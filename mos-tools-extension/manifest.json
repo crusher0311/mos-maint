@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MOS Tools",
-  "version": "1.20.12",
+  "version": "1.20.13",
   "description": "Maintenance planning and job management for automotive shops",
   "permissions": [
     "storage",
@@ -15,6 +15,8 @@
     "https://cba.tekmetric.com/*",
     "https://*.protractor.com/*",
     "https://*.autoflow.com/*",
+    "https://*.shop-ware.com/*",
+    "https://*.shop-ware-api-sandbox.com/*",
     "https://mos.tools/*",
     "https://*.mos.tools/*"
   ],
@@ -44,6 +46,14 @@
       ],
       "js": ["adapters/tekmetric-content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.shop-ware.com/*",
+        "https://*.shop-ware-api-sandbox.com/*"
+      ],
+      "js": ["adapters/shopware-content.js"],
+      "run_at": "document_idle"
     }
   ],
   "options_page": "options.html",
@@ -63,7 +73,18 @@
   "web_accessible_resources": [
     {
       "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png", "adapters/interceptor.js"],
-      "matches": ["https://shop.tekmetric.com/*", "https://sandbox.tekmetric.com/*", "https://cba.tekmetric.com/*"]
+      "matches": [
+        "https://shop.tekmetric.com/*",
+        "https://sandbox.tekmetric.com/*",
+        "https://cba.tekmetric.com/*"
+      ]
+    },
+    {
+      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png"],
+      "matches": [
+        "https://*.shop-ware.com/*",
+        "https://*.shop-ware-api-sandbox.com/*"
+      ]
     }
   ]
 }
