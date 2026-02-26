@@ -424,12 +424,10 @@ async function runOnDemandAnalysis(
         let status: string;
 
         if (intervalMiles > 0) {
-          // Mileage-based calculation
           if (lastPerformed.mileage && lastPerformed.mileage > 0) {
             nextDueMileage = lastPerformed.mileage + intervalMiles;
-          } else if (currentMileage > 0) {
-            const intervalsPassed = Math.floor(currentMileage / intervalMiles);
-            nextDueMileage = (intervalsPassed + 1) * intervalMiles;
+          } else if (currentMileage > 0 && currentMileage > intervalMiles) {
+            nextDueMileage = intervalMiles;
           } else {
             nextDueMileage = intervalMiles;
           }
