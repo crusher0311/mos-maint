@@ -1,0 +1,40 @@
+2026-02-26T14:43:58.643792045Z ==> Downloading cache...
+2026-02-26T14:43:58.684080334Z ==> Cloning from https://github.com/crusher0311/mos-maint
+2026-02-26T14:44:21.026461439Z ==> Checking out commit 225b95ab56499cd64b96daf9222e55c5cf5f2501 in branch qa
+2026-02-26T14:44:23.519948833Z 
+2026-02-26T14:44:23.519972703Z gzip: stdin: invalid compressed data--format violated
+2026-02-26T14:44:23.520574014Z tar: Unexpected EOF in archive
+2026-02-26T14:44:23.520591565Z tar: Unexpected EOF in archive
+2026-02-26T14:44:23.520782638Z tar: Error is not recoverable: exiting now
+2026-02-26T14:44:23.560099719Z ==> cache extraction failed, continuing without cache
+2026-02-26T14:44:23.783034954Z ==> Downloaded 742MB in 9s. Extraction took 1s.
+2026-02-26T14:44:26.846866224Z ==> Using Node.js version 22.16.0 (default)
+2026-02-26T14:44:26.872097295Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-02-26T14:44:26.99282697Z ==> Running build command './render-build.sh'...
+2026-02-26T14:44:26.998745033Z Installing dependencies...
+2026-02-26T14:44:27.021367745Z node:internal/modules/cjs/loader:1404
+2026-02-26T14:44:27.021386005Z   throw err;
+2026-02-26T14:44:27.021389165Z   ^
+2026-02-26T14:44:27.021391525Z 
+2026-02-26T14:44:27.021394045Z Error: Cannot find module '../lib/cli.js'
+2026-02-26T14:44:27.021396575Z Require stack:
+2026-02-26T14:44:27.021400195Z - /opt/render/project/nodes/node-22.16.0/lib/node_modules/npm/bin/npm-cli.js
+2026-02-26T14:44:27.021402835Z     at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+2026-02-26T14:44:27.021405015Z     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+2026-02-26T14:44:27.021407155Z     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+2026-02-26T14:44:27.021410445Z     at Function._load (node:internal/modules/cjs/loader:1211:37)
+2026-02-26T14:44:27.021413355Z     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-02-26T14:44:27.021415995Z     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+2026-02-26T14:44:27.021418695Z     at Module.require (node:internal/modules/cjs/loader:1487:12)
+2026-02-26T14:44:27.021421446Z     at require (node:internal/modules/helpers:135:16)
+2026-02-26T14:44:27.021424606Z     at Object.<anonymous> (/opt/render/project/nodes/node-22.16.0/lib/node_modules/npm/bin/npm-cli.js:2:1)
+2026-02-26T14:44:27.021426346Z     at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+2026-02-26T14:44:27.021428626Z   code: 'MODULE_NOT_FOUND',
+2026-02-26T14:44:27.021431296Z   requireStack: [
+2026-02-26T14:44:27.021433016Z     '/opt/render/project/nodes/node-22.16.0/lib/node_modules/npm/bin/npm-cli.js'
+2026-02-26T14:44:27.021434736Z   ]
+2026-02-26T14:44:27.021436526Z }
+2026-02-26T14:44:27.021438086Z 
+2026-02-26T14:44:27.021439726Z Node.js v22.16.0
+2026-02-26T14:44:27.063340096Z ==> Build failed 😞
+2026-02-26T14:44:27.063351916Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
