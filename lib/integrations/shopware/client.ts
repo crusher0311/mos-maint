@@ -12,7 +12,7 @@ import type {
 } from './types';
 
 const SW_PROD_BASE = 'https://api.shop-ware.com/api/v1';
-const SW_SANDBOX_BASE = 'https://app.shop-ware-api-sandbox.com/api/v1';
+const SW_SANDBOX_BASE = 'https://api.shop-ware-api-sandbox.com/api/v1';
 
 function getBaseUrl(): string {
   return process.env.SHOPWARE_API_BASE_URL || (process.env.SHOPWARE_USE_SANDBOX === 'true' ? SW_SANDBOX_BASE : SW_PROD_BASE);
