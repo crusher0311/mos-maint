@@ -1600,9 +1600,7 @@ async function handleSwAddFinding(service, isDraft = false) {
     return;
   }
 
-  console.log('[MOS] handleSwAddFinding service object:', JSON.stringify(service).substring(0, 200));
   const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
-  console.log('[MOS] handleSwAddFinding resolved serviceName:', serviceName);
   const details = [];
   if (service.laborHours) details.push(`${service.laborHours} hrs labor`);
   if (service.parts?.length) details.push(`${service.parts.length} part(s)`);
