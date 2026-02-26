@@ -849,19 +849,37 @@ function renderPlan(data) {
 let dropdownClickHandlerRegistered = false;
 
 function setupAddDropdowns() {
-  // Toggle dropdown on button click
   document.querySelectorAll('.btn-add-toggle').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
+      if (currentContext?.provider === 'shopware') {
+        const service = JSON.parse(btn.dataset.service);
+        if (shopwareAddMode === 'finding-draft') {
+          await handleSwAddFinding(service, true);
+        } else if (shopwareAddMode === 'add-service') {
+          await handleAddService(service);
+        } else {
+          await handleSwAddFinding(service, false);
+        }
+        return;
+      }
       const dropdownId = btn.dataset.dropdown;
       const dropdown = document.getElementById(dropdownId);
-      
-      // Close all other dropdowns
       document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
         if (menu.id !== dropdownId) menu.classList.add('hidden');
       });
-      
-      // Toggle this dropdown
+      dropdown.classList.toggle('hidden');
+    });
+
+    btn.addEventListener('contextmenu', (e) => {
+      if (currentContext?.provider !== 'shopware') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const dropdownId = btn.dataset.dropdown;
+      const dropdown = document.getElementById(dropdownId);
+      document.querySelectorAll('.add-dropdown-menu').forEach(menu => {
+        if (menu.id !== dropdownId) menu.classList.add('hidden');
+      });
       dropdown.classList.toggle('hidden');
     });
   });
@@ -889,10 +907,23 @@ function setupAddDropdowns() {
         filterCannedJobs(serviceName);
       } else if (action === 'add-generic') {
         await handleAddService(service);
-      } else if (action === 'sw-finding-publish' || action === 'sw-finding-draft') {
-        const isDraft = action === 'sw-finding-draft';
-        await handleSwAddFinding(service, isDraft);
+      } else if (action === 'sw-finding-publish') {
+        shopwareAddMode = 'finding-published';
+        chrome.storage.local.get('mosUser', (data) => {
+          if (data.mosUser) { data.mosUser.shopwareAddMode = 'finding-published'; chrome.storage.local.set({ mosUser: data.mosUser }); }
+        });
+        await handleSwAddFinding(service, false);
+      } else if (action === 'sw-finding-draft') {
+        shopwareAddMode = 'finding-draft';
+        chrome.storage.local.get('mosUser', (data) => {
+          if (data.mosUser) { data.mosUser.shopwareAddMode = 'finding-draft'; chrome.storage.local.set({ mosUser: data.mosUser }); }
+        });
+        await handleSwAddFinding(service, true);
       } else if (action === 'sw-add-service') {
+        shopwareAddMode = 'add-service';
+        chrome.storage.local.get('mosUser', (data) => {
+          if (data.mosUser) { data.mosUser.shopwareAddMode = 'add-service'; chrome.storage.local.set({ mosUser: data.mosUser }); }
+        });
         await handleAddService(service);
       }
     });
