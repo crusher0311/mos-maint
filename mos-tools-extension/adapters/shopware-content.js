@@ -1061,14 +1061,12 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
 
     if (serviceName) {
-      sessionStorage.setItem('mos_open_recommend', JSON.stringify({
-        noteText: text,
-        serviceName,
-        noteId
-      }));
+      const payload = JSON.stringify({ noteText: text, serviceName, noteId });
+      sessionStorage.setItem('mos_open_recommend', payload);
+      console.log('[MOS Tools] Set mos_open_recommend in sessionStorage:', payload);
     }
 
-    setTimeout(() => window.location.reload(), 800);
+    setTimeout(() => window.location.reload(), 1200);
     return { success: true, status: statusLabel, jobName: serviceName || text };
   } catch (err) {
     console.error('[MOS Tools] Add finding error:', err);
@@ -1191,7 +1189,9 @@ function injectFAB() {
 
 // ==================== AUTO-OPEN RECOMMEND SERVICE ====================
 async function checkAutoOpenRecommend() {
+  console.log('[MOS Tools] checkAutoOpenRecommend running, sessionStorage keys:', Object.keys(sessionStorage));
   const raw = sessionStorage.getItem('mos_open_recommend');
+  console.log('[MOS Tools] mos_open_recommend value:', raw);
   if (!raw) return;
   sessionStorage.removeItem('mos_open_recommend');
 
