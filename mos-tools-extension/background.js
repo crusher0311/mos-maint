@@ -462,7 +462,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        const provider = currentSmsContext.provider || 'tekmetric';
+        const provider = currentSmsContext.provider || '';
         const concernText = message.text;
 
         if (provider === 'shopware') {
@@ -862,7 +862,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     currentMileage: mileage,
     unit: 'mi',
     smsShopId: context.shopId,
-    provider: context.provider || 'tekmetric'
+    provider: context.provider || ''
   };
   
   // If override interval provided, use custom miles/months; otherwise auto-detect

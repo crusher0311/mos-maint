@@ -435,7 +435,7 @@ function switchTab(tab) {
             <line x1="16" y1="17" x2="8" y2="17"/>
           </svg>
           <p class="upgrade-title">Repair Order Required</p>
-          <p class="upgrade-message">Open a repair order in Tekmetric to use this feature.</p>
+          <p class="upgrade-message">Open a repair order in your shop management system to use this feature.</p>
         </div>
       `;
       panel.prepend(roOverlay);
@@ -555,7 +555,7 @@ async function fetchShopFeatures() {
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
+      endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || ''}`
     });
     
     if (result && result.features) {
@@ -696,7 +696,7 @@ async function loadPlan() {
     const params = new URLSearchParams({
       shopId: currentContext.shopId,
       roId: currentContext.roId,
-      provider: currentContext.provider || 'tekmetric'
+      provider: currentContext.provider || ''
     });
     if (currentContext.vin) params.set('vin', currentContext.vin);
     
@@ -1073,7 +1073,7 @@ async function loadCommonFailures() {
       const params = new URLSearchParams({
         shopId: currentContext.shopId,
         roId: currentContext.roId,
-        provider: currentContext.provider || 'tekmetric'
+        provider: currentContext.provider || ''
       });
       if (currentContext.vin) params.set('vin', currentContext.vin);
       
@@ -1267,7 +1267,7 @@ async function handleJobSearch() {
     const params = new URLSearchParams({ q: query });
     if (currentContext?.shopId) params.set('shopId', currentContext.shopId);
     if (currentContext?.roId) params.set('roId', currentContext.roId); // Pass roId for server-side vehicle lookup
-    params.set('provider', currentContext?.provider || 'tekmetric');
+    params.set('provider', currentContext?.provider || '');
     if (currentContext?.vehicle) {
       if (currentContext.vehicle.year) params.set('year', currentContext.vehicle.year);
       if (currentContext.vehicle.make) params.set('make', currentContext.vehicle.make);
@@ -1441,7 +1441,7 @@ async function loadCannedJobs() {
     // Fetch from MOS enriched library (always)
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || 'tekmetric'}`
+      endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || ''}`
     });
     
     // Handle error responses from MOS API
@@ -2090,7 +2090,7 @@ async function loadStickerConfig() {
     // Build endpoint with shop context if available
     let endpoint = '/api/extension/sticker';
     if (currentContext && currentContext.shopId) {
-      const provider = currentContext.provider || 'tekmetric';
+      const provider = currentContext.provider || '';
       endpoint += `?shopId=${currentContext.shopId}&provider=${provider}`;
     }
     
@@ -2200,7 +2200,7 @@ async function handleKeytagPrint() {
     // Add shop context
     if (currentContext && currentContext.shopId) {
       body.smsShopId = currentContext.shopId;
-      body.provider = currentContext.provider || 'tekmetric';
+      body.provider = currentContext.provider || '';
     }
     
     const result = await sendMessage({
@@ -2322,7 +2322,7 @@ async function handleStickerPrint() {
     // Add shop context if available
     if (currentContext && currentContext.shopId) {
       body.smsShopId = currentContext.shopId;
-      body.provider = currentContext.provider || 'tekmetric';
+      body.provider = currentContext.provider || '';
     }
     
     // Add customer/vehicle data for auto booking
@@ -2552,7 +2552,7 @@ async function loadVehicleSpecs() {
       const params = new URLSearchParams({
         shopId: currentContext.shopId,
         roId: currentContext.roId,
-        provider: currentContext.provider || 'tekmetric'
+        provider: currentContext.provider || ''
       });
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
