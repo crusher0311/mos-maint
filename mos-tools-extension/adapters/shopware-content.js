@@ -1048,64 +1048,32 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
   }
 
   const statusLabel = isDraft ? 'Draft' : 'Published';
+  showToast(`Adding finding as ${statusLabel}...`, 'info');
 
-  if (serviceName) {
-    showToast(`Adding finding with service "${serviceName}"...`, 'info');
-
-    try {
-      const searchResult = await searchShopWareCannedJobs(serviceName, vehicle, workOrderId);
-      if (!searchResult.success || searchResult.results.length === 0) {
-        console.warn('[MOS Tools] No canned job found, falling back to text-only finding');
-        return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
-      }
-
-      const nameLower = serviceName.toLowerCase();
-      let bestMatch = searchResult.results[0];
-      for (const job of searchResult.results) {
-        const title = (job.title || job.name || '').toLowerCase();
-        if (title === nameLower) { bestMatch = job; break; }
-        if (title.includes(nameLower) || nameLower.includes(title)) { bestMatch = job; }
-      }
-
-      const jobId = bestMatch.id;
-      const jobTitle = bestMatch.title || bestMatch.name || serviceName;
-      showToast(`Importing "${jobTitle}" as proposed service...`, 'info');
-
-      const importResult = await importProposedService(workOrderId, jobId, csrfToken);
-      if (!importResult.success) {
-        console.warn('[MOS Tools] Proposed import failed, falling back to text-only finding');
-        return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
-      }
-
-      const noteId = await createNote(workOrderId, text, isDraft, csrfToken);
-      if (!noteId) {
-        showToast(`Service imported but note creation failed. Reload the page.`, 'warning');
-        setTimeout(() => window.location.reload(), 1500);
-        return { success: true, status: statusLabel, partial: true };
-      }
-
-      if (importResult.serviceTemplateId) {
-        const recOk = await addRecommendationToNote(workOrderId, noteId, importResult.serviceTemplateId, csrfToken);
-        if (recOk) {
-          console.log(`[MOS Tools] Full finding added: note ${noteId} + recommendation (template ${importResult.serviceTemplateId})`);
-          showToast(`Finding added (${statusLabel}): "${jobTitle}" with pricing`, 'success');
-        } else {
-          console.warn('[MOS Tools] Recommendation link failed, but note + service were created');
-          showToast(`Finding added (${statusLabel}): "${jobTitle}" — pricing link may need manual review`, 'warning');
-        }
-      } else {
-        console.log(`[MOS Tools] Finding added with note but no template ID to link recommendation`);
-        showToast(`Finding added (${statusLabel}): "${jobTitle}"`, 'success');
-      }
-
-      setTimeout(() => window.location.reload(), 1500);
-      return { success: true, status: statusLabel, jobName: jobTitle };
-    } catch (err) {
-      console.error('[MOS Tools] Structured finding error:', err);
-      return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+  try {
+    const noteId = await createNote(workOrderId, text, isDraft, csrfToken);
+    if (!noteId) {
+      showToast('Failed to add finding. Try adding it manually.', 'error');
+      return { success: false, error: 'Note creation failed' };
     }
-  } else {
-    return await addTextOnlyFinding(workOrderId, text, isDraft, csrfToken, statusLabel);
+
+    console.log(`[MOS Tools] Finding created (${statusLabel}), noteId: ${noteId}`);
+    showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
+
+    if (serviceName) {
+      sessionStorage.setItem('mos_open_recommend', JSON.stringify({
+        noteText: text,
+        serviceName,
+        noteId
+      }));
+    }
+
+    setTimeout(() => window.location.reload(), 800);
+    return { success: true, status: statusLabel, jobName: serviceName || text };
+  } catch (err) {
+    console.error('[MOS Tools] Add finding error:', err);
+    showToast(`Error adding finding: ${err.message}`, 'error');
+    return { success: false, error: err.message };
   }
 }
 
@@ -1221,11 +1189,100 @@ function injectFAB() {
   document.body.appendChild(fab);
 }
 
+// ==================== AUTO-OPEN RECOMMEND SERVICE ====================
+async function checkAutoOpenRecommend() {
+  const raw = sessionStorage.getItem('mos_open_recommend');
+  if (!raw) return;
+  sessionStorage.removeItem('mos_open_recommend');
+
+  let data;
+  try { data = JSON.parse(raw); } catch { return; }
+  const { serviceName } = data;
+  if (!serviceName) return;
+
+  console.log(`[MOS Tools] Auto-opening Recommend a Service for "${serviceName}"`);
+
+  const waitForEl = (selector, maxWait = 8000) => new Promise((resolve) => {
+    const existing = document.querySelector(selector);
+    if (existing) return resolve(existing);
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector(selector);
+      if (el) { observer.disconnect(); resolve(el); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => { observer.disconnect(); resolve(null); }, maxWait);
+  });
+
+  const notesTab = await waitForEl('[data-tab="notes"], .notes-tab, a[href*="notes"]');
+  if (notesTab) notesTab.click();
+  await new Promise(r => setTimeout(r, 500));
+
+  const findRecommendBtn = () => {
+    const allBtns = document.querySelectorAll('button, a, [role="button"]');
+    for (const btn of allBtns) {
+      const txt = (btn.textContent || '').trim().toLowerCase();
+      if (txt.includes('recommend') && (txt.includes('service') || txt.includes('a service'))) return btn;
+    }
+    const links = document.querySelectorAll('a[href*="recommend"], button[data-action*="recommend"]');
+    if (links.length) return links[0];
+    return null;
+  };
+
+  let recommendBtn = findRecommendBtn();
+  if (!recommendBtn) {
+    const noteEls = document.querySelectorAll('.note, .note-item, [class*="note"], [data-note-id]');
+    for (const noteEl of noteEls) {
+      const txt = (noteEl.textContent || '').trim();
+      if (txt.includes(data.noteText?.substring(0, 30) || serviceName)) {
+        noteEl.click();
+        await new Promise(r => setTimeout(r, 500));
+        recommendBtn = findRecommendBtn();
+        if (recommendBtn) break;
+      }
+    }
+  }
+
+  if (!recommendBtn) {
+    await new Promise(r => setTimeout(r, 2000));
+    recommendBtn = findRecommendBtn();
+  }
+
+  if (recommendBtn) {
+    recommendBtn.click();
+    console.log(`[MOS Tools] Clicked "Recommend a Service" button`);
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    const searchInputs = document.querySelectorAll('input[type="search"], input[type="text"], input[placeholder*="earch"]');
+    for (const input of searchInputs) {
+      const isInModal = input.closest('.modal, [role="dialog"], .overlay, .popup, .recommend');
+      if (isInModal || searchInputs.length === 1) {
+        input.value = serviceName;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+
+        const searchBtn = input.parentElement?.querySelector('button, [type="submit"]');
+        if (searchBtn) searchBtn.click();
+
+        console.log(`[MOS Tools] Pre-filled search with "${serviceName}"`);
+        break;
+      }
+    }
+  } else {
+    console.warn('[MOS Tools] Could not find "Recommend a Service" button');
+    showToast(`Finding added. Click it and use "Recommend a Service" to add "${serviceName}".`, 'info');
+  }
+}
+
 // ==================== INIT ====================
 function init() {
   updateContext();
   checkAndInjectButton();
   injectFAB();
+
+  setTimeout(() => checkAutoOpenRecommend(), 2000);
 
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {
