@@ -100,6 +100,24 @@ export async function GET(request: NextRequest) {
         vehicleMake = swRo.vehicleMake || null;
         vehicleModel = swRo.vehicleModel || null;
       }
+
+      if (!vin && shopDoc?.shopware?.tenantId) {
+        try {
+          const { getRepairOrder } = await import("@/lib/integrations/shopware/client");
+          const ro = await getRepairOrder(shopDoc.shopware.tenantId, parseInt(roId), shopDoc.shopware.swShopId);
+          if (ro) {
+            if (!vin) vin = ro.vehicle?.vin?.toUpperCase() ?? null;
+            if (!mileage) mileage = ro.odometer ?? null;
+            if (!repairOrderNumber) repairOrderNumber = ro.number ? String(ro.number) : null;
+            if (!customerName) customerName = ro.customer ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim() : null;
+            if (!vehicleYear && ro.vehicle?.year) vehicleYear = parseInt(ro.vehicle.year, 10);
+            if (!vehicleMake) vehicleMake = ro.vehicle?.make ?? null;
+            if (!vehicleModel) vehicleModel = ro.vehicle?.model ?? null;
+          }
+        } catch (e: any) {
+          console.error(`[ro-context] Shop-Ware API fallback failed:`, e.message);
+        }
+      }
     } else if (resolvedProvider === "autoflow") {
       const dvi = await db.collection("dvi_results").findOne({
         shopId: { $in: [mosShopId, String(mosShopId)] },
