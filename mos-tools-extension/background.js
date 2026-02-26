@@ -10,7 +10,8 @@ let currentSmsContext = null;
 const smsTokens = {
   tekmetric: null,
   protractor: null,
-  autoflow: null
+  autoflow: null,
+  shopware: null
 };
 
 // Tekmetric-specific state
@@ -361,6 +362,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const provider = currentSmsContext.provider || 'tekmetric';
         const concernText = message.text;
+
+        if (provider === 'shopware') {
+          console.log('[Concern] Shop-Ware does not support API-based concern injection. Falling back to DOM injection via content script.');
+          const tabs = await chrome.tabs.query({ url: ["*://app.shop-ware.com/*"] });
+          for (const tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'INJECT_CONCERN_TEXT',
+              text: concernText
+            }, (res) => {
+              if (res?.success) {
+                sendResponse({ success: true });
+              } else {
+                sendResponse({ success: false, error: 'Could not inject concern — please paste manually into the concern field.' });
+              }
+            });
+            return;
+          }
+          sendResponse({ success: false, error: 'No Shop-Ware tab found. Please paste the concern manually.' });
+          return;
+        }
 
         if (provider === 'protractor') {
           console.log(`[Concern] Adding concern to Protractor WO ${currentSmsContext.roId} via MOS API`);

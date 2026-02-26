@@ -1520,7 +1520,12 @@ async function handleAddJob(job) {
     alert('No repair order context. Please navigate to a repair order.');
     return;
   }
-  
+
+  if (currentContext.provider === 'shopware') {
+    showNotification('Adding jobs to a repair order is not supported via the Shop-Ware API. Please add the job directly in Shop-Ware.', 'info');
+    return;
+  }
+
   // Transform job data for Tekmetric
   const jobData = {
     name: job.title || job.name,
@@ -1565,7 +1570,12 @@ async function handleAddCannedJob(job) {
     alert('No repair order context. Please navigate to a repair order.');
     return;
   }
-  
+
+  if (currentContext.provider === 'shopware') {
+    showNotification('Adding jobs to a repair order is not supported via the Shop-Ware API. Please add the job directly in Shop-Ware.', 'info');
+    return;
+  }
+
   // Get the tekmetric ID - could be in different fields
   const tekmetricId = job.tekmetricId || job.id;
   
