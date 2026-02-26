@@ -1,0 +1,55 @@
+2026-02-26T16:15:10.974676195Z 
+2026-02-26T16:15:10.974702477Z > mos-maintenance-mvp@1.8.0 start
+2026-02-26T16:15:10.974706727Z > next start -p ${PORT:-5000} -H 0.0.0.0
+2026-02-26T16:15:10.974708967Z 
+2026-02-26T16:15:11.274719928Z   ▲ Next.js 14.2.5
+2026-02-26T16:15:11.274837615Z   - Local:        http://localhost:10000
+2026-02-26T16:15:11.274841145Z   - Network:      http://0.0.0.0:10000
+2026-02-26T16:15:11.274861556Z 
+2026-02-26T16:15:11.281421489Z  ✓ Starting...
+2026-02-26T16:15:11.549460371Z  ✓ Ready in 506ms
+2026-02-26T16:15:24.005842071Z ==> Your service is live 🎉
+2026-02-26T16:15:24.430591575Z ==> 
+2026-02-26T16:15:24.433149269Z ==> ///////////////////////////////////////////////////////////
+2026-02-26T16:15:24.435567099Z ==> 
+2026-02-26T16:15:24.43797389Z ==> Available at your primary URL https://www.qa.mos.tools + 2 more domains
+2026-02-26T16:15:24.440944793Z ==> 
+2026-02-26T16:15:24.443831923Z ==> ///////////////////////////////////////////////////////////
+2026-02-26T16:15:26Z clientIP="34.82.79.105" requestID="6f4fd95a-85a2-48a4" responseTimeMS=20 responseBytes=7443 userAgent="Go-http-client/2.0"
+2026-02-26T16:16:08Z clientIP="72.198.61.82" requestID="1982ab60-3b85-46f5" responseTimeMS=902 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:16:08Z clientIP="72.198.61.82" requestID="15dc43c5-e9e6-4ef9" responseTimeMS=893 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:16:08Z clientIP="72.198.61.82" requestID="50e660da-4726-4731" responseTimeMS=199 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:16:08Z clientIP="72.198.61.82" requestID="1fba3498-9ac4-467d" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:16:09Z clientIP="72.198.61.82" requestID="df740032-6cf6-45b4" responseTimeMS=1695 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:07Z clientIP="72.198.61.82" requestID="ba5e4376-0399-4542" responseTimeMS=207 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:07Z clientIP="72.198.61.82" requestID="147b6119-e8db-4f91" responseTimeMS=200 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:08Z clientIP="72.198.61.82" requestID="ca3307bd-9b6c-4384" responseTimeMS=200 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:08Z clientIP="72.198.61.82" requestID="91dd774e-f1f3-4ab7" responseTimeMS=196 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:08Z clientIP="72.198.61.82" requestID="6c120289-6fc9-4a08" responseTimeMS=640 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:30Z clientIP="72.198.61.82" requestID="4e1a4941-291e-4168" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:30Z clientIP="72.198.61.82" requestID="c0e5a725-cded-492e" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:30Z clientIP="72.198.61.82" requestID="bd73f450-f0f3-4cef" responseTimeMS=196 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:30Z clientIP="72.198.61.82" requestID="5e017076-8c46-4dda" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:30Z clientIP="72.198.61.82" requestID="928ece25-fd58-42ee" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:31Z clientIP="72.198.61.82" requestID="02b27d29-e8a3-4a8c" responseTimeMS=650 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:32Z clientIP="72.198.61.82" requestID="6113402d-541e-4eee" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:35Z clientIP="72.198.61.82" requestID="1d059e25-355c-4960" responseTimeMS=89 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:39Z clientIP="72.198.61.82" requestID="ab4f90f5-63cc-405b" responseTimeMS=648 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:41Z clientIP="72.198.61.82" requestID="21a18659-65c7-4e5d" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:42Z clientIP="72.198.61.82" requestID="b4ca8580-10c7-4601" responseTimeMS=650 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:42Z clientIP="98.93.30.171" requestID="0e5a2b5c-97c5-4c42" responseTimeMS=154 responseBytes=306 userAgent="Ruby"
+2026-02-26T16:17:43.321284476Z [SW Webhook] Fetch RO 66772 attempt 1/3 failed (Shop-Ware API error 500 (https://api.shop-ware-api-sandbox.com/api/v1/tenants/211/repair_orders/66772?associations=services,services.labors,services.parts,customer,vehicle): {"status":500,"error":"Internal Server Error"}), retrying in 2000ms...
+2026-02-26T16:17:44Z clientIP="72.198.61.82" requestID="90215758-5e84-4153" responseTimeMS=72 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:45.420734907Z [SW Webhook] Fetch RO 66772 attempt 2/3 failed (Shop-Ware API error 500 (https://api.shop-ware-api-sandbox.com/api/v1/tenants/211/repair_orders/66772?associations=services,services.labors,services.parts,customer,vehicle): {"status":500,"error":"Internal Server Error"}), retrying in 4000ms...
+2026-02-26T16:17:47Z clientIP="72.198.61.82" requestID="5159b834-1cd1-4552" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:49.52088396Z [SW Webhook] Failed to fetch RO 66772 after 3 attempt(s): Shop-Ware API error 500 (https://api.shop-ware-api-sandbox.com/api/v1/tenants/211/repair_orders/66772?associations=services,services.labors,services.parts,customer,vehicle): {"status":500,"error":"Internal Server Error"}
+2026-02-26T16:17:49.520904751Z [SW Webhook] Using webhook payload as fallback for RO 66772
+2026-02-26T16:17:49.601655236Z [SW Webhook] Stored partial RO 66772 from webhook payload for shop 77
+2026-02-26T16:17:50Z clientIP="72.198.61.82" requestID="6d6f003c-dfb8-46c9" responseTimeMS=69 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:51Z clientIP="72.198.61.82" requestID="937f62fe-2520-4cc5" responseTimeMS=652 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:53Z clientIP="72.198.61.82" requestID="64664334-8f9d-43c5" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:56Z clientIP="72.198.61.82" requestID="e09e17ee-7e89-4507" responseTimeMS=192 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:56Z clientIP="72.198.61.82" requestID="5ed0a18e-a3f6-48e8" responseTimeMS=70 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:56Z clientIP="72.198.61.82" requestID="9dede111-fd5f-4122" responseTimeMS=194 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:57Z clientIP="72.198.61.82" requestID="b8a98f6f-047b-4f66" responseTimeMS=651 responseBytes=612 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T16:17:59Z clientIP="72.198.61.82" requestID="ae57d867-bd45-46d4" responseTimeMS=68 responseBytes=282 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"

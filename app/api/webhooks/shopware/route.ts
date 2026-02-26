@@ -358,7 +358,8 @@ export async function POST(req: NextRequest) {
   const resourceData = payload?.data ?? null;
 
   const db = await getDb();
-  await db.collection("events").insertOne({
+
+  const logEntry = {
     provider: "shopware",
     webhookId,
     event,
@@ -368,7 +369,16 @@ export async function POST(req: NextRequest) {
     payload,
     raw,
     receivedAt: new Date(),
-  });
+    processed: false,
+    processedAt: null as Date | null,
+    processingError: null as string | null,
+  };
+
+  await db.collection("events").insertOne({ ...logEntry });
+  const swLog = await db.collection("shopware_webhook_logs").insertOne({ ...logEntry });
+  const swLogId = swLog.insertedId;
+
+  console.log(`[SW Webhook] Received ${event} for tenant ${tenantId} resource ${resourceId} (log ${swLogId})`);
 
   setImmediate(async () => {
     try {
@@ -381,8 +391,17 @@ export async function POST(req: NextRequest) {
       } else {
         console.log(`[SW Webhook] Unhandled event type: ${event}`);
       }
+
+      await db.collection("shopware_webhook_logs").updateOne(
+        { _id: swLogId },
+        { $set: { processed: true, processedAt: new Date() } }
+      );
     } catch (err: any) {
       console.error("[SW Webhook] Async processing error:", err.message);
+      await db.collection("shopware_webhook_logs").updateOne(
+        { _id: swLogId },
+        { $set: { processed: false, processedAt: new Date(), processingError: err.message } }
+      ).catch(() => {});
     }
   });
 
