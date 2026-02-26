@@ -1060,6 +1060,7 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     console.log(`[MOS Tools] Finding created (${statusLabel}), noteId: ${noteId}`);
     showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
 
+    setTimeout(() => window.location.reload(), 1500);
     return { success: true, status: statusLabel, jobName: serviceName || text };
   } catch (err) {
     console.error('[MOS Tools] Add finding error:', err);
@@ -1141,8 +1142,48 @@ function injectFAB() {
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
-  fab.setAttribute('style', 'position:fixed !important; bottom:20px !important; right:20px !important; z-index:999998 !important; background:transparent !important; border:none !important; cursor:pointer !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;');
-  fab.addEventListener('click', () => {
+  const saved = localStorage.getItem('mos_fab_pos');
+  const pos = saved ? JSON.parse(saved) : { bottom: 20, right: 20 };
+  fab.setAttribute('style', `position:fixed !important; bottom:${pos.bottom}px !important; right:${pos.right}px !important; z-index:999998 !important; background:transparent !important; border:none !important; cursor:grab !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;`);
+
+  let isDragging = false;
+  let dragStartX, dragStartY, fabStartRight, fabStartBottom;
+
+  fab.addEventListener('mousedown', (e) => {
+    isDragging = false;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    const rect = fab.getBoundingClientRect();
+    fabStartRight = window.innerWidth - rect.right;
+    fabStartBottom = window.innerHeight - rect.bottom;
+    fab.style.cursor = 'grabbing';
+
+    const onMouseMove = (e) => {
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
+      const newRight = Math.max(0, fabStartRight - dx);
+      const newBottom = Math.max(0, fabStartBottom + dy);
+      fab.style.right = newRight + 'px';
+      fab.style.bottom = newBottom + 'px';
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      fab.style.cursor = 'grab';
+      if (isDragging) {
+        const newPos = { right: parseInt(fab.style.right), bottom: parseInt(fab.style.bottom) };
+        localStorage.setItem('mos_fab_pos', JSON.stringify(newPos));
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  fab.addEventListener('click', (e) => {
+    if (isDragging) { e.preventDefault(); e.stopPropagation(); return; }
     chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }).catch(() => {});
   });
   document.body.appendChild(fab);
