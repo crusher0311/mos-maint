@@ -1200,18 +1200,40 @@ async function checkAutoOpenRecommend() {
   const { serviceName } = data;
   if (!serviceName) return;
 
-  console.log(`[MOS Tools] Auto-opening Recommend Service for "${serviceName}"`);
+  console.log(`[MOS Tools] Auto-opening Recommend Service for "${serviceName}", noteId: ${data.noteId}`);
 
   await new Promise(r => setTimeout(r, 2500));
 
-  const recommendBtn = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
-  if (recommendBtn) {
-    recommendBtn.click();
-    console.log(`[MOS Tools] Clicked "Recommend Service" button`);
-  } else {
-    console.warn('[MOS Tools] Could not find "Recommend Service" button');
-    showToast(`Finding added. Click "Recommend Service" to attach "${serviceName}".`, 'info');
+  const noteEditBtn = document.querySelector(`[data-note-id="${data.noteId}"] .js-note-edit-btn, .js-note-edit-btn`);
+  if (!noteEditBtn) {
+    console.warn('[MOS Tools] Could not find note edit button');
+    showToast(`Finding added. Click the pencil icon on your finding, then "Recommend Service".`, 'info');
+    return;
   }
+  noteEditBtn.click();
+  console.log('[MOS Tools] Step 1: Clicked note edit button');
+
+  await new Promise(r => setTimeout(r, 800));
+
+  const recommendIcon = document.querySelector('i.icon-recommend-a-service, .icon-recommend-a-service');
+  if (!recommendIcon) {
+    console.warn('[MOS Tools] Could not find recommend-a-service icon');
+    showToast(`Finding opened. Click the recommend icon, then "Recommend Service".`, 'info');
+    return;
+  }
+  recommendIcon.click();
+  console.log('[MOS Tools] Step 2: Clicked recommend-a-service icon');
+
+  await new Promise(r => setTimeout(r, 800));
+
+  const recommendLink = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+  if (!recommendLink) {
+    console.warn('[MOS Tools] Could not find "Recommend Service" link');
+    showToast(`Click "Recommend Service" to search for "${serviceName}".`, 'info');
+    return;
+  }
+  recommendLink.click();
+  console.log('[MOS Tools] Step 3: Clicked "Recommend Service" link');
 }
 
 // ==================== INIT ====================
