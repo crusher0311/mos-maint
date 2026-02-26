@@ -772,6 +772,7 @@ function renderPlan(data) {
       console.log('[MOS] Updated VIN from API:', currentContext.vin);
     }
   }
+  console.log('[MOS] Plan response mileage:', data.mileage, 'estimated:', data.mileageEstimated, 'fromCache:', data.fromDashboardCache);
   if (data.mileage) {
     elements.mileageDisplay.textContent = `${data.mileage.toLocaleString()} mi`;
     elements.mileageDisplay.classList.remove('hidden');

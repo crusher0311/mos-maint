@@ -1142,13 +1142,23 @@ function injectFAB() {
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
-  const saved = localStorage.getItem('mos_fab_pos');
-  const pos = saved ? JSON.parse(saved) : { bottom: 20, right: 20 };
+  const defaultPos = { bottom: 20, right: 20 };
   const fabBaseStyle = 'position:fixed !important; z-index:999998 !important; background:transparent !important; border:none !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;';
   const setFabPos = (r, b, cursor) => {
     fab.setAttribute('style', `${fabBaseStyle} right:${r}px !important; bottom:${b}px !important; cursor:${cursor || 'grab'} !important;`);
   };
-  setFabPos(pos.right, pos.bottom);
+  setFabPos(defaultPos.right, defaultPos.bottom);
+
+  chrome.storage.local.get('mos_fab_pos', (result) => {
+    if (result.mos_fab_pos) {
+      try {
+        const pos = typeof result.mos_fab_pos === 'string' ? JSON.parse(result.mos_fab_pos) : result.mos_fab_pos;
+        if (pos.right != null && pos.bottom != null) {
+          setFabPos(pos.right, pos.bottom);
+        }
+      } catch (e) {}
+    }
+  });
 
   let isDragging = false;
   let dragStartX, dragStartY, fabStartRight, fabStartBottom;
@@ -1179,7 +1189,7 @@ function injectFAB() {
         const finalRight = Math.round(window.innerWidth - rect.right);
         const finalBottom = Math.round(window.innerHeight - rect.bottom);
         setFabPos(finalRight, finalBottom);
-        localStorage.setItem('mos_fab_pos', JSON.stringify({ right: finalRight, bottom: finalBottom }));
+        chrome.storage.local.set({ mos_fab_pos: { right: finalRight, bottom: finalBottom } });
       } else {
         setFabPos(fabStartRight, fabStartBottom);
       }
