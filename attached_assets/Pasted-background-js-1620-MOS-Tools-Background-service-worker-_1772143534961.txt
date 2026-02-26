@@ -1,0 +1,43 @@
+background.js:1620 [MOS Tools] Background service worker loaded
+background.js:36 [MOS] Restored API token from storage
+background.js:40 [MOS] Restored API URL: https://qa.mos.tools
+background.js:55 [Tekmetric] Restored session token
+background.js:141 [MOS] Side panel opens on action click
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:1120 [LaborRate] Auto-apply only supported for Tekmetric, skipping: shopware
+background.js:164 [MOS] Message received: GET_MOS_AUTH
+background.js:164 [MOS] Message received: GET_SMS_CONTEXT
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:765 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:772 [MOS] Updated VIN from API: 1FTSW21P96ED58191
+sidepanel.js:775 [MOS] Plan response mileage: 299141 estimated: true fromCache: undefined
+sidepanel.js:799 [MOS] Updated RO number from API: 175956930
+sidepanel.js:804 [MOS] Updated customer name from API: App Ninja
+sidepanel.js:765 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:772 [MOS] Updated VIN from API: 1FTSW21P96ED58191
+sidepanel.js:775 [MOS] Plan response mileage: 299141 estimated: true fromCache: undefined
+sidepanel.js:799 [MOS] Updated RO number from API: 175956930
+sidepanel.js:804 [MOS] Updated customer name from API: App Ninja
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:1120 [LaborRate] Auto-apply only supported for Tekmetric, skipping: shopware
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:765 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:772 [MOS] Updated VIN from API: 1FTSW21P96ED58191
+sidepanel.js:775 [MOS] Plan response mileage: 299141 estimated: true fromCache: undefined
+sidepanel.js:799 [MOS] Updated RO number from API: 175956930
+sidepanel.js:804 [MOS] Updated customer name from API: App Ninja
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:1120 [LaborRate] Auto-apply only supported for Tekmetric, skipping: shopware
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:765 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:772 [MOS] Updated VIN from API: 1FTSW21P96ED58191
+sidepanel.js:775 [MOS] Plan response mileage: 299141 estimated: true fromCache: undefined
+sidepanel.js:799 [MOS] Updated RO number from API: 175956930
+sidepanel.js:804 [MOS] Updated customer name from API: App Ninja

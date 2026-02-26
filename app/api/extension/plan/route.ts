@@ -1018,13 +1018,16 @@ export async function GET(request: NextRequest) {
     const maxAge = 24 * 60 * 60 * 1000;
     const hasRecommendations = analysisData?.recommendations?.length > 0;
 
-    // Also re-run if showInspectItems preference changed
     const cachedShowInspect = analysisData?.showInspectItems ?? true;
     const prefsChanged = cachedShowInspect !== showInspectItems;
+
+    const cachedAnalysisMileage = analysisData?.mileageAtAnalysis || analysisData?.mileage || 0;
+    const currentAnalysisMileage = mileage || 0;
+    const mileageChanged = currentAnalysisMileage > 0 && (cachedAnalysisMileage <= 0 || Math.abs(currentAnalysisMileage - cachedAnalysisMileage) > 500);
     
-    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}`);
+    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}, mileageChanged=${mileageChanged} (cached=${cachedAnalysisMileage}, current=${currentAnalysisMileage})`);
     
-    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations) {
+    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations || mileageChanged) {
       try {
         const startTime = Date.now();
         
