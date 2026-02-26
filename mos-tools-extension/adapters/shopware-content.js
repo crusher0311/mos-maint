@@ -1202,55 +1202,46 @@ async function checkAutoOpenRecommend() {
 
   console.log(`[MOS Tools] Auto-opening Recommend Service for "${serviceName}", noteId: ${data.noteId}`);
 
-  await new Promise(r => setTimeout(r, 2500));
+  const waitFor = (selectorOrFn, maxWait = 3000) => new Promise((resolve) => {
+    const check = () => {
+      const el = typeof selectorOrFn === 'function' ? selectorOrFn() : document.querySelector(selectorOrFn);
+      if (el) { resolve(el); return true; }
+      return false;
+    };
+    if (check()) return;
+    const interval = setInterval(() => { if (check()) clearInterval(interval); }, 150);
+    setTimeout(() => { clearInterval(interval); resolve(null); }, maxWait);
+  });
 
   let noteEditBtn = null;
-  const allEditBtns = document.querySelectorAll('.js-note-edit-btn');
-  console.log(`[MOS Tools] Found ${allEditBtns.length} note edit buttons, looking for note with text: "${data.noteText?.substring(0, 30)}"`);
-
   if (data.noteText) {
-    for (const btn of allEditBtns) {
-      const noteContainer = btn.closest('[class*="note"], [id*="note"], tr, .row, div') || btn.parentElement?.parentElement;
-      if (noteContainer) {
-        const containerText = noteContainer.textContent || '';
-        if (containerText.includes(data.noteText.substring(0, 30))) {
-          noteEditBtn = btn;
-          console.log('[MOS Tools] Found matching note by text content');
-          break;
-        }
+    noteEditBtn = await waitFor(() => {
+      const btns = document.querySelectorAll('.js-note-edit-btn');
+      for (const btn of btns) {
+        const container = btn.closest('[class*="note"], tr, .row, div') || btn.parentElement?.parentElement;
+        if (container && container.textContent.includes(data.noteText.substring(0, 30))) return btn;
       }
-    }
+      return btns.length ? btns[btns.length - 1] : null;
+    });
   }
-
-  if (!noteEditBtn && allEditBtns.length > 0) {
-    noteEditBtn = allEditBtns[allEditBtns.length - 1];
-    console.log('[MOS Tools] Falling back to last note edit button');
-  }
-
+  if (!noteEditBtn) noteEditBtn = await waitFor('.js-note-edit-btn');
   if (!noteEditBtn) {
-    console.warn('[MOS Tools] Could not find any note edit button');
-    showToast(`Finding added. Click the pencil icon on your finding, then "Recommend Service".`, 'info');
+    showToast(`Finding added. Click the pencil icon, then "Recommend Service".`, 'info');
     return;
   }
   noteEditBtn.click();
   console.log('[MOS Tools] Step 1: Clicked note edit button');
 
-  await new Promise(r => setTimeout(r, 800));
-
-  const recommendIcon = document.querySelector('i.icon-recommend-a-service, .icon-recommend-a-service');
+  const recommendIcon = await waitFor('i.icon-recommend-a-service, .icon-recommend-a-service');
   if (!recommendIcon) {
-    console.warn('[MOS Tools] Could not find recommend-a-service icon');
     showToast(`Finding opened. Click the recommend icon, then "Recommend Service".`, 'info');
     return;
   }
   recommendIcon.click();
   console.log('[MOS Tools] Step 2: Clicked recommend-a-service icon');
 
-  await new Promise(r => setTimeout(r, 800));
-
-  const recommendLink = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+  const recommendLink = await waitFor('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
   if (!recommendLink) {
-    console.warn('[MOS Tools] Could not find "Recommend Service" link');
     showToast(`Click "Recommend Service" to search for "${serviceName}".`, 'info');
     return;
   }
