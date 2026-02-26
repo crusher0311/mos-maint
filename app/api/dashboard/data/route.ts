@@ -663,14 +663,15 @@ export async function GET(request: NextRequest) {
             displayMiles: {
               $cond: [{ $gt: ["$odometer", 0] }, "$odometer", null],
             },
-            displayRo: "$number",
+            displayRo: { $toString: { $ifNull: ["$number", ""] } },
             roId: "$roId",
             dviDone: { $literal: false },
             source: { $literal: "shopware" },
             displayStatus: {
-              $ifNull: ["$raw.label", { $ifNull: ["$state", "Open"] }],
+              $ifNull: ["$raw.label.text", { $ifNull: ["$state", "Open"] }],
             },
-            label: { $ifNull: ["$raw.label", null] },
+            label: { $ifNull: ["$raw.label.text", null] },
+            labelColor: { $ifNull: ["$raw.label.color_code", null] },
             af: {
               status: { $ifNull: ["$state", "Open"] },
               createdAt: "$createdAt",

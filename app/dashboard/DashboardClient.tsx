@@ -61,17 +61,22 @@ const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string; icon: R
 };
 
 function formatWorkflowStage(status: string): { label: string; color: string; icon: ReactNode | null } {
-  const mapped = WORKFLOW_STAGE_MAP[status];
+  const safeStatus = typeof status === 'string' ? status : String(status ?? 'Unknown');
+  const mapped = WORKFLOW_STAGE_MAP[safeStatus];
   if (mapped) return mapped;
   
   // Fallback for unknown stages or legacy status values
-  if (status.toLowerCase().includes('close') || status.toLowerCase().includes('complete')) {
-    return { label: status, color: "bg-green-100 text-green-800", icon: <CheckCircle2 className="w-3 h-3" /> };
+  const lower = safeStatus.toLowerCase();
+  if (lower.includes('close') || lower.includes('complete') || lower.includes('invoice')) {
+    return { label: safeStatus, color: "bg-green-100 text-green-800", icon: <CheckCircle2 className="w-3 h-3" /> };
   }
-  if (status.toLowerCase().includes('open') || status.toLowerCase().includes('progress')) {
-    return { label: status, color: "bg-blue-100 text-blue-800", icon: <Clock className="w-3 h-3" /> };
+  if (lower.includes('open') || lower.includes('progress') || lower.includes('in_progress')) {
+    return { label: safeStatus, color: "bg-blue-100 text-blue-800", icon: <Clock className="w-3 h-3" /> };
   }
-  return { label: status, color: "bg-gray-100 text-gray-800", icon: null };
+  if (lower.includes('estimate')) {
+    return { label: safeStatus, color: "bg-purple-100 text-purple-800", icon: <FileText className="w-3 h-3" /> };
+  }
+  return { label: safeStatus, color: "bg-gray-100 text-gray-800", icon: null };
 }
 
 async function fetchDashboardData(page: number, search: string, archived: boolean = false): Promise<DashboardData | null> {
