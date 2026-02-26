@@ -173,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "MOS_LOGOUT") {
     mosApiToken = null;
-    chrome.storage.local.remove(['mosApiToken', 'mosUser']);
+    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosLoginEmail', 'mosLoginPass']);
     sendResponse({ success: true });
     return false;
   }
@@ -622,14 +622,31 @@ async function handleMosLogin(email, password, apiUrl) {
     const data = await response.json();
     mosApiToken = data.token;
     
-    // Persist auth
+    // Persist auth and credentials for silent re-auth
     chrome.storage.local.set({
       mosApiToken: data.token,
       mosApiUrl: mosApiUrl,
-      mosUser: data.user
+      mosUser: data.user,
+      mosLoginEmail: email,
+      mosLoginPass: password
     });
 
-    console.log("[MOS] Login successful:", data.user?.email);
+    console.log("[MOS] Login successful:", data.user?.email, "| token:", data.token?.substring(0, 20) + "...");
+
+    // Verify token works immediately
+    try {
+      const verifyRes = await fetch(`${mosApiUrl}/api/extension/features?shopId=${data.user?.shopId || ''}`, {
+        headers: { 'Authorization': `Bearer ${data.token}` }
+      });
+      console.log("[MOS] Token verify:", verifyRes.status);
+      if (verifyRes.status === 401) {
+        const body = await verifyRes.json().catch(() => ({}));
+        console.error("[MOS] Token INVALID immediately after login!", body);
+      }
+    } catch (e) {
+      console.warn("[MOS] Token verify fetch failed:", e.message);
+    }
+
     return { success: true, user: data.user };
   } catch (err) {
     console.error("[MOS] Login error:", err);
@@ -637,7 +654,7 @@ async function handleMosLogin(email, password, apiUrl) {
   }
 }
 
-async function handleMosApiRequest(endpoint, options = {}) {
+async function handleMosApiRequest(endpoint, options = {}, _retried = false) {
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS");
   }
@@ -653,8 +670,25 @@ async function handleMosApiRequest(endpoint, options = {}) {
     }
   });
 
-  // Handle 401 - only clear if the token hasn't changed (avoids race with fresh login)
+  // Handle 401 - retry once with saved credentials before giving up
   if (response.status === 401) {
+    const errBody = await response.json().catch(() => ({}));
+    console.error("[MOS] 401 on", endpoint, "| server:", errBody.error || "no detail", "| token match:", mosApiToken === tokenUsed, "| retried:", _retried);
+
+    // If we haven't retried yet, try re-authenticating with saved credentials
+    if (!_retried) {
+      const stored = await new Promise(resolve => chrome.storage.local.get(['mosLoginEmail', 'mosLoginPass'], resolve));
+      if (stored.mosLoginEmail && stored.mosLoginPass) {
+        console.log("[MOS] 401 received, attempting silent re-auth...");
+        try {
+          await handleMosLogin(stored.mosLoginEmail, stored.mosLoginPass, mosApiUrl);
+          return handleMosApiRequest(endpoint, options, true);
+        } catch (e) {
+          console.error("[MOS] Silent re-auth failed:", e.message);
+        }
+      }
+    }
+
     if (mosApiToken === tokenUsed) {
       mosApiToken = null;
       chrome.storage.local.remove(['mosApiToken']);
