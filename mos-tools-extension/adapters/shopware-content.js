@@ -1061,9 +1061,10 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
 
     if (serviceName) {
-      openRecommendServiceModal(serviceName);
+      sessionStorage.setItem('mos_open_recommend', JSON.stringify({ noteText: text, serviceName, noteId }));
     }
 
+    setTimeout(() => window.location.reload(), 500);
     return { success: true, status: statusLabel, jobName: serviceName || text };
   } catch (err) {
     console.error('[MOS Tools] Add finding error:', err);
@@ -1166,18 +1167,7 @@ function injectFAB() {
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
-  Object.assign(fab.style, {
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    zIndex: '999998',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '0',
-    borderRadius: '50%',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-  });
+  fab.setAttribute('style', 'position:fixed !important; bottom:20px !important; right:20px !important; z-index:999998 !important; background:transparent !important; border:none !important; cursor:pointer !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;');
   fab.addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }).catch(() => {});
   });
@@ -1198,11 +1188,70 @@ function openRecommendServiceModal(serviceName) {
   }
 }
 
+// ==================== AUTO-OPEN AFTER RELOAD ====================
+function checkAutoOpenRecommend() {
+  const raw = sessionStorage.getItem('mos_open_recommend');
+  if (!raw) return;
+  sessionStorage.removeItem('mos_open_recommend');
+
+  let data;
+  try { data = JSON.parse(raw); } catch { return; }
+  if (!data.serviceName) return;
+
+  console.log(`[MOS Tools] Auto-opening Recommend Service for "${data.serviceName}"`);
+
+  const waitFor = (selectorOrFn, maxWait = 5000) => new Promise((resolve) => {
+    const check = () => {
+      const el = typeof selectorOrFn === 'function' ? selectorOrFn() : document.querySelector(selectorOrFn);
+      if (el) { resolve(el); return true; }
+      return false;
+    };
+    if (check()) return;
+    const interval = setInterval(() => { if (check()) clearInterval(interval); }, 200);
+    setTimeout(() => { clearInterval(interval); resolve(null); }, maxWait);
+  });
+
+  (async () => {
+    const noteText = data.noteText || data.serviceName;
+    const editBtn = await waitFor(() => {
+      const btns = document.querySelectorAll('.js-note-edit-btn');
+      for (const btn of btns) {
+        const parent = btn.closest('div, tr, li');
+        if (parent && parent.textContent.includes(noteText.substring(0, 25))) return btn;
+      }
+      return null;
+    });
+
+    if (editBtn) {
+      editBtn.click();
+      console.log('[MOS Tools] Step 1: Clicked matching note edit btn');
+    } else {
+      console.warn('[MOS Tools] Could not find matching note, trying Recommend Service directly');
+    }
+
+    const recommendIcon = await waitFor('.icon-recommend-a-service');
+    if (recommendIcon) {
+      recommendIcon.click();
+      console.log('[MOS Tools] Step 2: Clicked recommend icon');
+    }
+
+    const recommendLink = await waitFor('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+    if (recommendLink) {
+      recommendLink.click();
+      console.log('[MOS Tools] Step 3: Clicked Recommend Service link');
+    } else {
+      showToast(`Finding added. Use "Recommend Service" to attach "${data.serviceName}".`, 'info');
+    }
+  })();
+}
+
 // ==================== INIT ====================
 function init() {
   updateContext();
   checkAndInjectButton();
   injectFAB();
+
+  setTimeout(checkAutoOpenRecommend, 1500);
 
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {

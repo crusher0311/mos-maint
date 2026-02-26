@@ -533,7 +533,8 @@ function updateContext(context) {
     
     fetchShopFeatures();
     
-    if (context.roId) {
+    const roChanged = !prevContext || prevContext.roId !== context.roId;
+    if (context.roId && roChanged) {
       if (currentTab === 'plan') {
         loadPlan();
       } else if (currentTab === 'failures') {
