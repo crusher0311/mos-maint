@@ -2629,6 +2629,18 @@ async function loadVehicleSpecs() {
     }
   }
   if (!vin) {
+    try {
+      const freshContext = await sendMessage({ action: 'GET_SMS_CONTEXT' });
+      if (freshContext?.context?.vin) {
+        vin = freshContext.context.vin.toUpperCase();
+        currentContext.vin = vin;
+        console.log('[MOS] Specs: got VIN from refreshed context:', vin);
+      }
+    } catch (err) {
+      console.error('[MOS] Specs: failed to refresh context for VIN:', err);
+    }
+  }
+  if (!vin) {
     specsLoading.classList.add('hidden');
     specsContent.classList.add('hidden');
     specsEmpty.classList.remove('hidden');

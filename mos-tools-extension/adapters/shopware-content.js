@@ -77,26 +77,50 @@ function detectContext() {
   // ============ EXTRACT VIN ============
   try {
     // Shop-Ware displays VINs with spaces, e.g. "1C4HJWEG7 GL 906678"
-    // Strategy 1: Look for "VIN:" label and grab the value after it
-    const vinLabelMatch = pageText.match(/VIN:\s*([A-HJ-NPR-Z0-9 ]{17,22})/i);
-    if (vinLabelMatch) {
-      const cleaned = vinLabelMatch[1].replace(/\s/g, '');
-      if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)) {
-        context.vin = cleaned.toUpperCase();
+    // Strategy 1: Look for "VIN:" label in DOM elements (more reliable than pageText)
+    const allElements = document.querySelectorAll('span, td, div, p, label, dt, dd');
+    for (const el of allElements) {
+      const txt = (el.textContent || '').trim();
+      if (/^VIN:?\s*$/i.test(txt)) {
+        let sibling = el.nextElementSibling || el.parentElement?.nextElementSibling;
+        if (sibling) {
+          const raw = (sibling.textContent || '').replace(/[^A-HJ-NPR-Z0-9]/gi, '');
+          if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(raw)) {
+            context.vin = raw.toUpperCase();
+            break;
+          }
+        }
+        const parentText = (el.parentElement?.textContent || '').replace(/[^A-HJ-NPR-Z0-9 ]/gi, '');
+        const vinInParent = parentText.replace(/^.*VIN\s*/i, '').replace(/\s/g, '');
+        const m17 = vinInParent.match(/^([A-HJ-NPR-Z0-9]{17})/i);
+        if (m17) {
+          context.vin = m17[1].toUpperCase();
+          break;
+        }
       }
     }
-    // Strategy 2: Standard 17 consecutive chars
+    // Strategy 2: Look for "VIN:" in pageText with generous whitespace/char tolerance
+    if (!context.vin) {
+      const vinLabelMatch = pageText.match(/VIN:?\s*([A-HJ-NPR-Z0-9 ]{17,25})/i);
+      if (vinLabelMatch) {
+        const cleaned = vinLabelMatch[1].replace(/[^A-HJ-NPR-Z0-9]/gi, '');
+        if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)) {
+          context.vin = cleaned.toUpperCase();
+        }
+      }
+    }
+    // Strategy 3: Standard 17 consecutive chars anywhere in pageText
     if (!context.vin) {
       const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
       if (vinMatch) {
         context.vin = vinMatch[1].toUpperCase();
       }
     }
-    // Strategy 3: Look in DOM elements with VIN-related attributes
+    // Strategy 4: Look in DOM elements with VIN-related attributes
     if (!context.vin) {
       const vinEls = document.querySelectorAll('[data-testid*="vin"], [class*="vin"], [class*="VIN"], [aria-label*="VIN"], [aria-label*="vin"]');
       for (const el of vinEls) {
-        const raw = (el.textContent || '').replace(/\s/g, '');
+        const raw = (el.textContent || '').replace(/[^A-HJ-NPR-Z0-9]/gi, '');
         const m = raw.match(/[A-HJ-NPR-Z0-9]{17}/i);
         if (m) { context.vin = m[0].toUpperCase(); break; }
       }
