@@ -464,76 +464,78 @@ function injectPrintButton() {
   if (!context.roId) return;
   if (document.getElementById('mos-print-btn-sw')) { printButtonInjected = true; return; }
 
-  // Shop-Ware WO page has a vehicle info card on the right side of the page.
-  // The card shows "2016 Jeep Wrangler" as header with a three-dot menu (⋮).
-  // We inject the MOS print button next to that three-dot menu.
+  // Shop-Ware DOM structure (from DevTools inspection):
+  //   div.job-detail-vehicle-container
+  //     div.job-header-item-heading
+  //       h4.job-header-item-heading-main
+  //         span.vehicle-dropdown-container
+  //           a.dropdown-toggle > i.icon-more-options   ← three-dot menu (⋮)
+  //           ul.dropdown-menu.vehicle-dropdown
+  //
+  // We inject the MOS print button inside span.vehicle-dropdown-container,
+  // right before the a.dropdown-toggle (⋮ menu).
 
-  // Strategy 1: Find the element containing the VIN label — the vehicle card
-  // Walk up to find the card container, then find its three-dot menu / action area
   let injected = false;
 
-  // Look for text node containing "VIN:" to identify the vehicle card
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-  let vinNode = null;
-  while (walker.nextNode()) {
-    if (/VIN:/i.test(walker.currentNode.textContent)) {
-      vinNode = walker.currentNode;
-      break;
-    }
-  }
-
-  if (vinNode) {
-    // Walk up to find the containing card (usually a div with padding/border)
-    let card = vinNode.parentElement;
-    for (let i = 0; i < 8 && card; i++) {
-      // Look for a three-dot menu button within this container
-      const menuBtn = card.querySelector('button[class*="dropdown"], button[class*="menu"], [class*="dropdown"] > button, [class*="kebab"], [class*="more"]');
-      if (menuBtn) {
-        const btn = createPrintButton();
-        menuBtn.parentElement.insertBefore(btn, menuBtn);
-        injected = true;
-        break;
-      }
-      // Or look for the vehicle title heading (e.g. "2016 Jeep Wrangler")
-      const headings = card.querySelectorAll('h1, h2, h3, h4, h5, strong, b');
-      for (const h of headings) {
-        if (/\b(19|20)\d{2}\s+\w+/.test(h.textContent || '')) {
-          const btn = createPrintButton();
-          h.parentElement.appendChild(btn);
-          injected = true;
-          break;
-        }
-      }
-      if (injected) break;
-      card = card.parentElement;
-    }
-  }
-
-  // Strategy 2: Find three-dot menu buttons (⋮) near vehicle info — look for the second one
-  // (first ⋮ is on customer card, second is on vehicle card)
-  if (!injected) {
-    const allBtns = document.querySelectorAll('button');
-    const dotMenuBtns = [];
-    for (const btn of allBtns) {
-      const text = (btn.textContent || '').trim();
-      const svg = btn.querySelector('svg');
-      if (text === '⋮' || text === '...' || text === '⋯' ||
-          btn.getAttribute('aria-label')?.includes('more') ||
-          btn.getAttribute('aria-label')?.includes('menu') ||
-          (svg && /ellipsis|dot|more|kebab/i.test(svg.getAttribute('class') || ''))) {
-        dotMenuBtns.push(btn);
-      }
-    }
-    // The vehicle card's menu is typically the second three-dot menu on the page
-    const vehicleMenu = dotMenuBtns.length >= 2 ? dotMenuBtns[1] : dotMenuBtns[0];
-    if (vehicleMenu) {
+  // Strategy 1: Exact selector — vehicle card's dropdown container
+  const vehicleContainer = document.querySelector('.job-detail-vehicle-container');
+  if (vehicleContainer) {
+    const dropdownContainer = vehicleContainer.querySelector('span.vehicle-dropdown-container');
+    if (dropdownContainer) {
+      const dropdownToggle = dropdownContainer.querySelector('a.dropdown-toggle');
       const btn = createPrintButton();
-      vehicleMenu.parentElement.insertBefore(btn, vehicleMenu);
+      if (dropdownToggle) {
+        dropdownContainer.insertBefore(btn, dropdownToggle);
+      } else {
+        dropdownContainer.prepend(btn);
+      }
+      injected = true;
+    } else {
+      // Fallback: insert into the heading row
+      const heading = vehicleContainer.querySelector('.job-header-item-heading, .job-header-item-heading-main');
+      if (heading) {
+        const btn = createPrintButton();
+        heading.appendChild(btn);
+        injected = true;
+      }
+    }
+  }
+
+  // Strategy 2: Broader selector — any vehicle dropdown container on the page
+  if (!injected) {
+    const dropdownContainer = document.querySelector('span.vehicle-dropdown-container');
+    if (dropdownContainer) {
+      const dropdownToggle = dropdownContainer.querySelector('a.dropdown-toggle');
+      const btn = createPrintButton();
+      if (dropdownToggle) {
+        dropdownContainer.insertBefore(btn, dropdownToggle);
+      } else {
+        dropdownContainer.prepend(btn);
+      }
       injected = true;
     }
   }
 
-  // Strategy 3: Fallback — append to the WO header area
+  // Strategy 3: Look for the icon-more-options inside the vehicle heading area
+  if (!injected) {
+    const moreIcons = document.querySelectorAll('i.icon-more-options');
+    for (const icon of moreIcons) {
+      const anchor = icon.closest('a.dropdown-toggle');
+      if (anchor) {
+        const container = anchor.parentElement;
+        // Verify this is the vehicle card's menu (not the customer card's)
+        const vehicleCard = anchor.closest('.job-detail-vehicle-container, .job-header-vehicle');
+        if (vehicleCard || moreIcons.length === 1) {
+          const btn = createPrintButton();
+          container.insertBefore(btn, anchor);
+          injected = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // Strategy 4: Fallback — append to the WO header area
   if (!injected) {
     const woHeader = Array.from(document.querySelectorAll('h1, h2, h3, [class*="header"], [class*="Header"]'))
       .find(el => /Work\s+Order/i.test(el.textContent || ''));
