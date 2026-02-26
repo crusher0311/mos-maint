@@ -919,16 +919,14 @@ export async function GET(request: NextRequest) {
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
     
     if (cachedPlan && cachedPlan.plan?.buckets) {
-      console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}`);
+      console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}, cachedMiles=${cachedPlan.mileage}, currentMiles=${mileage}`);
       
-      // Convert cached plan buckets to extension format
       const plan = {
         overdue: [] as any[],
         dueSoon: [] as any[],
         recommended: [] as any[]
       };
       
-      // Helper to convert cached item to extension format
       const convertItem = (item: any) => ({
         service: item.title || item.key,
         name: item.title || item.key,
@@ -962,18 +960,49 @@ export async function GET(request: NextRequest) {
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null
       });
-      
-      for (const item of (cachedPlan.plan.buckets.overdue || [])) {
-        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-        plan.overdue.push(convertItem(item));
-      }
-      for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
-        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-        plan.dueSoon.push(convertItem(item));
-      }
-      for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
-        if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-        plan.recommended.push(convertItem(item));
+
+      const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
+      const cachedMiles = cachedPlan.mileage || cachedPlan.plan.currentMiles || 0;
+      const needsRecategorize = currentMiles > 0 && (cachedMiles <= 0 || Math.abs(currentMiles - cachedMiles) > 500);
+
+      if (needsRecategorize) {
+        console.log(`[Extension] Re-categorizing cached plan items: cachedMiles=${cachedMiles}, currentMiles=${currentMiles}`);
+        const allItems = [
+          ...(cachedPlan.plan.buckets.overdue || []),
+          ...(cachedPlan.plan.buckets.dueSoon || []),
+          ...(cachedPlan.plan.buckets.upcoming || [])
+        ];
+        const DUE_SOON_THRESHOLD = 1000;
+        for (const item of allItems) {
+          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          const converted = convertItem(item);
+          const dueAt = item.dueAtMiles;
+          if (dueAt != null && dueAt > 0) {
+            converted.milesToGo = dueAt - currentMiles;
+            if (currentMiles >= dueAt) {
+              plan.overdue.push(converted);
+            } else if (dueAt - currentMiles <= DUE_SOON_THRESHOLD) {
+              plan.dueSoon.push(converted);
+            } else {
+              plan.recommended.push(converted);
+            }
+          } else {
+            plan.recommended.push(converted);
+          }
+        }
+      } else {
+        for (const item of (cachedPlan.plan.buckets.overdue || [])) {
+          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          plan.overdue.push(convertItem(item));
+        }
+        for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
+          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          plan.dueSoon.push(convertItem(item));
+        }
+        for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
+          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          plan.recommended.push(convertItem(item));
+        }
       }
       
       backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
