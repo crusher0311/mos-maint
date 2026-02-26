@@ -29,6 +29,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   dataone: "/logos/dataone.png",
   autoflow: "/logos/autoflow.png",
   hovercode: "/logos/hovercode.png",
+  shopware: "/logos/shopware.png",
 };
 
 const CARD_ORDER_STORAGE_KEY = "api-usage-card-order";
