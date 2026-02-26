@@ -639,31 +639,6 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[Extension] Shop-Ware RO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
 
-        if (!workOrder && shopDoc?.shopware?.tenantId) {
-          console.log(`[Extension] Fetching RO ${roId} directly from Shop-Ware API`);
-          try {
-            const { getRepairOrder } = await import("@/lib/integrations/shopware/client");
-            const ro = await getRepairOrder(shopDoc.shopware.tenantId, parseInt(roId), shopDoc.shopware.swShopId);
-            if (ro) {
-              workOrder = {
-                vin: ro.vehicle?.vin?.toUpperCase() ?? null,
-                odometer: ro.odometer ?? null,
-                repairOrderNumber: ro.number ? String(ro.number) : null,
-                customerName: ro.customer
-                  ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
-                  : null,
-                vehicleYear: ro.vehicle?.year ? parseInt(ro.vehicle.year, 10) : null,
-                vehicleMake: ro.vehicle?.make ?? null,
-                vehicleModel: ro.vehicle?.model ?? null,
-                updatedAt: ro.updated_at ? new Date(ro.updated_at) : null,
-              };
-              console.log(`[Extension] Fetched from Shop-Ware API: vin=${workOrder.vin}, odometer=${workOrder.odometer}, roNumber=${workOrder.repairOrderNumber}, customer=${workOrder.customerName}`);
-            }
-          } catch (e: any) {
-            console.error(`[Extension] Shop-Ware API fetch failed:`, e.message);
-          }
-        }
-
         if (workOrder) {
           const wo: any = workOrder;
           if (wo.vehicleYear && wo.vehicleMake && wo.vehicleModel) {
@@ -680,6 +655,25 @@ export async function GET(request: NextRequest) {
             currentRoDate = wo.updatedAt ? new Date(wo.updatedAt) : null;
           }
           workOrder = null;
+        }
+
+        if (!vin && shopDoc?.shopware?.tenantId) {
+          console.log(`[Extension] No VIN from cache, fetching RO ${roId} directly from Shop-Ware API`);
+          try {
+            const { getRepairOrder } = await import("@/lib/integrations/shopware/client");
+            const ro = await getRepairOrder(shopDoc.shopware.tenantId, parseInt(roId), shopDoc.shopware.swShopId);
+            if (ro) {
+              vin = ro.vehicle?.vin?.toUpperCase() ?? null;
+              if (!mileage) mileage = ro.odometer ?? null;
+              if (!repairOrderNumber) repairOrderNumber = ro.number ? String(ro.number) : null;
+              if (!customerName) customerName = ro.customer
+                ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
+                : null;
+              console.log(`[Extension] Fetched from Shop-Ware API: vin=${vin}, odometer=${mileage}, roNumber=${repairOrderNumber}, customer=${customerName}`);
+            }
+          } catch (e: any) {
+            console.error(`[Extension] Shop-Ware API fetch failed:`, e.message);
+          }
         }
       } else {
         workOrder = await db.collection("work_orders").findOne({
