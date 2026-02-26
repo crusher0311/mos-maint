@@ -1522,7 +1522,23 @@ async function handleAddJob(job) {
   }
 
   if (currentContext.provider === 'shopware') {
-    showNotification('Adding jobs to a repair order is not supported via the Shop-Ware API. Please add the job directly in Shop-Ware.', 'info');
+    const serviceName = job.title || job.name;
+    try {
+      const result = await sendMessage({
+        action: 'SW_ADD_SERVICE',
+        serviceName,
+        workOrderId: currentContext.roId,
+        vehicle: currentContext.vehicle || null
+      });
+      if (result.success) {
+        showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+      } else {
+        throw new Error(result.error || 'Failed to add service');
+      }
+    } catch (err) {
+      console.error('[MOS] Error adding Shop-Ware service:', err);
+      showNotification(err.message, 'error');
+    }
     return;
   }
 
@@ -1572,7 +1588,23 @@ async function handleAddCannedJob(job) {
   }
 
   if (currentContext.provider === 'shopware') {
-    showNotification('Adding jobs to a repair order is not supported via the Shop-Ware API. Please add the job directly in Shop-Ware.', 'info');
+    const serviceName = job.name || job.title;
+    try {
+      const result = await sendMessage({
+        action: 'SW_ADD_SERVICE',
+        serviceName,
+        workOrderId: currentContext.roId,
+        vehicle: currentContext.vehicle || null
+      });
+      if (result.success) {
+        showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+      } else {
+        throw new Error(result.error || 'Failed to add service');
+      }
+    } catch (err) {
+      console.error('[MOS] Error adding Shop-Ware canned job:', err);
+      showNotification(err.message, 'error');
+    }
     return;
   }
 

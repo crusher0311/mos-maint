@@ -192,6 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------- SMS Context --------------------
   if (message.action === "SET_SMS_CONTEXT") {
     currentSmsContext = message.context;
+    if (sender?.tab?.id) currentSmsContext._tabId = sender.tab.id;
     chrome.storage.session.set({ currentSmsContext });
     console.log("[MOS] SMS context updated:", currentSmsContext);
     
@@ -252,6 +253,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     createTekmetricJob(message.shopId, message.roId, message.jobData)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "SW_ADD_SERVICE") {
+    (async () => {
+      try {
+        if (!message.workOrderId) {
+          sendResponse({ success: false, error: 'No work order ID — navigate to a work order first' });
+          return;
+        }
+        const targetTabId = currentSmsContext?._tabId;
+        let tabId;
+        if (targetTabId) {
+          tabId = targetTabId;
+        } else {
+          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+          if (tabs.length === 0) {
+            sendResponse({ success: false, error: 'No Shop-Ware tab found' });
+            return;
+          }
+          tabId = tabs[0].id;
+        }
+        chrome.tabs.sendMessage(tabId, {
+          action: 'SW_ADD_SERVICE',
+          serviceName: message.serviceName,
+          workOrderId: message.workOrderId,
+          vehicle: message.vehicle
+        }, (res) => {
+          sendResponse(res || { success: false, error: 'No response from content script' });
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "SW_SEARCH_CANNED_JOBS") {
+    (async () => {
+      try {
+        const targetTabId = currentSmsContext?._tabId;
+        let tabId;
+        if (targetTabId) {
+          tabId = targetTabId;
+        } else {
+          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+          if (tabs.length === 0) {
+            sendResponse({ success: false, error: 'No Shop-Ware tab found', results: [] });
+            return;
+          }
+          tabId = tabs[0].id;
+        }
+        chrome.tabs.sendMessage(tabId, {
+          action: 'SW_SEARCH_CANNED_JOBS',
+          query: message.query,
+          vehicle: message.vehicle,
+          workOrderId: message.workOrderId
+        }, (res) => {
+          sendResponse(res || { success: false, error: 'No response', results: [] });
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message, results: [] });
+      }
+    })();
     return true;
   }
 

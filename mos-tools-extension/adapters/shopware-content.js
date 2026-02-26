@@ -623,6 +623,123 @@ function checkAndInjectButton() {
   if (context.roId) injectPrintButton();
 }
 
+// ==================== ADD SERVICE TO RO ====================
+
+async function searchShopWareCannedJobs(query, vehicle, workOrderId) {
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) {
+    console.warn('[MOS Tools] No CSRF token found for canned job search');
+    return { success: false, error: 'No CSRF token', results: [] };
+  }
+
+  const params = new URLSearchParams();
+  if (query) params.set('search', query);
+  if (vehicle?.year) params.set('vehicle_year', String(vehicle.year));
+  if (vehicle?.make) params.set('vehicle_make', vehicle.make);
+  if (vehicle?.model) params.set('vehicle_model', vehicle.model);
+  if (vehicle?.engine) params.set('vehicle_engine', vehicle.engine);
+  if (workOrderId) params.set('work_order_id', workOrderId);
+
+  try {
+    const res = await fetch(`/canned_jobs/search?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'x-csrf-token': csrfToken,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin'
+    });
+
+    if (!res.ok) {
+      console.warn('[MOS Tools] Canned job search failed:', res.status);
+      return { success: false, error: `Search failed (${res.status})`, results: [] };
+    }
+
+    const data = await res.json();
+    const results = Array.isArray(data) ? data : (data.canned_jobs || data.results || []);
+    console.log(`[MOS Tools] Canned job search for "${query}": ${results.length} results`);
+    return { success: true, results };
+  } catch (err) {
+    console.error('[MOS Tools] Canned job search error:', err);
+    return { success: false, error: err.message, results: [] };
+  }
+}
+
+async function importServiceToRO(workOrderId, serviceId) {
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) {
+    return { success: false, error: 'No CSRF token found' };
+  }
+
+  try {
+    const res = await fetch(`/work_orders/${workOrderId}/import_service?service_id=${serviceId}`, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'x-csrf-token': csrfToken,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin'
+    });
+
+    if (!res.ok) {
+      console.warn('[MOS Tools] Import service failed:', res.status);
+      return { success: false, error: `Import failed (${res.status})` };
+    }
+
+    console.log(`[MOS Tools] Service ${serviceId} imported to WO ${workOrderId}`);
+    return { success: true };
+  } catch (err) {
+    console.error('[MOS Tools] Import service error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function addServiceToRO(serviceName, workOrderId, vehicle) {
+  if (!workOrderId) {
+    showToast('No work order detected. Navigate to a work order first.', 'error');
+    return { success: false, error: 'No work order ID' };
+  }
+  if (!serviceName) {
+    return { success: false, error: 'No service name provided' };
+  }
+  showToast(`Searching for "${serviceName}"...`, 'info');
+
+  const searchResult = await searchShopWareCannedJobs(serviceName, vehicle, workOrderId);
+  if (!searchResult.success || searchResult.results.length === 0) {
+    showToast(`No canned job found for "${serviceName}". Add it manually in Shop-Ware.`, 'warning');
+    return { success: false, error: 'No matching canned job found' };
+  }
+
+  const nameLower = serviceName.toLowerCase();
+  let bestMatch = searchResult.results[0];
+  for (const job of searchResult.results) {
+    const title = (job.title || job.name || '').toLowerCase();
+    if (title === nameLower) {
+      bestMatch = job;
+      break;
+    }
+    if (title.includes(nameLower) || nameLower.includes(title)) {
+      bestMatch = job;
+    }
+  }
+
+  const jobId = bestMatch.id;
+  const jobTitle = bestMatch.title || bestMatch.name || serviceName;
+  showToast(`Adding "${jobTitle}" to WO...`, 'info');
+
+  const importResult = await importServiceToRO(workOrderId, jobId);
+  if (importResult.success) {
+    showToast(`Added "${jobTitle}" to work order`, 'success');
+    setTimeout(() => window.location.reload(), 1500);
+    return { success: true, jobName: jobTitle };
+  } else {
+    showToast(`Failed to add "${jobTitle}": ${importResult.error}`, 'error');
+    return { success: false, error: importResult.error };
+  }
+}
+
 // ==================== MESSAGE HANDLERS ====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'GET_PAGE_CONTEXT') {
@@ -637,6 +754,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error('[MOS Tools] Concern injection error:', err);
       sendResponse({ success: false, error: err.message });
     });
+    return true;
+  }
+
+  if (message.action === 'SW_SEARCH_CANNED_JOBS') {
+    searchShopWareCannedJobs(message.query, message.vehicle, message.workOrderId)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message, results: [] }));
+    return true;
+  }
+
+  if (message.action === 'SW_IMPORT_SERVICE') {
+    importServiceToRO(message.workOrderId, message.serviceId)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'SW_ADD_SERVICE') {
+    addServiceToRO(message.serviceName, message.workOrderId, message.vehicle)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
