@@ -1142,43 +1142,35 @@ function injectFAB() {
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
   fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
-  const defaultPos = { bottom: 20, right: 20 };
+  const FAB_RIGHT = 20;
+  const defaultBottom = 20;
   const fabBaseStyle = 'position:fixed !important; z-index:999998 !important; background:transparent !important; border:none !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;';
-  const setFabPos = (r, b, cursor) => {
-    fab.setAttribute('style', `${fabBaseStyle} right:${r}px !important; bottom:${b}px !important; cursor:${cursor || 'grab'} !important;`);
+  const setFabPos = (b, cursor) => {
+    fab.setAttribute('style', `${fabBaseStyle} right:${FAB_RIGHT}px !important; bottom:${b}px !important; cursor:${cursor || 'grab'} !important;`);
   };
-  setFabPos(defaultPos.right, defaultPos.bottom);
+  setFabPos(defaultBottom);
 
-  chrome.storage.local.get('mos_fab_pos', (result) => {
-    if (result.mos_fab_pos) {
-      try {
-        const pos = typeof result.mos_fab_pos === 'string' ? JSON.parse(result.mos_fab_pos) : result.mos_fab_pos;
-        if (pos.right != null && pos.bottom != null) {
-          setFabPos(pos.right, pos.bottom);
-        }
-      } catch (e) {}
+  chrome.storage.local.get('mos_fab_bottom', (result) => {
+    if (result.mos_fab_bottom != null) {
+      setFabPos(result.mos_fab_bottom);
     }
   });
 
   let isDragging = false;
-  let dragStartX, dragStartY, fabStartRight, fabStartBottom;
+  let dragStartY, fabStartBottom;
 
   fab.addEventListener('mousedown', (e) => {
     isDragging = false;
-    dragStartX = e.clientX;
     dragStartY = e.clientY;
     const rect = fab.getBoundingClientRect();
-    fabStartRight = window.innerWidth - rect.right;
     fabStartBottom = window.innerHeight - rect.bottom;
-    setFabPos(fabStartRight, fabStartBottom, 'grabbing');
+    setFabPos(fabStartBottom, 'grabbing');
 
     const onMouseMove = (e) => {
-      const dx = e.clientX - dragStartX;
       const dy = e.clientY - dragStartY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
-      const newRight = Math.max(0, fabStartRight - dx);
-      const newBottom = Math.max(0, fabStartBottom - dy);
-      setFabPos(newRight, newBottom, 'grabbing');
+      if (Math.abs(dy) > 3) isDragging = true;
+      const newBottom = Math.max(0, Math.min(window.innerHeight - 48, fabStartBottom - dy));
+      setFabPos(newBottom, 'grabbing');
     };
 
     const onMouseUp = () => {
@@ -1186,12 +1178,11 @@ function injectFAB() {
       document.removeEventListener('mouseup', onMouseUp);
       if (isDragging) {
         const rect = fab.getBoundingClientRect();
-        const finalRight = Math.round(window.innerWidth - rect.right);
         const finalBottom = Math.round(window.innerHeight - rect.bottom);
-        setFabPos(finalRight, finalBottom);
-        chrome.storage.local.set({ mos_fab_pos: { right: finalRight, bottom: finalBottom } });
+        setFabPos(finalBottom);
+        chrome.storage.local.set({ mos_fab_bottom: finalBottom });
       } else {
-        setFabPos(fabStartRight, fabStartBottom);
+        setFabPos(fabStartBottom);
       }
     };
 

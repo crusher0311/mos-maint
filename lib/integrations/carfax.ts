@@ -279,7 +279,7 @@ function snapshotToResult(doc: any): CarfaxResult {
 export type MileageEstimate = {
   estimated: true;
   mileage: number;
-  confidence: "good" | "fair";
+  confidence: "good" | "fair" | "low" | "very-low";
   dataPoints: number;
   lastRecordedMileage: number;
   lastRecordedDate: string;
@@ -301,15 +301,11 @@ export async function estimateMileageFromCarfax(
     return { estimated: false, mileage: null, reason: "No CARFAX data available" };
   }
 
-  const fiveYearsAgo = new Date();
-  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-
-  const validRecords = doc.serviceRecords
+  const allValidRecords = doc.serviceRecords
     .filter((r: any) => {
       if (!r.date || r.odometer == null || r.odometer <= 0) return false;
       const d = new Date(r.date);
       if (isNaN(d.getTime())) return false;
-      if (d < fiveYearsAgo) return false;
       return true;
     })
     .map((r: any) => ({
@@ -318,14 +314,19 @@ export async function estimateMileageFromCarfax(
     }))
     .sort((a: { date: Date }, b: { date: Date }) => b.date.getTime() - a.date.getTime());
 
-  if (validRecords.length < 2) {
+  if (allValidRecords.length < 2) {
     return { estimated: false, mileage: null, reason: "Not enough CARFAX data points to estimate mileage" };
   }
 
-  const recentRecords = validRecords.slice(0, 3);
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  const recentRecords = allValidRecords.filter((r: { date: Date }) => r.date >= fiveYearsAgo);
 
-  const newest = recentRecords[0];
-  const oldest = recentRecords[recentRecords.length - 1];
+  const useRecent = recentRecords.length >= 2;
+  const records = useRecent ? recentRecords.slice(0, 3) : allValidRecords.slice(0, 5);
+
+  const newest = records[0];
+  const oldest = records[records.length - 1];
 
   const daysBetween = (newest.date.getTime() - oldest.date.getTime()) / (1000 * 60 * 60 * 24);
   if (daysBetween < 30) {
@@ -338,15 +339,27 @@ export async function estimateMileageFromCarfax(
   }
 
   const milesPerDay = milesDriven / daysBetween;
-
   const daysSinceNewest = (Date.now() - newest.date.getTime()) / (1000 * 60 * 60 * 24);
+  const yearsSinceNewest = daysSinceNewest / 365;
+
+  let confidence: string;
+  if (useRecent && records.length >= 3) {
+    confidence = "good";
+  } else if (useRecent) {
+    confidence = "fair";
+  } else if (yearsSinceNewest <= 8) {
+    confidence = "low";
+  } else {
+    confidence = "very-low";
+  }
+
   const estimatedMileage = Math.round(newest.odometer + (milesPerDay * daysSinceNewest));
 
   return {
     estimated: true,
     mileage: estimatedMileage,
-    confidence: recentRecords.length >= 3 ? "good" : "fair",
-    dataPoints: recentRecords.length,
+    confidence,
+    dataPoints: records.length,
     lastRecordedMileage: newest.odometer,
     lastRecordedDate: newest.date.toISOString().split("T")[0],
     milesPerDay: Math.round(milesPerDay * 10) / 10,
