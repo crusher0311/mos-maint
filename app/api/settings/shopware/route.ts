@@ -61,15 +61,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { tenantId, swShopId } = body;
 
-    if (!tenantId || !swShopId) {
-      return NextResponse.json({ error: 'tenantId and swShopId are required' }, { status: 400 });
+    if (!swShopId) {
+      return NextResponse.json({ error: 'swShopId is required' }, { status: 400 });
     }
 
-    const tenantIdNum = parseInt(String(tenantId), 10);
     const swShopIdNum = parseInt(String(swShopId), 10);
+    const tenantIdNum = tenantId ? parseInt(String(tenantId), 10) : swShopIdNum;
 
-    if (isNaN(tenantIdNum) || isNaN(swShopIdNum)) {
-      return NextResponse.json({ error: 'tenantId and swShopId must be integers' }, { status: 400 });
+    if (isNaN(swShopIdNum) || isNaN(tenantIdNum)) {
+      return NextResponse.json({ error: 'Shop ID must be a number' }, { status: 400 });
     }
 
     const connTest = await testConnection(tenantIdNum);
