@@ -114,13 +114,49 @@ async function handleRepairOrderEvent(
     return;
   }
 
-  let ro: ShopWareRepairOrder;
-  try {
-    ro = await getRepairOrder(tenantId, roId, mosShopId);
-  } catch (err: any) {
-    console.error(`[SW Webhook] Failed to fetch RO ${roId}:`, err.message);
-    return;
+  let ro: ShopWareRepairOrder | null = null;
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      ro = await getRepairOrder(tenantId, roId, mosShopId);
+      break;
+    } catch (err: any) {
+      const isServerError = err.message?.includes("500") || err.message?.includes("502") || err.message?.includes("503");
+      if (isServerError && attempt < maxRetries) {
+        const delay = attempt * 2000;
+        console.warn(`[SW Webhook] Fetch RO ${roId} attempt ${attempt}/${maxRetries} failed (${err.message}), retrying in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      console.error(`[SW Webhook] Failed to fetch RO ${roId} after ${attempt} attempt(s):`, err.message);
+
+      if (rawData && (rawData.id || rawData.number)) {
+        console.log(`[SW Webhook] Using webhook payload as fallback for RO ${roId}`);
+        await db.collection("shopware_repair_orders").updateOne(
+          { mosShopId, roId },
+          {
+            $set: {
+              mosShopId,
+              roId,
+              tenantId,
+              state: rawData.state ?? null,
+              vin: rawData.vehicle?.vin?.toUpperCase() ?? rawData.vin?.toUpperCase() ?? null,
+              number: rawData.number ?? null,
+              updatedAt: new Date(),
+              syncedAt: new Date(),
+              partialFromWebhook: true,
+              fetchError: err.message,
+            },
+          },
+          { upsert: true }
+        );
+        console.log(`[SW Webhook] Stored partial RO ${roId} from webhook payload for shop ${mosShopId}`);
+      }
+      return;
+    }
   }
+
+  if (!ro) return;
 
   const normalized = transformRepairOrder(ro);
 
