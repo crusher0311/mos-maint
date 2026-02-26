@@ -941,6 +941,20 @@ body {
   color: var(--success);
 }
 
+.default-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--primary);
+  color: white;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
 /* ==================== Common Failures ==================== */
 .failures-source-badge {
   display: inline-flex;

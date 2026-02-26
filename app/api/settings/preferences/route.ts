@@ -35,13 +35,14 @@ export async function GET() {
     distanceUnit: shop?.preferences?.distanceUnit || "miles",
     timezone: shop?.preferences?.timezone || "America/New_York",
     workflowStages: shop?.preferences?.workflowStages || DEFAULT_WORKFLOW_STAGES,
-    showInspectItems: shop?.preferences?.showInspectItems !== false, // default true
-    showOnlyWithMileage: shop?.preferences?.showOnlyWithMileage !== false, // default true
-    showRecalls: shop?.preferences?.showRecalls !== false, // default true
-    recallsExpanded: shop?.preferences?.recallsExpanded !== false, // default true
-    tekmetricLabels: shop?.preferences?.tekmetricLabels || [], // empty = show all
-    jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null, // null = all enterprise shops
-    enterpriseShops, // for UI to display options
+    showInspectItems: shop?.preferences?.showInspectItems !== false,
+    showOnlyWithMileage: shop?.preferences?.showOnlyWithMileage !== false,
+    showRecalls: shop?.preferences?.showRecalls !== false,
+    recallsExpanded: shop?.preferences?.recallsExpanded !== false,
+    tekmetricLabels: shop?.preferences?.tekmetricLabels || [],
+    jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null,
+    shopwareAddMode: shop?.preferences?.shopwareAddMode || "finding-published",
+    enterpriseShops,
   });
 }
 
@@ -58,7 +59,7 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, shopwareAddMode } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -80,6 +81,13 @@ export async function PUT(req: NextRequest) {
   if (recallsExpanded !== undefined) updates["preferences.recallsExpanded"] = recallsExpanded;
   if (tekmetricLabels !== undefined) updates["preferences.tekmetricLabels"] = tekmetricLabels;
   if (jobHistoryShopIds !== undefined) updates["preferences.jobHistoryShopIds"] = jobHistoryShopIds;
+  if (shopwareAddMode !== undefined) {
+    const validModes = ["finding-published", "finding-draft", "add-service"];
+    if (!validModes.includes(shopwareAddMode)) {
+      return NextResponse.json({ error: "Invalid Shop-Ware add mode" }, { status: 400 });
+    }
+    updates["preferences.shopwareAddMode"] = shopwareAddMode;
+  }
 
   await db.collection("shops").updateOne(
     { shopId: Number(sess.shopId) },

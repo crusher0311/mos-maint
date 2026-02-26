@@ -183,7 +183,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({
         isAuthenticated: !!mosApiToken,
         apiUrl: mosApiUrl,
-        defaultExtensionTab: result.mosUser?.defaultExtensionTab || null
+        defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
+        shopwareAddMode: result.mosUser?.shopwareAddMode || null
       });
     });
     return true;

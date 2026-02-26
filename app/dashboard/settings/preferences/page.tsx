@@ -24,11 +24,13 @@ export default function PreferencesPage() {
   const [showOnlyWithMileage, setShowOnlyWithMileage] = useState(true);
   const [showRecalls, setShowRecalls] = useState(true);
   const [recallsExpanded, setRecallsExpanded] = useState(true);
+  const [shopwareAddMode, setShopwareAddMode] = useState("finding-published");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasProtractor, setHasProtractor] = useState(false);
   const [hasTekmetric, setHasTekmetric] = useState(false);
+  const [hasShopware, setHasShopware] = useState(false);
   const [tekmetricLabels, setTekmetricLabels] = useState<TekmetricLabel[]>([]);
   const [selectedTekmetricLabels, setSelectedTekmetricLabels] = useState<string[]>([]);
   const [enterpriseShops, setEnterpriseShops] = useState<EnterpriseShop[]>([]);
@@ -57,12 +59,14 @@ export default function PreferencesPage() {
         setSelectedTekmetricLabels(data.tekmetricLabels || []);
         setEnterpriseShops(data.enterpriseShops || []);
         setJobHistoryShopIds(data.jobHistoryShopIds || null);
+        setShopwareAddMode(data.shopwareAddMode || "finding-published");
       }
       
       if (integrationsRes.ok) {
         const integrations = await integrationsRes.json();
         setHasProtractor(!!integrations.protractor?.configured);
         setHasTekmetric(!!integrations.tekmetric?.configured);
+        setHasShopware(!!integrations.shopware?.configured);
       }
       
       if (labelsRes.ok) {
@@ -128,7 +132,8 @@ export default function PreferencesPage() {
           showRecalls,
           recallsExpanded,
           tekmetricLabels: selectedTekmetricLabels,
-          jobHistoryShopIds
+          jobHistoryShopIds,
+          shopwareAddMode
         }),
       });
       if (res.ok) {
@@ -212,6 +217,70 @@ export default function PreferencesPage() {
             </div>
           </div>
         </div>
+
+        {hasShopware && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Car className="w-5 h-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Shop-Ware Extension Settings</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Default Add-to-RO Mode
+                </label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Set the shop-wide default for how recommendations are added to Shop-Ware work orders. Individual users can override this in the extension settings.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${shopwareAddMode === 'finding-published' ? 'border-blue-500 bg-blue-50' : ''}`}>
+                    <input
+                      type="radio"
+                      name="shopwareAddMode"
+                      value="finding-published"
+                      checked={shopwareAddMode === "finding-published"}
+                      onChange={(e) => setShopwareAddMode(e.target.value)}
+                      className="w-4 h-4 text-blue-600 mt-0.5"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">Add Finding (Published)</p>
+                      <p className="text-xs text-gray-500 mt-1">Adds as a published finding on the right panel, visible to the customer</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${shopwareAddMode === 'finding-draft' ? 'border-blue-500 bg-blue-50' : ''}`}>
+                    <input
+                      type="radio"
+                      name="shopwareAddMode"
+                      value="finding-draft"
+                      checked={shopwareAddMode === "finding-draft"}
+                      onChange={(e) => setShopwareAddMode(e.target.value)}
+                      className="w-4 h-4 text-blue-600 mt-0.5"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">Add Finding (Draft)</p>
+                      <p className="text-xs text-gray-500 mt-1">Adds as a draft finding on the right panel, internal only until published</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${shopwareAddMode === 'add-service' ? 'border-blue-500 bg-blue-50' : ''}`}>
+                    <input
+                      type="radio"
+                      name="shopwareAddMode"
+                      value="add-service"
+                      checked={shopwareAddMode === "add-service"}
+                      onChange={(e) => setShopwareAddMode(e.target.value)}
+                      className="w-4 h-4 text-blue-600 mt-0.5"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">Add Service (Direct)</p>
+                      <p className="text-xs text-gray-500 mt-1">Adds the canned job directly as a service line item on the RO</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {hasProtractor && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

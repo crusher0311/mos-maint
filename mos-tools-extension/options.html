@@ -243,6 +243,17 @@
               <option value="specs">Vehicle Specs</option>
             </select>
           </div>
+          <div class="form-group" id="sw-add-mode-group" style="display:none; margin-top: 16px;">
+            <label class="form-label" for="sw-add-mode">Shop-Ware default add mode</label>
+            <select id="sw-add-mode" class="form-select">
+              <option value="finding-published">Add Finding (Published)</option>
+              <option value="finding-draft">Add Finding (Draft)</option>
+              <option value="add-service">Add Service (Direct to RO)</option>
+            </select>
+            <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+              Sets which action is highlighted when adding recommendations to a Shop-Ware repair order
+            </p>
+          </div>
           <div id="status-message" class="status-message"></div>
         </div>
       </div>
@@ -269,6 +280,8 @@
 
   <script>
     const tabSelect = document.getElementById('default-tab');
+    const swAddModeSelect = document.getElementById('sw-add-mode');
+    const swAddModeGroup = document.getElementById('sw-add-mode-group');
     const statusMessage = document.getElementById('status-message');
     const notLoggedIn = document.getElementById('not-logged-in');
     const settingsContent = document.getElementById('settings-content');
@@ -285,6 +298,7 @@
 
     let currentFeatures = {};
     let saveTimeout = null;
+    let swSaveTimeout = null;
 
     async function init() {
       const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
@@ -301,13 +315,23 @@
       if (authStatus.defaultExtensionTab) {
         tabSelect.value = authStatus.defaultExtensionTab;
       }
+      if (authStatus.shopwareAddMode) {
+        swAddModeSelect.value = authStatus.shopwareAddMode;
+      }
 
       loadFeatures();
+      checkShopwareIntegration();
 
       tabSelect.addEventListener('change', () => {
         clearTimeout(saveTimeout);
         showStatus('Saving...', 'loading');
         saveTimeout = setTimeout(() => saveDefaultTab(tabSelect.value), 300);
+      });
+
+      swAddModeSelect.addEventListener('change', () => {
+        clearTimeout(swSaveTimeout);
+        showStatus('Saving...', 'loading');
+        swSaveTimeout = setTimeout(() => saveSwAddMode(swAddModeSelect.value), 300);
       });
     }
 
@@ -348,6 +372,52 @@
 
       if (tabSelect.selectedOptions[0]?.disabled) {
         tabSelect.value = '';
+      }
+    }
+
+    async function checkShopwareIntegration() {
+      try {
+        const stored = await chrome.storage.local.get(['mosUser']);
+        const shopId = stored.mosUser?.shopId;
+        if (!shopId) return;
+
+        const result = await chrome.runtime.sendMessage({
+          action: 'MOS_API_REQUEST',
+          endpoint: `/api/settings/integrations`
+        });
+
+        if (result?.shopware?.configured) {
+          swAddModeGroup.style.display = 'block';
+        }
+      } catch (err) {
+        console.error('[Options] Error checking Shop-Ware integration:', err);
+      }
+    }
+
+    async function saveSwAddMode(mode) {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          action: 'MOS_API_REQUEST',
+          endpoint: '/api/extension/preferences',
+          options: {
+            method: 'PUT',
+            body: JSON.stringify({ shopwareAddMode: mode })
+          }
+        });
+
+        if (result.success) {
+          const stored = await chrome.storage.local.get(['mosUser']);
+          if (stored.mosUser) {
+            stored.mosUser.shopwareAddMode = mode;
+            await chrome.storage.local.set({ mosUser: stored.mosUser });
+          }
+          showStatus('Saved successfully', 'success');
+        } else {
+          throw new Error(result.error || 'Failed to save');
+        }
+      } catch (err) {
+        console.error('[Options] Save SW add mode error:', err);
+        showStatus('Failed to save. Please try again.', 'error');
       }
     }
 

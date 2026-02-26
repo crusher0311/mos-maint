@@ -5,6 +5,7 @@ let isAuthenticated = false;
 let currentContext = null;
 let currentTab = 'plan';
 let userDefaultTab = null;
+let shopwareAddMode = 'finding-published';
 // Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
@@ -170,6 +171,9 @@ async function init() {
     if (authStatus.defaultExtensionTab) {
       userDefaultTab = authStatus.defaultExtensionTab;
       currentTab = userDefaultTab;
+    }
+    if (authStatus.shopwareAddMode) {
+      shopwareAddMode = authStatus.shopwareAddMode;
     }
 
     showMainState();
@@ -640,6 +644,9 @@ async function handleLogin(e) {
         userDefaultTab = result.user.defaultExtensionTab;
         currentTab = userDefaultTab;
       }
+      if (result.user?.shopwareAddMode) {
+        shopwareAddMode = result.user.shopwareAddMode;
+      }
 
       showMainState();
       
@@ -994,23 +1001,23 @@ function createServiceItemHTML(item, type) {
           </button>
           <div id="${itemId}" class="add-dropdown-menu hidden">
             ${currentContext?.provider === 'shopware' ? `
-            <button class="add-dropdown-item add-primary" data-action="sw-finding-publish" data-service='${JSON.stringify(item)}'>
+            <button class="add-dropdown-item ${shopwareAddMode === 'finding-published' ? 'add-primary' : ''}" data-action="sw-finding-publish" data-service='${JSON.stringify(item)}'>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
               </svg>
-              Add Finding (Published)
+              Add Finding (Published)${shopwareAddMode === 'finding-published' ? ' <span class="default-badge">default</span>' : ''}
             </button>
-            <button class="add-dropdown-item" data-action="sw-finding-draft" data-service='${JSON.stringify(item)}'>
+            <button class="add-dropdown-item ${shopwareAddMode === 'finding-draft' ? 'add-primary' : ''}" data-action="sw-finding-draft" data-service='${JSON.stringify(item)}'>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
-              Add Finding (Draft)
+              Add Finding (Draft)${shopwareAddMode === 'finding-draft' ? ' <span class="default-badge">default</span>' : ''}
             </button>
-            <button class="add-dropdown-item" data-action="sw-add-service" data-service='${JSON.stringify(item)}'>
+            <button class="add-dropdown-item ${shopwareAddMode === 'add-service' ? 'add-primary' : ''}" data-action="sw-add-service" data-service='${JSON.stringify(item)}'>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              Add Service (Direct to RO)
+              Add Service (Direct to RO)${shopwareAddMode === 'add-service' ? ' <span class="default-badge">default</span>' : ''}
             </button>
             ` : `
             ${hasFullDetails ? `

@@ -106,6 +106,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    const shop = await db.collection("shops").findOne({ shopId: user.shopId });
+    const effectiveSwMode = user.shopwareAddMode || shop?.preferences?.shopwareAddMode || "finding-published";
+
     return NextResponse.json({
       token: extensionToken,
       user: {
@@ -114,7 +117,8 @@ export async function POST(request: NextRequest) {
         name: user.name,
         shopId: user.shopId,
         role: user.role,
-        defaultExtensionTab: user.defaultExtensionTab || null
+        defaultExtensionTab: user.defaultExtensionTab || null,
+        shopwareAddMode: effectiveSwMode
       }
     }, { headers: corsHeaders });
   } catch (error: any) {
