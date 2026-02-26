@@ -2158,33 +2158,32 @@ async function loadKeytagSection() {
       const params = new URLSearchParams({
         shopId: currentContext.shopId,
         roId: currentContext.roId,
-        provider: currentContext.provider || ''
       });
+      if (currentContext.provider) params.set('provider', currentContext.provider);
       if (currentContext.vin) params.set('vin', currentContext.vin);
 
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/plan?${params}`
+        endpoint: `/api/extension/ro-context?${params}`
       });
 
       if (result && !result.error) {
         keytagContextEnriched = true;
-        if (result.customerName && currentContext) {
+        if (result.customerName) {
           currentContext.customerName = result.customerName;
         }
-        if (result.repairOrderNumber && currentContext) {
+        if (result.repairOrderNumber) {
           currentContext.roNumber = String(result.repairOrderNumber);
         }
-        if (result.mileage && currentContext) {
+        if (result.mileage) {
           currentContext.mileage = result.mileage;
         }
-        if (result.vehicle && currentContext) {
-          const v = result.vehicle;
-          if (v.year && v.make && v.model) {
-            currentContext.vehicle = { year: v.year, make: v.make, model: v.model, engine: v.engine || null };
-            currentContext.vehicleDisplay = `${v.year} ${v.make} ${v.model}`;
-          }
-          if (v.vin) currentContext.vin = v.vin.toUpperCase();
+        if (result.vehicle) {
+          currentContext.vehicle = { year: result.vehicle.year, make: result.vehicle.make, model: result.vehicle.model, engine: null };
+          currentContext.vehicleDisplay = result.vehicleDisplay || `${result.vehicle.year} ${result.vehicle.make} ${result.vehicle.model}`;
+        }
+        if (result.vin) {
+          currentContext.vin = result.vin.toUpperCase();
         }
         updateKeytagFields();
       }
