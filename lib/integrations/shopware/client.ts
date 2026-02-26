@@ -173,11 +173,49 @@ export async function getRepairOrder(
   shopId?: number,
   associations = 'services,services.labors,services.parts,customer,vehicle'
 ): Promise<ShopWareRepairOrder> {
-  return shopWareRequest<ShopWareRepairOrder>(
-    `/tenants/${tenantId}/repair_orders/${roId}?associations=${associations}`,
-    {},
-    shopId
-  );
+  try {
+    return await shopWareRequest<ShopWareRepairOrder>(
+      `/tenants/${tenantId}/repair_orders/${roId}?associations=${associations}`,
+      {},
+      shopId
+    );
+  } catch (err: any) {
+    const isServerError = err.message?.includes('500') || err.message?.includes('502') || err.message?.includes('503');
+    if (!isServerError) throw err;
+
+    console.warn(`[Shop-Ware] Associations fetch failed for RO ${roId}, falling back to base + separate lookups`);
+    const ro = await shopWareRequest<ShopWareRepairOrder>(
+      `/tenants/${tenantId}/repair_orders/${roId}`,
+      {},
+      shopId
+    );
+
+    if (!ro.vehicle && ro.vehicle_id) {
+      try {
+        ro.vehicle = await shopWareRequest<ShopWareVehicle>(
+          `/tenants/${tenantId}/vehicles/${ro.vehicle_id}`,
+          {},
+          shopId
+        );
+      } catch (vErr: any) {
+        console.warn(`[Shop-Ware] Failed to fetch vehicle ${ro.vehicle_id}:`, vErr.message);
+      }
+    }
+
+    if (!ro.customer && ro.customer_id) {
+      try {
+        ro.customer = await shopWareRequest<ShopWareCustomer>(
+          `/tenants/${tenantId}/customers/${ro.customer_id}`,
+          {},
+          shopId
+        );
+      } catch (cErr: any) {
+        console.warn(`[Shop-Ware] Failed to fetch customer ${ro.customer_id}:`, cErr.message);
+      }
+    }
+
+    return ro;
+  }
 }
 
 export async function getRepairOrders(
