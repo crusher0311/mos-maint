@@ -1,0 +1,50 @@
+2026-02-26T19:13:02Z clientIP="72.198.61.82" requestID="a955a4f6-3248-46b6" responseTimeMS=1542 responseBytes=1336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:03Z clientIP="72.198.61.82" requestID="30a94b78-a99e-48eb" responseTimeMS=695 responseBytes=1336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:03.267561888Z [Extension] Found shop 77 (Shop-Ware Demo), provider: shopware
+2026-02-26T19:13:03.328464514Z [Extension] Shop-Ware RO lookup: mosShopId=77, roId=66772, found=true
+2026-02-26T19:13:03.389407922Z [Extension] VIN decoded: 2016 Jeep Wrangler Unlimited
+2026-02-26T19:13:03.769840825Z [PlanCache] HIT: 1C4HJWEG7GL906678 cached 131m ago, 2222 miles
+2026-02-26T19:13:03.769863496Z [Extension] Using dashboard cached plan: overdue=0, dueSoon=0, upcoming=12
+2026-02-26T19:13:03.832163471Z [Extension Prefetch] Shop 77: DB lock active, skipping
+2026-02-26T19:13:07Z clientIP="72.198.61.82" requestID="51e10c81-93a2-44f0" responseTimeMS=387 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:07Z clientIP="72.198.61.82" requestID="aa5ddf36-c780-4abf" responseTimeMS=388 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:07Z clientIP="72.198.61.82" requestID="8ba4221a-f7d7-4e2b" responseTimeMS=187 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="1d430012-beeb-400b" responseTimeMS=1470 responseBytes=1752 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="efa8e8c1-69be-4da4" responseTimeMS=187 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="62aec4ab-64e7-4997" responseTimeMS=182 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="57edb38e-c78d-44ea" responseTimeMS=184 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="364c3d55-bf15-49ab" responseTimeMS=305 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="6814729c-09a6-407a" responseTimeMS=178 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="8ae59ce6-b8e8-4f73" responseTimeMS=408 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="5bd5eedc-7321-4cf3" responseTimeMS=387 responseBytes=281 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="0c4a16b8-43fd-4cd6" responseTimeMS=183 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:08Z clientIP="72.198.61.82" requestID="376204f9-2431-47f8" responseTimeMS=400 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:25Z clientIP="72.198.61.82" requestID="ddfece1e-29de-4818" responseTimeMS=313 responseBytes=534 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:25.820692339Z [Extension] Found shop 77 (Shop-Ware Demo), provider: shopware
+2026-02-26T19:13:25.880883124Z [Extension] Shop-Ware RO lookup: mosShopId=77, roId=66772, found=true
+2026-02-26T19:13:25.943073033Z [Extension] VIN decoded: 2016 Jeep Wrangler Unlimited
+2026-02-26T19:13:26Z clientIP="72.198.61.82" requestID="c624b849-b17c-474b" responseTimeMS=667 responseBytes=1336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:26.304737691Z [PlanCache] HIT: 1C4HJWEG7GL906678 cached 132m ago, 2222 miles
+2026-02-26T19:13:26.304767953Z [Extension] Using dashboard cached plan: overdue=0, dueSoon=0, upcoming=12
+2026-02-26T19:13:26.365032322Z [Extension Prefetch] Shop 77: DB lock active, skipping
+2026-02-26T19:13:26.520585004Z [Extension] Found shop 77 (Shop-Ware Demo), provider: shopware
+2026-02-26T19:13:26.579786253Z [Extension] Shop-Ware RO lookup: mosShopId=77, roId=66772, found=true
+2026-02-26T19:13:26.641832324Z [Extension] VIN decoded: 2016 Jeep Wrangler Unlimited
+2026-02-26T19:13:27Z clientIP="72.198.61.82" requestID="7f3f4dc4-4c04-44ae" responseTimeMS=611 responseBytes=1336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:27.002680325Z [PlanCache] HIT: 1C4HJWEG7GL906678 cached 132m ago, 2222 miles
+2026-02-26T19:13:27.002770931Z [Extension] Using dashboard cached plan: overdue=0, dueSoon=0, upcoming=12
+2026-02-26T19:13:27.06356942Z [Extension Prefetch] Shop 77: DB lock active, skipping
+2026-02-26T19:13:29Z clientIP="72.198.61.82" requestID="c5da0739-f023-4ae3" responseTimeMS=377 responseBytes=567 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:29.063150958Z [Extension Sticker] GET: smsShopId=sandbox-shop, provider=shopware, mosShopId=77, features=[]
+2026-02-26T19:13:29.063770733Z [Extension Sticker] Shop 77: hasOilStickerFeature=true, enabledFeatures={"maintenance":true,"job_lookup":true,"common_failures":true,"oil_sticker":true,"keytags":true,"auto_booking":true,"part_xref":true,"labor_rates":true,"concern_assistant":true}
+2026-02-26T19:13:30Z clientIP="72.198.61.82" requestID="" responseTimeMS=0 responseBytes=156 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:30.359291348Z [Extension Keytag] Using designer layout (canvas)
+2026-02-26T19:13:31Z clientIP="72.198.61.82" requestID="9a5d7662-d71f-40de" responseTimeMS=1005 responseBytes=67562 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:31.086551019Z [Canvas Renderer] Fonts registered
+2026-02-26T19:13:35Z clientIP="72.198.61.82" requestID="041dd808-67e9-42a6" responseTimeMS=664 responseBytes=1336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-02-26T19:13:35.060706483Z [Extension] Found shop 77 (Shop-Ware Demo), provider: shopware
+2026-02-26T19:13:35.120288384Z [Extension] Shop-Ware RO lookup: mosShopId=77, roId=66772, found=true
+2026-02-26T19:13:35.181129475Z [Extension] VIN decoded: 2016 Jeep Wrangler Unlimited
+2026-02-26T19:13:35.541803887Z [PlanCache] HIT: 1C4HJWEG7GL906678 cached 132m ago, 2222 miles
+2026-02-26T19:13:35.541835169Z [Extension] Using dashboard cached plan: overdue=0, dueSoon=0, upcoming=12
+2026-02-26T19:13:35.601903827Z [Extension Prefetch] Shop 77: DB lock active, skipping

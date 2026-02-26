@@ -979,8 +979,9 @@ export async function GET(request: NextRequest) {
       backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
         .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
+      const cachedVehicle = cachedPlan.plan.vehicle || vehicle || {};
       return NextResponse.json({
-        vehicle: cachedPlan.plan.vehicle || vehicle || { vin: vin.toUpperCase() },
+        vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
         mileageEstimated,
         mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
