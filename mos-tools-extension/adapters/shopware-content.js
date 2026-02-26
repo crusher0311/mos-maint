@@ -76,14 +76,28 @@ function detectContext() {
 
   // ============ EXTRACT VIN ============
   try {
-    const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
-    if (vinMatch) {
-      context.vin = vinMatch[1].toUpperCase();
+    // Shop-Ware displays VINs with spaces, e.g. "1C4HJWEG7 GL 906678"
+    // Strategy 1: Look for "VIN:" label and grab the value after it
+    const vinLabelMatch = pageText.match(/VIN:\s*([A-HJ-NPR-Z0-9 ]{17,22})/i);
+    if (vinLabelMatch) {
+      const cleaned = vinLabelMatch[1].replace(/\s/g, '');
+      if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)) {
+        context.vin = cleaned.toUpperCase();
+      }
     }
+    // Strategy 2: Standard 17 consecutive chars
+    if (!context.vin) {
+      const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
+      if (vinMatch) {
+        context.vin = vinMatch[1].toUpperCase();
+      }
+    }
+    // Strategy 3: Look in DOM elements with VIN-related attributes
     if (!context.vin) {
       const vinEls = document.querySelectorAll('[data-testid*="vin"], [class*="vin"], [class*="VIN"], [aria-label*="VIN"], [aria-label*="vin"]');
       for (const el of vinEls) {
-        const m = el.textContent.match(/[A-HJ-NPR-Z0-9]{17}/i);
+        const raw = (el.textContent || '').replace(/\s/g, '');
+        const m = raw.match(/[A-HJ-NPR-Z0-9]{17}/i);
         if (m) { context.vin = m[0].toUpperCase(); break; }
       }
     }
@@ -154,16 +168,18 @@ function detectContext() {
     }
 
     if (!context.mileage) {
+      // Shop-Ware shows "Odometer In: 2222  Out: 39390"
       const patterns = [
-        /Mileage[:\s]*([\d,]+)/i,
+        /Odometer\s+In:\s*([\d,]+)/i,
         /Odometer[:\s]*([\d,]+)/i,
-        /In[:\s]*([\d,]+)/i
+        /Mileage[:\s]*([\d,]+)/i,
+        /In:\s*([\d,]+)/i
       ];
       for (const p of patterns) {
         const m = pageText.match(p);
         if (m) {
           const v = parseInt(m[1].replace(/,/g, ''));
-          if (v > 100 && v < 1000000) { context.mileage = v; break; }
+          if (v > 0 && v < 1000000) { context.mileage = v; break; }
         }
       }
     }
@@ -266,52 +282,106 @@ function updateContext() {
   }
 }
 
+// ==================== HELPERS ====================
+function findSectionByHeading(pattern) {
+  const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, b, [class*="heading"], [class*="title"], [class*="section-header"]');
+  for (const h of headings) {
+    if (pattern.test(h.textContent || '')) {
+      // Return the parent section container
+      let section = h.parentElement;
+      for (let i = 0; i < 4 && section; i++) {
+        if (section.querySelector('textarea, [contenteditable="true"], input[type="text"]')) return section;
+        section = section.parentElement;
+      }
+      return h.parentElement;
+    }
+  }
+  // Also try scanning all elements for the text
+  const allEls = document.querySelectorAll('div, section, fieldset');
+  for (const el of allEls) {
+    const directText = Array.from(el.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    if (pattern.test(directText)) return el;
+  }
+  return null;
+}
+
+function getNearbyText(el) {
+  let text = '';
+  const parent = el.parentElement;
+  if (parent) {
+    const prev = parent.previousElementSibling;
+    if (prev) text += prev.textContent || '';
+    text += parent.textContent || '';
+  }
+  text += el.getAttribute('placeholder') || '';
+  text += el.getAttribute('aria-label') || '';
+  text += el.getAttribute('name') || '';
+  return text;
+}
+
+function setFieldValue(el, text) {
+  try {
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+      const setter = Object.getOwnPropertyDescriptor(
+        el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      if (setter) { setter.call(el, text); } else { el.value = text; }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      el.textContent = text;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    el.focus();
+    console.log('[MOS Tools] Field value set successfully');
+    return true;
+  } catch (e) {
+    console.warn('[MOS Tools] Error setting field value:', e);
+    return false;
+  }
+}
+
 // ==================== CONCERN TEXT INJECTION ====================
 function injectConcernText(text) {
-  // Try common concern/complaint textareas in Shop-Ware's UI
+  // Shop-Ware shows "Reason for Customer's Visit" section with a textarea/editable area.
+  // Strategy 1: Find the "Reason for Customer's Visit" section and its textarea
+  const reasonSection = findSectionByHeading(/Reason\s+for\s+Customer/i);
+  if (reasonSection) {
+    const textarea = reasonSection.querySelector('textarea, [contenteditable="true"], input[type="text"]');
+    if (textarea && textarea.offsetParent !== null) {
+      if (setFieldValue(textarea, text)) return true;
+    }
+  }
+
+  // Strategy 2: Try common concern/complaint textareas
   const selectors = [
+    'textarea[placeholder*="reason" i]',
     'textarea[placeholder*="concern" i]',
     'textarea[placeholder*="complaint" i]',
     'textarea[placeholder*="customer" i]',
     'textarea[name*="concern" i]',
+    'textarea[name*="reason" i]',
     'textarea[name*="complaint" i]',
     'textarea[aria-label*="concern" i]',
-    'textarea[aria-label*="complaint" i]',
-    'textarea[data-testid*="concern" i]',
-    '[contenteditable="true"][aria-label*="concern" i]',
-    '[contenteditable="true"][data-testid*="concern" i]',
-    'textarea'  // fallback: first visible textarea on the page
+    'textarea[aria-label*="reason" i]',
+    '[contenteditable="true"]',
+    'textarea'
   ];
 
   for (const sel of selectors) {
     const els = document.querySelectorAll(sel);
     for (const el of els) {
-      if (el.offsetParent === null) continue; // skip hidden
-      const isFallback = sel === 'textarea';
-      // For the blanket textarea fallback, only use if it looks like a concern field
+      if (el.offsetParent === null) continue;
+      const isFallback = sel === 'textarea' || sel === '[contenteditable="true"]';
       if (isFallback) {
-        const label = el.getAttribute('placeholder') || el.getAttribute('aria-label') || '';
-        if (!/(concern|complaint|customer|note|description)/i.test(label)) continue;
+        const nearby = getNearbyText(el);
+        if (!/(reason|concern|complaint|customer|visit|note|description)/i.test(nearby)) continue;
       }
 
-      // Set value
-      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-          || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(el, text);
-        } else {
-          el.value = text;
-        }
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      } else {
-        el.textContent = text;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+      if (setFieldValue(el, text)) {
+        console.log('[MOS Tools] Concern injected into:', sel);
+        return true;
       }
-      el.focus();
-      console.log('[MOS Tools] Concern injected into:', sel);
-      return true;
     }
   }
   return false;
@@ -348,29 +418,10 @@ function showToast(message, type = 'info') {
 // ==================== PRINT BUTTON ====================
 let printButtonInjected = false;
 
-function injectPrintButton() {
-  if (printButtonInjected) return;
-  const context = detectContext();
-  if (!context.roId) return;
-  if (document.getElementById('mos-print-btn-sw')) { printButtonInjected = true; return; }
-
-  // Look for a toolbar or action bar near the top of the page
-  const containers = [
-    document.querySelector('[class*="toolbar"]'),
-    document.querySelector('[class*="Toolbar"]'),
-    document.querySelector('[class*="action-bar"]'),
-    document.querySelector('[class*="ActionBar"]'),
-    document.querySelector('[class*="header-actions"]'),
-    document.querySelector('[class*="work-order-header"]'),
-    document.querySelector('header'),
-    document.querySelector('nav')
-  ];
-  const targetContainer = containers.find(c => c !== null);
-  if (!targetContainer) return;
-
+function createPrintButton() {
   const button = document.createElement('button');
   button.id = 'mos-print-btn-sw';
-  button.title = 'MOS Oil Sticker — Print';
+  button.title = 'MOS Oil Sticker\nLeft-click: Print';
   button.type = 'button';
 
   const imgUrl = chrome.runtime.getURL('icons/mos-print-button.png');
@@ -379,14 +430,20 @@ function injectPrintButton() {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '2px 4px',
+    padding: '2px',
     background: 'transparent',
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    marginLeft: '6px'
+    marginLeft: '4px',
+    verticalAlign: 'middle',
+    transition: 'opacity 0.2s'
   });
-  button.addEventListener('click', () => {
+  button.addEventListener('mouseenter', () => { button.style.opacity = '0.8'; });
+  button.addEventListener('mouseleave', () => { button.style.opacity = '1'; });
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const ctx = detectContext();
     if (!ctx.roId || !ctx.shopId) { showToast('No work order detected', 'error'); return; }
     showToast('Generating sticker...', 'info');
@@ -398,10 +455,99 @@ function injectPrintButton() {
       }
     });
   });
+  return button;
+}
 
-  targetContainer.appendChild(button);
-  printButtonInjected = true;
-  console.log('[MOS Tools] Shop-Ware print button injected');
+function injectPrintButton() {
+  if (printButtonInjected) return;
+  const context = detectContext();
+  if (!context.roId) return;
+  if (document.getElementById('mos-print-btn-sw')) { printButtonInjected = true; return; }
+
+  // Shop-Ware WO page has a vehicle info card on the right side of the page.
+  // The card shows "2016 Jeep Wrangler" as header with a three-dot menu (⋮).
+  // We inject the MOS print button next to that three-dot menu.
+
+  // Strategy 1: Find the element containing the VIN label — the vehicle card
+  // Walk up to find the card container, then find its three-dot menu / action area
+  let injected = false;
+
+  // Look for text node containing "VIN:" to identify the vehicle card
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+  let vinNode = null;
+  while (walker.nextNode()) {
+    if (/VIN:/i.test(walker.currentNode.textContent)) {
+      vinNode = walker.currentNode;
+      break;
+    }
+  }
+
+  if (vinNode) {
+    // Walk up to find the containing card (usually a div with padding/border)
+    let card = vinNode.parentElement;
+    for (let i = 0; i < 8 && card; i++) {
+      // Look for a three-dot menu button within this container
+      const menuBtn = card.querySelector('button[class*="dropdown"], button[class*="menu"], [class*="dropdown"] > button, [class*="kebab"], [class*="more"]');
+      if (menuBtn) {
+        const btn = createPrintButton();
+        menuBtn.parentElement.insertBefore(btn, menuBtn);
+        injected = true;
+        break;
+      }
+      // Or look for the vehicle title heading (e.g. "2016 Jeep Wrangler")
+      const headings = card.querySelectorAll('h1, h2, h3, h4, h5, strong, b');
+      for (const h of headings) {
+        if (/\b(19|20)\d{2}\s+\w+/.test(h.textContent || '')) {
+          const btn = createPrintButton();
+          h.parentElement.appendChild(btn);
+          injected = true;
+          break;
+        }
+      }
+      if (injected) break;
+      card = card.parentElement;
+    }
+  }
+
+  // Strategy 2: Find three-dot menu buttons (⋮) near vehicle info — look for the second one
+  // (first ⋮ is on customer card, second is on vehicle card)
+  if (!injected) {
+    const allBtns = document.querySelectorAll('button');
+    const dotMenuBtns = [];
+    for (const btn of allBtns) {
+      const text = (btn.textContent || '').trim();
+      const svg = btn.querySelector('svg');
+      if (text === '⋮' || text === '...' || text === '⋯' ||
+          btn.getAttribute('aria-label')?.includes('more') ||
+          btn.getAttribute('aria-label')?.includes('menu') ||
+          (svg && /ellipsis|dot|more|kebab/i.test(svg.getAttribute('class') || ''))) {
+        dotMenuBtns.push(btn);
+      }
+    }
+    // The vehicle card's menu is typically the second three-dot menu on the page
+    const vehicleMenu = dotMenuBtns.length >= 2 ? dotMenuBtns[1] : dotMenuBtns[0];
+    if (vehicleMenu) {
+      const btn = createPrintButton();
+      vehicleMenu.parentElement.insertBefore(btn, vehicleMenu);
+      injected = true;
+    }
+  }
+
+  // Strategy 3: Fallback — append to the WO header area
+  if (!injected) {
+    const woHeader = Array.from(document.querySelectorAll('h1, h2, h3, [class*="header"], [class*="Header"]'))
+      .find(el => /Work\s+Order/i.test(el.textContent || ''));
+    if (woHeader) {
+      const btn = createPrintButton();
+      woHeader.appendChild(btn);
+      injected = true;
+    }
+  }
+
+  if (injected) {
+    printButtonInjected = true;
+    console.log('[MOS Tools] Shop-Ware print button injected');
+  }
 }
 
 function printStickerFromContentScript(sticker) {
