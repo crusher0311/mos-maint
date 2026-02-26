@@ -467,21 +467,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         if (provider === 'shopware') {
           console.log('[Concern] Injecting concern via Shop-Ware content script (internal API + DOM fallback)');
-          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
-          for (const tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, {
+          let targetTabId = currentSmsContext?._tabId;
+          if (!targetTabId) {
+            const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+            if (tabs.length > 0) targetTabId = tabs[0].id;
+          }
+          if (!targetTabId) {
+            sendResponse({ success: false, error: 'No Shop-Ware tab found. Please paste the concern manually.' });
+            return;
+          }
+
+          const trySend = (tabId) => new Promise((resolve) => {
+            chrome.tabs.sendMessage(tabId, {
               action: 'INJECT_CONCERN_TEXT',
               text: concernText
             }, (res) => {
-              if (res?.success) {
-                sendResponse({ success: true });
+              if (chrome.runtime.lastError) {
+                console.warn('[Concern] Content script not reachable:', chrome.runtime.lastError.message);
+                resolve(null);
               } else {
-                sendResponse({ success: false, error: 'Could not inject concern — please paste manually into the concern field.' });
+                resolve(res);
               }
             });
-            return;
+          });
+
+          let res = await trySend(targetTabId);
+          if (!res) {
+            try {
+              console.log('[Concern] Re-injecting content script and retrying...');
+              await chrome.scripting.executeScript({
+                target: { tabId: targetTabId },
+                files: ['adapters/shopware-content.js']
+              });
+              await new Promise(r => setTimeout(r, 500));
+              res = await trySend(targetTabId);
+            } catch (e) {
+              console.error('[Concern] Script re-injection failed:', e.message);
+            }
           }
-          sendResponse({ success: false, error: 'No Shop-Ware tab found. Please paste the concern manually.' });
+
+          if (res?.success) {
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Could not inject concern — please paste manually into the concern field.' });
+          }
           return;
         }
 

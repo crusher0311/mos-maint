@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MOS Tools",
-  "version": "1.21.6",
+  "version": "1.21.7",
   "description": "Maintenance planning and job management for automotive shops",
   "permissions": [
     "storage",
     "sidePanel",
     "activeTab",
-    "webRequest"
+    "webRequest",
+    "scripting"
   ],
   "host_permissions": [
     "https://shop.tekmetric.com/*",
