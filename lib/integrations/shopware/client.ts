@@ -71,7 +71,7 @@ export async function shopWareRequest<T = any>(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Shop-Ware API error ${response.status}: ${errorText}`);
+      throw new Error(`Shop-Ware API error ${response.status} (${url}): ${errorText}`);
     }
 
     return response.json() as Promise<T>;
