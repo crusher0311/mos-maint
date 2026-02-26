@@ -585,11 +585,21 @@ function updateTabAccessibility() {
     'sticker': 'oil_sticker',
     'specs': null
   };
+
+  const isShopWare = currentContext?.provider === 'shopware';
+  const hiddenForProvider = isShopWare ? ['lookup', 'canned'] : [];
   
   let firstAvailableTab = null;
   
   elements.tabBtns.forEach(btn => {
     const tab = btn.dataset.tab;
+
+    if (hiddenForProvider.includes(tab)) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = '';
+
     const featureKey = featureMap[tab];
     const hasAccess = featureKey ? shopFeatures[featureKey] : true;
     
