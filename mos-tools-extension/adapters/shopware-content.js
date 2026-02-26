@@ -740,6 +740,59 @@ async function addServiceToRO(serviceName, workOrderId, vehicle) {
   }
 }
 
+// ==================== ADD FINDING TO RO ====================
+
+async function addFindingToRO(text, workOrderId, isDraft = false) {
+  if (!workOrderId) {
+    showToast('No work order detected. Navigate to a work order first.', 'error');
+    return { success: false, error: 'No work order ID' };
+  }
+  if (!text) {
+    return { success: false, error: 'No finding text provided' };
+  }
+
+  const csrfToken = getCsrfToken();
+  if (!csrfToken) {
+    return { success: false, error: 'No CSRF token found' };
+  }
+
+  const statusLabel = isDraft ? 'Draft' : 'Published';
+  showToast(`Adding finding as ${statusLabel}...`, 'info');
+
+  try {
+    const res = await fetch(`/work_orders/${workOrderId}/notes/`, {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'content-type': 'application/json',
+        'x-csrf-token': csrfToken,
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        note: { text },
+        is_draft: isDraft
+      })
+    });
+
+    if (res.ok) {
+      console.log(`[MOS Tools] Finding added to WO ${workOrderId} (${statusLabel})`);
+      showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
+      setTimeout(() => window.location.reload(), 1500);
+      return { success: true, status: statusLabel };
+    } else {
+      const errBody = await res.text().catch(() => '');
+      console.warn('[MOS Tools] Add finding failed:', res.status, errBody.substring(0, 200));
+      showToast(`Failed to add finding (${res.status}). Try adding it manually.`, 'error');
+      return { success: false, error: `Failed (${res.status})` };
+    }
+  } catch (err) {
+    console.error('[MOS Tools] Add finding error:', err);
+    showToast(`Error adding finding: ${err.message}`, 'error');
+    return { success: false, error: err.message };
+  }
+}
+
 // ==================== MESSAGE HANDLERS ====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'GET_PAGE_CONTEXT') {
@@ -773,6 +826,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'SW_ADD_SERVICE') {
     addServiceToRO(message.serviceName, message.workOrderId, message.vehicle)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'SW_ADD_FINDING') {
+    addFindingToRO(message.text, message.workOrderId, message.isDraft)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;

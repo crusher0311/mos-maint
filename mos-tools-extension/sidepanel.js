@@ -858,18 +858,19 @@ function setupAddDropdowns() {
       const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
       
       if (action === 'search-history') {
-        // Switch to Job Lookup tab and search for this service
         switchTab('lookup');
         elements.jobSearch.value = serviceName;
         await handleJobSearch();
       } else if (action === 'search-canned') {
-        // Switch to Canned Jobs tab and search
         switchTab('canned');
-        // Filter canned jobs list by the service name
         elements.cannedSearch.value = serviceName;
         filterCannedJobs(serviceName);
       } else if (action === 'add-generic') {
-        // Add as generic job
+        await handleAddService(service);
+      } else if (action === 'sw-finding-publish' || action === 'sw-finding-draft') {
+        const isDraft = action === 'sw-finding-draft';
+        await handleSwAddFinding(service, isDraft);
+      } else if (action === 'sw-add-service') {
         await handleAddService(service);
       }
     });
@@ -992,6 +993,26 @@ function createServiceItemHTML(item, type) {
             + Add
           </button>
           <div id="${itemId}" class="add-dropdown-menu hidden">
+            ${currentContext?.provider === 'shopware' ? `
+            <button class="add-dropdown-item add-primary" data-action="sw-finding-publish" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+              Add Finding (Published)
+            </button>
+            <button class="add-dropdown-item" data-action="sw-finding-draft" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Add Finding (Draft)
+            </button>
+            <button class="add-dropdown-item" data-action="sw-add-service" data-service='${JSON.stringify(item)}'>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Service (Direct to RO)
+            </button>
+            ` : `
             ${hasFullDetails ? `
             <button class="add-dropdown-item add-primary" data-action="add-generic" data-service='${JSON.stringify(item)}'>
               ${addIcon}
@@ -1016,6 +1037,7 @@ function createServiceItemHTML(item, type) {
               ${addLabel}
             </button>
             ` : ''}
+            `}
           </div>
         </div>
       </div>
@@ -1513,6 +1535,39 @@ async function handleAddService(service) {
   };
   
   await handleAddJob(jobData);
+}
+
+async function handleSwAddFinding(service, isDraft = false) {
+  if (!currentContext || !currentContext.roId) {
+    showNotification('No repair order context. Navigate to a work order first.', 'error');
+    return;
+  }
+
+  const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
+  const details = [];
+  if (service.laborHours) details.push(`${service.laborHours} hrs labor`);
+  if (service.parts?.length) details.push(`${service.parts.length} part(s)`);
+  const findingText = details.length > 0 
+    ? `${serviceName} — ${details.join(', ')}`
+    : serviceName;
+
+  try {
+    const result = await sendMessage({
+      action: 'SW_ADD_FINDING',
+      text: findingText,
+      workOrderId: currentContext.roId,
+      isDraft
+    });
+    if (result.success) {
+      const status = isDraft ? 'Draft' : 'Published';
+      showNotification(`Finding added (${status}): ${serviceName}`, 'success');
+    } else {
+      throw new Error(result.error || 'Failed to add finding');
+    }
+  } catch (err) {
+    console.error('[MOS] Error adding Shop-Ware finding:', err);
+    showNotification(err.message, 'error');
+  }
 }
 
 async function handleAddJob(job) {

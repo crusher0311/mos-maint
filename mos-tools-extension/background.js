@@ -320,6 +320,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "SW_ADD_FINDING") {
+    (async () => {
+      try {
+        if (!message.workOrderId) {
+          sendResponse({ success: false, error: 'No work order ID — navigate to a work order first' });
+          return;
+        }
+        const targetTabId = currentSmsContext?._tabId;
+        let tabId;
+        if (targetTabId) {
+          tabId = targetTabId;
+        } else {
+          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+          if (tabs.length === 0) {
+            sendResponse({ success: false, error: 'No Shop-Ware tab found' });
+            return;
+          }
+          tabId = tabs[0].id;
+        }
+        chrome.tabs.sendMessage(tabId, {
+          action: 'SW_ADD_FINDING',
+          text: message.text,
+          workOrderId: message.workOrderId,
+          isDraft: message.isDraft
+        }, (res) => {
+          sendResponse(res || { success: false, error: 'No response from content script' });
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === "GET_TEKMETRIC_STATE") {
     sendResponse({
       hasToken: !!smsTokens.tekmetric,
