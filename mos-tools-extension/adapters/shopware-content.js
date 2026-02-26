@@ -1201,78 +1201,27 @@ async function checkAutoOpenRecommend() {
   if (!serviceName) return;
 
   console.log(`[MOS Tools] Auto-opening Recommend a Service for "${serviceName}"`);
+  showToast(`Opening "Recommend a Service" for "${serviceName}"...`, 'info');
 
-  const waitForEl = (selector, maxWait = 8000) => new Promise((resolve) => {
-    const existing = document.querySelector(selector);
-    if (existing) return resolve(existing);
-    const observer = new MutationObserver(() => {
-      const el = document.querySelector(selector);
-      if (el) { observer.disconnect(); resolve(el); }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    setTimeout(() => { observer.disconnect(); resolve(null); }, maxWait);
-  });
+  await new Promise(r => setTimeout(r, 2500));
 
-  const notesTab = await waitForEl('[data-tab="notes"], .notes-tab, a[href*="notes"]');
-  if (notesTab) notesTab.click();
-  await new Promise(r => setTimeout(r, 500));
-
-  const findRecommendBtn = () => {
-    const allBtns = document.querySelectorAll('button, a, [role="button"]');
+  const clickAddService = () => {
+    const allBtns = document.querySelectorAll('button, a, [role="button"], span');
     for (const btn of allBtns) {
       const txt = (btn.textContent || '').trim().toLowerCase();
-      if (txt.includes('recommend') && (txt.includes('service') || txt.includes('a service'))) return btn;
+      if (txt === 'add service' || txt === 'recommend a service' || txt === 'recommend service') {
+        btn.click();
+        return true;
+      }
     }
-    const links = document.querySelectorAll('a[href*="recommend"], button[data-action*="recommend"]');
-    if (links.length) return links[0];
-    return null;
+    return false;
   };
 
-  let recommendBtn = findRecommendBtn();
-  if (!recommendBtn) {
-    const noteEls = document.querySelectorAll('.note, .note-item, [class*="note"], [data-note-id]');
-    for (const noteEl of noteEls) {
-      const txt = (noteEl.textContent || '').trim();
-      if (txt.includes(data.noteText?.substring(0, 30) || serviceName)) {
-        noteEl.click();
-        await new Promise(r => setTimeout(r, 500));
-        recommendBtn = findRecommendBtn();
-        if (recommendBtn) break;
-      }
-    }
-  }
-
-  if (!recommendBtn) {
-    await new Promise(r => setTimeout(r, 2000));
-    recommendBtn = findRecommendBtn();
-  }
-
-  if (recommendBtn) {
-    recommendBtn.click();
-    console.log(`[MOS Tools] Clicked "Recommend a Service" button`);
-
-    await new Promise(r => setTimeout(r, 1000));
-
-    const searchInputs = document.querySelectorAll('input[type="search"], input[type="text"], input[placeholder*="earch"]');
-    for (const input of searchInputs) {
-      const isInModal = input.closest('.modal, [role="dialog"], .overlay, .popup, .recommend');
-      if (isInModal || searchInputs.length === 1) {
-        input.value = serviceName;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
-
-        const searchBtn = input.parentElement?.querySelector('button, [type="submit"]');
-        if (searchBtn) searchBtn.click();
-
-        console.log(`[MOS Tools] Pre-filled search with "${serviceName}"`);
-        break;
-      }
-    }
+  if (clickAddService()) {
+    console.log(`[MOS Tools] Clicked "Add Service" / "Recommend a Service" button`);
   } else {
-    console.warn('[MOS Tools] Could not find "Recommend a Service" button');
-    showToast(`Finding added. Click it and use "Recommend a Service" to add "${serviceName}".`, 'info');
+    console.warn('[MOS Tools] Could not find "Add/Recommend Service" button');
+    showToast(`Finding added. Use Shop-Ware's "Add Service" to attach "${serviceName}".`, 'info');
   }
 }
 
