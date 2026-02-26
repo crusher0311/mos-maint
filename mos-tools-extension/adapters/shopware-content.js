@@ -728,12 +728,51 @@ function injectPrintButton() {
 
 function printStickerFromContentScript(sticker) {
   const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:999999;background:white;';
-  iframe.srcdoc = `<!DOCTYPE html><html><head><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:white;}img{max-width:100%;height:auto;}</style></head><body><img src="${sticker.imageUrl}" onload="window.print();setTimeout(()=>window.parent.postMessage('done','*'),500);" /></body></html>`;
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
   document.body.appendChild(iframe);
-  window.addEventListener('message', (e) => {
-    if (e.data === 'done') iframe.remove();
-  }, { once: true });
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Print Sticker</title>
+      <style>
+        @page { margin: 0; size: auto; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; }
+        img {
+          width: ${sticker.widthInches || '2in'};
+          height: ${sticker.heightInches || '2.5in'};
+          display: block;
+        }
+      </style>
+    </head>
+    <body>
+      <img id="sticker" src="${sticker.dataUrl}" />
+    </body>
+    </html>
+  `);
+  doc.close();
+
+  const img = doc.getElementById('sticker');
+  const doPrint = () => {
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => iframe.remove(), 1000);
+    }, 100);
+  };
+
+  if (img.complete) {
+    doPrint();
+  } else {
+    img.onload = doPrint;
+    img.onerror = () => {
+      showToast('Failed to load sticker image', 'error');
+      iframe.remove();
+    };
+  }
 }
 
 function checkAndInjectButton() {
