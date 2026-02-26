@@ -1061,10 +1061,16 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     showToast(`Finding added (${statusLabel}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`, 'success');
 
     if (serviceName) {
-      sessionStorage.setItem('mos_open_recommend', JSON.stringify({ noteText: text, serviceName, noteId }));
+      const recommendBtn = document.querySelector('a.search-service-btn, a.toolbar-recommendation-dropdown-btn');
+      if (recommendBtn) {
+        recommendBtn.click();
+        console.log('[MOS Tools] Opened Recommend Service modal immediately');
+      } else {
+        sessionStorage.setItem('mos_open_recommend', JSON.stringify({ noteText: text, serviceName, noteId }));
+        setTimeout(() => window.location.reload(), 500);
+      }
     }
 
-    setTimeout(() => window.location.reload(), 500);
     return { success: true, status: statusLabel, jobName: serviceName || text };
   } catch (err) {
     console.error('[MOS Tools] Add finding error:', err);
