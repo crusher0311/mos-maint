@@ -511,7 +511,125 @@ function createPrintButton() {
       }
     });
   });
+  button.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showIntervalDropdown(e, button);
+  });
   return button;
+}
+
+async function showIntervalDropdown(event, buttonElement) {
+  const existingDropdown = document.getElementById('mos-interval-dropdown');
+  if (existingDropdown) { existingDropdown.remove(); return; }
+
+  const context = detectContext();
+
+  const dropdown = document.createElement('div');
+  dropdown.id = 'mos-interval-dropdown';
+  Object.assign(dropdown.style, {
+    position: 'fixed',
+    backgroundColor: '#fff',
+    border: '1px solid #e0e0e0',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    zIndex: '999999',
+    minWidth: '180px',
+    padding: '4px 0',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  });
+
+  const rect = buttonElement.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + 4}px`;
+  dropdown.style.left = `${rect.left}px`;
+
+  dropdown.innerHTML = '<div style="padding: 12px 16px; color: #666; font-size: 13px;">Loading intervals...</div>';
+  document.body.appendChild(dropdown);
+
+  let intervals = [];
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'shopware'}`
+      }, resolve);
+    });
+
+    if (result && result.config && result.config.intervals) {
+      const cfg = result.config.intervals;
+      if (cfg.conventional) {
+        intervals.push({ label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} mi / ${cfg.conventional.months} mo`, miles: cfg.conventional.mileage, months: cfg.conventional.months });
+      }
+      if (cfg.synthetic) {
+        intervals.push({ label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} mi / ${cfg.synthetic.months} mo`, miles: cfg.synthetic.mileage, months: cfg.synthetic.months });
+      }
+      if (cfg.euro) {
+        intervals.push({ label: `Euro: ${cfg.euro.mileage.toLocaleString()} mi / ${cfg.euro.months} mo`, miles: cfg.euro.mileage, months: cfg.euro.months });
+      }
+      if (cfg.diesel) {
+        intervals.push({ label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} mi / ${cfg.diesel.months} mo`, miles: cfg.diesel.mileage, months: cfg.diesel.months });
+      }
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to fetch sticker config:', err);
+  }
+
+  if (intervals.length === 0) {
+    intervals = [
+      { label: 'Conventional: 3,000 mi / 3 mo', miles: 3000, months: 3 },
+      { label: 'Synthetic: 5,000 mi / 6 mo', miles: 5000, months: 6 },
+      { label: 'Euro: 10,000 mi / 12 mo', miles: 10000, months: 12 },
+      { label: 'Diesel: 7,500 mi / 6 mo', miles: 7500, months: 6 }
+    ];
+  }
+
+  intervals.push({ label: 'Customize...', action: 'customize' });
+
+  dropdown.innerHTML = '';
+
+  intervals.forEach(interval => {
+    const item = document.createElement('div');
+    item.textContent = interval.label;
+    Object.assign(item.style, {
+      padding: '8px 16px',
+      cursor: 'pointer',
+      fontSize: '13px',
+      color: '#333',
+      transition: 'background-color 0.15s'
+    });
+    item.addEventListener('mouseenter', () => { item.style.backgroundColor = '#f5f5f5'; });
+    item.addEventListener('mouseleave', () => { item.style.backgroundColor = 'transparent'; });
+    item.addEventListener('click', () => {
+      dropdown.remove();
+      if (interval.action === 'customize') {
+        chrome.runtime.sendMessage({ action: 'OPEN_STICKER_PANEL', context });
+      } else {
+        const ctx = detectContext();
+        if (!ctx.roId || !ctx.shopId) { showToast('No work order detected', 'error'); return; }
+        showToast(`Generating sticker (${interval.miles.toLocaleString()} mi)...`, 'info');
+        chrome.runtime.sendMessage({
+          action: 'PRINT_STICKER_IMMEDIATE',
+          context: ctx,
+          overrideInterval: { miles: interval.miles, months: interval.months }
+        }, (response) => {
+          if (response?.success) {
+            printStickerFromContentScript(response.sticker);
+          } else {
+            showToast(response?.error || 'Failed to generate sticker', 'error');
+          }
+        });
+      }
+    });
+    dropdown.appendChild(item);
+  });
+
+  const closeDropdown = (e) => {
+    if (!dropdown.contains(e.target) && e.target !== buttonElement) {
+      dropdown.remove();
+      document.removeEventListener('click', closeDropdown);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeDropdown), 0);
 }
 
 function injectPrintButton() {

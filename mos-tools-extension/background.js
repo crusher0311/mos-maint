@@ -931,7 +931,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   }
   
   // Call the sticker API
-  const response = await fetch(`${mosApiUrl}/api/extension/sticker`, {
+  const response = await fetch(`${mosApiUrl}/api/extension/sticker?_token=${encodeURIComponent(mosApiToken)}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${mosApiToken}`,
