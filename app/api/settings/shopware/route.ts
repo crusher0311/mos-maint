@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { tenantId, swShopId } = body;
+    const { tenantId, swShopId, tenantSubdomain } = body;
 
     if (!swShopId) {
       return NextResponse.json({ error: 'swShopId is required' }, { status: 400 });
@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
           'shopware.shopName': shopName,
           'shopware.connectedAt': new Date(),
           'shopware.lastSyncAt': null,
+          ...(tenantSubdomain ? { 'shopware.tenantSubdomain': tenantSubdomain } : {}),
         },
       },
       { upsert: true }

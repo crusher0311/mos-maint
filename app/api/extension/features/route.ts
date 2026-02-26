@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
     let mosShopId: number | null = null;
     
     if (smsShopId) {
-      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
+      const provider = searchParams.get("provider") || undefined;
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
       }

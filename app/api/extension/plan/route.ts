@@ -533,64 +533,25 @@ export async function GET(request: NextRequest) {
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    let mosShopId: number | null = null;
-    let shopDoc: any = null;
-    
-    // Try to find shop by SMS shop ID across all integration types
-    const tekShopIdNum = parseInt(smsShopId);
-    const tekShopIdStr = String(smsShopId);
-    
-    // Build query to find shop by any integration's shop ID
-    const shopQuery: any = {
-      $or: [
-        // Tekmetric
-        { "tekmetric.shopId": tekShopIdNum },
-        { "tekmetric.shopId": tekShopIdStr },
-        { tekmetricShopId: tekShopIdNum },
-        { tekmetricShopId: tekShopIdStr },
-        // Protractor
-        { "protractor.connectionId": smsShopId },
-        { protractorConnectionId: smsShopId },
-        // AutoFlow
-        { "autoflow.shopId": smsShopId },
-        { "autoflow.domain": smsShopId },
-        { "autoflow.domain": `${smsShopId}.autotext.me` },
-        { "autoflow.subdomain": smsShopId },
-        { autoflowDomain: smsShopId },
-        { autoflowDomain: `${smsShopId}.autotext.me` },
-        // Shop-Ware (tenant subdomain)
-        { "shopware.tenantSubdomain": smsShopId },
-      ]
-    };
-    
-    if (!isPlatformAdmin) {
-      shopQuery.shopId = { $in: userShopIds };
-    }
-    
-    shopDoc = await db.collection("shops").findOne(shopQuery);
-    
-    if (shopDoc) {
-      mosShopId = shopDoc.shopId;
-      console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), integrationProvider: ${shopDoc.integrationProvider}`);
-    } else {
-      console.log(`[Extension] No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
-    }
+    const shopResult = await findShopBySmsId(smsShopId, { 
+      userShopIds, 
+      isPlatformAdmin, 
+      providerHint: providerHint || undefined 
+    });
 
-    if (!mosShopId) {
+    if (!shopResult) {
+      console.log(`[Extension] No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
       return NextResponse.json(
         { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
         { status: 404, headers: corsHeaders }
       );
     }
+
+    const mosShopId = shopResult.mosShopId;
+    const shopDoc = shopResult.shopDoc;
+    const provider = shopResult.provider;
     
-    // Use the shop's actual integration provider, not the passed hint
-    // Fall back to detecting from config if integrationProvider field not set
-    const provider = shopDoc.integrationProvider 
-      || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
-        : shopDoc.protractor?.connectionId ? 'protractor' 
-        : shopDoc.shopware?.tenantId ? 'shopware'
-        : shopDoc.autoflow?.domain ? 'autoflow' 
-        : providerHint || 'tekmetric');
+    console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), provider: ${provider}`);
     
     if (providerHint && providerHint !== provider) {
       console.log(`[Extension] Provider mismatch: hint=${providerHint}, actual=${provider}`);

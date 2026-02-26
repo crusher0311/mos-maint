@@ -39,9 +39,11 @@ export async function GET(request: NextRequest) {
     const userShopIds = getUserShopIds(auth.user).map((id) => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
+    const providerHintParam = new URL(request.url).searchParams.get("provider") || undefined;
     const shopResult = await findShopBySmsId(smsShopId, {
       userShopIds,
       isPlatformAdmin,
+      providerHint: providerHintParam,
     });
 
     if (!shopResult) {

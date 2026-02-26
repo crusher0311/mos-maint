@@ -70,7 +70,8 @@ export async function GET(request: NextRequest) {
     
     if (smsShopId) {
       // Look up shop from SMS shop ID (Tekmetric/Protractor shop ID)
-      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin });
+      const providerParam = new URL(request.url).searchParams.get("provider") || undefined;
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: providerParam });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
         provider = shopResult.provider;
