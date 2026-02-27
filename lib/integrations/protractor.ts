@@ -411,7 +411,7 @@ export async function protractorFetch<T>(
 
             const fullXml = `<?xml version="1.0" encoding="utf-8"?>\n${woXml}`;
             const xmlRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-              const restUrl = new URL(`${PROTRACTOR_API_BASE}/WorkOrder/${woGuid}`);
+              const restUrl = new URL(`${BASE_URL}/WorkOrder/${woGuid}`);
               restUrl.searchParams.set("connectionId", config.connectionId);
               restUrl.searchParams.set("apiKey", config.apiKey);
               restUrl.searchParams.set("authentication", config.authentication);
