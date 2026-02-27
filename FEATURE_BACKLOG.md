@@ -1085,6 +1085,36 @@ An on-demand "Verify" feature that reviews a work order before the service advis
 
 ---
 
+## Bulk Add Plan Items to RO
+
+**Priority:** High  
+**Status:** Planned
+
+### Overview
+One-click injection of all overdue/due soon plan items from the Chrome extension into the repair order.
+
+### Key Considerations
+- **Tekmetric**: Each item needs to match a canned job in the shop's catalog. Items without a match could be skipped with a summary shown to the user. Consider a checklist UI where the advisor reviews and unchecks items before submitting.
+- **Shop-Ware**: Simpler for findings (just text). For "Add Service" mode, would need canned job search like single-add does today.
+- **UX options**: One-click "add all" vs. checklist approach where advisor can deselect items before injecting.
+
+---
+
+## DVI / Inspection Injection
+
+**Priority:** High  
+**Status:** Planned
+
+### Overview
+Push matching maintenance plan items into Tekmetric inspections (DVI) and potentially AutoFlow DVI so technicians see relevant recommendations during vehicle walkthroughs.
+
+### Key Considerations
+- **Tekmetric inspections**: Structured template with specific line items. Need to determine if Tekmetric's API allows writing to inspection line items or if this requires DOM-based injection via content script.
+- **AutoFlow DVI**: Uses their own inspection format. Extension already supports AutoFlow for context detection — could extend it for DVI injection.
+- **Matching logic**: The OEM-to-CARFAX service mappings could help match plan items to the right inspection line items using standardized service names.
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
@@ -1093,4 +1123,4 @@ An on-demand "Verify" feature that reviews a work order before the service advis
 
 ---
 
-*Last Updated: February 23, 2026*
+*Last Updated: February 27, 2026*
