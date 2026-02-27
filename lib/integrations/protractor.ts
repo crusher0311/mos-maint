@@ -401,52 +401,61 @@ export async function protractorFetch<T>(
 
         if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 0) {
           const woGuid = endpoint.replace('/WorkOrder/', '');
-          console.log(`[Protractor] REST POST (JSON) failing for WorkOrder — trying REST POST with XML content type...`);
+          console.log(`[Protractor] REST POST (JSON) failing for WorkOrder — trying minimal JSON payload...`);
           try {
             const woData = JSON.parse(body);
-            const woXml = buildWorkOrderXml(woData);
-            const xmlPkgCount = (woXml.match(/<ServicePackage>/g) || []).length;
-            const xmlLineCount = (woXml.match(/<ServicePackageLine>/g) || []).length;
-            console.log(`[Protractor] REST XML payload: ${woXml.length} chars, ${xmlPkgCount} packages, ${xmlLineCount} lines`);
-
-            const fullXml = `<?xml version="1.0" encoding="utf-8"?>\n${woXml}`;
-            const xmlRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+            
+            const minimalPayload = {
+              ID: woData.ID,
+              Type: woData.Type || "WorkOrder",
+              WorkOrderNumber: woData.WorkOrderNumber,
+              Completed: woData.Completed ?? false,
+              Contact: woData.Contact?.ID ? { ID: woData.Contact.ID } : undefined,
+              ServiceItem: woData.ServiceItem?.ID ? { ID: woData.ServiceItem.ID } : undefined,
+              ServicePackages: woData.ServicePackages,
+            };
+            Object.keys(minimalPayload).forEach(k => {
+              if ((minimalPayload as any)[k] === undefined) delete (minimalPayload as any)[k];
+            });
+            
+            const minimalBody = JSON.stringify(minimalPayload);
+            console.log(`[Protractor] Minimal JSON payload: ${minimalBody.length} chars, keys: ${Object.keys(minimalPayload).join(', ')}`);
+            
+            const minRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
               const restUrl = new URL(`${BASE_URL}/WorkOrder/${woGuid}`);
               restUrl.searchParams.set("connectionId", config.connectionId);
               restUrl.searchParams.set("apiKey", config.apiKey);
               restUrl.searchParams.set("authentication", config.authentication);
-              const reqOpts = {
+              const minReq = https.request({
                 hostname: restUrl.hostname,
                 port: 443,
                 path: `${restUrl.pathname}${restUrl.search}`,
                 method: "POST",
                 headers: {
-                  "Content-Type": "application/xml",
-                  "Accept": "application/xml",
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
                 },
-              };
-              const xmlReq = https.request(reqOpts, (response) => {
+              }, (response) => {
                 let data = "";
                 response.on("data", (chunk: string) => (data += chunk));
                 response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
               });
-              xmlReq.on("error", reject);
-              xmlReq.write(fullXml);
-              xmlReq.end();
+              minReq.on("error", reject);
+              minReq.write(minimalBody);
+              minReq.end();
             });
 
-            console.log(`[Protractor] REST XML response: HTTP ${xmlRes.statusCode} | Length: ${xmlRes.body.length} | Body (first 500): ${xmlRes.body.substring(0, 500)}`);
+            console.log(`[Protractor] Minimal JSON response: HTTP ${minRes.statusCode} | Length: ${minRes.body.length} | Body (first 500): ${minRes.body.substring(0, 500)}`);
 
-            if (xmlRes.statusCode >= 200 && xmlRes.statusCode < 300) {
-              console.log(`[Protractor] REST XML fallback succeeded for WorkOrder/${woGuid}`);
+            if (minRes.statusCode >= 200 && minRes.statusCode < 300) {
+              console.log(`[Protractor] Minimal JSON succeeded for WorkOrder/${woGuid}`);
               let parsedData = woData;
-              try {
-                if (xmlRes.body.startsWith('{')) parsedData = JSON.parse(xmlRes.body);
-              } catch {}
+              try { parsedData = JSON.parse(minRes.body); } catch {}
               return { ok: true, data: parsedData as T };
             }
 
-            console.log(`[Protractor] REST XML also failed (HTTP ${xmlRes.statusCode}), trying SOAP fallback...`);
+            console.log(`[Protractor] Minimal JSON also failed (HTTP ${minRes.statusCode}), trying SOAP fallback...`);
+            const woXml = buildWorkOrderXml(woData);
             const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
             if (soapResult.ok) {
               console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
@@ -454,7 +463,7 @@ export async function protractorFetch<T>(
             }
             console.log(`[Protractor] SOAP fallback also failed: ${soapResult.error}`);
           } catch (soapErr: any) {
-            console.log(`[Protractor] XML/SOAP fallback error: ${soapErr.message}`);
+            console.log(`[Protractor] Fallback error: ${soapErr.message}`);
           }
         }
 
@@ -1318,7 +1327,6 @@ export async function createProtractorWorkOrder(
           Chapter: chapter,
           Code: pkg.code || "",
           Rank: existingPkgs.length + 1,
-          Status: "Pending",
           ServicePackageHeader: {
             Title: pkg.title,
             Description: description,
@@ -1331,10 +1339,36 @@ export async function createProtractorWorkOrder(
           console.log(`[Create WO]   Line ${i}: ${l.Type} - "${l.Description}" Qty:${l.Quantity} Price:${l.Price}`);
         });
 
-        const updatedWo = {
-          ...currentWo,
+        const cw = currentWo as any;
+        const updatedWo: Record<string, any> = {
+          ID: cw.ID,
+          Type: cw.Type,
+          WorkOrderNumber: cw.WorkOrderNumber,
+          Completed: cw.Completed,
+          WorkflowStage: cw.WorkflowStage,
+          ScheduledTime: cw.ScheduledTime,
+          PromisedTime: cw.PromisedTime,
+          InUsage: cw.InUsage,
+          OutUsage: cw.OutUsage,
+          Flag: cw.Flag,
+          Tags: cw.Tags,
+          Note: cw.Note,
+          SearchString: cw.SearchString,
+          OtherChargeCode: cw.OtherChargeCode,
+          PurchaseOrderNumber: cw.PurchaseOrderNumber,
+          Duration: cw.Duration,
+          InvoiceTime: cw.InvoiceTime,
+          InvoiceNumber: cw.InvoiceNumber,
+          WorkOrderFlags: cw.WorkOrderFlags,
           ServicePackages: { ItemCollection: [...existingPkgs, newPkg] },
         };
+        if (cw.Contact?.ID) updatedWo.Contact = { ID: cw.Contact.ID };
+        if (cw.ServiceItem?.ID) updatedWo.ServiceItem = { ID: cw.ServiceItem.ID };
+        if (cw.ServiceAdvisor?.ID) updatedWo.ServiceAdvisor = { ID: cw.ServiceAdvisor.ID };
+        if (cw.Technician?.ID) updatedWo.Technician = { ID: cw.Technician.ID };
+        Object.keys(updatedWo).forEach(k => {
+          if (updatedWo[k] === undefined || updatedWo[k] === null) delete updatedWo[k];
+        });
 
         const updateResult = await protractorFetch<any>(
           `/WorkOrder/${workOrderId}`,
