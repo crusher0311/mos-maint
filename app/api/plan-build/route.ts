@@ -15,8 +15,6 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
-import { searchVehiclesByVin, getRepairOrders } from "@/lib/integrations/tekmetric/client";
-import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -829,24 +827,18 @@ export async function POST(req: NextRequest) {
 
     let customerName: string | null = null;
     const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
-    if (isTekmetricConfigured() && tekmetricShopId) {
+    if (tekmetricShopId) {
       try {
-        const vehicleResult = await searchVehiclesByVin(tekmetricShopId, vin);
-        if (vehicleResult.content?.length > 0) {
-          const vehicle = vehicleResult.content[0];
-          if (vehicle.id) {
-            const rosResult = await getRepairOrders(tekmetricShopId, { vehicleId: vehicle.id, size: 1 });
-            if (rosResult.content?.length > 0) {
-              latestRoNumber = String(rosResult.content[0].repairOrderNumber);
-              const ro = rosResult.content[0] as any;
-              if (ro.customer) {
-                customerName = [ro.customer.firstName, ro.customer.lastName].filter(Boolean).join(" ") || null;
-              }
-            }
-          }
+        const cachedWO = await db.collection("tekmetric_work_orders").findOne(
+          { vin: vin.toUpperCase(), tekmetricShopId: Number(tekmetricShopId) },
+          { sort: { createdAt: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
+        );
+        if (cachedWO) {
+          if (cachedWO.workOrderNumber) latestRoNumber = String(cachedWO.workOrderNumber);
+          if (cachedWO.customerName) customerName = cachedWO.customerName;
         }
       } catch (err) {
-        console.log(`[PlanBuild] Tekmetric fetch error for ${vin}:`, err);
+        console.log(`[PlanBuild] MongoDB WO lookup error for ${vin}:`, err);
       }
     }
 
