@@ -2060,7 +2060,7 @@ export async function fetchServicePackageTemplates(
 }
 
 const TEMPLATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const TEMPLATE_404_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for 404s
+const TEMPLATE_404_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days for 404s
 
 export async function fetchServicePackageTemplateDetail(
   shopId: number,

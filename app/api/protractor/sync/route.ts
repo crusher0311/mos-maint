@@ -96,12 +96,20 @@ export async function POST(req: NextRequest) {
     console.log(`[Protractor Sync] Canned jobs API result: ok=${cannedJobsResult.ok}, count=${cannedJobsResult.cannedJobs?.length || 0}`);
     
     if (cannedJobsResult.ok && cannedJobsResult.cannedJobs?.length) {
-      // Fetch full details for each template (with lines) using rate limiting
-      const templateLimit = pLimit(5); // 5 concurrent requests
-      console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
+      const templateLimit = pLimit(5);
+      const allTemplateIds = cannedJobsResult.cannedJobs.map((t: any) => t.ID).filter(Boolean);
+      const cached404s = await db.collection("protractor_template_cache").find({
+        shopId,
+        is404: true,
+        templateId: { $in: allTemplateIds },
+        expiresAt: { $gt: new Date() }
+      }, { projection: { templateId: 1 } }).toArray();
+      const known404Ids = new Set(cached404s.map((c: any) => c.templateId));
+      const templatesToFetch = cannedJobsResult.cannedJobs.filter((t: any) => !known404Ids.has(t.ID));
+      console.log(`[Protractor Sync] ${cannedJobsResult.cannedJobs.length} templates total, ${known404Ids.size} cached 404s skipped, fetching ${templatesToFetch.length} details...`);
       
       const templatesWithDetails = await Promise.all(
-        cannedJobsResult.cannedJobs.map((template: any) =>
+        templatesToFetch.map((template: any) =>
           templateLimit(async () => {
             try {
               const detailResult = await fetchServicePackageTemplateDetail(shopId, template.ID);
@@ -115,11 +123,12 @@ export async function POST(req: NextRequest) {
             } catch (err: any) {
               console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);
             }
-            // Fall back to summary if detail fetch fails
             return template;
           })
         )
       );
+      const skippedTemplates = cannedJobsResult.cannedJobs.filter((t: any) => known404Ids.has(t.ID));
+      templatesWithDetails.push(...skippedTemplates);
       
       await upsertCannedJobsCache(shopId, templatesWithDetails);
       results.cannedJobsSynced = templatesWithDetails.length;
