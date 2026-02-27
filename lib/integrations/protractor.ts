@@ -401,14 +401,52 @@ export async function protractorFetch<T>(
 
         if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 0) {
           const woGuid = endpoint.replace('/WorkOrder/', '');
-          console.log(`[Protractor] REST POST failing for WorkOrder — trying SOAP fallback...`);
+          console.log(`[Protractor] REST POST (JSON) failing for WorkOrder — trying REST POST with XML content type...`);
           try {
             const woData = JSON.parse(body);
             const woXml = buildWorkOrderXml(woData);
             const xmlPkgCount = (woXml.match(/<ServicePackage>/g) || []).length;
             const xmlLineCount = (woXml.match(/<ServicePackageLine>/g) || []).length;
-            console.log(`[Protractor] SOAP XML payload: ${woXml.length} chars, ${xmlPkgCount} packages, ${xmlLineCount} lines`);
-            console.log(`[Protractor] SOAP XML ServicePackages section: ${woXml.substring(woXml.indexOf('<ServicePackages>'), woXml.indexOf('</ServicePackages>') + 20)}`);
+            console.log(`[Protractor] REST XML payload: ${woXml.length} chars, ${xmlPkgCount} packages, ${xmlLineCount} lines`);
+
+            const fullXml = `<?xml version="1.0" encoding="utf-8"?>\n${woXml}`;
+            const xmlRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+              const restUrl = new URL(`${PROTRACTOR_API_BASE}/WorkOrder/${woGuid}`);
+              restUrl.searchParams.set("connectionId", config.connectionId);
+              restUrl.searchParams.set("apiKey", config.apiKey);
+              restUrl.searchParams.set("authentication", config.authentication);
+              const reqOpts = {
+                hostname: restUrl.hostname,
+                port: 443,
+                path: `${restUrl.pathname}${restUrl.search}`,
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/xml",
+                  "Accept": "application/xml",
+                },
+              };
+              const xmlReq = https.request(reqOpts, (response) => {
+                let data = "";
+                response.on("data", (chunk: string) => (data += chunk));
+                response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
+              });
+              xmlReq.on("error", reject);
+              xmlReq.write(fullXml);
+              xmlReq.end();
+            });
+
+            console.log(`[Protractor] REST XML response: HTTP ${xmlRes.statusCode} | Length: ${xmlRes.body.length} | Body (first 500): ${xmlRes.body.substring(0, 500)}`);
+
+            if (xmlRes.statusCode >= 200 && xmlRes.statusCode < 300) {
+              console.log(`[Protractor] REST XML fallback succeeded for WorkOrder/${woGuid}`);
+              let parsedData = woData;
+              try {
+                if (xmlRes.body.startsWith('{')) parsedData = JSON.parse(xmlRes.body);
+              } catch {}
+              return { ok: true, data: parsedData as T };
+            }
+
+            console.log(`[Protractor] REST XML also failed (HTTP ${xmlRes.statusCode}), trying SOAP fallback...`);
             const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
             if (soapResult.ok) {
               console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
@@ -416,7 +454,7 @@ export async function protractorFetch<T>(
             }
             console.log(`[Protractor] SOAP fallback also failed: ${soapResult.error}`);
           } catch (soapErr: any) {
-            console.log(`[Protractor] SOAP fallback error: ${soapErr.message}`);
+            console.log(`[Protractor] XML/SOAP fallback error: ${soapErr.message}`);
           }
         }
 
