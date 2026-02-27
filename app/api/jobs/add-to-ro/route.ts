@@ -215,23 +215,42 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const updatedWorkOrder = {
-    ...existingWorkOrder,
-    ServicePackages: {
-      ItemCollection: [...existingPackages, newServicePackage],
-    },
+  const ew = existingWorkOrder as any;
+  const updatedWorkOrder: Record<string, any> = {
+    ID: ew.ID,
+    Type: ew.Type,
+    WorkOrderNumber: ew.WorkOrderNumber,
+    Completed: ew.Completed,
+    WorkflowStage: ew.WorkflowStage,
+    ScheduledTime: ew.ScheduledTime,
+    PromisedTime: ew.PromisedTime,
+    InUsage: ew.InUsage,
+    OutUsage: ew.OutUsage,
+    Flag: ew.Flag,
+    Tags: ew.Tags,
+    Note: ew.Note,
+    SearchString: ew.SearchString,
+    OtherChargeCode: ew.OtherChargeCode,
+    PurchaseOrderNumber: ew.PurchaseOrderNumber,
+    Duration: ew.Duration,
+    InvoiceTime: ew.InvoiceTime,
+    InvoiceNumber: ew.InvoiceNumber,
+    WorkOrderFlags: ew.WorkOrderFlags,
+  };
+  if (ew.Contact?.ID) updatedWorkOrder.Contact = { ID: ew.Contact.ID };
+  if (ew.ServiceItem?.ID) updatedWorkOrder.ServiceItem = { ID: ew.ServiceItem.ID };
+  if (ew.ServiceAdvisor?.ID) updatedWorkOrder.ServiceAdvisor = { ID: ew.ServiceAdvisor.ID };
+  if (ew.Technician?.ID) updatedWorkOrder.Technician = { ID: ew.Technician.ID };
+
+  updatedWorkOrder.ServicePackages = {
+    ItemCollection: [...existingPackages, newServicePackage],
   };
 
-  delete (updatedWorkOrder as any).Status;
-  delete (updatedWorkOrder as any).status;
-  const allPkgs = updatedWorkOrder.ServicePackages?.ItemCollection || [];
-  for (const pkg of allPkgs) {
-    delete pkg.Status;
-    delete pkg.status;
-  }
+  Object.keys(updatedWorkOrder).forEach(k => {
+    if (updatedWorkOrder[k] === undefined || updatedWorkOrder[k] === null) delete updatedWorkOrder[k];
+  });
 
-  const woKeys = Object.keys(updatedWorkOrder);
-  console.log(`[Add-to-RO:${requestId}] WO keys being POSTed: ${woKeys.join(', ')}`);
+  const allPkgs = updatedWorkOrder.ServicePackages?.ItemCollection || [];
   console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines, ${allPkgs.length} total packages...`);
   const postStart = Date.now();
 
