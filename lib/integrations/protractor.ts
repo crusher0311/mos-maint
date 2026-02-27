@@ -405,7 +405,10 @@ export async function protractorFetch<T>(
           try {
             const woData = JSON.parse(body);
             const woXml = buildWorkOrderXml(woData);
-            console.log(`[Protractor] SOAP XML payload (first 500 chars): ${woXml.substring(0, 500)}`);
+            const xmlPkgCount = (woXml.match(/<ServicePackage>/g) || []).length;
+            const xmlLineCount = (woXml.match(/<ServicePackageLine>/g) || []).length;
+            console.log(`[Protractor] SOAP XML payload: ${woXml.length} chars, ${xmlPkgCount} packages, ${xmlLineCount} lines`);
+            console.log(`[Protractor] SOAP XML ServicePackages section: ${woXml.substring(woXml.indexOf('<ServicePackages>'), woXml.indexOf('</ServicePackages>') + 20)}`);
             const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
             if (soapResult.ok) {
               console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
@@ -864,8 +867,16 @@ async function protractorSoapWorkOrderUpdate(
       trackApiRequest('protractor', `/WorkOrder/${workOrderId}`, 'POST-SOAP', res.statusCode, latencyMs, shopId);
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
-        const resultMatch = res.body.match(/WorkOrderUpdateResult>([^<]*)</);
-        console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1}) | Response length: ${res.body.length} | Result snippet: ${(resultMatch?.[1] || res.body).substring(0, 300)}`);
+        const resultMatch = res.body.match(/WorkOrderUpdateResult>([\s\S]*?)<\//);
+        const resultXml = resultMatch?.[1]
+          ?.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+          || '';
+        const hasServicePkgs = resultXml.includes('ServicePackage');
+        const pkgCount = (resultXml.match(/<ServicePackage>/g) || []).length;
+        console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1}) | Response length: ${res.body.length} | ServicePackages in response: ${pkgCount} | Has packages: ${hasServicePkgs}`);
+        if (pkgCount === 0 && resultXml.length > 0) {
+          console.log(`[Protractor:SOAP] WARNING: Response has no service packages. Response XML (first 1000): ${resultXml.substring(0, 1000)}`);
+        }
         return { ok: true };
       }
 

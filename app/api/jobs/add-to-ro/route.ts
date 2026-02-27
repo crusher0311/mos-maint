@@ -206,7 +206,6 @@ export async function POST(req: NextRequest) {
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,
-    Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
       Description: job.description ? `${job.description} [Added by MOS]` : `[Added by MOS]`,
@@ -223,7 +222,17 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines...`);
+  delete (updatedWorkOrder as any).Status;
+  delete (updatedWorkOrder as any).status;
+  const allPkgs = updatedWorkOrder.ServicePackages?.ItemCollection || [];
+  for (const pkg of allPkgs) {
+    delete pkg.Status;
+    delete pkg.status;
+  }
+
+  const woKeys = Object.keys(updatedWorkOrder);
+  console.log(`[Add-to-RO:${requestId}] WO keys being POSTed: ${woKeys.join(', ')}`);
+  console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines, ${allPkgs.length} total packages...`);
   const postStart = Date.now();
 
   const updateResult = await protractorFetch<any>(
