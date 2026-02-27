@@ -360,7 +360,25 @@ export async function protractorFetch<T>(
         });
       }
       
-      const body = options.body ? String(options.body) : undefined;
+      let body = options.body ? String(options.body) : undefined;
+      if (body && method === 'POST' && endpoint.startsWith('/WorkOrder/')) {
+        try {
+          const parsed = JSON.parse(body);
+          const stripStatus = (obj: any): any => {
+            if (Array.isArray(obj)) return obj.map(stripStatus);
+            if (obj && typeof obj === 'object') {
+              const cleaned: any = {};
+              for (const [key, val] of Object.entries(obj)) {
+                if (key === 'Status') continue;
+                cleaned[key] = stripStatus(val);
+              }
+              return cleaned;
+            }
+            return obj;
+          };
+          body = JSON.stringify(stripStatus(parsed));
+        } catch {}
+      }
       const res = await httpsRequest(url, method, headers, body);
 
       const latencyMs = Date.now() - startTime;
@@ -373,12 +391,13 @@ export async function protractorFetch<T>(
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
       }).catch(() => {});
 
-      if ((isRateLimited || isServerError) && retryCount < 3) {
-        const baseWaitMs = Math.pow(2, retryCount + 1) * 1000;
+      const maxRetries = (method === 'POST' || method === 'PUT') ? 6 : 3;
+      if ((isRateLimited || isServerError) && retryCount < maxRetries) {
+        const baseWaitMs = Math.min(Math.pow(2, retryCount + 1) * 1000, 10000);
         const jitter = Math.random() * 500;
         const waitMs = baseWaitMs + jitter;
         
-        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3) | Body: ${(res.body || '').substring(0, 500)}`);
+        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
       }
