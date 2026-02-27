@@ -235,6 +235,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  const payloadStr = JSON.stringify(updatedWorkOrder);
+  const statusCount = (payloadStr.match(/"Status"/g) || []).length;
+  console.log(`[Add-to-RO:${requestId}] Payload size: ${payloadStr.length} bytes, "Status" occurrences: ${statusCount}`);
   console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines...`);
   const postStart = Date.now();
 
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
     { priority: true }
   );
   
-  console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms`);
+  console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
 
   if (!updateResult.ok) {
     console.log(`[Add-to-RO:${requestId}] Failed: ${updateResult.error}, total time: ${Date.now() - startTime}ms`);
@@ -260,8 +263,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.log(`[Add-to-RO:${requestId}] Response keys: ${Object.keys(updateResult.data || {}).join(", ")}`);
   const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
                            updateResult.data?.ServicePackages || [];
+  const responsePackageCount = Array.isArray(responsePackages) ? responsePackages.length : 0;
+  console.log(`[Add-to-RO:${requestId}] Response has ${responsePackageCount} packages (sent ${existingPackages.length + 1})`);
+  
   const addedPackage = Array.isArray(responsePackages) 
     ? responsePackages.find((p: any) => 
         p.ServicePackageHeader?.Title === job.title || 
@@ -269,10 +276,17 @@ export async function POST(req: NextRequest) {
       )
     : null;
   
+  if (!addedPackage) {
+    const titles = Array.isArray(responsePackages) 
+      ? responsePackages.map((p: any) => p.ServicePackageHeader?.Title || p.Code || "?").join(", ")
+      : "none";
+    console.log(`[Add-to-RO:${requestId}] WARNING: Package "${job.title}" not found in response. Packages: ${titles}`);
+  }
+  
   const linesInResponse = addedPackage?.ServicePackageLines?.ItemCollection?.length || 
                           addedPackage?.ServicePackageLines?.length || 0;
   
-  console.log(`[Add-to-RO:${requestId}] Success: Added "${job.title}" to WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);
+  console.log(`[Add-to-RO:${requestId}] ${addedPackage ? "Verified" : "UNVERIFIED"}: "${job.title}" on WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);
 
   const totalAmount = job.lines.reduce((sum, line) => sum + (line.extendedPrice || 0), 0);
   const laborAmount = job.lines.filter(l => l.lineType === "labor").reduce((sum, l) => sum + (l.extendedPrice || 0), 0);
