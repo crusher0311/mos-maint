@@ -378,7 +378,7 @@ export async function protractorFetch<T>(
         const jitter = Math.random() * 500;
         const waitMs = baseWaitMs + jitter;
         
-        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3)`);
+        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/3) | Body: ${(res.body || '').substring(0, 500)}`);
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
       }
