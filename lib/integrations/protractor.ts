@@ -398,6 +398,24 @@ export async function protractorFetch<T>(
         const waitMs = baseWaitMs + jitter;
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+
+        if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 1) {
+          const woGuid = endpoint.replace('/WorkOrder/', '');
+          console.log(`[Protractor] REST POST failing for WorkOrder — trying SOAP fallback...`);
+          try {
+            const woData = JSON.parse(body);
+            const woXml = buildWorkOrderXml(woData);
+            const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
+            if (soapResult.ok) {
+              console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
+              return { ok: true, data: woData as T };
+            }
+            console.log(`[Protractor] SOAP fallback also failed: ${soapResult.error}`);
+          } catch (soapErr: any) {
+            console.log(`[Protractor] SOAP fallback error: ${soapErr.message}`);
+          }
+        }
+
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
       }
@@ -646,6 +664,7 @@ function buildServiceItemVehicleXml(fields: {
 }
 
 const PROTRACTOR_SOAP_URL = "https://integration.protractor.com/IntegrationServices/2.0/ContactServices.asmx";
+const PROTRACTOR_SOAP_WO_URL = "https://integration.protractor.com/IntegrationServices/2.0/WorkOrderServices.asmx";
 const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
 
 async function protractorSoapServiceItemUpdate(
@@ -701,6 +720,176 @@ async function protractorSoapServiceItemUpdate(
   } catch (err: any) {
     return { ok: false, error: err.message || "SOAP request failed" };
   }
+}
+
+function buildWorkOrderXml(wo: Record<string, any>): string {
+  const x: string[] = ['<WorkOrder>'];
+  
+  if (wo.ID) x.push(`  <ID>${escapeXml(wo.ID)}</ID>`);
+  if (wo.Type) x.push(`  <Type>${escapeXml(wo.Type)}</Type>`);
+  if (wo.WorkOrderNumber !== undefined) x.push(`  <WorkOrderNumber>${wo.WorkOrderNumber}</WorkOrderNumber>`);
+  if (wo.Completed !== undefined) x.push(`  <Completed>${wo.Completed}</Completed>`);
+  if (wo.WorkflowStage) x.push(`  <WorkflowStage>${escapeXml(wo.WorkflowStage)}</WorkflowStage>`);
+  if (wo.ScheduledTime) x.push(`  <ScheduledTime>${escapeXml(wo.ScheduledTime)}</ScheduledTime>`);
+  if (wo.PromisedTime) x.push(`  <PromisedTime>${escapeXml(wo.PromisedTime)}</PromisedTime>`);
+  if (wo.InUsage !== undefined) x.push(`  <InUsage>${wo.InUsage}</InUsage>`);
+  if (wo.OutUsage !== undefined) x.push(`  <OutUsage>${wo.OutUsage}</OutUsage>`);
+  if (wo.Note) x.push(`  <Note>${escapeXml(wo.Note)}</Note>`);
+  if (wo.SearchString) x.push(`  <SearchString>${escapeXml(wo.SearchString)}</SearchString>`);
+  if (wo.Flag) x.push(`  <Flag>${escapeXml(wo.Flag)}</Flag>`);
+  if (wo.Tags) x.push(`  <Tags>${escapeXml(wo.Tags)}</Tags>`);
+  if (wo.OtherChargeCode) x.push(`  <OtherChargeCode>${escapeXml(wo.OtherChargeCode)}</OtherChargeCode>`);
+  if (wo.PurchaseOrderNumber) x.push(`  <PurchaseOrderNumber>${escapeXml(wo.PurchaseOrderNumber)}</PurchaseOrderNumber>`);
+
+  if (wo.Contact?.ID) {
+    x.push(`  <Contact><ID>${escapeXml(wo.Contact.ID)}</ID></Contact>`);
+  }
+  if (wo.ServiceItem?.ID) {
+    x.push(`  <ServiceItem><ID>${escapeXml(wo.ServiceItem.ID)}</ID></ServiceItem>`);
+  }
+  if (wo.ServiceAdvisor?.ID) {
+    x.push(`  <ServiceAdvisor><ID>${escapeXml(wo.ServiceAdvisor.ID)}</ID></ServiceAdvisor>`);
+  }
+  if (wo.Technician?.ID) {
+    x.push(`  <Technician><ID>${escapeXml(wo.Technician.ID)}</ID></Technician>`);
+  }
+
+  const pkgs = Array.isArray(wo.ServicePackages)
+    ? wo.ServicePackages
+    : wo.ServicePackages?.ItemCollection || [];
+  
+  if (pkgs.length > 0) {
+    x.push('  <ServicePackages>');
+    for (const pkg of pkgs) {
+      x.push('    <ServicePackage>');
+      if (pkg.ID) x.push(`      <ID>${escapeXml(pkg.ID)}</ID>`);
+      if (pkg.Chapter) x.push(`      <Chapter>${escapeXml(pkg.Chapter)}</Chapter>`);
+      if (pkg.Code) x.push(`      <Code>${escapeXml(pkg.Code)}</Code>`);
+      if (pkg.Rank !== undefined) x.push(`      <Rank>${pkg.Rank}</Rank>`);
+      if (pkg.ServicePackageHeader) {
+        x.push('      <ServicePackageHeader>');
+        if (pkg.ServicePackageHeader.Title) x.push(`        <Title>${escapeXml(pkg.ServicePackageHeader.Title)}</Title>`);
+        if (pkg.ServicePackageHeader.Description) x.push(`        <Description>${escapeXml(pkg.ServicePackageHeader.Description)}</Description>`);
+        x.push('      </ServicePackageHeader>');
+      }
+      const lines = Array.isArray(pkg.ServicePackageLines)
+        ? pkg.ServicePackageLines
+        : pkg.ServicePackageLines?.ItemCollection || [];
+      if (lines.length > 0) {
+        x.push('      <ServicePackageLines>');
+        for (const line of lines) {
+          x.push('        <ServicePackageLine>');
+          if (line.ID) x.push(`          <ID>${escapeXml(line.ID)}</ID>`);
+          if (line.Rank !== undefined) x.push(`          <Rank>${line.Rank}</Rank>`);
+          if (line.Type) x.push(`          <Type>${escapeXml(line.Type)}</Type>`);
+          if (line.Description) x.push(`          <Description>${escapeXml(line.Description)}</Description>`);
+          if (line.Quantity !== undefined) x.push(`          <Quantity>${line.Quantity}</Quantity>`);
+          if (line.Price !== undefined) x.push(`          <Price>${line.Price}</Price>`);
+          if (line.Total !== undefined) x.push(`          <Total>${line.Total}</Total>`);
+          if (line.ExtendedTotal !== undefined) x.push(`          <ExtendedTotal>${line.ExtendedTotal}</ExtendedTotal>`);
+          if (line.RateCode) x.push(`          <RateCode>${escapeXml(line.RateCode)}</RateCode>`);
+          if (line.TechnicianHour !== undefined) x.push(`          <TechnicianHour>${line.TechnicianHour}</TechnicianHour>`);
+          if (line.Unit) x.push(`          <Unit>${escapeXml(line.Unit)}</Unit>`);
+          if (line.Cost !== undefined) x.push(`          <Cost>${line.Cost}</Cost>`);
+          if (line.TotalCost !== undefined) x.push(`          <TotalCost>${line.TotalCost}</TotalCost>`);
+          if (line.MinimumCharge !== undefined) x.push(`          <MinimumCharge>${line.MinimumCharge}</MinimumCharge>`);
+          if (line.Discount !== undefined) x.push(`          <Discount>${line.Discount}</Discount>`);
+          if (line.PartNumber) x.push(`          <PartNumber>${escapeXml(line.PartNumber)}</PartNumber>`);
+          if (line.Manufacturer) x.push(`          <Manufacturer>${escapeXml(line.Manufacturer)}</Manufacturer>`);
+          if (line.Completed !== undefined) x.push(`          <Completed>${line.Completed}</Completed>`);
+          x.push('        </ServicePackageLine>');
+        }
+        x.push('      </ServicePackageLines>');
+      }
+      x.push('    </ServicePackage>');
+    }
+    x.push('  </ServicePackages>');
+  }
+
+  x.push('</WorkOrder>');
+  return x.join('\n');
+}
+
+async function protractorSoapWorkOrderUpdate(
+  config: { connectionId: string; apiKey: string; authentication: string },
+  workOrderId: string,
+  workOrderXml: string,
+  shopId?: number | string
+): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const soapEnvelope = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"',
+    `               xmlns:tns="${PROTRACTOR_SOAP_NS}">`,
+    '  <soap:Body>',
+    '    <tns:WorkOrderUpdate>',
+    `      <tns:connectionId>${escapeXml(config.connectionId)}</tns:connectionId>`,
+    `      <tns:apiKey>${escapeXml(config.apiKey)}</tns:apiKey>`,
+    `      <tns:authentication>${escapeXml(config.authentication)}</tns:authentication>`,
+    `      <tns:workOrderId>${escapeXml(workOrderId)}</tns:workOrderId>`,
+    `      <tns:workOrder><![CDATA[${workOrderXml}]]></tns:workOrder>`,
+    '    </tns:WorkOrderUpdate>',
+    '  </soap:Body>',
+    '</soap:Envelope>',
+  ].join('\n');
+
+  const maxRetries = 6;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const startTime = Date.now();
+      const res = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+        const url = new URL(PROTRACTOR_SOAP_WO_URL);
+        const req = https.request(
+          {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/xml; charset=utf-8',
+              'SOAPAction': `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
+            },
+          },
+          (response) => {
+            let data = '';
+            response.on('data', (chunk: string) => (data += chunk));
+            response.on('end', () => resolve({ statusCode: response.statusCode || 0, body: data }));
+          }
+        );
+        req.on('error', reject);
+        req.write(soapEnvelope);
+        req.end();
+      });
+
+      const latencyMs = Date.now() - startTime;
+      trackApiRequest('protractor', `/WorkOrder/${workOrderId}`, 'POST-SOAP', res.statusCode, latencyMs, shopId);
+
+      if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
+        console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+        return { ok: true };
+      }
+
+      const faultMatch = res.body.match(/faultstring>([^<]+)/);
+      const errorMsg = faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}`;
+      console.log(`[Protractor:SOAP] WorkOrderUpdate error (attempt ${attempt + 1}/${maxRetries + 1}): ${errorMsg}`);
+
+      if (res.statusCode >= 500 && attempt < maxRetries) {
+        const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      return { ok: false, error: errorMsg };
+    } catch (err: any) {
+      console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
+      if (attempt < maxRetries) {
+        const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return { ok: false, error: err.message || 'SOAP request failed' };
+    }
+  }
+  return { ok: false, error: 'Max retries exceeded' };
 }
 
 export async function createServiceItem(
