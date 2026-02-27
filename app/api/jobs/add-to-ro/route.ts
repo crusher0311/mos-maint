@@ -206,7 +206,6 @@ export async function POST(req: NextRequest) {
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,
-    Status: "Pending",
     ServicePackageHeader: {
       Title: job.title,
       Description: job.description ? `${job.description} [Added by MOS]` : `[Added by MOS]`,
@@ -216,10 +215,16 @@ export async function POST(req: NextRequest) {
     },
   };
 
+  const { Status: _woStatus, ...workOrderWithoutStatus } = existingWorkOrder as any;
+  const cleanedPackages = existingPackages.map((pkg: any) => {
+    const { Status: _pkgStatus, ...rest } = pkg;
+    return rest;
+  });
+
   const updatedWorkOrder = {
-    ...existingWorkOrder,
+    ...workOrderWithoutStatus,
     ServicePackages: {
-      ItemCollection: [...existingPackages, newServicePackage],
+      ItemCollection: [...cleanedPackages, newServicePackage],
     },
   };
 
