@@ -1060,6 +1060,7 @@ export async function createProtractorWorkOrder(
           Chapter: chapter,
           Code: pkg.code || "",
           Rank: existingPkgs.length + 1,
+          Status: "Pending",
           ServicePackageHeader: {
             Title: pkg.title,
             Description: description,
@@ -1072,14 +1073,9 @@ export async function createProtractorWorkOrder(
           console.log(`[Create WO]   Line ${i}: ${l.Type} - "${l.Description}" Qty:${l.Quantity} Price:${l.Price}`);
         });
 
-        const { Status: _woStatus, ...woWithoutStatus } = currentWo as any;
-        const cleanedExistingPkgs = existingPkgs.map((p: any) => {
-          const { Status: _s, ...rest } = p;
-          return rest;
-        });
         const updatedWo = {
-          ...woWithoutStatus,
-          ServicePackages: { ItemCollection: [...cleanedExistingPkgs, newPkg] },
+          ...currentWo,
+          ServicePackages: { ItemCollection: [...existingPkgs, newPkg] },
         };
 
         const updateResult = await protractorFetch<any>(
@@ -2064,7 +2060,7 @@ export async function fetchServicePackageTemplates(
 }
 
 const TEMPLATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const TEMPLATE_404_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days for 404s
+const TEMPLATE_404_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for 404s
 
 export async function fetchServicePackageTemplateDetail(
   shopId: number,
@@ -2314,21 +2310,18 @@ export async function applyCannedJobToWorkOrder(
           Description: "[Added by MOS]",
         },
         ServicePackageLines: { ItemCollection: [] },
+        Status: "Pending",
       };
       
+      // Get existing work order and add service package
       const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
       const existingPackages = Array.isArray(existingPackagesRaw) 
         ? existingPackagesRaw 
         : (existingPackagesRaw?.ItemCollection || []);
-      const { Status: _woStatus2, ...woWithoutStatus2 } = existingWorkOrder as any;
-      const cleanedPkgs2 = existingPackages.map((p: any) => {
-        const { Status: _s, ...rest } = p;
-        return rest;
-      });
       const updatedWorkOrder = {
-        ...woWithoutStatus2,
+        ...existingWorkOrder,
         ServicePackages: {
-          ItemCollection: [...cleanedPkgs2, newServicePackage]
+          ItemCollection: [...existingPackages, newServicePackage]
         }
       };
       
@@ -2531,17 +2524,14 @@ export async function applyCannedJobToWorkOrder(
     ? existingPackagesRaw 
     : (existingPackagesRaw?.ItemCollection || []);
   
-  const { Status: _woStatus4, ...woWithoutStatus4 } = existingWorkOrder as any;
-  const cleanedExistingPkgs4 = existingPackages.map((p: any) => {
-    const { Status: _s, ...rest } = p;
-    return rest;
-  });
+  // Build full work order object with new service package added
+  // Include actual lines from template
   const fullWorkOrderPayload = {
-    ...woWithoutStatus4,
+    ...existingWorkOrder,
     ID: workOrderGuid,
     ServicePackages: {
       ItemCollection: [
-        ...cleanedExistingPkgs4,
+        ...existingPackages,
         {
           ID: "00000000-0000-0000-0000-000000000000",
           Chapter: template.Chapter || "Service",
@@ -3404,26 +3394,21 @@ export async function addDeferredWorkToWorkOrder(
       Title: title,
       Description: packageDescription,
     },
+    // Include the original labor and parts lines
     ServicePackageLines: { 
-      ItemCollection: originalServicePackageLines.map(line => {
-        const { Status: _ls, ...lineRest } = line as any;
-        return {
-          ...lineRest,
-          ID: "00000000-0000-0000-0000-000000000000",
-        };
-      })
+      ItemCollection: originalServicePackageLines.map(line => ({
+        ...line,
+        ID: "00000000-0000-0000-0000-000000000000", // New line ID for the new package
+        Status: "Pending", // Reset status to pending
+      }))
     },
-    Chapter: "Service",
+    Status: "Pending", // Pending status for active work
+    Chapter: "Service", // Force Chapter to "Service" to add to active work order, not deferred
   };
 
-  const cleanedExistingPkgs = existingPackages.map((p: any) => {
-    const { Status: _s, ...rest } = p;
-    return rest;
-  });
-  const updatedPackages = [...cleanedExistingPkgs, newServicePackage];
-  const { Status: _woStatus3, ...woWithoutStatus3 } = existingWorkOrder as any;
+  const updatedPackages = [...existingPackages, newServicePackage];
   const updatedWorkOrder = {
-    ...woWithoutStatus3,
+    ...existingWorkOrder,
     ServicePackages: isArrayFormat 
       ? updatedPackages 
       : { ItemCollection: updatedPackages }
