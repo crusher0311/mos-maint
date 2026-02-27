@@ -215,18 +215,25 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const { Status: _woStatus, ...workOrderWithoutStatus } = existingWorkOrder as any;
-  const cleanedPackages = existingPackages.map((pkg: any) => {
-    const { Status: _pkgStatus, ...rest } = pkg;
-    return rest;
-  });
+  function stripStatus(obj: any): any {
+    if (Array.isArray(obj)) return obj.map(stripStatus);
+    if (obj && typeof obj === "object") {
+      const cleaned: any = {};
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === "Status") continue;
+        cleaned[key] = stripStatus(val);
+      }
+      return cleaned;
+    }
+    return obj;
+  }
 
-  const updatedWorkOrder = {
-    ...workOrderWithoutStatus,
+  const updatedWorkOrder = stripStatus({
+    ...existingWorkOrder,
     ServicePackages: {
-      ItemCollection: [...cleanedPackages, newServicePackage],
+      ItemCollection: [...existingPackages, newServicePackage],
     },
-  };
+  });
 
   console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines...`);
   const postStart = Date.now();
