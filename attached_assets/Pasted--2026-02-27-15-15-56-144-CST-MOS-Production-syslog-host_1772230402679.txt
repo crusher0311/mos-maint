@@ -1,0 +1,100 @@
+
+2026-02-27 15:15:56.144 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback GET] Skipping duplicate Update WorkOrder 68988fe9-0189-4d28-b4ff-f50f38778dcf for shop 35 (processed 19s ago)
+2026-02-27 15:16:00.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"162.212.202.163","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?connectionId=a00cc90d368d4426bb47ebbef6d21768&apiKey=699d1411e38e43eca95d2695a582cff9&type=ServiceItem&id=e36e81eb-fe88-4046-9ebc-6d31a0977ca7&operation=Update","requestId":"1474b835-bdba-401e","responseBytes":314,"responseTimeMS":921,"statusCode":200,"time":"2026-02-27T21:16:00Z","userAgent":""}1 result found
+2026-02-27 15:16:00.275 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback GET] Update ServiceItem e36e81eb-fe88-4046-9ebc-6d31a0977ca7 for shop 35
+2026-02-27 15:16:00.444 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback GET] Logged ServiceItem e36e81eb-fe88-4046-9ebc-6d31a0977ca7 for shop 35
+2026-02-27 15:16:00.836 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback] Processed vehicle KMHDH4AE6GU633984
+2026-02-27 15:16:01.000 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"162.212.202.163","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?connectionId=7b12d1d0edc0458cbc59769ae22b1e56&apiKey=80b064eec4aa46239a4c9e9e8593e1b6&type=WorkOrder&id=3e29525b-a561-4985-a188-56e5066f3b07&operation=Update","requestId":"8c58cc80-4683-4430","responseBytes":316,"responseTimeMS":287,"statusCode":200,"time":"2026-02-27T21:16:01Z","userAgent":""}1 result found
+2026-02-27 15:16:01.869 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback GET] Update WorkOrder 3e29525b-a561-4985-a188-56e5066f3b07 for shop 69
+2026-02-27 15:16:01.976 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-mcs9h syslog.procid:1 [Protractor Callback GET] Skipping duplicate Update WorkOrder 3e29525b-a561-4985-a188-56e5066f3b07 for shop 69 (processed 9s ago)
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/callbacks/protractor 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/cron/protractor-backfill 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/cron/protractor-sync 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/canned-jobs 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/contacts 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/create-contact 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/create-vehicle 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/create-work-order 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/deferred-work 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/job-history 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/vehicles 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/dashboard/protractor/vin-plate-ocr 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/extension/concern-assistant/inject-protractor 0 B 0 B
+Filter by similar pattern
+Exclude this pattern
+Mark as spam
+
+
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/apply-canned-job 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/canned-jobs 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/canned-jobs/enrich 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/debug 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/inspections 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/protractor/sync 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/settings/protractor 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/settings/protractor/test 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ƒ /api/webhooks/protractor/[token] 0 B 0 B
+2026-02-27 16:12:48.603 CST
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-pg4mw syslog.procid:1 ├ ○ /dashboard/settings/protractor 5.12 kB 92.4 kB
+Waiting for logs...
