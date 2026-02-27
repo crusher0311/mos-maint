@@ -399,12 +399,13 @@ export async function protractorFetch<T>(
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
 
-        if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 1) {
+        if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 0) {
           const woGuid = endpoint.replace('/WorkOrder/', '');
           console.log(`[Protractor] REST POST failing for WorkOrder — trying SOAP fallback...`);
           try {
             const woData = JSON.parse(body);
             const woXml = buildWorkOrderXml(woData);
+            console.log(`[Protractor] SOAP XML payload (first 500 chars): ${woXml.substring(0, 500)}`);
             const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
             if (soapResult.ok) {
               console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
@@ -825,7 +826,6 @@ async function protractorSoapWorkOrderUpdate(
     `      <tns:connectionId>${escapeXml(config.connectionId)}</tns:connectionId>`,
     `      <tns:apiKey>${escapeXml(config.apiKey)}</tns:apiKey>`,
     `      <tns:authentication>${escapeXml(config.authentication)}</tns:authentication>`,
-    `      <tns:workOrderId>${escapeXml(workOrderId)}</tns:workOrderId>`,
     `      <tns:workOrder><![CDATA[${workOrderXml}]]></tns:workOrder>`,
     '    </tns:WorkOrderUpdate>',
     '  </soap:Body>',
@@ -864,7 +864,8 @@ async function protractorSoapWorkOrderUpdate(
       trackApiRequest('protractor', `/WorkOrder/${workOrderId}`, 'POST-SOAP', res.statusCode, latencyMs, shopId);
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
-        console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+        const resultMatch = res.body.match(/WorkOrderUpdateResult>([^<]*)</);
+        console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1}) | Response length: ${res.body.length} | Result snippet: ${(resultMatch?.[1] || res.body).substring(0, 300)}`);
         return { ok: true };
       }
 
