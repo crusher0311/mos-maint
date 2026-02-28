@@ -242,8 +242,23 @@ export async function POST(req: NextRequest) {
   if (ew.ServiceAdvisor?.ID) updatedWorkOrder.ServiceAdvisor = { ID: ew.ServiceAdvisor.ID };
   if (ew.Technician?.ID) updatedWorkOrder.Technician = { ID: ew.Technician.ID };
 
+  const stripStatusDeep = (obj: any): any => {
+    if (Array.isArray(obj)) return obj.map(stripStatusDeep);
+    if (obj && typeof obj === 'object') {
+      const cleaned: any = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === 'Status') continue;
+        cleaned[k] = stripStatusDeep(v);
+      }
+      return cleaned;
+    }
+    return obj;
+  };
+
+  const cleanedExistingPackages = stripStatusDeep(existingPackages);
+
   updatedWorkOrder.ServicePackages = {
-    ItemCollection: [...existingPackages, newServicePackage],
+    ItemCollection: [...cleanedExistingPackages, newServicePackage],
   };
 
   Object.keys(updatedWorkOrder).forEach(k => {
