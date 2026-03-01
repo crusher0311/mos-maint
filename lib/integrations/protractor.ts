@@ -447,6 +447,10 @@ export async function protractorFetch<T>(
               req2.end();
             });
 
+            const strippedLatency = Date.now() - startTime;
+            trackApiRequest('protractor', `/WorkOrder/${woGuid}`, 'POST-stripped', strippedRes.statusCode, strippedLatency, shopId, {
+              errorMessage: strippedRes.statusCode >= 400 ? strippedRes.body?.substring(0, 200) : undefined,
+            }).catch(() => {});
             console.log(`[Protractor] Deep-stripped response: HTTP ${strippedRes.statusCode} | Body (first 500): ${strippedRes.body.substring(0, 500)}`);
 
             if (strippedRes.statusCode >= 200 && strippedRes.statusCode < 300) {
@@ -485,6 +489,10 @@ export async function protractorFetch<T>(
               req3.end();
             });
 
+            const noPkgLatency = Date.now() - startTime;
+            trackApiRequest('protractor', `/WorkOrder/${woGuid}`, 'POST-nopkg', noPkgRes.statusCode, noPkgLatency, shopId, {
+              errorMessage: noPkgRes.statusCode >= 400 ? noPkgRes.body?.substring(0, 200) : undefined,
+            }).catch(() => {});
             console.log(`[Protractor] No-packages response: HTTP ${noPkgRes.statusCode} | Body (first 500): ${noPkgRes.body.substring(0, 500)}`);
             if (noPkgRes.statusCode >= 200 && noPkgRes.statusCode < 300) {
               console.log(`[Protractor] No-packages POST succeeded — confirms bug is in ServicePackages handling`);
