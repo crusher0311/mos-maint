@@ -80,10 +80,33 @@ https://integration.protractor.com/IntegrationServices/2.0
 ---
 
 #### `POST /WorkOrder/{id}`
-**Purpose**: Update work order (add service packages)
+**Purpose**: Create or update work order (add service packages)
 **Used in**:
-- `lib/integrations/protractor.ts` → `addDeferredWorkToWorkOrder()`
-- Add Deferred feature: Push service package to active RO
+- `lib/integrations/protractor.ts` → `createProtractorWorkOrder()`, `applyCannedJobToWorkOrder()`, `addDeferredWorkToWorkOrder()`
+- `app/api/jobs/add-to-ro/route.ts` → Add job to RO from extension
+
+**Request Body**: Full `WorkOrder` object (per Swagger schema)
+
+**⚠️ CRITICAL: Minimal Payload Required**
+Do NOT echo back the full GET response. The GET response contains read-only fields (`Header`, `Summary`, `Footer`, `Company`, `Authorizations`, `Signature`, `DeferredServicePackages`) and nested objects with their own read-only fields (`Owner`, `Header`, `Status`, `IsInvoicing` on ServicePackage). Sending these back causes SQL errors on Protractor's side.
+
+**Allowed WorkOrder fields** (used by `buildMinimalWorkOrderPayload()`):
+- `ID`, `Type`, `WorkOrderNumber`, `Completed`, `WorkflowStage`
+- `Contact: { ID }`, `ServiceItem: { ID }`, `ServiceAdvisor: { ID }`, `Technician: { ID }`
+- `ScheduledTime`, `PromisedTime`, `InUsage`, `OutUsage`, `Duration`
+- `InvoiceTime`, `InvoiceNumber`, `PurchaseOrderNumber`
+- `Note`, `SearchString`, `Flag`, `Tags`, `OtherChargeCode`, `WorkOrderFlags`
+- `ServicePackages: { ItemCollection: [...] }`
+
+**Allowed ServicePackage fields** (used by `cleanServicePackageForPost()`):
+- `ID`, `Code`, `Chapter`, `Rank`, `Flag`
+- `ServicePackageTemplateID`, `ServiceCategoryID`
+- `ServicePackageHeader: { Title, Description }`, `ServicePackageFooter: { Title, Description }`
+- `ServicePackageLines: { ItemCollection: [...] }`
+
+**DO NOT send**: `Header`, `Owner`, `Status`, `IsInvoicing`, `URL`, `InspectionReferenceID`, `ContactID`, `ServicePackageInspectionLines`
+
+**Swagger**: https://integration.protractor.com/integrationservices/2.0/swagger/ui/index#/
 
 ---
 

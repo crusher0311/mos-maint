@@ -223,6 +223,59 @@ export type ProtractorDeferredWork = {
   };
 };
 
+function cleanServicePackageForPost(pkg: any): any {
+  const cleaned: any = { ID: pkg.ID };
+  if (pkg.Code) cleaned.Code = pkg.Code;
+  if (pkg.Chapter) cleaned.Chapter = pkg.Chapter;
+  if (pkg.Rank != null) cleaned.Rank = pkg.Rank;
+  if (pkg.Flag) cleaned.Flag = pkg.Flag;
+  if (pkg.ServicePackageTemplateID) cleaned.ServicePackageTemplateID = pkg.ServicePackageTemplateID;
+  if (pkg.ServiceCategoryID) cleaned.ServiceCategoryID = pkg.ServiceCategoryID;
+  if (pkg.ServicePackageHeader) {
+    cleaned.ServicePackageHeader = {
+      Title: pkg.ServicePackageHeader.Title || "",
+      Description: pkg.ServicePackageHeader.Description || "",
+    };
+  }
+  if (pkg.ServicePackageFooter) {
+    cleaned.ServicePackageFooter = {
+      Title: pkg.ServicePackageFooter.Title || "",
+      Description: pkg.ServicePackageFooter.Description || "",
+    };
+  }
+  const linesRaw = pkg.ServicePackageLines;
+  const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
+  if (lines.length > 0) {
+    cleaned.ServicePackageLines = {
+      ItemCollection: lines.map((line: any) => {
+        const cl: any = { ID: line.ID };
+        if (line.Type) cl.Type = line.Type;
+        if (line.Rank != null) cl.Rank = line.Rank;
+        if (line.Description) cl.Description = line.Description;
+        if (line.Quantity != null) cl.Quantity = line.Quantity;
+        if (line.Price != null) cl.Price = line.Price;
+        if (line.UnitPrice != null) cl.UnitPrice = line.UnitPrice;
+        if (line.Total != null) cl.Total = line.Total;
+        if (line.ExtendedTotal != null) cl.ExtendedTotal = line.ExtendedTotal;
+        if (line.RateCode) cl.RateCode = line.RateCode;
+        if (line.TechnicianHour != null) cl.TechnicianHour = line.TechnicianHour;
+        if (line.Unit) cl.Unit = line.Unit;
+        if (line.Cost != null) cl.Cost = line.Cost;
+        if (line.TotalCost != null) cl.TotalCost = line.TotalCost;
+        if (line.MinimumCharge != null) cl.MinimumCharge = line.MinimumCharge;
+        if (line.Discount != null) cl.Discount = line.Discount;
+        if (line.PartNumber) cl.PartNumber = line.PartNumber;
+        if (line.Manufacturer) cl.Manufacturer = line.Manufacturer;
+        if (line.Completed != null) cl.Completed = line.Completed;
+        return cl;
+      })
+    };
+  } else {
+    cleaned.ServicePackageLines = { ItemCollection: [] };
+  }
+  return cleaned;
+}
+
 function buildMinimalWorkOrderPayload(
   existingWorkOrder: Record<string, any>,
   servicePackages: any[]
@@ -2583,40 +2636,7 @@ export async function applyCannedJobToWorkOrder(
         ? existingPackagesRaw 
         : (existingPackagesRaw?.ItemCollection || []);
 
-      const cleanServicePackage = (pkg: any) => {
-        const cleaned: any = {
-          ID: pkg.ID,
-        };
-        if (pkg.Code) cleaned.Code = pkg.Code;
-        if (pkg.Chapter) cleaned.Chapter = pkg.Chapter;
-        if (pkg.Rank != null) cleaned.Rank = pkg.Rank;
-        if (pkg.ServicePackageHeader) {
-          cleaned.ServicePackageHeader = {
-            Title: pkg.ServicePackageHeader.Title || "",
-            Description: pkg.ServicePackageHeader.Description || "",
-          };
-        }
-        if (pkg.ServicePackageLines?.ItemCollection?.length) {
-          cleaned.ServicePackageLines = {
-            ItemCollection: pkg.ServicePackageLines.ItemCollection.map((line: any) => {
-              const cl: any = { ID: line.ID };
-              if (line.Type) cl.Type = line.Type;
-              if (line.Description) cl.Description = line.Description;
-              if (line.Quantity != null) cl.Quantity = line.Quantity;
-              if (line.Price != null) cl.Price = line.Price;
-              if (line.UnitPrice != null) cl.UnitPrice = line.UnitPrice;
-              if (line.PartNumber) cl.PartNumber = line.PartNumber;
-              if (line.Manufacturer) cl.Manufacturer = line.Manufacturer;
-              return cl;
-            })
-          };
-        } else {
-          cleaned.ServicePackageLines = { ItemCollection: [] };
-        }
-        return cleaned;
-      };
-
-      const cleanedPkgs = existingPackages.map(cleanServicePackage);
+      const cleanedPkgs = existingPackages.map(cleanServicePackageForPost);
 
       const minimalWorkOrder = buildMinimalWorkOrderPayload(
         existingWorkOrder as Record<string, any>,
@@ -3708,20 +3728,7 @@ export async function addDeferredWorkToWorkOrder(
     Chapter: "Service",
   };
 
-  const stripStatusDeep = (obj: any): any => {
-    if (Array.isArray(obj)) return obj.map(stripStatusDeep);
-    if (obj && typeof obj === 'object') {
-      const cleaned: any = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (k === 'Status') continue;
-        cleaned[k] = stripStatusDeep(v);
-      }
-      return cleaned;
-    }
-    return obj;
-  };
-
-  const cleanedExistingPackages = stripStatusDeep(existingPackages);
+  const cleanedExistingPackages = existingPackages.map(cleanServicePackageForPost);
   const updatedPackages = [...cleanedExistingPackages, newServicePackage];
   
   const updatedWorkOrder = buildMinimalWorkOrderPayload(
