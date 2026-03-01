@@ -223,6 +223,42 @@ export type ProtractorDeferredWork = {
   };
 };
 
+function buildMinimalWorkOrderPayload(
+  existingWorkOrder: Record<string, any>,
+  servicePackages: any[]
+): Record<string, any> {
+  const ew = existingWorkOrder as any;
+  const payload: Record<string, any> = {
+    ID: ew.ID,
+    Type: ew.Type || "WorkOrder",
+    WorkOrderNumber: ew.WorkOrderNumber || 0,
+    Completed: ew.Completed || false,
+    WorkflowStage: ew.WorkflowStage || "Unassigned",
+    ServicePackages: { ItemCollection: servicePackages },
+  };
+
+  if (ew.Contact?.ID) payload.Contact = { ID: ew.Contact.ID };
+  else if (ew.ContactID) payload.Contact = { ID: ew.ContactID };
+
+  if (ew.ServiceItem?.ID) payload.ServiceItem = { ID: ew.ServiceItem.ID };
+  else if (ew.ServiceItemID) payload.ServiceItem = { ID: ew.ServiceItemID };
+
+  if (ew.ServiceAdvisor?.ID) payload.ServiceAdvisor = { ID: ew.ServiceAdvisor.ID };
+  if (ew.Technician?.ID) payload.Technician = { ID: ew.Technician.ID };
+
+  const optionalFields = [
+    'ScheduledTime', 'PromisedTime', 'InUsage', 'OutUsage',
+    'Flag', 'Tags', 'Note', 'SearchString', 'OtherChargeCode',
+    'PurchaseOrderNumber', 'Duration', 'InvoiceTime', 'InvoiceNumber',
+    'WorkOrderFlags',
+  ];
+  for (const field of optionalFields) {
+    if (ew[field] != null) payload[field] = ew[field];
+  }
+
+  return payload;
+}
+
 export function computeAuthentication(connectionId: string, apiKey: string): string {
   const keyBytes = Buffer.from(apiKey.replace(/-/g, "").toLowerCase(), "utf8");
   const dataBytes = Buffer.from(connectionId.replace(/-/g, "").toLowerCase(), "utf8");
@@ -398,118 +434,6 @@ export async function protractorFetch<T>(
         const waitMs = baseWaitMs + jitter;
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
-
-        if (isServerError && method === 'POST' && endpoint.startsWith('/WorkOrder/') && body && retryCount >= 0) {
-          const woGuid = endpoint.replace('/WorkOrder/', '');
-          console.log(`[Protractor] REST POST failing for WorkOrder — trying deep-stripped payload (no Status anywhere)...`);
-          try {
-            const woData = JSON.parse(body);
-
-            const stripStatusDeep = (obj: any): any => {
-              if (Array.isArray(obj)) return obj.map(stripStatusDeep);
-              if (obj && typeof obj === 'object') {
-                const cleaned: any = {};
-                for (const [k, v] of Object.entries(obj)) {
-                  if (k === 'Status') continue;
-                  cleaned[k] = stripStatusDeep(v);
-                }
-                return cleaned;
-              }
-              return obj;
-            };
-
-            const strippedPayload = stripStatusDeep(woData);
-            const strippedBody = JSON.stringify(strippedPayload);
-            const hadStatus = body.includes('"Status"');
-            console.log(`[Protractor] Deep-stripped payload: ${strippedBody.length} chars (had Status: ${hadStatus})`);
-            
-            const strippedRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-              const restUrl = new URL(`${BASE_URL}/WorkOrder/${woGuid}`);
-              restUrl.searchParams.set("connectionId", config.connectionId);
-              restUrl.searchParams.set("apiKey", config.apiKey);
-              restUrl.searchParams.set("authentication", config.authentication);
-              const req2 = https.request({
-                hostname: restUrl.hostname,
-                port: 443,
-                path: `${restUrl.pathname}${restUrl.search}`,
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json",
-                },
-              }, (response) => {
-                let data = "";
-                response.on("data", (chunk: string) => (data += chunk));
-                response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
-              });
-              req2.on("error", reject);
-              req2.write(strippedBody);
-              req2.end();
-            });
-
-            const strippedLatency = Date.now() - startTime;
-            trackApiRequest('protractor', `/WorkOrder/${woGuid}`, 'POST-stripped', strippedRes.statusCode, strippedLatency, shopId, {
-              errorMessage: strippedRes.statusCode >= 400 ? strippedRes.body?.substring(0, 200) : undefined,
-            }).catch(() => {});
-            console.log(`[Protractor] Deep-stripped response: HTTP ${strippedRes.statusCode} | Body (first 500): ${strippedRes.body.substring(0, 500)}`);
-
-            if (strippedRes.statusCode >= 200 && strippedRes.statusCode < 300) {
-              console.log(`[Protractor] Deep-stripped payload SUCCEEDED for WorkOrder/${woGuid}`);
-              let parsedData = woData;
-              try { parsedData = JSON.parse(strippedRes.body); } catch {}
-              return { ok: true, data: parsedData as T };
-            }
-
-            console.log(`[Protractor] Deep-stripped also failed — trying without ServicePackages entirely...`);
-            const noPackagesPayload = stripStatusDeep(woData);
-            delete noPackagesPayload.ServicePackages;
-            const noPackagesBody = JSON.stringify(noPackagesPayload);
-            
-            const noPkgRes = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-              const restUrl = new URL(`${BASE_URL}/WorkOrder/${woGuid}`);
-              restUrl.searchParams.set("connectionId", config.connectionId);
-              restUrl.searchParams.set("apiKey", config.apiKey);
-              restUrl.searchParams.set("authentication", config.authentication);
-              const req3 = https.request({
-                hostname: restUrl.hostname,
-                port: 443,
-                path: `${restUrl.pathname}${restUrl.search}`,
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json",
-                },
-              }, (response) => {
-                let data = "";
-                response.on("data", (chunk: string) => (data += chunk));
-                response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
-              });
-              req3.on("error", reject);
-              req3.write(noPackagesBody);
-              req3.end();
-            });
-
-            const noPkgLatency = Date.now() - startTime;
-            trackApiRequest('protractor', `/WorkOrder/${woGuid}`, 'POST-nopkg', noPkgRes.statusCode, noPkgLatency, shopId, {
-              errorMessage: noPkgRes.statusCode >= 400 ? noPkgRes.body?.substring(0, 200) : undefined,
-            }).catch(() => {});
-            console.log(`[Protractor] No-packages response: HTTP ${noPkgRes.statusCode} | Body (first 500): ${noPkgRes.body.substring(0, 500)}`);
-            if (noPkgRes.statusCode >= 200 && noPkgRes.statusCode < 300) {
-              console.log(`[Protractor] No-packages POST succeeded — confirms bug is in ServicePackages handling`);
-            }
-
-            console.log(`[Protractor] All REST attempts failed, trying SOAP fallback...`);
-            const woXml = buildWorkOrderXml(woData);
-            const soapResult = await protractorSoapWorkOrderUpdate(config, woGuid, woXml, shopId);
-            if (soapResult.ok) {
-              console.log(`[Protractor] SOAP fallback succeeded for WorkOrder/${woGuid}`);
-              return { ok: true, data: woData as T };
-            }
-            console.log(`[Protractor] SOAP fallback also failed: ${soapResult.error}`);
-          } catch (soapErr: any) {
-            console.log(`[Protractor] Fallback error: ${soapErr.message}`);
-          }
-        }
 
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
@@ -2641,11 +2565,9 @@ export async function applyCannedJobToWorkOrder(
       }
     }
     
-    // Template API not available - use direct WorkOrder POST to add service package by code
     if (!template) {
       console.log(`[Protractor] No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
       
-      // Per Protractor docs: POST /WorkOrder/{workOrderID} with service package in request body
       const newServicePackage = {
         ID: "00000000-0000-0000-0000-000000000000",
         Code: cannedJobCode,
@@ -2656,44 +2578,71 @@ export async function applyCannedJobToWorkOrder(
         ServicePackageLines: { ItemCollection: [] },
       };
       
-      // Get existing work order and add service package
       const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
       const existingPackages = Array.isArray(existingPackagesRaw) 
         ? existingPackagesRaw 
         : (existingPackagesRaw?.ItemCollection || []);
-      const cleanedPkgs = existingPackages.map((p: any) => {
-        const { Status: _s, ...rest } = p;
-        return rest;
-      });
-      const updatedWorkOrder = {
-        ...existingWorkOrder,
-        ServicePackages: {
-          ItemCollection: [...cleanedPkgs, newServicePackage]
+
+      const cleanServicePackage = (pkg: any) => {
+        const cleaned: any = {
+          ID: pkg.ID,
+        };
+        if (pkg.Code) cleaned.Code = pkg.Code;
+        if (pkg.Chapter) cleaned.Chapter = pkg.Chapter;
+        if (pkg.Rank != null) cleaned.Rank = pkg.Rank;
+        if (pkg.ServicePackageHeader) {
+          cleaned.ServicePackageHeader = {
+            Title: pkg.ServicePackageHeader.Title || "",
+            Description: pkg.ServicePackageHeader.Description || "",
+          };
         }
+        if (pkg.ServicePackageLines?.ItemCollection?.length) {
+          cleaned.ServicePackageLines = {
+            ItemCollection: pkg.ServicePackageLines.ItemCollection.map((line: any) => {
+              const cl: any = { ID: line.ID };
+              if (line.Type) cl.Type = line.Type;
+              if (line.Description) cl.Description = line.Description;
+              if (line.Quantity != null) cl.Quantity = line.Quantity;
+              if (line.Price != null) cl.Price = line.Price;
+              if (line.UnitPrice != null) cl.UnitPrice = line.UnitPrice;
+              if (line.PartNumber) cl.PartNumber = line.PartNumber;
+              if (line.Manufacturer) cl.Manufacturer = line.Manufacturer;
+              return cl;
+            })
+          };
+        } else {
+          cleaned.ServicePackageLines = { ItemCollection: [] };
+        }
+        return cleaned;
       };
-      delete (updatedWorkOrder as any).Status;
+
+      const cleanedPkgs = existingPackages.map(cleanServicePackage);
+
+      const minimalWorkOrder = buildMinimalWorkOrderPayload(
+        existingWorkOrder as Record<string, any>,
+        [...cleanedPkgs, newServicePackage]
+      );
       
-      console.log(`[Protractor] POSTing work order update with new service package...`);
-      console.log(`[Protractor] Request payload:`, JSON.stringify({
-        ServicePackages: { ItemCollection: [{ Code: cannedJobCode, Title: cannedJobTitle }] }
-      }));
+      console.log(`[Protractor] POSTing minimal work order update with ${cleanedPkgs.length} existing + 1 new service package...`);
+      console.log(`[Protractor] Payload keys:`, Object.keys(minimalWorkOrder).join(', '));
       
       const updateResult = await protractorFetch<any>(
         `/WorkOrder/${workOrderGuid}`,
         config,
         {
           method: "POST",
-          body: JSON.stringify(updatedWorkOrder)
+          body: JSON.stringify(minimalWorkOrder)
         },
         0,
         shopId
       );
       
       console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
-      console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data || {}).substring(0, 500));
+      if (updateResult.data) {
+        console.log(`[Protractor] Response data:`, JSON.stringify(updateResult.data).substring(0, 500));
+      }
       
       if (updateResult.ok) {
-        // Check if the response actually contains our service package
         const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
                                  updateResult.data?.ServicePackages || [];
         const added = Array.isArray(responsePackages) && responsePackages.some(
@@ -2713,24 +2662,17 @@ export async function applyCannedJobToWorkOrder(
             }
           };
         } else {
-          console.log(`[Protractor] WARNING: API returned OK but service package not found in response`);
-          // Still return success since API said OK - Protractor may add it asynchronously
+          console.log(`[Protractor] WARNING: API returned OK but service package "${cannedJobCode}" not found in response. Packages in response: ${JSON.stringify(responsePackages).substring(0, 300)}`);
           return {
-            ok: true,
-            servicePackage: {
-              ID: newServicePackage.ID,
-              Title: cannedJobTitle || cannedJobCode,
-              Description: "",
-              Chapter: "Service",
-              Status: "Pending"
-            }
+            ok: false,
+            error: `Service package was not confirmed by Protractor. The API accepted the request but the package "${cannedJobTitle || cannedJobCode}" was not found in the updated work order.`
           };
         }
       } else {
         console.log(`[Protractor] WorkOrder update failed: ${updateResult.error}`);
         return {
           ok: false,
-          error: `Failed to add service package via WorkOrder update: ${updateResult.error}. Ensure 'UpdateWorkOrderPackage' is set to 'Yes' in Protractor Integration settings.`
+          error: `Failed to add service package: ${updateResult.error}`
         };
       }
     }
@@ -3781,15 +3723,14 @@ export async function addDeferredWorkToWorkOrder(
 
   const cleanedExistingPackages = stripStatusDeep(existingPackages);
   const updatedPackages = [...cleanedExistingPackages, newServicePackage];
-  const updatedWorkOrder = {
-    ...existingWorkOrder,
-    ServicePackages: isArrayFormat 
-      ? updatedPackages 
-      : { ItemCollection: updatedPackages }
-  };
-  delete (updatedWorkOrder as any).Status;
+  
+  const updatedWorkOrder = buildMinimalWorkOrderPayload(
+    existingWorkOrder as Record<string, any>,
+    updatedPackages
+  );
 
   console.log(`[Protractor] Adding deferred work "${title}" to work order ${workOrderGuid} with ${originalServicePackageLines.length} lines...`);
+  console.log(`[Protractor] Payload keys:`, Object.keys(updatedWorkOrder).join(', '));
 
   const updateResult = await protractorFetch<any>(
     `/WorkOrder/${workOrderGuid}`,
