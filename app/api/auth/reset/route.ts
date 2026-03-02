@@ -75,22 +75,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6) Hash new password with scrypt in the same format as existing users.passwordHash
-    // Format we produce: "scrypt:1:<saltHex>:<hashHex>"
-    async function hashPasswordScrypt(pass: string): Promise<string> {
-      const salt = crypto.randomBytes(16);
-      // Typical scrypt params; adjust if your existing helper uses different ones.
-      const N = 16384, r = 8, p = 1, keylen = 32;
-      const derivedKey: Buffer = await new Promise((resolve, reject) => {
-        crypto.scrypt(pass, salt, keylen, { N, r, p, maxmem: 64 * 1024 * 1024 }, (err, dk) => {
-          if (err) reject(err);
-          else resolve(dk as Buffer);
-        });
-      });
-      return `scrypt:1:${salt.toString("hex")}:${derivedKey.toString("hex")}`;
-    }
-
-    const passwordHash = await hashPasswordScrypt(String(password));
+    const bcrypt = (await import("bcryptjs")).default;
+    const passwordHash = await bcrypt.hash(String(password), 12);
 
     await users.updateOne(
       { _id: user._id },
@@ -100,34 +86,30 @@ export async function POST(req: Request) {
     // 7) Mark token as used
     await pwTokens.updateOne({ _id: t._id }, { $set: { usedAt: now } });
 
-    // 8) Invalidate existing sessions for this user (optional but recommended)
     await sessions.deleteMany({ userId: user._id });
 
-    // 9) Create new session and set cookie so the user is signed in immediately
-    const sessionId = crypto.randomBytes(24).toString("hex");
-    const sessionTtlDays = 14; // adjust as needed
+    const sessionToken = crypto.randomBytes(32).toString("hex");
+    const sessionTtlDays = 30;
     const expiresAt = new Date(now.getTime() + sessionTtlDays * 24 * 60 * 60 * 1000);
 
     await sessions.insertOne({
-      _id: sessionId,
+      token: sessionToken,
       userId: user._id,
       shopId: Number(t.shopId),
       createdAt: now,
       expiresAt,
     });
 
-    // Set cookie "sid" (align name/options with the rest of your app)
     const res = NextResponse.json({ ok: true, shopId: Number(t.shopId) });
-    // SameSite=Lax is typical for session cookies; tweak to your policy.
     res.headers.append(
       "Set-Cookie",
       [
-        `sid=${sessionId}`,
+        `session_token=${sessionToken}`,
         `Path=/`,
         `HttpOnly`,
         `Secure`,
         `SameSite=Lax`,
-        `Expires=${expiresAt.toUTCString()}`,
+        `Max-Age=${sessionTtlDays * 24 * 60 * 60}`,
       ].join("; ")
     );
 

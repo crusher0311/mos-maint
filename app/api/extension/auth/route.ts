@@ -48,46 +48,53 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     const usersCollection = db.collection("users");
 
-    const user = await usersCollection.findOne({ 
+    const candidates = await usersCollection.find({ 
       email: email.toLowerCase().trim() 
-    });
+    }).toArray();
 
-    if (!user) {
+    if (candidates.length === 0) {
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401, headers: corsHeaders }
       );
     }
 
-    // Check password - same logic as main app login
-    const dbHash = user.passwordHash;
-    const legacyPlain = user.password;
+    let user: any = null;
 
-    let passOk = false;
+    for (const candidate of candidates) {
+      const dbHash = candidate.passwordHash;
+      const legacyPlain = candidate.password;
+      let passOk = false;
 
-    if (looksLikeBcrypt(dbHash)) {
-      passOk = await bcrypt.compare(String(password), String(dbHash));
-    } else if (looksLikeScrypt(dbHash)) {
-      passOk = await verifyScrypt(String(password), String(dbHash));
-      if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 12);
-        await usersCollection.updateOne(
-          { _id: user._id },
-          { $set: { passwordHash: newHash } }
-        );
+      if (looksLikeBcrypt(dbHash)) {
+        passOk = await bcrypt.compare(String(password), String(dbHash));
+      } else if (looksLikeScrypt(dbHash)) {
+        passOk = await verifyScrypt(String(password), String(dbHash));
+        if (passOk) {
+          const newHash = await bcrypt.hash(String(password), 12);
+          await usersCollection.updateOne(
+            { _id: candidate._id },
+            { $set: { passwordHash: newHash } }
+          );
+        }
+      } else if (legacyPlain) {
+        passOk = String(password) === String(legacyPlain);
+        if (passOk) {
+          const newHash = await bcrypt.hash(String(password), 12);
+          await usersCollection.updateOne(
+            { _id: candidate._id },
+            { $set: { passwordHash: newHash }, $unset: { password: "" } }
+          );
+        }
       }
-    } else if (legacyPlain) {
-      passOk = String(password) === String(legacyPlain);
+
       if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 12);
-        await usersCollection.updateOne(
-          { _id: user._id },
-          { $set: { passwordHash: newHash }, $unset: { password: "" } }
-        );
+        user = candidate;
+        break;
       }
     }
 
-    if (!passOk) {
+    if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401, headers: corsHeaders }
