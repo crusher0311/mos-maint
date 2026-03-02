@@ -9,6 +9,33 @@ import crypto from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function resolveShopId(
+  db: any,
+  metadata: Record<string, string> | null | undefined,
+  customerId?: string | null
+): Promise<{ shopId: number; shop: any } | null> {
+  const metaShopId = Number(metadata?.shopId);
+  if (metaShopId) {
+    const shop = await db.collection("shops").findOne({ shopId: metaShopId });
+    if (shop) return { shopId: metaShopId, shop };
+  }
+
+  if (customerId) {
+    const shop = await db.collection("shops").findOne({
+      $or: [
+        { "billing.stripeCustomerId": customerId },
+        { stripeCustomerId: customerId },
+      ],
+    });
+    if (shop) {
+      console.log(`[Stripe] Resolved shop ${shop.shopId} via stripeCustomerId ${customerId}`);
+      return { shopId: shop.shopId, shop };
+    }
+  }
+
+  return null;
+}
+
 async function logWebhookEvent(
   db: any,
   event: Stripe.Event,
@@ -233,23 +260,47 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const shopId = Number(subscription.metadata?.shopId);
+        const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+        const resolved = await resolveShopId(db, subscription.metadata, customerId);
         
-        if (shopId) {
+        if (resolved) {
+          const { shopId } = resolved;
           const status = subscription.status === "active" ? "active" : subscription.status;
           const currentPeriodEnd = (subscription as any).current_period_end 
             ? new Date((subscription as any).current_period_end * 1000)
             : null;
           
+          const updateData: Record<string, any> = {
+            "billing.status": status,
+            "billing.nextBillingDate": currentPeriodEnd,
+            "billing.stripeSubscriptionId": subscription.id,
+            "billing.updatedAt": new Date(),
+          };
+
+          if (status === "active") {
+            updateData["billing.isPaid"] = true;
+          } else if (status === "canceled" || status === "unpaid") {
+            updateData["billing.isPaid"] = false;
+          }
+
+          const fullSub = await stripe.subscriptions.retrieve(subscription.id, {
+            expand: ["items.data.price.product"],
+          });
+          const firstItem = fullSub.items?.data?.[0];
+          if (firstItem?.price) {
+            const amount = firstItem.price.unit_amount || 0;
+            updateData["billing.stripeSubscriptionAmount"] = amount;
+            updateData.stripeSubscriptionAmount = amount;
+
+            const product = firstItem.price.product;
+            if (product && typeof product === "object" && "name" in product) {
+              updateData["billing.stripeProductName"] = (product as any).name;
+            }
+          }
+          
           await db.collection("shops").updateOne(
             { shopId },
-            {
-              $set: {
-                "billing.status": status,
-                "billing.nextBillingDate": currentPeriodEnd,
-                "billing.updatedAt": new Date(),
-              },
-            }
+            { $set: updateData }
           );
           console.log(`[Stripe] Shop ${shopId} subscription updated: ${status}`);
         }
@@ -258,21 +309,23 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        const shopId = Number(subscription.metadata?.shopId);
+        const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+        const resolved = await resolveShopId(db, subscription.metadata, customerId);
         
-        if (shopId) {
+        if (resolved) {
           await db.collection("shops").updateOne(
-            { shopId },
+            { shopId: resolved.shopId },
             {
               $set: {
-                "billing.plan": "trial",
+                "billing.plan": "churned",
                 "billing.status": "canceled",
+                "billing.isPaid": false,
                 "billing.stripeSubscriptionId": null,
                 "billing.updatedAt": new Date(),
               },
             }
           );
-          console.log(`[Stripe] Shop ${shopId} subscription canceled`);
+          console.log(`[Stripe] Shop ${resolved.shopId} subscription canceled`);
         }
         break;
       }
@@ -282,23 +335,40 @@ export async function POST(req: NextRequest) {
         const subscriptionId = (invoice as any).subscription as string;
         
         if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const shopId = Number(subscription.metadata?.shopId);
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+            expand: ["items.data.price.product"],
+          });
+          const customerId = typeof subscription.customer === "string" ? subscription.customer : (subscription.customer as any)?.id;
+          const resolved = await resolveShopId(db, subscription.metadata, customerId);
           const periodEnd = (subscription as any).current_period_end;
           
-          if (shopId) {
-            const shop = await db.collection("shops").findOne({ shopId });
+          if (resolved) {
+            const { shopId, shop } = resolved;
             const wasInGracePeriod = shop?.billing?.status === "past_due" || shop?.billing?.status === "suspended";
             
             const updateData: Record<string, any> = {
               "billing.status": "active",
+              "billing.isPaid": true,
               "billing.lastPaymentAt": new Date(),
               "billing.nextBillingDate": periodEnd ? new Date(periodEnd * 1000) : null,
+              "billing.stripeSubscriptionId": subscription.id,
               "billing.gracePeriodStartedAt": null,
               "billing.gracePeriodEndsAt": null,
               "billing.gracePeriodExtendedBy": null,
               "billing.gracePeriodExtendedAt": null,
             };
+
+            const firstItem = subscription.items?.data?.[0];
+            if (firstItem?.price) {
+              const amount = firstItem.price.unit_amount || 0;
+              updateData["billing.stripeSubscriptionAmount"] = amount;
+              updateData.stripeSubscriptionAmount = amount;
+
+              const product = firstItem.price.product;
+              if (product && typeof product === "object" && "name" in product) {
+                updateData["billing.stripeProductName"] = (product as any).name;
+              }
+            }
             
             if (wasInGracePeriod && shop?.billing?.status === "suspended") {
               const plan = shop?.billing?.plan || "starter";
@@ -350,10 +420,12 @@ export async function POST(req: NextRequest) {
         
         if (subscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const shopId = Number(subscription.metadata?.shopId);
+          const failCustomerId = typeof subscription.customer === "string" ? subscription.customer : (subscription.customer as any)?.id;
+          const failResolved = await resolveShopId(db, subscription.metadata, failCustomerId);
           
-          if (shopId) {
-            const shop = await db.collection("shops").findOne({ shopId });
+          if (failResolved) {
+            const shopId = failResolved.shopId;
+            const shop = failResolved.shop;
             const now = new Date();
             const gracePeriodDays = 7;
             const gracePeriodEndsAt = new Date(now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000);
