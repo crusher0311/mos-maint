@@ -504,7 +504,11 @@ export async function protractorFetch<T>(
       }).catch(() => {});
 
       const maxRetries = (method === 'POST' || method === 'PUT') ? 6 : 3;
-      if ((isRateLimited || isServerError) && retryCount < maxRetries) {
+      const isDeterministicError = isServerError && res.body && (
+        res.body.includes("Invalid column name") ||
+        res.body.includes("SqlException") && res.body.includes("column")
+      );
+      if ((isRateLimited || isServerError) && retryCount < maxRetries && !isDeterministicError) {
         const baseWaitMs = Math.min(Math.pow(2, retryCount + 1) * 1000, 10000);
         const jitter = Math.random() * 500;
         const waitMs = baseWaitMs + jitter;
@@ -513,6 +517,9 @@ export async function protractorFetch<T>(
 
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
+      }
+      if (isDeterministicError) {
+        console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
       }
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
