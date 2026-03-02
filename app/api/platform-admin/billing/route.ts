@@ -319,7 +319,15 @@ export async function PATCH(req: NextRequest) {
       if (isBrandPro) {
         updateFields["billing.plan"] = "oil_sticker_legacy";
         updateFields["billing.isPaid"] = true;
-        console.log(`[Billing PATCH] BrandPro product detected — setting plan to oil_sticker_legacy (was: ${currentPlan}, product: ${productName})`);
+        updateFields["enabledFeatures.maintenance"] = false;
+        updateFields["enabledFeatures.job_lookup"] = false;
+        updateFields["enabledFeatures.common_failures"] = false;
+        updateFields["enabledFeatures.oil_sticker"] = true;
+        updateFields["enabledFeatures.keytags"] = false;
+        updateFields["enabledFeatures.auto_booking"] = true;
+        updateFields["enabledFeatures.part_xref"] = false;
+        updateFields["enabledFeatures.labor_rates"] = true;
+        console.log(`[Billing PATCH] BrandPro product detected — setting plan to oil_sticker_legacy with features (was: ${currentPlan}, product: ${productName})`);
       } else if (currentPlan === "trial" || currentPlan === "demo") {
         updateFields["billing.plan"] = "starter";
         updateFields["billing.isPaid"] = true;
