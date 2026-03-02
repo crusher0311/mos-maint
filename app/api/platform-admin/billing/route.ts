@@ -211,11 +211,51 @@ export async function PATCH(req: NextRequest) {
             updateFields.stripeSubscriptionId = actualSubId;
             updateFields["billing.stripeSubscriptionId"] = actualSubId;
           } else {
-            stripeSubData = { error: "Subscription schedule has no active subscription yet" };
+            const phases = schedule.phases || [];
+            const latestPhase = phases[phases.length - 1];
+            if (latestPhase?.items?.length) {
+              const phaseItem = latestPhase.items[0] as any;
+              const priceId = typeof phaseItem.price === "string" ? phaseItem.price : phaseItem.price?.id;
+              if (priceId) {
+                try {
+                  const price = await stripeClient.prices.retrieve(priceId, { expand: ["product"] });
+                  const amount = price.unit_amount || 0;
+                  updateFields.stripeSubscriptionAmount = amount;
+                  updateFields["billing.stripeSubscriptionAmount"] = amount;
+                  updateFields["billing.stripeSubscriptionScheduleId"] = stripeSubscriptionId;
+
+                  stripeSubData = {
+                    status: schedule.status,
+                    amount,
+                    currency: price.currency,
+                    interval: price.recurring?.interval || null,
+                    intervalCount: price.recurring?.interval_count || null,
+                    priceId: price.id,
+                    scheduledStart: latestPhase.start_date ? new Date((latestPhase.start_date as number) * 1000) : null,
+                  };
+
+                  const product = price.product;
+                  if (product && typeof product === "object" && "name" in product) {
+                    stripeSubData.productName = (product as any).name;
+                    updateFields["billing.stripeProductName"] = (product as any).name;
+                  }
+
+                  if (!status) {
+                    updateFields["billing.status"] = "active";
+                  }
+                } catch (priceErr: any) {
+                  stripeSubData = { error: `Schedule found but could not fetch price: ${priceErr?.message}` };
+                }
+              } else {
+                stripeSubData = { error: "Subscription schedule has no price in its phases" };
+              }
+            } else {
+              stripeSubData = { error: "Subscription schedule has no phases configured" };
+            }
           }
         }
 
-        if (!stripeSubData?.error) {
+        if (!stripeSubData) {
           const subscription = await stripeClient.subscriptions.retrieve(actualSubId, {
             expand: ["items.data.price.product"],
           });
