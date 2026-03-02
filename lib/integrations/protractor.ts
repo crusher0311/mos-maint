@@ -312,6 +312,29 @@ function buildMinimalWorkOrderPayload(
   return payload;
 }
 
+export function buildMinimalPayloadForPost(
+  existingWorkOrder: Record<string, any>,
+  existingPackages: any[],
+  newServicePackage: any
+): Record<string, any> {
+  const cleanedPkgs = existingPackages.map(cleanServicePackageForPost);
+  return buildMinimalWorkOrderPayload(existingWorkOrder, [...cleanedPkgs, newServicePackage]);
+}
+
+export async function soapAddServicePackage(
+  shopId: number | string,
+  workOrderGuid: string,
+  workOrderPayload: Record<string, any>
+): Promise<{ ok: boolean; error?: string }> {
+  const config = await resolveProtractorConfig(Number(shopId));
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured" };
+  }
+  const woXml = buildWorkOrderXml(workOrderPayload);
+  console.log(`[Protractor:SOAP] Attempting SOAP WorkOrderUpdate for ${workOrderGuid}, XML length: ${woXml.length}`);
+  return protractorSoapWorkOrderUpdate(config, workOrderGuid, woXml, shopId);
+}
+
 export function computeAuthentication(connectionId: string, apiKey: string): string {
   const keyBytes = Buffer.from(apiKey.replace(/-/g, "").toLowerCase(), "utf8");
   const dataBytes = Buffer.from(connectionId.replace(/-/g, "").toLowerCase(), "utf8");

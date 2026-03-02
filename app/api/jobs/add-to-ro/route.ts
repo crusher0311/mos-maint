@@ -6,7 +6,8 @@ import { getSession } from "@/lib/auth";
 import { 
   resolveProtractorConfig, 
   fetchWorkOrderById,
-  protractorFetch 
+  protractorFetch,
+  createProtractorWorkOrder
 } from "@/lib/integrations/protractor";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
@@ -215,58 +216,14 @@ export async function POST(req: NextRequest) {
     },
   };
 
-  const ew = existingWorkOrder as any;
-  const updatedWorkOrder: Record<string, any> = {
-    ID: ew.ID,
-    Type: ew.Type,
-    WorkOrderNumber: ew.WorkOrderNumber,
-    Completed: ew.Completed,
-    WorkflowStage: ew.WorkflowStage,
-    ScheduledTime: ew.ScheduledTime,
-    PromisedTime: ew.PromisedTime,
-    InUsage: ew.InUsage,
-    OutUsage: ew.OutUsage,
-    Flag: ew.Flag,
-    Tags: ew.Tags,
-    Note: ew.Note,
-    SearchString: ew.SearchString,
-    OtherChargeCode: ew.OtherChargeCode,
-    PurchaseOrderNumber: ew.PurchaseOrderNumber,
-    Duration: ew.Duration,
-    InvoiceTime: ew.InvoiceTime,
-    InvoiceNumber: ew.InvoiceNumber,
-    WorkOrderFlags: ew.WorkOrderFlags,
-  };
-  if (ew.Contact?.ID) updatedWorkOrder.Contact = { ID: ew.Contact.ID };
-  if (ew.ServiceItem?.ID) updatedWorkOrder.ServiceItem = { ID: ew.ServiceItem.ID };
-  if (ew.ServiceAdvisor?.ID) updatedWorkOrder.ServiceAdvisor = { ID: ew.ServiceAdvisor.ID };
-  if (ew.Technician?.ID) updatedWorkOrder.Technician = { ID: ew.Technician.ID };
+  const { buildMinimalPayloadForPost, soapAddServicePackage } = await import("@/lib/integrations/protractor");
 
-  const stripStatusDeep = (obj: any): any => {
-    if (Array.isArray(obj)) return obj.map(stripStatusDeep);
-    if (obj && typeof obj === 'object') {
-      const cleaned: any = {};
-      for (const [k, v] of Object.entries(obj)) {
-        if (k === 'Status') continue;
-        cleaned[k] = stripStatusDeep(v);
-      }
-      return cleaned;
-    }
-    return obj;
-  };
-
-  const cleanedExistingPackages = stripStatusDeep(existingPackages);
-
-  updatedWorkOrder.ServicePackages = {
-    ItemCollection: [...cleanedExistingPackages, newServicePackage],
-  };
-
-  Object.keys(updatedWorkOrder).forEach(k => {
-    if (updatedWorkOrder[k] === undefined || updatedWorkOrder[k] === null) delete updatedWorkOrder[k];
-  });
+  const updatedWorkOrder = buildMinimalPayloadForPost(existingWorkOrder as any, existingPackages, newServicePackage);
 
   const allPkgs = updatedWorkOrder.ServicePackages?.ItemCollection || [];
   console.log(`[Add-to-RO:${requestId}] Sending POST to add "${job.title}" with ${job.lines.length} lines, ${allPkgs.length} total packages...`);
+  console.log(`[Add-to-RO:${requestId}] Payload keys: ${Object.keys(updatedWorkOrder).join(', ')}`);
+  console.log(`[Add-to-RO:${requestId}] Full payload: ${JSON.stringify(updatedWorkOrder).substring(0, 2000)}`);
   const postStart = Date.now();
 
   const updateResult = await protractorFetch<any>(
@@ -281,27 +238,78 @@ export async function POST(req: NextRequest) {
     { priority: true }
   );
   
-  console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms`);
+  console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
 
   if (!updateResult.ok) {
-    console.log(`[Add-to-RO:${requestId}] Failed: ${updateResult.error}, total time: ${Date.now() - startTime}ms`);
-    return NextResponse.json(
-      { error: updateResult.error || "Failed to add job to work order" },
-      { status: 500 }
-    );
+    const isStatusColumnError = (updateResult.error || '').includes("Invalid column name 'Status'");
+    
+    if (isStatusColumnError) {
+      console.log(`[Add-to-RO:${requestId}] REST failed with Status column SQL error — trying SOAP fallback...`);
+      const soapStart = Date.now();
+      const soapResult = await soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder);
+      console.log(`[Add-to-RO:${requestId}] SOAP took ${Date.now() - soapStart}ms, ok=${soapResult.ok}`);
+      
+      if (soapResult.ok) {
+        console.log(`[Add-to-RO:${requestId}] SOAP succeeded: verifying package was added...`);
+        
+        await new Promise(r => setTimeout(r, 1000));
+        const verifyResult = await protractorFetch<any>(
+          `/WorkOrder/${workOrderGuid}`,
+          config,
+          {},
+          0,
+          shopId,
+          { priority: true }
+        );
+        
+        if (verifyResult.ok && verifyResult.data) {
+          const verifyPkgs = verifyResult.data?.ServicePackages?.ItemCollection || 
+                             verifyResult.data?.ServicePackages || [];
+          const found = Array.isArray(verifyPkgs) && verifyPkgs.some(
+            (p: any) => p.ServicePackageHeader?.Title === job.title || p.Code === newServicePackage.Code
+          );
+          
+          if (found) {
+            console.log(`[Add-to-RO:${requestId}] SOAP VERIFIED: Package "${job.title}" confirmed in WO`);
+          } else {
+            console.log(`[Add-to-RO:${requestId}] SOAP WARNING: Package "${job.title}" not found in verification GET. Packages: ${JSON.stringify(verifyPkgs.map((p: any) => p.ServicePackageHeader?.Title)).substring(0, 500)}`);
+            
+            return NextResponse.json(
+              { error: `SOAP update accepted but package was not confirmed. This Protractor installation may have a database issue (missing 'Status' column). Please contact Protractor support.` },
+              { status: 500 }
+            );
+          }
+        } else {
+          console.log(`[Add-to-RO:${requestId}] Could not verify SOAP result (GET failed)`);
+        }
+      } else {
+        console.log(`[Add-to-RO:${requestId}] SOAP also failed: ${soapResult.error}`);
+        return NextResponse.json(
+          { error: `Failed to add job: Protractor's database has a missing 'Status' column. Both REST and SOAP methods failed. Please contact Protractor support about this SQL error.` },
+          { status: 500 }
+        );
+      }
+    } else {
+      console.log(`[Add-to-RO:${requestId}] Failed: ${updateResult.error}, total time: ${Date.now() - startTime}ms`);
+      return NextResponse.json(
+        { error: updateResult.error || "Failed to add job to work order" },
+        { status: 500 }
+      );
+    }
+  } else {
+    const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
+                             updateResult.data?.ServicePackages || [];
+    const addedPackage = Array.isArray(responsePackages) 
+      ? responsePackages.find((p: any) => 
+          p.ServicePackageHeader?.Title === job.title || 
+          p.Code === newServicePackage.Code
+        )
+      : null;
+    
+    if (!addedPackage) {
+      console.log(`[Add-to-RO:${requestId}] WARNING: REST returned OK but package not found in response`);
+    }
   }
-
-  const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
-                           updateResult.data?.ServicePackages || [];
-  const addedPackage = Array.isArray(responsePackages) 
-    ? responsePackages.find((p: any) => 
-        p.ServicePackageHeader?.Title === job.title || 
-        p.Code === newServicePackage.Code
-      )
-    : null;
-  
-  const linesInResponse = addedPackage?.ServicePackageLines?.ItemCollection?.length || 
-                          addedPackage?.ServicePackageLines?.length || 0;
   
   console.log(`[Add-to-RO:${requestId}] Success: Added "${job.title}" to WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);
 
