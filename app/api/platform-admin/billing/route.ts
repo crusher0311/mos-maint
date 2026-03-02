@@ -199,45 +199,63 @@ export async function PATCH(req: NextRequest) {
 
       try {
         const stripeClient = getStripe();
-        const subscription = await stripeClient.subscriptions.retrieve(stripeSubscriptionId, {
-          expand: ["items.data.price.product"],
-        });
+        let actualSubId = stripeSubscriptionId;
 
-        stripeSubData = {
-          status: subscription.status,
-          currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
-          currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        };
-
-        const firstItem = subscription.items?.data?.[0];
-        if (firstItem?.price) {
-          const amount = firstItem.price.unit_amount || 0;
-          updateFields.stripeSubscriptionAmount = amount;
-          updateFields["billing.stripeSubscriptionAmount"] = amount;
-          stripeSubData.amount = amount;
-          stripeSubData.currency = firstItem.price.currency;
-          stripeSubData.interval = firstItem.price.recurring?.interval || null;
-          stripeSubData.intervalCount = firstItem.price.recurring?.interval_count || null;
-          stripeSubData.priceId = firstItem.price.id;
-
-          const product = firstItem.price.product;
-          if (product && typeof product === "object" && "name" in product) {
-            stripeSubData.productName = product.name;
-            updateFields["billing.stripeProductName"] = product.name;
+        if (stripeSubscriptionId.startsWith("sub_sched_")) {
+          const schedule = await stripeClient.subscriptionSchedules.retrieve(stripeSubscriptionId);
+          if (schedule.subscription) {
+            actualSubId = typeof schedule.subscription === "string" 
+              ? schedule.subscription 
+              : schedule.subscription.id;
+            updateFields["billing.stripeSubscriptionScheduleId"] = stripeSubscriptionId;
+            updateFields.stripeSubscriptionId = actualSubId;
+            updateFields["billing.stripeSubscriptionId"] = actualSubId;
+          } else {
+            stripeSubData = { error: "Subscription schedule has no active subscription yet" };
           }
         }
 
-        const stripeStatusMap: Record<string, string> = {
-          active: "active",
-          past_due: "past_due",
-          canceled: "canceled",
-          unpaid: "past_due",
-          paused: "paused",
-          trialing: "trial",
-        };
-        if (!status && stripeStatusMap[subscription.status]) {
-          updateFields["billing.status"] = stripeStatusMap[subscription.status];
+        if (!stripeSubData?.error) {
+          const subscription = await stripeClient.subscriptions.retrieve(actualSubId, {
+            expand: ["items.data.price.product"],
+          });
+
+          stripeSubData = {
+            status: subscription.status,
+            currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+            currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          };
+
+          const firstItem = subscription.items?.data?.[0];
+          if (firstItem?.price) {
+            const amount = firstItem.price.unit_amount || 0;
+            updateFields.stripeSubscriptionAmount = amount;
+            updateFields["billing.stripeSubscriptionAmount"] = amount;
+            stripeSubData.amount = amount;
+            stripeSubData.currency = firstItem.price.currency;
+            stripeSubData.interval = firstItem.price.recurring?.interval || null;
+            stripeSubData.intervalCount = firstItem.price.recurring?.interval_count || null;
+            stripeSubData.priceId = firstItem.price.id;
+
+            const product = firstItem.price.product;
+            if (product && typeof product === "object" && "name" in product) {
+              stripeSubData.productName = product.name;
+              updateFields["billing.stripeProductName"] = product.name;
+            }
+          }
+
+          const stripeStatusMap: Record<string, string> = {
+            active: "active",
+            past_due: "past_due",
+            canceled: "canceled",
+            unpaid: "past_due",
+            paused: "paused",
+            trialing: "trial",
+          };
+          if (!status && stripeStatusMap[subscription.status]) {
+            updateFields["billing.status"] = stripeStatusMap[subscription.status];
+          }
         }
       } catch (stripeErr: any) {
         console.error("Failed to fetch Stripe subscription:", stripeErr?.message);
