@@ -308,24 +308,33 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    if (plan) {
-      updateFields["billing.plan"] = plan;
-      if (plan === "trial" || plan === "demo" || plan === "churned") {
-        updateFields["billing.isPaid"] = false;
-      } else {
-        updateFields["billing.isPaid"] = true;
-      }
-    } else if (stripeSubData && !stripeSubData.error && stripeSubData.amount > 0) {
-      const currentPlan = shop.billing?.plan || "trial";
+    const hasSubscriptionData = stripeSubData && !stripeSubData.error && stripeSubData.amount > 0;
+
+    if (hasSubscriptionData) {
+      const currentPlan = plan || shop.billing?.plan || "trial";
       if (currentPlan === "trial" || currentPlan === "demo") {
         updateFields["billing.plan"] = "starter";
         updateFields["billing.isPaid"] = true;
         console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to starter (has paid subscription)`);
+      } else if (plan) {
+        updateFields["billing.plan"] = plan;
+        updateFields["billing.isPaid"] = !["trial", "demo", "churned"].includes(plan);
       }
-    }
-
-    if (status) {
-      updateFields["billing.status"] = status;
+      if (!updateFields["billing.status"] || updateFields["billing.status"] === "trial") {
+        updateFields["billing.status"] = "active";
+      }
+    } else {
+      if (plan) {
+        updateFields["billing.plan"] = plan;
+        if (plan === "trial" || plan === "demo" || plan === "churned") {
+          updateFields["billing.isPaid"] = false;
+        } else {
+          updateFields["billing.isPaid"] = true;
+        }
+      }
+      if (status) {
+        updateFields["billing.status"] = status;
+      }
     }
 
     console.log(`[Billing PATCH] Shop ${shopId} updateFields:`, JSON.stringify(updateFields, null, 2));
