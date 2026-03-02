@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +100,8 @@ export async function GET() {
         vinLimit: billing.vinLimit || 10,
         stripeCustomerId: shop.stripeCustomerId,
         stripeSubscriptionId: shop.stripeSubscriptionId,
+        stripeSubscriptionAmount: shop.stripeSubscriptionAmount || billing.stripeSubscriptionAmount || null,
+        stripeProductName: billing.stripeProductName || null,
         createdAt: shop.createdAt,
       };
     });
@@ -188,9 +191,58 @@ export async function PATCH(req: NextRequest) {
       updatedAt: new Date(),
     };
 
+    let stripeSubData: any = null;
+
     if (stripeSubscriptionId) {
       updateFields.stripeSubscriptionId = stripeSubscriptionId;
       updateFields["billing.stripeSubscriptionId"] = stripeSubscriptionId;
+
+      try {
+        const stripeClient = getStripe();
+        const subscription = await stripeClient.subscriptions.retrieve(stripeSubscriptionId, {
+          expand: ["items.data.price.product"],
+        });
+
+        stripeSubData = {
+          status: subscription.status,
+          currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
+          currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        };
+
+        const firstItem = subscription.items?.data?.[0];
+        if (firstItem?.price) {
+          const amount = firstItem.price.unit_amount || 0;
+          updateFields.stripeSubscriptionAmount = amount;
+          updateFields["billing.stripeSubscriptionAmount"] = amount;
+          stripeSubData.amount = amount;
+          stripeSubData.currency = firstItem.price.currency;
+          stripeSubData.interval = firstItem.price.recurring?.interval || null;
+          stripeSubData.intervalCount = firstItem.price.recurring?.interval_count || null;
+          stripeSubData.priceId = firstItem.price.id;
+
+          const product = firstItem.price.product;
+          if (product && typeof product === "object" && "name" in product) {
+            stripeSubData.productName = product.name;
+            updateFields["billing.stripeProductName"] = product.name;
+          }
+        }
+
+        const stripeStatusMap: Record<string, string> = {
+          active: "active",
+          past_due: "past_due",
+          canceled: "canceled",
+          unpaid: "past_due",
+          paused: "paused",
+          trialing: "trial",
+        };
+        if (!status && stripeStatusMap[subscription.status]) {
+          updateFields["billing.status"] = stripeStatusMap[subscription.status];
+        }
+      } catch (stripeErr: any) {
+        console.error("Failed to fetch Stripe subscription:", stripeErr?.message);
+        stripeSubData = { error: stripeErr?.message || "Failed to fetch subscription" };
+      }
     }
 
     if (plan) {
@@ -217,13 +269,14 @@ export async function PATCH(req: NextRequest) {
       shopName: shop.name,
       stripeCustomerId,
       stripeSubscriptionId: stripeSubscriptionId || null,
+      stripeSubData,
       plan: plan || null,
       status: status || null,
       performedBy: session.email,
       createdAt: new Date(),
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, stripeSubData });
   } catch (err: any) {
     console.error("Link stripe error:", err);
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });

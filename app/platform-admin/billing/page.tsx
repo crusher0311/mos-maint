@@ -32,6 +32,8 @@ interface ShopBilling {
   vinLimit: number;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
+  stripeSubscriptionAmount?: number | null;
+  stripeProductName?: string | null;
   createdAt?: string;
 }
 
@@ -87,6 +89,7 @@ export default function PlatformBillingPage() {
   const [linkStatus, setLinkStatus] = useState("");
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkError, setLinkError] = useState("");
+  const [linkSuccess, setLinkSuccess] = useState("");
 
   useEffect(() => {
     loadBilling();
@@ -160,6 +163,18 @@ export default function PlatformBillingPage() {
       if (!res.ok) {
         setLinkError(data.error || "Failed to link Stripe");
         return;
+      }
+      if (data.stripeSubData && !data.stripeSubData.error) {
+        const sub = data.stripeSubData;
+        const parts = ["Linked successfully"];
+        if (sub.productName) parts.push(`Product: ${sub.productName}`);
+        if (sub.amount) parts.push(`Amount: $${(sub.amount / 100).toFixed(2)}/${sub.interval || "mo"}`);
+        if (sub.status) parts.push(`Status: ${sub.status}`);
+        setLinkSuccess(parts.join(" · "));
+        setTimeout(() => setLinkSuccess(""), 5000);
+      } else if (data.stripeSubData?.error) {
+        setLinkSuccess(`Linked, but could not fetch subscription: ${data.stripeSubData.error}`);
+        setTimeout(() => setLinkSuccess(""), 5000);
       }
       closeLinkModal();
       loadBilling();
@@ -314,6 +329,13 @@ export default function PlatformBillingPage() {
           </div>
         )}
 
+        {linkSuccess && (
+          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 px-4 py-3 rounded-xl">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            {linkSuccess}
+          </div>
+        )}
+
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
           <div className="p-4 border-b border-gray-200">
             <div className="flex flex-col sm:flex-row gap-3">
@@ -404,25 +426,33 @@ export default function PlatformBillingPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {shop.stripeCustomerId ? (
-                            <a
-                              href={`https://dashboard.stripe.com/customers/${shop.stripeCustomerId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            {shop.stripeCustomerId ? (
+                              <a
+                                href={`https://dashboard.stripe.com/customers/${shop.stripeCustomerId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                View <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : null}
+                            <button
+                              onClick={() => openLinkModal(shop)}
+                              className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#3c81c3] transition-colors"
+                              title={shop.stripeCustomerId ? "Edit Stripe link" : "Link Stripe customer"}
                             >
-                              View <ExternalLink className="w-3 h-3" />
-                            </a>
+                              <Link2 className="w-3.5 h-3.5" />
+                              {!shop.stripeCustomerId && "Link"}
+                            </button>
+                          </div>
+                          {shop.stripeSubscriptionAmount ? (
+                            <span className="text-xs text-gray-500">
+                              ${(shop.stripeSubscriptionAmount / 100).toFixed(2)}/mo
+                              {shop.stripeProductName && ` · ${shop.stripeProductName}`}
+                            </span>
                           ) : null}
-                          <button
-                            onClick={() => openLinkModal(shop)}
-                            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#3c81c3] transition-colors"
-                            title={shop.stripeCustomerId ? "Edit Stripe link" : "Link Stripe customer"}
-                          >
-                            <Link2 className="w-3.5 h-3.5" />
-                            {!shop.stripeCustomerId && "Link"}
-                          </button>
                         </div>
                       </td>
                     </tr>
