@@ -61,8 +61,19 @@ const planColors: Record<string, string> = {
   starter: "bg-blue-100 text-blue-700",
   professional: "bg-[rgba(60,129,195,0.15)] text-[#3c81c3]",
   enterprise: "bg-green-100 text-green-700",
+  oil_sticker_legacy: "bg-purple-100 text-purple-700",
   demo: "bg-yellow-100 text-yellow-700",
   churned: "bg-red-100 text-red-700",
+};
+
+const planLabels: Record<string, string> = {
+  trial: "Trial",
+  starter: "Starter",
+  professional: "Professional",
+  enterprise: "Enterprise",
+  oil_sticker_legacy: "Oil Sticker - Legacy",
+  demo: "Demo",
+  churned: "Churned",
 };
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -294,8 +305,8 @@ export default function PlatformBillingPage() {
                 {Object.entries(summary.planCounts).map(([plan, count]) => (
                   <div key={plan} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${planColors[plan] || planColors.trial}`}>
-                        {plan}
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${planColors[plan] || planColors.trial}`}>
+                        {planLabels[plan] || plan}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -359,6 +370,7 @@ export default function PlatformBillingPage() {
                 <option value="starter">Starter</option>
                 <option value="professional">Professional</option>
                 <option value="enterprise">Enterprise</option>
+                <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
                 <option value="demo">Demo</option>
                 <option value="churned">Churned</option>
               </select>
@@ -399,8 +411,8 @@ export default function PlatformBillingPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${planColors[shop.plan] || planColors.trial}`}>
-                          {shop.plan}
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${planColors[shop.plan] || planColors.trial}`}>
+                          {planLabels[shop.plan] || shop.plan}
                         </span>
                         {shop.isPaid && (
                           <span className="ml-1 text-xs text-green-600">(Paid)</span>
@@ -548,6 +560,7 @@ export default function PlatformBillingPage() {
                       <option value="starter">Starter</option>
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
+                      <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
                       <option value="demo">Demo</option>
                     </select>
                   </div>

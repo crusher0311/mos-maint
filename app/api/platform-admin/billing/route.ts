@@ -51,6 +51,7 @@ export async function GET() {
       starter: 0,
       professional: 0,
       enterprise: 0,
+      oil_sticker_legacy: 0,
       demo: 0,
       churned: 0,
     };
@@ -107,7 +108,7 @@ export async function GET() {
     });
 
     shopBillingData.sort((a, b) => {
-      const order = ["enterprise", "professional", "starter", "demo", "trial", "churned"];
+      const order = ["enterprise", "professional", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
       return order.indexOf(a.plan) - order.indexOf(b.plan);
     });
 
@@ -140,7 +141,7 @@ export async function GET() {
   }
 }
 
-const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "demo", "churned"];
+const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "demo", "churned", "oil_sticker_legacy"];
 const VALID_STATUSES = ["trial", "active", "past_due", "canceled", "paused"];
 
 export async function PATCH(req: NextRequest) {
@@ -313,9 +314,12 @@ export async function PATCH(req: NextRequest) {
     if (hasSubscriptionData) {
       const currentPlan = plan || shop.billing?.plan || "trial";
       if (currentPlan === "trial" || currentPlan === "demo") {
-        updateFields["billing.plan"] = "starter";
+        const productName = stripeSubData.productName || "";
+        const isBrandPro = /brandpro/i.test(productName);
+        const autoTier = isBrandPro ? "oil_sticker_legacy" : "starter";
+        updateFields["billing.plan"] = autoTier;
         updateFields["billing.isPaid"] = true;
-        console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to starter (has paid subscription)`);
+        console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to ${autoTier} (product: ${productName})`);
       } else if (plan) {
         updateFields["billing.plan"] = plan;
         updateFields["billing.isPaid"] = !["trial", "demo", "churned"].includes(plan);

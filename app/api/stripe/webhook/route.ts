@@ -372,14 +372,16 @@ export async function POST(req: NextRequest) {
             
             if (wasInGracePeriod && shop?.billing?.status === "suspended") {
               const plan = shop?.billing?.plan || "starter";
+              const isLegacy = plan === "oil_sticker_legacy";
               const planFeatures: Record<string, boolean> = {
-                maintenance: true,
-                job_lookup: plan !== "starter" && plan !== "trial",
-                common_failures: plan !== "starter" && plan !== "trial",
+                maintenance: !isLegacy,
+                job_lookup: !isLegacy && plan !== "starter" && plan !== "trial",
+                common_failures: !isLegacy && plan !== "starter" && plan !== "trial",
                 oil_sticker: plan !== "trial",
-                keytags: plan === "elite" || plan === "enterprise",
-                auto_booking: plan === "elite" || plan === "enterprise",
-                part_xref: plan === "elite" || plan === "enterprise",
+                keytags: !isLegacy && (plan === "elite" || plan === "enterprise"),
+                auto_booking: isLegacy || plan === "elite" || plan === "enterprise",
+                part_xref: !isLegacy && (plan === "elite" || plan === "enterprise"),
+                labor_rates: isLegacy,
               };
               
               updateData["enabledFeatures.maintenance"] = planFeatures.maintenance;
@@ -389,6 +391,7 @@ export async function POST(req: NextRequest) {
               updateData["enabledFeatures.keytags"] = planFeatures.keytags;
               updateData["enabledFeatures.auto_booking"] = planFeatures.auto_booking;
               updateData["enabledFeatures.part_xref"] = planFeatures.part_xref;
+              updateData["enabledFeatures.labor_rates"] = planFeatures.labor_rates;
               
               console.log(`[Stripe] Shop ${shopId} payment recovered from suspended - re-enabling features for ${plan} plan`);
               

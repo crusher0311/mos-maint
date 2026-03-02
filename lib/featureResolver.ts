@@ -4,7 +4,7 @@ export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
-export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "demo";
+export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo";
 
 export interface FeatureSettings {
   maintenance: boolean;
@@ -126,6 +126,17 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     labor_rates: true,
     concern_assistant: true,
+  },
+  oil_sticker_legacy: {
+    maintenance: false,
+    job_lookup: false,
+    common_failures: false,
+    oil_sticker: true,
+    keytags: false,
+    auto_booking: true,
+    part_xref: false,
+    labor_rates: true,
+    concern_assistant: false,
   },
   enterprise: {
     maintenance: true,
