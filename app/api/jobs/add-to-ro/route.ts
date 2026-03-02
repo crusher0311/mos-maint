@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
+  const { randomUUID } = await import("crypto");
 
   const existingPackagesRaw = existingWorkOrder.ServicePackages as any;
   const existingPackages = Array.isArray(existingPackagesRaw)
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
 
   const servicePackageLines = job.lines.map((line, idx) => {
     const baseLine = {
-      ID: ZERO_GUID,
+      ID: randomUUID(),
       Rank: idx + 1,
       Type: mapLineType(line.lineType),
       Description: line.description,
@@ -171,10 +171,9 @@ export async function POST(req: NextRequest) {
     };
 
     if (line.lineType === "labor") {
-      // Use shop's labor rate (from WO or fallback to historical)
       const laborTotal = line.quantity * shopLaborRate;
       return {
-        ID: ZERO_GUID,
+        ID: randomUUID(),
         Rank: idx + 1,
         Type: "Labor",
         Description: line.description,
@@ -203,7 +202,7 @@ export async function POST(req: NextRequest) {
   });
 
   const newServicePackage = {
-    ID: ZERO_GUID,
+    ID: randomUUID(),
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,

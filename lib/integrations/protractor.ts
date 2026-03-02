@@ -319,7 +319,6 @@ export function buildMinimalPayloadForPost(
 ): Record<string, any> {
   const cleanedPkgs = existingPackages.map(cleanServicePackageForPost);
   const payload = buildMinimalWorkOrderPayload(existingWorkOrder, [...cleanedPkgs, newServicePackage]);
-  payload.ID = "00000000-0000-0000-0000-000000000000";
   return payload;
 }
 
@@ -533,6 +532,7 @@ export async function protractorFetch<T>(
       }
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
+        console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
         return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
       }
 
@@ -1112,7 +1112,6 @@ export async function createProtractorWorkOrder(
   }
 
   const newWorkOrderId = crypto.randomUUID();
-  const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
   const body: Record<string, any> = {
     ID: newWorkOrderId,
@@ -1134,7 +1133,7 @@ export async function createProtractorWorkOrder(
 
   if (params.concernText) {
     initialPackages.push({
-      ID: ZERO_GUID,
+      ID: crypto.randomUUID(),
       Chapter: "Concern",
       Rank: rank++,
       ServicePackageHeader: {
@@ -1337,7 +1336,7 @@ export async function createProtractorWorkOrder(
             const laborRate = shopLaborRate > 0 ? shopLaborRate : price;
             const laborTotal = qty * laborRate;
             return {
-              ID: ZERO_GUID,
+              ID: crypto.randomUUID(),
               Rank: idx + 1,
               Type: "Labor",
               Description: l.description || "Labor",
@@ -1355,7 +1354,7 @@ export async function createProtractorWorkOrder(
           } else {
             const extPrice = qty * price;
             return {
-              ID: ZERO_GUID,
+              ID: crypto.randomUUID(),
               Rank: idx + 1,
               Type: lineType,
               Description: l.description || "",
@@ -1384,7 +1383,7 @@ export async function createProtractorWorkOrder(
           : (pkg.description ? `${pkg.description} [Added by MOS]` : "[Added by MOS]");
 
         const newPkg = {
-          ID: ZERO_GUID,
+          ID: crypto.randomUUID(),
           Chapter: chapter,
           Code: pkg.code || "",
           Rank: existingPkgs.length + 1,
@@ -2625,7 +2624,7 @@ export async function applyCannedJobToWorkOrder(
       console.log(`[Protractor] No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
       
       const newServicePackage = {
-        ID: "00000000-0000-0000-0000-000000000000",
+        ID: crypto.randomUUID(),
         Code: cannedJobCode,
         ServicePackageHeader: {
           Title: cannedJobTitle || cannedJobCode,
@@ -2802,7 +2801,7 @@ export async function applyCannedJobToWorkOrder(
     WorkOrderID: workOrderGuid,
     ServicePackages: {
       ItemCollection: [{
-        ID: "00000000-0000-0000-0000-000000000000",
+        ID: crypto.randomUUID(),
         Chapter: "Service",
         Code: template.Code || cannedJobCode,
         Rank: 1,
@@ -2814,7 +2813,7 @@ export async function applyCannedJobToWorkOrder(
         ServicePackageTemplateID: template.ID,
         ServicePackageLines: {
           ItemCollection: [{
-            ID: "00000000-0000-0000-0000-000000000000",
+            ID: crypto.randomUUID(),
             Rank: 1,
             Type: "Labor",
             Description: template.ServicePackageHeader?.Title || cannedJobCode,
@@ -2859,7 +2858,7 @@ export async function applyCannedJobToWorkOrder(
       ItemCollection: [
         ...cleanedExistingPackages,
         {
-          ID: "00000000-0000-0000-0000-000000000000",
+          ID: crypto.randomUUID(),
           Chapter: template.Chapter || "Service",
           Code: template.Code || cannedJobCode,
           Rank: existingPackages.length + 1,
@@ -2870,7 +2869,7 @@ export async function applyCannedJobToWorkOrder(
           ServicePackageTemplateID: template.ID,
           ServicePackageLines: {
             ItemCollection: templateLines.map((line: any, idx: number) => ({
-              ID: "00000000-0000-0000-0000-000000000000",
+              ID: crypto.randomUUID(),
               Rank: idx + 1,
               Type: line.Type || "Labor",
               Description: line.Description || "",
@@ -3716,17 +3715,16 @@ export async function addDeferredWorkToWorkOrder(
     : "[Previously Deferred - Added by MOS]";
   
   const newServicePackage = {
-    ID: "00000000-0000-0000-0000-000000000000",
+    ID: crypto.randomUUID(),
     Code: deferredItem.Code || title,
     ServicePackageHeader: {
       Title: title,
       Description: packageDescription,
     },
-    // Include the original labor and parts lines
     ServicePackageLines: { 
       ItemCollection: originalServicePackageLines.map(({ Status: _s, ...line }: any) => ({
         ...line,
-        ID: "00000000-0000-0000-0000-000000000000",
+        ID: crypto.randomUUID(),
       }))
     },
     Chapter: "Service",
