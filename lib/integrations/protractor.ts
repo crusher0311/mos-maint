@@ -318,7 +318,9 @@ export function buildMinimalPayloadForPost(
   newServicePackage: any
 ): Record<string, any> {
   const cleanedPkgs = existingPackages.map(cleanServicePackageForPost);
-  return buildMinimalWorkOrderPayload(existingWorkOrder, [...cleanedPkgs, newServicePackage]);
+  const payload = buildMinimalWorkOrderPayload(existingWorkOrder, [...cleanedPkgs, newServicePackage]);
+  payload.ID = "00000000-0000-0000-0000-000000000000";
+  return payload;
 }
 
 export async function soapAddServicePackage(
@@ -1390,44 +1392,7 @@ export async function createProtractorWorkOrder(
           console.log(`[Create WO]   Line ${i}: ${l.Type} - "${l.Description}" Qty:${l.Quantity} Price:${l.Price}`);
         });
 
-        const cw = currentWo as any;
-        const updatedWo: Record<string, any> = {
-          ID: cw.ID,
-          Type: cw.Type,
-          WorkOrderNumber: cw.WorkOrderNumber,
-          Completed: cw.Completed,
-          WorkflowStage: cw.WorkflowStage,
-          ScheduledTime: cw.ScheduledTime,
-          PromisedTime: cw.PromisedTime,
-          InUsage: cw.InUsage,
-          OutUsage: cw.OutUsage,
-          Flag: cw.Flag,
-          Tags: cw.Tags,
-          Note: cw.Note,
-          SearchString: cw.SearchString,
-          OtherChargeCode: cw.OtherChargeCode,
-          PurchaseOrderNumber: cw.PurchaseOrderNumber,
-          Duration: cw.Duration,
-          InvoiceTime: cw.InvoiceTime,
-          InvoiceNumber: cw.InvoiceNumber,
-          WorkOrderFlags: cw.WorkOrderFlags,
-          ServicePackages: { ItemCollection: [...existingPkgs.map((p: any) => {
-            const { Status: _s, ...rest } = p;
-            if (rest.ServicePackageLines?.ItemCollection) {
-              rest.ServicePackageLines = {
-                ItemCollection: rest.ServicePackageLines.ItemCollection.map(({ Status: _ls, ...lRest }: any) => lRest)
-              };
-            }
-            return rest;
-          }), newPkg] },
-        };
-        if (cw.Contact?.ID) updatedWo.Contact = { ID: cw.Contact.ID };
-        if (cw.ServiceItem?.ID) updatedWo.ServiceItem = { ID: cw.ServiceItem.ID };
-        if (cw.ServiceAdvisor?.ID) updatedWo.ServiceAdvisor = { ID: cw.ServiceAdvisor.ID };
-        if (cw.Technician?.ID) updatedWo.Technician = { ID: cw.Technician.ID };
-        Object.keys(updatedWo).forEach(k => {
-          if (updatedWo[k] === undefined || updatedWo[k] === null) delete updatedWo[k];
-        });
+        const updatedWo = buildMinimalPayloadForPost(currentWo as any, existingPkgs, newPkg);
 
         const updateResult = await protractorFetch<any>(
           `/WorkOrder/${workOrderId}`,
@@ -2668,9 +2633,10 @@ export async function applyCannedJobToWorkOrder(
 
       const cleanedPkgs = existingPackages.map(cleanServicePackageForPost);
 
-      const minimalWorkOrder = buildMinimalWorkOrderPayload(
+      const minimalWorkOrder = buildMinimalPayloadForPost(
         existingWorkOrder as Record<string, any>,
-        [...cleanedPkgs, newServicePackage]
+        existingPackages,
+        newServicePackage
       );
       
       console.log(`[Protractor] POSTing minimal work order update with ${cleanedPkgs.length} existing + 1 new service package...`);
