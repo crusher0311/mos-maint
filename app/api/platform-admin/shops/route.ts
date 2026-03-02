@@ -304,10 +304,10 @@ export async function POST(req: NextRequest) {
 
     await db.collection("shops").insertOne(shopDoc);
 
-    const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+    const hashedPassword = await bcrypt.hash(ownerPassword, 12);
     const userDoc = {
       email: ownerEmail.toLowerCase().trim(),
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       name: ownerName?.trim() || ownerEmail.split("@")[0],
       shopId: newShopId,
       role: "admin",

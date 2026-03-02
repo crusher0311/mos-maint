@@ -37,18 +37,23 @@ export async function POST(req: NextRequest) {
     }
 
     let valid = false;
-    if (user.password) {
-      if (user.password.startsWith("$2")) {
-        valid = await bcrypt.compare(password, user.password);
+    const dbHash = user.passwordHash;
+    const legacyPlain = user.password;
+
+    if (dbHash && dbHash.startsWith("$2")) {
+      valid = await bcrypt.compare(password, dbHash);
+    } else if (legacyPlain) {
+      if (legacyPlain.startsWith("$2")) {
+        valid = await bcrypt.compare(password, legacyPlain);
       } else {
-        valid = user.password === password;
-        if (valid) {
-          const hashed = await bcrypt.hash(password, 12);
-          await db.collection("users").updateOne(
-            { _id: user._id },
-            { $set: { password: hashed } }
-          );
-        }
+        valid = legacyPlain === password;
+      }
+      if (valid) {
+        const hashed = await bcrypt.hash(password, 12);
+        await db.collection("users").updateOne(
+          { _id: user._id },
+          { $set: { passwordHash: hashed }, $unset: { password: "" } }
+        );
       }
     }
 
