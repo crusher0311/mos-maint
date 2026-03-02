@@ -315,11 +315,20 @@ export async function PATCH(req: NextRequest) {
       } else {
         updateFields["billing.isPaid"] = true;
       }
+    } else if (stripeSubData && !stripeSubData.error && stripeSubData.amount > 0) {
+      const currentPlan = shop.billing?.plan || "trial";
+      if (currentPlan === "trial" || currentPlan === "demo") {
+        updateFields["billing.plan"] = "starter";
+        updateFields["billing.isPaid"] = true;
+        console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to starter (has paid subscription)`);
+      }
     }
 
     if (status) {
       updateFields["billing.status"] = status;
     }
+
+    console.log(`[Billing PATCH] Shop ${shopId} updateFields:`, JSON.stringify(updateFields, null, 2));
 
     await db.collection("shops").updateOne(
       { shopId: Number(shopId) },
