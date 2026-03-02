@@ -5,7 +5,7 @@ import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
-const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
+const BASE_URL = "https://integration.protractor.com/IntegrationServices/1.0";
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
@@ -475,6 +475,14 @@ export async function protractorFetch<T>(
       }
       
       let body = options.body ? String(options.body) : undefined;
+      
+      if (body && method === 'POST' && endpoint.startsWith('/WorkOrder/')) {
+        const curlHeaders = Object.entries(headers)
+          .map(([k, v]) => `-H '${k}: ${k === 'apikey' || k === 'authentication' ? '***REDACTED***' : v}'`)
+          .join(' \\\n  ');
+        console.log(`[Protractor:cURL] curl -X POST '${url}' \\\n  ${curlHeaders} \\\n  -d '${body.substring(0, 3000)}'`);
+      }
+      
       if (body && method === 'POST' && endpoint.startsWith('/WorkOrder/')) {
         try {
           const parsed = JSON.parse(body);
@@ -767,8 +775,8 @@ function buildServiceItemVehicleXml(fields: {
   return lines.join("\n");
 }
 
-const PROTRACTOR_SOAP_URL = "https://integration.protractor.com/IntegrationServices/2.0/ContactServices.asmx";
-const PROTRACTOR_SOAP_WO_URL = "https://integration.protractor.com/IntegrationServices/2.0/WorkOrderServices.asmx";
+const PROTRACTOR_SOAP_URL = "https://integration.protractor.com/IntegrationServices/1.0/ContactServices.asmx";
+const PROTRACTOR_SOAP_WO_URL = "https://integration.protractor.com/IntegrationServices/1.0/WorkOrderServices.asmx";
 const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
 
 async function protractorSoapServiceItemUpdate(
