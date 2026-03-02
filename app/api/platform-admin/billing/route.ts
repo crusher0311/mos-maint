@@ -312,14 +312,18 @@ export async function PATCH(req: NextRequest) {
     const hasSubscriptionData = stripeSubData && !stripeSubData.error && stripeSubData.amount > 0;
 
     if (hasSubscriptionData) {
+      const productName = stripeSubData.productName || "";
+      const isBrandPro = /brandpro/i.test(productName);
       const currentPlan = plan || shop.billing?.plan || "trial";
-      if (currentPlan === "trial" || currentPlan === "demo") {
-        const productName = stripeSubData.productName || "";
-        const isBrandPro = /brandpro/i.test(productName);
-        const autoTier = isBrandPro ? "oil_sticker_legacy" : "starter";
-        updateFields["billing.plan"] = autoTier;
+
+      if (isBrandPro) {
+        updateFields["billing.plan"] = "oil_sticker_legacy";
         updateFields["billing.isPaid"] = true;
-        console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to ${autoTier} (product: ${productName})`);
+        console.log(`[Billing PATCH] BrandPro product detected — setting plan to oil_sticker_legacy (was: ${currentPlan}, product: ${productName})`);
+      } else if (currentPlan === "trial" || currentPlan === "demo") {
+        updateFields["billing.plan"] = "starter";
+        updateFields["billing.isPaid"] = true;
+        console.log(`[Billing PATCH] Auto-setting plan from ${currentPlan} to starter (product: ${productName})`);
       } else if (plan) {
         updateFields["billing.plan"] = plan;
         updateFields["billing.isPaid"] = !["trial", "demo", "churned"].includes(plan);
