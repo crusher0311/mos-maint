@@ -15,7 +15,9 @@ import {
   Clock,
   XCircle,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Link2,
+  X
 } from "lucide-react";
 
 interface ShopBilling {
@@ -78,6 +80,14 @@ export default function PlatformBillingPage() {
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [showEvents, setShowEvents] = useState(false);
 
+  const [linkShop, setLinkShop] = useState<ShopBilling | null>(null);
+  const [linkCustomerId, setLinkCustomerId] = useState("");
+  const [linkSubId, setLinkSubId] = useState("");
+  const [linkPlan, setLinkPlan] = useState("");
+  const [linkStatus, setLinkStatus] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkError, setLinkError] = useState("");
+
   useEffect(() => {
     loadBilling();
   }, []);
@@ -96,6 +106,67 @@ export default function PlatformBillingPage() {
       console.error("Error loading billing:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openLinkModal = (shop: ShopBilling) => {
+    setLinkShop(shop);
+    setLinkCustomerId(shop.stripeCustomerId || "");
+    setLinkSubId(shop.stripeSubscriptionId || "");
+    setLinkPlan(shop.plan || "");
+    setLinkStatus(shop.status || "");
+    setLinkError("");
+  };
+
+  const closeLinkModal = () => {
+    setLinkShop(null);
+    setLinkCustomerId("");
+    setLinkSubId("");
+    setLinkPlan("");
+    setLinkStatus("");
+    setLinkError("");
+  };
+
+  const saveLinkStripe = async () => {
+    if (!linkShop) return;
+    if (!linkCustomerId.trim()) {
+      setLinkError("Stripe Customer ID is required");
+      return;
+    }
+    if (!linkCustomerId.startsWith("cus_")) {
+      setLinkError("Customer ID must start with 'cus_'");
+      return;
+    }
+    if (linkSubId && !linkSubId.startsWith("sub_")) {
+      setLinkError("Subscription ID must start with 'sub_'");
+      return;
+    }
+
+    setLinkSaving(true);
+    setLinkError("");
+    try {
+      const res = await fetch("/api/platform-admin/billing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopId: linkShop.shopId,
+          stripeCustomerId: linkCustomerId.trim(),
+          stripeSubscriptionId: linkSubId.trim() || undefined,
+          plan: linkPlan || undefined,
+          status: linkStatus || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLinkError(data.error || "Failed to link Stripe");
+        return;
+      }
+      closeLinkModal();
+      loadBilling();
+    } catch (err) {
+      setLinkError("Network error");
+    } finally {
+      setLinkSaving(false);
     }
   };
 
@@ -333,18 +404,26 @@ export default function PlatformBillingPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {shop.stripeCustomerId ? (
-                          <a
-                            href={`https://dashboard.stripe.com/customers/${shop.stripeCustomerId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                        <div className="flex items-center gap-2">
+                          {shop.stripeCustomerId ? (
+                            <a
+                              href={`https://dashboard.stripe.com/customers/${shop.stripeCustomerId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                            >
+                              View <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : null}
+                          <button
+                            onClick={() => openLinkModal(shop)}
+                            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#3c81c3] transition-colors"
+                            title={shop.stripeCustomerId ? "Edit Stripe link" : "Link Stripe customer"}
                           >
-                            View <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span className="text-sm text-gray-400">No customer</span>
-                        )}
+                            <Link2 className="w-3.5 h-3.5" />
+                            {!shop.stripeCustomerId && "Link"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -383,6 +462,106 @@ export default function PlatformBillingPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {linkShop && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+              <div className="flex items-center justify-between p-5 border-b border-gray-200">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Link Stripe Customer</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{linkShop.name} (ID: {linkShop.shopId})</p>
+                </div>
+                <button onClick={closeLinkModal} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stripe Customer ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={linkCustomerId}
+                    onChange={(e) => setLinkCustomerId(e.target.value)}
+                    placeholder="cus_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stripe Subscription ID
+                  </label>
+                  <input
+                    type="text"
+                    value={linkSubId}
+                    onChange={(e) => setLinkSubId(e.target.value)}
+                    placeholder="sub_... (optional)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                    <select
+                      value={linkPlan}
+                      onChange={(e) => setLinkPlan(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                    >
+                      <option value="">No change</option>
+                      <option value="trial">Trial</option>
+                      <option value="starter">Starter</option>
+                      <option value="professional">Professional</option>
+                      <option value="enterprise">Enterprise</option>
+                      <option value="demo">Demo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={linkStatus}
+                      onChange={(e) => setLinkStatus(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                    >
+                      <option value="">No change</option>
+                      <option value="active">Active</option>
+                      <option value="trial">Trial</option>
+                      <option value="past_due">Past Due</option>
+                      <option value="canceled">Canceled</option>
+                      <option value="paused">Paused</option>
+                    </select>
+                  </div>
+                </div>
+
+                {linkError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {linkError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
+                <button
+                  onClick={closeLinkModal}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveLinkStripe}
+                  disabled={linkSaving}
+                  className="px-4 py-2 text-sm text-white bg-[#3c81c3] hover:bg-[#2d6ba3] rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {linkSaving ? "Saving..." : "Link Stripe"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
