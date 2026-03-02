@@ -240,6 +240,7 @@ export async function PATCH(req: NextRequest) {
                     updateFields["billing.stripeProductName"] = (product as any).name;
                   }
 
+                  updateFields["billing.isPaid"] = true;
                   if (!status) {
                     updateFields["billing.status"] = "active";
                   }
@@ -283,6 +284,10 @@ export async function PATCH(req: NextRequest) {
               stripeSubData.productName = product.name;
               updateFields["billing.stripeProductName"] = product.name;
             }
+          }
+
+          if (subscription.status === "active" || subscription.status === "trialing") {
+            updateFields["billing.isPaid"] = true;
           }
 
           const stripeStatusMap: Record<string, string> = {
