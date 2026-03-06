@@ -268,7 +268,7 @@ export default function VisionLanding() {
                     "Chrome extension inside your SMS",
                     "Works with Tekmetric, Shop-Ware & AutoFlow",
                     "Detects overdue & upcoming maintenance",
-                    "AI-powered job search with real pricing",
+                    "Historical job search with AI-assisted matching",
                     "One-click add services to the repair order",
                   ].map((item) => (
                     <div key={item} className="flex items-start gap-2.5">
@@ -394,7 +394,7 @@ export default function VisionLanding() {
             </h2>
             <p className="text-gray-400 max-w-2xl mx-auto leading-relaxed">
               My Oil Sticker helped thousands of shops print professional stickers. MOS Tools takes that foundation
-              and wraps it in a full operations platform — OEM maintenance intelligence, AI-powered job search,
+              and wraps it in a full operations platform — OEM maintenance intelligence, historical job search,
               shop management integrations, automated booking, and more. Everything a service advisor needs,
               in one place, so they can focus on the customer instead of the computer.
             </p>
@@ -472,7 +472,7 @@ export default function VisionLanding() {
                   "Full MOS Tools platform access",
                   "Vehicle maintenance intelligence",
                   "CARFAX integration & history",
-                  "AI-powered job search & lookup",
+                  "Historical job search & lookup",
                   "Detect Dog extension for your SMS",
                   "Auto booking & labor rate rules",
                   "Every new feature we release — forever",
@@ -533,8 +533,8 @@ export default function VisionLanding() {
               },
               {
                 icon: <Star className="w-6 h-6" />,
-                title: "AI Job Search",
-                desc: "Find past jobs with parts and pricing instantly. Smart autocomplete helps advisors build estimates faster.",
+                title: "Historical Job Search",
+                desc: "Search your shop's past jobs with parts and pricing instantly. AI-assisted matching helps advisors build estimates faster.",
               },
               {
                 icon: <DollarSign className="w-6 h-6" />,
@@ -604,7 +604,7 @@ export default function VisionLanding() {
               },
               {
                 q: "I used My Oil Sticker before — is this the same thing?",
-                a: "MOS Tools is the next generation of My Oil Sticker. You still get the same fast, professional sticker printing — but now it's part of a full operations platform with maintenance intelligence, AI job search, SMS integrations, and more. Everything your advisors wished My Oil Sticker could do.",
+                a: "MOS Tools is the next generation of My Oil Sticker. You still get the same fast, professional sticker printing — but now it's part of a full operations platform with maintenance intelligence, historical job search assisted by AI, SMS integrations, and more. Everything your advisors wished My Oil Sticker could do.",
               },
               {
                 q: "What happens after the 30 days?",
