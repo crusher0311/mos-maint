@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CheckCircle, ArrowRight, Printer, Star, Shield, Zap, Gift, Clock, DollarSign, ChevronRight } from "lucide-react";
 
-const BUY_NOW_URL = "#";
+const BUY_NOW_URL = "https://crm.myoilsticker.com/payment-link/69aaecca84b2d76696602481";
 
 const SCREENSHOTS = [
   { src: "/screenshots/dashboard.png", label: "Shop Dashboard", desc: "See every vehicle, status, and mileage at a glance" },
