@@ -29,6 +29,13 @@ export async function GET() {
     }
   }
 
+  const user = await db.collection("users").findOne({ email: sess.email, shopId: sess.shopId });
+
+  const needsSetup = !!(
+    shop?.provisionedVia &&
+    !shop?.setupCompleted
+  );
+
   return NextResponse.json({
     ok: true,
     authenticated: true,
@@ -41,5 +48,6 @@ export async function GET() {
     isPlatformAdmin: sess.isPlatformAdmin || false,
     enterpriseId: shop?.enterpriseId || null,
     hasEnterpriseBilling,
+    needsSetup,
   });
 }

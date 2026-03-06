@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
 import SupportChatWidget from "@/components/ui/SupportChatWidget";
@@ -30,6 +31,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [quickStickerOpen, setQuickStickerOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     async function fetchUserInfo() {
@@ -42,6 +45,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         if (authRes.ok) {
           const authData = await authRes.json();
           if (authData.authenticated) {
+            if (authData.needsSetup && pathname !== "/dashboard/setup-shop") {
+              router.replace("/dashboard/setup-shop");
+              return;
+            }
+
             let enabledFeatures = ["maintenance"];
             
             let billingStatus: BillingStatus | undefined;
@@ -66,7 +74,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }
     }
     fetchUserInfo();
-  }, []);
+  }, [pathname, router]);
 
   useEffect(() => {
     if (mobileMenuOpen) {
