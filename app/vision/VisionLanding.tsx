@@ -199,9 +199,97 @@ export default function VisionLanding() {
         </div>
       </section>
 
-      <section ref={showcaseAnim.ref} className="relative py-16 sm:py-24">
+      <section ref={showcaseAnim.ref} className="relative py-16 sm:py-24 overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/3 left-0 w-72 h-72 bg-blue-600/5 rounded-full blur-[100px]"></div>
+          <div className="absolute top-1/3 right-0 w-72 h-72 bg-blue-400/5 rounded-full blur-[100px]"></div>
+        </div>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className={`text-center mb-12 transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <div className={`text-center mb-16 transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-3">What You Get</p>
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              The Hardware. <span className="text-blue-400">The Intelligence.</span>
+            </h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              A professional sticker printer paired with a Chrome extension that knows what every vehicle needs.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 lg:gap-12 items-start">
+            <div className={`transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-12'}`}>
+              <div className="relative bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/10 rounded-2xl p-6 sm:p-8 hover:border-blue-500/20 transition-colors">
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-blue-500/5 rounded-full blur-[40px] scale-110"></div>
+                    <img
+                      src="/logos/mos-printer.png"
+                      alt="MOS Tools Sticker Printer"
+                      className="relative w-56 sm:w-64 animate-float"
+                      style={{ animationDelay: '0s' }}
+                    />
+                  </div>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-center mb-2">MOS Sticker Printer</h3>
+                <p className="text-sm text-blue-400 text-center font-medium mb-4">The Most Intelligent Oil Sticker on the Planet</p>
+                <div className="space-y-2.5">
+                  {[
+                    "Zink Happy thermal printer included",
+                    "Custom branded stickers with your logo",
+                    "QR codes that link customers back to you",
+                    "2 rolls of sticker paper included",
+                    "Full setup & training — we handle everything",
+                  ].map((item) => (
+                    <div key={item} className="flex items-start gap-2.5">
+                      <CheckCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                      <span className="text-gray-300 text-sm">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className={`transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12'}`} style={{ transitionDelay: '0.15s' }}>
+              <div className="relative bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/10 rounded-2xl p-6 sm:p-8 hover:border-blue-500/20 transition-colors">
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-blue-500/5 rounded-full blur-[40px] scale-110"></div>
+                    <img
+                      src="/logos/detect-dog.png"
+                      alt="Detect Dog by MOS Tools"
+                      className="relative w-44 sm:w-52 animate-float"
+                      style={{ animationDelay: '3s' }}
+                    />
+                  </div>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-center mb-2">Detect Dog</h3>
+                <p className="text-sm text-blue-400 text-center font-medium mb-4">Your advisor's best friend</p>
+                <div className="space-y-2.5">
+                  {[
+                    "Chrome extension inside your SMS",
+                    "Works with Tekmetric, Shop-Ware & AutoFlow",
+                    "Detects overdue & upcoming maintenance",
+                    "AI-powered job search with real pricing",
+                    "One-click add services to the repair order",
+                  ].map((item) => (
+                    <div key={item} className="flex items-start gap-2.5">
+                      <CheckCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                      <span className="text-gray-300 text-sm">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-gray-500 italic mt-8">
+            Both included with MOS Tools. No extra cost for Detect Dog.
+          </p>
+        </div>
+      </section>
+
+      <section ref={detectDogAnim.ref} className="relative py-16 sm:py-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className={`text-center mb-12 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-3">See It in Action</p>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
               More Than a Sticker. <span className="text-blue-400">A Full Platform.</span>
@@ -219,7 +307,7 @@ export default function VisionLanding() {
                       ? 'bg-blue-600/15 border border-blue-500/30'
                       : 'bg-white/[0.02] border border-transparent hover:bg-white/[0.05] hover:border-white/10'
                   }`}
-                  style={showcaseAnim.isVisible ? { animation: `slideIn 0.5s ease-out ${i * 0.1}s both` } : { opacity: 0 }}
+                  style={detectDogAnim.isVisible ? { animation: `slideIn 0.5s ease-out ${i * 0.1}s both` } : { opacity: 0 }}
                 >
                   <div className="flex items-center gap-3">
                     <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${activeShot === i ? 'text-blue-400' : 'text-gray-600'}`} />
@@ -237,7 +325,7 @@ export default function VisionLanding() {
               ))}
             </div>
 
-            <div className={`lg:col-span-3 transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
+            <div className={`lg:col-span-3 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
               <div className="relative rounded-2xl overflow-hidden border border-white/10 animate-glow">
                 <div className="bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-1.5">
                   <div className="flex items-center gap-1.5 px-3 py-2">
@@ -273,57 +361,6 @@ export default function VisionLanding() {
                   />
                 ))}
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section ref={detectDogAnim.ref} className="relative py-16 sm:py-24 border-t border-white/10 overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-0 w-72 h-72 bg-blue-600/5 rounded-full blur-[100px] -translate-y-1/2"></div>
-          <div className="absolute top-1/2 right-0 w-72 h-72 bg-blue-400/5 rounded-full blur-[100px] -translate-y-1/2"></div>
-        </div>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className={`flex justify-center lg:order-2 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12'}`}>
-              <div className="relative">
-                <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-[60px] scale-75"></div>
-                <img
-                  src="/logos/detect-dog.png"
-                  alt="Detect Dog by MOS Tools"
-                  className="relative w-64 sm:w-80 animate-float"
-                />
-              </div>
-            </div>
-
-            <div className={`lg:order-1 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-12'}`}>
-              <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-3">Introducing</p>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4">
-                Meet <span className="text-blue-400">Detect Dog</span>
-              </h2>
-              <p className="text-xl text-gray-300 mb-2">Your advisor's best friend.</p>
-              <p className="text-gray-400 leading-relaxed mb-6">
-                Detect Dog is the MOS Tools Chrome extension that lives right inside your shop management system.
-                It sniffs out what every vehicle needs — overdue maintenance, service history, pricing from past jobs —
-                and puts it all at your advisor's fingertips without ever leaving the screen they're already on.
-              </p>
-              <div className="space-y-3 mb-8">
-                {[
-                  "Works inside Tekmetric, Shop-Ware & AutoFlow",
-                  "Detects overdue and upcoming maintenance instantly",
-                  "AI-powered job search with real pricing from your shop",
-                  "One-click add services directly to the repair order",
-                  "Print oil stickers right from the extension",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                    <span className="text-gray-300 text-sm">{item}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-sm text-gray-500 italic">
-                Included with every MOS Tools subscription. No extra cost.
-              </p>
             </div>
           </div>
         </div>
