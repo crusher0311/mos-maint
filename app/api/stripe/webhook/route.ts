@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
-import { sendEmail, makeWelcomeEmail, makePaymentFailedEmail, makePaymentRecoveredEmail } from "@/lib/email";
+import { sendEmail, makeWelcomeEmail, makeCredentialsWelcomeEmail, makePaymentFailedEmail, makePaymentRecoveredEmail } from "@/lib/email";
 import { createHovercodeQR } from "@/lib/hovercode";
+import { getNextShopId } from "@/lib/ids";
 import Stripe from "stripe";
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -254,6 +256,124 @@ export async function POST(req: NextRequest) {
             { $set: updateData }
           );
           console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skip trial bonus applied)" : ""}`);
+        } else if (session.customer_details?.email) {
+          const crmEmail = session.customer_details.email.toLowerCase().trim();
+          const crmName = session.customer_details.name || "";
+          const isCrmSignup = session.metadata?.source === "crm" || session.metadata?.crmSignup === "true";
+
+          const existingUser = await db.collection("users").findOne({ emailLower: crmEmail });
+          const existingShopByCustomer = session.customer
+            ? await db.collection("shops").findOne({
+                $or: [
+                  { "billing.stripeCustomerId": session.customer },
+                  { stripeCustomerId: session.customer },
+                ],
+              })
+            : null;
+
+          if (!existingUser && !existingShopByCustomer && isCrmSignup) {
+            const alreadyProvisioned = await db.collection("crm_provisions").findOne({
+              stripeSessionId: (session as any).id,
+            });
+            if (alreadyProvisioned) {
+              console.log(`[Stripe CRM] Session ${(session as any).id} already provisioned, skipping`);
+              break;
+            }
+
+            console.log(`[Stripe CRM] Auto-provisioning account for ${crmEmail}`);
+
+            const allowedCrmPlans = ["professional", "starter", "enterprise"];
+            const rawPlan = session.metadata?.plan || "professional";
+            const validatedPlan = allowedCrmPlans.includes(rawPlan) ? rawPlan : "professional";
+
+            const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+            let tempPassword = "";
+            const bytes = crypto.randomBytes(12);
+            for (let i = 0; i < 12; i++) {
+              tempPassword += chars[bytes[i] % chars.length];
+            }
+
+            const passwordHash = await bcrypt.hash(tempPassword, 12);
+            const newShopId = await getNextShopId();
+            const now = new Date();
+            const webhookToken = crypto.randomBytes(12).toString("hex");
+            const rawShopName = session.metadata?.shopName || crmName || "New Shop";
+            const shopNameFromMeta = rawShopName.slice(0, 200).trim();
+
+            const shopDoc = {
+              shopId: newShopId,
+              name: shopNameFromMeta,
+              webhookToken,
+              createdAt: now,
+              updatedAt: now,
+              provisionedVia: "crm_stripe",
+              billing: {
+                plan: validatedPlan,
+                status: "active",
+                isPaid: true,
+                vinLimit: 300,
+                stripeCustomerId: session.customer,
+                stripeSubscriptionId: session.subscription,
+                updatedAt: now,
+              },
+              enabledFeatures: {
+                maintenance: true,
+                job_lookup: true,
+                common_failures: true,
+                oil_sticker: true,
+                keytags: true,
+                auto_booking: true,
+                part_xref: true,
+              },
+            };
+
+            const userDoc = {
+              shopId: newShopId,
+              email: crmEmail,
+              emailLower: crmEmail,
+              name: crmName || null,
+              role: "owner",
+              passwordHash,
+              mustChangePassword: true,
+              createdAt: now,
+              updatedAt: now,
+            };
+
+            await db.collection("shops").insertOne(shopDoc);
+            await db.collection("users").insertOne(userDoc);
+            await db.collection("crm_provisions").insertOne({
+              stripeSessionId: (session as any).id,
+              stripeCustomerId: session.customer,
+              email: crmEmail,
+              shopId: newShopId,
+              createdAt: now,
+            });
+            console.log(`[Stripe CRM] Created shop ${newShopId} (${shopNameFromMeta}) for ${crmEmail}`);
+
+            createHovercodeQR({ shopId: newShopId, shopName: shopNameFromMeta }).then(async (result) => {
+              if (result.success && result.hovercodeId) {
+                await db.collection("shops").updateOne(
+                  { shopId: newShopId },
+                  {
+                    $set: {
+                      "stickerConfig.hovercodeQRId": result.hovercodeId,
+                      "stickerConfig.hovercodeShortUrl": result.shortUrl,
+                      "stickerConfig.hovercodeProvisionedAt": new Date(),
+                    },
+                  }
+                );
+              }
+            }).catch(() => {});
+
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+            try {
+              const emailContent = makeCredentialsWelcomeEmail(shopNameFromMeta, crmEmail, tempPassword, `${baseUrl}/login`);
+              await sendEmail({ to: crmEmail, ...emailContent });
+              console.log(`[Stripe CRM] Welcome email with credentials sent to ${crmEmail}`);
+            } catch (emailErr) {
+              console.error("[Stripe CRM] Failed to send welcome email:", emailErr);
+            }
+          }
         }
         break;
       }

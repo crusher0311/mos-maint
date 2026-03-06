@@ -345,6 +345,71 @@ export function makeWelcomeEmail(shopName: string, loginUrl: string) {
   return { subject, html, text };
 }
 
+export function makeCredentialsWelcomeEmail(
+  shopName: string,
+  email: string,
+  tempPassword: string,
+  loginUrl: string,
+  chromeExtensionUrl: string = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd"
+) {
+  const subject = `Your MOS Tools Login Credentials — ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:30px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      
+      <h1 style="color:#1f2937;font-size:24px;margin-bottom:16px">Welcome to MOS Tools!</h1>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Thank you for signing up <b>${shopName}</b> with MOS Tools. Your account has been created and is ready to go!
+      </p>
+      
+      <div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px;margin:24px 0">
+        <h2 style="color:#1e40af;font-size:16px;margin:0 0 12px 0">Your Login Credentials</h2>
+        <p style="color:#1f2937;font-size:16px;margin:4px 0"><b>Email:</b> ${email}</p>
+        <p style="color:#1f2937;font-size:16px;margin:4px 0"><b>Temporary Password:</b> <code style="background:#e0e7ff;padding:2px 8px;border-radius:4px;font-size:15px">${tempPassword}</code></p>
+        <p style="color:#dc2626;font-size:14px;margin:12px 0 0 0">Please change your password after your first login.</p>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        These credentials work for both:
+      </p>
+      
+      <ul style="color:#4b5563;font-size:16px;padding-left:20px">
+        <li><b>MOS Tools Web Dashboard</b> — manage stickers, maintenance plans, and shop settings</li>
+        <li><b>Detect Dog Chrome Extension</b> — maintenance intelligence inside your shop management system</li>
+      </ul>
+      
+      <div style="text-align:center;margin:30px 0">
+        <a href="${loginUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Log In to Dashboard</a>
+      </div>
+      
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:24px 0">
+        <h3 style="color:#1f2937;font-size:15px;margin:0 0 8px 0">Install the Chrome Extension</h3>
+        <p style="color:#4b5563;font-size:14px;margin:0">
+          Get Detect Dog for your browser to access maintenance plans directly inside Tekmetric, Shop-Ware, or AutoFlow.
+        </p>
+        <p style="margin:8px 0 0 0"><a href="${chromeExtensionUrl}" style="color:#2563eb;font-size:14px">Install from Chrome Web Store →</a></p>
+      </div>
+      
+      <p style="color:#4b5563;font-size:16px">
+        Need help getting started? Reply to this email or reach out to <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      
+      <p style="color:#9ca3af;font-size:14px;text-align:center">
+        MOS Tools - The Most Intelligent Oil Sticker on the Planet<br />
+        <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
+      </p>
+    </div>`;
+  const text = `Welcome to MOS Tools!\n\nYour account for ${shopName} has been created.\n\nLogin Credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nThese work for both the web dashboard and the Detect Dog Chrome extension.\n\nLog in: ${loginUrl}\nInstall Chrome Extension: ${chromeExtensionUrl}\n\nPlease change your password after your first login.\n\nNeed help? Contact support@mos.tools`;
+  return { subject, html, text };
+}
+
 export function makeAnnouncementEmail(title: string, message: string, priority: "info" | "warning" | "critical") {
   const priorityColors = {
     info: { bg: "#dbeafe", border: "#3b82f6", text: "#1e40af", label: "Information" },
