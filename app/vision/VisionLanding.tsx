@@ -309,7 +309,7 @@ export default function VisionLanding() {
               </p>
               <div className="space-y-3 mb-8">
                 {[
-                  "Works inside Tekmetric, Protractor, Shop-Ware & AutoFlow",
+                  "Works inside Tekmetric, Shop-Ware & AutoFlow",
                   "Detects overdue and upcoming maintenance instantly",
                   "AI-powered job search with real pricing from your shop",
                   "One-click add services directly to the repair order",
@@ -579,7 +579,7 @@ export default function VisionLanding() {
               },
               {
                 q: "What shop management systems do you work with?",
-                a: "MOS Tools integrates with Tekmetric, Protractor, Shop-Ware, and AutoFlow. Our Detect Dog Chrome extension works right inside your SMS — no switching between tabs.",
+                a: "MOS Tools integrates with Tekmetric, Protractor, Shop-Ware, and AutoFlow. Our Detect Dog Chrome extension works right inside Tekmetric, Shop-Ware, and AutoFlow — no switching between tabs.",
               },
               {
                 q: "Is this deal only available at Vision?",
