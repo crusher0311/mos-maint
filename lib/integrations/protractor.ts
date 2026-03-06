@@ -1800,19 +1800,36 @@ export async function fetchDeferredWork(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
+  const endpoints = [
     `/DeferredWork/ServiceItem/${encodeURIComponent(serviceItemId)}`,
-    config,
-    {},
-    0,
-    shopId
-  );
+    `/DeferredWork/Read/${encodeURIComponent(serviceItemId)}`,
+    `/DeferredWork/?serviceItemID=${encodeURIComponent(serviceItemId)}`,
+  ];
 
-  if (!result.ok) {
-    return { ok: false, error: result.error };
+  const errors: string[] = [];
+
+  for (const endpoint of endpoints) {
+    console.log(`[Protractor:DeferredWork] Trying GET ${endpoint} for shop ${shopId}...`);
+    const result = await protractorFetch<any>(
+      endpoint,
+      config,
+      {},
+      0,
+      shopId
+    );
+
+    if (result.ok && result.data) {
+      const items = result.data?.ItemCollection || (Array.isArray(result.data) ? result.data : []);
+      console.log(`[Protractor:DeferredWork] SUCCESS via ${endpoint} — ${items.length} items, response keys: ${Object.keys(result.data || {}).join(', ')}`);
+      return { ok: true, deferredWork: items };
+    }
+
+    console.log(`[Protractor:DeferredWork] FAILED ${endpoint}: ${result.error}`);
+    errors.push(`${endpoint}: ${result.error}`);
   }
 
-  return { ok: true, deferredWork: result.data?.ItemCollection || [] };
+  console.error(`[Protractor:DeferredWork] All deferred work endpoints failed for shop ${shopId}:`, errors);
+  return { ok: false, error: "Could not fetch deferred work. No valid endpoint found." };
 }
 
 export async function testConnection(
@@ -2212,27 +2229,8 @@ export async function fetchCannedJobs(
 
   const errors: string[] = [];
 
-  // Try GET /ServicePackageTemplate first (this is what works for Protractor)
-  console.log(`[Protractor] Trying GET /ServicePackageTemplate...`);
-  const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
-    "/ServicePackageTemplate",
-    config,
-    {},
-    0,
-    shopId
-  );
-
-  if (getResult.ok && getResult.data?.ItemCollection?.length) {
-    console.log(`[Protractor] Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
-    return { ok: true, cannedJobs: getResult.data.ItemCollection };
-  }
-  
-  if (getResult.error) {
-    errors.push(`GET /ServicePackageTemplate: ${getResult.error}`);
-  }
-
-  // Try GET /CannedJob/ endpoint (paginated)
-  console.log(`[Protractor] Trying GET /CannedJob/...`);
+  // Try GET /CannedJob/ endpoint first (paginated) — this is the canonical Protractor API endpoint
+  console.log(`[Protractor:CannedJobs] Trying GET /CannedJob/ for shop ${shopId}...`);
   const allCannedJobs: ProtractorCannedJob[] = [];
   let skip = 0;
   const pageSize = 100;
@@ -2253,6 +2251,7 @@ export async function fetchCannedJobs(
     );
 
     if (!cannedResult.ok) {
+      console.log(`[Protractor:CannedJobs] FAILED /CannedJob/ at skip=${skip}: ${cannedResult.error}`);
       if (skip === 0) {
         errors.push(`GET /CannedJob/: ${cannedResult.error}`);
       }
@@ -2260,6 +2259,7 @@ export async function fetchCannedJobs(
     }
 
     const pageItems = cannedResult.data?.ItemCollection || [];
+    console.log(`[Protractor:CannedJobs] /CannedJob/ page skip=${skip}: ${pageItems.length} items, response keys: ${Object.keys(cannedResult.data || {}).join(', ')}`);
     allCannedJobs.push(...pageItems);
 
     if (pageItems.length < pageSize) {
@@ -2271,11 +2271,33 @@ export async function fetchCannedJobs(
   }
 
   if (cannedJobSuccess && allCannedJobs.length > 0) {
-    console.log(`[Protractor] Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
+    console.log(`[Protractor:CannedJobs] SUCCESS — Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
     return { ok: true, cannedJobs: allCannedJobs };
   }
 
-  // Fallback to POST endpoints if GET didn't work
+  // Try GET /ServicePackageTemplate
+  console.log(`[Protractor:CannedJobs] Trying GET /ServicePackageTemplate for shop ${shopId}...`);
+  const getResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+    "/ServicePackageTemplate",
+    config,
+    {},
+    0,
+    shopId
+  );
+
+  if (getResult.ok && getResult.data?.ItemCollection?.length) {
+    console.log(`[Protractor:CannedJobs] SUCCESS — Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
+    return { ok: true, cannedJobs: getResult.data.ItemCollection };
+  }
+  
+  if (getResult.error) {
+    console.log(`[Protractor:CannedJobs] FAILED /ServicePackageTemplate: ${getResult.error}`);
+    errors.push(`GET /ServicePackageTemplate: ${getResult.error}`);
+  } else {
+    console.log(`[Protractor:CannedJobs] /ServicePackageTemplate returned OK but no items. Response keys: ${Object.keys(getResult.data || {}).join(', ')}`);
+  }
+
+  // Fallback to POST endpoints
   const postEndpoints = [
     {
       endpoint: "/ServicePackageTemplate/Read",
@@ -2288,7 +2310,7 @@ export async function fetchCannedJobs(
   ];
   
   for (const { endpoint, body } of postEndpoints) {
-    console.log(`[Protractor] Trying POST ${endpoint}...`);
+    console.log(`[Protractor:CannedJobs] Trying POST ${endpoint} for shop ${shopId}...`);
     const result = await protractorFetch<{ 
       ItemCollection?: ProtractorCannedJob[];
       ServicePackageTemplates?: ProtractorCannedJob[];
@@ -2306,16 +2328,19 @@ export async function fetchCannedJobs(
                   result.data?.ServicePackageTemplateReadResponse?.ItemCollection;
     
     if (result.ok && items?.length) {
-      console.log(`[Protractor] Found ${items.length} service packages via POST ${endpoint}`);
+      console.log(`[Protractor:CannedJobs] SUCCESS — Found ${items.length} service packages via POST ${endpoint}`);
       return { ok: true, cannedJobs: items };
     }
     
     if (result.error) {
+      console.log(`[Protractor:CannedJobs] FAILED POST ${endpoint}: ${result.error}`);
       errors.push(`POST ${endpoint}: ${result.error}`);
+    } else {
+      console.log(`[Protractor:CannedJobs] POST ${endpoint} returned OK but no items. Response keys: ${Object.keys(result.data || {}).join(', ')}`);
     }
   }
 
-  console.error(`[Protractor] All canned job endpoints failed for shop ${shopId}:`, errors);
+  console.error(`[Protractor:CannedJobs] ALL endpoints failed for shop ${shopId}:`, errors);
   return { 
     ok: false, 
     error: "Could not fetch canned jobs from Protractor. The service package endpoint may not be available for this shop." 
