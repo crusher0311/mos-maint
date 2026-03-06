@@ -233,7 +233,7 @@ export default function VisionLanding() {
                 <p className="text-sm text-blue-400 text-center font-medium mb-4">The Most Intelligent Oil Sticker on the Planet</p>
                 <div className="space-y-2.5">
                   {[
-                    "Zink Happy thermal printer included",
+                    "MOS Printer included",
                     "Custom branded stickers with your logo",
                     "QR codes that link customers back to you",
                     "2 rolls of sticker paper included",
@@ -428,7 +428,7 @@ export default function VisionLanding() {
               </div>
               <div className="space-y-3 mb-8">
                 {[
-                  "Zink Happy Thermal Printer",
+                  "MOS Printer",
                   "2 rolls of sticker paper",
                   "Full setup & training",
                   "30 days of MOS Tools included",
@@ -600,7 +600,7 @@ export default function VisionLanding() {
             {[
               {
                 q: "What's included in the $349 Starter Kit?",
-                a: "A Zink Happy thermal printer, 2 rolls of sticker paper, full setup and training, and 30 days of MOS Tools software access. Everything you need to start printing stickers the day it arrives.",
+                a: "The MOS Printer, 2 rolls of sticker paper, full setup and training, and 30 days of MOS Tools software access. Everything you need to start printing stickers the day it arrives.",
               },
               {
                 q: "I used My Oil Sticker before — is this the same thing?",
