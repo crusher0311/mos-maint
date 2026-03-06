@@ -1800,13 +1800,8 @@ export async function fetchDeferredWork(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const params = new URLSearchParams();
-  params.set("serviceItemID", serviceItemId);
-  if (options?.startDate) params.set("startDate", options.startDate);
-  if (options?.endDate) params.set("endDate", options.endDate);
-
   const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
-    `/ServicePackage/DeferredWorks?${params.toString()}`,
+    `/DeferredWork/ServiceItem/${encodeURIComponent(serviceItemId)}`,
     config,
     {},
     0,
@@ -2234,6 +2229,50 @@ export async function fetchCannedJobs(
   
   if (getResult.error) {
     errors.push(`GET /ServicePackageTemplate: ${getResult.error}`);
+  }
+
+  // Try GET /CannedJob/ endpoint (paginated)
+  console.log(`[Protractor] Trying GET /CannedJob/...`);
+  const allCannedJobs: ProtractorCannedJob[] = [];
+  let skip = 0;
+  const pageSize = 100;
+  let hasMore = true;
+  let cannedJobSuccess = false;
+
+  while (hasMore && skip < 5000) {
+    const params = new URLSearchParams();
+    params.set("take", String(pageSize));
+    params.set("skip", String(skip));
+
+    const cannedResult = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+      `/CannedJob/?${params.toString()}`,
+      config,
+      {},
+      0,
+      shopId
+    );
+
+    if (!cannedResult.ok) {
+      if (skip === 0) {
+        errors.push(`GET /CannedJob/: ${cannedResult.error}`);
+      }
+      break;
+    }
+
+    const pageItems = cannedResult.data?.ItemCollection || [];
+    allCannedJobs.push(...pageItems);
+
+    if (pageItems.length < pageSize) {
+      hasMore = false;
+    } else {
+      skip += pageSize;
+    }
+    cannedJobSuccess = true;
+  }
+
+  if (cannedJobSuccess && allCannedJobs.length > 0) {
+    console.log(`[Protractor] Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
+    return { ok: true, cannedJobs: allCannedJobs };
   }
 
   // Fallback to POST endpoints if GET didn't work
