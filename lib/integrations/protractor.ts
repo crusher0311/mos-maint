@@ -5,7 +5,7 @@ import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
-const BASE_URL = "https://integration.protractor.com/IntegrationServices/1.0";
+const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
@@ -1800,36 +1800,30 @@ export async function fetchDeferredWork(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const endpoints = [
-    `/DeferredWork/ServiceItem/${encodeURIComponent(serviceItemId)}`,
-    `/DeferredWork/Read/${encodeURIComponent(serviceItemId)}`,
-    `/DeferredWork/?serviceItemID=${encodeURIComponent(serviceItemId)}`,
-  ];
+  const params = new URLSearchParams();
+  params.set("serviceItemID", serviceItemId);
+  if (options?.startDate) params.set("startDate", options.startDate);
+  if (options?.endDate) params.set("endDate", options.endDate);
 
-  const errors: string[] = [];
+  const endpoint = `/ServicePackage/DeferredWorks?${params.toString()}`;
+  console.log(`[Protractor:DeferredWork] GET ${endpoint} for shop ${shopId}...`);
 
-  for (const endpoint of endpoints) {
-    console.log(`[Protractor:DeferredWork] Trying GET ${endpoint} for shop ${shopId}...`);
-    const result = await protractorFetch<any>(
-      endpoint,
-      config,
-      {},
-      0,
-      shopId
-    );
+  const result = await protractorFetch<{ ItemCollection?: ProtractorDeferredWork[] }>(
+    endpoint,
+    config,
+    {},
+    0,
+    shopId
+  );
 
-    if (result.ok && result.data) {
-      const items = result.data?.ItemCollection || (Array.isArray(result.data) ? result.data : []);
-      console.log(`[Protractor:DeferredWork] SUCCESS via ${endpoint} — ${items.length} items, response keys: ${Object.keys(result.data || {}).join(', ')}`);
-      return { ok: true, deferredWork: items };
-    }
-
-    console.log(`[Protractor:DeferredWork] FAILED ${endpoint}: ${result.error}`);
-    errors.push(`${endpoint}: ${result.error}`);
+  if (!result.ok) {
+    console.log(`[Protractor:DeferredWork] FAILED: ${result.error}`);
+    return { ok: false, error: result.error };
   }
 
-  console.error(`[Protractor:DeferredWork] All deferred work endpoints failed for shop ${shopId}:`, errors);
-  return { ok: false, error: "Could not fetch deferred work. No valid endpoint found." };
+  const items = result.data?.ItemCollection || [];
+  console.log(`[Protractor:DeferredWork] SUCCESS — ${items.length} items`);
+  return { ok: true, deferredWork: items };
 }
 
 export async function testConnection(
