@@ -35,7 +35,7 @@ export default function VisionLanding() {
   const detectDogAnim = useInView(0.1);
   const featuresAnim = useInView(0.1);
   const pricingAnim = useInView(0.1);
-  const statsAnim = useInView(0.1);
+
 
   useEffect(() => {
     const visionEnd = new Date("2026-03-08T18:00:00-06:00");
@@ -176,25 +176,58 @@ export default function VisionLanding() {
             from clock-in to close.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <a
-              href={BUY_NOW_URL}
-              className="group inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 hover:shadow-2xl hover:shadow-blue-600/30 transition-all hover:scale-[1.02]"
-            >
-              Claim Your Vision Deal — $349
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </a>
-            <span className="text-sm text-gray-500">
-              <span className="line-through text-gray-600">$495</span>{" "}
-              <span className="text-blue-400 font-semibold">Save $146</span>
-            </span>
-          </div>
+          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 items-center mb-12">
+            <div className="flex flex-col items-center md:items-end gap-4">
+              <a
+                href={BUY_NOW_URL}
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 hover:shadow-2xl hover:shadow-blue-600/30 transition-all hover:scale-[1.02]"
+              >
+                Claim Your Vision Deal — $349
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
+              <span className="text-sm text-gray-500">
+                <span className="line-through text-gray-600">$495</span>{" "}
+                <span className="text-blue-400 font-semibold">Save $146</span>
+              </span>
+              <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-5 gap-y-2 text-sm text-gray-400">
+                <span className="flex items-center gap-1.5"><Printer className="w-4 h-4 text-blue-400" /> Printer Included</span>
+                <span className="flex items-center gap-1.5"><Gift className="w-4 h-4 text-blue-400" /> 2 Rolls Included</span>
+                <span className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-blue-400" /> Setup & Training</span>
+                <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-400" /> 30 Days of MOS Tools</span>
+              </div>
+            </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400">
-            <span className="flex items-center gap-1.5"><Printer className="w-4 h-4 text-blue-400" /> Printer Included</span>
-            <span className="flex items-center gap-1.5"><Gift className="w-4 h-4 text-blue-400" /> 2 Rolls Included</span>
-            <span className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-blue-400" /> Setup & Training</span>
-            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-400" /> 30 Days of MOS Tools</span>
+            <div className="border-l border-white/10 pl-8 hidden md:block">
+              <h3 className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-5">Why Shops Love It</h3>
+              <div className="space-y-5">
+                {[
+                  { stat: "1-Click", label: "Job adding" },
+                  { stat: "15 Min", label: "Saved per RO" },
+                  { stat: "$500+/mo", label: "Added in labor rate adjustments" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-baseline gap-3">
+                    <span className="text-2xl font-black text-blue-400 whitespace-nowrap">{item.stat}</span>
+                    <span className="text-gray-400 text-sm">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="md:hidden text-center pt-4 border-t border-white/10">
+              <h3 className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-4">Why Shops Love It</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { stat: "1-Click", label: "Job adding" },
+                  { stat: "15 Min", label: "Saved per RO" },
+                  { stat: "$500+/mo", label: "Labor rate adjustments" },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <div className="text-xl font-black text-blue-400">{item.stat}</div>
+                    <div className="text-gray-400 text-xs">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -563,32 +596,6 @@ export default function VisionLanding() {
         </div>
       </section>
 
-      <section ref={statsAnim.ref} className="relative py-20 border-t border-white/10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className={`text-center mb-12 transition-all duration-700 ${statsAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Why Shops <span className="text-blue-400">Love It</span>
-            </h2>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-8 text-center">
-            {[
-              { stat: "1-Click", label: "Job adding" },
-              { stat: "15 Min", label: "Saved per RO" },
-              { stat: "$500+", label: "Month added in labor rate adjustments" },
-            ].map((item, i) => (
-              <div
-                key={item.label}
-                className={`transition-all duration-700 ${statsAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-                style={statsAnim.isVisible ? { transitionDelay: `${i * 0.15}s` } : undefined}
-              >
-                <div className="text-4xl sm:text-5xl font-black text-blue-400 mb-2">{item.stat}</div>
-                <div className="text-gray-400">{item.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       <section className="relative py-20 border-t border-white/10">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
