@@ -482,7 +482,7 @@ export default function VisionLanding() {
               {
                 icon: <Printer className="w-6 h-6" />,
                 title: "Instant Oil Stickers",
-                desc: "The same great sticker printing you know, now with custom branding, QR codes, and under-5-second print times.",
+                desc: "The same great sticker printing you know, now with custom branding and QR codes that link customers back to your shop.",
               },
               {
                 icon: <Zap className="w-6 h-6" />,
@@ -536,7 +536,7 @@ export default function VisionLanding() {
 
           <div className="grid sm:grid-cols-3 gap-8 text-center">
             {[
-              { stat: "< 5 sec", label: "To print a sticker" },
+              { stat: "1-Click", label: "Sticker printing" },
               { stat: "4 SMS", label: "Integrations supported" },
               { stat: "$0", label: "Setup hassle — we handle it" },
             ].map((item, i) => (
