@@ -1,12 +1,40 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { CheckCircle, ArrowRight, Printer, Star, Shield, Zap, Gift, Clock, DollarSign } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { CheckCircle, ArrowRight, Printer, Star, Shield, Zap, Gift, Clock, DollarSign, ChevronRight } from "lucide-react";
 
 const BUY_NOW_URL = "#";
 
+const SCREENSHOTS = [
+  { src: "/screenshots/dashboard.png", label: "Shop Dashboard", desc: "See every vehicle, status, and mileage at a glance" },
+  { src: "/screenshots/maintenance-plan.png", label: "Maintenance Plans", desc: "OEM schedules + CARFAX history = zero guesswork" },
+  { src: "/screenshots/chrome-ext-plan.png", label: "Chrome Extension", desc: "Maintenance intelligence right inside your SMS" },
+  { src: "/screenshots/chrome-ext-job.png", label: "AI Job Search", desc: "Find past jobs with pricing in seconds" },
+  { src: "/screenshots/oem-data.png", label: "OEM Data", desc: "Factory maintenance specs for every vehicle" },
+];
+
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setIsVisible(true); obs.disconnect(); }
+    }, { threshold });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return { ref, isVisible };
+}
+
 export default function VisionLanding() {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [activeShot, setActiveShot] = useState(0);
+  const showcaseAnim = useInView(0.1);
+  const featuresAnim = useInView(0.1);
+  const pricingAnim = useInView(0.1);
+  const statsAnim = useInView(0.1);
 
   useEffect(() => {
     const visionEnd = new Date("2026-03-08T18:00:00-06:00");
@@ -29,11 +57,63 @@ export default function VisionLanding() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveShot((prev) => (prev + 1) % SCREENSHOTS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      <style jsx global>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-12px) rotate(1deg); }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(40px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(-30px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeScale {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+          50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.3); }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-slideUp { animation: slideUp 0.7s ease-out forwards; }
+        .animate-slideIn { animation: slideIn 0.6s ease-out forwards; }
+        .animate-fadeScale { animation: fadeScale 0.6s ease-out forwards; }
+        .animate-glow { animation: glow 3s ease-in-out infinite; }
+        .stagger-1 { animation-delay: 0.1s; }
+        .stagger-2 { animation-delay: 0.2s; }
+        .stagger-3 { animation-delay: 0.3s; }
+        .stagger-4 { animation-delay: 0.4s; }
+        .stagger-5 { animation-delay: 0.5s; }
+        .shimmer-text {
+          background: linear-gradient(90deg, #60a5fa 0%, #93c5fd 40%, #ffffff 50%, #93c5fd 60%, #60a5fa 100%);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: shimmer 4s linear infinite;
+        }
+      `}</style>
+
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-400/8 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-400/5 rounded-full blur-[120px]"></div>
       </div>
 
       <header className="relative z-50 border-b border-white/10">
@@ -63,58 +143,135 @@ export default function VisionLanding() {
         </div>
       </header>
 
-      <section className="relative pt-16 pb-20 sm:pt-24 sm:pb-28">
+      <section className="relative pt-16 pb-12 sm:pt-24 sm:pb-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div>
-            <div className="flex items-center justify-center gap-3 mb-8">
-              <img src="/logos/vision-logo-white.png" alt="Vision" className="h-6 sm:hidden" />
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-gray-300">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                Vision Hi-Tech Training & Expo 2026 — Kansas City
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <img src="/logos/vision-logo-white.png" alt="Vision" className="h-6 sm:hidden" />
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-gray-300">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+              Vision Hi-Tech Training & Expo 2026 — Kansas City
+            </div>
+          </div>
+
+          <p className="text-sm sm:text-base text-blue-400 font-medium tracking-wide uppercase mb-4">
+            My Oil Sticker — Reimagined
+          </p>
+
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-black leading-[1.1] mb-3 tracking-tight">
+            <span className="shimmer-text">The Most Intelligent</span>
+            <br />
+            <span className="shimmer-text">Oil Sticker</span>
+            <br />
+            <span className="text-white">on the Planet</span>
+          </h1>
+
+          <p className="text-base sm:text-lg text-gray-500 mb-6 italic">
+            And it's just the beginning.
+          </p>
+
+          <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            MOS Tools takes everything you loved about My Oil Sticker and builds
+            a complete operations platform around it — simplifying your service advisors' day
+            from clock-in to close.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+            <a
+              href={BUY_NOW_URL}
+              className="group inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 hover:shadow-2xl hover:shadow-blue-600/30 transition-all hover:scale-[1.02]"
+            >
+              Claim Your Vision Deal — $349
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </a>
+            <span className="text-sm text-gray-500">
+              <span className="line-through text-gray-600">$495</span>{" "}
+              <span className="text-blue-400 font-semibold">Save $146</span>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400">
+            <span className="flex items-center gap-1.5"><Printer className="w-4 h-4 text-blue-400" /> Printer Included</span>
+            <span className="flex items-center gap-1.5"><Gift className="w-4 h-4 text-blue-400" /> 2 Rolls Included</span>
+            <span className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-blue-400" /> Setup & Training</span>
+            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-400" /> 30 Days of MOS Tools</span>
+          </div>
+        </div>
+      </section>
+
+      <section ref={showcaseAnim.ref} className="relative py-16 sm:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className={`text-center mb-12 transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-3">See It in Action</p>
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              More Than a Sticker. <span className="text-blue-400">A Full Platform.</span>
+            </h2>
+          </div>
+
+          <div className="grid lg:grid-cols-5 gap-8 items-start">
+            <div className="lg:col-span-2 space-y-2">
+              {SCREENSHOTS.map((shot, i) => (
+                <button
+                  key={shot.label}
+                  onClick={() => setActiveShot(i)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
+                    activeShot === i
+                      ? 'bg-blue-600/15 border border-blue-500/30'
+                      : 'bg-white/[0.02] border border-transparent hover:bg-white/[0.05] hover:border-white/10'
+                  }`}
+                  style={showcaseAnim.isVisible ? { animation: `slideIn 0.5s ease-out ${i * 0.1}s both` } : { opacity: 0 }}
+                >
+                  <div className="flex items-center gap-3">
+                    <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${activeShot === i ? 'text-blue-400' : 'text-gray-600'}`} />
+                    <div>
+                      <div className={`font-semibold text-sm transition-colors ${activeShot === i ? 'text-white' : 'text-gray-400'}`}>
+                        {shot.label}
+                      </div>
+                      <div className="text-xs text-gray-500">{shot.desc}</div>
+                    </div>
+                  </div>
+                  {activeShot === i && (
+                    <div className="mt-2 ml-7 h-0.5 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className={`lg:col-span-3 transition-all duration-700 ${showcaseAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}>
+              <div className="relative rounded-2xl overflow-hidden border border-white/10 animate-glow">
+                <div className="bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-1.5">
+                  <div className="flex items-center gap-1.5 px-3 py-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/60"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/60"></div>
+                    <span className="ml-2 text-xs text-gray-500">{SCREENSHOTS[activeShot].label}</span>
+                  </div>
+                </div>
+                <div className="relative overflow-hidden">
+                  {SCREENSHOTS.map((shot, i) => (
+                    <img
+                      key={shot.src}
+                      src={shot.src}
+                      alt={shot.label}
+                      loading="lazy"
+                      className={`w-full transition-all duration-500 ${
+                        activeShot === i ? 'opacity-100 relative' : 'opacity-0 absolute inset-0'
+                      }`}
+                      style={activeShot === i ? { animation: 'fadeScale 0.5s ease-out' } : undefined}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <p className="text-sm sm:text-base text-blue-400 font-medium tracking-wide uppercase mb-4">
-              My Oil Sticker — Reimagined
-            </p>
-
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-black leading-[1.1] mb-6 tracking-tight">
-              Your Sticker Printer,
-              <br />
-              <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 bg-clip-text text-transparent">
-                Now a Full Shop
-              </span>
-              <br />
-              <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 bg-clip-text text-transparent">
-                Operations Tool
-              </span>
-            </h1>
-
-            <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-              MOS Tools takes everything you loved about My Oil Sticker and builds
-              a complete operations platform around it — simplifying your service advisors' day
-              from clock-in to close.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-              <a
-                href={BUY_NOW_URL}
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 hover:shadow-2xl hover:shadow-blue-600/30 transition-all hover:scale-[1.02]"
-              >
-                Claim Your Vision Deal — $349
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </a>
-              <span className="text-sm text-gray-500">
-                <span className="line-through text-gray-600">$495</span>{" "}
-                <span className="text-blue-400 font-semibold">Save $146</span>
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-400">
-              <span className="flex items-center gap-1.5"><Printer className="w-4 h-4 text-blue-400" /> Printer Included</span>
-              <span className="flex items-center gap-1.5"><Gift className="w-4 h-4 text-blue-400" /> 2 Rolls Included</span>
-              <span className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-blue-400" /> Setup & Training</span>
-              <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-400" /> 30 Days of MOS Tools</span>
+              <div className="flex justify-center gap-2 mt-4">
+                {SCREENSHOTS.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveShot(i)}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      activeShot === i ? 'w-8 bg-blue-500' : 'w-3 bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -156,9 +313,9 @@ export default function VisionLanding() {
         </div>
       </section>
 
-      <section className="relative py-20 sm:py-28">
+      <section ref={pricingAnim.ref} className="relative py-20 sm:py-28">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+          <div className={`text-center mb-16 transition-all duration-700 ${pricingAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
               One Price. <span className="text-blue-400">Two Ways to Go.</span>
             </h2>
@@ -168,7 +325,10 @@ export default function VisionLanding() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <div className="relative bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/10 rounded-2xl p-8 hover:border-white/20 transition-colors">
+            <div
+              className={`relative bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/10 rounded-2xl p-8 hover:border-white/20 transition-all duration-700 ${pricingAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
+              style={pricingAnim.isVisible ? { transitionDelay: '0.1s' } : undefined}
+            >
               <div className="mb-6">
                 <span className="text-sm font-medium text-gray-400 uppercase tracking-wider">Vision Special</span>
                 <div className="flex items-baseline gap-2 mt-2">
@@ -200,7 +360,10 @@ export default function VisionLanding() {
               </a>
             </div>
 
-            <div className="relative bg-gradient-to-b from-blue-600/10 to-transparent border-2 border-blue-500/40 rounded-2xl p-8">
+            <div
+              className={`relative bg-gradient-to-b from-blue-600/10 to-transparent border-2 border-blue-500/40 rounded-2xl p-8 transition-all duration-700 ${pricingAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
+              style={pricingAnim.isVisible ? { transitionDelay: '0.25s' } : undefined}
+            >
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded-full">
                   Best Long-Term Value
@@ -251,9 +414,9 @@ export default function VisionLanding() {
         </div>
       </section>
 
-      <section className="relative py-20 border-t border-white/10">
+      <section ref={featuresAnim.ref} className="relative py-20 border-t border-white/10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
+          <div className={`text-center mb-12 transition-all duration-700 ${featuresAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
               Built to Simplify <span className="text-blue-400">Your Advisor's Day</span>
             </h2>
@@ -294,10 +457,11 @@ export default function VisionLanding() {
                 title: "Auto Booking",
                 desc: "Predictive scheduling based on driving habits. Automated reminders keep customers coming back on time.",
               },
-            ].map((feature) => (
+            ].map((feature, i) => (
               <div
                 key={feature.title}
-                className="group bg-white/[0.03] border border-white/10 rounded-xl p-6 hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
+                className={`group bg-white/[0.03] border border-white/10 rounded-xl p-6 hover:bg-white/[0.06] hover:border-blue-500/30 transition-all duration-500 ${featuresAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                style={featuresAnim.isVisible ? { transitionDelay: `${i * 0.1}s` } : undefined}
               >
                 <div className="w-12 h-12 bg-blue-600/15 rounded-xl flex items-center justify-center text-blue-400 mb-4 group-hover:bg-blue-600/25 transition-colors">
                   {feature.icon}
@@ -310,9 +474,9 @@ export default function VisionLanding() {
         </div>
       </section>
 
-      <section className="relative py-20 border-t border-white/10">
+      <section ref={statsAnim.ref} className="relative py-20 border-t border-white/10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
+          <div className={`text-center mb-12 transition-all duration-700 ${statsAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
               Why Shops <span className="text-blue-400">Love It</span>
             </h2>
@@ -323,8 +487,12 @@ export default function VisionLanding() {
               { stat: "< 5 sec", label: "To print a sticker" },
               { stat: "4 SMS", label: "Integrations supported" },
               { stat: "$0", label: "Setup hassle — we handle it" },
-            ].map((item) => (
-              <div key={item.label}>
+            ].map((item, i) => (
+              <div
+                key={item.label}
+                className={`transition-all duration-700 ${statsAnim.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                style={statsAnim.isVisible ? { transitionDelay: `${i * 0.15}s` } : undefined}
+              >
                 <div className="text-4xl sm:text-5xl font-black text-blue-400 mb-2">{item.stat}</div>
                 <div className="text-gray-400">{item.label}</div>
               </div>
@@ -387,6 +555,9 @@ export default function VisionLanding() {
 
       <section className="relative py-20 sm:py-28 border-t border-white/10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-4">
+            The Most Intelligent Oil Sticker on the Planet
+          </p>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
             Don't Miss This Deal
           </h2>
@@ -417,7 +588,7 @@ export default function VisionLanding() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img src="/mos-logo.png" alt="MOS.Tools" className="w-8 h-8 rounded-lg" />
-              <span className="text-sm text-gray-500">MOS.Tools — My Oil Sticker, Reimagined</span>
+              <span className="text-sm text-gray-500">MOS.Tools — The Most Intelligent Oil Sticker on the Planet</span>
             </div>
             <div className="flex items-center gap-3">
               <img src="/logos/vision-logo-white.png" alt="Vision" className="h-5 opacity-50" />
