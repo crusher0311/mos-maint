@@ -533,7 +533,13 @@ export async function protractorFetch<T>(
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
         console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
-        return { ok: false, error: `HTTP ${res.statusCode}: ${res.body || "Unknown error"}` };
+        let errorMsg = res.body || "Unknown error";
+        if (/<[^>]+>/i.test(errorMsg)) {
+          errorMsg = `Server returned ${res.statusCode}`;
+        } else if (errorMsg.length > 200) {
+          errorMsg = errorMsg.substring(0, 200);
+        }
+        return { ok: false, error: `HTTP ${res.statusCode}: ${errorMsg}` };
       }
 
       const data = res.body ? JSON.parse(res.body) : null;
@@ -2270,9 +2276,10 @@ export async function fetchCannedJobs(
     }
   }
 
+  console.error(`[Protractor] All canned job endpoints failed for shop ${shopId}:`, errors);
   return { 
     ok: false, 
-    error: `Could not fetch service packages. API responses: ${errors.slice(0, 2).join('; ')}` 
+    error: "Could not fetch canned jobs from Protractor. The service package endpoint may not be available for this shop." 
   };
 }
 
