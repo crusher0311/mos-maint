@@ -8,8 +8,8 @@ const BUY_NOW_URL = "#";
 const SCREENSHOTS = [
   { src: "/screenshots/dashboard.png", label: "Shop Dashboard", desc: "See every vehicle, status, and mileage at a glance" },
   { src: "/screenshots/maintenance-plan.png", label: "Maintenance Plans", desc: "OEM schedules + CARFAX history = zero guesswork" },
-  { src: "/screenshots/chrome-ext-plan.png", label: "Chrome Extension", desc: "Maintenance intelligence right inside your SMS" },
-  { src: "/screenshots/chrome-ext-job.png", label: "AI Job Search", desc: "Find past jobs with pricing in seconds" },
+  { src: "/screenshots/chrome-ext-plan.png", label: "Detect Dog — Plans", desc: "Maintenance intelligence right inside your SMS" },
+  { src: "/screenshots/chrome-ext-job.png", label: "Detect Dog — Jobs", desc: "Find past jobs with pricing in seconds" },
   { src: "/screenshots/oem-data.png", label: "OEM Data", desc: "Factory maintenance specs for every vehicle" },
 ];
 
@@ -32,6 +32,7 @@ export default function VisionLanding() {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [activeShot, setActiveShot] = useState(0);
   const showcaseAnim = useInView(0.1);
+  const detectDogAnim = useInView(0.1);
   const featuresAnim = useInView(0.1);
   const pricingAnim = useInView(0.1);
   const statsAnim = useInView(0.1);
@@ -277,6 +278,57 @@ export default function VisionLanding() {
         </div>
       </section>
 
+      <section ref={detectDogAnim.ref} className="relative py-16 sm:py-24 border-t border-white/10 overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/2 left-0 w-72 h-72 bg-blue-600/5 rounded-full blur-[100px] -translate-y-1/2"></div>
+          <div className="absolute top-1/2 right-0 w-72 h-72 bg-blue-400/5 rounded-full blur-[100px] -translate-y-1/2"></div>
+        </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className={`flex justify-center lg:order-2 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12'}`}>
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-[60px] scale-75"></div>
+                <img
+                  src="/logos/detect-dog.png"
+                  alt="Detect Dog by MOS Tools"
+                  className="relative w-64 sm:w-80 animate-float"
+                />
+              </div>
+            </div>
+
+            <div className={`lg:order-1 transition-all duration-700 ${detectDogAnim.isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-12'}`}>
+              <p className="text-sm font-medium text-blue-400 uppercase tracking-wider mb-3">Introducing</p>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-4">
+                Meet <span className="text-blue-400">Detect Dog</span>
+              </h2>
+              <p className="text-xl text-gray-300 mb-2">Your advisor's best friend.</p>
+              <p className="text-gray-400 leading-relaxed mb-6">
+                Detect Dog is the MOS Tools Chrome extension that lives right inside your shop management system.
+                It sniffs out what every vehicle needs — overdue maintenance, service history, pricing from past jobs —
+                and puts it all at your advisor's fingertips without ever leaving the screen they're already on.
+              </p>
+              <div className="space-y-3 mb-8">
+                {[
+                  "Works inside Tekmetric, Protractor, Shop-Ware & AutoFlow",
+                  "Detects overdue and upcoming maintenance instantly",
+                  "AI-powered job search with real pricing from your shop",
+                  "One-click add services directly to the repair order",
+                  "Print oil stickers right from the extension",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                    <span className="text-gray-300 text-sm">{item}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm text-gray-500 italic">
+                Included with every MOS Tools subscription. No extra cost.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="relative py-6 border-y border-white/10 bg-white/[0.02]">
         <div className="max-w-4xl mx-auto px-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
@@ -384,7 +436,7 @@ export default function VisionLanding() {
                   "Vehicle maintenance intelligence",
                   "CARFAX integration & history",
                   "AI-powered job search & lookup",
-                  "Chrome extension for your SMS",
+                  "Detect Dog extension for your SMS",
                   "Auto booking & labor rate rules",
                   "Every new feature we release — forever",
                 ].map((item) => (
@@ -527,7 +579,7 @@ export default function VisionLanding() {
               },
               {
                 q: "What shop management systems do you work with?",
-                a: "MOS Tools integrates with Tekmetric, Protractor, Shop-Ware, and AutoFlow. Our Chrome extension works right inside your SMS — no switching between tabs.",
+                a: "MOS Tools integrates with Tekmetric, Protractor, Shop-Ware, and AutoFlow. Our Detect Dog Chrome extension works right inside your SMS — no switching between tabs.",
               },
               {
                 q: "Is this deal only available at Vision?",
