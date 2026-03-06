@@ -259,7 +259,31 @@ export async function POST(req: NextRequest) {
         } else if (session.customer_details?.email) {
           const crmEmail = session.customer_details.email.toLowerCase().trim();
           const crmName = session.customer_details.name || "";
-          const isCrmSignup = session.metadata?.source === "crm" || session.metadata?.crmSignup === "true";
+
+          const CRM_PRODUCT_IDS = ["prod_U6CHMNValFQdpp"];
+          let isCrmProduct = false;
+          if (session.line_items?.data) {
+            isCrmProduct = session.line_items.data.some((item: any) =>
+              CRM_PRODUCT_IDS.includes(item.price?.product as string)
+            );
+          }
+          if (!isCrmProduct && (session as any).id) {
+            try {
+              const fullSession = await stripe.checkout.sessions.retrieve((session as any).id, {
+                expand: ["line_items.data.price.product"],
+              });
+              isCrmProduct = fullSession.line_items?.data?.some((item: any) => {
+                const productId = typeof item.price?.product === "string"
+                  ? item.price.product
+                  : item.price?.product?.id;
+                return CRM_PRODUCT_IDS.includes(productId);
+              }) || false;
+            } catch (err) {
+              console.error("[Stripe CRM] Failed to retrieve session line items:", err);
+            }
+          }
+
+          const isCrmSignup = isCrmProduct || session.metadata?.source === "crm" || session.metadata?.crmSignup === "true";
 
           const existingUser = await db.collection("users").findOne({ emailLower: crmEmail });
           const existingShopByCustomer = session.customer
