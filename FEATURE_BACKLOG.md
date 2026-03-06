@@ -1115,6 +1115,34 @@ Push matching maintenance plan items into Tekmetric inspections (DVI) and potent
 
 ---
 
+## 18. Mobile Sticker Printing (Android Support)
+
+**Priority:** Medium  
+**Status:** Planned
+
+### Overview
+Build a mobile-friendly web page for oil sticker printing to overcome the Zink Happy printer's iOS-only limitation. Android users currently cannot print stickers from the Chrome extension workflow.
+
+### Approach
+- Leverage existing server-side sticker image generation (`node-canvas` via `lib/canvas-renderer.ts`)
+- Mobile-optimized web page that takes vehicle/service info and generates sticker images
+- User downloads the sticker image and prints via Android's built-in print system (supports Wi-Fi and Bluetooth printers)
+- Alternative: Web Bluetooth API for direct thermal printer communication from browser
+
+### Open Questions
+- Authentication: MOS login credentials vs. link/QR code access?
+- Data entry: Manual vehicle info input vs. pulling from existing shop data (open ROs from Tekmetric, etc.)?
+- Scope: Oil stickers only initially, or include keytags?
+- Broader context: User is considering making the entire platform mobile-friendly — this could serve as a first step/proof of concept
+
+### Key Considerations
+- No native app required — mobile web page using existing sticker generation backend
+- Existing sticker API already generates images server-side, so the mobile page just needs to call it and present the result
+- Could support any printer that Android's print system recognizes (Wi-Fi, Bluetooth)
+- If the full platform goes mobile-friendly later, this page would integrate into the broader mobile experience
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
@@ -1123,4 +1151,4 @@ Push matching maintenance plan items into Tekmetric inspections (DVI) and potent
 
 ---
 
-*Last Updated: February 27, 2026*
+*Last Updated: March 2, 2026*
