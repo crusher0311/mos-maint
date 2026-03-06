@@ -573,9 +573,9 @@ export default function VisionLanding() {
 
           <div className="grid sm:grid-cols-3 gap-8 text-center">
             {[
-              { stat: "1-Click", label: "Sticker printing" },
-              { stat: "4 SMS", label: "Integrations supported" },
-              { stat: "$0", label: "Setup hassle — we handle it" },
+              { stat: "1-Click", label: "Job adding" },
+              { stat: "15 Min", label: "Saved per RO" },
+              { stat: "$500+", label: "Month added in labor rate adjustments" },
             ].map((item, i) => (
               <div
                 key={item.label}
