@@ -393,7 +393,7 @@ export default function VisionLanding() {
               From <span className="text-gray-400">My Oil Sticker</span> to <span className="text-blue-400">MOS Tools</span>
             </h2>
             <p className="text-gray-400 max-w-2xl mx-auto leading-relaxed">
-              My Oil Sticker helped thousands of shops print professional stickers. MOS Tools takes that foundation
+              My Oil Sticker helped countless shops print professional stickers. MOS Tools takes that foundation
               and wraps it in a full operations platform — OEM maintenance intelligence, historical job search,
               shop management integrations, automated booking, and more. Everything a service advisor needs,
               in one place, so they can focus on the customer instead of the computer.
