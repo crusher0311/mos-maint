@@ -5,7 +5,8 @@ import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 
-const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
+const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
+const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0";
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
@@ -448,9 +449,10 @@ export async function protractorFetch<T>(
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
     }
 
-    const url = `${BASE_URL}${endpoint}`;
-    const startTime = Date.now();
     const method = (options.method || "GET").toUpperCase();
+    const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
+    const url = `${baseUrl}${endpoint}`;
+    const startTime = Date.now();
     const totalWaitMs = Date.now() - concurrencyWaitStart;
     
     if (isPriority) {
