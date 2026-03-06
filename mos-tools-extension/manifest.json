@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "MOS Tools",
-  "version": "1.21.27",
-  "description": "Maintenance planning and job management for automotive shops",
+  "name": "Detect Dog by MOS Tools",
+  "version": "1.22.0",
+  "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
     "sidePanel",
@@ -68,7 +68,7 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "MOS Tools",
+    "default_title": "Detect Dog by MOS Tools",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
