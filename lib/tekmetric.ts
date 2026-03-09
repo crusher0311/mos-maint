@@ -41,6 +41,9 @@ async function tekmetricRequest(endpoint: string, options: RequestInit = {}, sho
 
     if (!response.ok) {
       const errorText = await response.text();
+      if (response.status === 403) {
+        console.error(`[Tekmetric] 403 Forbidden for ${method} ${endpoint} | shopId: ${shopId} | Response: ${errorText.substring(0, 500)}`);
+      }
       throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
     }
 
