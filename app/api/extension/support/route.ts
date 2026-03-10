@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getDb } from "@/lib/mongo";
 import {
   getOrCreateSession,
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
       { ok: false, error: auth.error || "Unauthorized" },
-      { status: 401, headers: CORS_HEADERS }
+      { status: getAuthErrorStatus(auth), headers: CORS_HEADERS }
     );
   }
 
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
       { ok: false, error: auth.error || "Unauthorized" },
-      { status: 401, headers: CORS_HEADERS }
+      { status: getAuthErrorStatus(auth), headers: CORS_HEADERS }
     );
   }
 

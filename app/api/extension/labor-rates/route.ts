@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
@@ -19,7 +19,7 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
-    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
   }
 
   const db = await getDb();
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
-    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
+    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
   }
 
   const body = await req.json();

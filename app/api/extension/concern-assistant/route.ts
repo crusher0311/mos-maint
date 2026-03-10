@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getOpenAI } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const body = await request.json();

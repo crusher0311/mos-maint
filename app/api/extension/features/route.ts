@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));

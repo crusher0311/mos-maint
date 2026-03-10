@@ -5,7 +5,11 @@ export interface ExtensionAuthResult {
   user: any | null;
   authorized: boolean;
   error: string | null;
+  serverError?: boolean;
 }
+
+const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const TOKEN_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // refresh after 7 days of use
 
 export async function validateExtensionToken(
   request: NextRequest, 
@@ -26,29 +30,51 @@ export async function validateExtensionToken(
     return { user: null, authorized: false, error: "Missing authorization" };
   }
 
-  const db = await getDb();
-  const user = await db.collection("users").findOne({ extensionToken: token });
+  let db;
+  try {
+    db = await getDb();
+  } catch (err) {
+    console.error("[Extension Auth] Database connection failed:", err);
+    return { user: null, authorized: false, error: "Server error", serverError: true };
+  }
+
+  let user;
+  try {
+    user = await db.collection("users").findOne({ extensionToken: token });
+  } catch (err) {
+    console.error("[Extension Auth] Token lookup failed:", err);
+    return { user: null, authorized: false, error: "Server error", serverError: true };
+  }
   
   if (!user) {
     return { user: null, authorized: false, error: "Invalid token" };
   }
 
-  const tokenAge = Date.now() - new Date(user.extensionTokenCreatedAt).getTime();
-  const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
-  
-  if (tokenAge > maxAge) {
-    return { user: null, authorized: false, error: "Token expired" };
+  if (user.extensionTokenCreatedAt) {
+    const tokenAge = Date.now() - new Date(user.extensionTokenCreatedAt).getTime();
+    
+    if (tokenAge > MAX_TOKEN_AGE_MS) {
+      return { user: null, authorized: false, error: "Token expired" };
+    }
+
+    if (tokenAge > TOKEN_REFRESH_THRESHOLD_MS) {
+      try {
+        await db.collection("users").updateOne(
+          { _id: user._id },
+          { $set: { extensionTokenCreatedAt: new Date() } }
+        );
+      } catch (err) {
+        console.warn("[Extension Auth] Failed to refresh token timestamp:", err);
+      }
+    }
   }
 
-  // Validate shop access if shopId is provided
   if (requiredShopId) {
     const userShopId = user.shopId?.toString();
     const userShopIds = (user.shopIds || []).map((id: any) => id.toString());
     
-    // Check if user has access to this shop
     const hasAccess = userShopId === requiredShopId || userShopIds.includes(requiredShopId);
     
-    // Also check if user is a platform admin (can access all shops)
     const isPlatformAdmin = user.role === "platform_admin";
     
     if (!hasAccess && !isPlatformAdmin) {
@@ -58,6 +84,11 @@ export async function validateExtensionToken(
   }
 
   return { user, authorized: true, error: null };
+}
+
+export function getAuthErrorStatus(auth: ExtensionAuthResult): number {
+  if (auth.serverError) return 503;
+  return 401;
 }
 
 export function getUserShopIds(user: any): string[] {

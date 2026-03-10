@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getDb } from "@/lib/mongo";
 
 const corsHeaders = {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     let effectiveSwMode = auth.user.shopwareAddMode || null;
@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const body = await request.json();

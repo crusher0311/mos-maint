@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { getDb } from "@/lib/mongo";
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const body = await request.json();

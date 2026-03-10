@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getVehicleSpecsLocal, decodeVinLocal } from "@/lib/integrations/dataone-local";
 
 const corsHeaders = {
@@ -15,7 +15,7 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized) {
-    return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: 401, headers: corsHeaders });
+    return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
   }
 
   const vin = req.nextUrl.searchParams.get("vin");

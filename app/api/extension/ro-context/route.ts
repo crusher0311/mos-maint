@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getUserShopIds } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
         { error: auth.error || "Unauthorized" },
-        { status: 401, headers: corsHeaders }
+        { status: getAuthErrorStatus(auth), headers: corsHeaders }
       );
     }
 

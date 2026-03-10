@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
 
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   if (!authResult.authorized) {
     return NextResponse.json(
       { error: authResult.error || "Unauthorized" },
-      { status: 401, headers: corsHeaders }
+      { status: getAuthErrorStatus(authResult), headers: corsHeaders }
     );
   }
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
   if (!authResult.authorized) {
     return NextResponse.json(
       { error: authResult.error || "Unauthorized" },
-      { status: 401, headers: corsHeaders }
+      { status: getAuthErrorStatus(authResult), headers: corsHeaders }
     );
   }
 

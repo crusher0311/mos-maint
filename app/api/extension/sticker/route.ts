@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
@@ -499,7 +499,7 @@ export async function GET(request: NextRequest) {
     if (!authResult.authorized || !authResult.user) {
       return NextResponse.json(
         { error: authResult.error || "Unauthorized" },
-        { status: 401, headers: corsHeaders }
+        { status: getAuthErrorStatus(authResult), headers: corsHeaders }
       );
     }
 
@@ -554,7 +554,7 @@ export async function POST(request: NextRequest) {
     if (!authResult.authorized || !authResult.user) {
       return NextResponse.json(
         { error: authResult.error || "Unauthorized" },
-        { status: 401, headers: corsHeaders }
+        { status: getAuthErrorStatus(authResult), headers: corsHeaders }
       );
     }
 
