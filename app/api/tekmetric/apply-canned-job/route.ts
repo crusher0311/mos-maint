@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { addCannedJobsToRepairOrder } from "@/lib/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,14 +20,36 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  let sessionEmail: string | null = null;
+  let sessionShopId: number;
+  let isPlatformAdmin = false;
+  let extUser: any = null;
+
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ext_")) {
+    const extAuth = await validateExtensionToken(req);
+    if (!extAuth.authorized || !extAuth.user) {
+      return NextResponse.json(
+        { error: extAuth.error || "Unauthorized" },
+        { status: getAuthErrorStatus(extAuth), headers: corsHeaders }
+      );
+    }
+    extUser = extAuth.user;
+    sessionEmail = extAuth.user.email;
+    sessionShopId = Number(extAuth.user.shopId);
+    isPlatformAdmin = extAuth.user.role === "platform_admin";
+  } else {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+    }
+    sessionEmail = session.email;
+    sessionShopId = Number(session.shopId);
+    isPlatformAdmin = session.role === "platform_admin";
   }
 
   const db = await getDb();
   
-  // Extension passes Tekmetric shop ID in query params
   const url = new URL(req.url);
   const smsShopId = url.searchParams.get("shopId");
   
@@ -34,19 +57,29 @@ export async function POST(req: NextRequest) {
   let shopId: number;
   let tekmetricShopId: number | string;
   
-  // Get user's accessible shops (their shop + any enterprise shops they manage)
-  const sessionShopId = Number(session.shopId);
   const userShop = await db.collection("shops").findOne({ shopId: sessionShopId });
   const enterpriseId = userShop?.enterpriseId;
   
-  // Build list of shop IDs this user can access
   let accessibleShopIds: number[] = [sessionShopId];
+  if (extUser) {
+    const extShopIds = getUserShopIds(extUser).map(id => Number(id));
+    for (const eid of extShopIds) {
+      if (!accessibleShopIds.includes(eid)) {
+        accessibleShopIds.push(eid);
+      }
+    }
+  }
   if (enterpriseId) {
     const enterpriseShops = await db.collection("shops")
       .find({ enterpriseId })
       .project({ shopId: 1 })
       .toArray();
-    accessibleShopIds = enterpriseShops.map(s => Number(s.shopId));
+    const enterpriseShopIds = enterpriseShops.map(s => Number(s.shopId));
+    for (const eid of enterpriseShopIds) {
+      if (!accessibleShopIds.includes(eid)) {
+        accessibleShopIds.push(eid);
+      }
+    }
   }
   
   if (smsShopId) {
@@ -65,8 +98,8 @@ export async function POST(req: NextRequest) {
       tekmetricShopId = Number(smsShopId);
       
       // Authorization check: ensure user has access to this shop
-      if (!accessibleShopIds.includes(shopId)) {
-        console.warn(`[Tekmetric Apply Canned Job] User ${session.email} attempted to access shop ${shopId} (Tekmetric ${smsShopId}) without permission`);
+      if (!isPlatformAdmin && !accessibleShopIds.includes(shopId)) {
+        console.warn(`[Tekmetric Apply Canned Job] User ${sessionEmail} attempted to access shop ${shopId} (Tekmetric ${smsShopId}) without permission`);
         return NextResponse.json({ error: "Access denied to this shop" }, { status: 403, headers: corsHeaders });
       }
     } else {
@@ -147,7 +180,7 @@ export async function POST(req: NextRequest) {
       cannedJobId,
       provider: "tekmetric",
       appliedAt: new Date(),
-      appliedBy: session.email || null,
+      appliedBy: sessionEmail || null,
     });
 
     try {
@@ -160,7 +193,7 @@ export async function POST(req: NextRequest) {
         recommendationType: "shop",
         serviceCode: cannedJobId,
         serviceName: cannedJobTitle || cannedJobId,
-        addedBy: session.email || undefined,
+        addedBy: sessionEmail || undefined,
       });
     } catch (err) {
       console.error("[Tekmetric Apply Canned Job] Failed to log recommendation event:", err);
@@ -168,7 +201,7 @@ export async function POST(req: NextRequest) {
 
     trackPushToRO({
       shopId,
-      userId: session.email,
+      userId: sessionEmail,
       vin: vin?.toUpperCase(),
       jobTitle: cannedJobTitle || `Canned Job ${cannedJobId}`,
       jobSource: "canned",
