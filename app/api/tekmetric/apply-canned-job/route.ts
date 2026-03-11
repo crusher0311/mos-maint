@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const db = await getDb();
   
   const url = new URL(req.url);
-  const smsShopId = url.searchParams.get("shopId");
+  const smsShopId = url.searchParams.get("shopId") || url.searchParams.get("smsShopId");
   
   let shop;
   let shopId: number;
@@ -105,8 +105,20 @@ export async function POST(req: NextRequest) {
     } else {
       return NextResponse.json({ error: `No shop found for Tekmetric shop ID ${smsShopId}` }, { status: 404, headers: corsHeaders });
     }
+  } else if (extUser) {
+    // Extension context: require explicit shop for multi-shop users
+    const extShopIds = getUserShopIds(extUser);
+    if (extShopIds.length > 1) {
+      return NextResponse.json(
+        { error: "shopId is required for multi-shop extension users" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    shopId = sessionShopId;
+    shop = userShop;
+    tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
   } else {
-    // Use session shopId (dashboard context)
+    // Dashboard session context
     shopId = sessionShopId;
     shop = userShop;
     tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;

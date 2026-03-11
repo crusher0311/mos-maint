@@ -30,23 +30,27 @@ export async function GET(req: NextRequest) {
   const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
   const isPlatformAdmin = auth.user.role === "platform_admin";
 
-  let shop;
+  let resolvedShopId: number;
   if (smsShopId) {
     const provider = searchParams.get("provider") || undefined;
     const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
     if (!shopResult) {
       return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
     }
-    shop = await db.collection("shops").findOne(
-      { shopId: shopResult.mosShopId },
-      { projection: { laborRateRules: 1, shopId: 1 } }
-    );
+    resolvedShopId = shopResult.mosShopId;
+  } else if (userShopIds.length <= 1) {
+    resolvedShopId = auth.user.shopId;
   } else {
-    shop = await db.collection("shops").findOne(
-      { shopId: auth.user.shopId },
-      { projection: { laborRateRules: 1, shopId: 1 } }
+    return NextResponse.json(
+      { ok: false, error: "shopId or smsShopId is required for multi-shop users" },
+      { status: 400, headers: CORS_HEADERS }
     );
   }
+
+  const shop = await db.collection("shops").findOne(
+    { shopId: resolvedShopId },
+    { projection: { laborRateRules: 1, shopId: 1 } }
+  );
 
   return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [], shopId: shop?.shopId }, { headers: CORS_HEADERS });
 }
@@ -91,7 +95,7 @@ export async function PUT(req: NextRequest) {
   const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
   const isPlatformAdmin = auth.user.role === "platform_admin";
 
-  let targetShopId = auth.user.shopId;
+  let targetShopId: number;
 
   if (smsShopId) {
     const provider = searchParams.get("provider") || undefined;
@@ -100,12 +104,29 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
     }
     targetShopId = shopResult.mosShopId;
+  } else if (userShopIds.length <= 1) {
+    targetShopId = auth.user.shopId;
+  } else {
+    return NextResponse.json(
+      { ok: false, error: "shopId or smsShopId is required for multi-shop users to prevent cross-shop rule contamination" },
+      { status: 400, headers: CORS_HEADERS }
+    );
+  }
+
+  const existingShop = await db.collection("shops").findOne(
+    { shopId: targetShopId },
+    { projection: { shopId: 1, name: 1, shopName: 1 } }
+  );
+  if (!existingShop) {
+    return NextResponse.json({ ok: false, error: "Target shop not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
   await db.collection("shops").updateOne(
     { shopId: targetShopId },
     { $set: { laborRateRules: sanitized } }
   );
+
+  console.log(`[Extension Labor Rates] Saved ${sanitized.length} rules to shop ${targetShopId} (${existingShop.name || existingShop.shopName}) by ${auth.user.email}`);
 
   return NextResponse.json({ ok: true, rules: sanitized, shopId: targetShopId }, { headers: CORS_HEADERS });
 }
