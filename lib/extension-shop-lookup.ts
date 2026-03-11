@@ -35,6 +35,7 @@ export async function findShopBySmsId(
       { autoflowDomain: smsShopId },
       { autoflowDomain: `${smsShopId}.autotext.me` },
       { "shopware.tenantSubdomain": smsShopId },
+      { "shopware.tenantId": smsShopId },
     ]
   };
   

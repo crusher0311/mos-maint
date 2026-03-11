@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getDb } from "@/lib/mongo";
 
 const corsHeaders = {
@@ -22,16 +23,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
-    let effectiveSwMode = auth.user.shopwareAddMode || null;
-    if (!effectiveSwMode) {
-      const db = await getDb();
-      const shop = await db.collection("shops").findOne({ shopId: auth.user.shopId });
-      effectiveSwMode = shop?.preferences?.shopwareAddMode || "finding-published";
+    const searchParams = request.nextUrl.searchParams;
+    const smsShopId = searchParams.get("shopId");
+    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+    const isPlatformAdmin = auth.user.role === "platform_admin";
+
+    const db = await getDb();
+    let shopId = auth.user.shopId;
+
+    if (smsShopId) {
+      const provider = searchParams.get("provider") || undefined;
+      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
+      if (!shopResult) {
+        return NextResponse.json({ error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: corsHeaders });
+      }
+      shopId = shopResult.mosShopId;
     }
+
+    const shop = await db.collection("shops").findOne({ shopId });
+    const shopSwMode = shop?.preferences?.shopwareAddMode || "finding-published";
+    const effectiveSwMode = smsShopId ? shopSwMode : (auth.user.shopwareAddMode || shopSwMode);
 
     return NextResponse.json({
       defaultExtensionTab: auth.user.defaultExtensionTab || null,
-      shopwareAddMode: effectiveSwMode
+      shopwareAddMode: effectiveSwMode,
+      shopId
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Preferences] GET error:", error);

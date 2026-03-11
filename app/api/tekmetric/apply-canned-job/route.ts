@@ -103,10 +103,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Access denied to this shop" }, { status: 403, headers: corsHeaders });
       }
     } else {
-      // Fallback: try session shopId
-      shopId = sessionShopId;
-      shop = userShop;
-      tekmetricShopId = shop?.tekmetric?.shopId || shop?.tekmetricShopId;
+      return NextResponse.json({ error: `No shop found for Tekmetric shop ID ${smsShopId}` }, { status: 404, headers: corsHeaders });
     }
   } else {
     // Use session shopId (dashboard context)

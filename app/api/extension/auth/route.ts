@@ -128,8 +128,61 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const shop = await db.collection("shops").findOne({ shopId: user.shopId });
-    const effectiveSwMode = user.shopwareAddMode || shop?.preferences?.shopwareAddMode || "finding-published";
+    const shopDocs = await db.collection("shops")
+      .find({ shopId: { $in: allShopIds } })
+      .project({
+        shopId: 1,
+        name: 1,
+        shopName: 1,
+        "tekmetric.shopId": 1,
+        "tekmetric.shopName": 1,
+        tekmetricShopId: 1,
+        "protractor.connectionId": 1,
+        protractorConnectionId: 1,
+        "shopware.tenantSubdomain": 1,
+        "shopware.tenantId": 1,
+        "autoflow.domain": 1,
+        "autoflow.subdomain": 1,
+        "autoflow.shopId": 1,
+        integrationProvider: 1,
+        "billing.plan": 1,
+        "billing.status": 1,
+        enabledFeatures: 1,
+        "preferences.shopwareAddMode": 1,
+      })
+      .toArray();
+
+    const shops = shopDocs.map((s: any) => {
+      const provider = s.integrationProvider
+        || (s.tekmetric?.shopId ? "tekmetric"
+          : s.protractor?.connectionId ? "protractor"
+          : s.shopware?.tenantId ? "shopware"
+          : s.autoflow?.domain ? "autoflow"
+          : "unknown");
+
+      let smsShopId: string | null = null;
+      if (provider === "tekmetric") {
+        smsShopId = String(s.tekmetric?.shopId || s.tekmetricShopId || "");
+      } else if (provider === "protractor") {
+        smsShopId = s.protractor?.connectionId || s.protractorConnectionId || null;
+      } else if (provider === "shopware") {
+        smsShopId = s.shopware?.tenantSubdomain || s.shopware?.tenantId || null;
+      } else if (provider === "autoflow") {
+        smsShopId = s.autoflow?.subdomain || s.autoflow?.shopId || s.autoflow?.domain || null;
+      }
+
+      return {
+        shopId: s.shopId,
+        name: s.name || s.shopName || s.tekmetric?.shopName || `Shop ${s.shopId}`,
+        provider,
+        smsShopId,
+        plan: s.billing?.plan || "trial",
+        status: s.billing?.status || "trial",
+      };
+    });
+
+    const primaryShop = shopDocs.find((s: any) => s.shopId === user.shopId);
+    const effectiveSwMode = user.shopwareAddMode || primaryShop?.preferences?.shopwareAddMode || "finding-published";
 
     return NextResponse.json({
       token: extensionToken,
@@ -142,7 +195,8 @@ export async function POST(request: NextRequest) {
         role: user.role,
         defaultExtensionTab: user.defaultExtensionTab || null,
         shopwareAddMode: effectiveSwMode
-      }
+      },
+      shops
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Auth] Error:", error);

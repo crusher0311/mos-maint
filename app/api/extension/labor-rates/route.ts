@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
@@ -24,45 +25,30 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const { searchParams } = new URL(req.url);
-  const smsShopId = searchParams.get("smsShopId");
+  const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
+
+  const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+  const isPlatformAdmin = auth.user.role === "platform_admin";
 
   let shop;
   if (smsShopId) {
-    const tekShopIdNum = parseInt(smsShopId);
-    const tekShopIdStr = String(smsShopId);
+    const provider = searchParams.get("provider") || undefined;
+    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
+    if (!shopResult) {
+      return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
+    }
     shop = await db.collection("shops").findOne(
-      {
-        $or: [
-          { "tekmetric.shopId": tekShopIdNum },
-          { "tekmetric.shopId": tekShopIdStr },
-          { tekmetricShopId: tekShopIdNum },
-          { tekmetricShopId: tekShopIdStr },
-          { "protractor.connectionId": smsShopId },
-          { protractorConnectionId: smsShopId },
-        ]
-      },
+      { shopId: shopResult.mosShopId },
       { projection: { laborRateRules: 1, shopId: 1 } }
     );
-
-    if (shop) {
-      const userShopId = auth.user.shopId?.toString();
-      const userShopIds = (auth.user.shopIds || []).map((id: any) => id.toString());
-      const isPlatformAdmin = auth.user.role === "platform_admin";
-      const hasAccess = userShopId === String(shop.shopId) || userShopIds.includes(String(shop.shopId)) || isPlatformAdmin;
-      if (!hasAccess) {
-        shop = null;
-      }
-    }
-  }
-
-  if (!shop) {
+  } else {
     shop = await db.collection("shops").findOne(
       { shopId: auth.user.shopId },
-      { projection: { laborRateRules: 1 } }
+      { projection: { laborRateRules: 1, shopId: 1 } }
     );
   }
 
-  return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [] }, { headers: CORS_HEADERS });
+  return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [], shopId: shop?.shopId }, { headers: CORS_HEADERS });
 }
 
 export async function PUT(req: NextRequest) {
@@ -100,36 +86,20 @@ export async function PUT(req: NextRequest) {
 
   const db = await getDb();
   const { searchParams } = new URL(req.url);
-  const smsShopId = searchParams.get("smsShopId");
+  const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
+
+  const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
+  const isPlatformAdmin = auth.user.role === "platform_admin";
 
   let targetShopId = auth.user.shopId;
 
   if (smsShopId) {
-    const tekShopIdNum = parseInt(smsShopId);
-    const tekShopIdStr = String(smsShopId);
-    const targetShop = await db.collection("shops").findOne(
-      {
-        $or: [
-          { "tekmetric.shopId": tekShopIdNum },
-          { "tekmetric.shopId": tekShopIdStr },
-          { tekmetricShopId: tekShopIdNum },
-          { tekmetricShopId: tekShopIdStr },
-          { "protractor.connectionId": smsShopId },
-          { protractorConnectionId: smsShopId },
-        ]
-      },
-      { projection: { shopId: 1 } }
-    );
-
-    if (targetShop) {
-      const userShopId = auth.user.shopId?.toString();
-      const userShopIds = (auth.user.shopIds || []).map((id: any) => id.toString());
-      const isPlatformAdmin = auth.user.role === "platform_admin";
-      const hasAccess = userShopId === String(targetShop.shopId) || userShopIds.includes(String(targetShop.shopId)) || isPlatformAdmin;
-      if (hasAccess) {
-        targetShopId = targetShop.shopId;
-      }
+    const provider = searchParams.get("provider") || undefined;
+    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
+    if (!shopResult) {
+      return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
     }
+    targetShopId = shopResult.mosShopId;
   }
 
   await db.collection("shops").updateOne(
@@ -137,5 +107,5 @@ export async function PUT(req: NextRequest) {
     { $set: { laborRateRules: sanitized } }
   );
 
-  return NextResponse.json({ ok: true, rules: sanitized }, { headers: CORS_HEADERS });
+  return NextResponse.json({ ok: true, rules: sanitized, shopId: targetShopId }, { headers: CORS_HEADERS });
 }
