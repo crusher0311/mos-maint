@@ -101,6 +101,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const allShopIds: number[] = [];
+    for (const c of candidates) {
+      if (c.shopId != null && !allShopIds.includes(Number(c.shopId))) {
+        allShopIds.push(Number(c.shopId));
+      }
+      if (Array.isArray(c.shopIds)) {
+        for (const sid of c.shopIds) {
+          if (!allShopIds.includes(Number(sid))) {
+            allShopIds.push(Number(sid));
+          }
+        }
+      }
+    }
+
     const extensionToken = `ext_${user._id.toString()}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
     
     await usersCollection.updateOne(
@@ -108,7 +122,8 @@ export async function POST(request: NextRequest) {
       { 
         $set: { 
           extensionToken,
-          extensionTokenCreatedAt: new Date()
+          extensionTokenCreatedAt: new Date(),
+          shopIds: allShopIds
         } 
       }
     );
@@ -123,6 +138,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name,
         shopId: user.shopId,
+        shopIds: allShopIds,
         role: user.role,
         defaultExtensionTab: user.defaultExtensionTab || null,
         shopwareAddMode: effectiveSwMode
