@@ -1,0 +1,50 @@
+2026-03-12T15:12:25.457792148Z ==> Downloaded 832MB in 9s. Extraction took 28s.
+2026-03-12T15:12:54.254324253Z ==> Using Node.js version 22.16.0 (default)
+2026-03-12T15:12:54.278904457Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2026-03-12T15:12:54.402903712Z ==> Running build command './render-build.sh'...
+2026-03-12T15:12:54.409636444Z Installing dependencies...
+2026-03-12T15:13:10.411063685Z npm error code ERESOLVE
+2026-03-12T15:13:10.411091977Z npm error ERESOLVE could not resolve
+2026-03-12T15:13:10.411099188Z npm error
+2026-03-12T15:13:10.411187734Z npm error While resolving: drizzle-zod@0.8.3
+2026-03-12T15:13:10.411200995Z npm error Found: react@18.3.1
+2026-03-12T15:13:10.411205186Z npm error node_modules/react
+2026-03-12T15:13:10.411208746Z npm error   react@"18.3.1" from the root project
+2026-03-12T15:13:10.411213016Z npm error   peer react@"^18.0.0 || ^19.0.0" from @uppy/react@5.1.1
+2026-03-12T15:13:10.411216567Z npm error   node_modules/@uppy/react
+2026-03-12T15:13:10.411220767Z npm error     @uppy/react@"^5.1.1" from the root project
+2026-03-12T15:13:10.411224967Z npm error   13 more (framer-motion, lucide-react, next, ...)
+2026-03-12T15:13:10.411228788Z npm error
+2026-03-12T15:13:10.411232388Z npm error Could not resolve dependency:
+2026-03-12T15:13:10.411235948Z npm error peer drizzle-orm@">=0.36.0" from drizzle-zod@0.8.3
+2026-03-12T15:13:10.411239438Z npm error node_modules/drizzle-zod
+2026-03-12T15:13:10.411242969Z npm error   drizzle-zod@"^0.8.3" from the root project
+2026-03-12T15:13:10.411246479Z npm error
+2026-03-12T15:13:10.411249939Z npm error Conflicting peer dependency: react@19.2.4
+2026-03-12T15:13:10.411253419Z npm error node_modules/react
+2026-03-12T15:13:10.41125699Z npm error   peer react@"^19.2.3" from react-native@0.84.1
+2026-03-12T15:13:10.41126051Z npm error   node_modules/react-native
+2026-03-12T15:13:10.41126436Z npm error     peer react-native@"*" from @op-engineering/op-sqlite@15.2.6
+2026-03-12T15:13:10.41126782Z npm error     node_modules/@op-engineering/op-sqlite
+2026-03-12T15:13:10.411272111Z npm error       peerOptional @op-engineering/op-sqlite@">=2" from drizzle-orm@0.45.1
+2026-03-12T15:13:10.411275611Z npm error       node_modules/drizzle-orm
+2026-03-12T15:13:10.411279051Z npm error         peer drizzle-orm@">=0.36.0" from drizzle-zod@0.8.3
+2026-03-12T15:13:10.411282472Z npm error         node_modules/drizzle-zod
+2026-03-12T15:13:10.411285952Z npm error     peer react-native@"*" from expo-sqlite@55.0.10
+2026-03-12T15:13:10.411289432Z npm error     node_modules/expo-sqlite
+2026-03-12T15:13:10.411292953Z npm error       peerOptional expo-sqlite@">=14.0.0" from drizzle-orm@0.45.1
+2026-03-12T15:13:10.411296403Z npm error       node_modules/drizzle-orm
+2026-03-12T15:13:10.411299883Z npm error         peer drizzle-orm@">=0.36.0" from drizzle-zod@0.8.3
+2026-03-12T15:13:10.411303923Z npm error         node_modules/drizzle-zod
+2026-03-12T15:13:10.411307454Z npm error     4 more (expo, @expo/dom-webview, @expo/metro-runtime, react-native-webview)
+2026-03-12T15:13:10.411310994Z npm error
+2026-03-12T15:13:10.411315134Z npm error Fix the upstream dependency conflict, or retry
+2026-03-12T15:13:10.411332585Z npm error this command with --force or --legacy-peer-deps
+2026-03-12T15:13:10.411335005Z npm error to accept an incorrect (and potentially broken) dependency resolution.
+2026-03-12T15:13:10.411349367Z npm error
+2026-03-12T15:13:10.411351707Z npm error
+2026-03-12T15:13:10.411353807Z npm error For a full report see:
+2026-03-12T15:13:10.411356397Z npm error /opt/render/.cache/_logs/2026-03-12T15_12_54_473Z-eresolve-report.txt
+2026-03-12T15:13:10.412859319Z npm error A complete log of this run can be found in: /opt/render/.cache/_logs/2026-03-12T15_12_54_473Z-debug-0.log
+2026-03-12T15:13:10.551917257Z ==> Build failed 😞
+2026-03-12T15:13:10.551934249Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

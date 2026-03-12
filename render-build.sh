@@ -2,7 +2,7 @@
 set -o errexit
 
 echo "Installing dependencies..."
-npm install
+npm install --legacy-peer-deps
 
 echo "Building application..."
 echo "Note: @sparticuz/chromium provides its own bundled Chrome for sticker generation"
