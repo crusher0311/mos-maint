@@ -1137,11 +1137,11 @@ function injectFAB() {
 
   const fab = document.createElement('button');
   fab.id = 'mos-fab-sw';
-  fab.title = 'Open MOS Tools';
+  fab.title = 'Open Detect Dog';
   fab.type = 'button';
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
-  fab.innerHTML = `<img src="${imgUrl}" alt="MOS" style="width:40px;height:40px;" />`;
+  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width:40px;height:40px;" />`;
   const FAB_RIGHT = 20;
   const defaultBottom = 20;
   const fabBaseStyle = 'position:fixed !important; z-index:999998 !important; background:transparent !important; border:none !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;';

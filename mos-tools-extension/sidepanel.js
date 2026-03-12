@@ -1,5 +1,48 @@
 // MOS Tools Side Panel Application
 
+// ==================== SEARCH NORMALIZATION ====================
+const SERVICE_SEARCH_MAPPINGS = [
+  { patterns: [/engine oil/i, /oil and filter/i, /oil & filter/i, /motor oil/i, /oil change/i, /lube.*oil/i], normalized: 'oil change' },
+  { patterns: [/cabin air filter/i, /cabin filter/i, /in.?cabin/i, /pollen filter/i], normalized: 'cabin filter' },
+  { patterns: [/engine air filter/i, /air cleaner element/i, /air filter element/i], normalized: 'air filter' },
+  { patterns: [/brake fluid/i, /brake.*flush/i], normalized: 'brake fluid' },
+  { patterns: [/coolant/i, /antifreeze/i, /cooling system/i], normalized: 'coolant' },
+  { patterns: [/transmission fluid/i, /trans fluid/i, /atf/i, /auto trans/i, /cvt fluid/i], normalized: 'transmission fluid' },
+  { patterns: [/transfer case/i], normalized: 'transfer case' },
+  { patterns: [/differential fluid/i, /diff fluid/i, /front differential/i, /rear differential/i], normalized: 'differential' },
+  { patterns: [/spark plug/i, /ignition plug/i], normalized: 'spark plug' },
+  { patterns: [/tire rotat/i, /rotate tire/i, /wheel rotation/i], normalized: 'tire rotation' },
+  { patterns: [/drive belt/i, /serpentine belt/i, /accessory belt/i, /v.?belt/i], normalized: 'drive belt' },
+  { patterns: [/timing belt/i, /timing chain/i, /cam belt/i], normalized: 'timing belt' },
+  { patterns: [/battery replace/i, /battery service/i, /^battery$/i], normalized: 'battery' },
+  { patterns: [/power steering/i], normalized: 'power steering' },
+  { patterns: [/wiper blade/i, /windshield wiper/i], normalized: 'wiper' },
+  { patterns: [/shock.*absorber/i, /strut.*replace/i, /shocks.*struts/i, /front shocks/i, /rear shocks/i], normalized: 'shocks struts' },
+  { patterns: [/fuel filter/i, /fuel system/i], normalized: 'fuel filter' },
+  { patterns: [/throttle body/i, /throttle.*clean/i], normalized: 'throttle body' },
+  { patterns: [/fuel injection/i, /injector.*clean/i, /fuel inject.*service/i], normalized: 'fuel injection' },
+  { patterns: [/wheel align/i, /front.*align/i, /4.?wheel align/i], normalized: 'alignment' },
+  { patterns: [/brake pad/i, /front brake/i, /rear brake/i, /brake.*service/i, /disc brake/i], normalized: 'brake' },
+  { patterns: [/synthetic.*oil/i], normalized: 'synthetic oil change' },
+  { patterns: [/conventional.*oil/i], normalized: 'oil change' },
+];
+
+function normalizeServiceSearch(rawName) {
+  if (!rawName) return rawName;
+  const trimmed = rawName.trim();
+  for (const mapping of SERVICE_SEARCH_MAPPINGS) {
+    for (const pattern of mapping.patterns) {
+      if (pattern.test(trimmed)) {
+        return mapping.normalized;
+      }
+    }
+  }
+  return trimmed
+    .replace(/\s*-\s*(replacement|service|inspection|check)\s*$/i, '')
+    .replace(/\s+(replacement|service)\s*$/i, '')
+    .trim();
+}
+
 // ==================== STATE ====================
 let isAuthenticated = false;
 let currentContext = null;
@@ -913,15 +956,16 @@ function setupAddDropdowns() {
       
       // Get the service name from various possible field names
       const serviceName = service.service || service.name || service.title || service.repair || service.jobTitle || 'Unknown Service';
+      const normalizedName = normalizeServiceSearch(serviceName);
       
       if (action === 'search-history') {
         switchTab('lookup');
-        elements.jobSearch.value = serviceName;
+        elements.jobSearch.value = normalizedName;
         await handleJobSearch();
       } else if (action === 'search-canned') {
         switchTab('canned');
-        elements.cannedSearch.value = serviceName;
-        filterCannedJobs(serviceName);
+        elements.cannedSearch.value = normalizedName;
+        filterCannedJobs(normalizedName);
       } else if (action === 'add-generic') {
         await handleAddService(service);
       } else if (action === 'sw-finding-publish') {
@@ -1310,8 +1354,9 @@ function setupFailureHandlers() {
       }
       // Search for this job in history using the correct field
       const jobTitle = failure.repair || failure.jobTitle || failure.title || failure.shopMatch?.title || '';
+      const normalizedTitle = normalizeServiceSearch(jobTitle);
       switchTab('lookup');
-      elements.jobSearch.value = jobTitle;
+      elements.jobSearch.value = normalizedTitle;
       await handleJobSearch();
     });
   });
@@ -1568,16 +1613,18 @@ function filterCannedJobs(searchTerm) {
   const term = searchTerm.toLowerCase().trim();
   
   if (!term) {
-    // Show all jobs if no search term
     renderCannedJobs(allCannedJobs);
     return;
   }
   
-  // Filter jobs by name or description
+  const searchWords = term.split(/\s+/).filter(w => w.length > 1);
+  
   const filtered = allCannedJobs.filter(job => {
     const name = (job.name || '').toLowerCase();
     const description = (job.description || '').toLowerCase();
-    return name.includes(term) || description.includes(term);
+    const combined = name + ' ' + description;
+    if (name.includes(term) || description.includes(term)) return true;
+    return searchWords.length > 0 && searchWords.every(word => combined.includes(word));
   });
   
   if (filtered.length === 0) {

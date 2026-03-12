@@ -995,11 +995,11 @@ function injectFloatingButton() {
   // Create the floating action button
   const fab = document.createElement('button');
   fab.id = 'mos-fab';
-  fab.title = 'Open MOS Tools';
+  fab.title = 'Open Detect Dog';
   fab.type = 'button';
   
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
-  fab.innerHTML = `<img src="${imgUrl}" alt="MOS Tools" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px;" />`;
+  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px;" />`;
   
   // Get saved position or default
   const savedTop = localStorage.getItem('mos-fab-top');
