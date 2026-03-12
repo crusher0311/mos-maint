@@ -4,6 +4,7 @@ import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
+import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -252,10 +253,17 @@ async function backfillShopChunk(
         if (vehicleCache.has(ro.vehicleId)) {
           vehicle = vehicleCache.get(ro.vehicleId)!;
         } else {
-          const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`);
-          if (vehResult.ok && vehResult.data) {
-            vehicle = vehResult.data;
+          const mongoVehicle = await getCachedVehicle(db, ro.vehicleId);
+          if (mongoVehicle) {
+            vehicle = mongoVehicle as TekmetricVehicle;
             vehicleCache.set(ro.vehicleId, vehicle);
+          } else {
+            const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`);
+            if (vehResult.ok && vehResult.data) {
+              vehicle = vehResult.data;
+              vehicleCache.set(ro.vehicleId, vehicle);
+              await cacheVehicle(db, ro.vehicleId, vehResult.data as any).catch(() => {});
+            }
           }
         }
       }
@@ -265,10 +273,17 @@ async function backfillShopChunk(
         if (customerCache.has(ro.customerId)) {
           customer = customerCache.get(ro.customerId)!;
         } else {
-          const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`);
-          if (custResult.ok && custResult.data) {
-            customer = custResult.data;
+          const mongoCustomer = await getCachedCustomer(db, ro.customerId);
+          if (mongoCustomer) {
+            customer = mongoCustomer as TekmetricCustomer;
             customerCache.set(ro.customerId, customer);
+          } else {
+            const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`);
+            if (custResult.ok && custResult.data) {
+              customer = custResult.data;
+              customerCache.set(ro.customerId, customer);
+              await cacheCustomer(db, ro.customerId, custResult.data as any).catch(() => {});
+            }
           }
         }
       }

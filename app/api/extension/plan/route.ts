@@ -633,7 +633,7 @@ export async function GET(request: NextRequest) {
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
         if (!workOrder && shopDoc?.tekmetric?.shopId) {
-          console.log(`[Extension] Fetching RO ${roId} from Tekmetric API (cached=${!forceRefresh})`);
+          console.log(`[Extension] API FALLBACK: RO ${roId} not in tekmetric_work_orders, fetching from Tekmetric API`);
           const data = await fetchTekmetricRoCached(String(roId), forceRefresh);
           if (data) {
             let roVin = data.vehicle?.vin || data.vehicleVin;
@@ -641,10 +641,21 @@ export async function GET(request: NextRequest) {
 
             if (!roVin && data.vehicleId) {
               try {
-                const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                const vehData = await tekmetricRequest(`/vehicles/${data.vehicleId}`);
-                roVin = vehData?.vin;
-              } catch {}
+                const { getCachedVehicle, cacheVehicle } = await import("@/lib/tekmetric-incremental-sync");
+                const vehicleId = Number(data.vehicleId);
+                const cachedVeh = await getCachedVehicle(db, vehicleId);
+                if (cachedVeh) {
+                  roVin = cachedVeh.vin;
+                  console.log(`[Extension] Vehicle ${vehicleId} found in MongoDB cache`);
+                } else {
+                  const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+                  const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`);
+                  roVin = vehData?.vin;
+                  if (vehData) await cacheVehicle(db, vehicleId, vehData).catch(() => {});
+                }
+              } catch (e: any) {
+                console.warn(`[Extension] Vehicle lookup failed for vehicleId=${data.vehicleId}, roId=${roId}:`, e?.message);
+              }
             }
 
             workOrder = {
@@ -655,7 +666,7 @@ export async function GET(request: NextRequest) {
                 ? `${data.customer.firstName} ${data.customer.lastName}`
                 : data.customer?.name
             };
-            console.log(`[Extension] Tekmetric API (cached): vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
+            console.log(`[Extension] Tekmetric API fallback: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
           }
         }
         
@@ -858,14 +869,31 @@ export async function GET(request: NextRequest) {
             customerName = data.customer.name;
           } else if (data.customerId) {
             try {
-              const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-              const custData = await tekmetricRequest(`/customers/${data.customerId}`);
-              if (custData?.firstName && custData?.lastName) {
-                customerName = `${custData.firstName} ${custData.lastName}`;
-              } else if (custData?.name) {
-                customerName = custData.name;
+              const { getCachedCustomer, cacheCustomer } = await import("@/lib/tekmetric-incremental-sync");
+              const customerId = Number(data.customerId);
+              const cachedCust = await getCachedCustomer(db, customerId);
+              if (cachedCust) {
+                const c = cachedCust as any;
+                if (c.firstName && c.lastName) {
+                  customerName = `${c.firstName} ${c.lastName}`;
+                } else if (c.name) {
+                  customerName = c.name;
+                }
+                console.log(`[Extension] Customer ${customerId} found in MongoDB cache`);
+              } else {
+                console.log(`[Extension] API FALLBACK: Customer ${customerId} not in cache, fetching from API`);
+                const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+                const custData = await tekmetricRequest(`/customers/${customerId}`);
+                if (custData?.firstName && custData?.lastName) {
+                  customerName = `${custData.firstName} ${custData.lastName}`;
+                } else if (custData?.name) {
+                  customerName = custData.name;
+                }
+                if (custData) await cacheCustomer(db, customerId, custData).catch(() => {});
               }
-            } catch {}
+            } catch (e: any) {
+              console.warn(`[Extension] Customer lookup failed for customerId=${data.customerId}, roId=${roId}:`, e?.message);
+            }
           }
         }
         console.log(`[Extension] RO details (cached): roNumber=${repairOrderNumber}, customer=${customerName}`);

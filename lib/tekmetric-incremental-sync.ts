@@ -96,7 +96,7 @@ async function updateShopSyncState(
   );
 }
 
-async function getCachedVehicle(db: any, vehicleId: number): Promise<TekmetricVehicle | null> {
+export async function getCachedVehicle(db: any, vehicleId: number): Promise<TekmetricVehicle | null> {
   const cached = await db.collection("tekmetric_vehicle_cache").findOne({
     vehicleId,
     cachedAt: { $gt: new Date(Date.now() - CACHE_TTL_MS) }
@@ -104,7 +104,7 @@ async function getCachedVehicle(db: any, vehicleId: number): Promise<TekmetricVe
   return cached?.data || null;
 }
 
-async function cacheVehicle(db: any, vehicleId: number, vehicle: TekmetricVehicle): Promise<void> {
+export async function cacheVehicle(db: any, vehicleId: number, vehicle: TekmetricVehicle): Promise<void> {
   await db.collection("tekmetric_vehicle_cache").updateOne(
     { vehicleId },
     { 
@@ -118,7 +118,7 @@ async function cacheVehicle(db: any, vehicleId: number, vehicle: TekmetricVehicl
   );
 }
 
-async function getCachedCustomer(db: any, customerId: number): Promise<TekmetricCustomer | null> {
+export async function getCachedCustomer(db: any, customerId: number): Promise<TekmetricCustomer | null> {
   const cached = await db.collection("tekmetric_customer_cache").findOne({
     customerId,
     cachedAt: { $gt: new Date(Date.now() - CACHE_TTL_MS) }
@@ -126,7 +126,7 @@ async function getCachedCustomer(db: any, customerId: number): Promise<Tekmetric
   return cached?.data || null;
 }
 
-async function cacheCustomer(db: any, customerId: number, customer: TekmetricCustomer): Promise<void> {
+export async function cacheCustomer(db: any, customerId: number, customer: TekmetricCustomer): Promise<void> {
   await db.collection("tekmetric_customer_cache").updateOne(
     { customerId },
     { 

@@ -6,6 +6,8 @@ import { getCannedJobs } from "@/lib/integrations/tekmetric/client";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const CANNED_JOBS_CACHE_TTL_MS = 20 * 60 * 1000;
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,10 +24,19 @@ export async function GET() {
     return NextResponse.json({ categories: [] });
   }
 
-  try {
-    const tekmetricShopId = shop.integrations.tekmetric.shopId || shopId;
+  const tekShopId = shop.integrations.tekmetric.shopId || shopId;
 
-    const data = await getCannedJobs(tekmetricShopId);
+  try {
+    const cached = await db.collection("tekmetric_canned_jobs_cache").findOne({
+      tekShopId,
+      cachedAt: { $gt: new Date(Date.now() - CANNED_JOBS_CACHE_TTL_MS) }
+    });
+
+    if (cached?.categories) {
+      return NextResponse.json({ categories: cached.categories });
+    }
+
+    const data = await getCannedJobs(tekShopId);
     const jobs = data.content || [];
 
     const categorySet = new Set<string>();
@@ -35,6 +46,18 @@ export async function GET() {
     }
 
     const categories = Array.from(categorySet).sort();
+
+    await db.collection("tekmetric_canned_jobs_cache").updateOne(
+      { tekShopId },
+      {
+        $set: {
+          tekShopId,
+          categories,
+          cachedAt: new Date()
+        }
+      },
+      { upsert: true }
+    ).catch((e: any) => console.warn("[TekJobCategories] Cache write failed:", e.message));
 
     return NextResponse.json({ categories });
   } catch (err) {
