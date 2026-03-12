@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/tekmetric-incremental-sync";
 import { getDb } from "@/lib/mongo";
+import { resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  resetTekmetricApiCallCount();
+
   try {
     await ensureCacheIndexes();
     
@@ -34,8 +37,9 @@ export async function GET(req: NextRequest) {
     const totalPagesQueued = results.reduce((sum, r) => sum + r.pagesQueued, 0);
     const errors = results.filter(r => r.error).length;
     const skipped = results.filter(r => r.skipped).length;
+    const apiCallCount = resetTekmetricApiCallCount();
     
-    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms: ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
+    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
@@ -109,6 +113,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       duration: `${duration}ms`,
+      tekmetricApiCalls: apiCallCount,
       summary: {
         totalShops: results.length,
         totalSynced,
@@ -124,7 +129,8 @@ export async function GET(req: NextRequest) {
       shops: results
     });
   } catch (err: any) {
-    console.error("[Cron] Tekmetric incremental sync error:", err);
+    const finalApiCalls = resetTekmetricApiCallCount();
+    console.error(`[Cron] Tekmetric incremental sync error (API calls made: ${finalApiCalls}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

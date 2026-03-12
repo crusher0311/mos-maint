@@ -195,21 +195,15 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false): Promi
     }
   }
   try {
-    const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
-    const tekApiToken = await getValidToken();
-    const res = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders/${roId}`, {
-      headers: { Authorization: `Bearer ${tekApiToken}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
-      if (tekmetricRoCache.size > 200) {
-        const oldest = Array.from(tekmetricRoCache.entries())
-          .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];
-        if (oldest) tekmetricRoCache.delete(oldest[0]);
-      }
-      return data;
+    const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+    const data = await tekmetricRequest(`/repair-orders/${roId}`);
+    tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
+    if (tekmetricRoCache.size > 200) {
+      const oldest = Array.from(tekmetricRoCache.entries())
+        .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];
+      if (oldest) tekmetricRoCache.delete(oldest[0]);
     }
+    return data;
   } catch (e: any) {
     console.error(`[Extension] Tekmetric RO fetch failed for ${roId}:`, e.message);
   }
@@ -647,15 +641,9 @@ export async function GET(request: NextRequest) {
 
             if (!roVin && data.vehicleId) {
               try {
-                const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
-                const tok = await getValidToken();
-                const vehRes = await fetch(`https://shop.tekmetric.com/api/v1/vehicles/${data.vehicleId}`, {
-                  headers: { Authorization: `Bearer ${tok}` }
-                });
-                if (vehRes.ok) {
-                  const vehData = await vehRes.json();
-                  roVin = vehData?.vin;
-                }
+                const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+                const vehData = await tekmetricRequest(`/vehicles/${data.vehicleId}`);
+                roVin = vehData?.vin;
               } catch {}
             }
 
@@ -870,18 +858,12 @@ export async function GET(request: NextRequest) {
             customerName = data.customer.name;
           } else if (data.customerId) {
             try {
-              const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
-              const tok = await getValidToken();
-              const custRes = await fetch(`https://shop.tekmetric.com/api/v1/customers/${data.customerId}`, {
-                headers: { Authorization: `Bearer ${tok}` }
-              });
-              if (custRes.ok) {
-                const custData = await custRes.json();
-                if (custData?.firstName && custData?.lastName) {
-                  customerName = `${custData.firstName} ${custData.lastName}`;
-                } else if (custData?.name) {
-                  customerName = custData.name;
-                }
+              const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+              const custData = await tekmetricRequest(`/customers/${data.customerId}`);
+              if (custData?.firstName && custData?.lastName) {
+                customerName = `${custData.firstName} ${custData.lastName}`;
+              } else if (custData?.name) {
+                customerName = custData.name;
               }
             } catch {}
           }

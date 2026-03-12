@@ -9,6 +9,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
+import { resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
@@ -135,6 +136,7 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
+  resetTekmetricApiCallCount();
 
   try {
     const shops = await db.collection("shops").find({
@@ -347,8 +349,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const apiCallCount = resetTekmetricApiCallCount();
     const duration = Date.now() - startTime;
-    console.log(`[Cron] Tekmetric sync completed in ${duration}ms:`, results);
+    console.log(`[Cron] Tekmetric sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min):`, results);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
@@ -415,10 +418,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       duration: `${duration}ms`,
+      tekmetricApiCalls: apiCallCount,
       shops: results
     });
   } catch (err: any) {
-    console.error("[Cron] Tekmetric sync error:", err);
+    const finalApiCalls = resetTekmetricApiCallCount();
+    console.error(`[Cron] Tekmetric sync error (API calls made: ${finalApiCalls}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

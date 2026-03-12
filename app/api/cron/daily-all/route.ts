@@ -121,6 +121,56 @@ export async function GET(req: NextRequest) {
     console.error(`[Cron] Shop-Ware enrich error:`, error);
   }
 
+  // Tekmetric syncs run sequentially to stay under 600/min API rate limit.
+  // Incremental sync first (lower volume), then backfill (higher volume).
+  try {
+    console.log(`[Cron] Running Tekmetric incremental sync...`);
+    const tekIncrementalResponse = await fetch(`${baseUrl}/api/cron/tekmetric-incremental-sync`, {
+      method: "GET",
+      headers: {
+        ...(CRON_SECRET ? { "Authorization": `Bearer ${CRON_SECRET}` } : {}),
+      },
+    });
+
+    if (tekIncrementalResponse.ok) {
+      results.tekmetricIncrementalSync = await tekIncrementalResponse.json();
+      console.log(`[Cron] Tekmetric incremental sync completed`);
+    } else {
+      results.tekmetricIncrementalSync = {
+        error: `HTTP ${tekIncrementalResponse.status}`,
+        details: await tekIncrementalResponse.text(),
+      };
+      console.error(`[Cron] Tekmetric incremental sync failed:`, results.tekmetricIncrementalSync);
+    }
+  } catch (error: any) {
+    results.tekmetricIncrementalSync = { error: error.message };
+    console.error(`[Cron] Tekmetric incremental sync error:`, error);
+  }
+
+  try {
+    console.log(`[Cron] Running Tekmetric backfill...`);
+    const tekBackfillResponse = await fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
+      method: "GET",
+      headers: {
+        ...(CRON_SECRET ? { "Authorization": `Bearer ${CRON_SECRET}` } : {}),
+      },
+    });
+
+    if (tekBackfillResponse.ok) {
+      results.tekmetricBackfill = await tekBackfillResponse.json();
+      console.log(`[Cron] Tekmetric backfill completed`);
+    } else {
+      results.tekmetricBackfill = {
+        error: `HTTP ${tekBackfillResponse.status}`,
+        details: await tekBackfillResponse.text(),
+      };
+      console.error(`[Cron] Tekmetric backfill failed:`, results.tekmetricBackfill);
+    }
+  } catch (error: any) {
+    results.tekmetricBackfill = { error: error.message };
+    console.error(`[Cron] Tekmetric backfill error:`, error);
+  }
+
   const duration = Date.now() - startTime;
   console.log(`[Cron] Daily-all completed in ${duration}ms`);
 

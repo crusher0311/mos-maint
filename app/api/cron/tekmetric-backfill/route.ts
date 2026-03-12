@@ -3,14 +3,13 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { getValidToken } from "@/lib/tekmetric-auth";
+import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
 const MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 1;
 const YEARS_TO_BACKFILL = 5;
@@ -76,47 +75,13 @@ function computeContentHash(entry: any): string {
   return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }
 
-async function tekmetricRequest<T>(endpoint: string, retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
-  let token: string;
+async function tekmetricRequest<T>(endpoint: string, _retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
-    token = await getValidToken();
+    const data = await centralTekmetricRequest<T>(endpoint);
+    return { ok: true, data };
   } catch (err: any) {
-    return { ok: false, error: `Token error: ${err.message}` };
+    return { ok: false, error: err.message };
   }
-  
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(`${TEKMETRIC_API_BASE}${endpoint}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-      });
-      
-      if (res.status === 429) {
-        const backoffMs = Math.min(Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000, 60000);
-        console.log(`[Tekmetric] Rate limited, backing off ${Math.round(backoffMs / 1000)}s (attempt ${attempt + 1})`);
-        await sleep(backoffMs);
-        continue;
-      }
-      
-      if (!res.ok) {
-        return { ok: false, error: `HTTP ${res.status}` };
-      }
-      
-      return { ok: true, data: await res.json() };
-    } catch (err: any) {
-      if (attempt < retries) {
-        const backoffMs = Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000;
-        await sleep(backoffMs);
-        continue;
-      }
-      return { ok: false, error: err.message };
-    }
-  }
-  
-  return { ok: false, error: "Max retries exceeded" };
 }
 
 async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
@@ -245,7 +210,7 @@ async function backfillShopChunk(
   const seenROIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
-  const limit = pLimit(8);
+  const limit = pLimit(2);
   const rosForNormalized: any[] = [];
 
   while (page < totalPages && page < 50) {
@@ -311,9 +276,15 @@ async function backfillShopChunk(
       const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
         `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`
       );
+
+      if (!jobsResult.ok) {
+        console.warn(`[Tekmetric Backfill] Failed to fetch jobs for RO ${ro.id}: ${jobsResult.error}`);
+        return { indexed: 0, skipped: 0, roData: null };
+      }
+
       const jobs = jobsResult.data?.content || [];
 
-      if (jobs.length === 0) return { indexed: 0, skipped: 0 };
+      if (jobs.length === 0) return { indexed: 0, skipped: 0, roData: null };
 
       let indexed = 0;
       let skipped = 0;
@@ -426,7 +397,7 @@ async function backfillShopChunk(
     }
 
     page++;
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 200));
   }
 
   // Dual-write to normalized collections
@@ -486,6 +457,7 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
+  resetTekmetricApiCallCount();
 
   try {
     const shopsToProcess = await getShopsNeedingBackfill(db);
@@ -512,15 +484,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const apiCallCount = resetTekmetricApiCallCount();
+    const duration = Date.now() - startTime;
+    console.log(`[Cron] Tekmetric backfill completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min)`);
+
     return NextResponse.json({
       ok: true,
       processed: results,
       shopsRemaining: shopsToProcess.length - selectedShops.length,
-      duration: `${Date.now() - startTime}ms`
+      duration: `${duration}ms`,
+      tekmetricApiCalls: apiCallCount,
     });
 
   } catch (err: any) {
-    console.error("[Tekmetric Backfill] Error:", err);
+    const apiCallCount = resetTekmetricApiCallCount();
+    console.error(`[Tekmetric Backfill] Error (API calls made: ${apiCallCount}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
@@ -537,6 +515,7 @@ export async function POST(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
+  resetTekmetricApiCallCount();
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -599,14 +578,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const apiCallCount = resetTekmetricApiCallCount();
+    const duration = Date.now() - startTime;
+    console.log(`[Cron] Tekmetric full backfill completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min)`);
+
     return NextResponse.json({
       ok: true,
       processed: results,
-      duration: `${Date.now() - startTime}ms`
+      duration: `${duration}ms`,
+      tekmetricApiCalls: apiCallCount,
     });
 
   } catch (err: any) {
-    console.error("[Tekmetric Backfill] Full backfill error:", err);
+    const apiCallCount = resetTekmetricApiCallCount();
+    console.error(`[Tekmetric Backfill] Full backfill error (API calls made: ${apiCallCount}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

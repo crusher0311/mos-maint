@@ -14,6 +14,18 @@ import type {
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 
+let tekmetricApiCallCounter = 0;
+
+export function getTekmetricApiCallCount(): number {
+  return tekmetricApiCallCounter;
+}
+
+export function resetTekmetricApiCallCount(): number {
+  const count = tekmetricApiCallCounter;
+  tekmetricApiCallCounter = 0;
+  return count;
+}
+
 export async function tekmetricRequest<T = any>(
   endpoint: string, 
   options: RequestInit = {}, 
@@ -22,8 +34,9 @@ export async function tekmetricRequest<T = any>(
 ): Promise<T> {
   const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
   if (!rateSlot.acquired) {
-    console.warn(`[Tekmetric] Rate limit slot not acquired, proceeding anyway`);
+    throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
   }
+  tekmetricApiCallCounter++;
 
   const token = await getValidToken();
   const method = options.method || 'GET';
@@ -50,6 +63,13 @@ export async function tekmetricRequest<T = any>(
       console.log('[Tekmetric] Received 401, refreshing token and retrying...');
       clearCachedToken();
       await refreshToken();
+      return tekmetricRequest<T>(endpoint, options, shopId, true);
+    }
+
+    if (response.status === 429 && !isRetry) {
+      const backoffMs = Math.min(5000 + Math.random() * 2000, 10000);
+      console.warn(`[Tekmetric] 429 rate limited on ${endpoint}, backing off ${Math.round(backoffMs)}ms`);
+      await new Promise(r => setTimeout(r, backoffMs));
       return tekmetricRequest<T>(endpoint, options, shopId, true);
     }
 

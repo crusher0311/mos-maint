@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getCannedJobs } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,28 +23,10 @@ export async function GET() {
   }
 
   try {
-    const smsToken = shop.integrations.tekmetric.apiToken || shop.integrations.tekmetric.accessToken;
-    if (!smsToken) {
-      return NextResponse.json({ categories: [] });
-    }
+    const tekmetricShopId = shop.integrations.tekmetric.shopId || shopId;
 
-    const res = await fetch(
-      `https://shop.tekmetric.com/api/shop/${shop.integrations.tekmetric.shopId || shopId}/canned-jobs?shop=${shop.integrations.tekmetric.shopId || shopId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${smsToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!res.ok) {
-      console.error(`[TekJobCategories] Failed to fetch canned jobs: ${res.status}`);
-      return NextResponse.json({ categories: [] });
-    }
-
-    const data = await res.json();
-    const jobs = data.content || data || [];
+    const data = await getCannedJobs(tekmetricShopId);
+    const jobs = data.content || [];
 
     const categorySet = new Set<string>();
     for (const job of Array.isArray(jobs) ? jobs : []) {
