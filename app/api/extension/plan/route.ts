@@ -187,10 +187,12 @@ const shopPrefetchInProgress = new Set<number>();
 const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
 const TEKMETRIC_RO_CACHE_TTL = 5 * 60 * 1000;
 
-async function fetchTekmetricRoCached(roId: string): Promise<any | null> {
-  const cached = tekmetricRoCache.get(roId);
-  if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
-    return cached.data;
+async function fetchTekmetricRoCached(roId: string, forceRefresh = false): Promise<any | null> {
+  if (!forceRefresh) {
+    const cached = tekmetricRoCache.get(roId);
+    if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
+      return cached.data;
+    }
   }
   try {
     const { getValidToken } = await import("@/lib/integrations/tekmetric/auth");
@@ -572,7 +574,6 @@ export async function GET(request: NextRequest) {
     const roId = searchParams.get("roId");
     const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
     const forceRefresh = searchParams.get("refresh") === "true";
-    const clientMileage = searchParams.get("mileage") ? parseInt(searchParams.get("mileage")!) : null;
 
     if (!smsShopId) {
       return NextResponse.json(
@@ -621,8 +622,7 @@ export async function GET(request: NextRequest) {
     const shopIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
 
     let vehicle = null;
-    let mileage: number | null = clientMileage && clientMileage > 0 ? clientMileage : null;
-    const mileageFromClient = mileage !== null;
+    let mileage = null;
     let repairOrderNumber = null;
     let customerName = null;
     let currentRoDate: Date | null = null;
@@ -639,18 +639,8 @@ export async function GET(request: NextRequest) {
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
         if (!workOrder && shopDoc?.tekmetric?.shopId) {
-          if (clientMileage && clientMileage > 0) {
-            const existingCache = tekmetricRoCache.get(String(roId));
-            if (existingCache) {
-              const cachedOdo = existingCache.data?.milesIn || existingCache.data?.mileageIn || existingCache.data?.vehicle?.mileage || 0;
-              if (cachedOdo !== clientMileage) {
-                console.log(`[Extension] Busting Tekmetric RO cache for ${roId}: cached odometer ${cachedOdo} != client mileage ${clientMileage}`);
-                tekmetricRoCache.delete(String(roId));
-              }
-            }
-          }
-          console.log(`[Extension] Fetching RO ${roId} from Tekmetric API (cached)`);
-          const data = await fetchTekmetricRoCached(String(roId));
+          console.log(`[Extension] Fetching RO ${roId} from Tekmetric API (cached=${!forceRefresh})`);
+          const data = await fetchTekmetricRoCached(String(roId), forceRefresh);
           if (data) {
             let roVin = data.vehicle?.vin || data.vehicleVin;
             const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
@@ -776,13 +766,6 @@ export async function GET(request: NextRequest) {
         mileage = mileage || vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage;
       }
 
-      if (mileageFromClient && clientMileage && clientMileage > 0) {
-        if (mileage !== clientMileage) {
-          console.log(`[Extension] Client mileage ${clientMileage} overrides server mileage ${mileage} for ${vin}`);
-        }
-        mileage = clientMileage;
-      }
-
       if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) {
         try {
           const { decodeVinLocal } = await import("@/lib/integrations/dataone-local");
@@ -877,7 +860,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
-      const data = await fetchTekmetricRoCached(String(roId));
+      const data = await fetchTekmetricRoCached(String(roId), forceRefresh);
       if (data) {
         if (!repairOrderNumber) repairOrderNumber = data.repairOrderNumber || null;
         if (!customerName) {
