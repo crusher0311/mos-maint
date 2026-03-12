@@ -430,7 +430,7 @@ function switchTab(tab) {
     if (!hasAccess) {
       if (!overlay) {
         const featureNames = {
-          'plan': 'Maintenance Recommendations',
+          'plan': 'Vehicle Health Indicator',
           'failures': 'Common Failures Advisor',
           'lookup': 'Job Lookup / History Writer',
           'rates': 'Labor Rate Rules',
@@ -447,7 +447,7 @@ function switchTab(tab) {
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
             <p class="upgrade-title">${featureName}</p>
-            <p class="upgrade-message">This feature is not included in your current plan.</p>
+            <p class="upgrade-message">This feature is not included in your current subscription.</p>
             <p class="upgrade-cta">Contact your administrator or upgrade your subscription to unlock this feature.</p>
           </div>
         `;

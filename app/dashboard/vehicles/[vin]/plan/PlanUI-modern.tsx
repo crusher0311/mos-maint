@@ -62,7 +62,7 @@ export default function PlanUI({
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="space-y-2">
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                🚗 {vehicleDisplayName} — Maintenance Plan
+                🚗 {vehicleDisplayName} — Vehicle Health Indicator
               </h1>
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                 <span>VIN: <code className="bg-gray-100 px-2 py-1 rounded text-xs">{vehicleInfo.vin}</code></span>
@@ -81,10 +81,10 @@ export default function PlanUI({
                 onClick={() => window.print()}
                 className="px-3 py-1.5 text-sm border border-gray-300 bg-white hover:bg-gray-50 rounded-md font-medium"
               >
-                🖨️ Print Plan
+                🖨️ Print VHI
               </button>
               <button
-                title="Share maintenance plan"
+                title="Share VHI report"
                 className="px-3 py-1.5 text-sm border border-gray-300 bg-white hover:bg-gray-50 rounded-md font-medium"
               >
                 📤 Share
@@ -442,10 +442,10 @@ export default function PlanUI({
                 onClick={() => window.print()}
                 className="px-3 py-1.5 text-sm border border-gray-300 bg-white hover:bg-gray-50 rounded-md font-medium"
               >
-                🖨️ Print Plan
+                🖨️ Print VHI
               </button>
               <button
-                title="Share maintenance plan"
+                title="Share VHI report"
                 className="px-3 py-1.5 text-sm border border-gray-300 bg-white hover:bg-gray-50 rounded-md font-medium"
               >
                 📤 Share

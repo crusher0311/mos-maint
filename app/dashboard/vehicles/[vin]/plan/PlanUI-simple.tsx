@@ -100,7 +100,7 @@ export default function PlanUI({ plan }: PlanUIProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Maintenance Plan</h2>
+          <h2 className="text-xl font-semibold">Vehicle Health Indicator</h2>
           <div className="flex gap-2 mt-2">
             <Badge className="bg-red-600 text-white">Overdue {counts.o}</Badge>
             <Badge className="bg-amber-600 text-white">Due Soon {counts.s}</Badge>

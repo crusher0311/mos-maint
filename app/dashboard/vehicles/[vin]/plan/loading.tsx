@@ -7,7 +7,7 @@ const loadingSteps = [
   { text: "Loading OEM maintenance schedule", icon: "📋" },
   { text: "Checking service history", icon: "🔍" },
   { text: "Analyzing inspection findings", icon: "🔧" },
-  { text: "Building your maintenance plan", icon: "✨" },
+  { text: "Building your Vehicle Health Indicator", icon: "✨" },
 ];
 
 export default function PlanLoading() {
@@ -51,7 +51,7 @@ export default function PlanLoading() {
           </div>
           
           <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            Building Your Maintenance Plan
+            Building Your Vehicle Health Indicator
           </h2>
           
           <p className="text-gray-500 mb-1 text-sm">
@@ -59,7 +59,7 @@ export default function PlanLoading() {
           </p>
           
           <p className="text-orange-500 mb-4 text-xs">
-            Initial loads may take up to 30 seconds while we load your smart plan
+            Initial loads may take up to 30 seconds while we build your VHI
           </p>
 
           <div className="w-full bg-gray-200 rounded-full h-2 mb-6">

@@ -188,7 +188,7 @@ export function PlanLauncher() {
         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700"
       >
         <ClipboardList className="w-5 h-5" />
-        <span>Open Plan</span>
+        <span>Open VHI</span>
         <ArrowRight className="w-4 h-4 ml-auto" />
       </button>
 
@@ -262,7 +262,7 @@ export function PlanLauncher() {
               <div className="p-2">
                 <p className="px-2 py-1 text-xs font-medium text-gray-500 uppercase flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  Recent Plans
+                  Recent VHI Reports
                 </p>
                 {recentPlans.map((plan) => (
                   <button
@@ -299,7 +299,7 @@ export function PlanLauncher() {
             ) : (
               <div className="p-4 text-center text-gray-500">
                 <ClipboardList className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">Search for a vehicle to view its plan</p>
+                <p className="text-sm">Search for a vehicle to view its VHI</p>
                 <p className="text-xs text-gray-400 mt-1">
                   Your recent plans will appear here
                 </p>

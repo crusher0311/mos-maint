@@ -474,7 +474,7 @@ export default async function VehiclePlanPage({ params }: PageProps) {
               </Link>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold truncate">
-              {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — Plan
+              {(vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") : "Vehicle")} — VHI
             </h1>
             <div className="text-sm text-neutral-600">
               VIN <code>{vin}</code>

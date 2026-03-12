@@ -189,7 +189,7 @@ export function PlanUI({
         <div className="mx-auto max-w-5xl px-3 sm:px-6 py-2 sm:py-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="text-xs sm:text-sm">
-              <div className="font-semibold truncate">Plan for VIN {vin}</div>
+              <div className="font-semibold truncate">VHI for VIN {vin}</div>
               <div className="text-neutral-600">
                 {currentMiles != null && <>Current: {fmtMiles(currentMiles)} mi</>}
                 {mpdBlended != null && <> • ~{mpdBlended.toFixed(1)} mi/day</>}
