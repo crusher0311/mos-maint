@@ -185,7 +185,7 @@ const PREFETCH_LOCK_TTL_MS = 10 * 60 * 1000;
 const shopPrefetchInProgress = new Set<number>();
 
 const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
-const TEKMETRIC_RO_CACHE_TTL = 60 * 60 * 1000;
+const TEKMETRIC_RO_CACHE_TTL = 5 * 60 * 1000;
 
 async function fetchTekmetricRoCached(roId: string): Promise<any | null> {
   const cached = tekmetricRoCache.get(roId);
@@ -572,6 +572,7 @@ export async function GET(request: NextRequest) {
     const roId = searchParams.get("roId");
     const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
     const forceRefresh = searchParams.get("refresh") === "true";
+    const clientMileage = searchParams.get("mileage") ? parseInt(searchParams.get("mileage")!) : null;
 
     if (!smsShopId) {
       return NextResponse.json(
@@ -620,7 +621,8 @@ export async function GET(request: NextRequest) {
     const shopIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
 
     let vehicle = null;
-    let mileage = null;
+    let mileage: number | null = clientMileage && clientMileage > 0 ? clientMileage : null;
+    const mileageFromClient = mileage !== null;
     let repairOrderNumber = null;
     let customerName = null;
     let currentRoDate: Date | null = null;
@@ -637,6 +639,16 @@ export async function GET(request: NextRequest) {
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
         if (!workOrder && shopDoc?.tekmetric?.shopId) {
+          if (clientMileage && clientMileage > 0) {
+            const existingCache = tekmetricRoCache.get(String(roId));
+            if (existingCache) {
+              const cachedOdo = existingCache.data?.milesIn || existingCache.data?.mileageIn || existingCache.data?.vehicle?.mileage || 0;
+              if (cachedOdo !== clientMileage) {
+                console.log(`[Extension] Busting Tekmetric RO cache for ${roId}: cached odometer ${cachedOdo} != client mileage ${clientMileage}`);
+                tekmetricRoCache.delete(String(roId));
+              }
+            }
+          }
           console.log(`[Extension] Fetching RO ${roId} from Tekmetric API (cached)`);
           const data = await fetchTekmetricRoCached(String(roId));
           if (data) {
@@ -762,6 +774,13 @@ export async function GET(request: NextRequest) {
 
       if (vehicle) {
         mileage = mileage || vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage;
+      }
+
+      if (mileageFromClient && clientMileage && clientMileage > 0) {
+        if (mileage !== clientMileage) {
+          console.log(`[Extension] Client mileage ${clientMileage} overrides server mileage ${mileage} for ${vin}`);
+        }
+        mileage = clientMileage;
       }
 
       if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) {

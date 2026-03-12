@@ -767,6 +767,7 @@ async function loadPlan(forceRefresh = false) {
       provider: currentContext.provider || ''
     });
     if (currentContext.vin) params.set('vin', currentContext.vin);
+    if (currentContext.mileage) params.set('mileage', String(currentContext.mileage));
     if (forceRefresh) params.set('refresh', 'true');
     
     let result;
