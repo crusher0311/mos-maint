@@ -1176,6 +1176,64 @@ Techs currently have no visibility into a vehicle's previous inspection findings
 
 ---
 
+## Vehicle Health Score (VHS)
+
+**Priority:** High  
+**Status:** Planned
+
+### Overview
+A single numeric score (0–100) that represents the overall health of a vehicle based on the VHI plan data. Gives advisors and customers an instant, at-a-glance understanding of vehicle condition without needing to parse individual recommendation buckets.
+
+### Scoring Model
+Start at 100 (perfect health) and deduct points based on weighted severity:
+
+#### Deduction Weights
+| Factor | Weight | Rationale |
+|--------|--------|-----------|
+| Overdue item (red) | -8 to -12 per item | Core safety/reliability risk |
+| Overdue + DVI-backed (red finding) | -12 to -15 per item | Physically verified as failing |
+| Due soon item (yellow) | -3 to -5 per item | Approaching maintenance window |
+| Due soon + DVI-backed (yellow finding) | -5 to -8 per item | Physically showing wear |
+| Previously declined service (still unresolved) | +2 additional penalty | Customer was informed, chose not to act |
+| Multi-visit unresolved (DVI Continuity) | +3 additional penalty per repeat | Compounding neglect |
+| Deterioration (marginal → bad between visits) | +3 additional penalty | Active worsening |
+
+#### Category Multipliers
+Not all services carry equal risk. Safety-critical categories should weigh more:
+- **Brakes, tires, steering/suspension**: 1.5x multiplier
+- **Engine, transmission, drivetrain**: 1.3x multiplier
+- **Fluids, filters, belts**: 1.0x (baseline)
+- **Wipers, lights, cabin**: 0.7x multiplier
+
+#### Score Ranges
+| Range | Label | Color | Meaning |
+|-------|-------|-------|---------|
+| 85–100 | Excellent | Green | Vehicle is well-maintained |
+| 70–84 | Good | Light green | Minor items approaching |
+| 50–69 | Fair | Yellow/amber | Multiple items need attention |
+| 30–49 | Poor | Orange | Significant maintenance needed |
+| 0–29 | Critical | Red | Serious safety/reliability concerns |
+
+### Display Locations
+- **VHI plan page (dashboard)**: Prominent score gauge at the top, alongside Y/M/M title and OE logo.
+- **Extension (Detect Dog)**: Score shown at the top of the plan panel — advisor sees it immediately when the RO is open.
+- **Vehicle list/dashboard**: Score column on the vehicles table for quick triage of which vehicles need the most attention.
+- **Customer-facing reports**: Include the score in any printed or emailed plan summaries.
+
+### Advanced Features (Phase 2)
+- **Score trending**: Track the score over time per vehicle. "Your vehicle's health improved from 58 to 85 after today's service." Stored as a time series alongside plan cache snapshots.
+- **Shop-wide health metrics**: Average health score across all vehicles serviced — useful for enterprise analytics and shop performance tracking.
+- **Pre/post service comparison**: Show the advisor "if the customer approves all recommended work, their score goes from 52 to 91" — a powerful sales tool grounded in data.
+- **Score-based queue prioritization**: In the maintenance queue, vehicles with lower health scores could be flagged for proactive outreach (pairs with auto booking).
+
+### Key Considerations
+- **Floor at 0**: Score can't go negative. Clamp at 0 for severely neglected vehicles.
+- **Configurable weights**: Allow platform admins to tune deduction weights per category over time as real-world data reveals what matters most.
+- **Consistency**: Score must be deterministic — same plan data always produces the same score. Computed during plan build and stored in the plan cache.
+- **Pairs with**: DVI Continuity (multi-visit penalties), DVI Auto-Fill (score informs what to inspect), declined services tracking, and customer-facing plan reports.
+
+---
+
 ## 18. Mobile Sticker Printing (Android Support)
 
 **Priority:** Medium  
