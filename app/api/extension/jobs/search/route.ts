@@ -30,6 +30,75 @@ function getModelVariants(model: string): string[] {
   return MODEL_VARIANTS[normalized] || [normalized];
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function resolveVehicleContext(
+  db: any,
+  params: { year: string | null; make: string | null; model: string | null; engine: string | null; roId: string | null; mosShopId: number | null; provider: string }
+): Promise<{ year: string | null; make: string | null; model: string | null; engine: string | null }> {
+  let { year, make, model, engine, roId, mosShopId, provider } = params;
+  if (year || make || model || !roId || !mosShopId) {
+    return { year, make, model, engine };
+  }
+  
+  const workOrder = await db.collection("tekmetric_work_orders").findOne({
+    shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+    workOrderId: String(roId)
+  });
+  
+  if (workOrder) {
+    year = workOrder.vehicleYear?.toString() || null;
+    make = workOrder.vehicleMake || null;
+    model = workOrder.vehicleModel || null;
+    engine = workOrder.vehicleEngine || null;
+    console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+  } else if (provider === "tekmetric") {
+    console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
+    const tekRo = await db.collection("tekmetric_repair_orders").findOne({
+      $or: [{ id: parseInt(roId) }, { id: String(roId) }]
+    });
+    if (tekRo?.vehicle) {
+      year = tekRo.vehicle.year?.toString() || null;
+      make = tekRo.vehicle.make || null;
+      model = tekRo.vehicle.model || null;
+      engine = tekRo.vehicle.engine || null;
+      console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model}`);
+    }
+  }
+  return { year, make, model, engine };
+}
+
+async function resolveSearchShopIds(
+  db: any,
+  mosShopId: number | null,
+  isPlatformAdmin: boolean,
+  userShopIds: number[]
+): Promise<number[]> {
+  if (!mosShopId) {
+    return isPlatformAdmin ? [] : userShopIds;
+  }
+  
+  const enterprise = await getEnterpriseByShopId(mosShopId);
+  if (!enterprise || enterprise.shopIds.length <= 1) {
+    return [mosShopId];
+  }
+  
+  const shop = await db.collection("shops").findOne({ shopId: mosShopId });
+  const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
+  
+  if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
+    const filtered = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
+    if (!filtered.includes(mosShopId)) filtered.push(mosShopId);
+    console.log(`[Jobs Search] Enterprise search (custom): shops ${filtered.join(', ')}`);
+    return filtered;
+  }
+  
+  console.log(`[Jobs Search] Enterprise search (all): shops ${enterprise.shopIds.join(', ')}`);
+  return enterprise.shopIds;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -45,7 +114,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q") || "";
     const smsShopId = searchParams.get("shopId");
-    const roId = searchParams.get("roId"); // RO ID for vehicle lookup fallback
+    const roId = searchParams.get("roId");
     let year = searchParams.get("year");
     let make = searchParams.get("make");
     let model = searchParams.get("model");
@@ -61,14 +130,10 @@ export async function GET(request: NextRequest) {
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
-    // For extension requests, always prefer the SMS shop ID from the URL
-    // This ensures we search the shop the user is viewing in Tekmetric/Protractor,
-    // not their MOS session shop (which might be different when impersonating)
     let mosShopId: number | null = null;
     let provider: string = 'tekmetric';
     
     if (smsShopId) {
-      // Look up shop from SMS shop ID (Tekmetric/Protractor shop ID)
       const providerParam = new URL(request.url).searchParams.get("provider") || undefined;
       const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: providerParam });
       if (shopResult) {
@@ -78,10 +143,8 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Fall back to session shop if no SMS shop found
     if (!mosShopId && auth.user.shopId) {
       mosShopId = parseInt(auth.user.shopId);
-      // Look up integration provider for session shop
       const shopDoc = await db.collection("shops").findOne(
         { shopId: { $in: [mosShopId, String(mosShopId)] } },
         { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1 } }
@@ -99,126 +162,82 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
     
-    // If no vehicle context provided but we have roId, look up the work order to get vehicle info
-    if (!year && !make && !model && roId && mosShopId) {
-      // Get vehicle info directly from tekmetric_work_orders (stores vehicleYear/vehicleMake/vehicleModel)
-      const workOrder = await db.collection("tekmetric_work_orders").findOne({
-        shopId: { $in: [String(mosShopId), Number(mosShopId)] },
-        workOrderId: String(roId)
-      });
-      
-      if (workOrder) {
-        // Work order has vehicle fields at top level (vehicleYear, vehicleMake, etc.)
-        year = workOrder.vehicleYear?.toString() || null;
-        make = workOrder.vehicleMake || null;
-        model = workOrder.vehicleModel || null;
-        engine = workOrder.vehicleEngine || null;
-        console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
-      } else if (provider === "tekmetric") {
-        console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
-        const tekRo = await db.collection("tekmetric_repair_orders").findOne({
-          $or: [{ id: parseInt(roId) }, { id: String(roId) }]
-        });
-        if (tekRo?.vehicle) {
-          year = tekRo.vehicle.year?.toString() || null;
-          make = tekRo.vehicle.make || null;
-          model = tekRo.vehicle.model || null;
-          engine = tekRo.vehicle.engine || null;
-          console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model}`);
-        } else {
-          console.log(`[Jobs Search] No vehicle data found for Tekmetric RO ${roId}`);
-        }
-      } else {
-        console.log(`[Jobs Search] No WO found for roId ${roId} in shop ${mosShopId}`);
-      }
-    }
-    
-    // Check if shop is part of an enterprise - if so, search enterprise shops based on preferences
-    let searchShopIds: number[] = [];
-    if (mosShopId) {
-      const enterprise = await getEnterpriseByShopId(mosShopId);
-      if (enterprise && enterprise.shopIds.length > 1) {
-        // Check shop preferences for job history location selection
-        const shop = await db.collection("shops").findOne({ shopId: mosShopId });
-        const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
-        
-        if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
-          // Use the shop's selected locations (must be within enterprise)
-          searchShopIds = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
-          // Always include own shop
-          if (!searchShopIds.includes(mosShopId)) {
-            searchShopIds.push(mosShopId);
-          }
-          console.log(`[Jobs Search] Enterprise search (custom): shops ${searchShopIds.join(', ')}`);
-        } else {
-          // Default: search all enterprise shops
-          searchShopIds = enterprise.shopIds;
-          console.log(`[Jobs Search] Enterprise search (all): shops ${searchShopIds.join(', ')}`);
-        }
-      } else {
-        searchShopIds = [mosShopId];
-      }
-    } else if (!isPlatformAdmin) {
-      searchShopIds = userShopIds;
-    }
+    const [vehicleContext, searchShopIds] = await Promise.all([
+      resolveVehicleContext(db, { year, make, model, engine, roId, mosShopId, provider }),
+      resolveSearchShopIds(db, mosShopId, isPlatformAdmin, userShopIds),
+    ]);
+    year = vehicleContext.year;
+    make = vehicleContext.make;
+    model = vehicleContext.model;
+    engine = vehicleContext.engine;
     
     console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopIds: ${searchShopIds.join(',')}`);
 
     const jobsCollection = db.collection("job_index");
 
-    // Build search query using same stopword logic as web app
     const { coreTokens, allTokens } = buildSearchQuery(query);
     
     const matchStage: Record<string, any> = {};
     
-    // Shop filter - search all enterprise shops if applicable
     if (searchShopIds.length === 1) {
       matchStage.shopId = searchShopIds[0];
     } else if (searchShopIds.length > 1) {
       matchStage.shopId = { $in: searchShopIds };
     }
     
-    // Text search using same logic as web app
     if (coreTokens.length > 0) {
-      matchStage.$or = [
-        { "job.keywords": { $all: coreTokens } },
-        { "job.title": { $regex: coreTokens.map(t => `(?=.*${t})`).join(""), $options: "i" } },
-      ];
+      matchStage["job.keywords"] = { $all: coreTokens };
     } else if (allTokens.length > 0) {
       matchStage["job.keywords"] = { $in: allTokens };
     } else {
-      // Fallback to regex on title
-      const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      matchStage.$or = [
-        { "job.title": searchRegex },
-        { "title": searchRegex },
-      ];
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      matchStage["job.title"] = { $regex: escaped, $options: "i" };
     }
     
-    // Optional make/model filtering for pre-filtering (same as web app)
-    // Use string pattern instead of RegExp objects to ensure MongoDB compatibility
     if (make) {
-      matchStage["vehicle.make"] = { $regex: make, $options: "i" };
+      matchStage["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
     }
     if (model) {
-      // Include model variants (e.g., Expedition MAX also matches Expedition)
       const variants = getModelVariants(model);
       if (variants.length > 1) {
-        // Build OR condition for model variants
-        matchStage["vehicle.model"] = { $regex: variants.join("|"), $options: "i" };
+        matchStage["vehicle.model"] = { $regex: variants.map(escapeRegex).join("|"), $options: "i" };
       } else {
-        matchStage["vehicle.model"] = { $regex: model, $options: "i" };
+        matchStage["vehicle.model"] = { $regex: escapeRegex(model), $options: "i" };
       }
     }
 
-    // Fetch candidates
-    const jobs: any[] = await jobsCollection
+    let jobs: any[] = await jobsCollection
       .aggregate([
         { $match: matchStage },
         { $sort: { performedAt: -1 } },
         { $limit: limit * 5 }
-      ])
+      ], { maxTimeMS: 8000 })
       .toArray();
+
+    if (jobs.length === 0 && coreTokens.length > 0) {
+      const fallbackMatch: Record<string, any> = {};
+      if (searchShopIds.length === 1) {
+        fallbackMatch.shopId = searchShopIds[0];
+      } else if (searchShopIds.length > 1) {
+        fallbackMatch.shopId = { $in: searchShopIds };
+      }
+      fallbackMatch["job.title"] = { $regex: coreTokens.map(escapeRegex).join(".*"), $options: "i" };
+      if (make) fallbackMatch["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
+      if (model) {
+        const variants = getModelVariants(model);
+        fallbackMatch["vehicle.model"] = { $regex: variants.map(escapeRegex).join("|"), $options: "i" };
+      }
+      jobs = await jobsCollection
+        .aggregate([
+          { $match: fallbackMatch },
+          { $sort: { performedAt: -1 } },
+          { $limit: limit * 3 }
+        ], { maxTimeMS: 5000 })
+        .toArray();
+      if (jobs.length > 0) {
+        console.log(`[Jobs Search] Fallback title search found ${jobs.length} candidates`);
+      }
+    }
 
     console.log(`[Jobs Search] Found ${jobs.length} candidates for scoring`);
 
@@ -330,6 +349,12 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error("[Extension Jobs Search] Error:", error);
+    if (error?.codeName === 'MaxTimeMSExpired' || error?.code === 50) {
+      return NextResponse.json(
+        { error: "Search timed out. Try a more specific search term.", jobs: [], total: 0 },
+        { status: 200, headers: corsHeaders }
+      );
+    }
     return NextResponse.json(
       { error: "Search failed" },
       { status: 500, headers: corsHeaders }
