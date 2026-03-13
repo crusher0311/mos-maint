@@ -152,11 +152,22 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
       </div>
 
       {hasSelection && (() => {
-        const bgTint = projectedScore >= 85 ? "from-green-50 to-emerald-50 border-green-200"
-          : projectedScore >= 70 ? "from-lime-50 to-green-50 border-lime-200"
-          : projectedScore >= 50 ? "from-amber-50 to-yellow-50 border-amber-200"
-          : projectedScore >= 30 ? "from-orange-50 to-amber-50 border-orange-200"
-          : "from-red-50 to-orange-50 border-red-200";
+        const remainingOverdue = data.buckets.overdue.filter((i) => !selectedKeys.has(i.key));
+        const hasRemainingOverdue = remainingOverdue.length > 0;
+
+        const bgTint = hasRemainingOverdue
+          ? (projectedScore >= 50 ? "from-amber-50 to-yellow-50 border-amber-200"
+            : projectedScore >= 30 ? "from-orange-50 to-amber-50 border-orange-200"
+            : "from-red-50 to-orange-50 border-red-200")
+          : (projectedScore >= 85 ? "from-green-50 to-emerald-50 border-green-200"
+            : projectedScore >= 70 ? "from-lime-50 to-green-50 border-lime-200"
+            : projectedScore >= 50 ? "from-amber-50 to-yellow-50 border-amber-200"
+            : projectedScore >= 30 ? "from-orange-50 to-amber-50 border-orange-200"
+            : "from-red-50 to-orange-50 border-red-200");
+
+        const displayColor = hasRemainingOverdue
+          ? (projectedScore >= 50 ? "#f59e0b" : projectedScore >= 30 ? "#f97316" : "#ef4444")
+          : projectedInfo.color;
 
         return (
           <div className={`bg-gradient-to-r ${bgTint} rounded-xl p-4 transition-all border`}>
@@ -167,7 +178,7 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
               </div>
 
               <div className="flex items-center gap-2 px-3">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: projectedInfo.color }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: displayColor }}>
                   <path d="M5 12 L19 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                   <path d="M14 7 L19 12 L14 17" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -175,12 +186,12 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
 
               <div className="text-center flex-1">
                 <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">After Repair</p>
-                <p className="text-2xl font-bold mt-0.5" style={{ color: projectedInfo.color }}>{projectedScore}</p>
+                <p className="text-2xl font-bold mt-0.5" style={{ color: displayColor }}>{projectedScore}</p>
               </div>
             </div>
 
             <div className="bg-white/70 rounded-lg p-2.5 text-center">
-              <p className="text-sm font-semibold" style={{ color: projectedInfo.color }}>
+              <p className="text-sm font-semibold" style={{ color: displayColor }}>
                 +{improvement} point{improvement !== 1 ? "s" : ""} improvement
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
