@@ -1126,6 +1126,56 @@ Use the VHI plan data (OEM schedule, CARFAX history, shop work order history, de
 
 ---
 
+## DVI Continuity — Unresolved Inspection Tracking
+
+**Priority:** High  
+**Status:** Planned
+
+### Overview
+Techs currently have no visibility into a vehicle's previous inspection findings. Even if the same vehicle was at the shop three months ago and had a red-flagged brake hose, the tech on the next visit has no idea — they start from scratch every time. This feature builds a per-vehicle DVI history timeline that tracks unresolved findings across visits and re-surfaces them with full context.
+
+### The Problem
+- Techs inspect in isolation — no awareness of prior findings, even from their own shop.
+- Customers decline a recommendation, and it silently disappears. Nobody follows up on the next visit.
+- Findings that get worse over time (marginal → bad) aren't tracked or escalated.
+- Advisors can't see whether a current recommendation is brand new or has been flagged repeatedly.
+
+### Proposed Implementation
+
+#### 1. DVI History Storage
+- Store every DVI finding per VIN with timestamp, source (`tekmetric`, `autoflow`, `autovitals`), RO number, and status (`bad`, `marginal`, `good`).
+- New MongoDB collection: `dvi_history` — keyed by VIN + shopId.
+- Populated automatically whenever DVI findings are fetched during plan builds (Tekmetric inspections, AutoFlow DVI, AutoVitals).
+- Schema: `{ vin, shopId, findings: [{ name, serviceKey, status, source, roId, roNumber, inspectedAt, resolvedAt?, resolvedBy? }] }`
+
+#### 2. Resolution Detection
+- When a work order is completed that includes a job matching a previously flagged DVI item, mark that finding as "resolved" with the WO number and date.
+- Uses the same `SERVICE_KEY_PATTERNS` matching logic already in the VHI triage.
+- Unresolved = flagged on a previous visit with no matching completed job since.
+
+#### 3. VHI Plan Integration
+- During plan triage, pull `dvi_history` for the VIN and identify unresolved findings.
+- Unresolved items from prior visits get a special indicator: "Previously flagged [date] — not yet addressed."
+- Items flagged multiple times get escalated priority (e.g., flagged on 2+ visits = auto-bump to red regardless of current DVI status).
+- Items that were declined by the customer should show "Customer declined [date]" alongside the re-recommendation.
+
+#### 4. Deterioration Tracking
+- If an item was `marginal` on one visit and `bad` on the next, surface this progression: "Condition worsened since last inspection."
+- This gives the advisor a powerful talking point with the customer.
+
+#### 5. Tech/Advisor-Facing UI
+- **Extension (Detect Dog)**: Show an "Unresolved from previous visits" section above or alongside the VHI plan items. Each entry shows when it was first flagged, how many times it's been seen, and whether the customer declined it.
+- **Dashboard plan page**: Similar section with full history timeline expandable per item.
+- **DVI Auto-Fill integration**: When auto-filling a new DVI (see "DVI / Inspection Auto-Fill from VHI"), previously unresolved items should be pre-flagged as priority inspection points.
+
+### Key Considerations
+- **Cross-shop visibility**: If the vehicle visited a different shop in the same enterprise, unresolved findings from that shop should carry over.
+- **Staleness**: Findings older than a configurable threshold (e.g., 18 months / 20k miles) should age out rather than persist indefinitely.
+- **Privacy**: DVI history is shop-scoped by default; enterprise-level sharing requires the multi-location feature flag.
+- **Pairs with**: DVI Auto-Fill from VHI (feeds unresolved items into new inspection templates) and declined services tracking (already exists on vehicle docs).
+
+---
+
 ## 18. Mobile Sticker Printing (Android Support)
 
 **Priority:** Medium  
