@@ -347,7 +347,10 @@ const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   serpentine_belt: "Serpentine Belt",
   timing_belt: "Timing Belt",
   fuel_system: "Fuel System Cleaning",
-  brake_pads: "Brake Pads",
+  front_brake_pads: "Front Brake Pads",
+  rear_brake_pads: "Rear Brake Pads",
+  front_brake_rotors: "Front Brake Rotors",
+  rear_brake_rotors: "Rear Brake Rotors",
   front_shocks: "Front Shocks / Struts",
   rear_shocks: "Rear Shocks / Struts",
   wheel_alignment: "Wheel Alignment",
@@ -404,9 +407,19 @@ const SERVICE_KEYS: Record<string, string[]> = {
     "fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction",
     "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning"
   ],
-  brake_pads: [
-    "brake pads", "brake linings", "brake rotor", "brake pads replaced", 
-    "brake lining", "disc brake", "front brakes", "rear brakes", "brake shoes"
+  front_brake_pads: [
+    "front brake pads", "front brake lining", "front brakes replaced",
+    "front brake pads replaced", "front disc brake"
+  ],
+  rear_brake_pads: [
+    "rear brake pads", "rear brake lining", "rear brakes replaced",
+    "rear brake pads replaced", "rear disc brake", "brake shoes"
+  ],
+  front_brake_rotors: [
+    "front brake rotor", "front rotor", "front brake rotors replaced"
+  ],
+  rear_brake_rotors: [
+    "rear brake rotor", "rear rotor", "rear brake rotors replaced"
   ],
   front_shocks: ["front shock", "front strut", "front shocks", "front struts"],
   rear_shocks: ["rear shock", "rear strut", "rear shocks", "rear struts"],
@@ -441,6 +454,16 @@ function toKeyFromName(name: string): string | null {
     if (n.includes("front")) return "front_shocks";
     if (n.includes("rear")) return "rear_shocks";
     return "front_shocks";
+  }
+  if (n.includes("brake rotor") || n.includes("rotor replaced") || n.includes("rotor(s) replaced")) {
+    if (n.includes("front")) return "front_brake_rotors";
+    if (n.includes("rear")) return "rear_brake_rotors";
+    return "front_brake_rotors";
+  }
+  if (n.includes("brake pad") || n.includes("brake lining") || n.includes("brakes replaced") || n.includes("brakes serviced") || n.includes("disc brake")) {
+    if (n.includes("front")) return "front_brake_pads";
+    if (n.includes("rear")) return "rear_brake_pads";
+    return "front_brake_pads";
   }
   return null;
 }
@@ -1005,6 +1028,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const LEGACY_KEY_MAP: Record<string, string[]> = {
     differential: ["front_differential", "rear_differential"],
     alignment: ["wheel_alignment"],
+    brake_pads: ["front_brake_pads", "rear_brake_pads"],
   };
   const shopIntervals: Record<string, ShopIntervalOverride> = { ...rawIntervals };
   for (const [oldKey, newKeys] of Object.entries(LEGACY_KEY_MAP)) {

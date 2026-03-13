@@ -54,7 +54,10 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   serpentine_belt: [/serpentine/i, /drive belt/i, /accessory belt/i, /v-belt/i],
   timing_belt: [/timing belt/i, /timing chain/i, /cam belt/i],
   fuel_system: [/fuel system/i, /fuel injection/i, /injector clean/i],
-  brake_pads: [/brake pad/i, /brake lining/i, /brake shoe/i],
+  front_brake_pads: [/front brake pad/i, /front brake lining/i, /front brakes replaced/i],
+  rear_brake_pads: [/rear brake pad/i, /rear brake lining/i, /rear brakes replaced/i, /brake shoe/i],
+  front_brake_rotors: [/front brake rotor/i, /front rotor/i],
+  rear_brake_rotors: [/rear brake rotor/i, /rear rotor/i],
   front_shocks: [/front shock/i, /front strut/i],
   rear_shocks: [/rear shock/i, /rear strut/i],
   wheel_alignment: [/wheel alignment/i, /alignment/i, /front end align/i, /4 wheel align/i],
@@ -76,6 +79,16 @@ function mapServiceToKey(serviceName: string): string | null {
     if (/front/i.test(name)) return "front_shocks";
     if (/rear/i.test(name)) return "rear_shocks";
     return "front_shocks";
+  }
+  if (/brake rotor/i.test(name)) {
+    if (/front/i.test(name)) return "front_brake_rotors";
+    if (/rear/i.test(name)) return "rear_brake_rotors";
+    return "front_brake_rotors";
+  }
+  if (/brake pad|brake lining|brakes replaced/i.test(name)) {
+    if (/front/i.test(name)) return "front_brake_pads";
+    if (/rear/i.test(name)) return "rear_brake_pads";
+    return "front_brake_pads";
   }
   return null;
 }
@@ -629,6 +642,7 @@ export async function GET(request: NextRequest) {
     const LEGACY_KEY_MAP: Record<string, string[]> = {
       differential: ["front_differential", "rear_differential"],
       alignment: ["wheel_alignment"],
+      brake_pads: ["front_brake_pads", "rear_brake_pads"],
     };
     const shopIntervals: ShopIntervals = { ...rawIntervals };
     for (const [oldKey, newKeys] of Object.entries(LEGACY_KEY_MAP)) {
