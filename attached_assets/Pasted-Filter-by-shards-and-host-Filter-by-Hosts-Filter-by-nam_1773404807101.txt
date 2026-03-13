@@ -1,0 +1,513 @@
+Filter by shards and host
+Filter by Hosts
+Filter by namespace
+Select Namespaces
+Filter by time range
+
+Filter by date and time
+
+Indexes sorted by impact
+Expected Impact values are estimates and should be validated in a test environment
+Namespace
+mos-maintenance-mvp.carfax_reports
+Top Suggestion
+Expected Impact: Can reduce up to 257.9 MB of disk reads from 4.25 queries/hour with this index per execution.
+
+shopId: 1
+vin: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+246 ms
+Execution Count
+4.25/hour
+Avg. Query Targeting
+7847
+Avg. Object Size
+9.3 KB
+Avg. Docs Scanned
+7847
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (1)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_callback_events
+objectId: 1
+objectType: 1
+operation: 1
+processed: 1
+shopId: 1
+processedAt: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+363 ms
+Execution Count
+5.96/hour
+Avg. Query Targeting
+115937
+Avg. Object Size
+299 Bytes
+Avg. Docs Scanned
+115937
+Avg. Docs Returned
+0
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (1)
+Sample Queries Improved By This Index
+Namespace
+test.oildatas
+logo_id: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+281 ms
+Execution Count
+0.42/hour
+Avg. Query Targeting
+133384
+Avg. Object Size
+711 Bytes
+Avg. Docs Scanned
+380380
+Avg. Docs Returned
+32
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.job_index
+job.title: 1
+vehicle.make: 1
+vehicle.model: 1
+performedAt: -1
+shopId: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+18207 ms
+Execution Count
+0.5/hour
+Avg. Query Targeting
+83397
+Avg. Object Size
+1.3 KB
+Avg. Docs Scanned
+159998
+Avg. Docs Returned
+28
+In Memory Sort
+0.33 ops/hr
+Existing Indexes In This Collection (17)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+data.ID: 1
+jobsIndexed: 1
+shopId: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+306 ms
+Execution Count
+0.25/hour
+Avg. Query Targeting
+895
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+895
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+jobsIndexed: 1
+shopId: 1
+workOrderGuid: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+306 ms
+Execution Count
+0.25/hour
+Avg. Query Targeting
+895
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+895
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.tekmetric_work_orders
+workOrderId: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+597 ms
+Execution Count
+0.13/hour
+Avg. Query Targeting
+18229
+Avg. Object Size
+4.1 KB
+Avg. Docs Scanned
+18229
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.events
+provider: 1
+type: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+614 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+49412
+Avg. Object Size
+2.1 KB
+Avg. Docs Scanned
+49412
+Avg. Docs Returned
+0
+In Memory Sort
+0.04 ops/hr
+Existing Indexes In This Collection (11)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.dataone_cache
+squish: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+342 ms
+Execution Count
+0.17/hour
+Avg. Query Targeting
+3755
+Avg. Object Size
+12.3 KB
+Avg. Docs Scanned
+3755
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (2)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+ServiceItem.VIN: 1
+shopId: 1
+Header.LastModifiedTime: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+601 ms
+Execution Count
+0.08/hour
+Avg. Query Targeting
+1172
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+1172
+Avg. Docs Returned
+1
+In Memory Sort
+0.08 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+data.VIN: 1
+shopId: 1
+Header.LastModifiedTime: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+601 ms
+Execution Count
+0.08/hour
+Avg. Query Targeting
+1172
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+1172
+Avg. Docs Returned
+1
+In Memory Sort
+0.08 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+shopId: 1
+vin: 1
+Header.LastModifiedTime: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+601 ms
+Execution Count
+0.08/hour
+Avg. Query Targeting
+1172
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+1172
+Avg. Docs Returned
+1
+In Memory Sort
+0.08 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.protractor_work_orders
+shopId: 1
+workflowStage: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+227 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+546
+Avg. Object Size
+51.1 KB
+Avg. Docs Scanned
+546
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (4)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.api_usage
+isError: 1
+_id: -1
+timestamp: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+748 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+16694
+Avg. Object Size
+362 Bytes
+Avg. Docs Scanned
+116860
+Avg. Docs Returned
+7
+In Memory Sort
+0.04 ops/hr
+Existing Indexes In This Collection (5)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.api_usage
+isError: 1
+provider: 1
+_id: -1
+timestamp: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+604 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+19363
+Avg. Object Size
+362 Bytes
+Avg. Docs Scanned
+77452
+Avg. Docs Returned
+4
+In Memory Sort
+0.04 ops/hr
+Existing Indexes In This Collection (5)
+Sample Queries Improved By This Index
+Namespace
+test.oildatas
+invoice: 1
+isArchived: 1
+status: 1
+user_id: 1
+new_flag: -1
+updatedAt: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+338 ms
+Execution Count
+0.21/hour
+Avg. Query Targeting
+2117
+Avg. Object Size
+711 Bytes
+Avg. Docs Scanned
+2117
+Avg. Docs Returned
+0
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+Namespace
+test.oildatas
+status: 1
+user_id: 1
+vehicle_model: 1
+new_flag: -1
+updatedAt: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+358 ms
+Execution Count
+0.17/hour
+Avg. Query Targeting
+2369
+Avg. Object Size
+711 Bytes
+Avg. Docs Scanned
+2369
+Avg. Docs Returned
+0
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+Namespace
+mos-maintenance-mvp.tekmetric_work_orders
+shopId: 1
+workOrderId: 1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+421 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+2154
+Avg. Object Size
+4.1 KB
+Avg. Docs Scanned
+2154
+Avg. Docs Returned
+1
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+Namespace
+test.oildatas
+isArchived: 1
+status: 1
+user_id: 1
+vehicle_model: 1
+new_flag: -1
+updatedAt: -1
+
+
+
+Current Query Metrics
+
+Avg. Execution Time
+257 ms
+Execution Count
+0.04/hour
+Avg. Query Targeting
+1110
+Avg. Object Size
+711 Bytes
+Avg. Docs Scanned
+1110
+Avg. Docs Returned
+0
+In Memory Sort
+< 0.01 ops/hr
+Existing Indexes In This Collection (3)
+Sample Queries Improved By This Index
+System StatusAll Good
+©2026 MongoDB, Inc.StatusTermsPrivacyAtlas BlogContact Sales
