@@ -1100,18 +1100,29 @@ One-click injection of all overdue/due soon plan items from the Chrome extension
 
 ---
 
-## DVI / Inspection Injection
+## DVI / Inspection Auto-Fill from VHI
 
 **Priority:** High  
 **Status:** Planned
 
 ### Overview
-Push matching maintenance plan items into Tekmetric inspections (DVI) and potentially AutoFlow DVI so technicians see relevant recommendations during vehicle walkthroughs.
+Use the VHI plan data (OEM schedule, CARFAX history, shop work order history, deferred work) to automatically populate DVI inspection items in Tekmetric and potentially AutoFlow. This reverses the current data flow — currently DVI feeds *into* the VHI, this feature would have VHI intelligence feed *out to* the DVI so techs see what's due/overdue before they even start inspecting.
+
+### API Research Needed
+- **Tekmetric**: Check if `/inspections` endpoint supports POST/PUT to create or update inspection items (currently only GET is used via `getRepairOrderInspections` in `lib/integrations/tekmetric/client.ts`). If not writable via API, fall back to DOM-based injection via extension content script.
+- **AutoFlow**: Check if their API exposes any write endpoints for DVI findings. Extension already supports AutoFlow for context detection — could extend for DVI write-back.
+
+### Proposed Flow
+1. When a VHI plan is built/loaded for a vehicle on an open RO, identify overdue and due-soon items.
+2. Match those items to existing DVI template line items using service key mappings (same `SERVICE_KEY_PATTERNS` used for dedup).
+3. Pre-flag matched DVI items as needing attention (e.g., set status to "marginal" or "needs inspection").
+4. Unmatched VHI items that don't exist in the DVI template could be added as custom findings or notes.
 
 ### Key Considerations
-- **Tekmetric inspections**: Structured template with specific line items. Need to determine if Tekmetric's API allows writing to inspection line items or if this requires DOM-based injection via content script.
-- **AutoFlow DVI**: Uses their own inspection format. Extension already supports AutoFlow for context detection — could extend it for DVI injection.
-- **Matching logic**: The OEM-to-CARFAX service mappings could help match plan items to the right inspection line items using standardized service names.
+- **Write permissions**: Shops must opt in — auto-filling DVI items without consent could be disruptive.
+- **Timing**: Should trigger when the tech opens the DVI, not when the plan is built (avoid stale data).
+- **Conflict resolution**: If a DVI item is already marked "good" by the tech, VHI should not override it.
+- **Matching logic**: The existing OEM-to-CARFAX service mappings and `SERVICE_KEY_PATTERNS` provide the foundation for matching plan items to inspection line items.
 
 ---
 
