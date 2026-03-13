@@ -1143,6 +1143,28 @@ Build a mobile-friendly web page for oil sticker printing to overcome the Zink H
 
 ---
 
+## Denormalize Protractor Work Orders (Eliminate $lookup)
+
+**Priority:** Medium  
+**Status:** Planned
+
+### Overview
+Protractor work order queries currently use MongoDB `$lookup` to join vehicle and customer data from separate collections (`protractor_vehicles`, `protractor_customers`) at query time. This accounts for over 50% of detected slow operations on the `protractor_work_orders` collection per Atlas Performance Advisor. The fix is to denormalize — embed vehicle (year/make/model/VIN) and customer (name/phone) data directly on the work order document during sync, matching the pattern already used for Tekmetric work orders.
+
+### Affected Files
+- Protractor sync logic (webhook handler + daily sync cron)
+- `app/api/dashboard/data/route.ts` — `$lookup` to `protractor_vehicles` for vehicle details
+- `app/api/jobs/open-work-orders/route.ts` — `$lookup` to `protractor_vehicles`
+- `app/api/internal/prefetch-vehicles/route.ts` — `$lookup` to `protractor_vehicles`
+
+### Implementation Steps
+1. During Protractor work order sync (webhook + cron), resolve vehicle/customer data and embed it directly on the work order document (e.g., `vehicleName`, `vehicleYear`, `vehicleMake`, `vehicleModel`, `customerName`, `customerPhone`)
+2. Write a one-time backfill script to populate existing work order documents
+3. Update the three query files to read embedded fields instead of `$lookup`
+4. Remove the `$lookup` stages from all aggregation pipelines
+
+---
+
 ## Notes
 
 - Features should be discussed before implementation
