@@ -3,6 +3,7 @@
 import React from "react";
 import HealthGauge from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
+import ScoreSimulator from "./ScoreSimulator";
 
 interface LastService {
   miles: number | null;
@@ -245,6 +246,9 @@ export default function VehicleHealthReport({
             </div>
           </div>
         )}
+
+        {/* Score Simulator */}
+        <ScoreSimulator data={data} currentScore={score} />
 
         {/* Systems in Good Condition */}
         {goodSystems.length > 0 && (
