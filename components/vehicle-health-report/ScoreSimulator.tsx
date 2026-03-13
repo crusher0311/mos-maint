@@ -156,17 +156,17 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
         const hasRemainingOverdue = remainingOverdue.length > 0;
 
         const bgTint = hasRemainingOverdue
-          ? (projectedScore >= 50 ? "from-amber-50 to-yellow-50 border-amber-200"
-            : projectedScore >= 30 ? "from-orange-50 to-amber-50 border-orange-200"
+          ? (projectedScore >= 70 ? "from-amber-50 to-yellow-50 border-amber-200"
+            : projectedScore >= 60 ? "from-orange-50 to-amber-50 border-orange-200"
             : "from-red-50 to-orange-50 border-red-200")
-          : (projectedScore >= 85 ? "from-green-50 to-emerald-50 border-green-200"
-            : projectedScore >= 70 ? "from-lime-50 to-green-50 border-lime-200"
-            : projectedScore >= 50 ? "from-amber-50 to-yellow-50 border-amber-200"
-            : projectedScore >= 30 ? "from-orange-50 to-amber-50 border-orange-200"
+          : (projectedScore >= 90 ? "from-green-50 to-emerald-50 border-green-200"
+            : projectedScore >= 80 ? "from-lime-50 to-green-50 border-lime-200"
+            : projectedScore >= 70 ? "from-amber-50 to-yellow-50 border-amber-200"
+            : projectedScore >= 60 ? "from-orange-50 to-amber-50 border-orange-200"
             : "from-red-50 to-orange-50 border-red-200");
 
         const displayColor = hasRemainingOverdue
-          ? (projectedScore >= 50 ? "#f59e0b" : projectedScore >= 30 ? "#f97316" : "#ef4444")
+          ? (projectedScore >= 70 ? "#f59e0b" : projectedScore >= 60 ? "#f97316" : "#ef4444")
           : projectedInfo.color;
 
         return (

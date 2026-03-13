@@ -1208,11 +1208,11 @@ Not all services carry equal risk. Safety-critical categories should weigh more:
 #### Score Ranges
 | Range | Label | Color | Meaning |
 |-------|-------|-------|---------|
-| 85–100 | Excellent | Green | Vehicle is well-maintained |
-| 70–84 | Good | Light green | Minor items approaching |
-| 50–69 | Fair | Yellow/amber | Multiple items need attention |
-| 30–49 | Poor | Orange | Significant maintenance needed |
-| 0–29 | Critical | Red | Serious safety/reliability concerns |
+| 90–100 | Excellent | Green | Vehicle is well-maintained |
+| 80–89 | Good | Light green | Minor items approaching |
+| 70–79 | Needs Attention | Yellow/amber | Multiple items need attention |
+| 60–69 | Poor | Orange | Significant maintenance needed |
+| 0–59 | Critical | Red | Serious safety/reliability concerns — like an F grade |
 
 ### Display Locations
 - **VHI plan page (dashboard)**: Prominent score gauge at the top, alongside Y/M/M title and OE logo.

@@ -7,10 +7,10 @@ interface HealthGaugeProps {
 }
 
 function getScoreInfo(score: number) {
-  if (score >= 85) return { label: "Excellent", color: "#22c55e", description: "Your vehicle is in great shape! Keep up with regular maintenance." };
-  if (score >= 70) return { label: "Good Condition", color: "#84cc16", description: "Your vehicle is in good condition with only minor items to address." };
-  if (score >= 50) return { label: "Needs Attention", color: "#f59e0b", description: "Your vehicle is safe to drive, but needs maintenance soon to prevent larger repairs." };
-  if (score >= 30) return { label: "Poor Condition", color: "#f97316", description: "Your vehicle has significant maintenance needs. We recommend scheduling service soon." };
+  if (score >= 90) return { label: "Excellent", color: "#22c55e", description: "Your vehicle is in great shape! Keep up with regular maintenance." };
+  if (score >= 80) return { label: "Good Condition", color: "#84cc16", description: "Your vehicle is in good condition with only minor items to address." };
+  if (score >= 70) return { label: "Needs Attention", color: "#f59e0b", description: "Your vehicle is safe to drive, but needs maintenance soon to prevent larger repairs." };
+  if (score >= 60) return { label: "Poor Condition", color: "#f97316", description: "Your vehicle has significant maintenance needs. We recommend scheduling service soon." };
   return { label: "Critical", color: "#ef4444", description: "Your vehicle requires immediate attention. Several critical systems need service." };
 }
 
