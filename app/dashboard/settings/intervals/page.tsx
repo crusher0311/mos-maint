@@ -8,31 +8,38 @@ import { Settings, Wrench, RotateCcw } from "lucide-react";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Categories aligned with CARFAX service categories
 const COMMON_SERVICES = [
-  { key: "oil", name: "Oil Change / Engine Oil Filter", defaultMiles: 5000, defaultMonths: 6 },
-  { key: "tire_rotation", name: "Tire Rotation", defaultMiles: 7500, defaultMonths: 6 },
-  { key: "cabin_air", name: "Cabin Air Filter Replacement", defaultMiles: 25000, defaultMonths: 24 },
-  { key: "engine_air", name: "Air Filter Replacement", defaultMiles: 30000, defaultMonths: 36 },
-  { key: "coolant", name: "Radiator Antifreeze Flush", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "trans_auto", name: "Automatic Transmission Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "trans_manual", name: "Manual Transmission Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "transfer_case", name: "Transfer Case Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "differential", name: "Differential Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "serpentine_belt", name: "Serpentine Belt Replacement", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "fuel_system", name: "Fuel System Cleaning", defaultMiles: 30000, defaultMonths: 36 },
-  { key: "fuel_filter", name: "Fuel Filter Replacement", defaultMiles: 30000, defaultMonths: 36 },
-  { key: "brake_pads", name: "Brake Linings/Pads Replacement", defaultMiles: 40000, defaultMonths: 48 },
-  { key: "emissions", name: "Emissions Test", defaultMiles: null, defaultMonths: 24 },
-  { key: "power_steering", name: "Power Steering Fluid", defaultMiles: 60000, defaultMonths: 60 },
-  { key: "battery", name: "Battery Replacement", defaultMiles: null, defaultMonths: 48 },
-  { key: "ac_refrigerant", name: "A/C Refrigerant Refill", defaultMiles: null, defaultMonths: 36 },
-  { key: "wheel_alignment", name: "Wheel Alignment", defaultMiles: 15000, defaultMonths: 12 },
+  { key: "oil", name: "Oil Change / Engine Oil Filter", category: "Fluids & Filters", defaultMiles: 5000, defaultMonths: 6 },
+  { key: "cabin_air", name: "Cabin Air Filter Replacement", category: "Fluids & Filters", defaultMiles: 25000, defaultMonths: 24 },
+  { key: "engine_air", name: "Engine Air Filter Replacement", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "coolant", name: "Coolant / Antifreeze Service", category: "Fluids & Filters", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "brake_fluid", name: "Brake Fluid Service", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: 24 },
+  { key: "trans_auto", name: "Automatic Transmission Fluid", category: "Fluids & Filters", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "trans_manual", name: "Manual Transmission Fluid", category: "Fluids & Filters", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "transfer_case", name: "Transfer Case Fluid Service", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: null },
+  { key: "front_differential", name: "Front Differential Fluid Service", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: null },
+  { key: "rear_differential", name: "Rear Differential Fluid Service", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: null },
+  { key: "power_steering", name: "Power Steering Fluid", category: "Fluids & Filters", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "fuel_filter", name: "Fuel Filter Replacement", category: "Fluids & Filters", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "spark_plugs", name: "Spark Plugs Replacement", category: "Engine", defaultMiles: 60000, defaultMonths: null },
+  { key: "serpentine_belt", name: "Serpentine / Drive Belt Replacement", category: "Engine", defaultMiles: 60000, defaultMonths: 60 },
+  { key: "timing_belt", name: "Timing Belt Replacement", category: "Engine", defaultMiles: 90000, defaultMonths: null },
+  { key: "fuel_system", name: "Fuel System / Injection Cleaning", category: "Engine", defaultMiles: 30000, defaultMonths: 36 },
+  { key: "brake_pads", name: "Brake Pads / Linings Replacement", category: "Brakes & Suspension", defaultMiles: 40000, defaultMonths: 48 },
+  { key: "front_shocks", name: "Front Shocks / Struts Replacement", category: "Brakes & Suspension", defaultMiles: 100000, defaultMonths: null },
+  { key: "rear_shocks", name: "Rear Shocks / Struts Replacement", category: "Brakes & Suspension", defaultMiles: 100000, defaultMonths: null },
+  { key: "tire_rotation", name: "Tire Rotation", category: "Tires & Wheels", defaultMiles: 7500, defaultMonths: 6 },
+  { key: "wheel_alignment", name: "Wheel Alignment", category: "Tires & Wheels", defaultMiles: 15000, defaultMonths: 12 },
+  { key: "battery", name: "Battery Replacement", category: "Electrical", defaultMiles: null, defaultMonths: 60 },
+  { key: "wiper_blades", name: "Wiper Blades Replacement", category: "Electrical", defaultMiles: null, defaultMonths: 12 },
+  { key: "ac_refrigerant", name: "A/C Refrigerant / Service", category: "Climate", defaultMiles: null, defaultMonths: 36 },
+  { key: "emissions", name: "Emissions Test", category: "Compliance", defaultMiles: null, defaultMonths: 24 },
 ];
 
 export type ShopInterval = {
   key: string;
   name: string;
+  category: string;
   useShop: boolean;
   excluded: boolean;
   miles: number | null;
@@ -53,6 +60,7 @@ async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
   return COMMON_SERVICES.map(svc => ({
     key: svc.key,
     name: svc.name,
+    category: svc.category,
     useShop: saved[svc.key]?.useShop ?? false,
     excluded: saved[svc.key]?.excluded ?? false,
     miles: saved[svc.key]?.miles ?? null,

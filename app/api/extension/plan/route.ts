@@ -36,25 +36,32 @@ function formatIntervalText(intervalMiles: number, intervalMonths?: number): str
   return parts.join(' / ') || '';
 }
 
-// Map OEM service names to shop interval keys
 const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
-  oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i],
+  oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i, /synthetic oil/i],
   tire_rotation: [/tire rotation/i, /rotate tire/i],
-  cabin_air: [/cabin air/i, /cabin filter/i],
-  engine_air: [/air filter/i, /engine air/i],
+  cabin_air: [/cabin air/i, /cabin filter/i, /pollen filter/i, /interior air filter/i],
+  engine_air: [/\bair filter\b/i, /engine air/i, /air cleaner/i],
   coolant: [/coolant/i, /antifreeze/i, /radiator flush/i],
-  trans_auto: [/automatic trans/i, /atf/i, /auto trans/i],
-  trans_manual: [/manual trans/i, /mtf/i],
+  brake_fluid: [/brake fluid/i],
+  trans_auto: [/automatic trans/i, /\batf\b/i, /auto trans/i, /transmission fluid/i],
+  trans_manual: [/manual trans/i, /\bmtf\b/i],
   transfer_case: [/transfer case/i],
-  differential: [/differential/i],
-  serpentine_belt: [/serpentine/i, /drive belt/i],
-  fuel_system: [/fuel system/i, /fuel injection/i, /injector clean/i],
-  fuel_filter: [/fuel filter/i],
-  brake_pads: [/brake pad/i, /brake lining/i, /brake shoe/i],
+  front_differential: [/front differential/i],
+  rear_differential: [/rear differential/i],
   power_steering: [/power steering/i],
-  battery: [/battery/i],
-  ac_refrigerant: [/a\/c/i, /refrigerant/i, /ac refr/i],
+  fuel_filter: [/fuel filter/i],
+  spark_plugs: [/spark plug/i, /ignition plug/i],
+  serpentine_belt: [/serpentine/i, /drive belt/i, /accessory belt/i, /v-belt/i],
+  timing_belt: [/timing belt/i, /timing chain/i, /cam belt/i],
+  fuel_system: [/fuel system/i, /fuel injection/i, /injector clean/i],
+  brake_pads: [/brake pad/i, /brake lining/i, /brake shoe/i],
+  front_shocks: [/front shock/i, /front strut/i],
+  rear_shocks: [/rear shock/i, /rear strut/i],
   wheel_alignment: [/wheel alignment/i, /alignment/i, /front end align/i, /4 wheel align/i],
+  battery: [/battery replace/i, /battery service/i, /\bbattery\b/i],
+  wiper_blades: [/wiper blade/i, /windshield wiper/i, /wiper replace/i, /wiper insert/i],
+  ac_refrigerant: [/a\/c/i, /refrigerant/i, /ac refr/i, /air condition/i],
+  emissions: [/emissions/i, /smog/i],
 };
 
 function mapServiceToKey(serviceName: string): string | null {
@@ -63,6 +70,12 @@ function mapServiceToKey(serviceName: string): string | null {
     if (patterns.some(p => p.test(name))) {
       return key;
     }
+  }
+  if (/\bdifferential\b/i.test(name) && !/front/i.test(name) && !/rear/i.test(name)) return "rear_differential";
+  if (/\b(shock|strut)\b/i.test(name)) {
+    if (/front/i.test(name)) return "front_shocks";
+    if (/rear/i.test(name)) return "rear_shocks";
+    return "front_shocks";
   }
   return null;
 }
@@ -612,8 +625,19 @@ export async function GET(request: NextRequest) {
     // Get shop preferences - showInspectItems defaults to true if not set
     const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
     
-    // Get shop maintenance intervals
-    const shopIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
+    const rawIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
+    const LEGACY_KEY_MAP: Record<string, string[]> = {
+      differential: ["front_differential", "rear_differential"],
+      alignment: ["wheel_alignment"],
+    };
+    const shopIntervals: ShopIntervals = { ...rawIntervals };
+    for (const [oldKey, newKeys] of Object.entries(LEGACY_KEY_MAP)) {
+      if (shopIntervals[oldKey]) {
+        for (const nk of newKeys) {
+          if (!shopIntervals[nk]) shopIntervals[nk] = shopIntervals[oldKey];
+        }
+      }
+    }
 
     let vehicle = null;
     let mileage = null;

@@ -31,7 +31,7 @@ const SERVICE_KEYS: Record<string, string[]> = {
   oil: [
     "oil and filter", "engine oil", "oil change", "replace engine oil", 
     "oil filter", "replace oil filter", "change oil", "motor oil",
-    "crankcase oil", "oil & filter"
+    "crankcase oil", "oil & filter", "synthetic oil"
   ],
   tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels"],
   cabin_air: ["cabin air filter", "cabin filter", "pollen filter", "hvac filter", "interior air filter"],
@@ -44,6 +44,10 @@ const SERVICE_KEYS: Record<string, string[]> = {
     "antifreeze", "radiator flush", "drain and fill coolant", "coolant service",
     "bg coolant", "cooling system service"
   ],
+  brake_fluid: [
+    "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush", 
+    "brake fluid service", "brake fluid change", "brake fluid flush"
+  ],
   trans_auto: [
     "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
     "transmission service", "transmission flush", "bg automatic transmission",
@@ -51,34 +55,41 @@ const SERVICE_KEYS: Record<string, string[]> = {
   ],
   trans_manual: ["manual transmission fluid", "manual trans fluid", "mtf fluid"],
   transfer_case: ["transfer case fluid", "transfer case flush", "transfer case oil"],
-  differential: [
-    "differential fluid", "differential flush", "rear differential", 
-    "front differential", "rear axle fluid", "front axle fluid",
-    "bg differential", "diff service", "differential service", "gear oil"
+  front_differential: [
+    "front differential", "front axle fluid", "front diff",
+    "front differential fluid", "front differential service"
   ],
+  rear_differential: [
+    "rear differential", "rear axle fluid", "rear diff",
+    "rear differential fluid", "rear differential service", "gear oil"
+  ],
+  power_steering: ["power steering fluid", "power steering flush", "power steering service"],
+  fuel_filter: ["fuel filter"],
+  spark_plugs: ["spark plug", "spark plugs", "ignition tune", "tune-up", "tune up"],
   serpentine_belt: ["serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt"],
+  timing_belt: ["timing belt", "timing chain", "cam belt", "replace timing belt"],
   fuel_system: [
     "fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction",
     "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning"
   ],
-  fuel_filter: ["fuel filter"],
   brake_pads: [
     "brake pads", "brake linings", "brake rotor", "brake pads replaced", 
     "brake lining", "disc brake", "front brakes", "rear brakes", "brake shoes"
   ],
-  brake_fluid: [
-    "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush", 
-    "brake fluid service", "brake fluid change", "brake fluid flush"
-  ],
-  spark_plugs: ["spark plug", "spark plugs", "ignition tune", "tune-up", "tune up"],
-  alignment: ["wheel alignment", "alignment", "all wheel alignment", "front alignment", "rear alignment"],
-  emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
-  power_steering: ["power steering fluid", "power steering flush", "power steering service"],
+  front_shocks: ["front shock", "front strut", "front shocks", "front struts"],
+  rear_shocks: ["rear shock", "rear strut", "rear shocks", "rear struts"],
+  wheel_alignment: ["wheel alignment", "alignment", "all wheel alignment", "front alignment", "rear alignment"],
   battery: ["battery replaced", "battery replacement", "battery/charging", "replace battery", "new battery"],
+  wiper_blades: [
+    "wiper blade", "windshield wiper", "wiper replace", "wiper insert",
+    "replace wiper", "wiper blades"
+  ],
   ac_refrigerant: [
     "a/c refrigerant", "ac refrigerant", "air conditioning refill", 
-    "a/c recharge", "ac recharge", "refrigerant", "r-134a", "r134a"
+    "a/c recharge", "ac recharge", "refrigerant", "r-134a", "r134a",
+    "a/c service", "ac service", "air conditioning service"
   ],
+  emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
 };
 
 const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
@@ -86,19 +97,27 @@ const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   tire_rotation: "Tire Rotation",
   cabin_air: "Cabin Air Filter",
   engine_air: "Engine Air Filter",
-  coolant: "Coolant Flush",
+  coolant: "Coolant Service",
+  brake_fluid: "Brake Fluid Service",
   trans_auto: "Automatic Transmission Fluid",
   trans_manual: "Manual Transmission Fluid",
   transfer_case: "Transfer Case Fluid",
-  differential: "Differential Fluid",
-  serpentine_belt: "Serpentine Belt",
-  fuel_system: "Fuel System Cleaning",
-  fuel_filter: "Fuel Filter",
-  brake_pads: "Brake Pads",
-  emissions: "Emissions Inspection",
+  front_differential: "Front Differential Fluid",
+  rear_differential: "Rear Differential Fluid",
   power_steering: "Power Steering Fluid",
+  fuel_filter: "Fuel Filter",
+  spark_plugs: "Spark Plugs",
+  serpentine_belt: "Serpentine Belt",
+  timing_belt: "Timing Belt",
+  fuel_system: "Fuel System Cleaning",
+  brake_pads: "Brake Pads",
+  front_shocks: "Front Shocks / Struts",
+  rear_shocks: "Rear Shocks / Struts",
+  wheel_alignment: "Wheel Alignment",
   battery: "Battery",
-  ac_refrigerant: "A/C Refrigerant",
+  wiper_blades: "Wiper Blades",
+  ac_refrigerant: "A/C Service",
+  emissions: "Emissions Inspection",
 };
 
 function toKeyFromName(name: string): string | null {
@@ -110,6 +129,12 @@ function toKeyFromName(name: string): string | null {
   if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
   if (n.includes("exhaust system")) return "exhaust";
   if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
+  if (n.includes("differential") && !n.includes("front") && !n.includes("rear")) return "rear_differential";
+  if (n.includes("shock") || n.includes("strut")) {
+    if (n.includes("front")) return "front_shocks";
+    if (n.includes("rear")) return "rear_shocks";
+    return "front_shocks";
+  }
   return null;
 }
 
@@ -672,7 +697,19 @@ export async function POST(req: NextRequest) {
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
     const distanceUnit = (shopDoc?.settings?.distanceUnit ?? "miles") as "miles" | "kilometers";
-    const shopIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
+    const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
+    const LEGACY_KEY_MAP: Record<string, string[]> = {
+      differential: ["front_differential", "rear_differential"],
+      alignment: ["wheel_alignment"],
+    };
+    const shopIntervals: Record<string, ShopIntervalOverride> = { ...rawIntervals };
+    for (const [oldKey, newKeys] of Object.entries(LEGACY_KEY_MAP)) {
+      if (shopIntervals[oldKey]) {
+        for (const nk of newKeys) {
+          if (!shopIntervals[nk]) shopIntervals[nk] = shopIntervals[oldKey];
+        }
+      }
+    }
 
     const vinUpper = vin.toUpperCase();
     const vinRegex = new RegExp(`^${vinUpper}$`, 'i');

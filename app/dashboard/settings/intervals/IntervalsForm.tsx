@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Wrench, Save, Check } from "lucide-react";
 import type { ShopInterval } from "./page";
 
@@ -68,9 +68,25 @@ export default function IntervalsForm({ intervals, distanceUnit, saveAction }: P
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {intervals.map((svc) => (
-                <IntervalRow key={svc.key} interval={svc} distanceUnit={distanceUnit} distanceAbbr={distanceAbbr} />
-              ))}
+              {(() => {
+                let lastCategory = "";
+                return intervals.map((svc) => {
+                  const showHeader = svc.category !== lastCategory;
+                  lastCategory = svc.category;
+                  return (
+                    <Fragment key={svc.key}>
+                      {showHeader && (
+                        <tr className="bg-gray-50">
+                          <td colSpan={5} className="px-4 py-2">
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{svc.category}</span>
+                          </td>
+                        </tr>
+                      )}
+                      <IntervalRow interval={svc} distanceUnit={distanceUnit} distanceAbbr={distanceAbbr} />
+                    </Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
