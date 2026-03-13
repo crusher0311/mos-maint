@@ -15,6 +15,8 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
+import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
+import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -353,7 +355,7 @@ interface TriagedItem {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor";
-  dviSource?: "autoflow" | "autovitals";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
@@ -445,14 +447,22 @@ function triage({
     }
   }
 
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" }>();
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric" }>();
+  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric" }> = [];
   for (const it of dviFindings || []) {
-    const key = it?.name ? toKeyFromName(String(it.name)) : null;
-    if (!key) continue;
+    const rawName = String(it.name || "");
+    if (!rawName) continue;
+    const key = toKeyFromName(rawName);
     const s = String(it.status ?? "");
-    const dviSource = (it.source === "autovitals" ? "autovitals" : "autoflow") as "autoflow" | "autovitals";
-    if (s === "0") dviMap.set(key, { status: "red", name: String(it.name), dviSource });
-    else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name), dviSource });
+    const dviSource = (it.source === "autovitals" ? "autovitals" : it.source === "tekmetric" ? "tekmetric" : "autoflow") as "autoflow" | "autovitals" | "tekmetric";
+    const mappedStatus = s === "0" ? "red" : s === "1" ? "yellow" : null;
+    if (!mappedStatus) continue;
+    if (key) {
+      if (mappedStatus === "red") dviMap.set(key, { status: "red", name: rawName, dviSource });
+      else if (dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: rawName, dviSource });
+    } else {
+      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource });
+    }
   }
 
   const declinedMap = new Map<string, DeclinedServiceEntry>();
@@ -574,6 +584,26 @@ function triage({
     });
   }
 
+  for (const unmapped of unmappedDviFindings) {
+    const safeKey = `dvi_unmapped_${unmapped.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
+    triaged.push({
+      key: safeKey,
+      serviceKey: safeKey,
+      title: unmapped.name,
+      category: "DVI Finding",
+      intervalMiles: null,
+      intervalMonths: null,
+      last: undefined,
+      dueAtMiles: null,
+      dueAtDate: null,
+      milesToGo: null,
+      daysToGo: null,
+      bump: unmapped.status,
+      source: "dvi",
+      dviSource: unmapped.dviSource,
+    });
+  }
+
   for (const dw of protractorDeferredWork || []) {
     const title = dw.Title || dw.ServicePackageHeader?.Title || dw.Code || dw.Description || dw.ServicePackageHeader?.Description || "Deferred Service";
     const normalizedTitle = title.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -629,7 +659,12 @@ function triage({
     return title.includes("inspect") || title.startsWith("check ");
   };
 
+  const hasDviBump = (item: TriagedItem) => item.bump === "red" || item.bump === "yellow";
+
   overdue.sort((a, b) => {
+    const aDvi = hasDviBump(a) ? 0 : 1;
+    const bDvi = hasDviBump(b) ? 0 : 1;
+    if (aDvi !== bDvi) return aDvi - bDvi;
     const aInspect = isInspectItem(a) ? 1 : 0;
     const bInspect = isInspectItem(b) ? 1 : 0;
     if (aInspect !== bInspect) return aInspect - bInspect;
@@ -639,6 +674,9 @@ function triage({
   });
   
   dueSoon.sort((a, b) => {
+    const aDvi = hasDviBump(a) ? 0 : 1;
+    const bDvi = hasDviBump(b) ? 0 : 1;
+    if (aDvi !== bDvi) return aDvi - bDvi;
     const aInspect = isInspectItem(a) ? 1 : 0;
     const bInspect = isInspectItem(b) ? 1 : 0;
     if (aInspect !== bInspect) return aInspect - bInspect;
@@ -836,7 +874,32 @@ export async function POST(req: NextRequest) {
         }));
     }
 
-    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings];
+    let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+    if (isTekmetricConfigured() && tekmetricWOs.length > 0) {
+      const latestTekRo = tekmetricWOs.find(wo => wo.dviDone) || tekmetricWOs[0];
+      const tekRoId = latestTekRo?.workOrderId ? Number(latestTekRo.workOrderId) : null;
+      if (tekRoId) {
+        try {
+          const inspections = await getRepairOrderInspections(tekRoId);
+          for (const inspection of inspections) {
+            for (const item of inspection.items || []) {
+              if (item.status === "bad") {
+                tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+              } else if (item.status === "marginal") {
+                tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+              }
+            }
+          }
+          if (tekmetricDviFindings.length > 0) {
+            console.log(`[PlanBuild] Tekmetric DVI: ${tekmetricDviFindings.length} findings from RO ${tekRoId}`);
+          }
+        } catch (err: any) {
+          console.warn(`[PlanBuild] Tekmetric DVI fetch failed for RO ${tekRoId}:`, err.message);
+        }
+      }
+    }
+
+    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings];
 
     let protractorDeferredWork: ProtractorDeferredWork[] = [];
     if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {

@@ -24,6 +24,8 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
+import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
+import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 import { AddToROButton } from "@/components/ui/AddToROButton";
 import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
@@ -571,7 +573,7 @@ type TriagedItem = {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor";
-  dviSource?: "autoflow" | "autovitals";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
@@ -707,14 +709,22 @@ function triage({
   }
 
   // DVI bumps - track which items we've seen (from AutoFlow or AutoVitals)
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" }>();
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric" }>();
+  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric" }> = [];
   for (const it of dviFindings || []) {
-    const key = it?.name ? toKeyFromName(String(it.name)) : null;
-    if (!key) continue;
+    const rawName = String(it.name || "");
+    if (!rawName) continue;
+    const key = toKeyFromName(rawName);
     const s = String(it.status ?? "");
-    const dviSource = (it.source === "autovitals" ? "autovitals" : "autoflow") as "autoflow" | "autovitals";
-    if (s === "0") dviMap.set(key, { status: "red", name: String(it.name), dviSource });
-    else if (s === "1" && dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: String(it.name), dviSource });
+    const dviSource = (it.source === "autovitals" ? "autovitals" : it.source === "tekmetric" ? "tekmetric" : "autoflow") as "autoflow" | "autovitals" | "tekmetric";
+    const mappedStatus = s === "0" ? "red" : s === "1" ? "yellow" : null;
+    if (!mappedStatus) continue;
+    if (key) {
+      if (mappedStatus === "red") dviMap.set(key, { status: "red", name: rawName, dviSource });
+      else if (dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: rawName, dviSource });
+    } else {
+      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource });
+    }
   }
 
   // Declined services map - key is the serviceKey
@@ -878,6 +888,26 @@ function triage({
     });
   }
 
+  for (const unmapped of unmappedDviFindings) {
+    const safeKey = `dvi_unmapped_${unmapped.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
+    triaged.push({
+      key: safeKey,
+      serviceKey: safeKey,
+      title: unmapped.name,
+      category: "DVI Finding",
+      intervalMiles: null,
+      intervalMonths: null,
+      last: undefined,
+      dueAtMiles: null,
+      dueAtDate: null,
+      milesToGo: null,
+      daysToGo: null,
+      bump: unmapped.status,
+      source: "dvi",
+      dviSource: unmapped.dviSource,
+    });
+  }
+
   // Add Protractor deferred work (shop recommendations)
   // These are services that were recommended but not performed - they're already overdue
   // seenDeferredTitles was already built above for OEM matching - reuse it here
@@ -961,22 +991,29 @@ function triage({
     return title.includes("inspect") || title.startsWith("check ");
   };
 
-  // sort within buckets - put "Inspect" items after actionable items
+  const hasDviBump = (item: TriagedItem) => item.bump === "red" || item.bump === "yellow";
+
   overdue.sort((a, b) => {
+    const aDvi = hasDviBump(a) ? 0 : 1;
+    const bDvi = hasDviBump(b) ? 0 : 1;
+    if (aDvi !== bDvi) return aDvi - bDvi;
     const aInspect = isInspectItem(a) ? 1 : 0;
     const bInspect = isInspectItem(b) ? 1 : 0;
-    if (aInspect !== bInspect) return aInspect - bInspect; // Non-inspect first
+    if (aInspect !== bInspect) return aInspect - bInspect;
     const aBehind = (a.milesToGo ?? 0) < 0 ? -(a.milesToGo ?? 0) : 0;
     const bBehind = (b.milesToGo ?? 0) < 0 ? -(b.milesToGo ?? 0) : 0;
-    return bBehind - aBehind; // most overdue first
+    return bBehind - aBehind;
   });
   dueSoon.sort((a, b) => {
+    const aDvi = hasDviBump(a) ? 0 : 1;
+    const bDvi = hasDviBump(b) ? 0 : 1;
+    if (aDvi !== bDvi) return aDvi - bDvi;
     const aInspect = isInspectItem(a) ? 1 : 0;
     const bInspect = isInspectItem(b) ? 1 : 0;
-    if (aInspect !== bInspect) return aInspect - bInspect; // Non-inspect first
+    if (aInspect !== bInspect) return aInspect - bInspect;
     const aLeft = a.milesToGo ?? Infinity;
     const bLeft = b.milesToGo ?? Infinity;
-    return aLeft - bLeft; // closest first
+    return aLeft - bLeft;
   });
   upcoming.sort((a, b) => {
     const aInspect = isInspectItem(a) ? 1 : 0;
@@ -1579,10 +1616,31 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
   }
 
-  // Merge DVI findings from both sources (AutoFlow and AutoVitals)
+  let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+  if (activeIntegration === "tekmetric" && latestRepairOrderId && isTekmetricConfigured()) {
+    try {
+      const inspections = await getRepairOrderInspections(Number(latestRepairOrderId));
+      for (const inspection of inspections) {
+        for (const item of inspection.items || []) {
+          if (item.status === "bad") {
+            tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+          } else if (item.status === "marginal") {
+            tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+          }
+        }
+      }
+      if (tekmetricDviFindings.length > 0) {
+        console.log(`[Plan Debug] Tekmetric DVI items: ${tekmetricDviFindings.length} from RO ${latestRepairOrderId}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Plan Debug] Tekmetric DVI fetch failed:`, err.message);
+    }
+  }
+
   const dviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [
     ...autoflowDviFindings,
-    ...autoVitalsDviFindings
+    ...autoVitalsDviFindings,
+    ...tekmetricDviFindings,
   ];
 
   const oemItems: OEMItem[] = (oemData.items as any[]).map((x) => ({
@@ -2032,8 +2090,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           </span>
                         )}
                         {t.bump === "red" && t.source !== "protractor" && (
-                          <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : "bg-red-600"}`}>
-                            {t.dviSource === "autovitals" ? "AutoVitals 🔴" : "DVI 🔴"}
+                          <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : t.dviSource === "tekmetric" ? "bg-orange-600" : "bg-red-600"}`}>
+                            {t.dviSource === "autovitals" ? "AutoVitals 🔴" : t.dviSource === "tekmetric" ? "Tekmetric DVI 🔴" : "DVI 🔴"}
                           </span>
                         )}
                         {t.source === "protractor" && (
@@ -2278,8 +2336,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       </span>
                     )}
                     {t.bump === "yellow" && t.source !== "protractor" && (
-                      <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : "bg-amber-600"}`}>
-                        {t.dviSource === "autovitals" ? "AutoVitals 🟡" : "DVI 🟡"}
+                      <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : t.dviSource === "tekmetric" ? "bg-orange-500" : "bg-amber-600"}`}>
+                        {t.dviSource === "autovitals" ? "AutoVitals 🟡" : t.dviSource === "tekmetric" ? "Tekmetric DVI 🟡" : "DVI 🟡"}
                       </span>
                     )}
                     {t.source === "protractor" && (

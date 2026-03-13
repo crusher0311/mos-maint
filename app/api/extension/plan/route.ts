@@ -5,6 +5,8 @@ import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } 
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
+import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -376,7 +378,8 @@ async function runOnDemandAnalysis(
   showInspectItems: boolean = true,
   shopIntervals: ShopIntervals = {},
   carfaxRecords: any[] | null = null,
-  prefetched?: PrefetchedData
+  prefetched?: PrefetchedData,
+  dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>
 ) {
   const db = await getDb();
   
@@ -547,6 +550,83 @@ async function runOnDemandAnalysis(
     console.warn('[Extension] OEM data fetch failed:', e);
   }
 
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource: string }>();
+  const unmappedDvi: Array<{ status: "red" | "yellow"; name: string; dviSource: string }> = [];
+  if (dviFindings && dviFindings.length > 0) {
+    for (const it of dviFindings) {
+      const rawName = String(it.name || "");
+      if (!rawName) continue;
+      const key = mapServiceToKey(rawName);
+      const s = String(it.status ?? "");
+      const src = it.source || "tekmetric";
+      const mappedStatus = s === "0" ? "red" as const : s === "1" ? "yellow" as const : null;
+      if (!mappedStatus) continue;
+      if (key) {
+        if (mappedStatus === "red") dviMap.set(key, { status: "red", name: rawName, dviSource: src });
+        else if (dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: rawName, dviSource: src });
+      } else {
+        unmappedDvi.push({ status: mappedStatus, name: rawName, dviSource: src });
+      }
+    }
+
+    const usedDviKeys = new Set<string>();
+    for (const rec of recommendations) {
+      const recKey = mapServiceToKey(rec.service || "");
+      if (recKey && dviMap.has(recKey)) {
+        const dvi = dviMap.get(recKey)!;
+        usedDviKeys.add(recKey);
+        rec.bump = dvi.status;
+        rec.dviSource = dvi.dviSource;
+        if (dvi.status === "red") {
+          rec.status = "overdue";
+        } else if (dvi.status === "yellow" && rec.status !== "overdue") {
+          rec.status = "due_soon";
+        }
+      }
+    }
+
+    for (const [dviKey, dvi] of dviMap) {
+      if (usedDviKeys.has(dviKey)) continue;
+      recommendations.push({
+        service: dvi.name,
+        category: "DVI Finding",
+        dueMileage: 0,
+        interval: 0,
+        intervalMonths: null,
+        intervalText: "",
+        intervalSource: "dvi",
+        lastPerformedBy: null,
+        lastPerformedMileage: null,
+        last: null,
+        milesToGo: 0,
+        source: "dvi",
+        status: dvi.status === "red" ? "overdue" : "due_soon",
+        bump: dvi.status,
+        dviSource: dvi.dviSource,
+      });
+    }
+    for (const unmapped of unmappedDvi) {
+      recommendations.push({
+        service: unmapped.name,
+        category: "DVI Finding",
+        dueMileage: 0,
+        interval: 0,
+        intervalMonths: null,
+        intervalText: "",
+        intervalSource: "dvi",
+        lastPerformedBy: null,
+        lastPerformedMileage: null,
+        last: null,
+        milesToGo: 0,
+        source: "dvi",
+        status: unmapped.status === "red" ? "overdue" : "due_soon",
+        bump: unmapped.status,
+        dviSource: unmapped.dviSource,
+      });
+    }
+    console.log(`[Extension] DVI applied: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched to OEM, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
+  }
+
   // Deduplicate recommendations by service name
   const uniqueRecs = recommendations.reduce((acc: any[], rec) => {
     const exists = acc.find(r => r.service?.toLowerCase() === rec.service?.toLowerCase());
@@ -554,11 +634,14 @@ async function runOnDemandAnalysis(
     return acc;
   }, []);
 
-  // Sort: overdue first (most overdue), then due_soon, then upcoming
+  const hasBump = (r: any) => r.bump === "red" || r.bump === "yellow";
   uniqueRecs.sort((a, b) => {
     const statusOrder: Record<string, number> = { overdue: 0, due_soon: 1, upcoming: 2 };
     const orderDiff = (statusOrder[a.status] ?? 2) - (statusOrder[b.status] ?? 2);
     if (orderDiff !== 0) return orderDiff;
+    const aDvi = hasBump(a) ? 0 : 1;
+    const bDvi = hasBump(b) ? 0 : 1;
+    if (aDvi !== bDvi) return aDvi - bDvi;
     return (a.milesToGo ?? Infinity) - (b.milesToGo ?? Infinity);
   });
 
@@ -1011,7 +1094,8 @@ export async function GET(request: NextRequest) {
         lastPerformedMileage: item.last?.miles || null,
         source: item.source || 'oem',
         serviceKey: item.serviceKey,
-        bump: item.bump,
+        bump: item.bump || null,
+        dviSource: item.dviSource || null,
         usingShopInterval: item.usingShopInterval,
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
@@ -1150,9 +1234,31 @@ export async function GET(request: NextRequest) {
           console.log(`[Extension] CARFAX: ${carfaxRecords.length} service records`);
         }
         
+        let tekDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+        if (provider === "tekmetric" && roId && isTekmetricConfigured()) {
+          try {
+            const inspections = await getRepairOrderInspections(Number(roId));
+            for (const inspection of inspections) {
+              for (const item of inspection.items || []) {
+                if (item.status === "bad") {
+                  tekDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+                } else if (item.status === "marginal") {
+                  tekDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+                }
+              }
+            }
+            if (tekDviFindings.length > 0) {
+              console.log(`[Extension] Tekmetric DVI: ${tekDviFindings.length} findings from RO ${roId}`);
+            }
+          } catch (err: any) {
+            console.warn(`[Extension] Tekmetric DVI fetch failed:`, err.message);
+          }
+        }
+
         const recommendations = await runOnDemandAnalysis(
           mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
-          { oemResult, shopWorkOrders }
+          { oemResult, shopWorkOrders },
+          tekDviFindings.length > 0 ? tekDviFindings : undefined
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
@@ -1234,7 +1340,9 @@ export async function GET(request: NextRequest) {
           laborHours: matchingCannedJob?.laborLines?.reduce((sum: number, l: any) => sum + (l.hours || 0), 0) || rec.laborHours || 1,
           amount: matchingCannedJob?.totalAmount || 0,
           cannedJobId: matchingCannedJob?._id?.toString() || null,
-          reason: rec.reason
+          reason: rec.reason,
+          bump: rec.bump || null,
+          dviSource: rec.dviSource || null,
         };
 
         if (rec.status === "overdue" || rec.isOverdue) {
