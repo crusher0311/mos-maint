@@ -657,6 +657,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       carfaxCfg={{ configured: carfaxCfg.configured }}
       tekmetricConnected={tekmetricConnected}
       protractorConnected={protractorCfg.configured}
+      shopId={String(shopId)}
     />
   );
 }

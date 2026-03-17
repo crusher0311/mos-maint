@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import crypto from "crypto";
 
 const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
@@ -61,13 +62,17 @@ export async function GET(
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const cachedPlan = await db.collection("plan_cache").findOne({
-      vin,
-      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
-    });
+    const cachedPlan = await db.collection("cached_plans").findOne(
+      {
+        vin,
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        expiresAt: { $gt: new Date() },
+      },
+      { sort: { createdAt: -1 } }
+    );
 
     if (!cachedPlan?.plan) {
-      return NextResponse.json({ error: "No plan found for this vehicle" }, { status: 404 });
+      return NextResponse.json({ error: "No plan found for this vehicle. Visit the Vehicle Health Indicator page first to generate a plan." }, { status: 404 });
     }
 
     const plan = cachedPlan.plan;
@@ -76,7 +81,7 @@ export async function GET(
       plan: {
         vehicle: plan.vehicle || {},
         vin,
-        currentMiles: plan.currentMiles || 0,
+        currentMiles: plan.currentMiles || cachedPlan.mileage || 0,
         customerName: plan.customerName || "Vehicle Owner",
         buckets: {
           overdue: plan.overdue || [],
@@ -98,9 +103,13 @@ export async function POST(
   { params }: { params: { vin: string } }
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const vin = params.vin?.toUpperCase();
-    const body = await req.json();
-    const { shopId } = body;
+    const shopId = session.shopId;
 
     if (!vin || !shopId) {
       return NextResponse.json({ error: "Missing vin or shopId" }, { status: 400 });
