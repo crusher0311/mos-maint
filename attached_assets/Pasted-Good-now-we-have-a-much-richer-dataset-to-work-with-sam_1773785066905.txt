@@ -1,0 +1,21 @@
+Good, now we have a much richer dataset to work with — same vehicle (2005 Honda CR-V, ~113-114K miles, RO #144127), all three outputs side by side.
+Here's the full breakdown:
+Detect Auto vs Detect Dog — key gaps:
+Detect Auto completely misses several critical items that Detect Dog flags as overdue: lube of all hinges/locks/latches, automatic transmission fluid (83K+ mi overdue), engine coolant (53K+ mi overdue), rear differential fluid, and brake fluid. These are the highest-urgency, highest-ticket items on the vehicle. Detect Auto only shows the upcoming oil change and filter-related items, which are the lowest-urgency things on the list.
+Detect Auto also splits engine oil and engine oil filter into separate line items with different OEM intervals (5K/6mo vs 10K/12mo), which is technically accurate for this vehicle but could confuse an advisor into thinking these are separate conversations. Detect Dog treats them together, which is cleaner for the service counter.
+The Detect Auto "upcoming" list is essentially just maintenance calendar items with CARFAX verification — it's useful but surface-level. Detect Dog is surfacing the actual deferred maintenance crisis on this vehicle.
+What the VHI report adds on top of Detect Dog:
+The HEART VHI report (the PDF) takes everything Detect Dog surfaces and translates it into a customer-facing document. The 38/100 "Critical" score is the key differentiator — it creates urgency before the advisor even opens their mouth. The "What if you repair today?" scoring mechanic is a strong upsell hook because it makes the customer an active participant in improving their own score. The report also organizes by NOW / NEXT 3 MO / LATER, which mirrors exactly how a good advisor should structure the conversation.
+The PDF also correctly identifies the serpentine belt and brake fluid, which appear in Detect Dog but are easy to lose in a long overdue list.
+Bottom line on competitive positioning:
+Detect Auto is showing the advisor what's due on paper. Detect Dog is showing the advisor what the vehicle actually needs. The VHI report is showing the customer why they should care. That's a three-layer stack that Detect Auto can't replicate with just a scheduled maintenance calendar.
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+VvisualizeVvisualize show_widgetA few things worth flagging from this deeper look:
+The VHI report gap with Detect Dog. The PDF doesn't include coolant hoses, shocks/struts, wipers, or power steering fluid — all of which Detect Dog is flagging as overdue. That's worth a conversation about whether those items should flow into the VHI report or whether there's a deliberate editorial decision to keep it focused on the highest-certainty items. If Detect Dog is your data engine, the report output should arguably reflect everything it surfaces, not a subset.
+Detect Auto's CARFAX integration is its only real edge. It's showing verified last-done dates with the CARFAX badge, which adds credibility for items it does show. That's a trust signal worth noting. But it's showing the right data for the wrong items — verified history on the low-urgency stuff, silence on the high-urgency stuff.
+The 38/100 score is your moat. Neither Detect Auto nor Detect Dog alone gives the customer a number they can internalize. The VHI score is the hook that makes everything else land. That "what if you repair today?" mechanic tied to a live score improvement is a genuinely strong piece of product thinking — it turns a deferred maintenance list into a game the customer wants to win.
