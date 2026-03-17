@@ -29,6 +29,8 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Work Order Creation**: A multi-step wizard for creating Protractor work orders from the dashboard, integrating the Customer Concern Assistant, AI-scored job search, and forms for new customer/vehicle creation with VIN/license plate photo recognition.
 *   **User Preferences**: Shops can select preferred distance units (miles/kilometers).
 *   **Vehicle Health Report (VHR)**: A customer-facing, mobile-friendly shareable report page at `/report/[vin]`. Displays a health score gauge (0–100), overdue items with detail cards, "Systems in Good Condition" section, service timeline (NOW / NEXT 3 MO / LATER), and due-soon detail cards. Share links are generated via POST to `/api/report/[vin]` with signed, expiring tokens (7-day TTL, HMAC-SHA256). Demo page at `/report/demo`. Components in `components/vehicle-health-report/`.
+*   **VHI API Endpoint**: `GET /api/vehicles/[vin]/vhi` returns Vehicle Health Indicator data as JSON — health score (0–100 with tier label), vehicle info, and bucketed maintenance items (overdue/dueSoon/upcoming). Reads from cached plan data. Session-authenticated.
+*   **Swagger UI**: Interactive API documentation at `/docs` (page) and `/api/docs/ui` (standalone HTML). Swagger UI assets served locally from `public/swagger-ui/`. OpenAPI spec at `/api/docs`.
 
 **Feature Specifications:**
 *   **Core Management**: Vehicle analysis, customer dashboards, and multi-shop management.

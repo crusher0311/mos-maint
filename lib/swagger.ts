@@ -169,6 +169,78 @@ API keys are scoped to specific permissions:
             vehicleInfo: { type: "string" },
           },
         },
+        VHIItem: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "Unique item identifier" },
+            serviceKey: { type: "string", nullable: true, description: "Normalized service key (e.g., oil, brake_fluid)" },
+            title: { type: "string", description: "Display name of the service" },
+            category: { type: "string", nullable: true, description: "Service category (e.g., Brakes, Engine)" },
+            intervalMiles: { type: "integer", nullable: true, description: "OEM interval in miles" },
+            intervalMonths: { type: "integer", nullable: true, description: "OEM interval in months" },
+            last: {
+              type: "object",
+              nullable: true,
+              properties: {
+                miles: { type: "integer", nullable: true },
+                date: { type: "string", nullable: true },
+                source: { type: "string", nullable: true, description: "Where last service was recorded (carfax, shop, protractor)" },
+              },
+            },
+            dueAtMiles: { type: "integer", nullable: true },
+            dueAtDate: { type: "string", nullable: true },
+            milesToGo: { type: "integer", nullable: true, description: "Miles until due (negative = overdue)" },
+            daysToGo: { type: "integer", nullable: true, description: "Days until due (negative = overdue)" },
+            bump: { type: "string", nullable: true, enum: ["red", "yellow"], description: "DVI urgency flag" },
+            source: { type: "string", nullable: true, description: "Data source (oem, dvi, protractor)" },
+            dviSource: { type: "string", nullable: true, enum: ["autoflow", "autovitals", "tekmetric"], description: "Which DVI provider flagged this item" },
+            declined: { type: "boolean", description: "Whether customer previously declined this service" },
+          },
+        },
+        VHIResponse: {
+          type: "object",
+          properties: {
+            ok: { type: "boolean" },
+            vin: { type: "string" },
+            vehicle: {
+              type: "object",
+              properties: {
+                year: { type: "integer", nullable: true },
+                make: { type: "string", nullable: true },
+                model: { type: "string", nullable: true },
+                engine: { type: "string", nullable: true },
+              },
+            },
+            currentMiles: { type: "integer", nullable: true },
+            distanceUnit: { type: "string", enum: ["miles", "kilometers"] },
+            customerName: { type: "string", nullable: true },
+            score: {
+              type: "object",
+              properties: {
+                value: { type: "integer", description: "Health score 0-100" },
+                tier: { type: "string", enum: ["Excellent", "Good", "Needs Attention", "Poor", "Critical"] },
+                color: { type: "string", enum: ["green", "lime", "amber", "orange", "red"] },
+              },
+            },
+            summary: {
+              type: "object",
+              properties: {
+                overdue: { type: "integer" },
+                dueSoon: { type: "integer" },
+                upcoming: { type: "integer" },
+              },
+            },
+            buckets: {
+              type: "object",
+              properties: {
+                overdue: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+                dueSoon: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+                upcoming: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+              },
+            },
+            cachedAt: { type: "string", format: "date-time" },
+          },
+        },
       },
     },
     security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
