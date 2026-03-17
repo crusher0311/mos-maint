@@ -47,7 +47,9 @@ export async function triggerPlanBuild(
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : `http://localhost:${process.env.PORT || 5000}`;
+      : process.env.RENDER_EXTERNAL_URL
+        ? process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "")
+        : `http://localhost:${process.env.PORT || 5000}`;
 
     const res = await fetch(
       `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}`,

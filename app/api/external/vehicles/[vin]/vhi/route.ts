@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +83,16 @@ export const GET = createExternalEndpoint(
 
     const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
-    const cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+    let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+
+    if (!cached && mileage) {
+      console.log(`[VHI External] No cached plan for ${vin} at shop ${resolvedShopId}, triggering build...`);
+      const built = await triggerPlanBuild(resolvedShopId, vin, mileage);
+      if (built) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+      }
+    }
 
     if (!cached) {
       return NextResponse.json(

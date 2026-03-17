@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
+import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,16 @@ export async function GET(
 
     const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
-    const cached = await getCachedPlan(db, vin, shopId, mileage);
+    let cached = await getCachedPlan(db, vin, shopId, mileage);
+
+    if (!cached && mileage) {
+      console.log(`[VHI API] No cached plan for ${vin} at shop ${shopId}, triggering build...`);
+      const built = await triggerPlanBuild(shopId, vin, mileage);
+      if (built) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        cached = await getCachedPlan(db, vin, shopId, mileage);
+      }
+    }
 
     if (!cached) {
       return NextResponse.json(
