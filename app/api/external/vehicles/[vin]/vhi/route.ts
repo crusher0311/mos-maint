@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache } from "@/lib/vhi-score";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 
@@ -83,59 +83,100 @@ export const GET = createExternalEndpoint(
 
     const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
-    let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+    const cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
 
-    if (!cached && mileage) {
-      console.log(`[VHI External] No cached plan for ${vin} at shop ${resolvedShopId}, triggering build...`);
+    if (cached) {
+      const plan = cached.plan;
+      const score = computeScore(plan.buckets);
+      const tier = getScoreTier(score);
+
+      return NextResponse.json({
+        success: true,
+        vin,
+        vehicle: {
+          year: plan.vehicle.year ?? null,
+          make: plan.vehicle.make ?? null,
+          model: plan.vehicle.model ?? null,
+          engine: plan.vehicle.engine ?? null,
+        },
+        currentMiles: plan.currentMiles,
+        distanceUnit: plan.distanceUnit,
+        customerName: plan.customerName ?? null,
+        score: { value: score, tier: tier.label, color: tier.color },
+        summary: {
+          overdue: plan.buckets.overdue.length,
+          dueSoon: plan.buckets.dueSoon.length,
+          upcoming: plan.buckets.upcoming.length,
+        },
+        buckets: {
+          overdue: plan.buckets.overdue.map(formatVhiItem),
+          dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
+          upcoming: plan.buckets.upcoming.map(formatVhiItem),
+        },
+        cachedAt: cached.createdAt,
+        source: "cached_plan",
+      });
+    }
+
+    console.log(`[VHI External] No cached_plans entry for ${vin} at shop ${resolvedShopId}, checking analysis cache...`);
+    const analysisResult = await getVhiFromAnalysisCache(db, vin, resolvedShopId, mileage);
+
+    if (analysisResult) {
+      console.log(`[VHI External] Found analysis cache for ${vin} at shop ${resolvedShopId}`);
+      return NextResponse.json({
+        success: true,
+        vin,
+        ...analysisResult,
+        source: "analysis_cache",
+      });
+    }
+
+    if (mileage) {
+      console.log(`[VHI External] No cache at all for ${vin} at shop ${resolvedShopId}, triggering build...`);
       const built = await triggerPlanBuild(resolvedShopId, vin, mileage);
       if (built) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+        const freshCached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+        if (freshCached) {
+          const plan = freshCached.plan;
+          const score = computeScore(plan.buckets);
+          const tier = getScoreTier(score);
+          return NextResponse.json({
+            success: true,
+            vin,
+            vehicle: {
+              year: plan.vehicle.year ?? null,
+              make: plan.vehicle.make ?? null,
+              model: plan.vehicle.model ?? null,
+              engine: plan.vehicle.engine ?? null,
+            },
+            currentMiles: plan.currentMiles,
+            distanceUnit: plan.distanceUnit,
+            customerName: plan.customerName ?? null,
+            score: { value: score, tier: tier.label, color: tier.color },
+            summary: {
+              overdue: plan.buckets.overdue.length,
+              dueSoon: plan.buckets.dueSoon.length,
+              upcoming: plan.buckets.upcoming.length,
+            },
+            buckets: {
+              overdue: plan.buckets.overdue.map(formatVhiItem),
+              dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
+              upcoming: plan.buckets.upcoming.map(formatVhiItem),
+            },
+            cachedAt: freshCached.createdAt,
+            source: "fresh_build",
+          });
+        }
       }
     }
 
-    if (!cached) {
-      return NextResponse.json(
-        {
-          error: "No VHI data available",
-          message: "No maintenance plan has been built for this vehicle yet. The plan is built when the vehicle is viewed in the dashboard or Chrome extension.",
-        },
-        { status: 404 }
-      );
-    }
-
-    const plan = cached.plan;
-    const score = computeScore(plan.buckets);
-    const tier = getScoreTier(score);
-
-    return NextResponse.json({
-      success: true,
-      vin,
-      vehicle: {
-        year: plan.vehicle.year ?? null,
-        make: plan.vehicle.make ?? null,
-        model: plan.vehicle.model ?? null,
-        engine: plan.vehicle.engine ?? null,
+    return NextResponse.json(
+      {
+        error: "No VHI data available",
+        message: "No maintenance plan has been built for this vehicle yet. The plan is built when the vehicle is viewed in the dashboard or Chrome extension.",
       },
-      currentMiles: plan.currentMiles,
-      distanceUnit: plan.distanceUnit,
-      customerName: plan.customerName ?? null,
-      score: {
-        value: score,
-        tier: tier.label,
-        color: tier.color,
-      },
-      summary: {
-        overdue: plan.buckets.overdue.length,
-        dueSoon: plan.buckets.dueSoon.length,
-        upcoming: plan.buckets.upcoming.length,
-      },
-      buckets: {
-        overdue: plan.buckets.overdue.map(formatVhiItem),
-        dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
-        upcoming: plan.buckets.upcoming.map(formatVhiItem),
-      },
-      cachedAt: cached.createdAt,
-    });
+      { status: 404 }
+    );
   }
 );

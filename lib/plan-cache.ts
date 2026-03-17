@@ -78,40 +78,45 @@ export async function getCachedPlan(
   shopId: number, 
   currentMiles?: number | null
 ): Promise<CachedPlan | null> {
-  // First check if any entry exists (regardless of expiry)
-  const anyEntry = await db.collection("cached_plans").findOne({
-    vin: vin.toUpperCase(),
-    shopId,
-  }) as CachedPlan | null;
-  
-  if (!anyEntry) {
+  const candidates = await db.collection("cached_plans")
+    .find({
+      vin: vin.toUpperCase(),
+      shopId: { $in: [String(shopId), Number(shopId)] },
+    })
+    .sort({ createdAt: -1 })
+    .toArray() as CachedPlan[];
+
+  if (candidates.length === 0) {
     console.log(`[PlanCache] MISS: No cache entry for ${vin}`);
     return null;
   }
-  
-  // Check if expired
-  if (anyEntry.expiresAt <= new Date()) {
-    const ageMinutes = Math.round((Date.now() - anyEntry.expiresAt.getTime()) / 60000);
-    console.log(`[PlanCache] MISS: Expired ${ageMinutes}m ago for ${vin}`);
-    return null;
-  }
-  
-  // If mileage provided, check if cache is still valid (within tolerance)
-  if (currentMiles != null && currentMiles > 0) {
-    if (anyEntry.mileage == null || anyEntry.mileage <= 0) {
-      console.log(`[PlanCache] MISS: Cache has no mileage but current is ${currentMiles} for ${vin}`);
-      return null;
+
+  for (const entry of candidates) {
+    if (entry.expiresAt <= new Date()) {
+      const ageMinutes = Math.round((Date.now() - entry.expiresAt.getTime()) / 60000);
+      console.log(`[PlanCache] SKIP: Expired ${ageMinutes}m ago for ${vin} (shopId=${entry.shopId})`);
+      continue;
     }
-    const mileageDiff = Math.abs(currentMiles - anyEntry.mileage);
-    if (mileageDiff > MILEAGE_TOLERANCE) {
-      console.log(`[PlanCache] MISS: Mileage changed ${anyEntry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
-      return null;
+
+    if (currentMiles != null && currentMiles > 0) {
+      if (entry.mileage == null || entry.mileage <= 0) {
+        console.log(`[PlanCache] SKIP: Cache has no mileage but current is ${currentMiles} for ${vin}`);
+        continue;
+      }
+      const mileageDiff = Math.abs(currentMiles - entry.mileage);
+      if (mileageDiff > MILEAGE_TOLERANCE) {
+        console.log(`[PlanCache] SKIP: Mileage changed ${entry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
+        continue;
+      }
     }
+
+    const ageMinutes = Math.round((Date.now() - entry.createdAt.getTime()) / 60000);
+    console.log(`[PlanCache] HIT: ${vin} cached ${ageMinutes}m ago, ${entry.mileage} miles`);
+    return entry;
   }
-  
-  const ageMinutes = Math.round((Date.now() - anyEntry.createdAt.getTime()) / 60000);
-  console.log(`[PlanCache] HIT: ${vin} cached ${ageMinutes}m ago, ${anyEntry.mileage} miles`);
-  return anyEntry;
+
+  console.log(`[PlanCache] MISS: ${candidates.length} entries found but none valid for ${vin}`);
+  return null;
 }
 
 export async function setCachedPlan(
@@ -122,25 +127,29 @@ export async function setCachedPlan(
   plan: CachedPlanData
 ): Promise<void> {
   const now = new Date();
-  await db.collection("cached_plans").updateOne(
-    { vin: vin.toUpperCase(), shopId },
-    {
-      $set: {
-        mileage,
-        plan,
-        createdAt: now,
-        expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
-      },
-    },
-    { upsert: true }
-  );
+  const normalizedVin = vin.toUpperCase();
+  const normalizedShopId = Number(shopId);
+
+  await db.collection("cached_plans").deleteMany({
+    vin: normalizedVin,
+    shopId: { $in: [String(normalizedShopId), normalizedShopId] },
+  });
+
+  await db.collection("cached_plans").insertOne({
+    vin: normalizedVin,
+    shopId: normalizedShopId,
+    mileage,
+    plan,
+    createdAt: now,
+    expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
+  });
   console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
 }
 
 export async function invalidateCachedPlan(db: Db, vin: string, shopId: number): Promise<void> {
-  await db.collection("cached_plans").deleteOne({
+  await db.collection("cached_plans").deleteMany({
     vin: vin.toUpperCase(),
-    shopId,
+    shopId: { $in: [String(shopId), Number(shopId)] },
   });
 }
 

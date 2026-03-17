@@ -1,3 +1,4 @@
+import { Db } from "mongodb";
 import { type TriagedItemCache } from "@/lib/plan-cache";
 
 export function categoryMultiplier(category: string): number {
@@ -58,5 +59,106 @@ export function formatVhiItem(item: TriagedItemCache) {
     source: item.source ?? null,
     dviSource: item.dviSource ?? null,
     declined: !!item.declined,
+  };
+}
+
+export interface AnalysisCacheVhiResult {
+  score: { value: number; tier: string; color: string };
+  summary: { overdue: number; dueSoon: number; upcoming: number };
+  buckets: { overdue: any[]; dueSoon: any[]; upcoming: any[] };
+  vehicle: { year: number | null; make: string | null; model: string | null; engine: string | null };
+  currentMiles: number | null;
+  distanceUnit: string;
+  customerName: string | null;
+  cachedAt: Date;
+}
+
+const ANALYSIS_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 4; // 4 hours
+
+export async function getVhiFromAnalysisCache(
+  db: Db,
+  vin: string,
+  shopId: number,
+  currentMiles?: number | null
+): Promise<AnalysisCacheVhiResult | null> {
+  const doc = await db.collection("maintenance_analysis_cache").findOne({
+    vin: vin.toUpperCase(),
+    shopId: { $in: [String(shopId), Number(shopId)] },
+  });
+
+  if (!doc || !doc.recommendations || !Array.isArray(doc.recommendations) || doc.recommendations.length === 0) {
+    return null;
+  }
+
+  const analyzedAt = doc.analyzedAt ? new Date(doc.analyzedAt).getTime() : 0;
+  if (Date.now() - analyzedAt > ANALYSIS_CACHE_MAX_AGE_MS) {
+    console.log(`[VHI] Analysis cache expired for ${vin} (age: ${Math.round((Date.now() - analyzedAt) / 60000)}m)`);
+    return null;
+  }
+
+  if (currentMiles != null && currentMiles > 0 && doc.mileageAtAnalysis) {
+    const diff = Math.abs(currentMiles - doc.mileageAtAnalysis);
+    if (diff > 500) {
+      console.log(`[VHI] Analysis cache mileage stale for ${vin} (cached: ${doc.mileageAtAnalysis}, current: ${currentMiles})`);
+      return null;
+    }
+  }
+
+  const recs = doc.recommendations;
+  const overdue = recs.filter((r: any) => r.status === "overdue");
+  const dueSoon = recs.filter((r: any) => r.status === "due_soon");
+  const upcoming = recs.filter((r: any) => r.status === "upcoming");
+
+  const buckets = {
+    overdue: overdue.map(convertRecToTriaged),
+    dueSoon: dueSoon.map(convertRecToTriaged),
+    upcoming: upcoming.map(convertRecToTriaged),
+  };
+
+  const score = computeScore(buckets);
+  const tier = getScoreTier(score);
+
+  const vehicleDoc = await db.collection("vehicles").findOne(
+    { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
+    { projection: { year: 1, make: 1, model: 1, engine: 1, customerName: 1 } }
+  );
+
+  return {
+    score: { value: score, tier: tier.label, color: tier.color },
+    summary: { overdue: overdue.length, dueSoon: dueSoon.length, upcoming: upcoming.length },
+    buckets: {
+      overdue: buckets.overdue.map(formatVhiItem),
+      dueSoon: buckets.dueSoon.map(formatVhiItem),
+      upcoming: buckets.upcoming.map(formatVhiItem),
+    },
+    vehicle: {
+      year: vehicleDoc?.year ?? null,
+      make: vehicleDoc?.make ?? null,
+      model: vehicleDoc?.model ?? null,
+      engine: vehicleDoc?.engine ?? null,
+    },
+    currentMiles: doc.mileageAtAnalysis ?? null,
+    distanceUnit: "miles",
+    customerName: vehicleDoc?.customerName ?? null,
+    cachedAt: doc.analyzedAt ? new Date(doc.analyzedAt) : new Date(),
+  };
+}
+
+function convertRecToTriaged(rec: any): TriagedItemCache {
+  return {
+    key: rec.serviceKey || rec.service || "",
+    serviceKey: rec.serviceKey || "",
+    title: rec.service || rec.name || "",
+    category: rec.category || undefined,
+    intervalMiles: rec.intervalMiles ?? rec.interval ?? null,
+    intervalMonths: rec.intervalMonths ?? null,
+    last: rec.last || undefined,
+    dueAtMiles: rec.dueMileage ?? null,
+    dueAtDate: null,
+    milesToGo: rec.milesToGo ?? null,
+    daysToGo: null,
+    bump: rec.bump || null,
+    source: rec.source === "shop" ? "oem" : rec.source === "oe" ? "oem" : rec.source === "dvi" ? "dvi" : "oem",
+    dviSource: rec.dviSource || undefined,
   };
 }
