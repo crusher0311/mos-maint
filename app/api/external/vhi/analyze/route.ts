@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export const POST = createExternalEndpoint(
   "vehicles:read",
-  async (req: NextRequest, { shopId: apiKeyShopId }) => {
+  async (req: NextRequest, { shopId: apiKeyShopId, isPartner, partnerId }) => {
     const body = await req.json();
     const { vin, sms, smsShopId, roNumber, mileage: providedMileage } = body;
 
@@ -22,7 +22,7 @@ export const POST = createExternalEndpoint(
 
     if (!sms || typeof sms !== "string") {
       return NextResponse.json(
-        { success: false, error: "sms field required (tekmetric, shopware, protractor)" },
+        { success: false, error: "sms field required (tekmetric, shopware, protractor, autoflow)" },
         { status: 400 }
       );
     }
@@ -57,20 +57,11 @@ export const POST = createExternalEndpoint(
 
     const resolvedShopId = shopResult.mosShopId;
 
-    if (resolvedShopId !== apiKeyShopId) {
-      const db = await getDb();
-      const apiKeyShops = await db.collection("shops").findOne({
-        shopId: { $in: [String(apiKeyShopId), Number(apiKeyShopId)] },
-      });
-      const resolvedShopEnterprise = shopResult.shopDoc?.enterpriseId;
-      const apiKeyEnterprise = apiKeyShops?.enterpriseId;
-
-      if (!resolvedShopEnterprise || !apiKeyEnterprise || resolvedShopEnterprise !== apiKeyEnterprise) {
-        return NextResponse.json(
-          { success: false, error: "API key is not authorized for this shop" },
-          { status: 403 }
-        );
-      }
+    if (!isPartner && resolvedShopId !== apiKeyShopId) {
+      return NextResponse.json(
+        { success: false, error: "API key is not authorized for this shop. Shop keys can only access their own shop. Use a partner key for cross-shop access." },
+        { status: 403 }
+      );
     }
 
     const db = await getDb();
@@ -98,7 +89,8 @@ export const POST = createExternalEndpoint(
 
     console.log(
       `[VHI Analyze] Building VHI: VIN=${vin.toUpperCase()}, shop=${resolvedShopId}, ` +
-      `sms=${smsLower}, smsShopId=${smsShopId}, RO=${roNumber || "N/A"}, mileage=${mileage}`
+      `sms=${smsLower}, smsShopId=${smsShopId}, RO=${roNumber || "N/A"}, mileage=${mileage}` +
+      (isPartner ? `, partner=${partnerId}` : "")
     );
 
     const result = await rebuildVhi(resolvedShopId, vin, mileage, {
@@ -122,7 +114,7 @@ export const POST = createExternalEndpoint(
       score: result.score?.value,
       tier: result.score?.tier,
       summary: result.summary,
-      triggeredBy: "external_api",
+      triggeredBy: isPartner ? `partner:${partnerId}` : "external_api",
       analyzedAt: new Date(),
     });
 

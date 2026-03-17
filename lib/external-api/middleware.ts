@@ -11,6 +11,8 @@ import {
 export interface ExternalApiContext {
   apiKey: ApiKey;
   shopId: number;
+  isPartner: boolean;
+  partnerId?: string;
 }
 
 export type ExternalApiHandler = (
@@ -98,6 +100,8 @@ export function withExternalAuth(
       const context: ExternalApiContext = {
         apiKey,
         shopId: apiKey.shopId,
+        isPartner: apiKey.isPartner === true,
+        partnerId: apiKey.partnerId,
       };
       
       const response = await handler(req, context);

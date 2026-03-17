@@ -3,13 +3,14 @@ import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const GET = createExternalEndpoint(
   "vehicles:read",
-  async (req: NextRequest, { shopId }) => {
+  async (req: NextRequest, { shopId, isPartner }) => {
     const pathParts = req.nextUrl.pathname.split("/");
     const vinIndex = pathParts.indexOf("vehicles") + 1;
     const vin = pathParts[vinIndex]?.toUpperCase();
@@ -21,11 +22,59 @@ export const GET = createExternalEndpoint(
       );
     }
 
+    let resolvedShopId = shopId;
+
+    if (isPartner) {
+      const smsShopIdParam = req.nextUrl.searchParams.get("smsShopId");
+      const smsParam = req.nextUrl.searchParams.get("sms");
+      const shopIdParam = req.nextUrl.searchParams.get("shopId");
+
+      if (shopIdParam) {
+        const parsed = Number(shopIdParam);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          return NextResponse.json(
+            { error: "shopId must be a valid positive number" },
+            { status: 400 }
+          );
+        }
+        resolvedShopId = parsed;
+      } else if (smsShopIdParam) {
+        if (!smsParam) {
+          return NextResponse.json(
+            {
+              error: "sms parameter required when using smsShopId",
+              message: "Add &sms=tekmetric (or shopware, protractor, autoflow) to specify the SMS type",
+            },
+            { status: 400 }
+          );
+        }
+        const shopResult = await findShopBySmsId(smsShopIdParam, {
+          isPlatformAdmin: true,
+          providerHint: smsParam.toLowerCase(),
+        });
+        if (!shopResult) {
+          return NextResponse.json(
+            { error: `No shop found for ${smsParam} ID: ${smsShopIdParam}` },
+            { status: 404 }
+          );
+        }
+        resolvedShopId = shopResult.mosShopId;
+      } else {
+        return NextResponse.json(
+          {
+            error: "Partner keys require shopId or smsShopId query parameter",
+            message: "Add ?shopId=123 or ?smsShopId=456&sms=tekmetric to identify the shop",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const db = await getDb();
 
     const vehicleDoc = await db.collection("vehicles").findOne(
       {
-        $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+        $or: [{ shopId: String(resolvedShopId) }, { shopId: Number(resolvedShopId) }],
         vin,
       },
       { projection: { currentMileage: 1, lastMileage: 1 } }
@@ -33,7 +82,7 @@ export const GET = createExternalEndpoint(
 
     const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
-    const cached = await getCachedPlan(db, vin, shopId, mileage);
+    const cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
 
     if (!cached) {
       return NextResponse.json(

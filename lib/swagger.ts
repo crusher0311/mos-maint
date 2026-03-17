@@ -38,6 +38,12 @@ API keys are scoped to specific permissions:
 - \`maintenance:read\` - Get maintenance schedules
 - \`recommendations:read\` - Get maintenance recommendations
 - \`*\` - Full access (all permissions)
+
+## API Key Types
+
+**Shop Keys** (\`mos_...\`) — Scoped to a single shop. Generated from the shop dashboard under Settings > API Keys.
+
+**Partner Keys** (\`mos_partner_...\`) — Global keys for integration partners (e.g., AppFueled). Not bound to a specific shop — the shop is resolved from the \`sms\` + \`smsShopId\` parameters passed with each request. Partner keys are issued by MOS platform administrators.
       `,
       contact: {
         name: "MOS Support",
@@ -419,11 +425,14 @@ API keys are scoped to specific permissions:
       "/vehicles/{vin}/vhi": {
         get: {
           summary: "Get Vehicle Health Indicator",
-          description: "Returns the Vehicle Health Indicator (VHI) data for a vehicle, including a 0-100 health score, vehicle details, and bucketed maintenance items (overdue, due soon, upcoming). Data is sourced from the cached maintenance plan, which is built when a vehicle is viewed in the dashboard or Chrome extension. Items include OEM maintenance schedules, DVI findings, deferred work, and service history.",
+          description: "Returns the Vehicle Health Indicator (VHI) data for a vehicle, including a 0-100 health score, vehicle details, and bucketed maintenance items (overdue, due soon, upcoming). Data is sourced from the cached maintenance plan, which is built when a vehicle is viewed in the dashboard or Chrome extension. Items include OEM maintenance schedules, DVI findings, deferred work, and service history. Partner keys must include shopId or smsShopId+sms query parameters to identify the shop.",
           tags: ["Vehicle Health"],
           security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
           parameters: [
             { name: "vin", in: "path", required: true, schema: { type: "string" }, description: "Vehicle VIN (17 characters)" },
+            { name: "shopId", in: "query", required: false, schema: { type: "number" }, description: "MOS shop ID (required for partner keys)" },
+            { name: "smsShopId", in: "query", required: false, schema: { type: "string" }, description: "SMS shop ID — alternative to shopId for partner keys" },
+            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"] }, description: "SMS type — used with smsShopId for partner keys" },
           ],
           responses: {
             "200": {
@@ -445,7 +454,7 @@ API keys are scoped to specific permissions:
       "/vhi/analyze": {
         post: {
           summary: "Analyze Vehicle Health (On-Demand)",
-          description: "Triggers a full Vehicle Health Indicator (VHI) analysis for a vehicle. Resolves the shop via SMS type and SMS shop ID, pulls mileage from the most recent work order (or uses provided mileage), invalidates any stale cache, builds a fresh maintenance plan, and returns the scored result. Ideal for post-RO-close workflows — pass the VIN and RO details after a work order posts to get an updated health assessment that reflects authorized work.",
+          description: "Triggers a full Vehicle Health Indicator (VHI) analysis for a vehicle. Resolves the shop via SMS type and SMS shop ID, pulls mileage from the most recent work order (or uses provided mileage), invalidates any stale cache, builds a fresh maintenance plan, and returns the scored result. Ideal for post-RO-close workflows — pass the VIN and RO details after a work order posts to get an updated health assessment that reflects authorized work. Supports both shop-scoped API keys and partner API keys.",
           tags: ["Vehicle Health"],
           security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
           requestBody: {

@@ -42,6 +42,9 @@ export interface ApiKey {
   createdAt: Date;
   createdBy: string;
   expiresAt?: Date;
+  isPartner?: boolean;
+  partnerId?: string;
+  partnerName?: string;
 }
 
 export interface ApiKeyUsageLog {
@@ -140,6 +143,58 @@ export async function generateApiKey(
   
   const result = await db.collection("api_keys").insertOne(apiKey);
   
+  return {
+    key: rawKey,
+    keyPrefix,
+    keyId: result.insertedId.toString(),
+  };
+}
+
+export async function generatePartnerApiKey(
+  partnerId: string,
+  partnerName: string,
+  permissions: string[],
+  createdBy: string,
+  options?: {
+    rateLimitTier?: RateLimitTier;
+    rateLimit?: number;
+    expiresAt?: Date;
+  }
+): Promise<{ key: string; keyPrefix: string; keyId: string }> {
+  const db = await getDb();
+
+  const permValidation = validatePermissions(permissions);
+  if (!permValidation.valid) {
+    throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
+  }
+
+  const rawKey = `mos_partner_${randomBytes(32).toString("hex")}`;
+  const keyPrefix = rawKey.substring(0, 16);
+  const keyHash = createHash("sha256").update(rawKey).digest("hex");
+
+  const tier = options?.rateLimitTier || "enterprise";
+  const rateLimit = options?.rateLimit || getRateLimitFromTier(tier);
+
+  const apiKey: ApiKey = {
+    shopId: 0,
+    keyHash,
+    keyPrefix,
+    name: `Partner: ${partnerName}`,
+    permissions,
+    rateLimit,
+    rateLimitTier: tier,
+    isActive: true,
+    usageCount: 0,
+    createdAt: new Date(),
+    createdBy,
+    expiresAt: options?.expiresAt,
+    isPartner: true,
+    partnerId,
+    partnerName,
+  };
+
+  const result = await db.collection("api_keys").insertOne(apiKey);
+
   return {
     key: rawKey,
     keyPrefix,
