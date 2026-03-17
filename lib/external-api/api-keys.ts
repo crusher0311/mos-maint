@@ -67,6 +67,7 @@ const AVAILABLE_PERMISSIONS = [
   "recommendations:read",
   "customers:read",
   "maintenance:read",
+  "shops:read",
 ] as const;
 
 export type ApiPermission = typeof AVAILABLE_PERMISSIONS[number];

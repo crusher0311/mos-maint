@@ -538,6 +538,66 @@ API keys are scoped to specific permissions:
           },
         },
       },
+      "/shops": {
+        get: {
+          summary: "List Shops",
+          description: "Returns a list of shops accessible to the API key. For shop-scoped keys, returns only the key's shop. For partner keys, returns all active shops on the platform with pagination, search, and SMS provider filtering. Each shop includes its MOS shop ID, name, integration provider, and relevant SMS IDs for use in other API calls.",
+          tags: ["Shops"],
+          security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
+          parameters: [
+            { name: "page", in: "query", required: false, schema: { type: "integer", default: 1 }, description: "Page number (default: 1)" },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", default: 50, maximum: 100 }, description: "Results per page (default: 50, max: 100)" },
+            { name: "search", in: "query", required: false, schema: { type: "string" }, description: "Search by shop name or location identifier" },
+            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"] }, description: "Filter by integration provider" },
+          ],
+          responses: {
+            "200": {
+              description: "List of shops",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      shops: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            shopId: { type: "number", description: "MOS shop ID — use this as the shopId parameter in other API calls" },
+                            name: { type: "string", nullable: true },
+                            status: { type: "string" },
+                            integrationProvider: { type: "string", nullable: true, description: "Active SMS integration (tekmetric, shopware, protractor, autoflow)" },
+                            locationIdentifier: { type: "string", nullable: true },
+                            smsIds: {
+                              type: "object",
+                              description: "SMS-specific IDs for the shop's integration provider",
+                              properties: {
+                                tekmetricShopId: { type: "number" },
+                                shopwareShopId: { type: "number" },
+                                shopwareTenantId: { type: "number" },
+                                protractorConnectionId: { type: "string" },
+                                autoflowDomain: { type: "string" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                      total: { type: "integer" },
+                      page: { type: "integer" },
+                      limit: { type: "integer" },
+                      totalPages: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": { description: "Unauthorized", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "403": { description: "Permission denied — API key lacks shops:read permission", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
       "/keytags": {
         post: {
           summary: "Generate Keytag",
