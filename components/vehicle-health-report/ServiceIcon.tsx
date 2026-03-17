@@ -243,12 +243,17 @@ const titleKeywordMap: Array<[string[], string]> = [
   [["inspect", "check", "examine", "visual"], "general_service"],
 ];
 
+const imageIcons: Record<string, string> = {
+  brake_pads_front: "/icons/service/brakes.png",
+  brake_pads_rear: "/icons/service/brakes.png",
+};
+
 function resolveIconKey(serviceKey: string | null, title?: string): string {
   if (!serviceKey && !title) return "";
 
   if (serviceKey?.startsWith("dvi_finding") || serviceKey?.startsWith("dvi_unmapped")) return "dvi_finding";
 
-  if (serviceKey && iconPaths[serviceKey]) return serviceKey;
+  if (serviceKey && (imageIcons[serviceKey] || iconPaths[serviceKey])) return serviceKey;
 
   const titleLower = (title || serviceKey || "").toLowerCase();
   for (const [keywords, iconKey] of titleKeywordMap) {
@@ -275,6 +280,21 @@ interface ServiceIconProps {
 
 export default function ServiceIcon({ serviceKey, title, className = "", size = 32 }: ServiceIconProps) {
   const key = resolveIconKey(serviceKey, title);
+
+  const imgSrc = imageIcons[key];
+  if (imgSrc) {
+    return (
+      <img
+        src={imgSrc}
+        alt=""
+        width={size}
+        height={size}
+        className={`inline-block ${className}`}
+        style={{ width: size, height: size, objectFit: "contain" }}
+      />
+    );
+  }
+
   const icon = iconPaths[key] || defaultIcon;
 
   return (
