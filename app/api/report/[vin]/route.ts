@@ -76,6 +76,7 @@ export async function GET(
     }
 
     const plan = cachedPlan.plan;
+    const buckets = plan.buckets || {};
 
     return NextResponse.json({
       plan: {
@@ -84,9 +85,9 @@ export async function GET(
         currentMiles: plan.currentMiles || cachedPlan.mileage || 0,
         customerName: plan.customerName || "Vehicle Owner",
         buckets: {
-          overdue: plan.overdue || [],
-          dueSoon: plan.dueSoon || [],
-          upcoming: plan.upcoming || [],
+          overdue: buckets.overdue || [],
+          dueSoon: buckets.dueSoon || [],
+          upcoming: buckets.upcoming || [],
         },
       },
       shopName: shop.name || shop.shopName || "",
