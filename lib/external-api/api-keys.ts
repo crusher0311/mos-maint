@@ -222,6 +222,10 @@ export async function validateApiKey(
   if (!apiKey.isActive) {
     return { valid: false, error: "API key is disabled" };
   }
+
+  if ((apiKey as any).revoked) {
+    return { valid: false, error: "API key has been revoked" };
+  }
   
   if (apiKey.expiresAt && new Date() > new Date(apiKey.expiresAt)) {
     return { valid: false, error: "API key has expired" };

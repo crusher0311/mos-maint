@@ -27,7 +27,8 @@ import {
   Grid3X3,
   Megaphone,
   BookOpen,
-  ArrowRightLeft
+  ArrowRightLeft,
+  KeyRound
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -300,6 +301,22 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
             >
               <Activity className="w-5 h-5" />
               <span>API Traffic</span>
+            </Link>
+          </li>
+
+          {/* Partner API Keys */}
+          <li>
+            <Link
+              href="/platform-admin/partner-keys"
+              onClick={handleNavClick}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive("/platform-admin/partner-keys")
+                  ? "bg-[rgba(60,129,195,0.75)] text-white"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <KeyRound className="w-5 h-5" />
+              <span>Partner Keys</span>
             </Link>
           </li>
 
