@@ -34,6 +34,7 @@ import { PrintButton } from "@/components/ui/PrintButton";
 import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
@@ -1901,6 +1902,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             </div>
 
             <div className="flex items-center gap-3">
+              <ShareReportButton vin={vin} />
               <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
                 {showRecalls && (
