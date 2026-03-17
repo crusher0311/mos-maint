@@ -379,6 +379,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       make: decoded.decoded.make,
       model: decoded.decoded.model,
       engine: decoded.decoded.engine_name,
+      transType: decoded.decoded.trans_type || null,
     } : undefined;
     
     // Check if local data has intervals - if items exist but none have miles/months, fall back to API

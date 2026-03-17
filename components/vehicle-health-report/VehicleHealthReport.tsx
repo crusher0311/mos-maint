@@ -157,7 +157,13 @@ export default function VehicleHealthReport({
       <div className="max-w-2xl mx-auto bg-white shadow-lg">
         {/* Header */}
         <div className="bg-[#1e3a5f] text-white text-center py-4 px-4">
-          <h1 className="text-lg sm:text-xl font-bold tracking-wide uppercase">Vehicle Health Report</h1>
+          <div className="flex items-center justify-center gap-3">
+            <img src="/icons/vehicle-health-intelligence.png" alt="" className="w-10 h-10" />
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-wide">Vehicle Health Indicator<sup className="text-xs align-super">™</sup></h1>
+              <p className="text-xs italic opacity-80">authentically intelligent</p>
+            </div>
+          </div>
         </div>
 
         {/* Customer & Vehicle Info */}

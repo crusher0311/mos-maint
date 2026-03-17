@@ -383,6 +383,7 @@ function triage({
   milesPerDay = null,
   shopIntervals = {},
   vehicleYear = null,
+  vehicleTransType = null,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -397,6 +398,7 @@ function triage({
   milesPerDay?: number | null;
   shopIntervals?: Record<string, ShopIntervalOverride>;
   vehicleYear?: number | null;
+  vehicleTransType?: string | null;
 }): Buckets {
   const earliestDate = vehicleYear 
     ? new Date(vehicleYear, 0, 1)
@@ -489,8 +491,18 @@ function triage({
     }
   }
 
+  const resolvedTransType = vehicleTransType?.toLowerCase().trim() || null;
+  const isAutomatic = resolvedTransType ? (resolvedTransType.includes("auto") || resolvedTransType.includes("cvt")) : null;
+  const isManual = resolvedTransType ? resolvedTransType.includes("manual") : null;
+
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
+
+    if (isAutomatic !== null) {
+      if (serviceKey === "trans_manual" && isAutomatic) continue;
+      if (serviceKey === "trans_auto" && isManual) continue;
+    }
+
     const matchedDeferred = deferredByServiceKey.get(serviceKey);
     if (matchedDeferred) deferredServiceKeysUsedByOem.add(serviceKey);
     if (usedServiceKeys.has(serviceKey) && !serviceKey.startsWith("misc_")) continue;
@@ -811,6 +823,7 @@ export async function POST(req: NextRequest) {
       { projection: { year: 1, make: 1, model: 1, declinedServices: 1 } }
     );
     const vehicleYear = vehicleDoc?.year ?? oemData.vehicle?.year ?? null;
+    const vehicleTransType: string | null = (oemData.vehicle as any)?.transType || null;
 
     const [protractorWOs, tekmetricWOs] = await Promise.all([
       db.collection("protractor_work_orders").find({
@@ -997,6 +1010,7 @@ export async function POST(req: NextRequest) {
       milesPerDay: mpdBlended,
       shopIntervals,
       vehicleYear,
+      vehicleTransType,
     });
 
     const isInspectItem = (item: TriagedItem) => {
