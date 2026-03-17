@@ -573,7 +573,7 @@ type TriagedItem = {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
-  source?: "oem" | "dvi" | "protractor";
+  source?: "oem" | "dvi" | "protractor" | "common";
   dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;

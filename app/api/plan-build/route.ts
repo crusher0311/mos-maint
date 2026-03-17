@@ -102,6 +102,10 @@ const SERVICE_KEYS: Record<string, string[]> = {
     "a/c service", "ac service", "air conditioning service"
   ],
   emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
+  coolant_hoses: [
+    "coolant hose", "coolant hoses", "radiator hose", "heater hose",
+    "upper radiator hose", "lower radiator hose", "bypass hose"
+  ],
 };
 
 const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
@@ -133,6 +137,7 @@ const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   wiper_blades: "Wiper Blades",
   ac_refrigerant: "A/C Service",
   emissions: "Emissions Inspection",
+  coolant_hoses: "Coolant Hoses",
 };
 
 function toKeyFromName(name: string): string | null {
@@ -354,7 +359,7 @@ interface TriagedItem {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
-  source?: "oem" | "dvi" | "protractor";
+  source?: "oem" | "dvi" | "protractor" | "common";
   dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
@@ -613,6 +618,92 @@ function triage({
       bump: unmapped.status,
       source: "dvi",
       dviSource: unmapped.dviSource,
+    });
+  }
+
+  const COMMON_MAINTENANCE: Array<{
+    serviceKey: string;
+    title: string;
+    category: string;
+    miles: number | null;
+    months: number | null;
+  }> = [
+    { serviceKey: "wheel_alignment", title: "Wheel Alignment", category: "Tires and Wheels", miles: 12000, months: 12 },
+    { serviceKey: "power_steering", title: "Power Steering Fluid", category: "Drivetrain", miles: 50000, months: null },
+    { serviceKey: "front_shocks", title: "Front Shocks / Struts", category: "Suspension", miles: 75000, months: null },
+    { serviceKey: "rear_shocks", title: "Rear Shocks / Struts", category: "Suspension", miles: 75000, months: null },
+    { serviceKey: "wiper_blades", title: "Wiper Blades", category: "General", miles: null, months: 12 },
+    { serviceKey: "battery", title: "Battery", category: "Electrical", miles: null, months: 48 },
+    { serviceKey: "fuel_system", title: "Fuel System Cleaning", category: "Engine", miles: 60000, months: null },
+    { serviceKey: "coolant_hoses", title: "Coolant Hoses", category: "Coolant System", miles: 60000, months: null },
+  ];
+
+  for (const cm of COMMON_MAINTENANCE) {
+    if (usedServiceKeys.has(cm.serviceKey)) continue;
+
+    const shopOverride = shopIntervals[cm.serviceKey];
+    if (shopOverride?.excluded) continue;
+
+    usedServiceKeys.add(cm.serviceKey);
+    const last = lastMap.get(cm.serviceKey) ?? null;
+    const lastPerformedAtShop = last?.source === 'shop';
+    const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
+    const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : cm.miles;
+    const intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : cm.months;
+
+    let dueAtMiles: number | null = null;
+    let dueAtDate: Date | null = null;
+    let neverDone = false;
+
+    if (intervalMiles && intervalMiles > 0) {
+      if (last?.miles != null) {
+        dueAtMiles = last.miles + intervalMiles;
+      } else if (currentMiles != null) {
+        dueAtMiles = intervalMiles;
+        neverDone = true;
+      }
+    }
+
+    if (intervalMonths && intervalMonths > 0) {
+      if (last?.date) dueAtDate = addMonths(last.date, intervalMonths);
+      else if (!neverDone) dueAtDate = addMonths(today, intervalMonths);
+    }
+
+    const milesToGo = currentMiles != null && dueAtMiles != null ? dueAtMiles - currentMiles : null;
+
+    if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
+      const daysUntilDue = Math.round(milesToGo / milesPerDay);
+      dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+    }
+
+    if (dueAtDate && dueAtDate < earliestDate) dueAtDate = null;
+
+    if (dueAtMiles == null && dueAtDate == null) continue;
+
+    const daysToGo = dueAtDate != null ? Math.ceil((dueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+    const declinedInfo = declinedMap.get(cm.serviceKey) || null;
+    const matchedDeferred = deferredByServiceKey.get(cm.serviceKey) || null;
+    if (matchedDeferred) deferredServiceKeysUsedByOem.add(cm.serviceKey);
+
+    triaged.push({
+      key: `common_${cm.serviceKey}`,
+      serviceKey: cm.serviceKey,
+      title: cm.title,
+      category: cm.category,
+      intervalMiles,
+      intervalMonths,
+      last,
+      dueAtMiles,
+      dueAtDate,
+      milesToGo,
+      daysToGo,
+      bump: null,
+      source: "common",
+      reason: neverDone ? "This service has never been performed." : undefined,
+      usingShopInterval,
+      declined: declinedInfo,
+      matchedDeferred: matchedDeferred || undefined,
     });
   }
 
