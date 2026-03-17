@@ -15,6 +15,8 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/api/extension/")) return true;
   if (pathname.startsWith("/api/cron/")) return true;
   if (pathname.startsWith("/api/platform-admin/log-stream")) return true;
+  if (pathname.startsWith("/api/docs")) return true;
+  if (pathname.startsWith("/report/")) return true;
   if (pathname.startsWith("/_next/")) return true;
   if (pathname === "/favicon.ico" || pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
   return false;
@@ -88,12 +90,18 @@ export async function middleware(req: NextRequest) {
     // Check for session token
     const sid = req.cookies.get(SESSION_COOKIE)?.value;
     if (!sid) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
       return redirectToLogin(req, pathname);
     }
 
     // Validate session in database for protected routes
     const isValidSession = await validateSession(sid);
     if (!isValidSession) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Session expired" }, { status: 401 });
+      }
       const response = redirectToLogin(req, pathname);
       response.cookies.delete(SESSION_COOKIE);
       return response;
