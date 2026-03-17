@@ -244,8 +244,8 @@ const titleKeywordMap: Array<[string[], string]> = [
 ];
 
 const imageIcons: Record<string, string> = {
-  brake_pads_front: "/icons/service/brakes.png",
-  brake_pads_rear: "/icons/service/brakes.png",
+  brake_pads_front: "/icons/service/brakes.svg",
+  brake_pads_rear: "/icons/service/brakes.svg",
   brake_fluid: "/icons/service/brake_fluid.svg",
   wiper_blades: "/icons/service/wiper_blades.svg",
 };
