@@ -249,6 +249,8 @@ const imageIcons: Record<string, string> = {
   brake_fluid: "/icons/service/brake_fluid.svg",
   wiper_blades: "/icons/service/wiper_blades.svg",
   transmission_fluid: "/icons/service/transmission_fluid.svg",
+  engine_air_filter: "/icons/service/air_filter.svg",
+  cabin_air_filter: "/icons/service/air_filter.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
