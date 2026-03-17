@@ -1,24 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
-import { getSession } from "@/lib/auth";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { vin: string } }
-) {
-  try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const shopId = Number(session.shopId);
-    const vin = params.vin?.toUpperCase();
+export const GET = createExternalEndpoint(
+  "vehicles:read",
+  async (req: NextRequest, { shopId }) => {
+    const pathParts = req.nextUrl.pathname.split("/");
+    const vinIndex = pathParts.indexOf("vehicles") + 1;
+    const vin = pathParts[vinIndex]?.toUpperCase();
 
     if (!vin || vin.length !== 17) {
       return NextResponse.json(
@@ -30,7 +24,10 @@ export async function GET(
     const db = await getDb();
 
     const vehicleDoc = await db.collection("vehicles").findOne(
-      { shopId, vin },
+      {
+        $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+        vin,
+      },
       { projection: { currentMileage: 1, lastMileage: 1 } }
     );
 
@@ -42,7 +39,7 @@ export async function GET(
       return NextResponse.json(
         {
           error: "No VHI data available",
-          message: "No maintenance plan has been built for this vehicle yet. Trigger a plan build first by viewing the vehicle's plan page or calling POST /api/plan-build?vin=VIN&mileage=MILEAGE.",
+          message: "No maintenance plan has been built for this vehicle yet. The plan is built when the vehicle is viewed in the dashboard or Chrome extension.",
         },
         { status: 404 }
       );
@@ -81,11 +78,5 @@ export async function GET(
       },
       cachedAt: cached.createdAt,
     });
-  } catch (err: any) {
-    console.error("[VHI API] Error:", err);
-    return NextResponse.json(
-      { error: "Failed to retrieve VHI data" },
-      { status: 500 }
-    );
   }
-}
+);

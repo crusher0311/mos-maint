@@ -200,7 +200,7 @@ API keys are scoped to specific permissions:
         VHIResponse: {
           type: "object",
           properties: {
-            ok: { type: "boolean" },
+            success: { type: "boolean" },
             vin: { type: "string" },
             vehicle: {
               type: "object",
@@ -413,6 +413,32 @@ API keys are scoped to specific permissions:
                 },
               },
             },
+          },
+        },
+      },
+      "/vehicles/{vin}/vhi": {
+        get: {
+          summary: "Get Vehicle Health Indicator",
+          description: "Returns the Vehicle Health Indicator (VHI) data for a vehicle, including a 0-100 health score, vehicle details, and bucketed maintenance items (overdue, due soon, upcoming). Data is sourced from the cached maintenance plan, which is built when a vehicle is viewed in the dashboard or Chrome extension. Items include OEM maintenance schedules, DVI findings, deferred work, and service history.",
+          tags: ["Vehicle Health"],
+          security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
+          parameters: [
+            { name: "vin", in: "path", required: true, schema: { type: "string" }, description: "Vehicle VIN (17 characters)" },
+          ],
+          responses: {
+            "200": {
+              description: "VHI data with health score and maintenance buckets",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/VHIResponse" },
+                },
+              },
+            },
+            "400": { description: "Invalid VIN", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "Unauthorized — missing or invalid API key", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "403": { description: "Permission denied — API key lacks vehicles:read permission", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "No VHI data available — maintenance plan not yet built for this vehicle", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
       },

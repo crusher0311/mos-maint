@@ -15,6 +15,7 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/api/extension/")) return true;
   if (pathname.startsWith("/api/cron/")) return true;
   if (pathname.startsWith("/api/platform-admin/log-stream")) return true;
+  if (pathname.startsWith("/api/external/")) return true;
   if (pathname.startsWith("/api/docs")) return true;
   if (pathname.startsWith("/report/")) return true;
   if (pathname.startsWith("/_next/")) return true;
