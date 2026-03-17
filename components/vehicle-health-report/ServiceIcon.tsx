@@ -252,6 +252,8 @@ const imageIcons: Record<string, string> = {
   engine_air_filter: "/icons/service/air_filter.svg",
   cabin_air_filter: "/icons/service/cabin_air_filter.svg",
   spark_plugs: "/icons/service/spark_plugs.svg",
+  engine_oil: "/icons/service/oil_change.svg",
+  oil_change: "/icons/service/oil_change.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
