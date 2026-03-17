@@ -9,6 +9,7 @@ import {
 import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
 import { computeJobHash } from "@/lib/job-index";
 import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
+import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -257,6 +258,19 @@ async function handleRepairOrderEvent(
     } catch (err: any) {
       console.error(`[SW Webhook] Job indexing error for RO ${roId}:`, err.message);
     }
+
+    const authorizedJobs = extractAuthorizedJobsFromShopWareRo(ro);
+    triggerVhiOnWorkOrderClose(db, {
+      vin: ro.vehicle?.vin?.toUpperCase(),
+      shopId: mosShopId,
+      provider: "shopware",
+      roNumber: ro.number ? String(ro.number) : null,
+      mileage: ro.odometer_out ?? ro.odometer ?? null,
+      authorizedJobs,
+      source: "webhook",
+    }).catch((err: any) =>
+      console.error(`[SW Webhook] VHI auto-rebuild failed for RO ${roId}:`, err.message)
+    );
   }
 }
 

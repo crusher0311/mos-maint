@@ -442,6 +442,93 @@ API keys are scoped to specific permissions:
           },
         },
       },
+      "/vhi/analyze": {
+        post: {
+          summary: "Analyze Vehicle Health (On-Demand)",
+          description: "Triggers a full Vehicle Health Indicator (VHI) analysis for a vehicle. Resolves the shop via SMS type and SMS shop ID, pulls mileage from the most recent work order (or uses provided mileage), invalidates any stale cache, builds a fresh maintenance plan, and returns the scored result. Ideal for post-RO-close workflows — pass the VIN and RO details after a work order posts to get an updated health assessment that reflects authorized work.",
+          tags: ["Vehicle Health"],
+          security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["vin", "sms", "smsShopId"],
+                  properties: {
+                    vin: { type: "string", description: "17-character Vehicle Identification Number", example: "1FT8W3BT0BEA08647" },
+                    sms: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"], description: "Shop management system name" },
+                    smsShopId: { type: "string", description: "Shop ID within the SMS platform", example: "12345" },
+                    roNumber: { type: "string", description: "Repair order number (optional — used to locate mileage from a specific RO)", example: "WO-9876" },
+                    mileage: { type: "number", description: "Override mileage (optional — auto-resolved from the RO if not provided)", example: 105388 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "VHI analysis result with health score and maintenance buckets",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean" },
+                      vin: { type: "string" },
+                      shopId: { type: "number" },
+                      sms: { type: "string" },
+                      roNumber: { type: "string", nullable: true },
+                      vehicle: {
+                        type: "object",
+                        properties: {
+                          year: { type: "number", nullable: true },
+                          make: { type: "string", nullable: true },
+                          model: { type: "string", nullable: true },
+                          engine: { type: "string", nullable: true },
+                        },
+                      },
+                      currentMiles: { type: "number", nullable: true },
+                      distanceUnit: { type: "string" },
+                      customerName: { type: "string", nullable: true },
+                      score: {
+                        type: "object",
+                        properties: {
+                          value: { type: "number", minimum: 0, maximum: 100 },
+                          tier: { type: "string", enum: ["Excellent", "Good", "Fair", "Poor", "Critical"] },
+                          color: { type: "string" },
+                        },
+                      },
+                      summary: {
+                        type: "object",
+                        properties: {
+                          overdue: { type: "number" },
+                          dueSoon: { type: "number" },
+                          upcoming: { type: "number" },
+                        },
+                      },
+                      buckets: {
+                        type: "object",
+                        properties: {
+                          overdue: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+                          dueSoon: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+                          upcoming: { type: "array", items: { $ref: "#/components/schemas/VHIItem" } },
+                        },
+                      },
+                      analyzedAt: { type: "string", format: "date-time" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": { description: "Invalid request — missing VIN, SMS, or mileage could not be resolved", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "401": { description: "Unauthorized — missing or invalid API key", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "403": { description: "Permission denied — API key not authorized for this shop", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "404": { description: "Shop not found for the given SMS and SMS shop ID", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          },
+        },
+      },
       "/keytags": {
         post: {
           summary: "Generate Keytag",

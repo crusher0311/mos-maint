@@ -8,6 +8,7 @@ import {
 } from "@/lib/integrations/protractor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
+import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -217,6 +218,21 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
             } catch (indexErr: any) {
               console.error(`[Protractor Webhook] Job indexing error for WO ${objectId}:`, indexErr.message);
             }
+
+            const authorizedJobs = extractAuthorizedJobsFromProtractorRo(result.workOrder);
+            const woMileage = result.workOrder.OutUsage || result.workOrder.InUsage || 
+              result.workOrder.ServiceItem?.Odometer || null;
+            triggerVhiOnWorkOrderClose(db, {
+              vin,
+              shopId,
+              provider: "protractor",
+              roNumber: result.workOrder.WorkOrderNumber || objectId,
+              mileage: woMileage,
+              authorizedJobs,
+              source: "webhook",
+            }).catch((err: any) =>
+              console.error(`[Protractor Webhook] VHI auto-rebuild failed for VIN ${vin}:`, err.message)
+            );
           }
         }
       }

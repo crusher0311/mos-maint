@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
+import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -204,10 +205,9 @@ export async function POST(req: NextRequest) {
         );
         
         if (shop) {
-          // Get VIN from existing cache or fetch it
           const cachedWO = await db.collection("tekmetric_work_orders").findOne(
             { workOrderId: String(roId) },
-            { projection: { vin: 1 } }
+            { projection: { vin: 1, odometer: 1 } }
           );
           
           const vin = cachedWO?.vin;
@@ -215,6 +215,21 @@ export async function POST(req: NextRequest) {
           if (vin) {
             await invalidateCachedPlan(db, vin, Number(shop.shopId));
             console.log(`[Tekmetric Webhook] Invalidated plan cache for VIN ${vin} (shop ${shop.shopId})`);
+            
+            if (isTerminal || isInvoicePosted) {
+              const authorizedJobs = extractAuthorizedJobsFromTekmetricRo(repairOrder);
+              triggerVhiOnWorkOrderClose(db, {
+                vin,
+                shopId: Number(shop.shopId),
+                provider: "tekmetric",
+                roNumber: String(roNumber),
+                mileage: cachedWO?.odometer || repairOrder.milesIn || repairOrder.milesOut || null,
+                authorizedJobs,
+                source: "webhook",
+              }).catch((err: any) =>
+                console.error(`[Tekmetric Webhook] VHI auto-rebuild failed for VIN ${vin}:`, err.message)
+              );
+            }
           }
         }
       } catch (err: any) {
