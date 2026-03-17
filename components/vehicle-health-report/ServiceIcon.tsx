@@ -254,6 +254,7 @@ const imageIcons: Record<string, string> = {
   spark_plugs: "/icons/service/spark_plugs.svg",
   engine_oil: "/icons/service/oil_change.svg",
   oil_change: "/icons/service/oil_change.svg",
+  tire_rotation: "/icons/service/tire_rotation.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
