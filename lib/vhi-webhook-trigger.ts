@@ -1,5 +1,6 @@
 import { Db } from "mongodb";
 import { rebuildVhi, resolveMileageFromRo } from "@/lib/vhi-rebuild";
+import { getCachedPlan } from "@/lib/plan-cache";
 
 const activeRebuilds = new Map<string, number>();
 const DEDUPE_WINDOW_MS = 30_000;
@@ -27,6 +28,75 @@ export interface VhiTriggerInput {
   mileage?: number | null;
   authorizedJobs?: string[];
   source: "webhook" | "cron" | "manual";
+}
+
+export async function triggerVhiOnWorkOrderCreate(
+  db: Db,
+  input: VhiTriggerInput
+): Promise<void> {
+  const { vin, shopId, provider, roNumber, source } = input;
+
+  if (!vin || vin.length < 11) {
+    return;
+  }
+
+  const lockKey = `create:${vin}:${shopId}`;
+  if (!acquireRebuildLock(lockKey)) {
+    console.log(`[VHI Trigger] Skipping duplicate create-build for ${lockKey}`);
+    return;
+  }
+
+  const existing = await getCachedPlan(db, vin, shopId, input.mileage);
+  if (existing) {
+    console.log(`[VHI Trigger] Plan already cached for ${vin} at shop ${shopId}, skipping create-build`);
+    return;
+  }
+
+  let mileage = input.mileage ?? null;
+
+  if (!mileage || mileage <= 0) {
+    mileage = await resolveMileageFromRo(db, shopId, provider, vin, roNumber);
+  }
+
+  if (!mileage || mileage <= 0) {
+    console.log(`[VHI Trigger] No mileage for create-build on ${vin}, skipping`);
+    return;
+  }
+
+  console.log(
+    `[VHI Trigger] Auto-building VHI on RO create: VIN=${vin}, shop=${shopId}, ` +
+    `provider=${provider}, RO=${roNumber || "N/A"}, mileage=${mileage}`
+  );
+
+  try {
+    const result = await rebuildVhi(shopId, vin, mileage, {
+      invalidateFirst: false,
+    });
+
+    if (result.success) {
+      await db.collection("vhi_analysis_log").insertOne({
+        vin: vin.toUpperCase(),
+        shopId,
+        provider,
+        roNumber: roNumber || null,
+        mileage,
+        score: result.score?.value,
+        tier: result.score?.tier,
+        summary: result.summary,
+        authorizedJobs: [],
+        triggeredBy: `${source}_ro_create`,
+        analyzedAt: new Date(),
+      });
+
+      console.log(
+        `[VHI Trigger] VHI built on RO create: VIN=${vin}, score=${result.score?.value} (${result.score?.tier})`
+      );
+    } else {
+      console.warn(`[VHI Trigger] VHI create-build failed for VIN=${vin}: ${result.error}`);
+    }
+  } catch (err: any) {
+    console.error(`[VHI Trigger] Error building VHI on RO create for VIN=${vin}:`, err.message);
+  }
 }
 
 export async function triggerVhiOnWorkOrderClose(

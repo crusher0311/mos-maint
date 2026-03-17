@@ -9,7 +9,7 @@ import {
 import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
 import { computeJobHash } from "@/lib/job-index";
 import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
-import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
+import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -219,9 +219,24 @@ async function handleRepairOrderEvent(
         console.warn(`[SW Webhook] Prefetch failed for ${vin}:`, err.message);
       }
     });
+
   }
 
   const isInvoiced = ro.state === "invoice" || Boolean(ro.closed_at);
+
+  if (!isInvoiced && vin && vin.length === 17 && odometer && odometer > 0) {
+    const swDb = await getDb();
+    triggerVhiOnWorkOrderCreate(swDb, {
+      vin,
+      shopId: mosShopId,
+      provider: "shopware",
+      roNumber: ro.number ? String(ro.number) : null,
+      mileage: odometer,
+      source: "webhook",
+    }).catch((err: any) =>
+      console.error(`[SW Webhook] VHI create-build failed for ${vin}:`, err.message)
+    );
+  }
 
   if (isInvoiced && ro.vehicle?.vin) {
     try {

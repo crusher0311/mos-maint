@@ -8,7 +8,7 @@ import {
 } from "@/lib/integrations/protractor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
-import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
+import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -154,10 +154,27 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
           { upsert: true }
         );
         console.log(`[Protractor Webhook] Updated work order snapshot ${objectId}`);
-        
+
         const woStage = (result.workOrder.WorkflowStage || "").toLowerCase();
         const isCompleted = result.workOrder.Completed || 
           ["invoiced", "invoice", "posted", "completed", "closed"].some(s => woStage.includes(s));
+
+        if (!isCompleted) {
+          const woVin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || "")?.toUpperCase() || null;
+          const woMileageCreate = result.workOrder.InUsage || result.workOrder.ServiceItem?.Odometer || null;
+          if (woVin && woVin.length >= 11 && woMileageCreate && woMileageCreate > 0) {
+            triggerVhiOnWorkOrderCreate(db, {
+              vin: woVin,
+              shopId,
+              provider: "protractor",
+              roNumber: result.workOrder.WorkOrderNumber || objectId,
+              mileage: woMileageCreate,
+              source: "webhook",
+            }).catch((err: any) =>
+              console.error(`[Protractor Webhook] VHI create-build failed for VIN ${woVin}:`, err.message)
+            );
+          }
+        }
 
         if (isCompleted) {
           const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;

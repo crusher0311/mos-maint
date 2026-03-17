@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
-import { triggerVhiOnWorkOrderClose, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
+import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -185,6 +185,19 @@ export async function POST(req: NextRequest) {
                 });
                 
                 console.log(`[Tekmetric Webhook] Created new work order #${roNumber} for VIN ${vehicle.vin}`);
+                
+                if (mileage && mileage > 0) {
+                  triggerVhiOnWorkOrderCreate(db, {
+                    vin: vehicle.vin.toUpperCase(),
+                    shopId: Number(shop.shopId),
+                    provider: "tekmetric",
+                    roNumber: String(roNumber),
+                    mileage,
+                    source: "webhook",
+                  }).catch((err: any) =>
+                    console.error(`[Tekmetric Webhook] VHI create-build failed for VIN ${vehicle.vin}:`, err.message)
+                  );
+                }
               } else {
                 console.log(`[Tekmetric Webhook] Skipped RO #${roNumber} - vehicle has no VIN`);
               }
@@ -197,7 +210,6 @@ export async function POST(req: NextRequest) {
         }
       }
       
-      // Invalidate cached VHI plan so next view gets fresh data
       try {
         const shop = await db.collection("shops").findOne(
           { "tekmetric.shopId": tekmetricShopId },
@@ -213,10 +225,10 @@ export async function POST(req: NextRequest) {
           const vin = cachedWO?.vin;
           
           if (vin) {
-            await invalidateCachedPlan(db, vin, Number(shop.shopId));
-            console.log(`[Tekmetric Webhook] Invalidated plan cache for VIN ${vin} (shop ${shop.shopId})`);
-            
             if (isTerminal || isInvoicePosted) {
+              await invalidateCachedPlan(db, vin, Number(shop.shopId));
+              console.log(`[Tekmetric Webhook] Invalidated plan cache for VIN ${vin} (shop ${shop.shopId})`);
+
               const authorizedJobs = extractAuthorizedJobsFromTekmetricRo(repairOrder);
               triggerVhiOnWorkOrderClose(db, {
                 vin,
@@ -233,7 +245,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (err: any) {
-        console.error(`[Tekmetric Webhook] Plan cache invalidation failed for RO #${roNumber}:`, err.message);
+        console.error(`[Tekmetric Webhook] VHI trigger failed for RO #${roNumber}:`, err.message);
       }
     }
     
