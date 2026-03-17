@@ -141,6 +141,25 @@ export async function POST(req: NextRequest) {
             { $set: updateFields }
           );
           console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, odometer=${newOdometer || 'unchanged'}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
+
+          if (existingWO.vin && newOdometer && newOdometer > 0) {
+            const tekShop = await db.collection("shops").findOne(
+              { "tekmetric.shopId": tekmetricShopId },
+              { projection: { shopId: 1 } }
+            );
+            if (tekShop) {
+              triggerVhiOnWorkOrderCreate(db, {
+                vin: existingWO.vin,
+                shopId: Number(tekShop.shopId),
+                provider: "tekmetric",
+                roNumber: String(roNumber),
+                mileage: newOdometer,
+                source: "webhook",
+              }).catch((err: any) =>
+                console.error(`[Tekmetric Webhook] VHI create-build on update failed for VIN ${existingWO.vin}:`, err.message)
+              );
+            }
+          }
         } else {
           // New work order - fetch vehicle and customer details, then create
           const shop = await db.collection("shops").findOne({
