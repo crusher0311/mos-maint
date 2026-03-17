@@ -118,7 +118,7 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
                 )}
               </div>
               <div className={`flex-shrink-0 ${isSelected ? "text-green-500" : isOverdue ? "text-red-500" : "text-amber-500"}`}>
-                <ServiceIcon serviceKey={item.serviceKey ?? item.key} size={22} />
+                <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={22} />
               </div>
               <div className="flex-1 min-w-0">
                 <span className={`text-sm font-medium ${isSelected ? "text-green-700 line-through" : "text-gray-800"}`}>

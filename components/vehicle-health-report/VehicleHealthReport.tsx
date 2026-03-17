@@ -224,7 +224,7 @@ export default function VehicleHealthReport({
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="text-red-600 flex-shrink-0 mt-0.5">
-                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} size={28} />
+                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
@@ -255,31 +255,6 @@ export default function VehicleHealthReport({
 
         {/* Score Simulator */}
         <ScoreSimulator data={data} currentScore={score} />
-
-        {/* Systems in Good Condition */}
-        {goodSystems.length > 0 && (
-          <div className="px-4 py-5 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
-                  <polyline points="3,7 6,10 11,4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-green-600">Systems in Good Condition</h3>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {goodSystems.slice(0, 8).map((item) => (
-                <div key={item.key} className="flex items-center gap-2 text-gray-600">
-                  <div className="text-green-500 flex-shrink-0">
-                    <ServiceIcon serviceKey={item.serviceKey ?? item.key} size={24} />
-                  </div>
-                  <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Service Timeline */}
         <div className="px-4 py-5 border-b border-gray-100">
@@ -366,7 +341,7 @@ export default function VehicleHealthReport({
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="text-amber-600 flex-shrink-0 mt-0.5">
-                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} size={28} />
+                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
@@ -384,6 +359,31 @@ export default function VehicleHealthReport({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Systems in Good Condition */}
+        {goodSystems.length > 0 && (
+          <div className="px-4 py-5 border-b border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                  <polyline points="3,7 6,10 11,4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-green-600">Systems in Good Condition</h3>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {goodSystems.slice(0, 8).map((item) => (
+                <div key={item.key} className="flex items-center gap-2 text-gray-600">
+                  <div className="text-green-500 flex-shrink-0">
+                    <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={24} />
+                  </div>
+                  <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
