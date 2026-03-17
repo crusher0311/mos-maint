@@ -1,0 +1,212 @@
+[
+  {
+    "id": "Cell_4_4_Group",
+    "gridRow": 0,
+    "gridCol": 0,
+    "label": "Car Diagnostics (outline)",
+    "filename": "s1_0_0_car_diagnostics__outline_"
+  },
+  {
+    "id": "Cell_4_2_Group",
+    "gridRow": 0,
+    "gridCol": 1,
+    "label": "Wrench (outline)",
+    "filename": "s1_0_1_wrench__outline_"
+  },
+  {
+    "id": "Cell_3_4_Group",
+    "gridRow": 0,
+    "gridCol": 2,
+    "label": "Clock/Timing (outline)",
+    "filename": "s1_0_2_clock_timing__outline_"
+  },
+  {
+    "id": "Cell_3_2_Group",
+    "gridRow": 0,
+    "gridCol": 3,
+    "label": "Shield+Drivetrain (outline)",
+    "filename": "s1_0_3_shield_drivetrain__outline_"
+  },
+  {
+    "id": "Cell_4_3_Group",
+    "gridRow": 0,
+    "gridCol": 4,
+    "label": "Steering Wheel (outline)",
+    "filename": "s1_0_4_steering_wheel__outline_"
+  },
+  {
+    "id": "Cell_4_1_Group",
+    "gridRow": 0,
+    "gridCol": 5,
+    "label": "Car Diagnostics (filled)",
+    "filename": "s1_0_5_car_diagnostics__filled_"
+  },
+  {
+    "id": "Cell_4_-1_Group",
+    "gridRow": 0,
+    "gridCol": 6,
+    "label": "Wrench (filled)",
+    "filename": "s1_0_6_wrench__filled_"
+  },
+  {
+    "id": "Cell_4_0_Group",
+    "gridRow": 0,
+    "gridCol": 7,
+    "label": "Clock/Timing (filled)",
+    "filename": "s1_0_7_clock_timing__filled_"
+  },
+  {
+    "id": "Cell_3_3_Group",
+    "gridRow": 0,
+    "gridCol": 8,
+    "label": "Shield+Drivetrain (filled)",
+    "filename": "s1_0_8_shield_drivetrain__filled_"
+  },
+  {
+    "id": "Cell_3_1_Group",
+    "gridRow": 0,
+    "gridCol": 9,
+    "label": "Steering Wheel (filled)",
+    "filename": "s1_0_9_steering_wheel__filled_"
+  },
+  {
+    "id": "Cell_3_0_Group",
+    "gridRow": 1,
+    "gridCol": 0,
+    "label": "Heart/Engine (outline)",
+    "filename": "s1_1_0_heart_engine__outline_"
+  },
+  {
+    "id": "Cell_2_4_Group",
+    "gridRow": 1,
+    "gridCol": 1,
+    "label": "Spark Plug (outline)",
+    "filename": "s1_1_1_spark_plug__outline_"
+  },
+  {
+    "id": "Cell_2_2_Group",
+    "gridRow": 1,
+    "gridCol": 2,
+    "label": "Car Door+Lock (outline)",
+    "filename": "s1_1_2_car_door_lock__outline_"
+  },
+  {
+    "id": "Cell_2_0_Group",
+    "gridRow": 1,
+    "gridCol": 3,
+    "label": "Exhaust/Wind (outline)",
+    "filename": "s1_1_3_exhaust_wind__outline_"
+  },
+  {
+    "id": "Cell_2_3_Group",
+    "gridRow": 1,
+    "gridCol": 4,
+    "label": "Nut+Wrench (outline)",
+    "filename": "s1_1_4_nut_wrench__outline_"
+  },
+  {
+    "id": "Cell_2_1_Group",
+    "gridRow": 1,
+    "gridCol": 5,
+    "label": "Heart/Engine (filled)",
+    "filename": "s1_1_5_heart_engine__filled_"
+  },
+  {
+    "id": "Cell_2_-1_Group",
+    "gridRow": 1,
+    "gridCol": 6,
+    "label": "Spark Plug (filled)",
+    "filename": "s1_1_6_spark_plug__filled_"
+  },
+  {
+    "id": "Cell_3_-1_Group",
+    "gridRow": 1,
+    "gridCol": 7,
+    "label": "Car Door+Lock (filled)",
+    "filename": "s1_1_7_car_door_lock__filled_"
+  },
+  {
+    "id": "Cell_1_3_Group",
+    "gridRow": 1,
+    "gridCol": 8,
+    "label": "Exhaust/Wind (filled)",
+    "filename": "s1_1_8_exhaust_wind__filled_"
+  },
+  {
+    "id": "Cell_1_4_Group",
+    "gridRow": 1,
+    "gridCol": 9,
+    "label": "Magnifying Glass (filled)",
+    "filename": "s1_1_9_magnifying_glass__filled_"
+  },
+  {
+    "id": "Cell_1_2_Group",
+    "gridRow": 2,
+    "gridCol": 0,
+    "label": "Crossed Wrenches (outline)",
+    "filename": "s1_2_0_crossed_wrenches__outline_"
+  },
+  {
+    "id": "Cell_1_0_Group",
+    "gridRow": 2,
+    "gridCol": 1,
+    "label": "Alignment Target (outline)",
+    "filename": "s1_2_1_alignment_target__outline_"
+  },
+  {
+    "id": "Cell_0_4_Group",
+    "gridRow": 2,
+    "gridCol": 2,
+    "label": "Key Fob (outline)",
+    "filename": "s1_2_2_key_fob__outline_"
+  },
+  {
+    "id": "Cell_0_2_Group",
+    "gridRow": 2,
+    "gridCol": 3,
+    "label": "Spring/Coil (outline)",
+    "filename": "s1_2_3_spring_coil__outline_"
+  },
+  {
+    "id": "Cell_0_0_Group",
+    "gridRow": 2,
+    "gridCol": 4,
+    "label": "Feather (outline)",
+    "filename": "s1_2_4_feather__outline_"
+  },
+  {
+    "id": "Cell_0_3_Group",
+    "gridRow": 2,
+    "gridCol": 5,
+    "label": "Nut/Bolt (outline)",
+    "filename": "s1_2_5_nut_bolt__outline_"
+  },
+  {
+    "id": "Cell_1_-1_Group",
+    "gridRow": 2,
+    "gridCol": 6,
+    "label": "Crossed Wrenches (filled)",
+    "filename": "s1_2_6_crossed_wrenches__filled_"
+  },
+  {
+    "id": "Cell_0_-1_Group",
+    "gridRow": 2,
+    "gridCol": 7,
+    "label": "Alignment Target (filled)",
+    "filename": "s1_2_7_alignment_target__filled_"
+  },
+  {
+    "id": "Cell_0_1_Group",
+    "gridRow": 2,
+    "gridCol": 8,
+    "label": "Key Fob (filled)",
+    "filename": "s1_2_8_key_fob__filled_"
+  },
+  {
+    "id": "Cell_1_1_Group",
+    "gridRow": 2,
+    "gridCol": 9,
+    "label": "Spring+Nut (filled)",
+    "filename": "s1_2_9_spring_nut__filled_"
+  }
+]
