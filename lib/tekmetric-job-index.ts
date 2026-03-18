@@ -147,9 +147,14 @@ export async function indexTekmetricWorkOrderJobs(
       }
       
       if (job.parts && job.parts.length > 0) {
+        const allPartsZero = job.parts.every(p => !(p.retail || p.cost));
+        const totalPartsQty = job.parts.reduce((s, p) => s + (p.quantity || 1), 0);
         for (const part of job.parts) {
           const qty = part.quantity || 1;
-          const retailDollars = (part.retail || part.cost || 0) / 100;
+          let retailDollars = (part.retail || part.cost || 0) / 100;
+          if (retailDollars === 0 && allPartsZero && partsAmountDollars > 0 && totalPartsQty > 0) {
+            retailDollars = Math.round((partsAmountDollars / totalPartsQty) * 100) / 100;
+          }
           lines.push({
             lineType: "part",
             description: part.name || part.description || "",

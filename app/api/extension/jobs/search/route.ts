@@ -313,6 +313,9 @@ export async function GET(request: NextRequest) {
       const partsAmount = rawTotals.partsAmount || calculatedPartsAmount;
       const laborAmount = rawTotals.laborAmount || calculatedLaborAmount;
       const totalAmount = rawTotals.totalAmount || (partsAmount + laborAmount);
+
+      const allPartPricesZero = partLines.length > 0 && partLines.every((l: any) => !(l.unitPrice || l.extendedPrice));
+      const totalPartsQty = partLines.reduce((s: number, l: any) => s + (l.quantity || 1), 0);
       
       return {
         _id: job._id.toString(),
@@ -325,14 +328,20 @@ export async function GET(request: NextRequest) {
           name: l.description,
           hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
         })),
-        parts: partLines.map((l: any) => ({
-          name: l.description,
-          partNumber: l.partNumber,
-          brand: l.manufacturer,
-          quantity: l.quantity || 1,
-          cost: l.cost || 0,
-          retail: l.unitPrice || l.extendedPrice || 0
-        })),
+        parts: partLines.map((l: any) => {
+          let retail = l.unitPrice || l.extendedPrice || 0;
+          if (retail === 0 && allPartPricesZero && partsAmount > 0 && totalPartsQty > 0) {
+            retail = Math.round((partsAmount / totalPartsQty) * 100) / 100;
+          }
+          return {
+            name: l.description,
+            partNumber: l.partNumber,
+            brand: l.manufacturer,
+            quantity: l.quantity || 1,
+            cost: l.cost || 0,
+            retail
+          };
+        }),
         totals: {
           laborHours: rawTotals.laborHours || laborHours || 0,
           laborAmount,
