@@ -1071,12 +1071,22 @@ export async function POST(req: NextRequest) {
     if (tekmetricShopId) {
       try {
         const cachedWO = await db.collection("tekmetric_work_orders").findOne(
-          { vin: vin.toUpperCase(), tekmetricShopId: Number(tekmetricShopId) },
-          { sort: { createdAt: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
+          {
+            vin: { $regex: new RegExp(`^${vin}$`, "i") },
+            $or: [
+              { tekmetricShopId: Number(tekmetricShopId) },
+              { tekmetricShopId: String(tekmetricShopId) },
+              { shopId: String(shopId) },
+              { shopId: Number(shopId) },
+            ],
+          },
+          { sort: { updatedAt: -1, createdAt: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
         );
         if (cachedWO) {
           if (cachedWO.workOrderNumber) latestRoNumber = String(cachedWO.workOrderNumber);
-          if (cachedWO.customerName) customerName = cachedWO.customerName;
+          if (cachedWO.customerName && cachedWO.customerName !== "Unknown Customer") {
+            customerName = cachedWO.customerName;
+          }
         }
       } catch (err) {
         console.log(`[PlanBuild] MongoDB WO lookup error for ${vin}:`, err);
@@ -1086,6 +1096,38 @@ export async function POST(req: NextRequest) {
     if (!customerName && protractorCfg.configured && (protractorVehicleResult as any).ok) {
       const v = (protractorVehicleResult as any).vehicle;
       customerName = v?.CustomerName || [v?.FirstName, v?.LastName].filter(Boolean).join(" ") || null;
+    }
+
+    if (!customerName) {
+      try {
+        const swRo = await db.collection("cached_work_orders").findOne(
+          {
+            vin: vin.toUpperCase(),
+            shopId: { $in: [String(shopId), Number(shopId)] },
+            customerName: { $exists: true, $nin: [null, ""] },
+          },
+          { sort: { createdAt: -1 }, projection: { customerName: 1 } }
+        );
+        if (swRo?.customerName) customerName = swRo.customerName;
+      } catch (err) {
+        console.log(`[PlanBuild] cached_work_orders customer lookup error for ${vin}:`, err);
+      }
+    }
+
+    if (!customerName) {
+      try {
+        const vDoc = await db.collection("vehicles").findOne(
+          {
+            vin: vin.toUpperCase(),
+            shopId: { $in: [String(shopId), Number(shopId)] },
+            customerName: { $exists: true, $nin: [null, ""] },
+          },
+          { projection: { customerName: 1 } }
+        );
+        if (vDoc?.customerName) customerName = vDoc.customerName;
+      } catch (err) {
+        console.log(`[PlanBuild] vehicles customer lookup error for ${vin}:`, err);
+      }
     }
 
     const buckets = triage({

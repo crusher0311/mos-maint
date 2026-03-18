@@ -81,6 +81,21 @@ export async function GET(
     let customerName = plan.customerName || null;
 
     if (!customerName) {
+      const tekWo = await db.collection("tekmetric_work_orders").findOne(
+        {
+          vin: { $regex: new RegExp(`^${vin}$`, "i") },
+          $or: [
+            { shopId: String(shopId) },
+            { shopId: Number(shopId) },
+          ],
+          customerName: { $exists: true, $nin: [null, "", "Unknown Customer"] },
+        },
+        { sort: { updatedAt: -1, createdAt: -1 }, projection: { customerName: 1 } }
+      );
+      if (tekWo?.customerName) customerName = tekWo.customerName;
+    }
+
+    if (!customerName) {
       const wo = await db.collection("cached_work_orders").findOne(
         {
           vin,
