@@ -1005,9 +1005,10 @@ export async function POST(req: NextRequest) {
 
     let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
     if (isTekmetricConfigured() && tekmetricWOs.length > 0) {
-      const latestTekRo = tekmetricWOs.find(wo => wo.dviDone) || tekmetricWOs[0];
-      const tekRoId = latestTekRo?.workOrderId ? Number(latestTekRo.workOrderId) : null;
-      if (tekRoId) {
+      const rosToTry = [...tekmetricWOs];
+      for (const tekRo of rosToTry) {
+        const tekRoId = tekRo?.workOrderId ? Number(tekRo.workOrderId) : null;
+        if (!tekRoId) continue;
         try {
           const inspections = await getRepairOrderInspections(tekRoId);
           for (const inspection of inspections) {
@@ -1021,6 +1022,7 @@ export async function POST(req: NextRequest) {
           }
           if (tekmetricDviFindings.length > 0) {
             console.log(`[PlanBuild] Tekmetric DVI: ${tekmetricDviFindings.length} findings from RO ${tekRoId}`);
+            break;
           }
         } catch (err: any) {
           console.warn(`[PlanBuild] Tekmetric DVI fetch failed for RO ${tekRoId}:`, err.message);

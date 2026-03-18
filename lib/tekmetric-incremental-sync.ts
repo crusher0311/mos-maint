@@ -4,6 +4,7 @@ import {
   getVehicle, 
   getCustomer,
   getTekmetricWorkOrderStatus,
+  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -321,6 +322,17 @@ async function upsertWorkOrder(
     },
     { upsert: true }
   );
+
+  try {
+    const inspections = await getRepairOrderInspections(ro.id);
+    if (inspections.length > 0) {
+      await db.collection("tekmetric_work_orders").updateOne(
+        { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: String(ro.id) },
+        { $set: { dviDone: true, dviCompletedAt: new Date() } }
+      );
+    }
+  } catch (err) {
+  }
 }
 
 async function sweepTerminalStatuses(

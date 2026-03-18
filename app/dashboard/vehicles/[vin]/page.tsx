@@ -151,6 +151,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         customerId: 1,
         hasComponents: 1,
         declinedServices: 1,
+        tekmetric: 1,
       },
     }
   );
@@ -188,6 +189,19 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         updatedAt: eventVehicle.createdAt || new Date(),
         customerId: null,
       };
+    }
+  }
+
+  if (vehicle && !vehicle.tekmetric) {
+    const tekWo = await db.collection("tekmetric_work_orders").findOne(
+      { 
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        vin: vin.toUpperCase()
+      },
+      { sort: { fetchedAt: -1 }, projection: { vehicleId: 1, workOrderId: 1 } }
+    );
+    if (tekWo?.vehicleId) {
+      vehicle.tekmetric = { vehicleId: tekWo.vehicleId };
     }
   }
 

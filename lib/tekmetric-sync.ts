@@ -3,6 +3,7 @@ import {
   getRepairOrders, 
   getVehicle, 
   getCustomer,
+  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -111,6 +112,17 @@ export async function syncSingleShop(
           },
           { upsert: true }
         );
+
+        try {
+          const inspections = await getRepairOrderInspections(ro.id);
+          if (inspections.length > 0) {
+            await db.collection("tekmetric_work_orders").updateOne(
+              { shopId: { $in: [String(numericShopId), numericShopId] }, workOrderId: String(ro.id) },
+              { $set: { dviDone: true, dviCompletedAt: new Date() } }
+            );
+          }
+        } catch (err) {
+        }
       }
     }
 
