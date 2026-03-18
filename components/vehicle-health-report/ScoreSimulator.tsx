@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import type { PlanItem, VHIData } from "./VehicleHealthReport";
-import { computeScore } from "./VehicleHealthReport";
+import { computeScore, isComplimentaryItem } from "./VehicleHealthReport";
 import { getScoreInfo } from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
 
@@ -14,8 +14,8 @@ interface ScoreSimulatorProps {
 export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorProps) {
   const actionableItems = useMemo(() => {
     return [
-      ...data.buckets.overdue.map((item) => ({ ...item, bucket: "overdue" as const })),
-      ...data.buckets.dueSoon.map((item) => ({ ...item, bucket: "dueSoon" as const })),
+      ...data.buckets.overdue.filter(i => !isComplimentaryItem(i)).map((item) => ({ ...item, bucket: "overdue" as const })),
+      ...data.buckets.dueSoon.filter(i => !isComplimentaryItem(i)).map((item) => ({ ...item, bucket: "dueSoon" as const })),
     ];
   }, [data]);
 
@@ -152,7 +152,7 @@ export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorPro
       </div>
 
       {hasSelection && (() => {
-        const remainingOverdue = data.buckets.overdue.filter((i) => !selectedKeys.has(i.key));
+        const remainingOverdue = data.buckets.overdue.filter((i) => !selectedKeys.has(i.key) && !isComplimentaryItem(i));
         const hasRemainingOverdue = remainingOverdue.length > 0;
 
         const bgTint = hasRemainingOverdue

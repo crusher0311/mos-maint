@@ -700,7 +700,7 @@ function triage({
       daysToGo,
       bump: null,
       source: "common",
-      reason: neverDone ? "This service has never been performed." : undefined,
+      reason: neverDone ? "No record of this service being performed." : undefined,
       usingShopInterval,
       declined: declinedInfo,
       matchedDeferred: matchedDeferred || undefined,

@@ -63,6 +63,40 @@ interface VehicleHealthReportProps {
   onViewDetails?: () => void;
 }
 
+const COMPLIMENTARY_KEYS = new Set([
+  "oil_reminder",
+  "oil_replacement_reminder",
+  "reset_oil_replacement_reminder",
+  "chassis_body",
+  "tighten_nuts_bolts",
+  "multi_point_inspection",
+  "tire_pressure",
+  "tire_pressure_check",
+]);
+
+const COMPLIMENTARY_TITLE_KEYWORDS = [
+  "oil replacement reminder",
+  "maint reqd",
+  "oil reset",
+  "reset oil",
+  "tighten nuts and bolts",
+  "tighten nuts & bolts",
+  "chassis and body",
+  "chassis & body",
+  "multi-point inspection",
+  "multi point inspection",
+  "tire pressure check",
+  "tire pressure set",
+  "set tire pressure",
+];
+
+function isComplimentaryItem(item: PlanItem): boolean {
+  const key = (item.serviceKey || item.key || "").toLowerCase();
+  if (COMPLIMENTARY_KEYS.has(key)) return true;
+  const title = item.title.toLowerCase();
+  return COMPLIMENTARY_TITLE_KEYWORDS.some(kw => title.includes(kw));
+}
+
 function computeScore(data: VHIData): number {
   let score = 100;
 
@@ -75,6 +109,7 @@ function computeScore(data: VHIData): number {
   };
 
   for (const item of data.buckets.overdue) {
+    if (isComplimentaryItem(item)) continue;
     let deduction = item.bump === "red" ? 7 : item.bump === "yellow" ? 5 : 5;
     deduction *= categoryMultiplier(item.category);
     if (item.declined) deduction += 1;
@@ -82,6 +117,7 @@ function computeScore(data: VHIData): number {
   }
 
   for (const item of data.buckets.dueSoon) {
+    if (isComplimentaryItem(item)) continue;
     let deduction = item.bump === "yellow" ? 2.5 : item.bump === "red" ? 3 : 2;
     deduction *= categoryMultiplier(item.category);
     score -= deduction;
@@ -105,7 +141,7 @@ function getItemDescription(item: PlanItem): string {
     return "Identified during vehicle inspection. Repair recommended.";
   }
   if (!item.last) {
-    return `This service has never been performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} miles.` : ""}`;
+    return `No record of this service being performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} miles.` : ""}`;
   }
   const lastDate = item.last.date ? new Date(item.last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null;
   const lastMiles = item.last.miles?.toLocaleString();
@@ -181,6 +217,13 @@ export default function VehicleHealthReport({
   const score = scoreProp ?? computeScore(data);
   const { vehicle, currentMiles, customerName, buckets } = data;
   const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
+
+  const complimentaryItems = [
+    ...buckets.overdue.filter(isComplimentaryItem),
+    ...buckets.dueSoon.filter(isComplimentaryItem),
+  ];
+  const filteredOverdue = buckets.overdue.filter(i => !isComplimentaryItem(i));
+  const filteredDueSoon = buckets.dueSoon.filter(i => !isComplimentaryItem(i));
 
   const goodSystems = buckets.upcoming.filter(
     (item) => item.milesToGo !== null && item.milesToGo > 5000
@@ -278,7 +321,7 @@ export default function VehicleHealthReport({
           {/* RECOMMENDATIONS TAB */}
           {activeTab === "recommendations" && (
             <div>
-              {buckets.overdue.length > 0 && (
+              {filteredOverdue.length > 0 && (
                 <div className="px-4 py-5 border-b border-gray-100">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
@@ -289,12 +332,12 @@ export default function VehicleHealthReport({
                       </svg>
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-red-600">
-                      Needs Attention Now ({buckets.overdue.length})
+                      Needs Attention Now ({filteredOverdue.length})
                     </h3>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {buckets.overdue.map((item) => {
+                    {filteredOverdue.map((item) => {
                       const status = getStatusLabel(item, "overdue");
                       return (
                         <div
@@ -332,7 +375,7 @@ export default function VehicleHealthReport({
                 </div>
               )}
 
-              {buckets.dueSoon.length > 0 && (
+              {filteredDueSoon.length > 0 && (
                 <div className="px-4 py-5 border-b border-gray-100">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0">
@@ -343,12 +386,12 @@ export default function VehicleHealthReport({
                       </svg>
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-amber-600">
-                      Coming Up Soon ({buckets.dueSoon.length})
+                      Coming Up Soon ({filteredDueSoon.length})
                     </h3>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {buckets.dueSoon.map((item) => {
+                    {filteredDueSoon.map((item) => {
                       const status = getStatusLabel(item, "dueSoon");
                       return (
                         <div
@@ -375,6 +418,37 @@ export default function VehicleHealthReport({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {complimentaryItems.length > 0 && (
+                <div className="px-4 py-5 border-b border-gray-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                        <path d="M7 2 L8.5 5.5 L12 5.5 L9 8 L10 12 L7 9.5 L4 12 L5 8 L2 5.5 L5.5 5.5 Z" fill="white" />
+                      </svg>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-blue-600">
+                      Complimentary with Your Visit ({complimentaryItems.length})
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {complimentaryItems.map((item) => (
+                      <div
+                        key={item.key}
+                        className="border border-blue-100 rounded-lg p-3 bg-blue-50/30"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="text-blue-500 flex-shrink-0">
+                            <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={22} />
+                          </div>
+                          <span className="text-xs font-medium text-gray-700 leading-tight">{item.title}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -414,13 +488,13 @@ export default function VehicleHealthReport({
                     <span className="text-xs sm:text-sm font-bold tracking-wide">NOW</span>
                   </div>
                   <div className="p-2 sm:p-3 space-y-2">
-                    {buckets.overdue.map((item) => (
+                    {filteredOverdue.map((item) => (
                       <div key={item.key} className="flex items-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "red" || item.category === "DVI Finding" ? "bg-red-500" : "bg-red-400"}`} />
                         <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
                       </div>
                     ))}
-                    {buckets.overdue.length === 0 && (
+                    {filteredOverdue.length === 0 && (
                       <p className="text-[11px] text-gray-400 italic">Nothing overdue</p>
                     )}
                   </div>
@@ -431,13 +505,13 @@ export default function VehicleHealthReport({
                     <span className="text-xs sm:text-sm font-bold tracking-wide">NEXT 3 MO</span>
                   </div>
                   <div className="p-2 sm:p-3 space-y-2">
-                    {buckets.dueSoon.map((item) => (
+                    {filteredDueSoon.map((item) => (
                       <div key={item.key} className="flex items-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "yellow" ? "bg-amber-400" : "bg-amber-500"}`} />
                         <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
                       </div>
                     ))}
-                    {buckets.dueSoon.length === 0 && (
+                    {filteredDueSoon.length === 0 && (
                       <p className="text-[11px] text-gray-400 italic">Nothing due soon</p>
                     )}
                   </div>
@@ -460,6 +534,22 @@ export default function VehicleHealthReport({
                   </div>
                 </div>
               </div>
+
+              {complimentaryItems.length > 0 && (
+                <div className="mt-4 border border-blue-100 rounded-lg p-3 bg-blue-50/30">
+                  <p className="text-xs font-semibold text-blue-600 mb-2">Complimentary with Your Visit</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {complimentaryItems.map((item) => (
+                      <div key={item.key} className="flex items-center gap-1.5">
+                        <div className="text-blue-400 flex-shrink-0">
+                          <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={16} />
+                        </div>
+                        <span className="text-[11px] text-gray-600 font-medium">{item.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -489,5 +579,5 @@ export default function VehicleHealthReport({
   );
 }
 
-export { computeScore };
+export { computeScore, isComplimentaryItem };
 export type { VHIData, PlanItem, VehicleInfo };
