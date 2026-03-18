@@ -310,9 +310,12 @@ export async function GET(request: NextRequest) {
         return sum + price;
       }, 0);
       
+      const totalAmount = rawTotals.totalAmount || 0;
       const partsAmount = rawTotals.partsAmount || calculatedPartsAmount;
-      const laborAmount = rawTotals.laborAmount || calculatedLaborAmount;
-      const totalAmount = rawTotals.totalAmount || (partsAmount + laborAmount);
+      let laborAmount = rawTotals.laborAmount || calculatedLaborAmount;
+      if (laborAmount === 0 && totalAmount > 0 && totalAmount > partsAmount) {
+        laborAmount = Math.round((totalAmount - partsAmount) * 100) / 100;
+      }
 
       const allPartPricesZero = partLines.length > 0 && partLines.every((l: any) => !(l.unitPrice || l.extendedPrice));
       const totalPartsQty = partLines.reduce((s: number, l: any) => s + (l.quantity || 1), 0);
@@ -350,10 +353,10 @@ export async function GET(request: NextRequest) {
           };
         }),
         totals: {
-          laborHours: rawTotals.laborHours || laborHours || 0,
+          laborHours: rawTotals.laborHours || laborHours || (laborItems.length > 0 ? laborItems.reduce((s: number, l: any) => s + (l.hours || 0), 0) : 0),
           laborAmount,
           partsAmount,
-          totalAmount,
+          totalAmount: totalAmount || (laborAmount + partsAmount),
         },
         matchScore: job.matchScore,
         matchBand: job.matchBand,
