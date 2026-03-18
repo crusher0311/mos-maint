@@ -549,9 +549,12 @@ function triage({
 
     const milesToGo = currentMiles != null && dueAtMiles != null ? dueAtMiles - currentMiles : null;
 
-    if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
+    if (milesToGo != null && milesPerDay != null && milesPerDay > 0) {
       const daysUntilDue = Math.round(milesToGo / milesPerDay);
-      dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+      const mileageBasedDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+      if (dueAtDate == null || mileageBasedDate < dueAtDate) {
+        dueAtDate = mileageBasedDate;
+      }
     }
     
     if (dueAtDate && dueAtDate < earliestDate) dueAtDate = null;
@@ -674,9 +677,12 @@ function triage({
 
     const milesToGo = currentMiles != null && dueAtMiles != null ? dueAtMiles - currentMiles : null;
 
-    if (dueAtDate == null && milesToGo != null && milesPerDay != null && milesPerDay > 0) {
+    if (milesToGo != null && milesPerDay != null && milesPerDay > 0) {
       const daysUntilDue = Math.round(milesToGo / milesPerDay);
-      dueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+      const mileageBasedDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+      if (dueAtDate == null || mileageBasedDate < dueAtDate) {
+        dueAtDate = mileageBasedDate;
+      }
     }
 
     if (dueAtDate && dueAtDate < earliestDate) dueAtDate = null;

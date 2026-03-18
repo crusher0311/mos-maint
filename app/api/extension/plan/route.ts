@@ -38,6 +38,30 @@ function formatIntervalText(intervalMiles: number, intervalMonths?: number): str
   return parts.join(' / ') || '';
 }
 
+function computeEstimatedDate(milesToGo: number | null, intervalMiles: number | null, intervalMonths: number | null, lastDate: any, dueAtDate: any): { daysToGo: number | null; estimatedDueDate: string | null } {
+  const candidates: Date[] = [];
+  if (milesToGo != null && milesToGo > 0 && intervalMiles != null && intervalMiles > 0 && intervalMonths != null && intervalMonths > 0) {
+    const mileageDays = Math.round((milesToGo / intervalMiles) * intervalMonths * 30);
+    if (mileageDays > 0) candidates.push(new Date(Date.now() + mileageDays * 86400000));
+  }
+  if (lastDate && intervalMonths != null && intervalMonths > 0) {
+    const ld = new Date(lastDate);
+    if (!isNaN(ld.getTime())) {
+      const dateBasedDue = new Date(ld);
+      dateBasedDue.setMonth(dateBasedDue.getMonth() + intervalMonths);
+      if (dateBasedDue.getTime() > Date.now()) candidates.push(dateBasedDue);
+    }
+  }
+  if (dueAtDate) {
+    const d = new Date(dueAtDate);
+    if (!isNaN(d.getTime()) && d.getTime() > Date.now()) candidates.push(d);
+  }
+  if (candidates.length === 0) return { daysToGo: null, estimatedDueDate: null };
+  const earliest = candidates.reduce((a, b) => a < b ? a : b);
+  const days = Math.ceil((earliest.getTime() - Date.now()) / 86400000);
+  return { daysToGo: days > 0 ? days : null, estimatedDueDate: days > 0 ? earliest.toISOString().split('T')[0] : null };
+}
+
 const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i, /synthetic oil/i],
   tire_rotation: [/tire rotation/i, /rotate tire/i],
@@ -526,13 +550,9 @@ async function runOnDemandAnalysis(
         const sourceLabel = intervalSource === 'shop' ? 'Shop' : 'OEM';
         const intervalText = `${sourceLabel}: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`;
         
-        let daysToGo: number | null = null;
-        if (milesToGo > 0 && intervalMiles > 0 && intervalMonths) {
-          daysToGo = Math.round((milesToGo / intervalMiles) * intervalMonths * 30);
-        }
-        const estimatedDueDate = daysToGo != null && daysToGo > 0
-          ? new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0]
-          : null;
+        const estResult = computeEstimatedDate(milesToGo, intervalMiles, intervalMonths, lastPerformed.date, null);
+        const daysToGo = estResult.daysToGo;
+        const estimatedDueDate = estResult.estimatedDueDate;
 
         recommendations.push({
           service: item.maintenance_name,
@@ -1100,16 +1120,13 @@ export async function GET(request: NextRequest) {
       };
       
       const convertItem = (item: any) => {
-        let daysToGo = item.daysToGo ?? null;
         let estimatedDueDate: string | null = null;
-        if (daysToGo != null && daysToGo > 0) {
-          estimatedDueDate = new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0];
-        } else if (daysToGo == null && item.milesToGo != null && item.milesToGo > 0 && item.intervalMiles && item.intervalMonths) {
-          daysToGo = Math.round((item.milesToGo / item.intervalMiles) * item.intervalMonths * 30);
-          estimatedDueDate = daysToGo > 0 ? new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0] : null;
-        } else if (item.dueAtDate) {
-          estimatedDueDate = typeof item.dueAtDate === 'string' ? item.dueAtDate.split('T')[0] : new Date(item.dueAtDate).toISOString().split('T')[0];
-        }
+        const existingDueDate = item.daysToGo != null && item.daysToGo > 0
+          ? new Date(Date.now() + item.daysToGo * 86400000).toISOString()
+          : item.dueAtDate || null;
+        const est = computeEstimatedDate(item.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, existingDueDate);
+        let daysToGo = est.daysToGo;
+        estimatedDueDate = est.estimatedDueDate;
         return {
         service: item.title || item.key,
         name: item.title || item.key,
@@ -1168,13 +1185,9 @@ export async function GET(request: NextRequest) {
             plan.complimentary.push(converted);
           } else if (dueAt != null && dueAt > 0) {
             converted.milesToGo = dueAt - currentMiles;
-            if (converted.milesToGo > 0 && item.intervalMiles && item.intervalMonths) {
-              converted.daysToGo = Math.round((converted.milesToGo / item.intervalMiles) * item.intervalMonths * 30);
-              converted.estimatedDueDate = new Date(Date.now() + converted.daysToGo * 86400000).toISOString().split('T')[0];
-            } else {
-              converted.daysToGo = null;
-              converted.estimatedDueDate = null;
-            }
+            const recat = computeEstimatedDate(converted.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, item.dueAtDate);
+            converted.daysToGo = recat.daysToGo;
+            converted.estimatedDueDate = recat.estimatedDueDate;
             if (currentMiles >= dueAt) {
               plan.overdue.push(converted);
             } else if (dueAt - currentMiles <= DUE_SOON_THRESHOLD) {
@@ -1379,12 +1392,12 @@ export async function GET(request: NextRequest) {
         // Try to find matching canned job for full labor/parts details
         const matchingCannedJob = findMatchingCannedJob(rec.service || rec.name);
         
-        let itemDaysToGo = rec.daysToGo ?? null;
-        let itemEstDate = rec.estimatedDueDate ?? null;
-        if (itemDaysToGo == null && rec.milesToGo != null && rec.milesToGo > 0 && rec.interval && rec.intervalMonths) {
-          itemDaysToGo = Math.round((rec.milesToGo / rec.interval) * rec.intervalMonths * 30);
-          itemEstDate = itemDaysToGo > 0 ? new Date(Date.now() + itemDaysToGo * 86400000).toISOString().split('T')[0] : null;
-        }
+        const existingDueDate2 = (rec.daysToGo != null && rec.daysToGo > 0)
+          ? new Date(Date.now() + rec.daysToGo * 86400000).toISOString()
+          : rec.dueAtDate || null;
+        const est2 = computeEstimatedDate(rec.milesToGo, rec.interval || rec.intervalMiles, rec.intervalMonths, rec.last?.date, existingDueDate2);
+        let itemDaysToGo = est2.daysToGo;
+        let itemEstDate = est2.estimatedDueDate;
         const item = {
           name: rec.service || rec.name,
           category: rec.category || null,
