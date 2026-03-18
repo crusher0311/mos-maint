@@ -96,6 +96,17 @@ export async function GET(
       }
     }
 
+    if (!mileage) {
+      const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
+        { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
+        { projection: { mileageAtAnalysis: 1 } }
+      );
+      if (analysisDoc?.mileageAtAnalysis) {
+        mileage = analysisDoc.mileageAtAnalysis;
+        console.log(`[VHI API] Recovered mileage ${mileage} from analysis cache for ${vin}`);
+      }
+    }
+
     if (mileage) {
       console.log(`[VHI API] No valid cache for ${vin} at shop ${shopId}, triggering build with mileage ${mileage}...`);
       const built = await triggerPlanBuild(shopId, vin, mileage);

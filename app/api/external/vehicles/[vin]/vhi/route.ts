@@ -142,6 +142,17 @@ export const GET = createExternalEndpoint(
       }
     }
 
+    if (!mileage) {
+      const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
+        { vin: vin.toUpperCase(), shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { projection: { mileageAtAnalysis: 1 } }
+      );
+      if (analysisDoc?.mileageAtAnalysis) {
+        mileage = analysisDoc.mileageAtAnalysis;
+        console.log(`[VHI External] Recovered mileage ${mileage} from analysis cache for ${vin}`);
+      }
+    }
+
     if (mileage) {
       console.log(`[VHI External] No valid cache for ${vin} at shop ${resolvedShopId}, triggering build with mileage ${mileage}...`);
       const built = await triggerPlanBuild(resolvedShopId, vin, mileage);
