@@ -1045,11 +1045,13 @@ function highlightCannedJob(serviceName, attempts = 0) {
   }
 }
 
-function formatLastDone(last) {
+function formatLastDone(last, currentMileage) {
   if (!last || (!last.miles && !last.date)) return null;
   
-  let text = 'Last done';
-  if (last.miles) {
+  const performedThisVisit = currentMileage && last.miles && Math.abs(last.miles - currentMileage) <= 100;
+  
+  let text = performedThisVisit ? 'Performed during this visit' : 'Last done';
+  if (!performedThisVisit && last.miles) {
     text += ` at ${last.miles.toLocaleString()} mi`;
   }
   if (last.date) {
@@ -1117,7 +1119,7 @@ function createServiceItemHTML(item, type) {
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
-  const lastDone = formatLastDone(item.last);
+  const lastDone = formatLastDone(item.last, currentContext?.mileage);
   const lastDoneHtml = lastDone ? 
     `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` :
     `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;

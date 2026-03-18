@@ -1099,7 +1099,18 @@ export async function GET(request: NextRequest) {
         complimentary: [] as any[]
       };
       
-      const convertItem = (item: any) => ({
+      const convertItem = (item: any) => {
+        let daysToGo = item.daysToGo ?? null;
+        let estimatedDueDate: string | null = null;
+        if (daysToGo != null && daysToGo > 0) {
+          estimatedDueDate = new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0];
+        } else if (daysToGo == null && item.milesToGo != null && item.milesToGo > 0 && item.intervalMiles && item.intervalMonths) {
+          daysToGo = Math.round((item.milesToGo / item.intervalMiles) * item.intervalMonths * 30);
+          estimatedDueDate = daysToGo > 0 ? new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0] : null;
+        } else if (item.dueAtDate) {
+          estimatedDueDate = typeof item.dueAtDate === 'string' ? item.dueAtDate.split('T')[0] : new Date(item.dueAtDate).toISOString().split('T')[0];
+        }
+        return {
         service: item.title || item.key,
         name: item.title || item.key,
         category: item.category || 'General',
@@ -1111,10 +1122,8 @@ export async function GET(request: NextRequest) {
         dueAt: item.dueAtMiles,
         dueMileage: item.dueAtMiles,
         dueDate: item.dueAtDate,
-        daysToGo: item.daysToGo ?? null,
-        estimatedDueDate: item.daysToGo != null && item.daysToGo > 0
-          ? new Date(Date.now() + item.daysToGo * 86400000).toISOString().split('T')[0]
-          : (item.dueAtDate || null),
+        daysToGo,
+        estimatedDueDate,
         milesToGo: item.milesToGo ?? null,
         last: item.last ? {
           source: item.last.source || 'unknown',
@@ -1137,7 +1146,7 @@ export async function GET(request: NextRequest) {
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null
-      });
+      }};
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
       const cachedMiles = cachedPlan.mileage || cachedPlan.plan.currentMiles || 0;
@@ -1370,13 +1379,19 @@ export async function GET(request: NextRequest) {
         // Try to find matching canned job for full labor/parts details
         const matchingCannedJob = findMatchingCannedJob(rec.service || rec.name);
         
+        let itemDaysToGo = rec.daysToGo ?? null;
+        let itemEstDate = rec.estimatedDueDate ?? null;
+        if (itemDaysToGo == null && rec.milesToGo != null && rec.milesToGo > 0 && rec.interval && rec.intervalMonths) {
+          itemDaysToGo = Math.round((rec.milesToGo / rec.interval) * rec.intervalMonths * 30);
+          itemEstDate = itemDaysToGo > 0 ? new Date(Date.now() + itemDaysToGo * 86400000).toISOString().split('T')[0] : null;
+        }
         const item = {
           name: rec.service || rec.name,
           category: rec.category || null,
           dueAt: rec.dueMileage,
           milesToGo: rec.milesToGo,
-          daysToGo: rec.daysToGo ?? null,
-          estimatedDueDate: rec.estimatedDueDate ?? null,
+          daysToGo: itemDaysToGo,
+          estimatedDueDate: itemEstDate,
           interval: rec.interval,
           intervalMonths: rec.intervalMonths,
           intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
