@@ -321,7 +321,18 @@ export default function ServiceIcon({ serviceKey, title, className = "", size = 
     );
   }
 
-  const icon = iconPaths[key] || defaultIcon;
+  if (!iconPaths[key]) {
+    return (
+      <img
+        src="/icons/service/general_service.svg"
+        alt=""
+        width={size}
+        height={size}
+        className={`inline-block ${className}`}
+        style={{ width: size, height: size, objectFit: "contain" }}
+      />
+    );
+  }
 
   return (
     <svg
@@ -331,7 +342,7 @@ export default function ServiceIcon({ serviceKey, title, className = "", size = 
       className={className}
       fill="none"
     >
-      {icon}
+      {iconPaths[key]}
     </svg>
   );
 }
