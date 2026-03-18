@@ -264,8 +264,6 @@ export default function DemoReportPage() {
       score={score}
       shopName="Mitchell's Auto Care"
       shopPhone="(555) 234-5678"
-      onScheduleService={() => alert("Schedule Service clicked")}
-      onViewDetails={() => alert("View Details clicked")}
     />
   );
 }
