@@ -35,7 +35,7 @@ export async function GET(
       { projection: { currentMileage: 1, lastMileage: 1 } }
     );
 
-    const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+    let mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
     let cached = await getCachedPlan(db, vin, shopId, mileage);
 
@@ -85,8 +85,19 @@ export async function GET(
       });
     }
 
+    if (!mileage) {
+      const expiredEntry = await db.collection("cached_plans").findOne(
+        { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
+        { sort: { createdAt: -1 }, projection: { mileage: 1, "plan.currentMiles": 1 } }
+      );
+      if (expiredEntry) {
+        mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
+        console.log(`[VHI API] Recovered mileage ${mileage} from expired cache for ${vin}`);
+      }
+    }
+
     if (mileage) {
-      console.log(`[VHI API] No cache at all for ${vin} at shop ${shopId}, triggering build...`);
+      console.log(`[VHI API] No valid cache for ${vin} at shop ${shopId}, triggering build with mileage ${mileage}...`);
       const built = await triggerPlanBuild(shopId, vin, mileage);
       if (built) {
         await new Promise((resolve) => setTimeout(resolve, 500));

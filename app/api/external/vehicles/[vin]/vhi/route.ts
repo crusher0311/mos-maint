@@ -81,9 +81,9 @@ export const GET = createExternalEndpoint(
       { projection: { currentMileage: 1, lastMileage: 1 } }
     );
 
-    const mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+    let mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
-    const cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+    let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
 
     if (cached) {
       const plan = cached.plan;
@@ -131,14 +131,25 @@ export const GET = createExternalEndpoint(
       });
     }
 
+    if (!mileage) {
+      const expiredEntry = await db.collection("cached_plans").findOne(
+        { vin: vin.toUpperCase(), shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { sort: { createdAt: -1 }, projection: { mileage: 1, "plan.currentMiles": 1 } }
+      );
+      if (expiredEntry) {
+        mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
+        console.log(`[VHI External] Recovered mileage ${mileage} from expired cache for ${vin}`);
+      }
+    }
+
     if (mileage) {
-      console.log(`[VHI External] No cache at all for ${vin} at shop ${resolvedShopId}, triggering build...`);
+      console.log(`[VHI External] No valid cache for ${vin} at shop ${resolvedShopId}, triggering build with mileage ${mileage}...`);
       const built = await triggerPlanBuild(resolvedShopId, vin, mileage);
       if (built) {
         await new Promise((resolve) => setTimeout(resolve, 500));
-        const freshCached = await getCachedPlan(db, vin, resolvedShopId, mileage);
-        if (freshCached) {
-          const plan = freshCached.plan;
+        cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+        if (cached) {
+          const plan = cached.plan;
           const score = computeScore(plan.buckets);
           const tier = getScoreTier(score);
           return NextResponse.json({
@@ -164,7 +175,7 @@ export const GET = createExternalEndpoint(
               dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
               upcoming: plan.buckets.upcoming.map(formatVhiItem),
             },
-            cachedAt: freshCached.createdAt,
+            cachedAt: cached.createdAt,
             source: "fresh_build",
           });
         }
