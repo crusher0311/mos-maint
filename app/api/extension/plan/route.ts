@@ -119,6 +119,15 @@ function mapServiceToKey(serviceName: string): string | null {
   return null;
 }
 
+function isApprovedThisVisit(serviceTitle: string, authorizedJobs: string[]): boolean {
+  if (!authorizedJobs.length || !serviceTitle) return false;
+  const serviceKey = mapServiceToKey(serviceTitle);
+  if (!serviceKey) return false;
+  const patterns = SERVICE_KEY_PATTERNS[serviceKey];
+  if (!patterns) return false;
+  return authorizedJobs.some(jobName => patterns.some(p => p.test(jobName)));
+}
+
 type LastPerformedInfo = {
   source: 'shop' | 'external' | 'unknown';
   date?: Date;
@@ -573,7 +582,8 @@ async function runOnDemandAnalysis(
           daysToGo,
           estimatedDueDate,
           source: intervalSource === 'shop' ? 'shop' : 'oe',
-          status
+          status,
+          approvedThisVisit: isApprovedThisVisit(item.maintenance_name, currentRoAuthorizedJobs),
         });
       }
       console.log(`[Extension] OEM processing: ${recommendations.length} recs, skipped: noInterval=${skippedNoInterval}, inspect=${skippedInspect}, excluded=${skippedExcluded}`);
@@ -774,6 +784,7 @@ export async function GET(request: NextRequest) {
     let repairOrderNumber = null;
     let customerName = null;
     let currentRoDate: Date | null = null;
+    let currentRoAuthorizedJobs: string[] = [];
 
     if (roId && !vin) {
       let workOrder = null;
@@ -819,7 +830,14 @@ export async function GET(request: NextRequest) {
                 : liveData.customer?.name || workOrder.customerName;
             }
             console.log(`[Extension] Tekmetric WO updated with live API data: odometer=${workOrder.odometer}`);
-          } else {
+          }
+          if (liveData.jobs && Array.isArray(liveData.jobs)) {
+            currentRoAuthorizedJobs = liveData.jobs
+              .filter((j: any) => j.authorized && j.name)
+              .map((j: any) => j.name);
+            console.log(`[Extension] Current RO authorized jobs: ${currentRoAuthorizedJobs.length} (${currentRoAuthorizedJobs.join(', ')})`);
+          }
+          if (!workOrder) {
             workOrder = {
               vin: roVin,
               odometer: liveOdometer,
@@ -1170,7 +1188,8 @@ export async function GET(request: NextRequest) {
         reason: item.reason || null,
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
-        declined: item.declined || null
+        declined: item.declined || null,
+        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs)
       }};
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
@@ -1431,6 +1450,7 @@ export async function GET(request: NextRequest) {
           reason: rec.reason,
           bump: rec.bump || null,
           dviSource: rec.dviSource || null,
+          approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs),
         };
 
         const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };

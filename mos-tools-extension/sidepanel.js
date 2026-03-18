@@ -1045,13 +1045,14 @@ function highlightCannedJob(serviceName, attempts = 0) {
   }
 }
 
-function formatLastDone(last, currentMileage) {
+function formatLastDone(last, currentMileage, approvedThisVisit) {
+  if (approvedThisVisit) {
+    return { text: 'Approved during this visit', logo: '', approvedThisVisit: true };
+  }
   if (!last || (!last.miles && !last.date)) return null;
   
-  const performedThisVisit = currentMileage && last.miles && Math.abs(last.miles - currentMileage) <= 100;
-  
-  let text = performedThisVisit ? 'Performed during this visit' : 'Last done';
-  if (!performedThisVisit && last.miles) {
+  let text = 'Last done';
+  if (last.miles) {
     text += ` at ${last.miles.toLocaleString()} mi`;
   }
   if (last.date) {
@@ -1119,9 +1120,9 @@ function createServiceItemHTML(item, type) {
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
-  const lastDone = formatLastDone(item.last, currentContext?.mileage);
+  const lastDone = formatLastDone(item.last, currentContext?.mileage, item.approvedThisVisit);
   const lastDoneHtml = lastDone ? 
-    `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` :
+    `<div class="last-done${lastDone.approvedThisVisit ? ' approved-this-visit' : ''}">${lastDone.text} ${lastDone.logo}</div>` :
     `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
   
   // Check if we have full job details from canned job match

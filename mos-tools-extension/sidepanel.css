@@ -593,6 +593,11 @@ body {
   font-size: 12px;
 }
 
+.last-done.approved-this-visit {
+  color: #16a34a;
+  font-weight: 600;
+}
+
 .source-logo {
   height: 14px;
   width: auto;
