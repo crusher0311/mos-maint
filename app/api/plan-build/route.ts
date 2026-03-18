@@ -951,10 +951,12 @@ export async function POST(req: NextRequest) {
       }
     }
     for (const wo of tekmetricWOs) {
+      const isCompleted = !!wo.completedDate;
       const wMileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn ?? null;
       const date = wo.completedDate ? new Date(wo.completedDate) : null;
       const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
+        if (!isCompleted && !job.authorized) continue;
         const serviceName = job.name ?? job.description ?? "";
         if (serviceName) shopServiceHistory.push({ serviceName, mileage: wMileage, date });
       }
