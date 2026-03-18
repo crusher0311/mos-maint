@@ -1777,15 +1777,39 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
   }
 
-  // Separate overdue items into non-deferred and deferred
-  const overdueNonDeferred = buckets.overdue.filter(t => t.source !== "protractor");
+  const COMPLIMENTARY_KEYS = new Set([
+    "oil_reminder", "oil_replacement_reminder", "reset_oil_replacement_reminder",
+    "chassis_body", "tighten_nuts_bolts",
+    "multi_point_inspection", "tire_pressure", "tire_pressure_check",
+  ]);
+  const COMPLIMENTARY_TITLE_KEYWORDS = [
+    "oil replacement reminder", "maint reqd", "oil reset", "reset oil",
+    "tighten nuts and bolts", "tighten nuts & bolts", "chassis and body", "chassis & body",
+    "multi-point inspection", "multi point inspection",
+    "tire pressure check", "tire pressure set", "set tire pressure",
+  ];
+  const isComplimentary = (t: TriagedItem) => {
+    const key = (t.serviceKey || t.key || "").toLowerCase();
+    if (COMPLIMENTARY_KEYS.has(key)) return true;
+    const title = t.title.toLowerCase();
+    return COMPLIMENTARY_TITLE_KEYWORDS.some(kw => title.includes(kw));
+  };
+
+  const complimentaryOverdue = buckets.overdue.filter(t => isComplimentary(t) && t.source !== "protractor");
+  const complimentaryDueSoon = buckets.dueSoon.filter(isComplimentary);
+  const allComplimentary = [...complimentaryOverdue, ...complimentaryDueSoon];
+
+  // Separate overdue items into non-deferred and deferred, excluding complimentary
+  const overdueNonDeferred = buckets.overdue.filter(t => t.source !== "protractor" && !isComplimentary(t));
   const overdueDeferred = buckets.overdue.filter(t => t.source === "protractor");
+  const dueSoonFiltered = buckets.dueSoon.filter(t => !isComplimentary(t));
   
   const counts = {
     overdue: overdueNonDeferred.length,
     deferred: overdueDeferred.length,
-    soon: buckets.dueSoon.length,
+    soon: dueSoonFiltered.length,
     upcoming: buckets.upcoming.length,
+    complimentary: allComplimentary.length,
   };
 
   // Cache the assembled plan for future requests (non-blocking)
@@ -1922,6 +1946,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                 <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
                   Due Soon {counts.soon}
                 </a>
+                {counts.complimentary > 0 && (
+                  <a href="#complimentary" className="rounded-full px-3 py-1 bg-blue-500 text-white">
+                    Complimentary {counts.complimentary}
+                  </a>
+                )}
                 <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
                   Upcoming {counts.upcoming}
                 </a>
@@ -2320,11 +2349,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
           <h2 className="text-lg font-semibold text-amber-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" /> Due Soon ({counts.soon})
           </h2>
-          {buckets.dueSoon.length === 0 ? (
+          {dueSoonFiltered.length === 0 ? (
             <div className="text-sm text-neutral-500">Nothing due soon.</div>
           ) : (
             <ul className="space-y-3">
-              {buckets.dueSoon.map((t) => (
+              {dueSoonFiltered.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
                   <div className="font-medium">{t.title}</div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
@@ -2460,6 +2489,59 @@ async function PlanContent({ params, searchParams }: PageProps) {
             </ul>
           )}
         </section>
+
+        {/* Value-Added Complimentary Services */}
+        {allComplimentary.length > 0 && (
+          <section id="complimentary" className="space-y-3">
+            <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Value-Added Complimentary Services ({counts.complimentary})
+            </h2>
+            <ul className="space-y-3">
+              {allComplimentary.map((t) => (
+                <li key={t.key} className="rounded-xl border border-blue-200 bg-blue-50/30 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium">{t.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
+                        {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
+                        <span className="rounded-full bg-blue-500 text-white px-2 py-0.5">COMPLIMENTARY</span>
+                        {(t.intervalMiles || t.intervalMonths) && (
+                          <span className="rounded-full border px-2 py-0.5">
+                            OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                            {t.intervalMiles && t.intervalMonths ? " / " : ""}
+                            {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {(() => {
+                      const opts = getCannedJobOptionsForService(t.serviceKey);
+                      return (
+                        <AddToROWithHistory
+                          vin={vin}
+                          serviceTitle={t.title}
+                          serviceKey={t.serviceKey}
+                          vehicleYear={vehicleYear}
+                          vehicleMake={vehicleMake}
+                          vehicleModel={vehicleModel}
+                          vehicleEngine={vehicleEngine}
+                          workOrderGuid={latestWorkOrderId ?? undefined}
+                          workOrderId={latestRoNumber ?? undefined}
+                          repairOrderId={latestRepairOrderId ?? undefined}
+                          cannedJobOptions={opts}
+                          integration={activeIntegration ?? "protractor"}
+                          showHistoryButton={hasJobLookupFeature}
+                          protractorDeferredId={t.protractorDeferredId}
+                          matchedDeferred={t.matchedDeferred}
+                        />
+                      );
+                    })()}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Upcoming */}
         <section id="upcoming" className="space-y-3">

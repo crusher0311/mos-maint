@@ -431,7 +431,7 @@ export default function VehicleHealthReport({
                       </svg>
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-blue-600">
-                      Complimentary with Your Visit ({complimentaryItems.length})
+                      Value-Added Complimentary Services ({complimentaryItems.length})
                     </h3>
                   </div>
 
@@ -537,7 +537,7 @@ export default function VehicleHealthReport({
 
               {complimentaryItems.length > 0 && (
                 <div className="mt-4 border border-blue-100 rounded-lg p-3 bg-blue-50/30">
-                  <p className="text-xs font-semibold text-blue-600 mb-2">Complimentary with Your Visit</p>
+                  <p className="text-xs font-semibold text-blue-600 mb-2">Value-Added Complimentary Services</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1">
                     {complimentaryItems.map((item) => (
                       <div key={item.key} className="flex items-center gap-1.5">

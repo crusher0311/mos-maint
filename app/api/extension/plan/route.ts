@@ -1058,13 +1058,32 @@ export async function GET(request: NextRequest) {
     // First try to use the dashboard's cached plan for consistency
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
     
+    const COMPLIMENTARY_KEYS = new Set([
+      "oil_reminder", "oil_replacement_reminder", "reset_oil_replacement_reminder",
+      "chassis_body", "tighten_nuts_bolts",
+      "multi_point_inspection", "tire_pressure", "tire_pressure_check",
+    ]);
+    const COMPLIMENTARY_TITLE_KW = [
+      "oil replacement reminder", "maint reqd", "oil reset", "reset oil",
+      "tighten nuts and bolts", "tighten nuts & bolts", "chassis and body", "chassis & body",
+      "multi-point inspection", "multi point inspection",
+      "tire pressure check", "tire pressure set", "set tire pressure",
+    ];
+    const isComplimentaryItem = (item: any) => {
+      const key = (item.serviceKey || item.key || "").toLowerCase();
+      if (COMPLIMENTARY_KEYS.has(key)) return true;
+      const title = (item.title || item.key || "").toLowerCase();
+      return COMPLIMENTARY_TITLE_KW.some(kw => title.includes(kw));
+    };
+
     if (cachedPlan && cachedPlan.plan?.buckets) {
       console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}, cachedMiles=${cachedPlan.mileage}, currentMiles=${mileage}`);
-      
+
       const plan = {
         overdue: [] as any[],
         dueSoon: [] as any[],
-        recommended: [] as any[]
+        recommended: [] as any[],
+        complimentary: [] as any[]
       };
       
       const convertItem = (item: any) => ({
@@ -1118,7 +1137,9 @@ export async function GET(request: NextRequest) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
           const converted = convertItem(item);
           const dueAt = item.dueAtMiles;
-          if (dueAt != null && dueAt > 0) {
+          if (isComplimentaryItem(item)) {
+            plan.complimentary.push(converted);
+          } else if (dueAt != null && dueAt > 0) {
             converted.milesToGo = dueAt - currentMiles;
             if (currentMiles >= dueAt) {
               plan.overdue.push(converted);
@@ -1134,10 +1155,12 @@ export async function GET(request: NextRequest) {
       } else {
         for (const item of (cachedPlan.plan.buckets.overdue || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
           plan.overdue.push(convertItem(item));
         }
         for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
           plan.dueSoon.push(convertItem(item));
         }
         for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
@@ -1269,7 +1292,8 @@ export async function GET(request: NextRequest) {
     const plan = {
       overdue: [] as any[],
       dueSoon: [] as any[],
-      recommended: [] as any[]
+      recommended: [] as any[],
+      complimentary: [] as any[]
     };
 
     // Look up enriched canned jobs to include full labor/parts details
@@ -1345,7 +1369,10 @@ export async function GET(request: NextRequest) {
           dviSource: rec.dviSource || null,
         };
 
-        if (rec.status === "overdue" || rec.isOverdue) {
+        const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };
+        if (isComplimentaryItem(nameForCheck)) {
+          plan.complimentary.push(item);
+        } else if (rec.status === "overdue" || rec.isOverdue) {
           plan.overdue.push(item);
         } else if (rec.status === "due_soon" || rec.isDueSoon) {
           plan.dueSoon.push(item);
@@ -1371,6 +1398,7 @@ export async function GET(request: NextRequest) {
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended,
+      complimentary: plan.complimentary,
       analyzed: !!analysisData,
       repairOrderNumber,
       customerName
