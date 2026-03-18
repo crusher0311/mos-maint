@@ -366,6 +366,159 @@ export async function runTekmetricHistoryBackfill(
   return { rosProcessed, jobsIndexed };
 }
 
+export async function reindexFromStoredData(
+  shopId?: number
+): Promise<{ rosProcessed: number; jobsReindexed: number }> {
+  const db = await getDb();
+  const jobIndexCollection = db.collection("job_index");
+  
+  const query: any = { "data.jobs": { $exists: true } };
+  if (shopId) {
+    query.shopId = { $in: [String(shopId), Number(shopId)] };
+  }
+  
+  const cursor = db.collection("tekmetric_work_orders").find(query);
+  let rosProcessed = 0;
+  let jobsReindexed = 0;
+  
+  const shopRateCache = new Map<number, number>();
+  
+  while (await cursor.hasNext()) {
+    const wo = await cursor.next();
+    if (!wo?.data?.jobs || !wo.vin) continue;
+    
+    const numericShopId = Number(wo.shopId);
+    
+    if (!shopRateCache.has(numericShopId)) {
+      const shopDoc = await db.collection("shops").findOne(
+        { shopId: { $in: [String(numericShopId), numericShopId] } },
+        { projection: { cachedLaborRate: 1 } }
+      );
+      shopRateCache.set(numericShopId, shopDoc?.cachedLaborRate || 150);
+    }
+    const shopLaborRate = shopRateCache.get(numericShopId) || 150;
+    
+    const jobs = wo.data.jobs as TekmetricJobWithDetails[];
+    const vehicle = {
+      vin: wo.vin,
+      year: wo.vehicleYear,
+      make: wo.vehicleMake,
+      model: wo.vehicleModel,
+      engine: wo.vehicleEngine
+    };
+    const completedDate = wo.completedDate || wo.updatedDate || wo.createdDate;
+    
+    for (const job of jobs) {
+      if (!job.name) continue;
+      
+      const laborAmountDollars = (job.laborTotal || job.laborAmount || 0) / 100;
+      const partsAmountDollars = (job.partsTotal || job.partsAmount || 0) / 100;
+      const totalAmountDollars = (job.subtotal || job.totalAmount || 0) / 100;
+      
+      const lines: TekmetricJobIndexEntry["lines"] = [];
+      let laborHours = job.laborHours || 0;
+      
+      if (job.labor && job.labor.length > 0) {
+        for (const entry of job.labor) {
+          const hours = entry.hours || 0;
+          const rateDollars = (entry.rate || 0) / 100;
+          lines.push({
+            lineType: "labor",
+            description: entry.name || job.name,
+            quantity: 1,
+            unitPrice: rateDollars,
+            extendedPrice: hours * rateDollars,
+            hours
+          });
+        }
+      } else if (laborAmountDollars > 0) {
+        laborHours = laborHours || Math.round(laborAmountDollars / shopLaborRate * 10) / 10;
+        lines.push({
+          lineType: "labor",
+          description: job.name,
+          quantity: 1,
+          unitPrice: laborAmountDollars,
+          extendedPrice: laborAmountDollars,
+          hours: laborHours
+        });
+      }
+      
+      if (job.parts && job.parts.length > 0) {
+        const allPartsZero = job.parts.every(p => !(p.retail || p.cost));
+        const totalPartsQty = job.parts.reduce((s, p) => s + (p.quantity || 1), 0);
+        for (const part of job.parts) {
+          const qty = part.quantity || 1;
+          let retailDollars = (part.retail || part.cost || 0) / 100;
+          if (retailDollars === 0 && allPartsZero && partsAmountDollars > 0 && totalPartsQty > 0) {
+            retailDollars = Math.round((partsAmountDollars / totalPartsQty) * 100) / 100;
+          }
+          lines.push({
+            lineType: "part",
+            description: part.name || part.description || "",
+            partNumber: part.partNumber,
+            manufacturer: part.brand,
+            quantity: qty,
+            unitPrice: retailDollars,
+            extendedPrice: qty * retailDollars
+          });
+        }
+      } else if (partsAmountDollars > 0) {
+        lines.push({
+          lineType: "part",
+          description: "Parts",
+          quantity: 1,
+          unitPrice: partsAmountDollars,
+          extendedPrice: partsAmountDollars
+        });
+      }
+      
+      const jobEntry: TekmetricJobIndexEntry = {
+        shopId: numericShopId,
+        workOrderId: String(wo.workOrderId),
+        workOrderNumber: wo.workOrderNumber,
+        servicePackageId: String(job.id),
+        performedAt: new Date(completedDate || new Date()),
+        vehicle,
+        job: {
+          title: job.name,
+          keywords: extractKeywords(job.name)
+        },
+        lines,
+        totals: {
+          laborHours,
+          laborAmount: laborAmountDollars,
+          partsAmount: partsAmountDollars,
+          totalAmount: totalAmountDollars || (laborAmountDollars + partsAmountDollars)
+        },
+        metadata: {
+          indexedAt: new Date(),
+          sourceType: "tekmetric"
+        }
+      };
+      
+      await jobIndexCollection.updateOne(
+        {
+          shopId: numericShopId,
+          workOrderId: String(wo.workOrderId),
+          servicePackageId: String(job.id)
+        },
+        { $set: jobEntry },
+        { upsert: true }
+      );
+      
+      jobsReindexed++;
+    }
+    
+    rosProcessed++;
+    if (rosProcessed % 100 === 0) {
+      console.log(`[Reindex] Processed ${rosProcessed} ROs, ${jobsReindexed} jobs reindexed`);
+    }
+  }
+  
+  console.log(`[Reindex] Complete: ${rosProcessed} ROs, ${jobsReindexed} jobs reindexed`);
+  return { rosProcessed, jobsReindexed };
+}
+
 export async function checkAndRunBackfillForNewShops(): Promise<void> {
   const db = await getDb();
   
