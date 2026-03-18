@@ -1116,7 +1116,28 @@ export async function GET(request: NextRequest) {
 
     // First try to use the dashboard's cached plan for consistency
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
-    
+
+    let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string }> = [];
+    if (provider === "tekmetric" && roId && isTekmetricConfigured()) {
+      try {
+        const inspections = await getRepairOrderInspections(Number(roId));
+        for (const inspection of inspections) {
+          for (const item of inspection.items || []) {
+            if (item.status === "bad") {
+              currentRoDviFindings.push({ name: item.name, status: "red", dviSource: "tekmetric" });
+            } else if (item.status === "marginal") {
+              currentRoDviFindings.push({ name: item.name, status: "yellow", dviSource: "tekmetric" });
+            }
+          }
+        }
+        if (currentRoDviFindings.length > 0) {
+          console.log(`[Extension] Tekmetric DVI for current RO ${roId}: ${currentRoDviFindings.length} findings`);
+        }
+      } catch (err: any) {
+        console.warn(`[Extension] Tekmetric DVI fetch failed for RO ${roId}:`, err.message);
+      }
+    }
+
     const COMPLIMENTARY_KEYS = new Set([
       "oil_reminder", "oil_replacement_reminder", "reset_oil_replacement_reminder",
       "chassis_body", "tighten_nuts_bolts",
@@ -1243,6 +1264,62 @@ export async function GET(request: NextRequest) {
         }
       }
       
+      if (currentRoDviFindings.length > 0) {
+        const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource: string }>();
+        const unmappedDvi: Array<{ status: "red" | "yellow"; name: string; dviSource: string }> = [];
+        for (const finding of currentRoDviFindings) {
+          const key = mapServiceToKey(finding.name);
+          if (key) {
+            const existing = dviMap.get(key);
+            if (!existing || (finding.status === "red" && existing.status !== "red")) {
+              dviMap.set(key, finding);
+            }
+          } else {
+            unmappedDvi.push(finding);
+          }
+        }
+        const usedDviKeys = new Set<string>();
+        for (const bucket of [plan.overdue, plan.dueSoon, plan.recommended]) {
+          for (const item of bucket) {
+            const itemKey = mapServiceToKey(item.name || item.service);
+            if (itemKey && dviMap.has(itemKey)) {
+              const dvi = dviMap.get(itemKey)!;
+              item.bump = dvi.status;
+              item.dviSource = dvi.dviSource;
+              usedDviKeys.add(itemKey);
+              if (dvi.status === "red" && bucket !== plan.overdue) {
+                bucket.splice(bucket.indexOf(item), 1);
+                plan.overdue.push(item);
+              }
+            }
+          }
+        }
+        for (const [dviKey, dvi] of dviMap) {
+          if (usedDviKeys.has(dviKey)) continue;
+          plan.overdue.push({
+            name: dvi.name, service: dvi.name, category: "DVI Finding",
+            intervalText: "", interval: null, intervalMonths: null,
+            intervalSource: "dvi", dueAt: null, milesToGo: null,
+            daysToGo: null, estimatedDueDate: null,
+            source: "dvi", bump: dvi.status, dviSource: dvi.dviSource,
+            last: null, reason: `Flagged ${dvi.status === "red" ? "bad" : "marginal"} on current inspection`,
+            approvedThisVisit: isApprovedThisVisit(dvi.name, currentRoAuthorizedJobs),
+          });
+        }
+        for (const unmapped of unmappedDvi) {
+          plan.overdue.push({
+            name: unmapped.name, service: unmapped.name, category: "DVI Finding",
+            intervalText: "", interval: null, intervalMonths: null,
+            intervalSource: "dvi", dueAt: null, milesToGo: null,
+            daysToGo: null, estimatedDueDate: null,
+            source: "dvi", bump: unmapped.status, dviSource: unmapped.dviSource,
+            last: null, reason: `Flagged ${unmapped.status === "red" ? "bad" : "marginal"} on current inspection`,
+            approvedThisVisit: isApprovedThisVisit(unmapped.name, currentRoAuthorizedJobs),
+          });
+        }
+        console.log(`[Extension] DVI overlay on cached plan: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
+      }
+
       backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
         .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
