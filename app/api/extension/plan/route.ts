@@ -242,7 +242,8 @@ async function backgroundPrefetchShopPlans(
   mosShopId: number,
   currentVin: string,
   showInspectItems: boolean,
-  shopIntervals: ShopIntervals
+  shopIntervals: ShopIntervals,
+  intervalApplyMode: string = "shop_only"
 ) {
   if (shopPrefetchInProgress.has(mosShopId)) {
     return;
@@ -350,7 +351,7 @@ async function backgroundPrefetchShopPlans(
       await Promise.allSettled(
         batch.map(async (v) => {
           try {
-            await runOnDemandAnalysis(mosShopId, v.vin, v.mileage, showInspectItems, shopIntervals);
+            await runOnDemandAnalysis(mosShopId, v.vin, v.mileage, showInspectItems, shopIntervals, null, undefined, undefined, intervalApplyMode);
             built++;
             console.log(`[Extension Prefetch] Shop ${mosShopId}: Built plan for ${v.vin} (${built}/${vehiclesToPrefetch.length})`);
           } catch (e: any) {
@@ -379,7 +380,8 @@ async function runOnDemandAnalysis(
   shopIntervals: ShopIntervals = {},
   carfaxRecords: any[] | null = null,
   prefetched?: PrefetchedData,
-  dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>
+  dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>,
+  intervalApplyMode: string = "shop_only"
 ) {
   const db = await getDb();
   
@@ -460,14 +462,16 @@ async function runOnDemandAnalysis(
         let intervalMonths = oemIntervalMonths;
         let intervalSource = 'oem';
         
-        // Use shop intervals only if:
-        // 1. Service was last done at shop, AND
-        // 2. Shop has custom intervals configured for this service
-        if (lastPerformed.source === 'shop' && serviceKey && shopIntervals[serviceKey]?.useShop) {
+        // Use shop intervals if enabled and:
+        // - "always" mode: apply regardless of last service location
+        // - "shop_only" mode: only when service was last done at this shop
+        const shopOverrideApplies = serviceKey && shopIntervals[serviceKey]?.useShop &&
+          (intervalApplyMode === 'always' || lastPerformed.source === 'shop');
+        if (shopOverrideApplies) {
           const shopInterval = shopIntervals[serviceKey];
-          if (shopInterval.miles) {
-            intervalMiles = shopInterval.miles;
-            intervalMonths = shopInterval.months;
+          if (shopInterval.miles != null || shopInterval.months != null) {
+            if (shopInterval.miles != null) intervalMiles = shopInterval.miles;
+            if (shopInterval.months != null) intervalMonths = shopInterval.months;
             intervalSource = 'shop';
           }
         }
@@ -722,6 +726,7 @@ export async function GET(request: NextRequest) {
     const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
     
     const rawIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
+    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "shop_only";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
       differential: ["front_differential", "rear_differential"],
       alignment: ["wheel_alignment"],
@@ -1170,7 +1175,7 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
+      backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
         .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
       const cachedVehicle = cachedPlan.plan.vehicle || vehicle || {};
@@ -1284,7 +1289,8 @@ export async function GET(request: NextRequest) {
         const recommendations = await runOnDemandAnalysis(
           mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
           { oemResult, shopWorkOrders },
-          tekDviFindings.length > 0 ? tekDviFindings : undefined
+          tekDviFindings.length > 0 ? tekDviFindings : undefined,
+          intervalApplyMode
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
@@ -1385,7 +1391,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals)
+    backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
       .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
     return NextResponse.json({

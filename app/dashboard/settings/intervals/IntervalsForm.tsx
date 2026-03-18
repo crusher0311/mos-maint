@@ -7,6 +7,7 @@ import type { ShopInterval } from "./page";
 type Props = {
   intervals: ShopInterval[];
   distanceUnit: "miles" | "kilometers";
+  applyMode: "always" | "shop_only";
   saveAction: (formData: FormData) => Promise<void>;
 };
 
@@ -17,9 +18,10 @@ function convertMilesToKm(miles: number | null): number | null {
   return Math.round(miles * MILES_TO_KM);
 }
 
-export default function IntervalsForm({ intervals, distanceUnit, saveAction }: Props) {
+export default function IntervalsForm({ intervals, distanceUnit, applyMode, saveAction }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [mode, setMode] = useState<"always" | "shop_only">(applyMode);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,6 +40,56 @@ export default function IntervalsForm({ intervals, distanceUnit, saveAction }: P
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <input type="hidden" name="distanceUnit" value={distanceUnit} />
+      <input type="hidden" name="intervalApplyMode" value={mode} />
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">When should shop intervals apply?</h3>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <label
+            className={`flex-1 flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+              mode === "always"
+                ? "border-green-500 bg-green-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="_applyModeRadio"
+              checked={mode === "always"}
+              onChange={() => setMode("always")}
+              className="mt-0.5 w-4 h-4 text-green-600 focus:ring-green-500"
+            />
+            <div>
+              <span className="font-medium text-gray-900 text-sm">All vehicles</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Apply shop intervals to every vehicle, regardless of service history.
+              </p>
+            </div>
+          </label>
+          <label
+            className={`flex-1 flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+              mode === "shop_only"
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="_applyModeRadio"
+              checked={mode === "shop_only"}
+              onChange={() => setMode("shop_only")}
+              className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="font-medium text-gray-900 text-sm">Only when last serviced here</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Only use shop intervals when the service was last performed at your shop.
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2">

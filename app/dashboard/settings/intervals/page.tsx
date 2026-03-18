@@ -51,16 +51,17 @@ export type ShopInterval = {
   defaultMonths: number | null;
 };
 
-async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
+async function getShopIntervals(shopId: number): Promise<{ intervals: ShopInterval[]; applyMode: "always" | "shop_only" }> {
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { shopId },
-    { projection: { "maintenance.intervals": 1 } }
+    { projection: { "maintenance.intervals": 1, "maintenance.intervalApplyMode": 1 } }
   );
   
   const saved = shop?.maintenance?.intervals || {};
+  const applyMode = shop?.maintenance?.intervalApplyMode || "shop_only";
   
-  return COMMON_SERVICES.map(svc => ({
+  const intervals = COMMON_SERVICES.map(svc => ({
     key: svc.key,
     name: svc.name,
     category: svc.category,
@@ -71,6 +72,8 @@ async function getShopIntervals(shopId: number): Promise<ShopInterval[]> {
     defaultMiles: svc.defaultMiles,
     defaultMonths: svc.defaultMonths,
   }));
+
+  return { intervals, applyMode };
 }
 
 async function getShopDistanceUnit(shopId: number): Promise<"miles" | "kilometers"> {
@@ -85,7 +88,7 @@ async function getShopDistanceUnit(shopId: number): Promise<"miles" | "kilometer
 export default async function IntervalsPage() {
   const sess = await requireSession();
   const shopId = Number(sess.shopId);
-  const [intervals, distanceUnit] = await Promise.all([
+  const [{ intervals, applyMode }, distanceUnit] = await Promise.all([
     getShopIntervals(shopId),
     getShopDistanceUnit(shopId)
   ]);
@@ -93,6 +96,8 @@ export default async function IntervalsPage() {
   async function saveIntervals(formData: FormData) {
     "use server";
     const unit = formData.get("distanceUnit") as string || "miles";
+    const rawApplyMode = formData.get("intervalApplyMode") as string;
+    const intervalApplyMode = rawApplyMode === "always" ? "always" : "shop_only";
     const updates: Record<string, { useShop: boolean; excluded: boolean; miles: number | null; months: number | null }> = {};
     
     for (const svc of COMMON_SERVICES) {
@@ -124,12 +129,18 @@ export default async function IntervalsPage() {
       {
         $set: {
           "maintenance.intervals": updates,
+          "maintenance.intervalApplyMode": intervalApplyMode,
           updatedAt: new Date(),
         },
         $setOnInsert: { createdAt: new Date() },
       },
       { upsert: true }
     );
+
+    await Promise.all([
+      db.collection("cached_plans").deleteMany({ shopId }),
+      db.collection("maintenance_analysis_cache").deleteMany({ shopId }),
+    ]);
 
     revalidatePath("/dashboard/settings/intervals");
     revalidatePath("/dashboard/vehicles/[vin]/plan");
@@ -155,6 +166,7 @@ export default async function IntervalsPage() {
       <IntervalsForm 
         intervals={intervals} 
         distanceUnit={distanceUnit}
+        applyMode={applyMode}
         saveAction={saveIntervals}
       />
     </main>

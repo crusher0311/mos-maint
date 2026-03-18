@@ -387,6 +387,7 @@ function triage({
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
   shopIntervals = {},
+  intervalApplyMode = "shop_only",
   vehicleYear = null,
   vehicleTransType = null,
 }: {
@@ -402,6 +403,7 @@ function triage({
   soonDays?: number;
   milesPerDay?: number | null;
   shopIntervals?: Record<string, ShopIntervalOverride>;
+  intervalApplyMode?: string;
   vehicleYear?: number | null;
   vehicleTransType?: string | null;
 }): Buckets {
@@ -521,7 +523,7 @@ function triage({
       continue;
     }
     const lastPerformedAtShop = last?.source === 'shop';
-    const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
+    const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
     const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : (o.miles ?? null);
     const intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : (o.months ?? null);
 
@@ -648,7 +650,7 @@ function triage({
     usedServiceKeys.add(cm.serviceKey);
     const last = lastMap.get(cm.serviceKey) ?? null;
     const lastPerformedAtShop = last?.source === 'shop';
-    const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
+    const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
     const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : cm.miles;
     const intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : cm.months;
 
@@ -876,6 +878,7 @@ export async function POST(req: NextRequest) {
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
     const distanceUnit = (shopDoc?.settings?.distanceUnit ?? "miles") as "miles" | "kilometers";
     const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
+    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "shop_only";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
       differential: ["front_differential", "rear_differential"],
       alignment: ["wheel_alignment"],
@@ -1143,6 +1146,7 @@ export async function POST(req: NextRequest) {
       soonDays,
       milesPerDay: mpdBlended,
       shopIntervals,
+      intervalApplyMode,
       vehicleYear,
       vehicleTransType,
     });
