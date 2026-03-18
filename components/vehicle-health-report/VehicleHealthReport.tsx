@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import HealthGauge from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
 import ScoreSimulator from "./ScoreSimulator";
+
+type ReportTab = "recommendations" | "plan" | "improve";
 
 interface LastService {
   miles: number | null;
@@ -144,6 +146,7 @@ export default function VehicleHealthReport({
   onScheduleService,
   onViewDetails,
 }: VehicleHealthReportProps) {
+  const [activeTab, setActiveTab] = useState<ReportTab>("recommendations");
   const score = scoreProp ?? computeScore(data);
   const { vehicle, currentMiles, customerName, buckets } = data;
   const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
@@ -151,6 +154,12 @@ export default function VehicleHealthReport({
   const goodSystems = buckets.upcoming.filter(
     (item) => item.milesToGo !== null && item.milesToGo > 5000
   );
+
+  const tabs: { key: ReportTab; label: string }[] = [
+    { key: "recommendations", label: "Recommendations" },
+    { key: "plan", label: "Plan" },
+    { key: "improve", label: "Improve My Score" },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,7 +184,7 @@ export default function VehicleHealthReport({
         </div>
 
         {/* Health Score Gauge */}
-        <div className="py-6 px-4 flex flex-col items-center border-b border-gray-100">
+        <div className="py-6 px-4 flex flex-col items-center">
           <HealthGauge score={score} />
 
           <div className="flex flex-col sm:flex-row gap-3 mt-5 w-full sm:w-auto px-4">
@@ -198,195 +207,223 @@ export default function VehicleHealthReport({
           </div>
         </div>
 
-        {/* Needs Attention Now */}
-        {buckets.overdue.length > 0 && (
-          <div className="px-4 py-5 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
-                  <path d="M7 1 L13 12 L1 12 Z" fill="none" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
-                  <line x1="7" y1="5" x2="7" y2="8.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="7" cy="10.5" r="0.8" fill="white" />
-                </svg>
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-red-600">
-                Needs Attention Now ({buckets.overdue.length})
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {buckets.overdue.map((item) => {
-                const status = getStatusLabel(item, "overdue");
-                return (
-                  <div
-                    key={item.key}
-                    className="border border-red-200 rounded-lg p-3 bg-red-50/50"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div className="text-red-600 flex-shrink-0 mt-0.5">
-                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
-                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                          {getItemDescription(item)}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                          <span
-                            className="text-xs font-bold uppercase"
-                            style={{ color: status.color }}
-                          >
-                            Status: {status.text}
-                          </span>
-                          {item.declined && (
-                            <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
-                              Previously Declined
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Score Simulator */}
-        <ScoreSimulator data={data} currentScore={score} />
-
-        {/* Service Timeline */}
-        <div className="px-4 py-5 border-b border-gray-100">
-          <div className="grid grid-cols-3 gap-0 rounded-lg overflow-hidden border border-gray-200">
-            {/* NOW column */}
-            <div>
-              <div className="bg-[#1e3a5f] text-white text-center py-2 px-2">
-                <span className="text-xs sm:text-sm font-bold tracking-wide">NOW</span>
-              </div>
-              <div className="p-2 sm:p-3 space-y-2">
-                {buckets.overdue.map((item) => (
-                  <div key={item.key} className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "red" || item.category === "DVI Finding" ? "bg-red-500" : "bg-red-400"}`} />
-                    <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
-                  </div>
-                ))}
-                {buckets.overdue.length === 0 && (
-                  <p className="text-[11px] text-gray-400 italic">Nothing overdue</p>
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200">
+          <div className="flex">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 py-3 px-2 text-xs sm:text-sm font-semibold text-center transition-colors relative ${
+                  activeTab === tab.key
+                    ? "text-[#1e3a5f]"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.key && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#1e3a5f] rounded-t" />
                 )}
-              </div>
-            </div>
-
-            {/* NEXT 3 MONTHS column */}
-            <div className="border-x border-gray-200">
-              <div className="bg-[#2a5a8f] text-white text-center py-2 px-2">
-                <span className="text-xs sm:text-sm font-bold tracking-wide">NEXT 3 MO</span>
-              </div>
-              <div className="p-2 sm:p-3 space-y-2">
-                {buckets.dueSoon.map((item) => (
-                  <div key={item.key} className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "yellow" ? "bg-amber-400" : "bg-amber-500"}`} />
-                    <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
-                  </div>
-                ))}
-                {buckets.dueSoon.length === 0 && (
-                  <p className="text-[11px] text-gray-400 italic">Nothing due soon</p>
-                )}
-              </div>
-            </div>
-
-            {/* LATER column */}
-            <div>
-              <div className="bg-[#4a7ab5] text-white text-center py-2 px-2">
-                <span className="text-xs sm:text-sm font-bold tracking-wide">LATER</span>
-              </div>
-              <div className="p-2 sm:p-3 space-y-2">
-                {buckets.upcoming.map((item) => (
-                  <div key={item.key} className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
-                    <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
-                  </div>
-                ))}
-                {buckets.upcoming.length === 0 && (
-                  <p className="text-[11px] text-gray-400 italic">All caught up</p>
-                )}
-              </div>
-            </div>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Due Soon Detail Cards */}
-        {buckets.dueSoon.length > 0 && (
-          <div className="px-4 py-5 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
-                  <circle cx="7" cy="7" r="5.5" fill="none" stroke="white" strokeWidth="1.5" />
-                  <line x1="7" y1="4" x2="7" y2="7.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                  <line x1="7" y1="7.5" x2="9.5" y2="9" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-amber-600">
-                Coming Up Soon ({buckets.dueSoon.length})
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {buckets.dueSoon.map((item) => {
-                const status = getStatusLabel(item, "dueSoon");
-                return (
-                  <div
-                    key={item.key}
-                    className="border border-amber-200 rounded-lg p-3 bg-amber-50/50"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <div className="text-amber-600 flex-shrink-0 mt-0.5">
-                        <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
-                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                          {getItemDescription(item)}
-                        </p>
-                        <span
-                          className="text-xs font-bold uppercase mt-2 inline-block"
-                          style={{ color: status.color }}
-                        >
-                          Status: {status.text}
-                        </span>
-                      </div>
+        {/* Tab Content */}
+        <div className="min-h-[300px]">
+          {/* RECOMMENDATIONS TAB */}
+          {activeTab === "recommendations" && (
+            <div>
+              {buckets.overdue.length > 0 && (
+                <div className="px-4 py-5 border-b border-gray-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                        <path d="M7 1 L13 12 L1 12 Z" fill="none" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
+                        <line x1="7" y1="5" x2="7" y2="8.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                        <circle cx="7" cy="10.5" r="0.8" fill="white" />
+                      </svg>
                     </div>
+                    <h3 className="text-base sm:text-lg font-bold text-red-600">
+                      Needs Attention Now ({buckets.overdue.length})
+                    </h3>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
-        {/* Systems in Good Condition */}
-        {goodSystems.length > 0 && (
-          <div className="px-4 py-5 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
-                  <polyline points="3,7 6,10 11,4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-green-600">Systems in Good Condition</h3>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {goodSystems.slice(0, 8).map((item) => (
-                <div key={item.key} className="flex items-center gap-2 text-gray-600">
-                  <div className="text-green-500 flex-shrink-0">
-                    <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={24} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {buckets.overdue.map((item) => {
+                      const status = getStatusLabel(item, "overdue");
+                      return (
+                        <div
+                          key={item.key}
+                          className="border border-red-200 rounded-lg p-3 bg-red-50/50"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className="text-red-600 flex-shrink-0 mt-0.5">
+                              <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
+                              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                                {getItemDescription(item)}
+                              </p>
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-xs font-bold uppercase"
+                                  style={{ color: status.color }}
+                                >
+                                  Status: {status.text}
+                                </span>
+                                {item.declined && (
+                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                                    Previously Declined
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
                 </div>
-              ))}
+              )}
+
+              {buckets.dueSoon.length > 0 && (
+                <div className="px-4 py-5 border-b border-gray-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                        <circle cx="7" cy="7" r="5.5" fill="none" stroke="white" strokeWidth="1.5" />
+                        <line x1="7" y1="4" x2="7" y2="7.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                        <line x1="7" y1="7.5" x2="9.5" y2="9" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-amber-600">
+                      Coming Up Soon ({buckets.dueSoon.length})
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {buckets.dueSoon.map((item) => {
+                      const status = getStatusLabel(item, "dueSoon");
+                      return (
+                        <div
+                          key={item.key}
+                          className="border border-amber-200 rounded-lg p-3 bg-amber-50/50"
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className="text-amber-600 flex-shrink-0 mt-0.5">
+                              <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={28} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
+                              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                                {getItemDescription(item)}
+                              </p>
+                              <span
+                                className="text-xs font-bold uppercase mt-2 inline-block"
+                                style={{ color: status.color }}
+                              >
+                                Status: {status.text}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {goodSystems.length > 0 && (
+                <div className="px-4 py-5 border-b border-gray-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="white">
+                        <polyline points="3,7 6,10 11,4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-green-600">Systems in Good Condition</h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {goodSystems.slice(0, 8).map((item) => (
+                      <div key={item.key} className="flex items-center gap-2 text-gray-600">
+                        <div className="text-green-500 flex-shrink-0">
+                          <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={24} />
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {/* PLAN TAB */}
+          {activeTab === "plan" && (
+            <div className="px-4 py-5">
+              <div className="grid grid-cols-3 gap-0 rounded-lg overflow-hidden border border-gray-200">
+                <div>
+                  <div className="bg-[#1e3a5f] text-white text-center py-2 px-2">
+                    <span className="text-xs sm:text-sm font-bold tracking-wide">NOW</span>
+                  </div>
+                  <div className="p-2 sm:p-3 space-y-2">
+                    {buckets.overdue.map((item) => (
+                      <div key={item.key} className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "red" || item.category === "DVI Finding" ? "bg-red-500" : "bg-red-400"}`} />
+                        <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                      </div>
+                    ))}
+                    {buckets.overdue.length === 0 && (
+                      <p className="text-[11px] text-gray-400 italic">Nothing overdue</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-x border-gray-200">
+                  <div className="bg-[#2a5a8f] text-white text-center py-2 px-2">
+                    <span className="text-xs sm:text-sm font-bold tracking-wide">NEXT 3 MO</span>
+                  </div>
+                  <div className="p-2 sm:p-3 space-y-2">
+                    {buckets.dueSoon.map((item) => (
+                      <div key={item.key} className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "yellow" ? "bg-amber-400" : "bg-amber-500"}`} />
+                        <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                      </div>
+                    ))}
+                    {buckets.dueSoon.length === 0 && (
+                      <p className="text-[11px] text-gray-400 italic">Nothing due soon</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="bg-[#4a7ab5] text-white text-center py-2 px-2">
+                    <span className="text-xs sm:text-sm font-bold tracking-wide">LATER</span>
+                  </div>
+                  <div className="p-2 sm:p-3 space-y-2">
+                    {buckets.upcoming.map((item) => (
+                      <div key={item.key} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
+                        <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                      </div>
+                    ))}
+                    {buckets.upcoming.length === 0 && (
+                      <p className="text-[11px] text-gray-400 italic">All caught up</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* IMPROVE MY SCORE TAB */}
+          {activeTab === "improve" && (
+            <ScoreSimulator data={data} currentScore={score} />
+          )}
+        </div>
 
         {/* Footer */}
         <div className="bg-gray-50 text-center py-4 px-4">
