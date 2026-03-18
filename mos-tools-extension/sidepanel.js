@@ -1120,7 +1120,7 @@ function createServiceItemHTML(item, type) {
   const lastDone = formatLastDone(item.last);
   const lastDoneHtml = lastDone ? 
     `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` :
-    (item.reason ? `<div class="last-done reason-text">${escapeHtml(item.reason)}</div>` : '');
+    `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
   
   // Check if we have full job details from canned job match
   const hasFullDetails = item.laborItems && item.laborItems.length > 0;
