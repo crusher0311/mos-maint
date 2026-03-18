@@ -268,6 +268,7 @@ const imageIcons: Record<string, string> = {
   rear_shocks: "/icons/service/shocks.svg",
   wheel_alignment: "/icons/service/wheel_alignment.svg",
   lubricate: "/icons/service/lubricate.svg",
+  bolt_torque: "/icons/service/bolt_torque.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
