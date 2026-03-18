@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import crypto from "crypto";
 
 const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
-const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
 function generateShareToken(vin: string, shopId: string, expiresAt: number): string {
   const payload = `${vin}:${shopId}:${expiresAt}`;
@@ -167,7 +167,7 @@ export async function POST(
       shareUrl,
       token,
       expiresAt,
-      expiresIn: "7 days",
+      expiresIn: "15 days",
     });
   } catch (err: any) {
     console.error("[Report API] Error generating share link:", err.message);
