@@ -526,6 +526,14 @@ async function runOnDemandAnalysis(
         const sourceLabel = intervalSource === 'shop' ? 'Shop' : 'OEM';
         const intervalText = `${sourceLabel}: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`;
         
+        let daysToGo: number | null = null;
+        if (milesToGo > 0 && intervalMiles > 0 && intervalMonths) {
+          daysToGo = Math.round((milesToGo / intervalMiles) * intervalMonths * 30);
+        }
+        const estimatedDueDate = daysToGo != null && daysToGo > 0
+          ? new Date(Date.now() + daysToGo * 86400000).toISOString().split('T')[0]
+          : null;
+
         recommendations.push({
           service: item.maintenance_name,
           category: item.maintenance_category,
@@ -534,16 +542,16 @@ async function runOnDemandAnalysis(
           intervalMonths,
           intervalText,
           intervalSource, // 'shop' or 'oem'
-          // Legacy fields for backward compatibility
           lastPerformedBy: lastPerformed.source,
           lastPerformedMileage: lastPerformed.mileage,
-          // New nested format for extension UI
           last: {
-            source: lastPerformed.source, // 'shop', 'external' (CARFAX), or 'unknown'
+            source: lastPerformed.source,
             miles: lastPerformed.mileage || null,
             date: lastPerformed.date ? lastPerformed.date.toISOString() : null
           },
           milesToGo,
+          daysToGo,
+          estimatedDueDate,
           source: intervalSource === 'shop' ? 'shop' : 'oe',
           status
         });
@@ -1103,6 +1111,10 @@ export async function GET(request: NextRequest) {
         dueAt: item.dueAtMiles,
         dueMileage: item.dueAtMiles,
         dueDate: item.dueAtDate,
+        daysToGo: item.daysToGo ?? null,
+        estimatedDueDate: item.daysToGo != null && item.daysToGo > 0
+          ? new Date(Date.now() + item.daysToGo * 86400000).toISOString().split('T')[0]
+          : (item.dueAtDate || null),
         milesToGo: item.milesToGo ?? null,
         last: item.last ? {
           source: item.last.source || 'unknown',
@@ -1147,6 +1159,13 @@ export async function GET(request: NextRequest) {
             plan.complimentary.push(converted);
           } else if (dueAt != null && dueAt > 0) {
             converted.milesToGo = dueAt - currentMiles;
+            if (converted.milesToGo > 0 && item.intervalMiles && item.intervalMonths) {
+              converted.daysToGo = Math.round((converted.milesToGo / item.intervalMiles) * item.intervalMonths * 30);
+              converted.estimatedDueDate = new Date(Date.now() + converted.daysToGo * 86400000).toISOString().split('T')[0];
+            } else {
+              converted.daysToGo = null;
+              converted.estimatedDueDate = null;
+            }
             if (currentMiles >= dueAt) {
               plan.overdue.push(converted);
             } else if (dueAt - currentMiles <= DUE_SOON_THRESHOLD) {
@@ -1356,16 +1375,16 @@ export async function GET(request: NextRequest) {
           category: rec.category || null,
           dueAt: rec.dueMileage,
           milesToGo: rec.milesToGo,
+          daysToGo: rec.daysToGo ?? null,
+          estimatedDueDate: rec.estimatedDueDate ?? null,
           interval: rec.interval,
           intervalMonths: rec.intervalMonths,
           intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
-          intervalSource: rec.intervalSource || 'oem', // 'shop' or 'oem'
+          intervalSource: rec.intervalSource || 'oem',
           source: rec.source || "oe",
-          // Legacy fields for backward compatibility
           lastPerformedBy: rec.lastPerformedBy || rec.last?.source || null,
           lastPerformedMileage: rec.lastPerformedMileage || rec.last?.miles || null,
-          // New nested format for extension UI
-          last: rec.last || null, // { source: 'shop'|'external'|'unknown', miles, date }
+          last: rec.last || null,
           priority: rec.priority,
           // Include full job details from matching canned job if available
           laborItems: matchingCannedJob?.laborLines || [],

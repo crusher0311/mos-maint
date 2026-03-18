@@ -599,6 +599,20 @@ body {
   vertical-align: middle;
 }
 
+.estimated-date {
+  font-size: 11px;
+  color: #6366f1;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.estimated-date::before {
+  content: "📅";
+  font-size: 10px;
+}
+
 .source-logo.shop-logo {
   display: inline-flex;
   align-items: center;

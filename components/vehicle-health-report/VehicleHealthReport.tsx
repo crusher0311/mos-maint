@@ -149,7 +149,12 @@ function getItemDescription(item: PlanItem): string {
     return `Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` Last serviced ${lastDate}.` : ""}`;
   }
   if (item.milesToGo !== null && item.milesToGo > 0) {
-    return `Due in approximately ${item.milesToGo.toLocaleString()} miles.${lastDate ? ` Last serviced ${lastDate}.` : ""}`;
+    let dateEst = "";
+    if (item.daysToGo !== null && item.daysToGo > 0) {
+      const estDate = new Date(Date.now() + item.daysToGo * 86400000);
+      dateEst = ` Estimated around ${estDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
+    }
+    return `Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` Last serviced ${lastDate}.` : ""}`;
   }
   if (lastDate) {
     return `Last serviced ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`;

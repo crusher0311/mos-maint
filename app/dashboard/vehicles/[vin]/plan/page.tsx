@@ -2436,6 +2436,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.daysToGo != null && t.daysToGo > 0 && (
                       <>
                         In ~<strong>{t.daysToGo}</strong> days
+                        {" "}
+                        <span className="text-indigo-500 italic">
+                          (est. {new Date(Date.now() + t.daysToGo * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
+                        </span>
                       </>
                     )}
                   </div>
@@ -2621,12 +2625,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         Next at ~<strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
                       </>
                     )}
-                    {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
-                    {t.dueAtDate != null && (
+                    {t.dueAtMiles != null && (t.dueAtDate != null || (t.daysToGo != null && t.daysToGo > 0)) && <> • </>}
+                    {t.dueAtDate != null ? (
                       <>
                         By ~<strong>{t.dueAtDate.toLocaleDateString()}</strong>
                       </>
-                    )}
+                    ) : t.daysToGo != null && t.daysToGo > 0 ? (
+                      <span className="text-indigo-500 italic">
+                        Est. {new Date(Date.now() + t.daysToGo * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    ) : null}
                   </div>
 
                   {t.declined && (

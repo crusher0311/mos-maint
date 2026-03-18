@@ -1193,6 +1193,7 @@ function createServiceItemHTML(item, type) {
       </div>
       <div class="service-details">
         ${dueAtText ? `<div class="due-info">${dueAtText}${overdueText ? ' • ' + overdueText : ''}</div>` : ''}
+        ${item.estimatedDueDate && (type === 'due-soon' || type === 'recommended') ? `<div class="estimated-date">Est. due ${new Date(item.estimatedDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>` : ''}
         ${lastDoneHtml}
       </div>
     </li>
