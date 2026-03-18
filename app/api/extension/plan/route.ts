@@ -779,46 +779,54 @@ export async function GET(request: NextRequest) {
       let workOrder = null;
       
       if (provider === "tekmetric") {
-        // tekmetric_work_orders uses MOS shopId and workOrderId (Tekmetric RO ID as string)
         workOrder = await db.collection("tekmetric_work_orders").findOne({
           shopId: { $in: [String(mosShopId), Number(mosShopId)] },
           workOrderId: String(roId)
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
-        if (!workOrder && shopDoc?.tekmetric?.shopId) {
-          console.log(`[Extension] API FALLBACK: RO ${roId} not in tekmetric_work_orders, fetching from Tekmetric API`);
-          const data = await fetchTekmetricRoCached(String(roId), forceRefresh);
-          if (data) {
-            let roVin = data.vehicle?.vin || data.vehicleVin;
-            const odometer = data.milesIn || data.mileageIn || data.vehicle?.mileage;
+        const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh);
+        if (liveData) {
+          const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
+          let roVin = liveData.vehicle?.vin || liveData.vehicleVin;
 
-            if (!roVin && data.vehicleId) {
-              try {
-                const { getCachedVehicle, cacheVehicle } = await import("@/lib/tekmetric-incremental-sync");
-                const vehicleId = Number(data.vehicleId);
-                const cachedVeh = await getCachedVehicle(db, vehicleId);
-                if (cachedVeh) {
-                  roVin = cachedVeh.vin;
-                  console.log(`[Extension] Vehicle ${vehicleId} found in MongoDB cache`);
-                } else {
-                  const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                  const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`);
-                  roVin = vehData?.vin;
-                  if (vehData) await cacheVehicle(db, vehicleId, vehData).catch(() => {});
-                }
-              } catch (e: any) {
-                console.warn(`[Extension] Vehicle lookup failed for vehicleId=${data.vehicleId}, roId=${roId}:`, e?.message);
+          if (!roVin && liveData.vehicleId) {
+            try {
+              const { getCachedVehicle, cacheVehicle } = await import("@/lib/tekmetric-incremental-sync");
+              const vehicleId = Number(liveData.vehicleId);
+              const cachedVeh = await getCachedVehicle(db, vehicleId);
+              if (cachedVeh) {
+                roVin = cachedVeh.vin;
+                console.log(`[Extension] Vehicle ${vehicleId} found in MongoDB cache`);
+              } else {
+                const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
+                const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`);
+                roVin = vehData?.vin;
+                if (vehData) await cacheVehicle(db, vehicleId, vehData).catch(() => {});
               }
+            } catch (e: any) {
+              console.warn(`[Extension] Vehicle lookup failed for vehicleId=${liveData.vehicleId}, roId=${roId}:`, e?.message);
             }
+          }
 
+          if (workOrder) {
+            if (liveOdometer) workOrder.odometer = liveOdometer;
+            if (roVin) workOrder.vin = workOrder.vin || roVin;
+            if (liveData.repairOrderNumber) workOrder.repairOrderNumber = liveData.repairOrderNumber;
+            if (liveData.customer) {
+              workOrder.customerName = liveData.customer?.firstName && liveData.customer?.lastName
+                ? `${liveData.customer.firstName} ${liveData.customer.lastName}`
+                : liveData.customer?.name || workOrder.customerName;
+            }
+            console.log(`[Extension] Tekmetric WO updated with live API data: odometer=${workOrder.odometer}`);
+          } else {
             workOrder = {
               vin: roVin,
-              odometer,
-              repairOrderNumber: data.repairOrderNumber,
-              customerName: data.customer?.firstName && data.customer?.lastName
-                ? `${data.customer.firstName} ${data.customer.lastName}`
-                : data.customer?.name
+              odometer: liveOdometer,
+              repairOrderNumber: liveData.repairOrderNumber,
+              customerName: liveData.customer?.firstName && liveData.customer?.lastName
+                ? `${liveData.customer.firstName} ${liveData.customer.lastName}`
+                : liveData.customer?.name
             };
             console.log(`[Extension] Tekmetric API fallback: vin=${workOrder.vin}, odometer=${workOrder.odometer}`);
           }
