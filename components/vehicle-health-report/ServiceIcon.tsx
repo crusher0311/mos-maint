@@ -263,6 +263,7 @@ const imageIcons: Record<string, string> = {
   battery: "/icons/service/battery.svg",
   power_steering: "/icons/service/power_steering.svg",
   fuel_system: "/icons/service/fuel_system.svg",
+  coolant_hoses: "/icons/service/coolant_hoses.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
