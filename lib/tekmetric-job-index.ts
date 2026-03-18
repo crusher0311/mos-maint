@@ -110,10 +110,28 @@ export async function indexTekmetricWorkOrderJobs(
   let indexedCount = 0;
   
   try {
-    const jobsResponse = await getJobs(tekmetricShopId, { repairOrderId: workOrderId, size: 100 });
-    const jobs = (jobsResponse.content || []) as TekmetricJobWithDetails[];
+    let jobs: TekmetricJobWithDetails[] = [];
+    
+    const cachedWO = await db.collection("tekmetric_work_orders").findOne({
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      workOrderId: String(workOrderId)
+    });
+    if (cachedWO?.data?.jobs && cachedWO.data.jobs.length > 0) {
+      jobs = cachedWO.data.jobs as TekmetricJobWithDetails[];
+    }
+    
+    if (jobs.length === 0) {
+      const jobsResponse = await getJobs(tekmetricShopId, { repairOrderId: workOrderId, size: 100 });
+      jobs = (jobsResponse.content || []) as TekmetricJobWithDetails[];
+    }
     
     if (jobs.length === 0) return 0;
+    
+    const shopDoc = await db.collection("shops").findOne(
+      { shopId: { $in: [String(shopId), Number(shopId)] } },
+      { projection: { cachedLaborRate: 1 } }
+    );
+    const shopLaborRate = shopDoc?.cachedLaborRate || 150;
     
     for (const job of jobs) {
       if (!job.name) continue;
@@ -139,7 +157,7 @@ export async function indexTekmetricWorkOrderJobs(
           });
         }
       } else if (laborAmountDollars > 0) {
-        laborHours = laborHours || Math.round(laborAmountDollars / 150 * 10) / 10;
+        laborHours = laborHours || Math.round(laborAmountDollars / shopLaborRate * 10) / 10;
         lines.push({
           lineType: "labor",
           description: job.name,

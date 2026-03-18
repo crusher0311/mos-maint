@@ -277,13 +277,15 @@ export async function GET(request: NextRequest) {
 
     const resultShopIds = [...new Set(results.map((j: any) => j.shopId).filter(Boolean))];
     const shopLocationMap = new Map<number, string>();
+    const shopLaborRateMap = new Map<number, number>();
     if (resultShopIds.length > 0) {
       const shopDocs = await db.collection("shops").find(
         { shopId: { $in: resultShopIds } },
-        { projection: { shopId: 1, locationIdentifier: 1, name: 1 } }
+        { projection: { shopId: 1, locationIdentifier: 1, name: 1, cachedLaborRate: 1 } }
       ).toArray();
       for (const s of shopDocs) {
         shopLocationMap.set(s.shopId, s.locationIdentifier || s.name || `Shop ${s.shopId}`);
+        if (s.cachedLaborRate) shopLaborRateMap.set(s.shopId, s.cachedLaborRate);
       }
     }
 
@@ -326,7 +328,8 @@ export async function GET(request: NextRequest) {
         hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
       }));
       if (laborItems.length === 0 && laborAmount > 0) {
-        const estHours = rawTotals.laborHours || Math.round(laborAmount / 150 * 10) / 10;
+        const shopRate = shopLaborRateMap.get(job.shopId) || 150;
+        const estHours = rawTotals.laborHours || Math.round(laborAmount / shopRate * 10) / 10;
         laborItems = [{ name: jobTitle, hours: estHours }];
       }
       
