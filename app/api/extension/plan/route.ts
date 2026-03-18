@@ -1184,7 +1184,9 @@ export async function GET(request: NextRequest) {
         vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
         fromDashboardCache: true,
         repairOrderNumber,
-        customerName
+        customerName,
+        shopLogo: shopDoc?.branding?.logo || null,
+        locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
       }, { headers: corsHeaders });
     }
     
@@ -1402,7 +1404,9 @@ export async function GET(request: NextRequest) {
       complimentary: plan.complimentary,
       analyzed: !!analysisData,
       repairOrderNumber,
-      customerName
+      customerName,
+      shopLogo: shopDoc?.branding?.logo || null,
+      locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
     }, { headers: corsHeaders });
 
   } catch (error: any) {

@@ -50,6 +50,8 @@ let currentTab = 'plan';
 let userDefaultTab = null;
 let shopwareAddMode = 'finding-published';
 let keytagContextEnriched = false;
+let currentPlanShopLogo = null;
+let currentPlanLocationId = null;
 // Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
@@ -531,6 +533,8 @@ function updateContext(context) {
   
   if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
     keytagContextEnriched = false;
+    currentPlanShopLogo = null;
+    currentPlanLocationId = null;
   }
   
   if (prevContext && context && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
@@ -861,6 +865,14 @@ function renderPlan(data) {
     console.log('[MOS] Updated customer name from API:', data.customerName);
   }
   
+  // Store shop branding for use in service item rendering
+  if (data.shopLogo) {
+    currentPlanShopLogo = data.shopLogo;
+  }
+  if (data.locationIdentifier) {
+    currentPlanLocationId = data.locationIdentifier;
+  }
+
   keytagContextEnriched = true;
   if (typeof updateKeytagFields === 'function') {
     updateKeytagFields();
@@ -1051,13 +1063,18 @@ function formatLastDone(last) {
     // CARFAX logo
     logo = `<img src="icons/carfax-badge.png" alt="CARFAX" class="source-logo" title="From CARFAX" />`;
   } else if (last.source === 'shop') {
-    // Shop icon
-    logo = `<span class="source-logo shop-logo" title="From Shop">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-        <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.18l6 3v9.64l-6 3-6-3V7.18l6-3z"/>
-        <path d="M12 6a3 3 0 100 6 3 3 0 000-6z"/>
-      </svg>
-    </span>`;
+    // Shop branding logo + location identifier
+    const locId = currentPlanLocationId ? ` (${escapeHtml(currentPlanLocationId)})` : '';
+    if (currentPlanShopLogo) {
+      logo = `<img src="${escapeHtml(currentPlanShopLogo)}" alt="Shop" class="source-logo" title="From Shop${locId}" />`;
+    } else {
+      logo = `<span class="source-logo shop-logo" title="From Shop${locId}">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+          <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.18l6 3v9.64l-6 3-6-3V7.18l6-3z"/>
+          <path d="M12 6a3 3 0 100 6 3 3 0 000-6z"/>
+        </svg>
+      </span>`;
+    }
   }
   
   return { text, logo };
@@ -1172,7 +1189,7 @@ function createServiceItemHTML(item, type) {
       <div class="service-badges">
         ${categoryBadge}
         ${badgeText ? `<span class="status-badge ${badgeClass}">${badgeText}</span>` : ''}
-        <span class="interval-badge ${isShopInterval ? 'shop' : 'oem'}">${intervalText}</span>
+        <span class="interval-badge ${isShopInterval ? 'shop' : 'oem'}">${isShopInterval && currentPlanShopLogo ? `<img src="${escapeHtml(currentPlanShopLogo)}" alt="" class="interval-shop-logo" />` : ''}${intervalText}</span>
       </div>
       <div class="service-details">
         ${dueAtText ? `<div class="due-info">${dueAtText}${overdueText ? ' • ' + overdueText : ''}</div>` : ''}

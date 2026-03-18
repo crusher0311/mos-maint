@@ -550,6 +550,15 @@ body {
   background: #DCFCE7;
   border-color: #86EFAC;
   color: #166534;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.interval-shop-logo {
+  height: 12px;
+  width: auto;
+  border-radius: 2px;
 }
 
 .service-details {
