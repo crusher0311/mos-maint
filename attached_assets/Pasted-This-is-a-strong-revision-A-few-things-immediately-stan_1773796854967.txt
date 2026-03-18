@@ -1,0 +1,31 @@
+This is a strong revision. A few things immediately stand out looking at this one vs the CR-V report:
+What's improved or notable:
+The "Vehicle Health Indicator" name with the trademark symbol is a meaningful upgrade from "Vehicle Health Report" — that's your IP, and having it on the face of the document matters. The "authentically intelligent" tagline under the header is a nice brand voice touch.
+The 17/100 on a 2020 Toyota 4Runner with only 32,384 miles is actually a more compelling sales tool than the 38/100 CR-V. A customer bringing in a relatively newer, lower-mileage vehicle who sees 17/100 Critical is going to be genuinely surprised — that's a conversation starter. The score does the heavy lifting before the advisor says a word.
+The icon system on the line items (wiper blade icon, wrench icon, bolt icon, coolant icon) adds visual professionalism and makes the report scan faster. The CR-V version didn't have those.
+A few things worth flagging:
+The "Reset the oil replacement reminder (i.e. MAINT REQD)" as a "Critical / Overdue" item is going to create friction. If a customer sees that alongside brake pads and ATF in the same "Needs Attention Now" section, it undermines credibility. That's a shop process item, not a vehicle health item — it probably shouldn't be in the critical list or on the customer-facing report at all.
+Same concern with "Tighten nuts and bolts on chassis and body" at every 5,000 miles. That's a Toyota OEM service interval item, but presenting it as overdue on a 32K mile vehicle with "never been performed" reads as padding to a skeptical customer. Worth considering whether low-credibility items like that get filtered from the customer-facing output even if they live in the advisor-facing data.
+The "Coming Up Soon (1) — Engine Air Filter" section with just one item feels a little thin. If there's only one upcoming item it might read better folded into the main layout rather than its own section header.
+The HEART / MOS Tools / Detect Dog attribution at the bottom — that's clean and establishes the powered-by stack without being distracting.
+Overall this is materially better than a plain maintenance list. The score gauge, the Critical label, the icon system, and the NOW/SOON/GOOD structure are all doing real work.so maybe make those type items you're calling shop process items show as "complimentary services" ?8:19 PMThat's a smart reframe. Instead of those items dragging down the score and sitting awkwardly in "Critical," they become a value-add. A few that would fit that bucket:
+
+Reset oil replacement reminder (MAINT REQD)
+Tighten nuts and bolts on chassis and body
+Lubricate propeller shaft / re-torque propeller shaft bolt (debatable — these are real services, but on a 32K mile Toyota they read as routine)
+Multi-point inspection
+Tire pressure check/set
+
+The customer-facing framing writes itself: "Complimentary with your visit" or "Included at no charge" — it turns what would otherwise look like padding in the critical list into a perceived benefit. The advisor can say "we also take care of these at no extra charge" rather than having to explain why resetting a dashboard light is a Critical health issue.
+The score integrity benefit is real too — if those items are excluded from the scoring algorithm, the 17/100 on that 4Runner becomes a more defensible number. Right now a customer could reasonably push back: "you're telling me my car is Critical partly because you never reset my oil light?" Filtering those out of the score keeps the credibility of the gauge intact.
+Worth also thinking about whether "Lubricate propeller shaft" stays in Critical or moves to complimentary — on a 4Runner that's a legitimate service, but "never been performed, every 5,000 miles" on a 32K vehicle is going to raise eyebrows. An advisor would need to explain that one carefully either way.i'm also considering changing the verbiage from "This service has never been performed." to "no record of this service having been performed"8:20 PMThat's a much better line. The difference is significant:
+"This service has never been performed" is a declarative statement of fact that the shop can't actually verify — it's only true relative to what's in the data. A customer who knows they had their coolant flushed at Jiffy Lube three years ago will immediately distrust the entire report.
+"No record of this service having been performed" is honest about the data's limitation. It's saying the system doesn't have evidence of it, not that it didn't happen. That's a defensible position and actually opens a better advisor conversation — "we don't have a record of this, do you know if it's been done?" — which invites the customer to share history rather than putting them on the defensive.
+It also quietly communicates the value of keeping service records in one place, which is a soft pitch for the customer staying with HEART long-term.
+The only small tweak I'd consider: "No record of this service being performed" is slightly cleaner and less formal than "having been performed" — reads more naturally out loud, which matters if advisors are reading from the report with customers.
+So the two options side by side:
+
+"No record of this service having been performed." — accurate, slightly formal
+"No record of this service being performed." — same meaning, slightly more natural
+
+Either is a meaningful upgrade over the current version. The credibility protection alone makes it worth the change.
