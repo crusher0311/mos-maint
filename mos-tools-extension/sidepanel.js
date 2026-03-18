@@ -1099,10 +1099,11 @@ function createServiceItemHTML(item, type) {
   const dueAtText = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : '';
   const overdueText = getOverdueText(item, type);
   
-  // Last done info with logo
+  // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
   const lastDone = formatLastDone(item.last);
   const lastDoneHtml = lastDone ? 
-    `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` : '';
+    `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` :
+    (item.reason ? `<div class="last-done reason-text">${escapeHtml(item.reason)}</div>` : '');
   
   // Check if we have full job details from canned job match
   const hasFullDetails = item.laborItems && item.laborItems.length > 0;

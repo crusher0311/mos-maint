@@ -1116,6 +1116,7 @@ export async function GET(request: NextRequest) {
         bump: item.bump || null,
         dviSource: item.dviSource || null,
         usingShopInterval: item.usingShopInterval,
+        reason: item.reason || null,
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null
