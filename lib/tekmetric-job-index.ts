@@ -7,9 +7,13 @@ type TekmetricJobWithDetails = {
   name: string;
   authorized: boolean;
   laborTotal?: number;
+  laborAmount?: number;
   partsTotal?: number;
+  partsAmount?: number;
   discountTotal?: number;
+  discountAmount?: number;
   subtotal?: number;
+  totalAmount?: number;
   laborHours?: number;
   labor?: Array<{
     id: number;
@@ -114,9 +118,9 @@ export async function indexTekmetricWorkOrderJobs(
     for (const job of jobs) {
       if (!job.name) continue;
       
-      const laborAmountDollars = (job.laborTotal || 0) / 100;
-      const partsAmountDollars = (job.partsTotal || 0) / 100;
-      const totalAmountDollars = (job.subtotal || 0) / 100;
+      const laborAmountDollars = (job.laborTotal || job.laborAmount || 0) / 100;
+      const partsAmountDollars = (job.partsTotal || job.partsAmount || 0) / 100;
+      const totalAmountDollars = (job.subtotal || job.totalAmount || 0) / 100;
       
       const lines: TekmetricJobIndexEntry["lines"] = [];
       let laborHours = job.laborHours || 0;

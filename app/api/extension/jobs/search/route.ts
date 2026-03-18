@@ -316,18 +316,25 @@ export async function GET(request: NextRequest) {
 
       const allPartPricesZero = partLines.length > 0 && partLines.every((l: any) => !(l.unitPrice || l.extendedPrice));
       const totalPartsQty = partLines.reduce((s: number, l: any) => s + (l.quantity || 1), 0);
+
+      const jobTitle = job.job?.title || job.title || "Job";
+      let laborItems = laborLines.map((l: any) => ({
+        name: l.description,
+        hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
+      }));
+      if (laborItems.length === 0 && laborAmount > 0) {
+        const estHours = rawTotals.laborHours || Math.round(laborAmount / 150 * 10) / 10;
+        laborItems = [{ name: jobTitle, hours: estHours }];
+      }
       
       return {
         _id: job._id.toString(),
-        title: job.job?.title || job.title || "Job",
+        title: jobTitle,
         description: job.job?.description,
         code: job.job?.code,
         vehicle: job.vehicle,
         workOrderNumber: job.workOrderNumber,
-        laborItems: laborLines.map((l: any) => ({
-          name: l.description,
-          hours: parseFloat(l.hours) || parseFloat(l.quantity) || 0
-        })),
+        laborItems,
         parts: partLines.map((l: any) => {
           let retail = l.unitPrice || l.extendedPrice || 0;
           if (retail === 0 && allPartPricesZero && partsAmount > 0 && totalPartsQty > 0) {
