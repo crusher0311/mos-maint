@@ -1093,7 +1093,7 @@ export async function GET(request: NextRequest) {
         interval: item.intervalMiles,
         intervalMiles: item.intervalMiles,
         intervalMonths: item.intervalMonths,
-        intervalText: formatIntervalText(item.intervalMiles, item.intervalMonths),
+        intervalText: `${item.usingShopInterval ? 'Shop' : 'OEM'}: ${formatIntervalText(item.intervalMiles, item.intervalMonths)}`,
         intervalSource: item.usingShopInterval ? 'shop' : 'oem',
         dueAt: item.dueAtMiles,
         dueMileage: item.dueAtMiles,

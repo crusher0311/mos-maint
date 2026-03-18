@@ -2117,8 +2117,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                         )}
                         {(t.intervalMiles || t.intervalMonths) && (
-                          <span className="rounded-full border px-2 py-0.5">
-                            OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                          <span className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${t.usingShopInterval ? "bg-green-50 border-green-300" : ""}`}>
+                            {t.usingShopInterval && shopLogo ? (
+                              <img src={shopLogo} alt="Shop" className="h-3 inline" />
+                            ) : null}
+                            {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
@@ -2366,8 +2369,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                     )}
                     {(t.intervalMiles || t.intervalMonths) && (
-                      <span className="rounded-full border px-2 py-0.5">
-                        OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                      <span className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${t.usingShopInterval ? "bg-green-50 border-green-300" : ""}`}>
+                        {t.usingShopInterval && shopLogo ? (
+                          <img src={shopLogo} alt="Shop" className="h-3 inline" />
+                        ) : null}
+                        {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
@@ -2515,8 +2521,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                         )}
                         {(t.intervalMiles || t.intervalMonths) && (
-                          <span className="rounded-full border px-2 py-0.5">
-                            OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                          <span className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${t.usingShopInterval ? "bg-green-50 border-green-300" : ""}`}>
+                            {t.usingShopInterval && shopLogo ? (
+                              <img src={shopLogo} alt="Shop" className="h-3 inline" />
+                            ) : null}
+                            {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
@@ -2568,13 +2577,15 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                     <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5">UPCOMING</span>
                     {(t.intervalMiles || t.intervalMonths) && (
-                      <span className="rounded-full border px-2 py-0.5">
-                        OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                      <span className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${t.usingShopInterval ? "bg-green-50 border-green-300" : ""}`}>
+                        {t.usingShopInterval && shopLogo ? (
+                          <img src={shopLogo} alt="Shop" className="h-3 inline" />
+                        ) : null}
+                        {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
                     )}
-                    {t.usingShopInterval && <span className="rounded-full bg-green-600 text-white px-2 py-0.5">Shop</span>}
                     {t.declined && (
                       <span className="rounded-full bg-orange-100 text-orange-700 border border-orange-300 px-2 py-0.5 font-medium">
                         Previously declined
