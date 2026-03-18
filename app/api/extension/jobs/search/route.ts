@@ -275,6 +275,18 @@ export async function GET(request: NextRequest) {
 
     const results = Array.from(uniqueJobs.values()).slice(0, limit);
 
+    const resultShopIds = [...new Set(results.map((j: any) => j.shopId).filter(Boolean))];
+    const shopLocationMap = new Map<number, string>();
+    if (resultShopIds.length > 0) {
+      const shopDocs = await db.collection("shops").find(
+        { shopId: { $in: resultShopIds } },
+        { projection: { shopId: 1, locationIdentifier: 1, name: 1 } }
+      ).toArray();
+      for (const s of shopDocs) {
+        shopLocationMap.set(s.shopId, s.locationIdentifier || s.name || `Shop ${s.shopId}`);
+      }
+    }
+
     const formattedJobs = results.map((job: any) => {
       const sourceType = job.metadata?.sourceType || "protractor";
       
@@ -331,7 +343,9 @@ export async function GET(request: NextRequest) {
         matchBand: job.matchBand,
         matchBandLabel: job.matchBandLabel,
         matchReason: job.matchReason,
-        source: sourceType
+        source: sourceType,
+        shopId: job.shopId || null,
+        location: shopLocationMap.get(job.shopId) || null,
       };
     });
 

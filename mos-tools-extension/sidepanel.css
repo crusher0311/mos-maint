@@ -790,6 +790,12 @@ body {
   margin-top: 4px;
 }
 
+.job-location {
+  font-size: 11px;
+  color: var(--blue-600, #2563eb);
+  margin-top: 2px;
+}
+
 .job-match-reason {
   font-size: 11px;
   color: var(--gray-400);

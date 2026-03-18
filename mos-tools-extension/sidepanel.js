@@ -1489,6 +1489,7 @@ function createJobItemHTML(job, lookupId) {
             <span class="match-score">${matchScore}%</span>
           </div>
           <div class="job-vehicle">${vehicle}${engine}</div>
+          ${job.location ? `<div class="job-location">📍 ${escapeHtml(job.location)}</div>` : ''}
           ${matchReason ? `<div class="job-match-reason">${escapeHtml(matchReason)}</div>` : ''}
         </div>
         <div class="job-header-right">
