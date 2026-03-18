@@ -66,7 +66,6 @@ export async function GET(
       {
         vin,
         shopId: { $in: [String(shopId), Number(shopId)] },
-        expiresAt: { $gt: new Date() },
       },
       { sort: { createdAt: -1 } }
     );
