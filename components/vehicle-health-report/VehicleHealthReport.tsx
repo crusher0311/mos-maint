@@ -132,6 +132,37 @@ function getBucketColor(bucket: "overdue" | "dueSoon" | "upcoming"): string {
   return "#6b7280";
 }
 
+const OE_LOGO_MAP: Record<string, string> = {
+  "AUDI": "/logos/makes/audi.png",
+  "BMW": "/logos/makes/bmw.png",
+  "CADILLAC": "/logos/makes/cadillac.png",
+  "CHEVROLET": "/logos/makes/chevrolet.png",
+  "CHRYSLER": "/logos/makes/chrysler.png",
+  "DODGE": "/logos/makes/dodge.png",
+  "FORD": "/logos/makes/ford.png",
+  "GMC": "/logos/makes/gmc.png",
+  "HONDA": "/logos/makes/honda.png",
+  "HYUNDAI": "/logos/makes/hyundai.png",
+  "JAGUAR": "/logos/makes/jaguar.png",
+  "JEEP": "/logos/makes/jeep.png",
+  "KIA": "/logos/makes/kia.png",
+  "LEXUS": "/logos/makes/lexus.png",
+  "LINCOLN": "/logos/makes/lincoln.png",
+  "MAZDA": "/logos/makes/mazda.png",
+  "MERCEDES-BENZ": "/logos/makes/mercedes-benz.png",
+  "NISSAN": "/logos/makes/nissan.png",
+  "RAM": "/logos/makes/ram.png",
+  "SUBARU": "/logos/makes/subaru.png",
+  "TOYOTA": "/logos/makes/toyota.png",
+  "VOLKSWAGEN": "/logos/makes/volkswagen.png",
+  "VOLVO": "/logos/makes/volvo.png",
+};
+
+function getOELogoUrl(make: string | null | undefined): string | null {
+  if (!make) return null;
+  return OE_LOGO_MAP[make.toUpperCase().trim()] || null;
+}
+
 function getBucketDot(bucket: "overdue" | "dueSoon" | "upcoming"): string {
   if (bucket === "overdue") return "bg-red-500";
   if (bucket === "dueSoon") return "bg-amber-500";
@@ -175,12 +206,25 @@ export default function VehicleHealthReport({
           </div>
         </div>
 
-        {/* Customer & Vehicle Info */}
-        <div className="text-center py-5 px-4 border-b border-gray-100">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{customerName}</h2>
-          <p className="text-sm sm:text-base text-gray-500 mt-1">
-            {ymm} &middot; {currentMiles.toLocaleString()} miles
-          </p>
+        {/* Vehicle Info Header */}
+        <div className="py-4 px-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            {getOELogoUrl(vehicle.make) && (
+              <img
+                src={getOELogoUrl(vehicle.make)!}
+                alt={vehicle.make || ""}
+                className="h-10 sm:h-12 object-contain flex-shrink-0"
+              />
+            )}
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{ymm || "Vehicle"}</h2>
+              <p className="text-xs sm:text-sm text-gray-500">
+                {customerName && <><span className="font-medium text-gray-700">{customerName}</span> &bull; </>}
+                VIN <code className="text-xs">{data.vin}</code>
+                {currentMiles > 0 && <> &bull; Current: <span className="font-medium">{currentMiles.toLocaleString()} mi</span></>}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Health Score Gauge */}
