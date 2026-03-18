@@ -261,6 +261,7 @@ const imageIcons: Record<string, string> = {
   serpentine_belt: "/icons/service/serpentine_belt.svg",
   transfer_case: "/icons/service/transfer_case.svg",
   battery: "/icons/service/battery.svg",
+  power_steering: "/icons/service/power_steering.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
