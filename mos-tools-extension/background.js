@@ -997,7 +997,8 @@ async function fetchLaborRateRules(forceRefresh = false) {
   }
 
   try {
-    const shopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
+    const effectiveShopId = tekmetricShopId || currentSmsContext?.shopId;
+    const shopParam = effectiveShopId ? `?smsShopId=${effectiveShopId}` : '';
     const data = await handleMosApiRequest(`/api/extension/labor-rates${shopParam}`);
     const serverRules = data.rules || [];
     // Merge locally-stored overrides (e.g. overrideCategoryRates, applyToAllLabor)
