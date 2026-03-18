@@ -574,6 +574,7 @@ function triage({
       daysToGo,
       bump: dviInfo?.status ?? null,
       source: "oem",
+      reason: neverDone ? "No record of this service being performed." : undefined,
       dviSource: dviInfo?.dviSource,
       declined: declinedInfo,
       usingShopInterval,

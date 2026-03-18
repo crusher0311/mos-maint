@@ -2113,6 +2113,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-red-600 text-white px-2 py-0.5">OVERDUE</span>
+                        {t.reason && !t.last?.miles && (
+                          <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
+                        )}
                         {(t.intervalMiles || t.intervalMonths) && (
                           <span className="rounded-full border px-2 py-0.5">
                             OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
@@ -2359,6 +2362,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                     <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DUE SOON</span>
+                    {t.reason && !t.last?.miles && (
+                      <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
+                    )}
                     {(t.intervalMiles || t.intervalMonths) && (
                       <span className="rounded-full border px-2 py-0.5">
                         OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
@@ -2505,6 +2511,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-blue-500 text-white px-2 py-0.5">COMPLIMENTARY</span>
+                        {t.reason && !t.last?.miles && (
+                          <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
+                        )}
                         {(t.intervalMiles || t.intervalMonths) && (
                           <span className="rounded-full border px-2 py-0.5">
                             OEM: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
