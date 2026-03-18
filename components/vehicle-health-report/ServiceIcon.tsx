@@ -271,6 +271,7 @@ const imageIcons: Record<string, string> = {
   bolt_torque: "/icons/service/bolt_torque.svg",
   oil_reminder: "/icons/service/oil_reminder.svg",
   chassis_body: "/icons/service/chassis_body.svg",
+  general_service: "/icons/service/general_service.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
