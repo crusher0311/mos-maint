@@ -260,6 +260,7 @@ const imageIcons: Record<string, string> = {
   differential_front: "/icons/service/differential.svg",
   serpentine_belt: "/icons/service/serpentine_belt.svg",
   transfer_case: "/icons/service/transfer_case.svg",
+  battery: "/icons/service/battery.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
