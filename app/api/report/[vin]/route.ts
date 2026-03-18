@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 import crypto from "crypto";
 
 const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
@@ -62,7 +63,7 @@ export async function GET(
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const cachedPlan = await db.collection("cached_plans").findOne(
+    let cachedPlan = await db.collection("cached_plans").findOne(
       {
         vin,
         shopId: { $in: [String(shopId), Number(shopId)] },
@@ -71,7 +72,36 @@ export async function GET(
     );
 
     if (!cachedPlan?.plan) {
-      return NextResponse.json({ error: "No plan found for this vehicle. Visit the Vehicle Health Indicator page first to generate a plan." }, { status: 404 });
+      let mileage: number | null = null;
+      const vehicleDoc = await db.collection("vehicles").findOne(
+        { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
+        { projection: { currentMileage: 1, lastMileage: 1 } }
+      );
+      mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+
+      if (!mileage) {
+        const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
+          { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
+          { projection: { mileageAtAnalysis: 1 } }
+        );
+        mileage = analysisDoc?.mileageAtAnalysis ?? null;
+      }
+
+      if (mileage) {
+        console.log(`[Report API] No cached plan for ${vin}, triggering rebuild with mileage ${mileage}...`);
+        const built = await triggerPlanBuild(Number(shopId), vin, mileage);
+        if (built) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          cachedPlan = await db.collection("cached_plans").findOne(
+            { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
+            { sort: { createdAt: -1 } }
+          );
+        }
+      }
+
+      if (!cachedPlan?.plan) {
+        return NextResponse.json({ error: "No plan found for this vehicle. Visit the Vehicle Health Indicator page first to generate a plan." }, { status: 404 });
+      }
     }
 
     const plan = cachedPlan.plan;
