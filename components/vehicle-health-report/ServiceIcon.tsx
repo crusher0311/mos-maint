@@ -215,8 +215,8 @@ const iconPaths: Record<string, JSX.Element> = {
 };
 
 const titleKeywordMap: Array<[string[], string]> = [
-  [["propeller shaft", "prop shaft", "driveshaft", "drive shaft", "lubricate"], "lubricate"],
   [["torque", "re-torque", "retorque", "bolt", "nut"], "bolt_torque"],
+  [["propeller shaft", "prop shaft", "driveshaft", "drive shaft", "lubricate"], "lubricate"],
   [["oil reminder", "maint reqd", "oil reset", "reset oil", "oil replacement reminder"], "oil_reminder"],
   [["chassis", "body", "tighten"], "chassis_body"],
   [["serpentine", "drive belt", "accessory belt", "v-belt", "timing belt"], "serpentine_belt"],
