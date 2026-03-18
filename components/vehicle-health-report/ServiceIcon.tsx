@@ -256,7 +256,8 @@ const imageIcons: Record<string, string> = {
   oil_change: "/icons/service/oil_change.svg",
   tires_rotate: "/icons/service/tire_rotation.svg",
   coolant: "/icons/service/coolant.svg",
-  differential_fluid: "/icons/service/differential.svg",
+  differential_rear: "/icons/service/differential.svg",
+  differential_front: "/icons/service/differential.svg",
 };
 
 function resolveIconKey(serviceKey: string | null, title?: string): string {
