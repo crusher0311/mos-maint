@@ -442,6 +442,10 @@ body {
   color: var(--warning);
 }
 
+.section-complimentary {
+  color: #3b82f6;
+}
+
 .section-recommended {
   color: var(--success);
 }
@@ -466,6 +470,10 @@ body {
 
 .service-item.due-soon {
   border-left: 3px solid var(--warning);
+}
+
+.service-item.complimentary {
+  border-left: 3px solid #3b82f6;
 }
 
 .service-item.recommended {
@@ -517,6 +525,11 @@ body {
 
 .status-badge.badge-due-soon {
   background: var(--warning);
+  color: white;
+}
+
+.status-badge.badge-complimentary {
+  background: #3b82f6;
   color: white;
 }
 

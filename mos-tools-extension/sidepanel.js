@@ -110,6 +110,8 @@ const elements = {
   overdueList: document.getElementById('overdue-list'),
   dueSoonSection: document.getElementById('due-soon-section'),
   dueSoonList: document.getElementById('due-soon-list'),
+  complimentarySection: document.getElementById('complimentary-section'),
+  complimentaryList: document.getElementById('complimentary-list'),
   recommendedSection: document.getElementById('recommended-section'),
   recommendedList: document.getElementById('recommended-list'),
   
@@ -866,9 +868,10 @@ function renderPlan(data) {
   
   const hasOverdue = data.overdue && data.overdue.length > 0;
   const hasDueSoon = data.dueSoon && data.dueSoon.length > 0;
+  const hasComplimentary = data.complimentary && data.complimentary.length > 0;
   const hasRecommended = data.recommended && data.recommended.length > 0;
   
-  if (!hasOverdue && !hasDueSoon && !hasRecommended) {
+  if (!hasOverdue && !hasDueSoon && !hasComplimentary && !hasRecommended) {
     elements.planEmpty.classList.remove('hidden');
     return;
   }
@@ -888,6 +891,14 @@ function renderPlan(data) {
   if (hasDueSoon) {
     elements.dueSoonList.innerHTML = data.dueSoon.map(item => 
       createServiceItemHTML(item, 'due-soon')
+    ).join('');
+  }
+  
+  // Render complimentary
+  elements.complimentarySection.classList.toggle('hidden', !hasComplimentary);
+  if (hasComplimentary) {
+    elements.complimentaryList.innerHTML = data.complimentary.map(item => 
+      createServiceItemHTML(item, 'complimentary')
     ).join('');
   }
   
@@ -1069,9 +1080,11 @@ function createServiceItemHTML(item, type) {
   
   // Status badge color based on type (recommended = upcoming in display)
   const badgeClass = type === 'overdue' ? 'badge-overdue' : 
-                     type === 'due-soon' ? 'badge-due-soon' : 'badge-upcoming';
+                     type === 'due-soon' ? 'badge-due-soon' :
+                     type === 'complimentary' ? 'badge-complimentary' : 'badge-upcoming';
   const badgeText = type === 'overdue' ? 'OVERDUE' : 
-                    type === 'due-soon' ? 'DUE SOON' : '';
+                    type === 'due-soon' ? 'DUE SOON' :
+                    type === 'complimentary' ? 'COMPLIMENTARY' : '';
   
   // Category badge
   const categoryBadge = item.category ? 
