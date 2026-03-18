@@ -78,12 +78,38 @@ export async function GET(
     const plan = cachedPlan.plan;
     const buckets = plan.buckets || {};
 
+    let customerName = plan.customerName || null;
+
+    if (!customerName) {
+      const wo = await db.collection("cached_work_orders").findOne(
+        {
+          vin,
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          customerName: { $exists: true, $nin: [null, ""] },
+        },
+        { sort: { createdAt: -1 }, projection: { customerName: 1 } }
+      );
+      if (wo?.customerName) customerName = wo.customerName;
+    }
+
+    if (!customerName) {
+      const vehicle = await db.collection("vehicles").findOne(
+        {
+          vin,
+          shopId: { $in: [String(shopId), Number(shopId)] },
+          customerName: { $exists: true, $nin: [null, ""] },
+        },
+        { projection: { customerName: 1 } }
+      );
+      if (vehicle?.customerName) customerName = vehicle.customerName;
+    }
+
     return NextResponse.json({
       plan: {
         vehicle: plan.vehicle || {},
         vin,
         currentMiles: plan.currentMiles || cachedPlan.mileage || 0,
-        customerName: plan.customerName || "Vehicle Owner",
+        customerName: customerName || "Vehicle Owner",
         buckets: {
           overdue: buckets.overdue || [],
           dueSoon: buckets.dueSoon || [],
