@@ -3,6 +3,7 @@ import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi, resolveMileageFromRo } from "@/lib/vhi-rebuild";
+import { buildReportUrl } from "@/lib/report-share";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,6 +132,7 @@ export const POST = createExternalEndpoint(
       score: result.score,
       summary: result.summary,
       buckets: result.buckets,
+      reportUrl: buildReportUrl(result.vin || vin.toUpperCase(), resolvedShopId),
       analyzedAt: new Date().toISOString(),
     });
   }

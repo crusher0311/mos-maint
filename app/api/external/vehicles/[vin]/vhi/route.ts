@@ -5,6 +5,7 @@ import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
+import { buildReportUrl } from "@/lib/report-share";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +117,7 @@ export const GET = createExternalEndpoint(
           upcoming: separated.upcoming.map(formatVhiItem),
           complimentary: separated.complimentary.map(formatVhiItem),
         },
+        reportUrl: buildReportUrl(vin, resolvedShopId),
         cachedAt: cached.createdAt,
         source: "cached_plan",
       });
@@ -130,6 +132,7 @@ export const GET = createExternalEndpoint(
         success: true,
         vin,
         ...analysisResult,
+        reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
       });
     }
@@ -224,6 +227,7 @@ export const GET = createExternalEndpoint(
       score: result.score,
       summary: result.summary,
       buckets: result.buckets,
+      reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
     });

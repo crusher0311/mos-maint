@@ -2,16 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+import { generateShareToken } from "@/lib/report-share";
 import crypto from "crypto";
 
 const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
 const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
-
-function generateShareToken(vin: string, shopId: string, expiresAt: number): string {
-  const payload = `${vin}:${shopId}:${expiresAt}`;
-  const signature = crypto.createHmac("sha256", SHARE_SECRET).update(payload).digest("hex").slice(0, 16);
-  return Buffer.from(`${payload}:${signature}`).toString("base64url");
-}
 
 function verifyShareToken(token: string): { vin: string; shopId: string } | null {
   try {
