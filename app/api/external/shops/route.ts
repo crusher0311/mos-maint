@@ -60,14 +60,18 @@ export const GET = createExternalEndpoint(
     const search = (req.nextUrl.searchParams.get("search") || "").trim().slice(0, 100) || null;
     const sms = req.nextUrl.searchParams.get("sms") || null;
 
-    const filter: any = { status: "active" };
+    const conditions: any[] = [
+      { $or: [{ status: "active" }, { status: { $exists: false } }] },
+    ];
 
     if (search) {
       const escaped = escapeRegex(search);
-      filter.$or = [
-        { name: { $regex: escaped, $options: "i" } },
-        { locationIdentifier: { $regex: escaped, $options: "i" } },
-      ];
+      conditions.push({
+        $or: [
+          { name: { $regex: escaped, $options: "i" } },
+          { locationIdentifier: { $regex: escaped, $options: "i" } },
+        ],
+      });
     }
 
     if (sms) {
@@ -79,8 +83,10 @@ export const GET = createExternalEndpoint(
           { status: 400 }
         );
       }
-      filter.integrationProvider = normalized;
+      conditions.push({ integrationProvider: normalized });
     }
+
+    const filter = conditions.length === 1 ? conditions[0] : { $and: conditions };
 
     const projection = {
       _id: 0,
