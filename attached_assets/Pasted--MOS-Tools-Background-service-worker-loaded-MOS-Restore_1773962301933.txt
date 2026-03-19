@@ -1,0 +1,70 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://qa.mos.tools
+ [Tekmetric] Restored session token
+ [MOS] Side panel opens on action click
+background.js:103 [Tekmetric] Shop ID captured: 14245
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: GET_MOS_AUTH
+background.js:164 [MOS] Message received: GET_SMS_CONTEXT
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:708 [MOS] 401 on /api/extension/features?shopId=14245&provider=tekmetric | server: Invalid token | token match: true | retried: false
+handleMosApiRequest @ background.js:708
+background.js:714 [MOS] 401 received, attempting silent re-auth...
+background.js:663 [MOS] Login successful: brandon@heartautocare.com | token: ext_6956d27cec0e9f48...
+background.js:670 [MOS] Token verify: 200
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:799 [MOS] Error loading plan: Error: No accessible shop configured for SMS shop ID 14245
+    at loadPlan (sidepanel.js:795:29)
+loadPlan @ sidepanel.js:799
+background.js:1017 [LaborRate] Failed to fetch rules: Error: No accessible shop configured for SMS shop ID 14245
+    at handleMosApiRequest (background.js:733:11)
+    at async fetchLaborRateRules (background.js:1002:18)
+    at async autoApplyLaborRate (background.js:1130:17)
+fetchLaborRateRules @ background.js:1017
+background.js:1132 [LaborRate] No rules configured, skipping
+sidepanel.js:799 [MOS] Error loading plan: Error: No accessible shop configured for SMS shop ID 14245
+    at loadPlan (sidepanel.js:795:29)
+loadPlan @ sidepanel.js:799
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:799 [MOS] Error loading plan: Error: No accessible shop configured for SMS shop ID 14245
+    at loadPlan (sidepanel.js:795:29)
+loadPlan @ sidepanel.js:799
+background.js:164 [MOS] Message received: SET_SMS_CONTEXT
+background.js:198 [MOS] SMS context updated: Object
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:1017 [LaborRate] Failed to fetch rules: Error: No accessible shop configured for SMS shop ID 14245
+    at handleMosApiRequest (background.js:733:11)
+    at async fetchLaborRateRules (background.js:1002:18)
+    at async autoApplyLaborRate (background.js:1130:17)
+fetchLaborRateRules @ background.js:1017
+background.js:1132 [LaborRate] No rules configured, skipping
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:799 [MOS] Error loading plan: Error: No accessible shop configured for SMS shop ID 14245
+    at loadPlan (sidepanel.js:795:29)
+loadPlan @ sidepanel.js:799
+background.js:164 [MOS] Message received: MOS_LOGOUT
+background.js:164 [MOS] Message received: MOS_LOGIN
+background.js:663 [MOS] Login successful: bcrusha@carexpertsok.com | token: ext_69540a985644999c...
+background.js:670 [MOS] Token verify: 200
+background.js:164 [MOS] Message received: GET_SMS_CONTEXT
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+background.js:164 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:826 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:833 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:836 [MOS] Plan response mileage: 105388 estimated: false fromCache: undefined
+sidepanel.js:860 [MOS] Updated RO number from API: 32
+sidepanel.js:865 [MOS] Updated customer name from API: Brandon
+sidepanel.js:826 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:833 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:836 [MOS] Plan response mileage: 105388 estimated: false fromCache: undefined
+sidepanel.js:860 [MOS] Updated RO number from API: 32
+sidepanel.js:865 [MOS] Updated customer name from API: Brandon
