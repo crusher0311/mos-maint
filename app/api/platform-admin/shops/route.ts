@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
+import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -291,6 +292,7 @@ export async function POST(req: NextRequest) {
     const shopDoc = {
       shopId: newShopId,
       name: shopName.trim(),
+      status: "active",
       billing: {
         plan: plan || "trial",
         status: status || "trial",
@@ -305,12 +307,15 @@ export async function POST(req: NextRequest) {
     await db.collection("shops").insertOne(shopDoc);
 
     const hashedPassword = await bcrypt.hash(ownerPassword, 12);
+    const normalizedEmail = ownerEmail.toLowerCase().trim();
     const userDoc = {
-      email: ownerEmail.toLowerCase().trim(),
+      email: normalizedEmail,
+      emailLower: normalizedEmail,
       passwordHash: hashedPassword,
       name: ownerName?.trim() || ownerEmail.split("@")[0],
       shopId: newShopId,
       role: "admin",
+      mustChangePassword: true,
       createdAt: now,
       updatedAt: now,
     };
@@ -327,10 +332,30 @@ export async function POST(req: NextRequest) {
       createdAt: now,
     });
 
+    const emailLower = ownerEmail.toLowerCase().trim();
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+    const loginUrl = `${baseUrl}/login`;
+    let emailSent = false;
+
+    try {
+      const emailContent = makeCredentialsWelcomeEmail(
+        shopName.trim(),
+        emailLower,
+        ownerPassword,
+        loginUrl
+      );
+      await sendEmail({ to: emailLower, ...emailContent });
+      emailSent = true;
+      console.log(`[Platform Admin] Welcome email sent to ${emailLower} for shop ${newShopId}`);
+    } catch (emailErr: any) {
+      console.error(`[Platform Admin] Failed to send welcome email to ${emailLower}:`, emailErr?.message);
+    }
+
     return NextResponse.json({ 
       ok: true, 
       shop: { shopId: newShopId, name: shopName.trim() },
-      message: `Shop "${shopName.trim()}" created with ID ${newShopId}`
+      emailSent,
+      message: `Shop "${shopName.trim()}" created with ID ${newShopId}${emailSent ? ". Welcome email sent." : ". Note: Welcome email could not be sent."}`
     });
   } catch (err: any) {
     console.error("Create shop error:", err);

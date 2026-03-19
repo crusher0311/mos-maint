@@ -125,7 +125,10 @@ export default function PlatformShopsPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        alert(data.message);
+        const emailNote = data.emailSent
+          ? `\n\nWelcome email with credentials sent to ${createShopData.ownerEmail}.`
+          : `\n\nNote: Welcome email could not be sent. Please share the credentials to the user manually.`;
+        alert(data.message + emailNote);
         setShowCreateShop(false);
         setCreateShopData({
           shopName: "", ownerEmail: "", ownerPassword: "", ownerName: "",
