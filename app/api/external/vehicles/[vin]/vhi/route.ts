@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 
@@ -87,7 +87,8 @@ export const GET = createExternalEndpoint(
 
     if (cached) {
       const plan = cached.plan;
-      const score = computeScore(plan.buckets);
+      const separated = separateComplimentary(plan.buckets);
+      const score = computeScore(separated);
       const tier = getScoreTier(score);
 
       return NextResponse.json({
@@ -104,14 +105,16 @@ export const GET = createExternalEndpoint(
         customerName: plan.customerName ?? null,
         score: { value: score, tier: tier.label, color: tier.color },
         summary: {
-          overdue: plan.buckets.overdue.length,
-          dueSoon: plan.buckets.dueSoon.length,
-          upcoming: plan.buckets.upcoming.length,
+          overdue: separated.overdue.length,
+          dueSoon: separated.dueSoon.length,
+          upcoming: separated.upcoming.length,
+          complimentary: separated.complimentary.length,
         },
         buckets: {
-          overdue: plan.buckets.overdue.map(formatVhiItem),
-          dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
-          upcoming: plan.buckets.upcoming.map(formatVhiItem),
+          overdue: separated.overdue.map(formatVhiItem),
+          dueSoon: separated.dueSoon.map(formatVhiItem),
+          upcoming: separated.upcoming.map(formatVhiItem),
+          complimentary: separated.complimentary.map(formatVhiItem),
         },
         cachedAt: cached.createdAt,
         source: "cached_plan",

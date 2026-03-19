@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan, invalidateCachedPlan, type CachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
 
 export interface VhiRebuildResult {
   success: boolean;
@@ -25,11 +25,13 @@ export interface VhiRebuildResult {
     overdue: number;
     dueSoon: number;
     upcoming: number;
+    complimentary?: number;
   };
   buckets?: {
     overdue: any[];
     dueSoon: any[];
     upcoming: any[];
+    complimentary?: any[];
   };
   cachedAt?: Date;
   error?: string;
@@ -120,7 +122,8 @@ export async function rebuildVhi(
   }
 
   const plan = cached.plan;
-  const score = computeScore(plan.buckets);
+  const separated = separateComplimentary(plan.buckets);
+  const score = computeScore(separated);
   const tier = getScoreTier(score);
 
   return {
@@ -143,14 +146,16 @@ export async function rebuildVhi(
     distanceUnit: plan.distanceUnit,
     customerName: plan.customerName ?? null,
     summary: {
-      overdue: plan.buckets.overdue.length,
-      dueSoon: plan.buckets.dueSoon.length,
-      upcoming: plan.buckets.upcoming.length,
+      overdue: separated.overdue.length,
+      dueSoon: separated.dueSoon.length,
+      upcoming: separated.upcoming.length,
+      complimentary: separated.complimentary.length,
     },
     buckets: {
-      overdue: plan.buckets.overdue.map(formatVhiItem),
-      dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
-      upcoming: plan.buckets.upcoming.map(formatVhiItem),
+      overdue: separated.overdue.map(formatVhiItem),
+      dueSoon: separated.dueSoon.map(formatVhiItem),
+      upcoming: separated.upcoming.map(formatVhiItem),
+      complimentary: separated.complimentary.map(formatVhiItem),
     },
     cachedAt: cached.createdAt,
   };

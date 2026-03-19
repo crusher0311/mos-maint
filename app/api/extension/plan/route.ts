@@ -7,6 +7,7 @@ import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
 import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
+import { isComplimentaryItem } from "@/lib/complimentary-classification";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1138,23 +1139,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const COMPLIMENTARY_KEYS = new Set([
-      "oil_reminder", "oil_replacement_reminder", "reset_oil_replacement_reminder",
-      "chassis_body", "tighten_nuts_bolts",
-      "multi_point_inspection", "tire_pressure", "tire_pressure_check",
-    ]);
-    const COMPLIMENTARY_TITLE_KW = [
-      "oil replacement reminder", "maint reqd", "oil reset", "reset oil",
-      "tighten nuts and bolts", "tighten nuts & bolts", "chassis and body", "chassis & body",
-      "multi-point inspection", "multi point inspection",
-      "tire pressure check", "tire pressure set", "set tire pressure",
-    ];
-    const isComplimentaryItem = (item: any) => {
-      const key = (item.serviceKey || item.key || "").toLowerCase();
-      if (COMPLIMENTARY_KEYS.has(key)) return true;
-      const title = (item.title || item.key || "").toLowerCase();
-      return COMPLIMENTARY_TITLE_KW.some(kw => title.includes(kw));
-    };
 
     if (cachedPlan && cachedPlan.plan?.buckets) {
       console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}, cachedMiles=${cachedPlan.mileage}, currentMiles=${mileage}`);
@@ -1260,6 +1244,7 @@ export async function GET(request: NextRequest) {
         }
         for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
           plan.recommended.push(convertItem(item));
         }
       }

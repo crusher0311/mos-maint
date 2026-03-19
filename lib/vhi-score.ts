@@ -1,5 +1,6 @@
 import { Db } from "mongodb";
 import { type TriagedItemCache } from "@/lib/plan-cache";
+import { isComplimentaryItem } from "@/lib/complimentary-classification";
 
 export function categoryMultiplier(category: string): number {
   const cat = (category || "").toLowerCase();
@@ -9,10 +10,38 @@ export function categoryMultiplier(category: string): number {
   return 1.0;
 }
 
+export function separateComplimentary(buckets: {
+  overdue: TriagedItemCache[];
+  dueSoon: TriagedItemCache[];
+  upcoming: TriagedItemCache[];
+}): {
+  overdue: TriagedItemCache[];
+  dueSoon: TriagedItemCache[];
+  upcoming: TriagedItemCache[];
+  complimentary: TriagedItemCache[];
+} {
+  const complimentary: TriagedItemCache[] = [];
+  const filter = (items: TriagedItemCache[]) =>
+    items.filter((item) => {
+      if (isComplimentaryItem(item)) {
+        complimentary.push(item);
+        return false;
+      }
+      return true;
+    });
+  return {
+    overdue: filter(buckets.overdue),
+    dueSoon: filter(buckets.dueSoon),
+    upcoming: filter(buckets.upcoming),
+    complimentary,
+  };
+}
+
 export function computeScore(buckets: { overdue: TriagedItemCache[]; dueSoon: TriagedItemCache[] }): number {
   let score = 100;
 
   for (const item of buckets.overdue) {
+    if (isComplimentaryItem(item)) continue;
     let deduction = item.bump === "red" ? 7 : 5;
     deduction *= categoryMultiplier(item.category || "");
     if (item.declined) deduction += 1;
@@ -20,6 +49,7 @@ export function computeScore(buckets: { overdue: TriagedItemCache[]; dueSoon: Tr
   }
 
   for (const item of buckets.dueSoon) {
+    if (isComplimentaryItem(item)) continue;
     let deduction = item.bump === "yellow" ? 2.5 : item.bump === "red" ? 3 : 2;
     deduction *= categoryMultiplier(item.category || "");
     score -= deduction;
@@ -64,8 +94,8 @@ export function formatVhiItem(item: TriagedItemCache) {
 
 export interface AnalysisCacheVhiResult {
   score: { value: number; tier: string; color: string };
-  summary: { overdue: number; dueSoon: number; upcoming: number };
-  buckets: { overdue: any[]; dueSoon: any[]; upcoming: any[] };
+  summary: { overdue: number; dueSoon: number; upcoming: number; complimentary?: number };
+  buckets: { overdue: any[]; dueSoon: any[]; upcoming: any[]; complimentary?: any[] };
   vehicle: { year: number | null; make: string | null; model: string | null; engine: string | null };
   currentMiles: number | null;
   distanceUnit: string;
@@ -109,13 +139,14 @@ export async function getVhiFromAnalysisCache(
   const dueSoon = recs.filter((r: any) => r.status === "due_soon");
   const upcoming = recs.filter((r: any) => r.status === "upcoming");
 
-  const buckets = {
+  const rawBuckets = {
     overdue: overdue.map(convertRecToTriaged),
     dueSoon: dueSoon.map(convertRecToTriaged),
     upcoming: upcoming.map(convertRecToTriaged),
   };
 
-  const score = computeScore(buckets);
+  const separated = separateComplimentary(rawBuckets);
+  const score = computeScore(separated);
   const tier = getScoreTier(score);
 
   const vehicleDoc = await db.collection("vehicles").findOne(
@@ -125,11 +156,17 @@ export async function getVhiFromAnalysisCache(
 
   return {
     score: { value: score, tier: tier.label, color: tier.color },
-    summary: { overdue: overdue.length, dueSoon: dueSoon.length, upcoming: upcoming.length },
+    summary: {
+      overdue: separated.overdue.length,
+      dueSoon: separated.dueSoon.length,
+      upcoming: separated.upcoming.length,
+      complimentary: separated.complimentary.length,
+    },
     buckets: {
-      overdue: buckets.overdue.map(formatVhiItem),
-      dueSoon: buckets.dueSoon.map(formatVhiItem),
-      upcoming: buckets.upcoming.map(formatVhiItem),
+      overdue: separated.overdue.map(formatVhiItem),
+      dueSoon: separated.dueSoon.map(formatVhiItem),
+      upcoming: separated.upcoming.map(formatVhiItem),
+      complimentary: separated.complimentary.map(formatVhiItem),
     },
     vehicle: {
       year: vehicleDoc?.year ?? null,
