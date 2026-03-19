@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache } from "@/lib/vhi-score";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+import { rebuildVhi } from "@/lib/vhi-rebuild";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -153,52 +153,76 @@ export const GET = createExternalEndpoint(
       }
     }
 
-    if (mileage) {
-      console.log(`[VHI External] No valid cache for ${vin} at shop ${resolvedShopId}, triggering build with mileage ${mileage}...`);
-      const built = await triggerPlanBuild(resolvedShopId, vin, mileage);
-      if (built) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
-        if (cached) {
-          const plan = cached.plan;
-          const score = computeScore(plan.buckets);
-          const tier = getScoreTier(score);
-          return NextResponse.json({
-            success: true,
-            vin,
-            vehicle: {
-              year: plan.vehicle.year ?? null,
-              make: plan.vehicle.make ?? null,
-              model: plan.vehicle.model ?? null,
-              engine: plan.vehicle.engine ?? null,
-            },
-            currentMiles: plan.currentMiles,
-            distanceUnit: plan.distanceUnit,
-            customerName: plan.customerName ?? null,
-            score: { value: score, tier: tier.label, color: tier.color },
-            summary: {
-              overdue: plan.buckets.overdue.length,
-              dueSoon: plan.buckets.dueSoon.length,
-              upcoming: plan.buckets.upcoming.length,
-            },
-            buckets: {
-              overdue: plan.buckets.overdue.map(formatVhiItem),
-              dueSoon: plan.buckets.dueSoon.map(formatVhiItem),
-              upcoming: plan.buckets.upcoming.map(formatVhiItem),
-            },
-            cachedAt: cached.createdAt,
-            source: "fresh_build",
-          });
+    if (!mileage) {
+      const shopDoc = await db.collection("shops").findOne(
+        { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { projection: { integrationProvider: 1 } }
+      );
+      const provider = shopDoc?.integrationProvider || "tekmetric";
+
+      if (provider === "tekmetric") {
+        const wo = await db.collection("tekmetric_work_orders").findOne(
+          { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { sort: { createdAt: -1 }, projection: { odometer: 1 } }
+        );
+        if (wo?.odometer) {
+          mileage = wo.odometer;
+          console.log(`[VHI External] Recovered mileage ${mileage} from tekmetric_work_orders for ${vin}`);
+        }
+      } else if (provider === "shopware") {
+        const ro = await db.collection("shopware_repair_orders").findOne(
+          { mosShopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { sort: { updatedAt: -1 }, projection: { odometer: 1, "raw.odometer": 1, "raw.odometer_out": 1 } }
+        );
+        if (ro) {
+          mileage = ro?.raw?.odometer_out ?? ro?.raw?.odometer ?? ro?.odometer ?? null;
+          if (mileage) console.log(`[VHI External] Recovered mileage ${mileage} from shopware_repair_orders for ${vin}`);
+        }
+      } else if (provider === "protractor") {
+        const wo = await db.collection("protractor_work_orders").findOne(
+          { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { sort: { updatedAt: -1 }, projection: { OutUsage: 1, InUsage: 1, Odometer: 1, "data.OutUsage": 1, "data.InUsage": 1, "data.Odometer": 1 } }
+        );
+        if (wo) {
+          mileage = wo?.OutUsage ?? wo?.InUsage ?? wo?.Odometer ?? wo?.data?.OutUsage ?? wo?.data?.InUsage ?? wo?.data?.Odometer ?? null;
+          if (mileage) console.log(`[VHI External] Recovered mileage ${mileage} from protractor_work_orders for ${vin}`);
         }
       }
     }
 
-    return NextResponse.json(
-      {
-        error: "No VHI data available",
-        message: "No maintenance plan has been built for this vehicle yet. The plan is built when the vehicle is viewed in the dashboard or Chrome extension.",
-      },
-      { status: 404 }
-    );
+    if (!mileage || mileage <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Could not determine mileage for this vehicle",
+          message: "No mileage found in vehicle records, cached plans, or work orders. Provide mileage via the POST /api/external/vhi/analyze endpoint, or ensure the vehicle has a work order with an odometer reading.",
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[VHI External] No valid cache for ${vin} at shop ${resolvedShopId}, triggering build with mileage ${mileage}...`);
+    const result = await rebuildVhi(resolvedShopId, vin, mileage, { invalidateFirst: false });
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error || "Failed to build maintenance plan" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      vin,
+      vehicle: result.vehicle,
+      currentMiles: result.currentMiles,
+      distanceUnit: result.distanceUnit,
+      customerName: result.customerName,
+      score: result.score,
+      summary: result.summary,
+      buckets: result.buckets,
+      cachedAt: result.cachedAt,
+      source: "on_demand_build",
+    });
   }
 );
