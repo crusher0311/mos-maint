@@ -183,9 +183,12 @@ function getLastPerformedInfo(
       for (const job of jobs) {
         const jobName = job.name || job.description || '';
         if (servicePatterns.some(p => p.test(jobName))) {
+          const woMileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn;
+          const woId = wo.workOrderId || wo.repairOrderNumber || wo._id;
+          console.log(`[Extension] LastPerformed match: service="${serviceName}" key="${serviceKey}" matched job="${jobName}" on WO#${woId} at ${woMileage}mi, completed=${wo.completedDate || 'open'}`);
           shopLastDone = {
             date: wo.completedDate ? new Date(wo.completedDate) : undefined,
-            mileage: wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn
+            mileage: woMileage
           };
           break;
         }
