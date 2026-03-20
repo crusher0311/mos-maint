@@ -1,0 +1,50 @@
+2026-03-20T12:16:28Z clientIP="18.220.11.229" requestID="4ed70964-07ab-4e3f" responseTimeMS=471 responseBytes=539 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:16:28.45594927Z ==> Detected service running on port 10000
+2026-03-20T12:16:28.524646276Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-03-20T12:16:31Z clientIP="18.220.11.229" requestID="" responseTimeMS=0 responseBytes=488 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:16:31.462457148Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=67ms
+2026-03-20T12:16:31.725830996Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:16:31.79400487Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:16:31.861113249Z [Extension] Estimated mileage for 1FT8W3BT0BEA08647: 103506 mi (good, 3 CARFAX points, 20.1 mi/day)
+2026-03-20T12:16:32.198589339Z [Extension] Customer 96588167 found in MongoDB cache
+2026-03-20T12:16:32.19860812Z [Extension] RO details (cached): roNumber=32, customer=null
+2026-03-20T12:16:32.266095314Z [PlanCache] SKIP: Mileage changed 105388 -> 103506 (diff: 1882) for 1FT8W3BT0BEA08647
+2026-03-20T12:16:32.266119834Z [PlanCache] MISS: 1 entries found but none valid for 1FT8W3BT0BEA08647
+2026-03-20T12:16:32.50715399Z [Extension] No dashboard cache, running on-demand analysis
+2026-03-20T12:16:32.572661805Z [Extension] Analysis cache check: exists=true, age=911s, hasRecs=true, prefsChanged=false, mileageChanged=true (cached=105388, current=103506)
+2026-03-20T12:16:32.706149571Z [DataOne Cache] HIT for squish 1FT8W3BTBE, cached at 2026-03-18T13:58:45.251Z
+2026-03-20T12:16:32.706194261Z [Extension] Parallel fetch completed in 134ms
+2026-03-20T12:16:32.706413154Z [Extension] CARFAX: 24 service records
+2026-03-20T12:16:32.883065563Z [Extension] Running analysis for VIN 1FT8W3BT0BEA08647, shop 63, mileage 103506, showInspect=false
+2026-03-20T12:16:32.883094433Z [Extension] Using prefetched 1 work orders
+2026-03-20T12:16:32.883113803Z [Extension] OEM data: 33 items, source: cache
+2026-03-20T12:16:33Z clientIP="18.220.11.229" requestID="77612eb2-4f8a-41e4" responseTimeMS=1753 responseBytes=65467 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:16:33.00319282Z [Extension] OEM processing: 15 recs, skipped: noInterval=9, inspect=9, excluded=0
+2026-03-20T12:16:33.073000748Z [Extension] Analysis complete: overdue=7, dueSoon=0, upcoming=8
+2026-03-20T12:16:33.207638702Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:16:44Z clientIP="18.220.11.229" requestID="" responseTimeMS=0 responseBytes=518 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:16:44.222113868Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=67ms
+2026-03-20T12:16:44.48511148Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:16:44.554366921Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:16:44.621814674Z [Extension] Estimated mileage for 1FT8W3BT0BEA08647: 103506 mi (good, 3 CARFAX points, 20.1 mi/day)
+2026-03-20T12:16:45Z clientIP="18.220.11.229" requestID="71d0f008-5db3-41f9" responseTimeMS=1730 responseBytes=65467 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:16:45.182147161Z [Extension] Customer 96588167 found in MongoDB cache
+2026-03-20T12:16:45.182172591Z [Extension] RO details (cached): roNumber=32, customer=null
+2026-03-20T12:16:45.362353672Z [Extension] No dashboard cache, running on-demand analysis
+2026-03-20T12:16:45.426653509Z [Extension] Analysis cache check: exists=true, age=12s, hasRecs=true, prefsChanged=false, mileageChanged=false (cached=103506, current=103506)
+2026-03-20T12:16:45.557326293Z [DataOne Cache] HIT for squish 1FT8W3BTBE, cached at 2026-03-18T13:58:45.251Z
+2026-03-20T12:16:45.557363763Z [Extension] Parallel fetch completed in 131ms
+2026-03-20T12:16:45.557415774Z [Extension] CARFAX: 24 service records
+2026-03-20T12:16:45.736122033Z [Extension] Running analysis for VIN 1FT8W3BT0BEA08647, shop 63, mileage 103506, showInspect=false
+2026-03-20T12:16:45.736153203Z [Extension] Using prefetched 1 work orders
+2026-03-20T12:16:45.736163833Z [Extension] OEM data: 33 items, source: cache
+2026-03-20T12:16:45.737067987Z [Extension] OEM processing: 15 recs, skipped: noInterval=9, inspect=9, excluded=0
+2026-03-20T12:16:45.806643952Z [Extension] Analysis complete: overdue=7, dueSoon=0, upcoming=8
+2026-03-20T12:16:45.939567299Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:16:47.573797152Z [Extension] OEM fetch timed out after 15s
+2026-03-20T12:17:00.426401934Z [Extension] OEM fetch timed out after 15s
+2026-03-20T12:17:07Z clientIP="18.220.11.229" requestID="e0f87709-a30f-4889" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:17:07Z clientIP="18.220.11.229" requestID="d9626553-adbe-412d" responseTimeMS=6 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:17:07Z clientIP="18.220.11.229" requestID="c59a3047-b716-4490" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:17:07Z clientIP="18.220.11.229" requestID="2add7af3-7bf8-4198" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:17:07Z clientIP="18.220.11.229" requestID="1849deb8-29f8-4e5d" responseTimeMS=4 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
