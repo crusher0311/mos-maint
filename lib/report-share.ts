@@ -21,15 +21,20 @@ export function generateShareToken(
   return Buffer.from(`${payload}:${signature}`).toString("base64url");
 }
 
+function resolveAppHost(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  }
+  const renderUrl = process.env.RENDER_EXTERNAL_URL || "";
+  if (renderUrl.includes("mos-tools-qa")) return "qa.mos.tools";
+  if (renderUrl.includes("mos-tools") && !renderUrl.includes("-qa")) return "mos.tools";
+  if (renderUrl) return renderUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  if (process.env.REPLIT_DEV_DOMAIN) return process.env.REPLIT_DEV_DOMAIN;
+  return "localhost:5000";
+}
+
 export function buildReportUrl(vin: string, shopId: number | string): string {
   const token = generateShareToken(vin.toUpperCase(), String(shopId));
-  const host =
-    process.env.RENDER_EXTERNAL_URL?.replace(/^https?:\/\//, "").replace(
-      /\/$/,
-      ""
-    ) ||
-    process.env.REPLIT_DEV_DOMAIN ||
-    "localhost:5000";
-  const protocol = process.env.RENDER_EXTERNAL_URL ? "https" : "https";
-  return `${protocol}://${host}/report/${vin.toUpperCase()}?token=${token}`;
+  const host = resolveAppHost();
+  return `https://${host}/report/${vin.toUpperCase()}?token=${token}`;
 }
