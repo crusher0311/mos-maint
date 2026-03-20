@@ -563,7 +563,7 @@ function triage({
 
     const dviInfo = dviMap.get(serviceKey);
     const declinedInfo = declinedMap.get(serviceKey) || null;
-    const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
+    const displayTitle = SERVICE_KEY_DISPLAY_NAMES[serviceKey] || o.name || "Maintenance Item";
     
     triaged.push({
       key: uniqueKey,
