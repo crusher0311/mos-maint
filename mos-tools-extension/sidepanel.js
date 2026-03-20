@@ -1045,9 +1045,12 @@ function highlightCannedJob(serviceName, attempts = 0) {
   }
 }
 
-function formatLastDone(last, currentMileage, approvedThisVisit) {
+function formatLastDone(last, currentMileage, approvedThisVisit, onCurrentRO) {
   if (approvedThisVisit) {
     return { text: 'Approved during this visit', logo: '', approvedThisVisit: true };
+  }
+  if (onCurrentRO) {
+    return { text: 'On current estimate — not yet authorized', logo: '', onCurrentRO: true };
   }
   if (!last || (!last.miles && !last.date)) return null;
   
@@ -1120,9 +1123,9 @@ function createServiceItemHTML(item, type) {
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
-  const lastDone = formatLastDone(item.last, currentContext?.mileage, item.approvedThisVisit);
+  const lastDone = formatLastDone(item.last, currentContext?.mileage, item.approvedThisVisit, item.onCurrentRO);
   const lastDoneHtml = lastDone ? 
-    `<div class="last-done${lastDone.approvedThisVisit ? ' approved-this-visit' : ''}">${lastDone.text} ${lastDone.logo}</div>` :
+    `<div class="last-done${lastDone.approvedThisVisit ? ' approved-this-visit' : ''}${lastDone.onCurrentRO ? ' on-current-ro' : ''}">${lastDone.text} ${lastDone.logo}</div>` :
     `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
   
   // Check if we have full job details from canned job match

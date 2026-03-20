@@ -598,6 +598,12 @@ body {
   font-weight: 600;
 }
 
+.last-done.on-current-ro {
+  color: #d97706;
+  font-weight: 600;
+  font-size: 12px;
+}
+
 .source-logo {
   height: 14px;
   width: auto;
