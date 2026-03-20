@@ -1,0 +1,50 @@
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="95c4bc0b-9c00-4e24" responseTimeMS=1657 responseBytes=64373 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="3d58afc4-0f74-4d6c" responseTimeMS=4 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="c61f8ba9-eb62-4369" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="c861b897-950c-4f66" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="39050246-6281-48ba" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07Z clientIP="18.220.11.229" requestID="912d9338-2778-4c79" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:07.643165394Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-03-20T10:36:07.643170783Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-03-20T10:36:07.643172624Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-03-20T10:36:07.643174404Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-03-20T10:36:07.643176504Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-03-20T10:36:07.643178304Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-03-20T10:36:07.643180234Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-03-20T10:36:07.712057338Z [Extension] Analysis complete: overdue=0, dueSoon=0, upcoming=0
+2026-03-20T10:36:07.845513979Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T10:36:07.986444201Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=67ms
+2026-03-20T10:36:08.184028497Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T10:36:08.250565468Z [Extension] Tekmetric WO lookup: mosShopId=63, roId=295818536, found=true
+2026-03-20T10:36:08.316977996Z [Extension] Vehicle 139046186 found in MongoDB cache
+2026-03-20T10:36:08.317000107Z [Extension] Tekmetric WO updated with live API data: odometer=105388
+2026-03-20T10:36:08.317004167Z [Extension] Current RO authorized jobs: 1 (CEL)
+2026-03-20T10:36:08.317007567Z [Extension] WO data: vin=1FT8W3BT0BEA08647, odometer=105388
+2026-03-20T10:36:08.385134774Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T10:36:08.45188419Z [Extension] Using actual mileage 105388 for 1FT8W3BT0BEA08647 (not estimating)
+2026-03-20T10:36:08.789270733Z [PlanCache] SKIP: Expired 1169m ago for 1FT8W3BT0BEA08647 (shopId=63)
+2026-03-20T10:36:08.789287443Z [PlanCache] MISS: 1 entries found but none valid for 1FT8W3BT0BEA08647
+2026-03-20T10:36:08.975917639Z [Extension] No dashboard cache, running on-demand analysis
+2026-03-20T10:36:09Z clientIP="18.220.11.229" requestID="e53676a7-6691-42ac" responseTimeMS=1569 responseBytes=64373 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T10:36:09.042996643Z [Extension] Analysis cache check: exists=true, age=1s, hasRecs=false, prefsChanged=false, mileageChanged=false (cached=105388, current=105388)
+2026-03-20T10:36:09.168068732Z [DataOne Cache] HIT for squish 1FT8W3BTBE, cached at 2026-03-18T13:58:45.251Z
+2026-03-20T10:36:09.173457555Z [Extension] Parallel fetch completed in 131ms
+2026-03-20T10:36:09.173484396Z [Extension] CARFAX: 24 service records
+2026-03-20T10:36:09.34649248Z [Extension] Running analysis for VIN 1FT8W3BT0BEA08647, shop 63, mileage 105388, showInspect=false
+2026-03-20T10:36:09.346530981Z [Extension] Using prefetched 1 work orders
+2026-03-20T10:36:09.346543261Z [Extension] OEM data: 33 items, source: cache
+2026-03-20T10:36:09.347127985Z [Extension] OEM data fetch failed: ReferenceError: currentRoAuthorizedJobs is not defined
+2026-03-20T10:36:09.347141805Z     at M (/opt/render/project/src/.next/server/app/api/extension/plan/route.js:1:10542)
+2026-03-20T10:36:09.347144905Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-03-20T10:36:09.347147395Z     at async N (/opt/render/project/src/.next/server/app/api/extension/plan/route.js:1:29443)
+2026-03-20T10:36:09.347150446Z     at async /opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:36258
+2026-03-20T10:36:09.347152675Z     at async eR.execute (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:26874)
+2026-03-20T10:36:09.347154775Z     at async eR.handle (/opt/render/project/src/node_modules/next/dist/compiled/next-server/app-route.runtime.prod.js:6:37512)
+2026-03-20T10:36:09.347157435Z     at async doRender (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1377:42)
+2026-03-20T10:36:09.347160406Z     at async cacheEntry.responseCache.get.routeKind (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1599:28)
+2026-03-20T10:36:09.347162796Z     at async NextNodeServer.renderToResponseWithComponentsImpl (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1507:28)
+2026-03-20T10:36:09.347165096Z     at async NextNodeServer.renderPageComponent (/opt/render/project/src/node_modules/next/dist/server/base-server.js:1931:24)
+2026-03-20T10:36:09.415533369Z [Extension] Analysis complete: overdue=0, dueSoon=0, upcoming=0
+2026-03-20T10:36:09.548868497Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T10:36:22.338153097Z [Extension] OEM fetch timed out after 15s
+2026-03-20T10:36:24.043704333Z [Extension] OEM fetch timed out after 15s

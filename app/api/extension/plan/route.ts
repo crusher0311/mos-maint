@@ -415,7 +415,8 @@ async function runOnDemandAnalysis(
   carfaxRecords: any[] | null = null,
   prefetched?: PrefetchedData,
   dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>,
-  intervalApplyMode: string = "shop_only"
+  intervalApplyMode: string = "shop_only",
+  currentRoAuthorizedJobs: string[] = []
 ) {
   const db = await getDb();
   
@@ -1425,7 +1426,8 @@ export async function GET(request: NextRequest) {
           mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
           { oemResult, shopWorkOrders },
           tekDviFindings.length > 0 ? tekDviFindings : undefined,
-          intervalApplyMode
+          intervalApplyMode,
+          currentRoAuthorizedJobs
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
