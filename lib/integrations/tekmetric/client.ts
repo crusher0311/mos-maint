@@ -187,16 +187,7 @@ export async function getCannedJobs(
 }
 
 export async function getRepairOrderInspections(repairOrderId: number, shopId?: number): Promise<TekmetricInspection[]> {
-  try {
-    const response = await tekmetricRequest<{ content: TekmetricInspection[] }>(
-      `/inspections?repairOrder=${repairOrderId}`,
-      {},
-      shopId
-    );
-    return response.content || [];
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function validateShopAccess(shopId: number): Promise<{ valid: boolean; shop?: TekmetricShop; error?: string }> {
