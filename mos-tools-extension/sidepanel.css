@@ -109,6 +109,26 @@ body {
   max-width: 320px;
 }
 
+.remember-me-group {
+  margin-bottom: 12px;
+}
+
+.remember-me-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--gray-600);
+}
+
+.remember-me-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
 .form-group {
   margin-bottom: 16px;
 }

@@ -87,6 +87,7 @@ const elements = {
   emailInput: document.getElementById('email'),
   passwordInput: document.getElementById('password'),
   apiUrlInput: document.getElementById('api-url'),
+  rememberMeCheckbox: document.getElementById('remember-me'),
   loginError: document.getElementById('login-error'),
   
   // Header
@@ -396,6 +397,16 @@ function showLoginState() {
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.remove('hidden');
   elements.mainState.classList.add('hidden');
+  chrome.storage.local.get(['mosLoginEmail', 'mosRememberMe'], (stored) => {
+    if (stored.mosRememberMe !== false && stored.mosLoginEmail) {
+      elements.emailInput.value = stored.mosLoginEmail;
+      elements.rememberMeCheckbox.checked = true;
+      elements.passwordInput.focus();
+    } else {
+      elements.rememberMeCheckbox.checked = false;
+      elements.emailInput.focus();
+    }
+  });
 }
 
 function showMainState() {
@@ -699,6 +710,7 @@ async function handleLogin(e) {
   const email = elements.emailInput.value;
   const password = elements.passwordInput.value;
   const apiUrl = elements.apiUrlInput.value || 'https://mos.tools';
+  const rememberMe = elements.rememberMeCheckbox.checked;
   
   elements.loginError.classList.add('hidden');
   elements.loginForm.querySelector('button').disabled = true;
@@ -709,7 +721,8 @@ async function handleLogin(e) {
       action: 'MOS_LOGIN',
       email,
       password,
-      apiUrl
+      apiUrl,
+      rememberMe
     });
     
     if (result.success) {

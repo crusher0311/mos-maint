@@ -174,7 +174,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- MOS Authentication --------------------
   if (message.action === "MOS_LOGIN") {
-    handleMosLogin(message.email, message.password, message.apiUrl)
+    handleMosLogin(message.email, message.password, message.apiUrl, message.rememberMe !== false)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
@@ -182,7 +182,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "MOS_LOGOUT") {
     mosApiToken = null;
-    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosLoginEmail', 'mosLoginPass']);
+    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosLoginEmail', 'mosLoginPass', 'mosRememberMe']);
     sendResponse({ success: true });
     return false;
   }
@@ -650,7 +650,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ==================== MOS API FUNCTIONS ====================
-async function handleMosLogin(email, password, apiUrl) {
+async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
   try {
     // Remove trailing slash from API URL
     mosApiUrl = (apiUrl || 'https://mos.tools').replace(/\/+$/, '');
@@ -669,14 +669,21 @@ async function handleMosLogin(email, password, apiUrl) {
     const data = await response.json();
     mosApiToken = data.token;
     
-    // Persist auth and credentials for silent re-auth
-    chrome.storage.local.set({
+    const storageData = {
       mosApiToken: data.token,
       mosApiUrl: mosApiUrl,
       mosUser: data.user,
-      mosLoginEmail: email,
-      mosLoginPass: password
-    });
+      mosRememberMe: rememberMe
+    };
+    
+    if (rememberMe) {
+      storageData.mosLoginEmail = email;
+      storageData.mosLoginPass = password;
+    } else {
+      chrome.storage.local.remove(['mosLoginEmail', 'mosLoginPass']);
+    }
+    
+    chrome.storage.local.set(storageData);
 
     console.log("[MOS] Login successful:", data.user?.email, "| token:", data.token?.substring(0, 20) + "...");
 
