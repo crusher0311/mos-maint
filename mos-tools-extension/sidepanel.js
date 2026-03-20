@@ -1045,12 +1045,9 @@ function highlightCannedJob(serviceName, attempts = 0) {
   }
 }
 
-function formatLastDone(last, currentMileage, approvedThisVisit, onCurrentRO) {
+function formatLastDone(last, currentMileage, approvedThisVisit) {
   if (approvedThisVisit) {
     return { text: 'Approved during this visit', logo: '', approvedThisVisit: true };
-  }
-  if (onCurrentRO) {
-    return { text: 'On current estimate — not yet authorized', logo: '', onCurrentRO: true };
   }
   if (!last || (!last.miles && !last.date)) return null;
   
@@ -1123,9 +1120,9 @@ function createServiceItemHTML(item, type) {
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
-  const lastDone = formatLastDone(item.last, currentContext?.mileage, item.approvedThisVisit, item.onCurrentRO);
+  const lastDone = formatLastDone(item.last, currentContext?.mileage, item.approvedThisVisit);
   const lastDoneHtml = lastDone ? 
-    `<div class="last-done${lastDone.approvedThisVisit ? ' approved-this-visit' : ''}${lastDone.onCurrentRO ? ' on-current-ro' : ''}">${lastDone.text} ${lastDone.logo}</div>` :
+    `<div class="last-done${lastDone.approvedThisVisit ? ' approved-this-visit' : ''}">${lastDone.text} ${lastDone.logo}</div>` :
     `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
   
   // Check if we have full job details from canned job match
@@ -1135,14 +1132,22 @@ function createServiceItemHTML(item, type) {
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
   
+  const isOnRoNotApproved = item.onCurrentRO && !item.approvedThisVisit;
+
   return `
     <li class="service-item ${type}">
       <div class="service-header">
         <div class="service-name">${escapeHtml(serviceName)}</div>
         <div class="add-dropdown">
+          ${isOnRoNotApproved ? `
+          <button class="btn-on-estimate btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
+            On Estimate
+          </button>
+          ` : `
           <button class="btn-add btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
             + Add
           </button>
+          `}
           <div id="${itemId}" class="add-dropdown-menu hidden">
             ${currentContext?.provider === 'shopware' ? `
             <button class="add-dropdown-item ${shopwareAddMode === 'finding-published' ? 'add-primary' : ''}" data-action="sw-finding-publish" data-service='${JSON.stringify(item)}'>
