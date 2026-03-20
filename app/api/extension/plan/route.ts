@@ -1354,6 +1354,23 @@ export async function GET(request: NextRequest) {
 
       const reportUrl = vin ? buildReportUrl(vin.toUpperCase(), mosShopId) : null;
 
+      if (vin) {
+        const approvedServiceKeys = [...plan.overdue, ...plan.dueSoon]
+          .filter((i: any) => i.approvedThisVisit && i.serviceKey)
+          .map((i: any) => i.serviceKey as string);
+        if (approvedServiceKeys.length > 0) {
+          db.collection("report_approved_items").updateOne(
+            { vin: vin.toUpperCase(), shopId: mosShopId },
+            { $set: { vin: vin.toUpperCase(), shopId: mosShopId, approvedServiceKeys, updatedAt: new Date() } },
+            { upsert: true }
+          ).catch(() => {});
+        } else {
+          db.collection("report_approved_items").deleteOne(
+            { vin: vin.toUpperCase(), shopId: mosShopId }
+          ).catch(() => {});
+        }
+      }
+
       return NextResponse.json({
         vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
@@ -1538,6 +1555,7 @@ export async function GET(request: NextRequest) {
         let itemEstDate = est2.estimatedDueDate;
         const item = {
           name: rec.service || rec.name,
+          serviceKey: rec.serviceKey || null,
           category: rec.category || null,
           dueAt: rec.dueMileage,
           milesToGo: rec.milesToGo,
@@ -1552,7 +1570,6 @@ export async function GET(request: NextRequest) {
           lastPerformedMileage: rec.lastPerformedMileage || rec.last?.miles || null,
           last: rec.last || null,
           priority: rec.priority,
-          // Include full job details from matching canned job if available
           laborItems: matchingCannedJob?.laborLines || [],
           parts: matchingCannedJob?.partLines || rec.parts || [],
           laborHours: matchingCannedJob?.laborLines?.reduce((sum: number, l: any) => sum + (l.hours || 0), 0) || rec.laborHours || 1,
@@ -1586,6 +1603,23 @@ export async function GET(request: NextRequest) {
       : null;
 
     const reportUrl2 = vin ? buildReportUrl(vin.toUpperCase(), mosShopId) : null;
+
+    if (vin) {
+      const approvedServiceKeys = [...plan.overdue, ...plan.dueSoon]
+        .filter((i: any) => i.approvedThisVisit && i.serviceKey)
+        .map((i: any) => i.serviceKey as string);
+      if (approvedServiceKeys.length > 0) {
+        db.collection("report_approved_items").updateOne(
+          { vin: vin.toUpperCase(), shopId: mosShopId },
+          { $set: { vin: vin.toUpperCase(), shopId: mosShopId, approvedServiceKeys, updatedAt: new Date() } },
+          { upsert: true }
+        ).catch(() => {});
+      } else {
+        db.collection("report_approved_items").deleteOne(
+          { vin: vin.toUpperCase(), shopId: mosShopId }
+        ).catch(() => {});
+      }
+    }
 
     return NextResponse.json({
       vehicle: vehicle ? {

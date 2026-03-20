@@ -6,6 +6,12 @@ import { computeScore, isComplimentaryItem } from "./VehicleHealthReport";
 import { getScoreInfo } from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
 
+function isApprovedItem(item: PlanItem, approvedKeys?: string[]): boolean {
+  if (!approvedKeys || approvedKeys.length === 0) return false;
+  const sk = (item.serviceKey || item.key || "").toLowerCase();
+  return approvedKeys.some(k => k.toLowerCase() === sk);
+}
+
 interface ScoreSimulatorProps {
   data: VHIData;
   currentScore: number;
@@ -13,9 +19,10 @@ interface ScoreSimulatorProps {
 
 export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorProps) {
   const actionableItems = useMemo(() => {
+    const approved = data.approvedServiceKeys;
     return [
-      ...data.buckets.overdue.filter(i => !isComplimentaryItem(i)).map((item) => ({ ...item, bucket: "overdue" as const })),
-      ...data.buckets.dueSoon.filter(i => !isComplimentaryItem(i)).map((item) => ({ ...item, bucket: "dueSoon" as const })),
+      ...data.buckets.overdue.filter(i => !isComplimentaryItem(i) && !isApprovedItem(i, approved)).map((item) => ({ ...item, bucket: "overdue" as const })),
+      ...data.buckets.dueSoon.filter(i => !isComplimentaryItem(i) && !isApprovedItem(i, approved)).map((item) => ({ ...item, bucket: "dueSoon" as const })),
     ];
   }, [data]);
 

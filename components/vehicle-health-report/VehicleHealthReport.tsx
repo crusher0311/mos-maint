@@ -52,6 +52,7 @@ interface VHIData {
     dueSoon: PlanItem[];
     upcoming: PlanItem[];
   };
+  approvedServiceKeys?: string[];
 }
 
 interface VehicleHealthReportProps {
@@ -97,8 +98,15 @@ function isComplimentaryItem(item: PlanItem): boolean {
   return COMPLIMENTARY_TITLE_KEYWORDS.some(kw => title.includes(kw));
 }
 
+function isApprovedItem(item: PlanItem, approvedKeys?: string[]): boolean {
+  if (!approvedKeys || approvedKeys.length === 0) return false;
+  const sk = (item.serviceKey || item.key || "").toLowerCase();
+  return approvedKeys.some(k => k.toLowerCase() === sk);
+}
+
 function computeScore(data: VHIData): number {
   let score = 100;
+  const approved = data.approvedServiceKeys;
 
   const categoryMultiplier = (category: string): number => {
     const cat = category.toLowerCase();
@@ -110,6 +118,7 @@ function computeScore(data: VHIData): number {
 
   for (const item of data.buckets.overdue) {
     if (isComplimentaryItem(item)) continue;
+    if (isApprovedItem(item, approved)) continue;
     let deduction = item.bump === "red" ? 7 : item.bump === "yellow" ? 5 : 5;
     deduction *= categoryMultiplier(item.category);
     if (item.declined) deduction += 1;
@@ -118,6 +127,7 @@ function computeScore(data: VHIData): number {
 
   for (const item of data.buckets.dueSoon) {
     if (isComplimentaryItem(item)) continue;
+    if (isApprovedItem(item, approved)) continue;
     let deduction = item.bump === "yellow" ? 2.5 : item.bump === "red" ? 3 : 2;
     deduction *= categoryMultiplier(item.category);
     score -= deduction;
@@ -223,12 +233,17 @@ export default function VehicleHealthReport({
   const { vehicle, currentMiles, customerName, buckets } = data;
   const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
 
+  const approved = data.approvedServiceKeys;
   const complimentaryItems = [
     ...buckets.overdue.filter(isComplimentaryItem),
     ...buckets.dueSoon.filter(isComplimentaryItem),
   ];
-  const filteredOverdue = buckets.overdue.filter(i => !isComplimentaryItem(i));
-  const filteredDueSoon = buckets.dueSoon.filter(i => !isComplimentaryItem(i));
+  const approvedItems = [
+    ...buckets.overdue.filter(i => !isComplimentaryItem(i) && isApprovedItem(i, approved)),
+    ...buckets.dueSoon.filter(i => !isComplimentaryItem(i) && isApprovedItem(i, approved)),
+  ];
+  const filteredOverdue = buckets.overdue.filter(i => !isComplimentaryItem(i) && !isApprovedItem(i, approved));
+  const filteredDueSoon = buckets.dueSoon.filter(i => !isComplimentaryItem(i) && !isApprovedItem(i, approved));
 
   const goodSystems = buckets.upcoming.filter(
     (item) => item.milesToGo !== null && item.milesToGo > 5000
@@ -458,7 +473,7 @@ export default function VehicleHealthReport({
                 </div>
               )}
 
-              {goodSystems.length > 0 && (
+              {(goodSystems.length > 0 || approvedItems.length > 0) && (
                 <div className="px-4 py-5 border-b border-gray-100">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
@@ -469,16 +484,34 @@ export default function VehicleHealthReport({
                     <h3 className="text-base sm:text-lg font-bold text-green-600">Systems in Good Condition</h3>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {goodSystems.slice(0, 8).map((item) => (
-                      <div key={item.key} className="flex items-center gap-2 text-gray-600">
-                        <div className="text-green-500 flex-shrink-0">
-                          <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={24} />
-                        </div>
-                        <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
+                  {approvedItems.length > 0 && (
+                    <div className="mb-4 border border-green-200 rounded-lg bg-green-50/50 p-3">
+                      <p className="text-xs font-semibold text-green-700 mb-2">Approved &amp; being performed during this active visit</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {approvedItems.map((item) => (
+                          <div key={item.key} className="flex items-center gap-2">
+                            <div className="text-green-600 flex-shrink-0">
+                              <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={20} />
+                            </div>
+                            <span className="text-xs font-medium text-green-800 truncate">{item.title}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+
+                  {goodSystems.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {goodSystems.slice(0, 8).map((item) => (
+                        <div key={item.key} className="flex items-center gap-2 text-gray-600">
+                          <div className="text-green-500 flex-shrink-0">
+                            <ServiceIcon serviceKey={item.serviceKey ?? item.key} title={item.title} size={24} />
+                          </div>
+                          <span className="text-xs sm:text-sm font-medium truncate">{item.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

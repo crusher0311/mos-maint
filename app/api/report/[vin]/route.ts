@@ -102,6 +102,18 @@ export async function GET(
     const plan = cachedPlan.plan;
     const buckets = plan.buckets || {};
 
+    const approvedDoc = await db.collection("report_approved_items").findOne({
+      vin,
+      shopId: { $in: [String(shopId), Number(shopId)] },
+    });
+    const approvedServiceKeys: string[] = [];
+    if (approvedDoc?.approvedServiceKeys?.length > 0) {
+      const ageMs = approvedDoc.updatedAt ? Date.now() - new Date(approvedDoc.updatedAt).getTime() : Infinity;
+      if (ageMs < 7 * 24 * 60 * 60 * 1000) {
+        approvedServiceKeys.push(...approvedDoc.approvedServiceKeys);
+      }
+    }
+
     let customerName = plan.customerName || null;
 
     if (!customerName) {
@@ -154,6 +166,7 @@ export async function GET(
           dueSoon: buckets.dueSoon || [],
           upcoming: buckets.upcoming || [],
         },
+        approvedServiceKeys: approvedServiceKeys.length > 0 ? approvedServiceKeys : undefined,
       },
       shopName: shop.name || shop.shopName || "",
       shopPhone: shop.phone || shop.contact?.phone || "",
