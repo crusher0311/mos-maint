@@ -1136,7 +1136,7 @@ function createServiceItemHTML(item, type) {
   const isOnRoNotApproved = item.onCurrentRO && !item.approvedThisVisit;
 
   return `
-    <li class="service-item ${type}">
+    <li class="service-item ${type}${item.approvedThisVisit ? ' approved-visit' : ''}">
       <div class="service-header">
         <div class="service-name">${escapeHtml(serviceName)}</div>
         <div class="add-dropdown">

@@ -480,6 +480,11 @@ body {
   border-left: 3px solid var(--success);
 }
 
+.service-item.approved-visit {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
 .service-header {
   display: flex;
   align-items: flex-start;
