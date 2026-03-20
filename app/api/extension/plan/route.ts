@@ -728,14 +728,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const reqStart = Date.now();
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
+      console.log(`[Extension Plan] AUTH FAIL: smsShopId=${smsShopId}, vin=${vin}, error=${auth.error}, elapsed=${Date.now() - reqStart}ms`);
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const db = await getDb();
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
+
+    const maskedEmail = auth.user.email ? auth.user.email.replace(/(.{2}).*(@.*)/, '$1***$2') : 'unknown';
+    console.log(`[Extension Plan] Auth OK: user=${maskedEmail}, shopIds=${userShopIds.join(',')}, smsShopId=${smsShopId}, elapsed=${Date.now() - reqStart}ms`);
 
     const shopResult = await findShopBySmsId(smsShopId, { 
       userShopIds, 
@@ -744,7 +749,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!shopResult) {
-      console.log(`[Extension] No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}`);
+      console.log(`[Extension Plan] SHOP FAIL: No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}, elapsed=${Date.now() - reqStart}ms`);
       return NextResponse.json(
         { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
         { status: 404, headers: corsHeaders }

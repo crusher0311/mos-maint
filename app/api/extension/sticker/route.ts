@@ -475,7 +475,8 @@ async function resolveMosShopId(
       ],
     };
     if (!isPlatformAdmin) {
-      query.shopId = { $in: userShopIds };
+      const shopIdVariants = userShopIds.flatMap((id: number) => [id, String(id)]);
+      query.shopId = { $in: shopIdVariants };
     }
     const shop = await db.collection("shops").findOne(query);
     if (shop) {
@@ -486,7 +487,8 @@ async function resolveMosShopId(
 
   // Fallback to user's primary shop
   if (authResult.user?.shopId) {
-    const shop = await db.collection("shops").findOne({ shopId: Number(authResult.user.shopId) });
+    const primaryShopId = authResult.user.shopId;
+    const shop = await db.collection("shops").findOne({ shopId: { $in: [Number(primaryShopId), String(primaryShopId)] } });
     return { mosShopId: shop?.shopId || null, shop };
   }
 

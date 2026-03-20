@@ -27,6 +27,9 @@ export async function validateExtensionToken(
   }
 
   if (!token || !token.startsWith("ext_")) {
+    const hasAuthHeader = !!authHeader;
+    const hasQueryToken = !!request.nextUrl.searchParams.get("_token");
+    console.log(`[Extension Auth] No valid token: hasAuthHeader=${hasAuthHeader}, hasQueryToken=${hasQueryToken}, path=${request.nextUrl.pathname}`);
     return { user: null, authorized: false, error: "Missing authorization" };
   }
 
@@ -47,6 +50,7 @@ export async function validateExtensionToken(
   }
   
   if (!user) {
+    console.log(`[Extension Auth] Token not found in DB, path=${request.nextUrl.pathname}`);
     return { user: null, authorized: false, error: "Invalid token" };
   }
 
@@ -54,6 +58,8 @@ export async function validateExtensionToken(
     const tokenAge = Date.now() - new Date(user.extensionTokenCreatedAt).getTime();
     
     if (tokenAge > MAX_TOKEN_AGE_MS) {
+      const maskedEmail = user.email ? user.email.replace(/(.{2}).*(@.*)/, '$1***$2') : 'unknown';
+      console.log(`[Extension Auth] Token expired: user=${maskedEmail}, age=${Math.round(tokenAge / 86400000)}d, max=${MAX_TOKEN_AGE_MS / 86400000}d, path=${request.nextUrl.pathname}`);
       return { user: null, authorized: false, error: "Token expired" };
     }
 

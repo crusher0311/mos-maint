@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
 
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
+      console.log(`[Extension Features] AUTH FAIL: smsShopId=${smsShopId}, error=${auth.error}`);
       return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 

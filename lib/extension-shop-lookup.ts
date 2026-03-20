@@ -40,17 +40,40 @@ export async function findShopBySmsId(
   };
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
-    shopQuery.shopId = { $in: userShopIds };
+    const shopIdVariants = userShopIds.flatMap(id => [id, String(id)]);
+    shopQuery.shopId = { $in: shopIdVariants };
   }
   
   let shopDoc = await db.collection("shops").findOne(shopQuery);
+  
+  if (!shopDoc) {
+    console.log(`[Shop Lookup] No match for smsShopId=${smsShopId}, userShopIds=${JSON.stringify(userShopIds)}, isPlatformAdmin=${isPlatformAdmin}, providerHint=${providerHint || 'none'}`);
+    const anyShop = await db.collection("shops").findOne({
+      $or: [
+        { "tekmetric.shopId": tekShopIdNum },
+        { "tekmetric.shopId": tekShopIdStr },
+        { tekmetricShopId: tekShopIdNum },
+        { tekmetricShopId: tekShopIdStr },
+        { "protractor.connectionId": smsShopId },
+        { protractorConnectionId: smsShopId },
+        { "shopware.tenantSubdomain": smsShopId },
+        { "shopware.tenantId": smsShopId },
+      ]
+    }, { projection: { shopId: 1, name: 1, integrationProvider: 1 } });
+    if (anyShop) {
+      console.log(`[Shop Lookup] Shop exists (shopId=${anyShop.shopId}, name=${anyShop.name}) but user lacks access. shopId type=${typeof anyShop.shopId}`);
+    } else {
+      console.log(`[Shop Lookup] No shop configured with SMS ID ${smsShopId} in any provider field`);
+    }
+  }
   
   if (!shopDoc && providerHint === 'shopware') {
     const swFallbackQuery: any = {
       "shopware.tenantId": { $exists: true },
     };
     if (!isPlatformAdmin && userShopIds.length > 0) {
-      swFallbackQuery.shopId = { $in: userShopIds };
+      const shopIdVariants = userShopIds.flatMap(id => [id, String(id)]);
+      swFallbackQuery.shopId = { $in: shopIdVariants };
     }
     const candidates = await db.collection("shops").find(swFallbackQuery).toArray();
     

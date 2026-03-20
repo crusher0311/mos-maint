@@ -128,8 +128,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    const shopIdVariants = allShopIds.flatMap((id: number) => [id, String(id)]);
     const shopDocs = await db.collection("shops")
-      .find({ shopId: { $in: allShopIds } })
+      .find({ shopId: { $in: shopIdVariants } })
       .project({
         shopId: 1,
         name: 1,
