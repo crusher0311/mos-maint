@@ -80,8 +80,10 @@ export async function tekmetricRequest<T = any>(
 
     return response.json();
   } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
-    trackApiRequest('tekmetric', endpoint, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    if (!statusCode) {
+      const latencyMs = Date.now() - startTime;
+      trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId).catch(() => {});
+    }
     throw err;
   }
 }
