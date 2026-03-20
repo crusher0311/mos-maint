@@ -593,11 +593,6 @@ body {
   font-size: 12px;
 }
 
-.last-done.approved-this-visit {
-  color: #16a34a;
-  font-weight: 600;
-}
-
 .source-logo {
   height: 14px;
   width: auto;
@@ -671,6 +666,26 @@ body {
 
 .btn-on-estimate:hover {
   background: #fde68a;
+}
+
+.btn-approved {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #22c55e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-approved:hover {
+  background: #bbf7d0;
 }
 
 /* ==================== Search ==================== */
