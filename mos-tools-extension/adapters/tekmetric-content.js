@@ -3,6 +3,14 @@
 
 console.log("[MOS Tools] Tekmetric content script loaded");
 
+function safeSendMessage(msg, callback) {
+  try {
+    if (!chrome.runtime?.id) return;
+    const p = chrome.runtime.sendMessage(msg, callback);
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+}
+
 let lastContext = null;
 let contextCheckInterval = null;
 
@@ -392,10 +400,10 @@ function updateContext() {
     
     if (context.shopId) {
       console.log("[MOS Tools] Context detected:", context.roId ? `RO ${context.roId}` : 'shop-level', context);
-      chrome.runtime.sendMessage({ 
+      safeSendMessage({ 
         action: "SET_SMS_CONTEXT", 
         context 
-      }).catch(() => {});
+      });
     }
   }
 }
@@ -620,7 +628,7 @@ function handleImmediatePrint() {
   showToast('Generating sticker...', 'info');
   
   // Send message to background to generate and print sticker
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'PRINT_STICKER_IMMEDIATE',
     context: {
       ...context,
@@ -628,7 +636,6 @@ function handleImmediatePrint() {
     }
   }, (response) => {
     if (response && response.success) {
-      // Print via iframe
       printStickerFromContentScript(response.sticker);
     } else {
       showToast(response?.error || 'Failed to generate sticker', 'error');
@@ -674,7 +681,7 @@ async function showIntervalDropdown(event, buttonElement) {
   let intervals = [];
   try {
     const result = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({
+      safeSendMessage({
         action: 'MOS_API_REQUEST',
         endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'tekmetric'}`
       }, resolve);
@@ -786,7 +793,7 @@ function handleImmediatePrintWithInterval(miles, months) {
   showToast(`Generating sticker (${miles.toLocaleString()} mi)...`, 'info');
   
   // Send message to background to generate and print sticker with custom interval
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'PRINT_STICKER_IMMEDIATE',
     context: {
       ...context,
@@ -862,7 +869,7 @@ function getVehicleDetails() {
 
 function openStickerPanel() {
   // Message background to open side panel to sticker tab
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'OPEN_STICKER_PANEL',
     context: detectContext()
   });
@@ -1083,17 +1090,17 @@ function injectFloatingButton() {
 }
 
 function openSidePanel() {
-  chrome.runtime.sendMessage({ action: 'PING' }, () => {
-    if (chrome.runtime.lastError) {
+  safeSendMessage({ action: 'PING' }, () => {
+    if (chrome.runtime?.lastError) {
       console.log('[MOS Tools] Waking service worker...');
     }
     setTimeout(() => {
-      chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, (response) => {
-        if (chrome.runtime.lastError) {
+      safeSendMessage({ action: 'OPEN_SIDE_PANEL' }, (response) => {
+        if (chrome.runtime?.lastError) {
           console.log('[MOS Tools] Could not open side panel:', chrome.runtime.lastError.message);
           setTimeout(() => {
-            chrome.runtime.sendMessage({ action: 'OPEN_SIDE_PANEL' }, () => {
-              if (chrome.runtime.lastError) {
+            safeSendMessage({ action: 'OPEN_SIDE_PANEL' }, () => {
+              if (chrome.runtime?.lastError) {
                 console.log('[MOS Tools] Side panel open failed after retry');
               }
             });
@@ -1118,12 +1125,12 @@ function startCategoryChangeObserver() {
 
       if (categoryChangeDebounce) clearTimeout(categoryChangeDebounce);
       categoryChangeDebounce = setTimeout(() => {
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: "CATEGORY_CHANGED",
           jobId: jobId,
           jobName: jobId,
           newCategory: categoryName || categoryCode
-        }).catch(() => {});
+        });
       }, 500);
     }
 
@@ -1131,9 +1138,9 @@ function startCategoryChangeObserver() {
       console.log('[MOS Tools] Job authorization detected via network');
       if (authorizationDebounce) clearTimeout(authorizationDebounce);
       authorizationDebounce = setTimeout(() => {
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: "JOBS_AUTHORIZED"
-        }).catch(() => {});
+        });
       }, 1500);
     }
   });
