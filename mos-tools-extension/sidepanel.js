@@ -882,6 +882,20 @@ function renderPlan(data) {
     updateKeytagFields();
   }
   
+  function sortItemsActionableFirst(items) {
+    if (!items) return items;
+    return [...items].sort((a, b) => {
+      const aHandled = a.approvedThisVisit ? 2 : a.onCurrentRO ? 1 : 0;
+      const bHandled = b.approvedThisVisit ? 2 : b.onCurrentRO ? 1 : 0;
+      return aHandled - bHandled;
+    });
+  }
+
+  data.overdue = sortItemsActionableFirst(data.overdue);
+  data.dueSoon = sortItemsActionableFirst(data.dueSoon);
+  data.complimentary = sortItemsActionableFirst(data.complimentary);
+  data.recommended = sortItemsActionableFirst(data.recommended);
+
   const hasOverdue = data.overdue && data.overdue.length > 0;
   const hasDueSoon = data.dueSoon && data.dueSoon.length > 0;
   const hasComplimentary = data.complimentary && data.complimentary.length > 0;
