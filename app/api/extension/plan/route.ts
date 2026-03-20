@@ -64,7 +64,7 @@ function computeEstimatedDate(milesToGo: number | null, intervalMiles: number | 
 }
 
 const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
-  oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i, /synthetic oil/i],
+  oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i, /synthetic oil/i, /lube.*oil/i],
   tire_rotation: [/tire rotation/i, /rotate tire/i],
   cabin_air: [/cabin air/i, /cabin filter/i, /pollen filter/i, /interior air filter/i],
   engine_air: [/\bair filter\b/i, /engine air/i, /air cleaner/i],
@@ -120,18 +120,18 @@ function mapServiceToKey(serviceName: string): string | null {
   return null;
 }
 
-function isApprovedThisVisit(serviceTitle: string, authorizedJobs: string[]): boolean {
+function isApprovedThisVisit(serviceTitle: string, authorizedJobs: string[], knownServiceKey?: string): boolean {
   if (!authorizedJobs.length || !serviceTitle) return false;
-  const serviceKey = mapServiceToKey(serviceTitle);
+  const serviceKey = (knownServiceKey && SERVICE_KEY_PATTERNS[knownServiceKey]) ? knownServiceKey : mapServiceToKey(serviceTitle);
   if (!serviceKey) return false;
   const patterns = SERVICE_KEY_PATTERNS[serviceKey];
   if (!patterns) return false;
   return authorizedJobs.some(jobName => patterns.some(p => p.test(jobName)));
 }
 
-function isOnCurrentRO(serviceTitle: string, allRoJobs: string[]): boolean {
+function isOnCurrentRO(serviceTitle: string, allRoJobs: string[], knownServiceKey?: string): boolean {
   if (!allRoJobs.length || !serviceTitle) return false;
-  const serviceKey = mapServiceToKey(serviceTitle);
+  const serviceKey = (knownServiceKey && SERVICE_KEY_PATTERNS[knownServiceKey]) ? knownServiceKey : mapServiceToKey(serviceTitle);
   if (!serviceKey) return false;
   const patterns = SERVICE_KEY_PATTERNS[serviceKey];
   if (!patterns) return false;
@@ -599,8 +599,8 @@ async function runOnDemandAnalysis(
           estimatedDueDate,
           source: intervalSource === 'shop' ? 'shop' : 'oe',
           status,
-          approvedThisVisit: isApprovedThisVisit(item.maintenance_name, currentRoAuthorizedJobs),
-          onCurrentRO: isOnCurrentRO(item.maintenance_name, currentRoAllJobs),
+          approvedThisVisit: isApprovedThisVisit(item.maintenance_name, currentRoAuthorizedJobs, serviceKey || undefined),
+          onCurrentRO: isOnCurrentRO(item.maintenance_name, currentRoAllJobs, serviceKey || undefined),
         });
       }
       console.log(`[Extension] OEM processing: ${recommendations.length} recs, skipped: noInterval=${skippedNoInterval}, inspect=${skippedInspect}, excluded=${skippedExcluded}`);
@@ -1167,6 +1167,16 @@ export async function GET(request: NextRequest) {
 
     if (cachedPlan && cachedPlan.plan?.buckets) {
       console.log(`[Extension] Using dashboard cached plan: overdue=${cachedPlan.plan.buckets.overdue?.length || 0}, dueSoon=${cachedPlan.plan.buckets.dueSoon?.length || 0}, upcoming=${cachedPlan.plan.buckets.upcoming?.length || 0}, cachedMiles=${cachedPlan.mileage}, currentMiles=${mileage}`);
+      if (currentRoAuthorizedJobs.length > 0) {
+        const allItems = [...(cachedPlan.plan.buckets.overdue || []), ...(cachedPlan.plan.buckets.dueSoon || []), ...(cachedPlan.plan.buckets.upcoming || [])];
+        const oilItem = allItems.find((i: any) => i.serviceKey === 'oil');
+        if (oilItem) {
+          const sk = oilItem.serviceKey;
+          const pats = SERVICE_KEY_PATTERNS[sk];
+          const matchResult = currentRoAuthorizedJobs.map((j: string) => `${j}:${pats ? pats.some(p => p.test(j)) : 'no-pats'}`);
+          console.log(`[Extension] Oil item debug: title="${oilItem.title}", serviceKey="${sk}", authorizedJobs=[${currentRoAuthorizedJobs.join(', ')}], matchResults=[${matchResult.join(', ')}]`);
+        }
+      }
 
       const plan = {
         overdue: [] as any[],
@@ -1219,8 +1229,8 @@ export async function GET(request: NextRequest) {
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null,
-        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs),
-        onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs),
+        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs, item.serviceKey),
+        onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs, item.serviceKey),
       }};
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
@@ -1314,8 +1324,8 @@ export async function GET(request: NextRequest) {
             daysToGo: null, estimatedDueDate: null,
             source: "dvi", bump: dvi.status, dviSource: dvi.dviSource,
             last: null, reason: `Flagged ${dvi.status === "red" ? "bad" : "marginal"} on current inspection`,
-            approvedThisVisit: isApprovedThisVisit(dvi.name, currentRoAuthorizedJobs),
-            onCurrentRO: isOnCurrentRO(dvi.name, currentRoAllJobs),
+            approvedThisVisit: isApprovedThisVisit(dvi.name, currentRoAuthorizedJobs, dviKey),
+            onCurrentRO: isOnCurrentRO(dvi.name, currentRoAllJobs, dviKey),
           });
         }
         for (const unmapped of unmappedDvi) {
@@ -1547,8 +1557,8 @@ export async function GET(request: NextRequest) {
           reason: rec.reason,
           bump: rec.bump || null,
           dviSource: rec.dviSource || null,
-          approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs),
-          onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs),
+          approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs, rec.serviceKey || undefined),
+          onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs, rec.serviceKey || undefined),
         };
 
         const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };

@@ -1,0 +1,118 @@
+2026-03-20T12:50:27Z clientIP="34.83.16.143" requestID="ec6fb656-c2db-4a9d" responseTimeMS=41 responseBytes=7444 userAgent="Go-http-client/2.0"
+2026-03-20T12:50:27.747493049Z ==> ///////////////////////////////////////////////////////////
+2026-03-20T12:51:07Z clientIP="18.220.11.229" requestID="980f29a1-46fe-496b" responseTimeMS=48 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:51:07Z clientIP="18.220.11.229" requestID="9df5b9ae-1006-42c9" responseTimeMS=29 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:51:08Z clientIP="18.220.11.229" requestID="ec66d1b7-503b-45cd" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:51:08Z clientIP="18.220.11.229" requestID="7cdeaac4-a595-48f3" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:51:08Z clientIP="18.220.11.229" requestID="e0eec164-cf18-44ab" responseTimeMS=10 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:07Z clientIP="18.220.11.229" requestID="3a695c92-a863-4e76" responseTimeMS=6 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:07Z clientIP="18.220.11.229" requestID="ad8f9904-8afe-46c8" responseTimeMS=7 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:07Z clientIP="18.220.11.229" requestID="95ac0a1a-23a9-4526" responseTimeMS=8 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:07Z clientIP="18.220.11.229" requestID="77282f1e-f23c-48bb" responseTimeMS=6 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:07Z clientIP="18.220.11.229" requestID="c5cf88a1-993b-40b1" responseTimeMS=6 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:41Z clientIP="18.220.11.229" requestID="0ff6cb68-b29e-4efa" responseTimeMS=1102 responseBytes=1000 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:42Z clientIP="18.220.11.229" requestID="2d39c4a4-0a01-4c94" responseTimeMS=553 responseBytes=539 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:42.087393773Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=67ms
+2026-03-20T12:52:42.285843338Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:52:42.353760052Z [Extension] Tekmetric WO lookup: mosShopId=63, roId=295818536, found=true
+2026-03-20T12:52:42.750599862Z [Extension] Vehicle 139046186 found in MongoDB cache
+2026-03-20T12:52:42.750763305Z [Extension] Tekmetric WO updated with live API data: odometer=105388
+2026-03-20T12:52:42.751131352Z [Extension] Current RO jobs: 5 total, 2 authorized (CEL, 6K Lube Oil And Filter)
+2026-03-20T12:52:42.751251614Z [Extension] WO data: vin=1FT8W3BT0BEA08647, odometer=105388
+2026-03-20T12:52:42.818218011Z [DataOne] Keep-alive started (every 240s)
+2026-03-20T12:52:42.907288232Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:52:42.974118317Z [Extension] Using actual mileage 105388 for 1FT8W3BT0BEA08647 (not estimating)
+2026-03-20T12:52:43Z clientIP="18.220.11.229" requestID="188c70ab-4c88-4ea2" responseTimeMS=1548 responseBytes=66363 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:43.314484652Z [PlanCache] HIT: 1FT8W3BT0BEA08647 cached 36m ago, 105388 miles
+2026-03-20T12:52:43.487062853Z [Extension] Using dashboard cached plan: overdue=15, dueSoon=0, upcoming=9, cachedMiles=105388, currentMiles=105388
+2026-03-20T12:52:43.832085414Z [Extension Prefetch] Shop 63: Estimated 3VWCB7BU5LM016774 at 64510 mi from CARFAX
+2026-03-20T12:52:43.899055441Z [Extension Prefetch] Shop 63: Estimated 2HKRM4H58GH726589 at 43547 mi from CARFAX
+2026-03-20T12:52:43.915104585Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=66ms
+2026-03-20T12:52:43.965854864Z [Extension Prefetch] Shop 63: Estimated 5J6RM4H73DL087864 at 176881 mi from CARFAX
+2026-03-20T12:52:44Z clientIP="18.220.11.229" requestID="d829c722-d428-400d" responseTimeMS=1124 responseBytes=66363 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:52:44.164689857Z [Extension Prefetch] Shop 63: Estimated 3VWRW3AL8AM002574 at 122191 mi from CARFAX
+2026-03-20T12:52:44.177016133Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:52:44.231696685Z [Extension Prefetch] Shop 63: All 22 open RO plans already cached
+2026-03-20T12:52:44.243323338Z [Extension] Tekmetric WO lookup: mosShopId=63, roId=295818536, found=true
+2026-03-20T12:52:44.310363556Z [Extension] Vehicle 139046186 found in MongoDB cache
+2026-03-20T12:52:44.310433367Z [Extension] Tekmetric WO updated with live API data: odometer=105388
+2026-03-20T12:52:44.310447057Z [Extension] Current RO jobs: 5 total, 2 authorized (CEL, 6K Lube Oil And Filter)
+2026-03-20T12:52:44.310451587Z [Extension] WO data: vin=1FT8W3BT0BEA08647, odometer=105388
+2026-03-20T12:52:44.37939065Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:52:44.446748444Z [Extension] Using actual mileage 105388 for 1FT8W3BT0BEA08647 (not estimating)
+2026-03-20T12:52:44.786303785Z [PlanCache] HIT: 1FT8W3BT0BEA08647 cached 36m ago, 105388 miles
+2026-03-20T12:52:44.960582597Z [Extension] Using dashboard cached plan: overdue=15, dueSoon=0, upcoming=9, cachedMiles=105388, currentMiles=105388
+2026-03-20T12:52:45.030473927Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:53:08Z clientIP="18.220.11.229" requestID="7f72d27c-218d-46b1" responseTimeMS=41 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:53:08Z clientIP="18.220.11.229" requestID="fdc8a4d8-f5fe-4238" responseTimeMS=6 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:53:08Z clientIP="18.220.11.229" requestID="b9c4a3eb-88e8-48c6" responseTimeMS=7 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:53:08Z clientIP="18.220.11.229" requestID="b3949f1e-59a7-44e9" responseTimeMS=58 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:53:08Z clientIP="18.220.11.229" requestID="6e003650-652c-40f9" responseTimeMS=24 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:07Z clientIP="18.220.11.229" requestID="1cf39e52-6aea-41c5" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:07Z clientIP="18.220.11.229" requestID="04522cd3-c0bb-4131" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:07Z clientIP="18.220.11.229" requestID="7aebc161-04a7-453d" responseTimeMS=7 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:07Z clientIP="18.220.11.229" requestID="bbc94954-e98f-4439" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:07Z clientIP="18.220.11.229" requestID="74e0df98-af3c-454b" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:54:50Z clientIP="74.7.241.176" requestID="fbdebc5a-131e-41e2" responseTimeMS=37 responseBytes=3120 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36; compatible; OAI-SearchBot/1.3; robots.txt; +https://openai.com/searchbot"
+2026-03-20T12:54:51Z clientIP="74.7.241.176" requestID="a0bd150b-550d-45f7" responseTimeMS=13 responseBytes=3120 userAgent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36; compatible; OAI-SearchBot/1.3; robots.txt; +https://openai.com/searchbot"
+2026-03-20T12:54:53Z clientIP="74.7.241.61" requestID="e8eed935-8c58-4a91" responseTimeMS=21 responseBytes=7459 userAgent="Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)"
+2026-03-20T12:55:07Z clientIP="18.220.11.229" requestID="cc87f80e-afda-4233" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:07Z clientIP="18.220.11.229" requestID="2c2d943b-b47f-4155" responseTimeMS=2 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:08Z clientIP="18.220.11.229" requestID="02cca2a8-9387-4b7f" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:07Z clientIP="18.220.11.229" requestID="d782410b-2a04-4b48" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:07Z clientIP="18.220.11.229" requestID="3d850453-6e72-41e4" responseTimeMS=4 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:15Z clientIP="18.220.11.229" requestID="e34e7e3e-2516-4fba" responseTimeMS=394 responseBytes=1000 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:18Z clientIP="18.220.11.229" requestID="999ff446-0d84-432d" responseTimeMS=457 responseBytes=539 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:19Z clientIP="18.220.11.229" requestID="6b79a77c-8cd2-4928" responseTimeMS=1366 responseBytes=66363 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:20Z clientIP="18.220.11.229" requestID="5a46cbd0-245e-49d1" responseTimeMS=918 responseBytes=66363 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:17.76855916Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=66ms
+2026-03-20T12:55:18.031330543Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:55:18.097881079Z [Extension] Tekmetric WO lookup: mosShopId=63, roId=295818536, found=true
+2026-03-20T12:55:18.404666435Z [Extension] Vehicle 139046186 found in MongoDB cache
+2026-03-20T12:55:18.404687815Z [Extension] Tekmetric WO updated with live API data: odometer=105388
+2026-03-20T12:55:18.404701536Z [Extension] Current RO jobs: 5 total, 2 authorized (CEL, 6K Lube Oil And Filter)
+2026-03-20T12:55:18.404710986Z [Extension] WO data: vin=1FT8W3BT0BEA08647, odometer=105388
+2026-03-20T12:55:18.472146638Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:55:18.537811948Z [Extension] Using actual mileage 105388 for 1FT8W3BT0BEA08647 (not estimating)
+2026-03-20T12:55:18.868594833Z [PlanCache] HIT: 1FT8W3BT0BEA08647 cached 39m ago, 105388 miles
+2026-03-20T12:55:19.044522248Z [Extension] Using dashboard cached plan: overdue=15, dueSoon=0, upcoming=9, cachedMiles=105388, currentMiles=105388
+2026-03-20T12:55:19.11245052Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:55:19.254108209Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=65ms
+2026-03-20T12:55:19.320496442Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:55:19.386192682Z [Extension] Tekmetric WO lookup: mosShopId=63, roId=295818536, found=true
+2026-03-20T12:55:19.451984505Z [Extension] Vehicle 139046186 found in MongoDB cache
+2026-03-20T12:55:19.452003525Z [Extension] Tekmetric WO updated with live API data: odometer=105388
+2026-03-20T12:55:19.452143018Z [Extension] Current RO jobs: 5 total, 2 authorized (CEL, 6K Lube Oil And Filter)
+2026-03-20T12:55:19.452153008Z [Extension] WO data: vin=1FT8W3BT0BEA08647, odometer=105388
+2026-03-20T12:55:19.519394137Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:55:19.585661668Z [Extension] Using actual mileage 105388 for 1FT8W3BT0BEA08647 (not estimating)
+2026-03-20T12:55:19.916212958Z [PlanCache] HIT: 1FT8W3BT0BEA08647 cached 39m ago, 105388 miles
+2026-03-20T12:55:20.096593745Z [Extension] Using dashboard cached plan: overdue=15, dueSoon=0, upcoming=9, cachedMiles=105388, currentMiles=105388
+2026-03-20T12:55:20.164635348Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:55:25.206587411Z ==> Detected service running on port 10000
+2026-03-20T12:55:25.281827866Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-03-20T12:55:27.989275024Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=67ms
+2026-03-20T12:55:28.248231647Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T12:55:28.315443935Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T12:55:28.381585674Z [Extension] Estimated mileage for 1FT8W3BT0BEA08647: 103507 mi (good, 3 CARFAX points, 20.1 mi/day)
+2026-03-20T12:55:28.965832591Z [Extension] Customer 96588167 found in MongoDB cache
+2026-03-20T12:55:28.965869472Z [Extension] RO details (cached): roNumber=32, customer=null
+2026-03-20T12:55:27Z clientIP="18.220.11.229" requestID="" responseTimeMS=0 responseBytes=516 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:29.141904939Z [Extension] No dashboard cache, running on-demand analysis
+2026-03-20T12:55:29.208878243Z [Extension] Analysis cache check: exists=false, age=Infinitys, hasRecs=false, prefsChanged=true, mileageChanged=true (cached=0, current=103507)
+2026-03-20T12:55:29.352285914Z [DataOne Cache] HIT for squish 1FT8W3BTBE, cached at 2026-03-18T13:58:45.251Z
+2026-03-20T12:55:29.352306934Z [Extension] Parallel fetch completed in 135ms
+2026-03-20T12:55:29.352310324Z [Extension] CARFAX: 24 service records
+2026-03-20T12:55:29.524277117Z [Extension] Running analysis for VIN 1FT8W3BT0BEA08647, shop 63, mileage 103507, showInspect=false
+2026-03-20T12:55:29.524293317Z [Extension] Using prefetched 1 work orders
+2026-03-20T12:55:29.524340148Z [Extension] OEM data: 33 items, source: cache
+2026-03-20T12:55:29.592713888Z [Extension] OEM processing: 15 recs, skipped: noInterval=9, inspect=9, excluded=0
+2026-03-20T12:55:29.664259975Z [Extension] Analysis complete: overdue=7, dueSoon=0, upcoming=8
+2026-03-20T12:55:29.805525947Z [Extension Prefetch] Shop 63: DB lock active, skipping
+2026-03-20T12:55:29Z clientIP="18.220.11.229" requestID="f70787e8-b42e-40b2" responseTimeMS=1827 responseBytes=65467 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:55:44.209691356Z [Extension] OEM fetch timed out after 15s
+2026-03-20T12:56:07Z clientIP="18.220.11.229" requestID="8ca671c3-2b20-439d" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:56:07Z clientIP="18.220.11.229" requestID="96d20a32-a751-4123" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:56:07Z clientIP="18.220.11.229" requestID="bb65f42a-e7f6-498a" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:56:07Z clientIP="18.220.11.229" requestID="0c6bd561-9c15-417c" responseTimeMS=2 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T12:56:07Z clientIP="18.220.11.229" requestID="5d092882-396e-4024" responseTimeMS=2 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
