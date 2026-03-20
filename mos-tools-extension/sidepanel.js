@@ -1167,7 +1167,7 @@ function createServiceItemHTML(item, type) {
                      type === 'complimentary' ? 'badge-complimentary' : 'badge-upcoming';
   const badgeText = type === 'overdue' ? 'OVERDUE' : 
                     type === 'due-soon' ? 'DUE SOON' :
-                    type === 'complimentary' ? 'COMPLIMENTARY' : '';
+                    type === 'complimentary' ? 'ADDITIONAL' : '';
   
   // Category badge
   const categoryBadge = item.category ? 

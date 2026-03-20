@@ -1948,7 +1948,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                 </a>
                 {counts.complimentary > 0 && (
                   <a href="#complimentary" className="rounded-full px-3 py-1 bg-blue-500 text-white">
-                    Complimentary {counts.complimentary}
+                    Additional {counts.complimentary}
                   </a>
                 )}
                 <a href="#upcoming" className="rounded-full px-3 py-1 bg-emerald-600 text-white">
@@ -2506,11 +2506,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
           )}
         </section>
 
-        {/* Value-Added Complimentary Services */}
+        {/* Additional Services */}
         {allComplimentary.length > 0 && (
           <section id="complimentary" className="space-y-3">
             <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Value-Added Complimentary Services ({counts.complimentary})
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Additional Services ({counts.complimentary})
             </h2>
             <ul className="space-y-3">
               {allComplimentary.map((t) => (
