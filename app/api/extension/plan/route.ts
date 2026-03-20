@@ -962,6 +962,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (roId && vin && provider === "tekmetric" && currentRoAuthorizedJobs.length === 0) {
+      const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh);
+      if (liveData) {
+        if (!mileage) {
+          const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
+          if (liveOdometer) mileage = liveOdometer;
+        }
+        if (liveData.jobs && Array.isArray(liveData.jobs)) {
+          currentRoAllJobs = liveData.jobs
+            .filter((j: any) => j.name)
+            .map((j: any) => j.name);
+          currentRoAuthorizedJobs = liveData.jobs
+            .filter((j: any) => j.authorized && j.name)
+            .map((j: any) => j.name);
+          console.log(`[Extension] Fetched RO jobs (vin+roId path): ${currentRoAllJobs.length} total, ${currentRoAuthorizedJobs.length} authorized (${currentRoAuthorizedJobs.join(', ')})`);
+        }
+        if (!repairOrderNumber && liveData.repairOrderNumber) {
+          repairOrderNumber = String(liveData.repairOrderNumber);
+        }
+        if (!customerName && liveData.customer) {
+          customerName = liveData.customer?.firstName && liveData.customer?.lastName
+            ? `${liveData.customer.firstName} ${liveData.customer.lastName}`
+            : liveData.customer?.name || null;
+        }
+      }
+    }
+
     if (vin) {
       vehicle = await db.collection("vehicles").findOne({
         vin: vin.toUpperCase(),
