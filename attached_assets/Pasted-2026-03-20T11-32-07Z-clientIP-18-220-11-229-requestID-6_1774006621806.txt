@@ -1,0 +1,50 @@
+2026-03-20T11:32:07Z clientIP="18.220.11.229" requestID="6e8957dd-9248-48d6" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:33:07Z clientIP="18.220.11.229" requestID="578b0e2d-0628-4c70" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:33:07Z clientIP="18.220.11.229" requestID="bb35e08c-a901-4737" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:33:07Z clientIP="18.220.11.229" requestID="2b4ea414-5a33-4b4f" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:33:07Z clientIP="18.220.11.229" requestID="02d8806c-6f07-4bfd" responseTimeMS=41 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:33:08Z clientIP="18.220.11.229" requestID="5d83dee1-7d3e-4111" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:34:07Z clientIP="18.220.11.229" requestID="5206acdf-8e73-4b6b" responseTimeMS=35 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:34:07Z clientIP="18.220.11.229" requestID="2fa50111-ce2f-40af" responseTimeMS=5 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:34:07Z clientIP="18.220.11.229" requestID="3516330b-f89b-4c3d" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:34:07Z clientIP="18.220.11.229" requestID="ed346a45-0f87-4c3f" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:34:07Z clientIP="18.220.11.229" requestID="4acbdb8f-2cec-42dd" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:35:07Z clientIP="18.220.11.229" requestID="153e3177-28a1-4551" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:35:07Z clientIP="18.220.11.229" requestID="40ae3299-43f4-4076" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:35:07Z clientIP="18.220.11.229" requestID="9ff2b7d8-a601-4503" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:35:07Z clientIP="18.220.11.229" requestID="32442a2a-cc67-419e" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:35:08Z clientIP="18.220.11.229" requestID="495baeb4-10ce-483b" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:03Z clientIP="18.220.11.229" requestID="af208240-2bc3-42ac" responseTimeMS=1255 responseBytes=539 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:03Z clientIP="18.220.11.229" requestID="2eabd62b-bf7e-4ff7" responseTimeMS=1164 responseBytes=1000 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:04Z clientIP="18.220.11.229" requestID="cfc01f54-faec-47ef" responseTimeMS=415 responseBytes=539 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:05.272785543Z [Extension Plan] Auth OK: user=bc***@carexpertsok.com, shopIds=28,63, smsShopId=14245, elapsed=68ms
+2026-03-20T11:36:05.474404895Z [Extension] Found shop 63 (Service Solutions Garage), provider: tekmetric
+2026-03-20T11:36:05.5425237Z [DataOne] Keep-alive started (every 240s)
+2026-03-20T11:36:05.633917102Z [Extension] VIN decoded: 2011 Ford F-350 Super Duty
+2026-03-20T11:36:05.703373503Z [Extension] Estimated mileage for 1FT8W3BT0BEA08647: 103506 mi (good, 3 CARFAX points, 20.1 mi/day)
+2026-03-20T11:36:06.394289358Z [Extension] Customer 96588167 found in MongoDB cache
+2026-03-20T11:36:06.394309769Z [Extension] RO details (cached): roNumber=32, customer=null
+2026-03-20T11:36:06.463943255Z [PlanCache] SKIP: Expired 1229m ago for 1FT8W3BT0BEA08647 (shopId=63)
+2026-03-20T11:36:06.463969445Z [PlanCache] MISS: 1 entries found but none valid for 1FT8W3BT0BEA08647
+2026-03-20T11:36:06.642796283Z [Extension] No dashboard cache, running on-demand analysis
+2026-03-20T11:36:06.710949789Z [Extension] Analysis cache check: exists=false, age=Infinitys, hasRecs=false, prefsChanged=true, mileageChanged=true (cached=0, current=103506)
+2026-03-20T11:36:06.845399672Z [DataOne Cache] HIT for squish 1FT8W3BTBE, cached at 2026-03-18T13:58:45.251Z
+2026-03-20T11:36:06.845422823Z [Extension] Parallel fetch completed in 135ms
+2026-03-20T11:36:06.845587997Z [Extension] CARFAX: 24 service records
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="a9767007-e500-42ea" responseTimeMS=2161 responseBytes=65410 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="8e4f56ce-3fc5-4cb0" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="b9ed3fa2-f225-4407" responseTimeMS=5 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="4452b358-d2ff-4292" responseTimeMS=3 responseBytes=287 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="e29aadde-af4e-4caf" responseTimeMS=4 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07Z clientIP="18.220.11.229" requestID="926af6d5-60d2-447c" responseTimeMS=3 responseBytes=276 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+2026-03-20T11:36:07.028929106Z [Extension] Running analysis for VIN 1FT8W3BT0BEA08647, shop 63, mileage 103506, showInspect=false
+2026-03-20T11:36:07.028957587Z [Extension] Using prefetched 1 work orders
+2026-03-20T11:36:07.028962667Z [Extension] OEM data: 33 items, source: cache
+2026-03-20T11:36:07.206150321Z [Extension] OEM processing: 15 recs, skipped: noInterval=9, inspect=9, excluded=0
+2026-03-20T11:36:07.279054865Z [Extension] Analysis complete: overdue=7, dueSoon=0, upcoming=8
+2026-03-20T11:36:07.761103122Z [Extension Prefetch] Shop 63: Estimated 3VWCB7BU5LM016774 at 64507 mi from CARFAX
+2026-03-20T11:36:07.828244071Z [Extension Prefetch] Shop 63: Estimated 2HKRM4H58GH726589 at 43546 mi from CARFAX
+2026-03-20T11:36:07.895812292Z [Extension Prefetch] Shop 63: Estimated 5J6RM4H73DL087864 at 176879 mi from CARFAX
+2026-03-20T11:36:08.0969162Z [Extension Prefetch] Shop 63: Estimated 3VWRW3AL8AM002574 at 122190 mi from CARFAX
+2026-03-20T11:36:08.167130982Z [Extension Prefetch] Shop 63: All 22 open RO plans already cached
+2026-03-20T11:36:21.711737556Z [Extension] OEM fetch timed out after 15s

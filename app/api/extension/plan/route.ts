@@ -129,6 +129,15 @@ function isApprovedThisVisit(serviceTitle: string, authorizedJobs: string[]): bo
   return authorizedJobs.some(jobName => patterns.some(p => p.test(jobName)));
 }
 
+function isOnCurrentRO(serviceTitle: string, allRoJobs: string[]): boolean {
+  if (!allRoJobs.length || !serviceTitle) return false;
+  const serviceKey = mapServiceToKey(serviceTitle);
+  if (!serviceKey) return false;
+  const patterns = SERVICE_KEY_PATTERNS[serviceKey];
+  if (!patterns) return false;
+  return allRoJobs.some(jobName => patterns.some(p => p.test(jobName)));
+}
+
 type LastPerformedInfo = {
   source: 'shop' | 'external' | 'unknown';
   date?: Date;
@@ -420,7 +429,8 @@ async function runOnDemandAnalysis(
   prefetched?: PrefetchedData,
   dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>,
   intervalApplyMode: string = "shop_only",
-  currentRoAuthorizedJobs: string[] = []
+  currentRoAuthorizedJobs: string[] = [],
+  currentRoAllJobs: string[] = []
 ) {
   const db = await getDb();
   
@@ -590,6 +600,7 @@ async function runOnDemandAnalysis(
           source: intervalSource === 'shop' ? 'shop' : 'oe',
           status,
           approvedThisVisit: isApprovedThisVisit(item.maintenance_name, currentRoAuthorizedJobs),
+          onCurrentRO: isOnCurrentRO(item.maintenance_name, currentRoAllJobs),
         });
       }
       console.log(`[Extension] OEM processing: ${recommendations.length} recs, skipped: noInterval=${skippedNoInterval}, inspect=${skippedInspect}, excluded=${skippedExcluded}`);
@@ -796,6 +807,7 @@ export async function GET(request: NextRequest) {
     let customerName = null;
     let currentRoDate: Date | null = null;
     let currentRoAuthorizedJobs: string[] = [];
+    let currentRoAllJobs: string[] = [];
 
     if (roId && !vin) {
       let workOrder = null;
@@ -843,10 +855,13 @@ export async function GET(request: NextRequest) {
             console.log(`[Extension] Tekmetric WO updated with live API data: odometer=${workOrder.odometer}`);
           }
           if (liveData.jobs && Array.isArray(liveData.jobs)) {
+            currentRoAllJobs = liveData.jobs
+              .filter((j: any) => j.name)
+              .map((j: any) => j.name);
             currentRoAuthorizedJobs = liveData.jobs
               .filter((j: any) => j.authorized && j.name)
               .map((j: any) => j.name);
-            console.log(`[Extension] Current RO authorized jobs: ${currentRoAuthorizedJobs.length} (${currentRoAuthorizedJobs.join(', ')})`);
+            console.log(`[Extension] Current RO jobs: ${currentRoAllJobs.length} total, ${currentRoAuthorizedJobs.length} authorized (${currentRoAuthorizedJobs.join(', ')})`);
           }
           if (!workOrder) {
             workOrder = {
@@ -1204,7 +1219,8 @@ export async function GET(request: NextRequest) {
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null,
-        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs)
+        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs),
+        onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs),
       }};
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
@@ -1299,6 +1315,7 @@ export async function GET(request: NextRequest) {
             source: "dvi", bump: dvi.status, dviSource: dvi.dviSource,
             last: null, reason: `Flagged ${dvi.status === "red" ? "bad" : "marginal"} on current inspection`,
             approvedThisVisit: isApprovedThisVisit(dvi.name, currentRoAuthorizedJobs),
+            onCurrentRO: isOnCurrentRO(dvi.name, currentRoAllJobs),
           });
         }
         for (const unmapped of unmappedDvi) {
@@ -1310,6 +1327,7 @@ export async function GET(request: NextRequest) {
             source: "dvi", bump: unmapped.status, dviSource: unmapped.dviSource,
             last: null, reason: `Flagged ${unmapped.status === "red" ? "bad" : "marginal"} on current inspection`,
             approvedThisVisit: isApprovedThisVisit(unmapped.name, currentRoAuthorizedJobs),
+            onCurrentRO: isOnCurrentRO(unmapped.name, currentRoAllJobs),
           });
         }
         console.log(`[Extension] DVI overlay on cached plan: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
@@ -1319,6 +1337,10 @@ export async function GET(request: NextRequest) {
         .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
       const cachedVehicle = cachedPlan.plan.vehicle || vehicle || {};
+      const cachedAuthorizedHash = currentRoAuthorizedJobs.length > 0
+        ? currentRoAuthorizedJobs.sort().join('|')
+        : null;
+
       return NextResponse.json({
         vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
@@ -1332,6 +1354,7 @@ export async function GET(request: NextRequest) {
         customerName,
         shopLogo: shopDoc?.branding?.logo || null,
         locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
+        authorizedJobsHash: cachedAuthorizedHash,
       }, { headers: corsHeaders });
     }
     
@@ -1431,7 +1454,8 @@ export async function GET(request: NextRequest) {
           { oemResult, shopWorkOrders },
           tekDviFindings.length > 0 ? tekDviFindings : undefined,
           intervalApplyMode,
-          currentRoAuthorizedJobs
+          currentRoAuthorizedJobs,
+          currentRoAllJobs
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
@@ -1524,6 +1548,7 @@ export async function GET(request: NextRequest) {
           bump: rec.bump || null,
           dviSource: rec.dviSource || null,
           approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs),
+          onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs),
         };
 
         const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };
@@ -1541,6 +1566,10 @@ export async function GET(request: NextRequest) {
 
     backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
       .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
+
+    const authorizedJobsHash = currentRoAuthorizedJobs.length > 0
+      ? currentRoAuthorizedJobs.sort().join('|')
+      : null;
 
     return NextResponse.json({
       vehicle: vehicle ? {
@@ -1561,6 +1590,7 @@ export async function GET(request: NextRequest) {
       customerName,
       shopLogo: shopDoc?.branding?.logo || null,
       locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
+      authorizedJobsHash,
     }, { headers: corsHeaders });
 
   } catch (error: any) {
