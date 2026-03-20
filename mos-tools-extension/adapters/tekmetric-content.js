@@ -1108,6 +1108,8 @@ function openSidePanel() {
 // ==================== CATEGORY CHANGE DETECTION ====================
 let categoryChangeDebounce = null;
 
+let authorizationDebounce = null;
+
 function startCategoryChangeObserver() {
   window.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'MOS_CATEGORY_CHANGED') {
@@ -1123,6 +1125,16 @@ function startCategoryChangeObserver() {
           newCategory: categoryName || categoryCode
         }).catch(() => {});
       }, 500);
+    }
+
+    if (e.data && e.data.type === 'MOS_JOBS_AUTHORIZED') {
+      console.log('[MOS Tools] Job authorization detected via network');
+      if (authorizationDebounce) clearTimeout(authorizationDebounce);
+      authorizationDebounce = setTimeout(() => {
+        chrome.runtime.sendMessage({
+          action: "JOBS_AUTHORIZED"
+        }).catch(() => {});
+      }, 1500);
     }
   });
 

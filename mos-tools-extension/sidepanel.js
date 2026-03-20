@@ -348,6 +348,10 @@ function setupEventListeners() {
       }
       switchTab('sticker');
     }
+    if (message.action === 'PLAN_REFRESH_NEEDED') {
+      console.log('[MOS] Plan refresh triggered:', message.reason);
+      loadPlan(true);
+    }
     if (message.action === 'LABOR_RATE_APPLIED') {
       if (message.success) {
         const rate = typeof message.rate === 'number' ? message.rate.toFixed(2) : message.rate;

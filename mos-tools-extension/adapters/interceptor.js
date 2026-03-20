@@ -24,6 +24,11 @@
               }, '*');
             }
           }
+
+          if (url.match(/\/api\/repair-order\/\d+\/authorize/) || url.match(/\/api\/repair-orders\/\d+\/authorize/)) {
+            console.log('[MOS Intercept] Job authorization detected');
+            window.postMessage({ type: 'MOS_JOBS_AUTHORIZED' }, '*');
+          }
         } catch(e) {}
       }
       if (opts.headers) {
@@ -65,6 +70,11 @@
                 categoryName: parsed.jobCategoryName || ''
               }, '*');
             }
+          }
+
+          if (this._mosUrl && (this._mosUrl.match(/\/api\/repair-order\/\d+\/authorize/) || this._mosUrl.match(/\/api\/repair-orders\/\d+\/authorize/))) {
+            console.log('[MOS Intercept XHR] Job authorization detected');
+            window.postMessage({ type: 'MOS_JOBS_AUTHORIZED' }, '*');
           }
         } catch(e) {}
       }

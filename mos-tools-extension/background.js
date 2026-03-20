@@ -237,6 +237,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "JOBS_AUTHORIZED") {
+    console.log("[MOS] Jobs authorized on RO, notifying sidepanel to reload plan");
+    chrome.runtime.sendMessage({ action: "PLAN_REFRESH_NEEDED", reason: "authorization" }).catch(() => {});
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "GET_SMS_CONTEXT") {
     sendResponse({
       context: currentSmsContext,
