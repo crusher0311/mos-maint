@@ -29,41 +29,50 @@ let lastJobCount = 0; // Track job count to detect new jobs
 let laborReapplyTimer = null; // Debounce timer for re-applying after new jobs
 
 // ==================== PERSISTENCE ====================
-// Restore MOS auth on startup
-chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser'], (result) => {
-  if (result.mosApiToken) {
-    mosApiToken = result.mosApiToken;
-    console.log("[MOS] Restored API token from storage");
-  }
-  if (result.mosApiUrl) {
-    mosApiUrl = result.mosApiUrl;
-    console.log("[MOS] Restored API URL:", mosApiUrl);
-  }
-});
-
-// Restore labor rate auto-apply setting
-chrome.storage.local.get(['laborRateAutoApply'], (result) => {
-  if (result.laborRateAutoApply !== undefined) {
-    laborRateAutoApply = result.laborRateAutoApply;
-  }
-});
-
-// Restore SMS context from session storage (survives service worker restarts within session)
-chrome.storage.session.get(['tekmetricToken', 'tekmetricShopId', 'tekmetricBaseUrl', 'currentSmsContext'], (result) => {
-  if (result.tekmetricToken) {
-    smsTokens.tekmetric = result.tekmetricToken;
-    console.log("[Tekmetric] Restored session token");
-  }
-  if (result.tekmetricShopId) {
-    tekmetricShopId = result.tekmetricShopId;
-  }
-  if (result.tekmetricBaseUrl) {
-    tekmetricBaseUrl = result.tekmetricBaseUrl;
-  }
-  if (result.currentSmsContext) {
-    currentSmsContext = result.currentSmsContext;
-  }
-});
+// Restore all persisted state on startup as a single awaitable promise.
+// This prevents race conditions where message handlers fire before
+// chrome.storage callbacks complete (e.g. after service worker restart).
+const _stateReady = Promise.all([
+  new Promise(resolve => {
+    chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser'], (result) => {
+      if (result.mosApiToken) {
+        mosApiToken = result.mosApiToken;
+        console.log("[MOS] Restored API token from storage");
+      }
+      if (result.mosApiUrl) {
+        mosApiUrl = result.mosApiUrl;
+        console.log("[MOS] Restored API URL:", mosApiUrl);
+      }
+      resolve();
+    });
+  }),
+  new Promise(resolve => {
+    chrome.storage.local.get(['laborRateAutoApply'], (result) => {
+      if (result.laborRateAutoApply !== undefined) {
+        laborRateAutoApply = result.laborRateAutoApply;
+      }
+      resolve();
+    });
+  }),
+  new Promise(resolve => {
+    chrome.storage.session.get(['tekmetricToken', 'tekmetricShopId', 'tekmetricBaseUrl', 'currentSmsContext'], (result) => {
+      if (result.tekmetricToken) {
+        smsTokens.tekmetric = result.tekmetricToken;
+        console.log("[Tekmetric] Restored session token");
+      }
+      if (result.tekmetricShopId) {
+        tekmetricShopId = result.tekmetricShopId;
+      }
+      if (result.tekmetricBaseUrl) {
+        tekmetricBaseUrl = result.tekmetricBaseUrl;
+      }
+      if (result.currentSmsContext) {
+        currentSmsContext = result.currentSmsContext;
+      }
+      resolve();
+    });
+  })
+]);
 
 // ==================== TEKMETRIC TOKEN CAPTURE ====================
 chrome.webRequest.onBeforeSendHeaders.addListener(
@@ -179,12 +188,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_MOS_AUTH") {
-    chrome.storage.local.get(['mosUser'], (result) => {
-      sendResponse({
-        isAuthenticated: !!mosApiToken,
-        apiUrl: mosApiUrl,
-        defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
-        shopwareAddMode: result.mosUser?.shopwareAddMode || null
+    _stateReady.then(() => {
+      chrome.storage.local.get(['mosUser'], (result) => {
+        sendResponse({
+          isAuthenticated: !!mosApiToken,
+          apiUrl: mosApiUrl,
+          defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
+          shopwareAddMode: result.mosUser?.shopwareAddMode || null
+        });
       });
     });
     return true;
@@ -684,6 +695,7 @@ async function handleMosLogin(email, password, apiUrl) {
 }
 
 async function handleMosApiRequest(endpoint, options = {}, _retried = false) {
+  await _stateReady;
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS");
   }
@@ -1114,6 +1126,7 @@ function findMatchingRule(rules, vehicleData) {
 }
 
 async function autoApplyLaborRate(context, options = {}) {
+  await _stateReady;
   if (!mosApiToken || !context?.roId) return;
 
   // Currently only supports Tekmetric
