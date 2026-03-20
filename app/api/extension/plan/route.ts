@@ -8,6 +8,7 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
 import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
+import { buildReportUrl } from "@/lib/report-share";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1351,6 +1352,8 @@ export async function GET(request: NextRequest) {
         ? currentRoAuthorizedJobs.sort().join('|')
         : null;
 
+      const reportUrl = vin ? buildReportUrl(vin.toUpperCase(), mosShopId) : null;
+
       return NextResponse.json({
         vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
@@ -1365,6 +1368,7 @@ export async function GET(request: NextRequest) {
         shopLogo: shopDoc?.branding?.logo || null,
         locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
         authorizedJobsHash: cachedAuthorizedHash,
+        reportUrl,
       }, { headers: corsHeaders });
     }
     
@@ -1581,6 +1585,8 @@ export async function GET(request: NextRequest) {
       ? currentRoAuthorizedJobs.sort().join('|')
       : null;
 
+    const reportUrl2 = vin ? buildReportUrl(vin.toUpperCase(), mosShopId) : null;
+
     return NextResponse.json({
       vehicle: vehicle ? {
         year: vehicle.year,
@@ -1601,6 +1607,7 @@ export async function GET(request: NextRequest) {
       shopLogo: shopDoc?.branding?.logo || null,
       locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
       authorizedJobsHash,
+      reportUrl: reportUrl2,
     }, { headers: corsHeaders });
 
   } catch (error: any) {

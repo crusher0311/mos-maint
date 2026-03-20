@@ -52,6 +52,7 @@ let shopwareAddMode = 'finding-published';
 let keytagContextEnriched = false;
 let currentPlanShopLogo = null;
 let currentPlanLocationId = null;
+let currentReportUrl = null;
 // Removed SMS toggle - now using MOS Enriched only
 let failuresDataMap = new Map(); // Store failure objects by ID to avoid JSON in HTML
 let cannedJobsDataMap = new Map(); // Store canned job objects by ID to avoid JSON in HTML
@@ -248,6 +249,26 @@ function setupEventListeners() {
     loadPlan(true);
   });
   
+  const shareVhiBtn = document.getElementById('share-vhi-btn');
+  if (shareVhiBtn) {
+    shareVhiBtn.addEventListener('click', async () => {
+      if (!currentReportUrl) return;
+      try {
+        await navigator.clipboard.writeText(currentReportUrl);
+        shareVhiBtn.classList.add('copied');
+        const label = shareVhiBtn.querySelector('span');
+        if (label) label.textContent = 'Copied!';
+        setTimeout(() => {
+          shareVhiBtn.classList.remove('copied');
+          if (label) label.textContent = 'Share VHI';
+        }, 2000);
+      } catch (err) {
+        console.warn('[MOS] Clipboard write failed, opening in new tab:', err);
+        window.open(currentReportUrl, '_blank');
+      }
+    });
+  }
+
   // Logout
   elements.logoutBtn.addEventListener('click', handleLogout);
   
@@ -550,6 +571,9 @@ function updateContext(context) {
     keytagContextEnriched = false;
     currentPlanShopLogo = null;
     currentPlanLocationId = null;
+    currentReportUrl = null;
+    const shareBtn = document.getElementById('share-vhi-btn');
+    if (shareBtn) shareBtn.classList.add('hidden');
   }
   
   if (prevContext && context && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
@@ -888,6 +912,17 @@ function renderPlan(data) {
   }
   if (data.locationIdentifier) {
     currentPlanLocationId = data.locationIdentifier;
+  }
+
+  if (data.reportUrl) {
+    currentReportUrl = data.reportUrl;
+    const shareBtn = document.getElementById('share-vhi-btn');
+    if (shareBtn) {
+      shareBtn.classList.remove('hidden');
+      shareBtn.classList.remove('copied');
+      const label = shareBtn.querySelector('span');
+      if (label) label.textContent = 'Share VHI';
+    }
   }
 
   keytagContextEnriched = true;

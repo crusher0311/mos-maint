@@ -291,6 +291,12 @@ body {
   color: var(--gray-500);
 }
 
+.mileage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mileage-display {
   font-size: 13px;
   color: var(--gray-600);
@@ -304,6 +310,37 @@ body {
   font-style: italic;
   cursor: help;
   border-bottom: 1px dashed var(--gray-400);
+}
+
+.btn-share-vhi {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--blue-50, #eff6ff);
+  border: 1px solid var(--blue-200, #bfdbfe);
+  border-radius: 4px;
+  color: var(--blue-600, #2563eb);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-share-vhi:hover {
+  background: var(--blue-100, #dbeafe);
+  border-color: var(--blue-300, #93c5fd);
+}
+
+.btn-share-vhi.copied {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #16a34a;
+}
+
+.btn-share-vhi.copied svg {
+  stroke: #16a34a;
 }
 
 /* ==================== Tab Navigation ==================== */
