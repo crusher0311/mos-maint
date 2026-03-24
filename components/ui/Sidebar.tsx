@@ -88,11 +88,6 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
       pathname?.startsWith("/dashboard/settings/preferences")) {
     sections.add("Preferences");
   }
-  if (pathname?.startsWith("/dashboard/conversations") ||
-      pathname?.startsWith("/dashboard/voicemails") ||
-      pathname?.startsWith("/dashboard/call-logs")) {
-    sections.add("Communications");
-  }
   if (pathname?.startsWith("/dashboard/enterprise")) {
     sections.add("Enterprise");
   }
@@ -213,12 +208,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         newExpanded.add("Preferences");
         changed = true;
       }
-      if ((pathname.startsWith("/dashboard/conversations") ||
-           pathname.startsWith("/dashboard/voicemails") ||
-           pathname.startsWith("/dashboard/call-logs")) && !newExpanded.has("Communications")) {
-        newExpanded.add("Communications");
-        changed = true;
-      }
       if (pathname.startsWith("/dashboard/enterprise") && !newExpanded.has("Enterprise")) {
         newExpanded.add("Enterprise");
         changed = true;
@@ -296,16 +285,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard/parts",
       icon: <RefreshCw className="w-5 h-5" />,
       featureId: "part_xref",
-    },
-    {
-      name: "Communications",
-      href: "/dashboard/conversations",
-      icon: <MessageSquare className="w-5 h-5" />,
-      children: [
-        { name: "Conversations", href: "/dashboard/conversations" },
-        { name: "Voicemails", href: "/dashboard/voicemails" },
-        { name: "Call Logs", href: "/dashboard/call-logs" },
-      ]
     },
     {
       name: "Settings",

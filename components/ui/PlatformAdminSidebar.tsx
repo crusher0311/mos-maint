@@ -28,7 +28,11 @@ import {
   Megaphone,
   BookOpen,
   ArrowRightLeft,
-  KeyRound
+  KeyRound,
+  MessageSquare,
+  Voicemail,
+  Phone,
+  Bot
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -45,6 +49,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [enterprisesExpanded, setEnterprisesExpanded] = useState(false);
   const [shopsExpanded, setShopsExpanded] = useState(false);
+  const [commsExpanded, setCommsExpanded] = useState(false);
 
   const isTicketsSection = pathname?.startsWith("/platform-admin/tickets") || 
                            pathname?.startsWith("/platform-admin/cobrowse") ||
@@ -61,13 +66,18 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const isShopsSection = pathname?.startsWith("/platform-admin/shops") ||
                          pathname?.startsWith("/platform-admin/users") ||
                          pathname?.startsWith("/platform-admin/hovercode");
+  const isCommsSection = pathname?.startsWith("/platform-admin/conversations") ||
+                         pathname?.startsWith("/platform-admin/voicemails") ||
+                         pathname?.startsWith("/platform-admin/call-logs") ||
+                         pathname?.startsWith("/platform-admin/rescue-rover");
 
   useEffect(() => {
     if (isTicketsSection) setTicketsExpanded(true);
     if (isSettingsSection) setSettingsExpanded(true);
     if (isEnterprisesSection) setEnterprisesExpanded(true);
     if (isShopsSection) setShopsExpanded(true);
-  }, [isTicketsSection, isSettingsSection, isEnterprisesSection, isShopsSection]);
+    if (isCommsSection) setCommsExpanded(true);
+  }, [isTicketsSection, isSettingsSection, isEnterprisesSection, isShopsSection, isCommsSection]);
 
   useEffect(() => {
     const fetchTicketCount = async () => {
@@ -456,6 +466,89 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               <BookOpen className="w-5 h-5" />
               <span>Knowledge Base</span>
             </Link>
+          </li>
+
+          {/* Communications */}
+          <li>
+            <button
+              onClick={() => setCommsExpanded(!commsExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isCommsSection
+                  ? "text-[#7ab3e0]"
+                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+              style={isCommsSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}
+            >
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <span>Communications</span>
+              </div>
+              {commsExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            {commsExpanded && (
+              <ul className="ml-8 mt-1 space-y-1">
+                <li>
+                  <Link
+                    href="/platform-admin/conversations"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/conversations")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Conversations</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/voicemails"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/voicemails")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Voicemail className="w-4 h-4" />
+                    <span>Voicemails</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/call-logs"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/call-logs")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Call Logs</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/platform-admin/rescue-rover"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive("/platform-admin/rescue-rover")
+                        ? "bg-[rgba(60,129,195,0.75)] text-white"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Bot className="w-4 h-4" />
+                    <span>Rescue Rover</span>
+                  </Link>
+                </li>
+              </ul>
+            )}
           </li>
 
           {/* Settings with Features */}
