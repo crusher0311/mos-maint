@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlatformAdminSidebar } from "@/components/ui/PlatformAdminSidebar";
-import { Menu, Plus, Search, X, Star, Calendar, Tag } from "lucide-react";
+import { Plus, Search, X, Star, Calendar, Tag } from "lucide-react";
 
 interface Special {
   id: string;
@@ -23,7 +22,6 @@ interface Special {
 export default function SpecialsPage() {
   const [specials, setSpecials] = useState<Special[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editing, setEditing] = useState<Partial<Special> | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -82,20 +80,11 @@ export default function SpecialsPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <div className="hidden md:block"><PlatformAdminSidebar /></div>
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
-          <div className="relative w-72 h-full"><PlatformAdminSidebar isMobile onClose={() => setShowMobileMenu(false)} /></div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto">
+    <>
+    <div className="flex-1 overflow-y-auto">
         <header className="bg-white border-b px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowMobileMenu(true)} className="md:hidden p-2 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5" /></button>
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-gray-900">Specials & Promotions</h1>
                 <p className="text-sm text-gray-500">{specials.length} specials</p>
@@ -243,6 +232,6 @@ export default function SpecialsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

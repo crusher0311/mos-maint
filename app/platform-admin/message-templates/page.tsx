@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlatformAdminSidebar } from "@/components/ui/PlatformAdminSidebar";
-import { Menu, Plus, Search, X, Mail, MessageSquare, Bell, FileText } from "lucide-react";
+import { Plus, Search, X, Mail, MessageSquare, Bell, FileText } from "lucide-react";
 
 interface Template {
   id: string;
@@ -20,7 +19,6 @@ interface Template {
 export default function MessageTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [channelFilter, setChannelFilter] = useState("");
   const [editing, setEditing] = useState<Partial<Template> | null>(null);
@@ -80,20 +78,11 @@ export default function MessageTemplatesPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <div className="hidden md:block"><PlatformAdminSidebar /></div>
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
-          <div className="relative w-72 h-full"><PlatformAdminSidebar isMobile onClose={() => setShowMobileMenu(false)} /></div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto">
+    <>
+    <div className="flex-1 overflow-y-auto">
         <header className="bg-white border-b px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowMobileMenu(true)} className="md:hidden p-2 hover:bg-gray-100 rounded-lg"><Menu className="w-5 h-5" /></button>
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-gray-900">Message Templates</h1>
                 <p className="text-sm text-gray-500">{templates.length} templates</p>
@@ -224,6 +213,6 @@ export default function MessageTemplatesPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

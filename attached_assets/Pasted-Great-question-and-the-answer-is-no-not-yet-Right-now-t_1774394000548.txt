@@ -1,0 +1,38 @@
+Great question — and the answer is no, not yet. Right now the core operational data (vehicles, maintenance plans, work orders, shops, users) is still being written exclusively to MongoDB. The new CRM tables in Supabase are a separate layer for the account hierarchy, contacts, sales pipeline, etc.
+
+To start dual-writing the MongoDB data into Supabase, we'd need to figure out which collections to tackle. Let me check what's currently going to MongoDB:
+
+That's a really smart approach — dual-writing to Supabase now means when you're ready to cut over from MongoDB, the data is already there. Here's the breakdown of what's currently in MongoDB:
+
+Core Data (highest priority for dual-write):
+
+shops — shop config, credentials, labor rates
+users — platform user accounts, permissions
+vehicles — vehicle records
+customers — customer profiles
+Normalized Data (the main operational layer):
+5. normalized_vehicles
+
+normalized_customers
+normalized_work_orders
+normalized_service_jobs
+normalized_line_items
+normalized_payments
+normalized_inspections
+normalized_recommendations
+Intelligence / Analytics:
+13. job_index — deduplicated job search index
+
+cached_plans — maintenance plans
+viewed_vins — billing/usage tracking
+enterprise_accounts — multi-shop groupings
+Plus integration caches (Protractor, Tekmetric, AutoVitals raw data), support tickets, audit logs, sessions, etc.
+
+None of these are currently being dual-written to Supabase. The CRM tables we built are a separate system that doesn't overlap with this data.
+
+This would be a big project — we'd need to:
+
+Create Drizzle schemas in Supabase for each collection
+Add dual-write logic at each MongoDB write point
+Handle the differences (MongoDB's flexible schema vs. Postgres's strict columns)
+Want me to scope this out as a task? I'd suggest starting with the normalized collections (vehicles, customers, work orders, jobs) since they have the cleanest, most structured data and represent the core of what you'd want in Supabase long-term.
