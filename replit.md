@@ -44,10 +44,17 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
 *   **Modular Features**: A la carte feature flags control functionalities like maintenance, job lookup, oil stickers, keytags, auto booking, and part cross-reference.
 
+*   **Communications (Twilio)**: Voice calling (inbound/outbound via browser), SMS send/receive, voicemail recording, caller ID lookup, conversation tracking. API routes under `app/api/communications/` (authenticated) and `app/api/webhooks/twilio/` (public, Twilio-signature validated). Conversations and voicemails stored in PostgreSQL (Supabase). Caller lookup bridges MongoDB customer data with the communications layer. Environment variables: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID`, `TWILIO_PHONE_NUMBER`, `SUPABASE_DATABASE_URL` or `DATABASE_URL`.
+    *   **Database layer**: `lib/db/postgres.ts` (connection), `lib/db/repositories/conversations.ts` (conversations + messages CRUD), `lib/db/repositories/voicemails.ts` (voicemail CRUD), `lib/db/init.ts` (auto-migrate tables).
+    *   **Twilio helpers**: `lib/twilio.ts` (client, config, signature validation).
+    *   **API routes**: Voice token (`/api/communications/voice/token`), caller lookup (`/api/communications/caller-lookup`), conversations CRUD (`/api/communications/conversations`), SMS send (`/api/communications/sms/send`), voicemails (`/api/communications/voicemails`), call activity (`/api/communications/call-activity`).
+    *   **Webhook routes**: Inbound voice (`/api/webhooks/twilio/voice/inbound`), outbound voice (`/api/webhooks/twilio/voice/outbound`), call status (`/api/webhooks/twilio/voice/status`), inbound SMS (`/api/webhooks/twilio/sms`), voicemail recording (`/api/webhooks/twilio/voicemail`).
+
 ## External Dependencies
-*   **Database**: MongoDB Atlas, PostgreSQL
+*   **Database**: MongoDB Atlas, PostgreSQL (Supabase)
 *   **AI**: OpenAI API
 *   **Payments**: Stripe
+*   **Communications**: Twilio (Voice, SMS)
 *   **VIN Decoding & OEM Schedules**: DataOne
 *   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
 *   **Vehicle History Reports**: CARFAX
