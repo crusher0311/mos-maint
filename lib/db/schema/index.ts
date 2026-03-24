@@ -4,3 +4,4 @@ export * from "./crm-accounts";
 export * from "./onboarding";
 export * from "./crm-contacts";
 export * from "./sales-marketing";
+export * from "./normalized";

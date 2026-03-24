@@ -58,5 +58,11 @@ export default defineConfig({
     "crm_contact_location_assignments",
     "crm_entity_notes",
     "crm_entity_tasks",
+    "normalized_vehicles",
+    "normalized_customers",
+    "normalized_work_orders",
+    "normalized_service_jobs",
+    "normalized_line_items",
+    "normalized_payments",
   ],
 });

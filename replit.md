@@ -90,3 +90,12 @@ The platform includes a comprehensive onboarding and content management system:
 *   **Repository Layer**: `lib/repositories/onboarding-repository.ts` with OnboardingRepository, ToursRepository, GuidesRepository, WorkflowSequencesRepository, BannersRepository, ContentAssignmentsRepository.
 *   **Admin Pages**: Stages management (`/platform-admin/onboarding/stages`), Steps with nested checklists (`/platform-admin/onboarding/steps`), Checklists (`/platform-admin/onboarding/checklists`), Tours with step editor (`/platform-admin/tours`), Guides with step editor (`/platform-admin/guides`), Banners (`/platform-admin/banners`), Content assignments to user types (`/platform-admin/content-assignments`).
 *   **API Routes**: Full CRUD under `/api/platform-admin/onboarding/`, `/api/platform-admin/tours/`, `/api/platform-admin/guides/`, `/api/platform-admin/workflow-sequences/`, `/api/platform-admin/banners/`, `/api/platform-admin/content-assignments/`.
+
+## Normalized Data Schema (Supabase)
+Six Drizzle ORM tables in Supabase PostgreSQL that mirror the core normalized MongoDB collections, enabling eventual dual-write migration from MongoDB:
+*   **Schema**: `lib/db/schema/normalized.ts` — Defines 14 Postgres enums and 6 tables: `normalized_vehicles`, `normalized_customers`, `normalized_work_orders`, `normalized_service_jobs`, `normalized_line_items`, `normalized_payments`
+*   **TypeScript Source**: `lib/normalized-schema.ts` — Original MongoDB interfaces that these tables mirror
+*   **Migration Script**: `scripts/apply-normalized-migration.ts` — Idempotent script to create enums, tables, foreign keys, and indexes (`npm run db:migrate:normalized`)
+*   **Foreign Keys**: `normalized_service_jobs` → `normalized_work_orders`, `normalized_line_items` → `normalized_work_orders` + `normalized_service_jobs`, `normalized_payments` → `normalized_work_orders`
+*   **JSONB Columns**: Deeply nested objects stored as JSONB: provenance, softDelete, vinDecodeData, odometerHistory, contacts, addresses, statusHistory, technicians, payments snapshots, laborOperationCodes, componentsCodes, tags, customFields
+*   **Indexes**: 44 indexes covering shopId, enterpriseId, VIN, workOrderNumber, foreign keys, timestamps, and key lookup fields

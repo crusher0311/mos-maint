@@ -20,6 +20,7 @@
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push --force",
     "db:migrate:crm": "tsx scripts/apply-crm-migration.ts",
+    "db:migrate:normalized": "tsx scripts/apply-normalized-migration.ts",
     "db:studio": "npx drizzle-kit studio",
     "start:rescue-rover-ws": "tsx scripts/rescue-rover-ws-server.ts"
   },
