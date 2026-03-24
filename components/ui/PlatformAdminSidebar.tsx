@@ -34,7 +34,10 @@ import {
   Store,
   MapPin,
   Database,
-  Wrench
+  Wrench,
+  Headphones,
+  Clock,
+  MessageCircle,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -61,6 +64,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     "/platform-admin/voicemails",
     "/platform-admin/call-logs",
     "/platform-admin/rescue-rover",
+    "/platform-admin/phone-numbers",
+    "/platform-admin/agent-groups",
+    "/platform-admin/time-tracking",
+    "/platform-admin/call-dashboard",
+    "/platform-admin/canned-messages",
   ];
   const opsPaths = [
     "/platform-admin/enterprises",
@@ -84,7 +92,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
 
   const isCrmSection = crmPaths.some(p => pathname?.startsWith(p));
   const isOpsSection = opsPaths.some(p => pathname?.startsWith(p));
-  const isCommsSection = ["/platform-admin/conversations", "/platform-admin/voicemails", "/platform-admin/call-logs", "/platform-admin/rescue-rover"].some(p => pathname?.startsWith(p));
+  const isCommsSection = ["/platform-admin/conversations", "/platform-admin/voicemails", "/platform-admin/call-logs", "/platform-admin/rescue-rover", "/platform-admin/phone-numbers", "/platform-admin/agent-groups", "/platform-admin/time-tracking", "/platform-admin/call-dashboard", "/platform-admin/canned-messages"].some(p => pathname?.startsWith(p));
   const isEnterprisesSection = ["/platform-admin/enterprises", "/platform-admin/shops", "/platform-admin/users", "/platform-admin/hovercode"].some(p => pathname?.startsWith(p));
   const isShopsSection = ["/platform-admin/shops", "/platform-admin/users", "/platform-admin/hovercode"].some(p => pathname?.startsWith(p));
   const isTicketsSection = ["/platform-admin/tickets", "/platform-admin/cobrowse", "/platform-admin/database"].some(p => pathname?.startsWith(p));
@@ -210,6 +218,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 <NavLink href="/platform-admin/voicemails" icon={Voicemail} label="Voicemails" indent />
                 <NavLink href="/platform-admin/call-logs" icon={Phone} label="Call Logs" indent />
                 <NavLink href="/platform-admin/rescue-rover" icon={Bot} label="Rescue Rover" indent />
+                <NavLink href="/platform-admin/phone-numbers" icon={Phone} label="Phone Numbers" indent />
+                <NavLink href="/platform-admin/agent-groups" icon={Users} label="Agent Groups" indent />
+                <NavLink href="/platform-admin/time-tracking" icon={Clock} label="Time Tracking" indent />
+                <NavLink href="/platform-admin/call-dashboard" icon={Headphones} label="Call Dashboard" indent />
+                <NavLink href="/platform-admin/canned-messages" icon={MessageCircle} label="Canned Messages" indent />
               </ul>
             )}
           </li>

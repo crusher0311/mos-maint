@@ -1,0 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requirePlatformAdmin } from "@/lib/auth";
+import {
+  getAgentTargets,
+  createAgentTarget,
+  updateAgentTarget,
+  deleteAgentTarget,
+  getAgentLeaderboard,
+} from "@/lib/db/repositories/call-center";
+
+export async function GET(request: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+    const { searchParams } = new URL(request.url);
+    const groupId = searchParams.get("groupId");
+    const leaderboard = searchParams.get("leaderboard");
+
+    if (leaderboard === "true") {
+      const result = await getAgentLeaderboard();
+      return NextResponse.json({ ok: true, data: result });
+    }
+
+    const result = await getAgentTargets(groupId ? parseInt(groupId) : undefined);
+    return NextResponse.json({ ok: true, data: result });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+    const body = await request.json();
+    const result = await createAgentTarget(body);
+    return NextResponse.json({ ok: true, data: result });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+    const body = await request.json();
+    const { id, ...data } = body;
+    if (!id) return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
+    const result = await updateAgentTarget(id, data);
+    return NextResponse.json({ ok: true, data: result });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
+    await deleteAgentTarget(parseInt(id));
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}

@@ -9,6 +9,7 @@ import {
   varchar,
   pgEnum,
   index,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -264,5 +265,114 @@ export const smsMessagesRelations = relations(smsMessages, ({ one }) => ({
   conversation: one(conversations, {
     fields: [smsMessages.conversationId],
     references: [conversations.id],
+  }),
+}));
+
+export const groupStatusEnum = pgEnum("group_status", [
+  "active",
+  "inactive",
+]);
+
+export const timeEntryTypeEnum = pgEnum("time_entry_type", [
+  "shift",
+  "break",
+]);
+
+export const timeEntryStatusEnum = pgEnum("time_entry_status", [
+  "active",
+  "completed",
+]);
+
+export const groups = pgTable("groups", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  status: groupStatusEnum("status").notNull().default("active"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("groups_status_idx").on(table.status),
+]);
+
+export const agentTargets = pgTable("agent_targets", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  agentName: varchar("agent_name", { length: 255 }).notNull(),
+  agentEmail: varchar("agent_email", { length: 255 }),
+  callsTarget: integer("calls_target").notNull().default(0),
+  conversionTarget: numeric("conversion_target", { precision: 5, scale: 2 }).default("0"),
+  revenueTarget: numeric("revenue_target", { precision: 12, scale: 2 }).default("0"),
+  callsActual: integer("calls_actual").notNull().default(0),
+  conversionActual: numeric("conversion_actual", { precision: 5, scale: 2 }).default("0"),
+  revenueActual: numeric("revenue_actual", { precision: 12, scale: 2 }).default("0"),
+  period: varchar("period", { length: 50 }).notNull().default("monthly"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("agent_targets_group_id_idx").on(table.groupId),
+  index("agent_targets_agent_email_idx").on(table.agentEmail),
+]);
+
+export const timeEntries = pgTable("time_entries", {
+  id: serial("id").primaryKey(),
+  agentName: varchar("agent_name", { length: 255 }).notNull(),
+  agentEmail: varchar("agent_email", { length: 255 }),
+  type: timeEntryTypeEnum("type").notNull().default("shift"),
+  status: timeEntryStatusEnum("status").notNull().default("active"),
+  clockIn: timestamp("clock_in", { withTimezone: true }).notNull().defaultNow(),
+  clockOut: timestamp("clock_out", { withTimezone: true }),
+  breakStart: timestamp("break_start", { withTimezone: true }),
+  breakEnd: timestamp("break_end", { withTimezone: true }),
+  totalBreakMinutes: integer("total_break_minutes").notNull().default(0),
+  notes: text("notes"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("time_entries_agent_email_idx").on(table.agentEmail),
+  index("time_entries_status_idx").on(table.status),
+  index("time_entries_clock_in_idx").on(table.clockIn),
+]);
+
+export const cannedMessages = pgTable("canned_messages", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  category: varchar("category", { length: 100 }),
+  shortcut: varchar("shortcut", { length: 50 }),
+  isActive: boolean("is_active").notNull().default(true),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("canned_messages_category_idx").on(table.category),
+  index("canned_messages_is_active_idx").on(table.isActive),
+]);
+
+export const groupsRelations = relations(groups, ({ many }) => ({
+  agentTargets: many(agentTargets),
+}));
+
+export const agentTargetsRelations = relations(agentTargets, ({ one }) => ({
+  group: one(groups, {
+    fields: [agentTargets.groupId],
+    references: [groups.id],
   }),
 }));

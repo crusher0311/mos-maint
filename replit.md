@@ -32,6 +32,7 @@ The UI adopts a modern SaaS aesthetic, characterized by a dark sidebar, light co
 *   **Common Maintenance Layer**: Industry-standard maintenance items are automatically integrated into plans when not covered by OEM data, respecting shop-specific overrides.
 *   **Communications**: Twilio powers voice calling, SMS, voicemail recording, and caller ID lookup, with conversation tracking and data stored in PostgreSQL.
 *   **Rescue Rover AI Voice Agent**: An AI-powered phone assistant handles inbound calls using Twilio media streams, Deepgram for STT/TTS, and OpenAI GPT-4o for conversational intelligence, including customer lookup, callback scheduling, and call transfer.
+*   **Call Center Management**: Phone number management (assign Twilio numbers to accounts/locations), agent groups with performance targets, time tracking (clock in/out with break management), call activity dashboard with agent leaderboard, and canned message templates. Tables: groups, agent_targets, time_entries, canned_messages. Pages under CRM → Communications in platform-admin sidebar.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)

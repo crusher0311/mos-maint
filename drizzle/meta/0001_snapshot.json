@@ -1,9 +1,161 @@
 {
-  "id": "947d0bc4-0d2f-40ba-8608-764b84e36b7b",
+  "id": "473c4114-3844-4e96-8d72-9000cf808a86",
   "prevId": "f2625078-66af-40de-8e14-54f5d07ea485",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.agent_targets": {
+      "name": "agent_targets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_name": {
+          "name": "agent_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_email": {
+          "name": "agent_email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calls_target": {
+          "name": "calls_target",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "conversion_target": {
+          "name": "conversion_target",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "revenue_target": {
+          "name": "revenue_target",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "calls_actual": {
+          "name": "calls_actual",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "conversion_actual": {
+          "name": "conversion_actual",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "revenue_actual": {
+          "name": "revenue_actual",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "period": {
+          "name": "period",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'monthly'"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agent_targets_group_id_idx": {
+          "name": "agent_targets_group_id_idx",
+          "columns": [
+            {
+              "expression": "group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_targets_agent_email_idx": {
+          "name": "agent_targets_agent_email_idx",
+          "columns": [
+            {
+              "expression": "agent_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_targets_group_id_groups_id_fk": {
+          "name": "agent_targets_group_id_groups_id_fk",
+          "tableFrom": "agent_targets",
+          "tableTo": "groups",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.call_transcriptions": {
       "name": "call_transcriptions",
       "schema": "",
@@ -116,6 +268,108 @@
           "columns": [
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.canned_messages": {
+      "name": "canned_messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shortcut": {
+          "name": "shortcut",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "usage_count": {
+          "name": "usage_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "canned_messages_category_idx": {
+          "name": "canned_messages_category_idx",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "canned_messages_is_active_idx": {
+          "name": "canned_messages_is_active_idx",
+          "columns": [
+            {
+              "expression": "is_active",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -509,6 +763,81 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.groups": {
+      "name": "groups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "group_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "groups_status_idx": {
+          "name": "groups_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.phone_numbers": {
       "name": "phone_numbers",
       "schema": "",
@@ -883,6 +1212,150 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.time_entries": {
+      "name": "time_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "agent_name": {
+          "name": "agent_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_email": {
+          "name": "agent_email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "time_entry_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'shift'"
+        },
+        "status": {
+          "name": "status",
+          "type": "time_entry_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "clock_in": {
+          "name": "clock_in",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "clock_out": {
+          "name": "clock_out",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "break_start": {
+          "name": "break_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "break_end": {
+          "name": "break_end",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_break_minutes": {
+          "name": "total_break_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "time_entries_agent_email_idx": {
+          "name": "time_entries_agent_email_idx",
+          "columns": [
+            {
+              "expression": "agent_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "time_entries_status_idx": {
+          "name": "time_entries_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "time_entries_clock_in_idx": {
+          "name": "time_entries_clock_in_idx",
+          "columns": [
+            {
+              "expression": "clock_in",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1900,118 +2373,219 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.accounts": {
-      "name": "accounts",
+    "public.crm_accounts": {
+      "name": "crm_accounts",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
         },
-        "parent_org_id": {
-          "name": "parent_org_id",
-          "type": "integer",
+        "parent_organization_id": {
+          "name": "parent_organization_id",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },
         "agency_id": {
           "name": "agency_id",
-          "type": "integer",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contact_email": {
-          "name": "contact_email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_phone": {
-          "name": "contact_phone",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "website": {
-          "name": "website",
-          "type": "varchar(500)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "account_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
         },
         "plan": {
           "name": "plan",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "branding_id": {
-          "name": "branding_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "legacy_shop_id": {
-          "name": "legacy_shop_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_archived": {
-          "name": "is_archived",
-          "type": "boolean",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": "'Growth'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Active'"
+        },
+        "owner_name": {
+          "name": "owner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_email": {
+          "name": "owner_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_phone": {
+          "name": "owner_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "linked_shop_id": {
+          "name": "linked_shop_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sms_number": {
+          "name": "sms_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sms": {
+          "name": "sms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_billing": {
+          "name": "next_billing",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo": {
+          "name": "logo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favicon": {
+          "name": "favicon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tagline": {
+          "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slogan": {
+          "name": "slogan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "corporate_website": {
+          "name": "corporate_website",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "branding_theme_id": {
+          "name": "branding_theme_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primary_color": {
+          "name": "primary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "secondary_color": {
+          "name": "secondary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_color": {
+          "name": "header_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_color": {
+          "name": "button_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_text_color": {
+          "name": "button_text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "border_color": {
+          "name": "border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_color": {
+          "name": "sidebar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_color": {
+          "name": "card_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "accounts_parent_org_id_idx": {
-          "name": "accounts_parent_org_id_idx",
+        "crm_accounts_parent_org_idx": {
+          "name": "crm_accounts_parent_org_idx",
           "columns": [
             {
-              "expression": "parent_org_id",
+              "expression": "parent_organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2022,8 +2596,8 @@
           "method": "btree",
           "with": {}
         },
-        "accounts_agency_id_idx": {
-          "name": "accounts_agency_id_idx",
+        "crm_accounts_agency_idx": {
+          "name": "crm_accounts_agency_idx",
           "columns": [
             {
               "expression": "agency_id",
@@ -2037,8 +2611,8 @@
           "method": "btree",
           "with": {}
         },
-        "accounts_status_idx": {
-          "name": "accounts_status_idx",
+        "crm_accounts_status_idx": {
+          "name": "crm_accounts_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -2052,11 +2626,11 @@
           "method": "btree",
           "with": {}
         },
-        "accounts_legacy_shop_id_idx": {
-          "name": "accounts_legacy_shop_id_idx",
+        "crm_accounts_plan_idx": {
+          "name": "crm_accounts_plan_idx",
           "columns": [
             {
-              "expression": "legacy_shop_id",
+              "expression": "plan",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2069,141 +2643,244 @@
         }
       },
       "foreignKeys": {
-        "accounts_parent_org_id_parent_organizations_id_fk": {
-          "name": "accounts_parent_org_id_parent_organizations_id_fk",
-          "tableFrom": "accounts",
-          "tableTo": "parent_organizations",
+        "crm_accounts_parent_organization_id_crm_parent_organizations_id_fk": {
+          "name": "crm_accounts_parent_organization_id_crm_parent_organizations_id_fk",
+          "tableFrom": "crm_accounts",
+          "tableTo": "crm_parent_organizations",
           "columnsFrom": [
-            "parent_org_id"
+            "parent_organization_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "accounts_agency_id_agencies_id_fk": {
-          "name": "accounts_agency_id_agencies_id_fk",
-          "tableFrom": "accounts",
-          "tableTo": "agencies",
+        "crm_accounts_agency_id_crm_agencies_id_fk": {
+          "name": "crm_accounts_agency_id_crm_agencies_id_fk",
+          "tableFrom": "crm_accounts",
+          "tableTo": "crm_agencies",
           "columnsFrom": [
             "agency_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "accounts_slug_unique": {
-          "name": "accounts_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agencies": {
-      "name": "agencies",
+    "public.crm_agencies": {
+      "name": "crm_agencies",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "name": {
           "name": "name",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "slug": {
           "name": "slug",
-          "type": "varchar(100)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'marketing'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Active'"
+        },
+        "logo": {
+          "name": "logo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primary_color": {
+          "name": "primary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#3c81c3'"
+        },
+        "secondary_color": {
+          "name": "secondary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#1e5a8a'"
+        },
         "contact_email": {
           "name": "contact_email",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "contact_phone": {
           "name": "contact_phone",
-          "type": "varchar(50)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "website": {
-          "name": "website",
-          "type": "varchar(500)",
+        "stripe_account_id": {
+          "name": "stripe_account_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "status": {
-          "name": "status",
-          "type": "agency_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "stripe_connect_account_id": {
-          "name": "stripe_connect_account_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "branding_id": {
-          "name": "branding_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_archived": {
-          "name": "is_archived",
+        "stripe_onboarded": {
+          "name": "stripe_onboarded",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": false
+        },
+        "commission_rate": {
+          "name": "commission_rate",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'10.00'"
+        },
+        "favicon": {
+          "name": "favicon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tagline": {
+          "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slogan": {
+          "name": "slogan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "corporate_website": {
+          "name": "corporate_website",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "app_store_link": {
+          "name": "app_store_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "play_store_link": {
+          "name": "play_store_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "branding_theme_id": {
+          "name": "branding_theme_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_color": {
+          "name": "header_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_color": {
+          "name": "button_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_text_color": {
+          "name": "button_text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "border_color": {
+          "name": "border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_color": {
+          "name": "sidebar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_color": {
+          "name": "card_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "agencies_status_idx": {
-          "name": "agencies_status_idx",
+        "crm_agencies_slug_idx": {
+          "name": "crm_agencies_slug_idx",
           "columns": [
             {
-              "expression": "status",
+              "expression": "slug",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2214,11 +2891,11 @@
           "method": "btree",
           "with": {}
         },
-        "agencies_slug_idx": {
-          "name": "agencies_slug_idx",
+        "crm_agencies_status_idx": {
+          "name": "crm_agencies_status_idx",
           "columns": [
             {
-              "expression": "slug",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2233,8 +2910,8 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "agencies_slug_unique": {
-          "name": "agencies_slug_unique",
+        "crm_agencies_slug_unique": {
+          "name": "crm_agencies_slug_unique",
           "nullsNotDistinct": false,
           "columns": [
             "slug"
@@ -2245,25 +2922,26 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agency_pricing_packages": {
-      "name": "agency_pricing_packages",
+    "public.crm_agency_pricing_packages": {
+      "name": "crm_agency_pricing_packages",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "agency_id": {
           "name": "agency_id",
-          "type": "integer",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
         "name": {
           "name": "name",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -2273,30 +2951,15 @@
           "primaryKey": false,
           "notNull": false
         },
-        "base_price": {
-          "name": "base_price",
-          "type": "real",
+        "monthly_price": {
+          "name": "monthly_price",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "interval": {
-          "name": "interval",
-          "type": "pricing_interval",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'monthly'"
+          "notNull": true
         },
         "features": {
           "name": "features",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "limits": {
-          "name": "limits",
-          "type": "jsonb",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },
@@ -2307,55 +2970,27 @@
           "notNull": true,
           "default": true
         },
-        "stripe_price_id": {
-          "name": "stripe_price_id",
-          "type": "varchar(255)",
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         }
       },
-      "indexes": {
-        "agency_pricing_agency_id_idx": {
-          "name": "agency_pricing_agency_id_idx",
-          "columns": [
-            {
-              "expression": "agency_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "agency_pricing_packages_agency_id_agencies_id_fk": {
-          "name": "agency_pricing_packages_agency_id_agencies_id_fk",
-          "tableFrom": "agency_pricing_packages",
-          "tableTo": "agencies",
+        "crm_agency_pricing_packages_agency_id_crm_agencies_id_fk": {
+          "name": "crm_agency_pricing_packages_agency_id_crm_agencies_id_fk",
+          "tableFrom": "crm_agency_pricing_packages",
+          "tableTo": "crm_agencies",
           "columnsFrom": [
             "agency_id"
           ],
@@ -2372,19 +3007,20 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.branding_themes": {
-      "name": "branding_themes",
+    "public.crm_branding_themes": {
+      "name": "crm_branding_themes",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "name": {
           "name": "name",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -2394,74 +3030,170 @@
           "primaryKey": false,
           "notNull": false
         },
-        "primary_color": {
-          "name": "primary_color",
-          "type": "varchar(20)",
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_locked": {
+          "name": "is_locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "preview_primary": {
+          "name": "preview_primary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preview_secondary": {
+          "name": "preview_secondary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "preview_accent": {
+          "name": "preview_accent",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "primary_color": {
+          "name": "primary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "secondary_color": {
           "name": "secondary_color",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "accent_color": {
-          "name": "accent_color",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_bg_color": {
-          "name": "header_bg_color",
-          "type": "varchar(20)",
+        "header_color": {
+          "name": "header_color",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "header_text_color": {
           "name": "header_text_color",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "font_family": {
-          "name": "font_family",
-          "type": "varchar(255)",
+        "button_color": {
+          "name": "button_color",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "border_radius": {
-          "name": "border_radius",
-          "type": "varchar(20)",
+        "button_text_color": {
+          "name": "button_text_color",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "preview_config": {
-          "name": "preview_config",
-          "type": "jsonb",
+        "button_hover_color": {
+          "name": "button_hover_color",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
+        "border_color": {
+          "name": "border_color",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_color": {
+          "name": "sidebar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_text_color": {
+          "name": "sidebar_text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_active_color": {
+          "name": "sidebar_active_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_color": {
+          "name": "card_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_border_color": {
+          "name": "card_border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "muted_color": {
+          "name": "muted_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destructive_color": {
+          "name": "destructive_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "success_color": {
+          "name": "success_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "warning_color": {
+          "name": "warning_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "info_color": {
+          "name": "info_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+        "created_by": {
+          "name": "created_by",
+          "type": "varchar",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {},
@@ -2472,126 +3204,233 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.corporate_branding": {
-      "name": "corporate_branding",
+    "public.crm_corporate_branding": {
+      "name": "crm_corporate_branding",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
-        "entity_type": {
-          "name": "entity_type",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entity_id": {
-          "name": "entity_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "logo_url": {
-          "name": "logo_url",
+        "logo": {
+          "name": "logo",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "favicon_url": {
-          "name": "favicon_url",
+        "favicon": {
+          "name": "favicon",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "company_name": {
+          "name": "company_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'MOS Tools'"
+        },
+        "tagline": {
+          "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slogan": {
+          "name": "slogan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "corporate_website": {
+          "name": "corporate_website",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "app_store_link": {
+          "name": "app_store_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "play_store_link": {
+          "name": "play_store_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_theme_id": {
+          "name": "active_theme_id",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },
         "primary_color": {
           "name": "primary_color",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#3c81c3'"
         },
         "secondary_color": {
           "name": "secondary_color",
-          "type": "varchar(20)",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#1e5a8a'"
         },
-        "accent_color": {
-          "name": "accent_color",
-          "type": "varchar(20)",
+        "header_color": {
+          "name": "header_color",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "header_bg_color": {
-          "name": "header_bg_color",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#ffffff'"
         },
         "header_text_color": {
           "name": "header_text_color",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_css": {
-          "name": "custom_css",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#1f2937'"
         },
-        "theme_id": {
-          "name": "theme_id",
-          "type": "integer",
+        "button_color": {
+          "name": "button_color",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#3c81c3'"
         },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
+        "button_text_color": {
+          "name": "button_text_color",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'#ffffff'"
         },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
+        "button_hover_color": {
+          "name": "button_hover_color",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false,
+          "default": "'#1e5a8a'"
+        },
+        "border_color": {
+          "name": "border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#e5e7eb'"
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#7ab3e0'"
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#f9fafb'"
+        },
+        "sidebar_color": {
+          "name": "sidebar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#ffffff'"
+        },
+        "sidebar_text_color": {
+          "name": "sidebar_text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#374151'"
+        },
+        "sidebar_active_color": {
+          "name": "sidebar_active_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#f3f4f6'"
+        },
+        "card_color": {
+          "name": "card_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#ffffff'"
+        },
+        "card_border_color": {
+          "name": "card_border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#e5e7eb'"
+        },
+        "muted_color": {
+          "name": "muted_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#6b7280'"
+        },
+        "destructive_color": {
+          "name": "destructive_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#ef4444'"
+        },
+        "success_color": {
+          "name": "success_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#22c55e'"
+        },
+        "warning_color": {
+          "name": "warning_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#f59e0b'"
+        },
+        "info_color": {
+          "name": "info_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'#3b82f6'"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {
-        "corporate_branding_entity_idx": {
-          "name": "corporate_branding_entity_idx",
-          "columns": [
-            {
-              "expression": "entity_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "entity_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -2599,147 +3438,107 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.locations": {
-      "name": "locations",
+    "public.crm_locations": {
+      "name": "crm_locations",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "account_id": {
           "name": "account_id",
-          "type": "integer",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "address_line_1": {
-          "name": "address_line_1",
-          "type": "varchar(500)",
+        "parent_organization_id": {
+          "name": "parent_organization_id",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },
-        "address_line_2": {
-          "name": "address_line_2",
-          "type": "varchar(500)",
+        "agency_id": {
+          "name": "agency_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "city": {
           "name": "city",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "state": {
           "name": "state",
-          "type": "varchar(100)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "zip_code": {
-          "name": "zip_code",
-          "type": "varchar(20)",
+        "zip": {
+          "name": "zip",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "country": {
-          "name": "country",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'US'"
         },
         "phone": {
           "name": "phone",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "timezone": {
           "name": "timezone",
-          "type": "varchar(100)",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'America/Chicago'"
+        },
+        "sms_number": {
+          "name": "sms_number",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "latitude": {
-          "name": "latitude",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "longitude": {
-          "name": "longitude",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "location_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "branding_id": {
-          "name": "branding_id",
+        "linked_shop_id": {
+          "name": "linked_shop_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_archived": {
-          "name": "is_archived",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "locations_account_id_idx": {
-          "name": "locations_account_id_idx",
+        "crm_locations_account_idx": {
+          "name": "crm_locations_account_idx",
           "columns": [
             {
               "expression": "account_id",
@@ -2753,32 +3552,11 @@
           "method": "btree",
           "with": {}
         },
-        "locations_status_idx": {
-          "name": "locations_status_idx",
+        "crm_locations_parent_org_idx": {
+          "name": "crm_locations_parent_org_idx",
           "columns": [
             {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "locations_city_state_idx": {
-          "name": "locations_city_state_idx",
-          "columns": [
-            {
-              "expression": "city",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "state",
+              "expression": "parent_organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2791,10 +3569,10 @@
         }
       },
       "foreignKeys": {
-        "locations_account_id_accounts_id_fk": {
-          "name": "locations_account_id_accounts_id_fk",
-          "tableFrom": "locations",
-          "tableTo": "accounts",
+        "crm_locations_account_id_crm_accounts_id_fk": {
+          "name": "crm_locations_account_id_crm_accounts_id_fk",
+          "tableFrom": "crm_locations",
+          "tableTo": "crm_accounts",
           "columnsFrom": [
             "account_id"
           ],
@@ -2802,6 +3580,32 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "crm_locations_parent_organization_id_crm_parent_organizations_id_fk": {
+          "name": "crm_locations_parent_organization_id_crm_parent_organizations_id_fk",
+          "tableFrom": "crm_locations",
+          "tableTo": "crm_parent_organizations",
+          "columnsFrom": [
+            "parent_organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_locations_agency_id_crm_agencies_id_fk": {
+          "name": "crm_locations_agency_id_crm_agencies_id_fk",
+          "tableFrom": "crm_locations",
+          "tableTo": "crm_agencies",
+          "columnsFrom": [
+            "agency_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -2811,97 +3615,179 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.parent_organizations": {
-      "name": "parent_organizations",
+    "public.crm_parent_organizations": {
+      "name": "crm_parent_organizations",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
         },
         "agency_id": {
           "name": "agency_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contact_email": {
-          "name": "contact_email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_phone": {
-          "name": "contact_phone",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "website": {
-          "name": "website",
-          "type": "varchar(500)",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },
         "status": {
           "name": "status",
-          "type": "org_status",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'active'"
+          "default": "'Active'"
         },
-        "branding_id": {
-          "name": "branding_id",
-          "type": "integer",
+        "contact_name": {
+          "name": "contact_name",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
+        "contact_email": {
+          "name": "contact_email",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "is_archived": {
-          "name": "is_archived",
-          "type": "boolean",
+        "contact_phone": {
+          "name": "contact_phone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo": {
+          "name": "logo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "favicon": {
+          "name": "favicon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tagline": {
+          "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slogan": {
+          "name": "slogan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "corporate_website": {
+          "name": "corporate_website",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "branding_theme_id": {
+          "name": "branding_theme_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primary_color": {
+          "name": "primary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "secondary_color": {
+          "name": "secondary_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "header_color": {
+          "name": "header_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_color": {
+          "name": "button_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "button_text_color": {
+          "name": "button_text_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "border_color": {
+          "name": "border_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accent_color": {
+          "name": "accent_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "background_color": {
+          "name": "background_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sidebar_color": {
+          "name": "sidebar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_color": {
+          "name": "card_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "parent_orgs_agency_id_idx": {
-          "name": "parent_orgs_agency_id_idx",
+        "crm_parent_orgs_agency_idx": {
+          "name": "crm_parent_orgs_agency_idx",
           "columns": [
             {
               "expression": "agency_id",
@@ -2915,8 +3801,8 @@
           "method": "btree",
           "with": {}
         },
-        "parent_orgs_status_idx": {
-          "name": "parent_orgs_status_idx",
+        "crm_parent_orgs_status_idx": {
+          "name": "crm_parent_orgs_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -2932,55 +3818,49 @@
         }
       },
       "foreignKeys": {
-        "parent_organizations_agency_id_agencies_id_fk": {
-          "name": "parent_organizations_agency_id_agencies_id_fk",
-          "tableFrom": "parent_organizations",
-          "tableTo": "agencies",
+        "crm_parent_organizations_agency_id_crm_agencies_id_fk": {
+          "name": "crm_parent_organizations_agency_id_crm_agencies_id_fk",
+          "tableFrom": "crm_parent_organizations",
+          "tableTo": "crm_agencies",
           "columnsFrom": [
             "agency_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "parent_organizations_slug_unique": {
-          "name": "parent_organizations_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.user_types": {
-      "name": "user_types",
+    "public.crm_user_types": {
+      "name": "crm_user_types",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "name": {
           "name": "name",
-          "type": "varchar(100)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "slug": {
-          "name": "slug",
-          "type": "varchar(100)",
+        "bucket": {
+          "name": "bucket",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'account'"
         },
         "description": {
           "name": "description",
@@ -2988,65 +3868,23 @@
           "primaryKey": false,
           "notNull": false
         },
-        "bucket": {
-          "name": "bucket",
-          "type": "user_type_bucket",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'external'"
-        },
         "permissions": {
           "name": "permissions",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": "'{}'::jsonb"
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": 0
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_archived": {
-          "name": "is_archived",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -3055,15 +3893,7 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "user_types_slug_unique": {
-          "name": "user_types_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3088,6 +3918,14 @@
         "active",
         "archived",
         "closed"
+      ]
+    },
+    "public.group_status": {
+      "name": "group_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "inactive"
       ]
     },
     "public.message_direction": {
@@ -3138,6 +3976,22 @@
         "mobile"
       ]
     },
+    "public.time_entry_status": {
+      "name": "time_entry_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "completed"
+      ]
+    },
+    "public.time_entry_type": {
+      "name": "time_entry_type",
+      "schema": "public",
+      "values": [
+        "shift",
+        "break"
+      ]
+    },
     "public.call_outcome": {
       "name": "call_outcome",
       "schema": "public",
@@ -3158,61 +4012,6 @@
         "neutral",
         "negative",
         "escalated"
-      ]
-    },
-    "public.account_status": {
-      "name": "account_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "trial",
-        "suspended",
-        "archived",
-        "churned"
-      ]
-    },
-    "public.agency_status": {
-      "name": "agency_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "suspended",
-        "archived"
-      ]
-    },
-    "public.location_status": {
-      "name": "location_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "inactive",
-        "archived"
-      ]
-    },
-    "public.org_status": {
-      "name": "org_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "suspended",
-        "archived"
-      ]
-    },
-    "public.pricing_interval": {
-      "name": "pricing_interval",
-      "schema": "public",
-      "values": [
-        "monthly",
-        "quarterly",
-        "annual"
-      ]
-    },
-    "public.user_type_bucket": {
-      "name": "user_type_bucket",
-      "schema": "public",
-      "values": [
-        "internal",
-        "external"
       ]
     }
   },
