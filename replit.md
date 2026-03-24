@@ -1,88 +1,45 @@
 # MOS Maintenance MVP
 
 ## Overview
-This project is an AI-enhanced automotive maintenance management system designed to optimize operations for auto shops. Built with Next.js, it provides tools for managing vehicle maintenance recommendations, customer data, and multi-shop user management. The system aims to boost operational efficiency and customer engagement through an intuitive dashboard, various integrations, and AI-powered insights.
+MOS Maintenance MVP is an AI-enhanced automotive maintenance management system built with Next.js. Its primary purpose is to optimize operations for auto shops by providing tools for managing vehicle maintenance recommendations, customer data, and multi-shop user management. The system aims to significantly boost operational efficiency and customer engagement through an intuitive dashboard, various integrations, and AI-powered insights, with a vision to become the leading platform for automotive service management.
 
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
 ## System Architecture
-The application is built using Next.js 14.2.5, React 18, Next.js API Routes, and Tailwind CSS, with TypeScript/JavaScript. Data management is transitioning from MongoDB Atlas to PostgreSQL for core relational data, with MongoDB Atlas currently used for caching.
+The application is built using Next.js 14.2.5, React 18, Next.js API Routes, and Tailwind CSS, primarily with TypeScript. The architecture employs a dual-database strategy, utilizing Supabase PostgreSQL for core relational data, CRM, and communications, and MongoDB Atlas for caching and legacy features.
 
 **UI/UX Decisions:**
-The user interface features a modern SaaS design with a dark sidebar, light content areas, and card-based layouts, accented with blue. Key elements include a unified integrations page, tabbed vehicle detail pages, visual data source badges, and dedicated UIs for "My Oil Sticker" and "Quick Sticker" with customization and rapid printing. Keytag printing includes a visual designer with drag-and-drop editing and live preview. The Health Intelligence plan page displays OE manufacturer logos, dynamic Year/Make/Model titles, and "Vehicle Health Intelligence" branding. VIN tooltips show service-relevant specifications.
+The UI adopts a modern SaaS aesthetic, characterized by a dark sidebar, light content areas, and card-based layouts accented with blue. Key features include a unified integrations page, tabbed vehicle detail views, visual data source badges, and dedicated UIs for "My Oil Sticker" and "Quick Sticker" with customization and rapid printing. A visual designer with drag-and-drop functionality is provided for keytag printing. Vehicle Health Intelligence (VHI) pages display OEM logos and dynamic vehicle titles, and VIN tooltips offer service-relevant specifications.
 
 **Technical Implementations:**
-*   **Data Management**: Dual-database architecture — existing MongoDB Atlas for legacy features/caching, and Supabase PostgreSQL for new CRM/communications features via Drizzle ORM. DataOne OEM maintenance data is stored in Supabase PostgreSQL, updated via weekly SFTP sync. New CRM tables (conversations, SMS, voicemails, call transcriptions, Rescue Rover AI settings/logs) are in Supabase via Drizzle ORM (`lib/db/`). Repository pattern in `lib/db/repositories/` abstracts all Supabase data access. Drizzle config at `drizzle.config.ts`, schemas in `lib/db/schema/`, migration script at `scripts/apply-crm-migration.ts`.
-*   **Integration Mechanisms**: A modular integration layer supports shop management systems (e.g., Tekmetric, Protractor, Shop-Ware) using `IIntegrationAdapter` and `IntegrationFacade` patterns, incorporating webhooks, incremental sync, OAuth, and rate limiting. Shop-Ware integration is fully implemented, including webhooks, daily incremental sync, and API for webhook management.
-*   **Authentication & Authorization**: Role-based access with bcrypt hashing and token-based authentication.
-*   **Billing & Licensing**: VIN-based billing with Stripe integration, modular feature flags, and robust grace period handling. Supports various plan tiers, automatic mapping of BrandPro subscriptions, and CRM auto-provisioning for new shop/user creation via Stripe webhooks or admin API.
-*   **Admin & Monitoring**: Includes admin audit logging, unified API usage monitoring, a support ticketing system, and a platform observability page for streamed log viewing and API usage analytics.
-*   **Notification System**: Supports email notifications via Resend API and in-app notifications.
-*   **AI Support Chatbot**: A floating chat widget provides OpenAI-powered responses, knowledge base retrieval, and ticket escalation.
-*   **Sticker & Keytag Generation**: QR codes are generated using HoverCode API, and sticker/keytag images are rendered via `node-canvas` for fast, dependency-free generation. Supports Dymo label printing with a visual designer.
-*   **Chrome Extension Shop-Ware Support**: The extension (`v1.20.13`) supports Shop-Ware for context detection, adding canned jobs, and adding findings directly to repair orders using Shop-Ware's internal APIs.
-*   **AI & Recommendations**: Offers AI-powered maintenance recommendations, AI-scored job search, smart job autocomplete, and a common failures advisor.
-*   **Auto Booking**: A feature-gated system for automated oil change appointment scheduling.
-*   **OEM-CARFAX Service Mappings**: A platform admin page allows mapping OEM maintenance items to CARFAX service equivalents, stored in MongoDB.
-*   **Chrome Extension (Detect Dog)**: The side panel extension (`v1.22.20`) supports Tekmetric, Shop-Ware, and AutoFlow, providing maintenance recommendations, job history, sticker printing, labor rate rules, and CARFAX-based mileage estimation. It includes a customer concern assistant powered by AI for intake, follow-up questions, conversation review, and cleaned write-up output, directly integrated into SMS concern fields. The extension supports multi-shop environments by aggregating user's shop IDs and resolving shop context via query parameters.
-*   **Work Order Creation**: A multi-step wizard for creating Protractor work orders from the dashboard, integrating the Customer Concern Assistant, AI-scored job search, and forms for new customer/vehicle creation with VIN/license plate photo recognition.
-*   **User Preferences**: Shops can select preferred distance units (miles/kilometers).
-*   **Vehicle Health Report (VHR)**: A customer-facing, mobile-friendly shareable report page at `/report/[vin]`. Displays a health score gauge (0–100), overdue items with detail cards, "Systems in Good Condition" section, service timeline (NOW / NEXT 3 MO / LATER), and due-soon detail cards. Share links are generated via POST to `/api/report/[vin]` with signed, expiring tokens (15-day TTL, HMAC-SHA256). Demo page at `/report/demo`. Components in `components/vehicle-health-report/`.
-*   **VHI API Endpoint**: Two versions: `GET /api/vehicles/[vin]/vhi` (session-authenticated, internal) and `GET /api/external/vehicles/[vin]/vhi` (API-key-authenticated, external). Both return Vehicle Health Indicator data as JSON — health score (0–100 with tier label), vehicle info, and bucketed maintenance items (overdue/dueSoon/upcoming/complimentary). External endpoints also return a `reportUrl` — a signed, shareable Vehicle Health Report link (15-day expiry) that partners can display to customers. Shared scoring logic in `lib/vhi-score.ts`. Report URL generation in `lib/report-share.ts`. Reads from cached plan data.
-*   **VHI On-Demand Analysis**: `POST /api/external/vhi/analyze` accepts VIN + SMS type + SMS shop ID + optional RO# and mileage. Resolves the shop via `findShopBySmsId`, pulls mileage from the RO if not provided, invalidates stale cache, triggers a full plan build, and returns scored VHI results. Uses `vehicles:read` permission. Supports both shop-scoped and partner API keys. Documented in Swagger under "Vehicle Health" tag.
-*   **Partner API Keys**: Global API keys (`mos_partner_...`) not bound to a single shop, designed for integration partners (e.g., AppFueled). The shop is resolved per-request via `sms` + `smsShopId` parameters. Generated by platform admins via `POST /api/platform-admin/partner-keys`. Uses enterprise-tier rate limits. Partner keys stored in `api_keys` collection with `isPartner: true`, `partnerId`, and `partnerName` fields. The `ExternalApiContext` in the middleware includes `isPartner` and `partnerId` so endpoints can handle partner vs shop-scoped keys. Platform admin UI at `/platform-admin/partner-keys` for creating, viewing, revoking, and reactivating partner keys. Revoked keys are blocked by `validateApiKey` middleware. PATCH endpoint supports `revoke` and `reactivate` actions.
-*   **Partner Shops Endpoint**: `GET /api/external/shops` returns shops accessible to the API key. For shop-scoped keys, returns only that key's shop. For partner keys, returns all active shops with pagination (`page`, `limit`), search by name/location, and `sms` provider filter. Response includes `shopId`, `name`, `integrationProvider`, `locationIdentifier`, and `smsIds` (provider-specific IDs like `tekmetricShopId`, `shopwareShopId`, etc.). Requires `shops:read` permission. Documented in Swagger under "Shops" tag.
-*   **VHI Auto-Build on RO Create**: All three webhook handlers (Tekmetric, Shop-Ware, Protractor) now automatically trigger a VHI build when a work order is created or updated with a valid VIN and mileage, even if the vehicle was never viewed in the dashboard or extension. The build skips if a valid plan already exists (no invalidation). Logged to `vhi_analysis_log` with `triggeredBy: "webhook_ro_create"`. Core function: `triggerVhiOnWorkOrderCreate` in `lib/vhi-webhook-trigger.ts`. This enables CRM partners like AppFueled to pull VHI data for any vehicle immediately after an RO is opened.
-*   **VHI Auto-Rebuild on RO Close**: All three webhook handlers also trigger a VHI rebuild when a work order reaches a terminal/invoiced state. The rebuild invalidates the cached plan, resolves mileage from the RO, builds a fresh VHI, and logs the result (including authorized jobs) to `vhi_analysis_log`. Runs asynchronously (fire-and-forget) to avoid blocking webhook responses. Core logic in `lib/vhi-rebuild.ts` and `lib/vhi-webhook-trigger.ts`.
-*   **Swagger UI**: Interactive API documentation at `/docs` (page) and `/api/docs/ui` (standalone HTML). Swagger UI assets served locally from `public/swagger-ui/`. OpenAPI spec at `/api/docs`.
-
-**Feature Specifications:**
-*   **Core Management**: Vehicle analysis, customer dashboards, and multi-shop management.
-*   **Common Maintenance Layer**: Industry-standard maintenance items (wheel alignment, power steering fluid, shocks/struts, battery, wiper blades, fuel system cleaning, coolant hoses) are automatically injected into plans when not already covered by OEM schedule data. Uses standard intervals, respects shop exclusion overrides and shop interval overrides, matches against service history and deferred work. Source tagged as `"common"` in plan builder output.
-*   **Maintenance & Service**: Intelligent queue-based prefetching for maintenance planning, component tracking, and logging declined services.
-*   **Enterprise Capabilities**: Multi-location analytics, shop management, shared canned job mappings, revenue attribution, enterprise-wide job search, and settings replication.
-*   **Modular Features**: A la carte feature flags control functionalities like maintenance, job lookup, oil stickers, keytags, auto booking, and part cross-reference.
-
-*   **Communications (Twilio)**: Voice calling (inbound/outbound via browser), SMS send/receive, voicemail recording, caller ID lookup, conversation tracking. API routes under `app/api/communications/` (authenticated) and `app/api/webhooks/twilio/` (public, Twilio-signature validated). Conversations and voicemails stored in PostgreSQL (Supabase). Caller lookup bridges MongoDB customer data with the communications layer. Environment variables: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID`, `TWILIO_PHONE_NUMBER`, `SUPABASE_DATABASE_URL` or `DATABASE_URL`.
-    *   **Database layer**: `lib/db/postgres.ts` (connection), `lib/db/repositories/conversations.ts` (conversations + messages CRUD), `lib/db/repositories/voicemails.ts` (voicemail CRUD), `lib/db/init.ts` (auto-migrate tables).
-    *   **Twilio helpers**: `lib/twilio.ts` (client, config, signature validation).
-    *   **API routes**: Voice token (`/api/communications/voice/token`), caller lookup (`/api/communications/caller-lookup`), conversations CRUD (`/api/communications/conversations`), SMS send (`/api/communications/sms/send`), voicemails (`/api/communications/voicemails`), call activity (`/api/communications/call-activity`).
-    *   **Webhook routes**: Inbound voice (`/api/webhooks/twilio/voice/inbound`), outbound voice (`/api/webhooks/twilio/voice/outbound`), call status (`/api/webhooks/twilio/voice/status`), inbound SMS (`/api/webhooks/twilio/sms`), voicemail recording (`/api/webhooks/twilio/voicemail`).
+*   **Data Management**: Core CRM and communication data reside in Supabase PostgreSQL, accessed via Drizzle ORM and a repository pattern. OEM maintenance data is also stored here, updated weekly. MongoDB Atlas is used for caching.
+*   **Integration Mechanisms**: A modular integration layer supports various shop management systems (e.g., Tekmetric, Protractor, Shop-Ware) using adapter and facade patterns, incorporating webhooks, incremental sync, and OAuth.
+*   **Authentication & Authorization**: Role-based access is implemented with bcrypt hashing and token-based authentication.
+*   **Billing & Licensing**: Stripe integration handles VIN-based billing, supports modular feature flags, and manages various plan tiers, including automatic CRM provisioning for new shops.
+*   **Admin & Monitoring**: The system includes admin audit logging, unified API usage monitoring, a support ticketing system, and a platform observability page for logs and API analytics.
+*   **Notification System**: Email notifications are handled via Resend API, complemented by in-app notifications.
+*   **AI Support Chatbot**: An OpenAI-powered floating chat widget provides instant answers, knowledge base retrieval, and ticket escalation.
+*   **Sticker & Keytag Generation**: QR codes are generated via HoverCode API, and stickers/keytags are rendered using `node-canvas` for efficient, dependency-free printing with Dymo label printer support.
+*   **Chrome Extensions**: Two extensions enhance functionality: one for Shop-Ware for context detection and adding repair order items, and "Detect Dog" for Tekmetric, Shop-Ware, and AutoFlow, offering maintenance recommendations, job history, and an AI-powered customer concern assistant.
+*   **AI & Recommendations**: The system provides AI-powered maintenance recommendations, job search, smart job autocomplete, and a common failures advisor.
+*   **Work Order Creation**: A multi-step wizard facilitates creating Protractor work orders from the dashboard, integrating AI assistance and VIN/license plate recognition.
+*   **Vehicle Health Report (VHR)**: A shareable, mobile-friendly customer-facing report page displays a health score, overdue items, a service timeline, and due-soon details. Share links are generated with signed, expiring tokens.
+*   **VHI API Endpoints & On-Demand Analysis**: Both internal and external API endpoints provide Vehicle Health Indicator data, including a health score and bucketed maintenance items. On-demand analysis allows real-time VHI generation upon request.
+*   **Partner API Keys**: Global API keys for integration partners facilitate shop resolution per-request and enable broader access.
+*   **VHI Auto-Build & Rebuild**: VHI data is automatically built when work orders are created and rebuilt when they are closed, ensuring up-to-date maintenance recommendations.
+*   **Swagger UI**: Interactive API documentation is available at `/docs` and `/api/docs/ui`.
+*   **Common Maintenance Layer**: Industry-standard maintenance items are automatically integrated into plans when not covered by OEM data, respecting shop-specific overrides.
+*   **Communications**: Twilio powers voice calling, SMS, voicemail recording, and caller ID lookup, with conversation tracking and data stored in PostgreSQL.
+*   **Rescue Rover AI Voice Agent**: An AI-powered phone assistant handles inbound calls using Twilio media streams, Deepgram for STT/TTS, and OpenAI GPT-4o for conversational intelligence, including customer lookup, callback scheduling, and call transfer.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)
-*   **AI**: OpenAI API
+*   **AI**: OpenAI API, Deepgram (STT Nova-2, TTS Aura)
 *   **Payments**: Stripe
-*   **Communications**: Twilio (Voice, SMS)
+*   **Communications**: Twilio (Voice, SMS, Media Streams)
 *   **VIN Decoding & OEM Schedules**: DataOne
-*   **Shop Management & Repair Orders**: AutoFlow, Protractor, Tekmetric
+*   **Shop Management Systems**: AutoFlow, Protractor, Tekmetric, Shop-Ware
 *   **Vehicle History Reports**: CARFAX
-*   **Digital Vehicle Inspections (DVI)**: AutoFlow, AutoVitals, Tekmetric
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
-*   **Voice AI**: Deepgram (STT Nova-2, TTS Aura), Twilio (Media Streams, Voice)
-*   **Telephony**: Twilio (inbound calls, WebSocket media streams, call transfer, voicemail)
-
-## Rescue Rover AI Voice Agent
-The Rescue Rover module (`lib/rescue-rover/`) is the AI-powered phone assistant for auto shops. It handles inbound calls via Twilio media streams, uses Deepgram for speech-to-text and text-to-speech, and OpenAI GPT-4o for conversational intelligence.
-
-**Architecture:**
-- **WebSocket Server** (`scripts/rescue-rover-ws-server.ts`): Standalone WebSocket server on port 3002 (configurable via `RESCUE_ROVER_WS_PORT`) for handling Twilio media streams. Launched alongside other workers via `start-with-workers.js`.
-- **Twilio Voice Webhook** (`app/api/webhooks/twilio/voice/route.ts`): Receives inbound calls, resolves shop from phone number, checks business hours, and connects to the WebSocket media stream or after-hours voicemail.
-- **Deepgram Flux STT** (`lib/rescue-rover/deepgram-flux.ts`): WebSocket-based speech recognition with Nova-2 model, mulaw 8kHz encoding, endpointing at 260ms, and utterance end detection at 1200ms.
-- **Deepgram TTS** (`lib/rescue-rover/deepgram-tts.ts`): Text-to-speech via Deepgram Aura, outputting mulaw audio chunked into 160-byte frames paced at 20ms intervals.
-- **Conversation Engine** (`lib/rescue-rover/conversation.ts`): OpenAI GPT-4o conversation loop with tool calling for customer lookup, callback scheduling, and call transfer. Builds system prompts from shop settings, safety rules, and customer context.
-- **Customer Context** (`lib/rescue-rover/customer-context.ts`): MongoDB lookup by caller phone number, retrieves vehicles and VHI scores to give the AI knowledge of the caller's maintenance needs.
-- **Safety Rules** (`lib/rescue-rover/safety-rules.ts`): Loads safety rules from Supabase with 1-minute TTL cache. Rules are injected as absolute constraints in the system prompt.
-- **Cost Tracking** (`lib/rescue-rover/cost-tracking.ts`): Estimates per-call costs for Deepgram STT/TTS and OpenAI tokens. Logs to `api_usage_logs` table.
-- **Call Logger** (`lib/rescue-rover/call-logger.ts`): Finalizes call records to `rescue_rover_call_logs` with transcript, duration, outcome, and cost estimate.
-- **Settings API** (`app/api/rescue-rover/settings/route.ts`): GET/POST for reading/writing per-shop Rescue Rover configuration (voice, greeting, hours, transfer number, etc.).
-- **Transfer & Voicemail** (`app/api/webhooks/twilio/voice/transfer-status/` and `voicemail/`): Handle call transfer to humans with ring timeout and voicemail fallback.
-
-**Environment Variables:**
-- `DEEPGRAM_API_KEY`: Required for STT and TTS
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`: Required for call transfers
-- `RESCUE_ROVER_WS_PORT`: WebSocket server port (default: 3002)
-- `RESCUE_ROVER_WS_HOST`: Full WebSocket URL override for production (e.g., `wss://ws.example.com`)
-- `DEFAULT_SHOP_ID`: Fallback shop ID when phone number lookup fails
