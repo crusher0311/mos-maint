@@ -316,7 +316,7 @@ export default function ConversationsPage() {
                   </div>
                   <div className="flex-shrink-0 text-right">
                     <span className="text-xs text-gray-400">
-                      {new Date(conv.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {new Date(conv.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })}
                     </span>
                     <ChevronRight className="w-4 h-4 text-gray-300 ml-auto mt-1" />
                   </div>
