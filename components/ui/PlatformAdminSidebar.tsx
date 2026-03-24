@@ -43,7 +43,15 @@ import {
   Flag,
   Link2,
   Contact,
-  UserCheck
+  UserCheck,
+  TrendingUp,
+  DollarSign,
+  Mail,
+  Tag,
+  Star,
+  CreditCard,
+  Percent,
+  Gift
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -63,6 +71,9 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const [shopsExpanded, setShopsExpanded] = useState(false);
   const [ticketsExpanded, setTicketsExpanded] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [salesExpanded, setSalesExpanded] = useState(false);
+  const [marketingExpanded, setMarketingExpanded] = useState(false);
+  const [pricingExpanded, setPricingExpanded] = useState(false);
 
   const crmPaths = [
     "/platform-admin/crm",
@@ -80,8 +91,20 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     "/platform-admin/guides",
     "/platform-admin/banners",
     "/platform-admin/content-assignments",
+    "/platform-admin/sales-pipeline",
+    "/platform-admin/campaigns",
+    "/platform-admin/coupons",
+    "/platform-admin/specials",
+    "/platform-admin/message-templates",
+    "/platform-admin/pricing-plans",
+    "/platform-admin/products",
+    "/platform-admin/promo-codes",
+    "/platform-admin/getting-started-packages",
   ];
   const isContactsSection = pathname?.startsWith("/platform-admin/crm/contacts") || pathname?.startsWith("/platform-admin/crm/contact-role-types");
+  const salesPaths = ["/platform-admin/sales-pipeline"];
+  const marketingPaths = ["/platform-admin/campaigns", "/platform-admin/coupons", "/platform-admin/specials", "/platform-admin/message-templates"];
+  const pricingPaths = ["/platform-admin/pricing-plans", "/platform-admin/products", "/platform-admin/promo-codes", "/platform-admin/getting-started-packages"];
   const opsPaths = [
     "/platform-admin/enterprises",
     "/platform-admin/shops",
@@ -109,6 +132,9 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const isShopsSection = ["/platform-admin/shops", "/platform-admin/users", "/platform-admin/hovercode"].some(p => pathname?.startsWith(p));
   const isTicketsSection = ["/platform-admin/tickets", "/platform-admin/cobrowse", "/platform-admin/database"].some(p => pathname?.startsWith(p));
   const isSettingsSection = ["/platform-admin/settings", "/platform-admin/announcements", "/platform-admin/features", "/platform-admin/plan-features", "/platform-admin/service-mappings"].some(p => pathname?.startsWith(p));
+  const isSalesSection = salesPaths.some(p => pathname?.startsWith(p));
+  const isMarketingSection = marketingPaths.some(p => pathname?.startsWith(p));
+  const isPricingSection = pricingPaths.some(p => pathname?.startsWith(p));
 
   useEffect(() => {
     if (isCrmSection) setCrmExpanded(true);
@@ -118,7 +144,10 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     if (isShopsSection) setShopsExpanded(true);
     if (isTicketsSection) setTicketsExpanded(true);
     if (isSettingsSection) setSettingsExpanded(true);
-  }, [isCrmSection, isOpsSection, isCommsSection, isEnterprisesSection, isShopsSection, isTicketsSection, isSettingsSection]);
+    if (isSalesSection) setSalesExpanded(true);
+    if (isMarketingSection) setMarketingExpanded(true);
+    if (isPricingSection) setPricingExpanded(true);
+  }, [isCrmSection, isOpsSection, isCommsSection, isEnterprisesSection, isShopsSection, isTicketsSection, isSettingsSection, isSalesSection, isMarketingSection, isPricingSection]);
 
   useEffect(() => {
     const fetchTicketCount = async () => {
@@ -248,6 +277,73 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/guides" icon={BookOpen} label="Guides" />
           <NavLink href="/platform-admin/banners" icon={Flag} label="Banners" />
           <NavLink href="/platform-admin/content-assignments" icon={Link2} label="Content Assignments" />
+
+          {/* Sales Pipeline */}
+          <li>
+            <button onClick={() => setSalesExpanded(!salesExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isSalesSection ? sectionActiveClass : sectionInactiveClass
+              }`}
+              style={isSalesSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}>
+              <div className="flex items-center gap-3">
+                <TrendingUp className="w-5 h-5" />
+                <span>Sales Pipeline</span>
+              </div>
+              {salesExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {salesExpanded && (
+              <ul className="ml-4 mt-1 space-y-1">
+                <NavLink href="/platform-admin/sales-pipeline" icon={TrendingUp} label="Deal Board" indent />
+                <NavLink href="/platform-admin/sales-pipeline/stages" icon={BarChart3} label="Funnel Stages" indent />
+              </ul>
+            )}
+          </li>
+
+          {/* Marketing */}
+          <li>
+            <button onClick={() => setMarketingExpanded(!marketingExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isMarketingSection ? sectionActiveClass : sectionInactiveClass
+              }`}
+              style={isMarketingSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}>
+              <div className="flex items-center gap-3">
+                <Megaphone className="w-5 h-5" />
+                <span>Marketing</span>
+              </div>
+              {marketingExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {marketingExpanded && (
+              <ul className="ml-4 mt-1 space-y-1">
+                <NavLink href="/platform-admin/campaigns" icon={Mail} label="Campaigns" indent />
+                <NavLink href="/platform-admin/coupons" icon={Percent} label="Coupons" indent />
+                <NavLink href="/platform-admin/specials" icon={Star} label="Specials" indent />
+                <NavLink href="/platform-admin/message-templates" icon={FileText} label="Templates" indent />
+              </ul>
+            )}
+          </li>
+
+          {/* Pricing */}
+          <li>
+            <button onClick={() => setPricingExpanded(!pricingExpanded)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isPricingSection ? sectionActiveClass : sectionInactiveClass
+              }`}
+              style={isPricingSection ? { backgroundColor: 'rgba(60, 129, 195, 0.2)' } : undefined}>
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-5 h-5" />
+                <span>Pricing</span>
+              </div>
+              {pricingExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {pricingExpanded && (
+              <ul className="ml-4 mt-1 space-y-1">
+                <NavLink href="/platform-admin/pricing-plans" icon={CreditCard} label="Plans" indent />
+                <NavLink href="/platform-admin/products" icon={Package} label="Products" indent />
+                <NavLink href="/platform-admin/promo-codes" icon={Tag} label="Promo Codes" indent />
+                <NavLink href="/platform-admin/getting-started-packages" icon={Gift} label="Starter Packages" indent />
+              </ul>
+            )}
+          </li>
 
           {/* ─── OPS Section ─── */}
           <li>

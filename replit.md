@@ -61,7 +61,7 @@ API routes: `/api/platform-admin/crm/{agencies,parent-orgs,accounts,locations,us
 UI pages: `/platform-admin/crm/{agencies,parent-orgs,accounts,locations,user-types}`
 
 The platform-admin sidebar is organized into two top-level sections:
-*   **CRM** — Agencies, Parent Orgs, Accounts, Locations, User Types, Contacts, Contact Roles, Communications (Conversations, Voicemails, Call Logs, Rescue Rover)
+*   **CRM** — Account Hierarchy (Agencies, Parent Orgs, Accounts, Locations, User Types), Contacts, Contact Roles, Communications, Onboarding, Sales Pipeline (Deal Board, Funnel Stages), Marketing (Campaigns, Coupons, Specials, Templates), Pricing (Plans, Products, Promo Codes, Starter Packages)
 *   **Ops** — Enterprises/Shops, API Traffic, Partner Keys, Job Analytics, Render Logs, Support Tickets, Knowledge Base, Settings
 
 ## CRM Contact Management
@@ -71,6 +71,16 @@ The CRM includes a full contact management system for tracking business contacts
 *   **API Routes**: Under `app/api/platform-admin/crm/contacts/` and `app/api/platform-admin/crm/contact-role-types/`
 *   **Pages**: Contact list (`/platform-admin/crm/contacts`), detail view (`/platform-admin/crm/contacts/[id]`), CSV import (`/platform-admin/crm/contacts/import`), role types (`/platform-admin/crm/contact-role-types`)
 *   Entity notes and entity tasks are polymorphic — attachable to any entity type (agency, parent org, account, location, contact)
+
+## CRM Sales Pipeline & Marketing Engine
+The platform includes a full sales pipeline and marketing management system:
+
+*   **Sales Pipeline**: Kanban-style deal board (`/platform-admin/sales-pipeline`) with drag-and-drop between funnel stages. Configurable funnel stages (`/platform-admin/sales-pipeline/stages`) with probability tracking. Deal detail page with value, probability, timeline, notes, contact info, and activity tracking.
+*   **Marketing**: Campaigns management (`/platform-admin/campaigns`) with delivery metric tracking (delivered/opened/clicked/bounced). Coupons (`/platform-admin/coupons`) with usage tracking and expiry. Specials/promotions (`/platform-admin/specials`). Message templates (`/platform-admin/message-templates`) for Email/SMS/Push with HTML/plain text editor.
+*   **Pricing Admin**: Pricing plans (`/platform-admin/pricing-plans`) with monthly/annual pricing, setup fees, trials. Products catalog (`/platform-admin/products`). Promo codes (`/platform-admin/promo-codes`) with redemption tracking. Getting started packages (`/platform-admin/getting-started-packages`) with feature lists.
+*   **Schema**: `lib/db/schema/sales-marketing.ts` — Tables: deal_funnel_stages, deals, campaigns, coupons, specials, message_templates, pricing_plans, products, product_features, promo_codes, getting_started_packages.
+*   **Repository**: `lib/db/repositories/sales-marketing.ts` — Class-based repositories for all entities.
+*   **API Routes**: Full CRUD under `/api/platform-admin/sales-pipeline/`, `/api/platform-admin/campaigns/`, `/api/platform-admin/coupons/`, `/api/platform-admin/specials/`, `/api/platform-admin/message-templates/`, `/api/platform-admin/pricing-plans/`, `/api/platform-admin/products/`, `/api/platform-admin/promo-codes/`, `/api/platform-admin/getting-started-packages/`.
 
 ## CRM Onboarding & Content System
 The platform includes a comprehensive onboarding and content management system:
