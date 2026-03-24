@@ -16,7 +16,11 @@
     "setup:dev": "cp .env.template .env.local && echo 'Please edit .env.local with your configuration'",
     "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\"",
     "generate:api-inventory": "tsx scripts/generate-api-inventory.ts",
-    "dataone:sync": "tsx scripts/dataone-weekly-sync.ts"
+    "dataone:sync": "tsx scripts/dataone-weekly-sync.ts",
+    "db:generate": "npx drizzle-kit generate",
+    "db:push": "npx drizzle-kit push --force",
+    "db:migrate:crm": "tsx scripts/apply-crm-migration.ts",
+    "db:studio": "npx drizzle-kit studio"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.18.0",
@@ -40,6 +44,8 @@
     "csv-parse": "^6.1.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.1",
     "drizzle-zod": "^0.8.3",
     "express": "^5.1.0",
     "fast-csv": "^5.0.5",
