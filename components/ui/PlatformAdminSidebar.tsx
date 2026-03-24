@@ -38,6 +38,10 @@ import {
   Headphones,
   Clock,
   MessageCircle,
+  ClipboardList,
+  Navigation,
+  Flag,
+  Link2
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -69,6 +73,11 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     "/platform-admin/time-tracking",
     "/platform-admin/call-dashboard",
     "/platform-admin/canned-messages",
+    "/platform-admin/onboarding",
+    "/platform-admin/tours",
+    "/platform-admin/guides",
+    "/platform-admin/banners",
+    "/platform-admin/content-assignments",
   ];
   const opsPaths = [
     "/platform-admin/enterprises",
@@ -226,6 +235,13 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               </ul>
             )}
           </li>
+
+          <NavLink href="/platform-admin/onboarding" icon={ClipboardList} label="Onboarding Board" />
+          <NavLink href="/platform-admin/onboarding/stages" icon={ClipboardList} label="Stages" />
+          <NavLink href="/platform-admin/tours" icon={Navigation} label="Tours" />
+          <NavLink href="/platform-admin/guides" icon={BookOpen} label="Guides" />
+          <NavLink href="/platform-admin/banners" icon={Flag} label="Banners" />
+          <NavLink href="/platform-admin/content-assignments" icon={Link2} label="Content Assignments" />
 
           {/* ─── OPS Section ─── */}
           <li>

@@ -63,3 +63,12 @@ UI pages: `/platform-admin/crm/{agencies,parent-orgs,accounts,locations,user-typ
 The platform-admin sidebar is organized into two top-level sections:
 *   **CRM** — Agencies, Parent Orgs, Accounts, Locations, User Types, Communications (Conversations, Voicemails, Call Logs, Rescue Rover)
 *   **Ops** — Enterprises/Shops, API Traffic, Partner Keys, Job Analytics, Render Logs, Support Tickets, Knowledge Base, Settings
+
+## CRM Onboarding & Content System
+The platform includes a comprehensive onboarding and content management system:
+
+*   **Onboarding Board**: A Trello-style drag-and-drop board (`/platform-admin/onboarding`) showing location cards moving through configurable onboarding stages (welcome call → go-live).
+*   **Schema**: Drizzle ORM tables in `lib/db/schema/onboarding.ts` covering: onboarding_stages, onboarding_stage_assignments, onboarding_steps, onboarding_stage_steps, onboarding_checklists, onboarding_step_checklists, onboarding_cards, onboarding_card_progress, tours, user_tour_progress, onboarding_guides_content, user_onboarding_guide_progress, workflow_sequences, user_workflow_sequence_progress, banners, user_banner_progress, user_favorites, content_assignments.
+*   **Repository Layer**: `lib/repositories/onboarding-repository.ts` with OnboardingRepository, ToursRepository, GuidesRepository, WorkflowSequencesRepository, BannersRepository, ContentAssignmentsRepository.
+*   **Admin Pages**: Stages management (`/platform-admin/onboarding/stages`), Steps with nested checklists (`/platform-admin/onboarding/steps`), Checklists (`/platform-admin/onboarding/checklists`), Tours with step editor (`/platform-admin/tours`), Guides with step editor (`/platform-admin/guides`), Banners (`/platform-admin/banners`), Content assignments to user types (`/platform-admin/content-assignments`).
+*   **API Routes**: Full CRUD under `/api/platform-admin/onboarding/`, `/api/platform-admin/tours/`, `/api/platform-admin/guides/`, `/api/platform-admin/workflow-sequences/`, `/api/platform-admin/banners/`, `/api/platform-admin/content-assignments/`.
