@@ -8,6 +8,13 @@
       "when": 1774383023531,
       "tag": "0000_fluffy_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774387911875,
+      "tag": "0001_panoramic_annihilus",
+      "breakpoints": true
     }
   ]
 }

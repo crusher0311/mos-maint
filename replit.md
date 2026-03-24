@@ -43,3 +43,22 @@ The UI adopts a modern SaaS aesthetic, characterized by a dark sidebar, light co
 *   **Vehicle History Reports**: CARFAX
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
+
+## CRM Account Hierarchy
+The platform includes a multi-tier CRM account hierarchy ported from AppFueled:
+*   **Agencies** → white-label resellers (table: `agencies`)
+*   **Parent Organizations** → enterprise groups under agencies (table: `parent_organizations`)
+*   **Accounts** → individual shop brands (table: `accounts`)
+*   **Locations** → physical addresses tied to accounts (table: `locations`)
+*   **User Types** → configurable RBAC roles with JSONB permissions and internal/external bucket classification (table: `user_types`)
+*   **Corporate Branding** → branding overrides (logo, colors, favicon) that cascade down the hierarchy (table: `corporate_branding`)
+*   **Branding Themes** → reusable theme presets (table: `branding_themes`)
+*   **Agency Pricing Packages** → pricing configuration per agency (table: `agency_pricing_packages`)
+
+Schema: `lib/db/schema/crm.ts`, Repository: `lib/db/repositories/crm.ts`
+API routes: `/api/platform-admin/crm/{agencies,parent-orgs,accounts,locations,user-types,branding}`
+UI pages: `/platform-admin/crm/{agencies,parent-orgs,accounts,locations,user-types}`
+
+The platform-admin sidebar is organized into two top-level sections:
+*   **CRM** — Agencies, Parent Orgs, Accounts, Locations, User Types, Communications (Conversations, Voicemails, Call Logs, Rescue Rover)
+*   **Ops** — Enterprises/Shops, API Traffic, Partner Keys, Job Analytics, Render Logs, Support Tickets, Knowledge Base, Settings
