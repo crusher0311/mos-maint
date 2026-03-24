@@ -61,3 +61,28 @@ The user interface features a modern SaaS design with a dark sidebar, light cont
 *   **Digital Vehicle Inspections (DVI)**: AutoFlow, AutoVitals, Tekmetric
 *   **QR Code Generation**: HoverCode API
 *   **Email Notifications**: Resend API
+*   **Voice AI**: Deepgram (STT Nova-2, TTS Aura), Twilio (Media Streams, Voice)
+*   **Telephony**: Twilio (inbound calls, WebSocket media streams, call transfer, voicemail)
+
+## Rescue Rover AI Voice Agent
+The Rescue Rover module (`lib/rescue-rover/`) is the AI-powered phone assistant for auto shops. It handles inbound calls via Twilio media streams, uses Deepgram for speech-to-text and text-to-speech, and OpenAI GPT-4o for conversational intelligence.
+
+**Architecture:**
+- **WebSocket Server** (`scripts/rescue-rover-ws-server.ts`): Standalone WebSocket server on port 3002 (configurable via `RESCUE_ROVER_WS_PORT`) for handling Twilio media streams. Launched alongside other workers via `start-with-workers.js`.
+- **Twilio Voice Webhook** (`app/api/webhooks/twilio/voice/route.ts`): Receives inbound calls, resolves shop from phone number, checks business hours, and connects to the WebSocket media stream or after-hours voicemail.
+- **Deepgram Flux STT** (`lib/rescue-rover/deepgram-flux.ts`): WebSocket-based speech recognition with Nova-2 model, mulaw 8kHz encoding, endpointing at 260ms, and utterance end detection at 1200ms.
+- **Deepgram TTS** (`lib/rescue-rover/deepgram-tts.ts`): Text-to-speech via Deepgram Aura, outputting mulaw audio chunked into 160-byte frames paced at 20ms intervals.
+- **Conversation Engine** (`lib/rescue-rover/conversation.ts`): OpenAI GPT-4o conversation loop with tool calling for customer lookup, callback scheduling, and call transfer. Builds system prompts from shop settings, safety rules, and customer context.
+- **Customer Context** (`lib/rescue-rover/customer-context.ts`): MongoDB lookup by caller phone number, retrieves vehicles and VHI scores to give the AI knowledge of the caller's maintenance needs.
+- **Safety Rules** (`lib/rescue-rover/safety-rules.ts`): Loads safety rules from Supabase with 1-minute TTL cache. Rules are injected as absolute constraints in the system prompt.
+- **Cost Tracking** (`lib/rescue-rover/cost-tracking.ts`): Estimates per-call costs for Deepgram STT/TTS and OpenAI tokens. Logs to `api_usage_logs` table.
+- **Call Logger** (`lib/rescue-rover/call-logger.ts`): Finalizes call records to `rescue_rover_call_logs` with transcript, duration, outcome, and cost estimate.
+- **Settings API** (`app/api/rescue-rover/settings/route.ts`): GET/POST for reading/writing per-shop Rescue Rover configuration (voice, greeting, hours, transfer number, etc.).
+- **Transfer & Voicemail** (`app/api/webhooks/twilio/voice/transfer-status/` and `voicemail/`): Handle call transfer to humans with ring timeout and voicemail fallback.
+
+**Environment Variables:**
+- `DEEPGRAM_API_KEY`: Required for STT and TTS
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`: Required for call transfers
+- `RESCUE_ROVER_WS_PORT`: WebSocket server port (default: 3002)
+- `RESCUE_ROVER_WS_HOST`: Full WebSocket URL override for production (e.g., `wss://ws.example.com`)
+- `DEFAULT_SHOP_ID`: Fallback shop ID when phone number lookup fails

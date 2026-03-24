@@ -20,9 +20,11 @@
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push --force",
     "db:migrate:crm": "tsx scripts/apply-crm-migration.ts",
-    "db:studio": "npx drizzle-kit studio"
+    "db:studio": "npx drizzle-kit studio",
+    "start:rescue-rover-ws": "tsx scripts/rescue-rover-ws-server.ts"
   },
   "dependencies": {
+    "@deepgram/sdk": "^5.0.0",
     "@google-cloud/storage": "^7.18.0",
     "@sparticuz/chromium": "^143.0.4",
     "@types/archiver": "^7.0.0",
@@ -32,6 +34,7 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-react": "^5.18.0",
     "@types/unzipper": "^0.10.11",
+    "@types/ws": "^8.18.1",
     "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
     "@uppy/dashboard": "^5.1.0",
@@ -76,6 +79,7 @@
     "tsx": "^4.20.5",
     "twilio": "^5.13.1",
     "unzipper": "^0.12.3",
+    "ws": "^8.20.0",
     "zod": "^4.2.1",
     "zod-validation-error": "^5.0.0"
   },
