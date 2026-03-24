@@ -50,5 +50,13 @@ export default defineConfig({
     "user_banner_progress",
     "user_favorites",
     "content_assignments",
+    "crm_contacts",
+    "crm_contact_role_types",
+    "crm_contact_agency_assignments",
+    "crm_contact_parent_org_assignments",
+    "crm_contact_account_assignments",
+    "crm_contact_location_assignments",
+    "crm_entity_notes",
+    "crm_entity_tasks",
   ],
 });

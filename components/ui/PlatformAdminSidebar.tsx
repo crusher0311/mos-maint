@@ -41,7 +41,9 @@ import {
   ClipboardList,
   Navigation,
   Flag,
-  Link2
+  Link2,
+  Contact,
+  UserCheck
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -79,6 +81,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     "/platform-admin/banners",
     "/platform-admin/content-assignments",
   ];
+  const isContactsSection = pathname?.startsWith("/platform-admin/crm/contacts") || pathname?.startsWith("/platform-admin/crm/contact-role-types");
   const opsPaths = [
     "/platform-admin/enterprises",
     "/platform-admin/shops",
@@ -207,6 +210,9 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
               </ul>
             )}
           </li>
+
+          <NavLink href="/platform-admin/crm/contacts" icon={Contact} label="Contacts" />
+          <NavLink href="/platform-admin/crm/contact-role-types" icon={UserCheck} label="Contact Roles" />
 
           {/* Communications under CRM */}
           <li>

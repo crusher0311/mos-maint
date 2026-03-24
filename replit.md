@@ -61,8 +61,16 @@ API routes: `/api/platform-admin/crm/{agencies,parent-orgs,accounts,locations,us
 UI pages: `/platform-admin/crm/{agencies,parent-orgs,accounts,locations,user-types}`
 
 The platform-admin sidebar is organized into two top-level sections:
-*   **CRM** — Agencies, Parent Orgs, Accounts, Locations, User Types, Communications (Conversations, Voicemails, Call Logs, Rescue Rover)
+*   **CRM** — Agencies, Parent Orgs, Accounts, Locations, User Types, Contacts, Contact Roles, Communications (Conversations, Voicemails, Call Logs, Rescue Rover)
 *   **Ops** — Enterprises/Shops, API Traffic, Partner Keys, Job Analytics, Render Logs, Support Tickets, Knowledge Base, Settings
+
+## CRM Contact Management
+The CRM includes a full contact management system for tracking business contacts across the account hierarchy (agencies, parent orgs, accounts, locations). Key components:
+*   **Schema**: `lib/db/schema/crm-contacts.ts` — Tables for contacts, contact_role_types, 4 assignment junction tables, entity_notes, entity_tasks
+*   **Repository**: `lib/db/repositories/crm-contacts.ts` — CRUD, search, assignment management, polymorphic entity notes/tasks
+*   **API Routes**: Under `app/api/platform-admin/crm/contacts/` and `app/api/platform-admin/crm/contact-role-types/`
+*   **Pages**: Contact list (`/platform-admin/crm/contacts`), detail view (`/platform-admin/crm/contacts/[id]`), CSV import (`/platform-admin/crm/contacts/import`), role types (`/platform-admin/crm/contact-role-types`)
+*   Entity notes and entity tasks are polymorphic — attachable to any entity type (agency, parent org, account, location, contact)
 
 ## CRM Onboarding & Content System
 The platform includes a comprehensive onboarding and content management system:
