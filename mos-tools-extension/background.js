@@ -1150,15 +1150,14 @@ function findMatchingRule(rules, vehicleData) {
 // ==================== TEKMETRIC INSPECTION FETCH ====================
 async function fetchAndRelayInspections(context) {
   await _stateReady;
-  if (!context?.roId || !context?.shopId) return;
+  if (!context?.roId) return;
   if (context.provider && context.provider !== 'tekmetric') return;
   if (!smsTokens.tekmetric) return;
   if (context.roId === lastInspectionFetchRoId) return;
 
-  lastInspectionFetchRoId = context.roId;
-
   const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return;
 
   try {
     const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
@@ -1181,7 +1180,10 @@ async function fetchAndRelayInspections(context) {
 
     console.log(`[MOS Inspections] Fetched ${inspArr.length} inspection(s) for RO ${context.roId}`);
 
-    if (!mosApiToken || !mosApiUrl) return;
+    if (!mosApiToken || !mosApiUrl) {
+      lastInspectionFetchRoId = context.roId;
+      return;
+    }
 
     const relayRes = await fetch(`${mosApiUrl}/api/extension/inspections`, {
       method: 'POST',
@@ -1201,6 +1203,7 @@ async function fetchAndRelayInspections(context) {
     if (relayRes.ok) {
       const result = await relayRes.json();
       console.log(`[MOS Inspections] Relayed inspections to MOS:`, result);
+      lastInspectionFetchRoId = context.roId;
     } else {
       console.warn(`[MOS Inspections] Failed to relay to MOS: ${relayRes.status}`);
     }

@@ -121,12 +121,16 @@ export async function POST(req: NextRequest) {
         
         if (existingWO) {
           const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
+          const DVI_LABEL_RE = /\binsp|dvi\b|\bmulti.?point|\bcourtesy.check|\bcomplimentary.check/i;
+          const dviFromLabel = newLabel && DVI_LABEL_RE.test(newLabel);
+
           const updateFields: any = { 
             status: statusName,
             statusCode: statusCode,
             label: newLabel,
             labelColor: repairOrder.color || null,
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            ...(dviFromLabel && !existingWO.dviDone ? { dviDone: true } : {}),
           };
           const newOdometer = repairOrder.milesIn || repairOrder.milesOut;
           if (newOdometer && newOdometer > 0) {
