@@ -51,7 +51,8 @@ import {
   Star,
   CreditCard,
   Percent,
-  Gift
+  Gift,
+  HeartPulse
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -85,6 +86,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
     "/platform-admin/features",
     "/platform-admin/plan-features",
     "/platform-admin/service-mappings",
+    "/platform-admin/client-health",
   ];
 
   const isOnOpsPage = opsPaths.some(p => pathname?.startsWith(p));
@@ -338,6 +340,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 </li>
               </CollapsibleSection>
 
+              <NavLink href="/platform-admin/client-health" icon={HeartPulse} label="Client Health" />
               <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />
               <NavLink href="/platform-admin/partner-keys" icon={KeyRound} label="Partner Keys" />
               <NavLink href="/platform-admin/job-analytics" icon={BarChart3} label="Job Analytics" />

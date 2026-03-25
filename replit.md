@@ -17,7 +17,8 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **Integration Mechanisms**: A modular integration layer supports various shop management systems (e.g., Tekmetric, Protractor, Shop-Ware) using adapter and facade patterns.
 *   **Authentication & Authorization**: Role-based access is implemented with bcrypt hashing and token-based authentication.
 *   **Billing & Licensing**: Stripe integration handles VIN-based billing, supports modular feature flags, and manages various plan tiers.
-*   **Admin & Monitoring**: The system includes admin audit logging, unified API usage monitoring, a support ticketing system, and a platform observability page.
+*   **Admin & Monitoring**: The system includes admin audit logging, unified API usage monitoring, a support ticketing system, a platform observability page, and a Client Health Score dashboard.
+*   **Client Health Dashboard**: A weighted health score (0-100) per shop based on billing status (25%), integration health (25%), activity recency (25%), feature adoption (15%), and support ticket status (10%). Risk levels: healthy (75+), monitor (50-74), at-risk (25-49), critical (0-24). Includes open ticket flags per shop. Located at `/platform-admin/client-health`.
 *   **Notification System**: Email notifications are handled via Resend API, complemented by in-app notifications.
 *   **AI Support Chatbot**: An OpenAI-powered floating chat widget provides instant answers and knowledge base retrieval.
 *   **Sticker & Keytag Generation**: QR codes are generated via HoverCode API, and stickers/keytags are rendered using `node-canvas` for efficient printing with Dymo label printer support.
