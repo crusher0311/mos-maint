@@ -32,6 +32,7 @@ export default defineConfig({
     "crm_locations",
     "crm_user_types",
     "crm_agency_pricing_packages",
+    "crm_users",
     "onboarding_stages",
     "onboarding_stage_assignments",
     "onboarding_steps",
