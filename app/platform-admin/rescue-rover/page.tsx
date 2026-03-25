@@ -77,7 +77,7 @@ export default function RescueRoverSettingsPage() {
     "You are Rescue Rover, a friendly and professional AI phone support assistant for MOS Tools — a SaaS platform for auto repair shops. Help clients with platform questions, account status, integration troubleshooting, and support ticket creation. Be warm, helpful, and concise."
   );
   const [greeting, setGreeting] = useState(
-    "Thank you for calling MOS Tools support! This is Rescue Rover. How can I help you today?"
+    "Hi, I'm Rescue Rover, your friendly support companion. How can I help you today?"
   );
   const [voiceId, setVoiceId] = useState("nova");
   const [speechSpeed, setSpeechSpeed] = useState(1.0);

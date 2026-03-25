@@ -275,9 +275,9 @@ export class ConversationEngine {
   private getDefaultGreeting(): string {
     const name = this.clientContext?.contactName;
     if (name) {
-      return `Hey ${name.split(" ")[0]}! Thanks for calling MOS Tools support. How can I help you today?`;
+      return `Hi ${name.split(" ")[0]}! I'm Rescue Rover, your friendly support companion. How can I help you today?`;
     }
-    return `Hello! Thanks for calling MOS Tools support. How can I help you today?`;
+    return `Hi, I'm Rescue Rover, your friendly support companion. How can I help you today?`;
   }
 
   private setupTools(): void {
