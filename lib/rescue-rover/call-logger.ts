@@ -26,6 +26,8 @@ export async function finalizeCallLog(session: CallSession): Promise<void> {
       outputTokens: session.tokensUsed.output,
     });
 
+    const summary = (session as any)._generatedSummary || null;
+
     await createCallLog({
       shopId: session.shopId,
       callSid: session.callSid,
@@ -34,7 +36,7 @@ export async function finalizeCallLog(session: CallSession): Promise<void> {
       duration: durationSeconds,
       outcome: session.outcome,
       transcription: transcriptText || null,
-      summary: null,
+      summary,
       intentDetected: session.intentDetected,
       appointmentScheduled: session.appointmentScheduled,
       transferredTo: session.transferredTo,
@@ -64,11 +66,12 @@ export async function finalizeCallLog(session: CallSession): Promise<void> {
         callerPhone: session.callerPhone,
         outcome: session.outcome,
         durationSeconds,
+        summary,
       },
     });
 
     console.log(
-      `[RescueRover] Call logged: ${session.callSid} duration=${durationSeconds}s cost=$${costEstimate.toFixed(4)} outcome=${session.outcome}`,
+      `[RescueRover] Call logged: ${session.callSid} duration=${durationSeconds}s cost=$${costEstimate.toFixed(4)} outcome=${session.outcome}${summary ? ` summary="${summary.substring(0, 80)}..."` : ""}`,
     );
   } catch (err) {
     console.error("[RescueRover] Failed to finalize call log:", err);

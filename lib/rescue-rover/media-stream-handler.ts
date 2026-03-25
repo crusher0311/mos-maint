@@ -9,6 +9,7 @@ import type { CallSession, RescueRoverConfig } from "./types";
 const FRAME_SIZE = 160;
 const PACING_INTERVAL_MS = 20;
 const DEFAULT_MAX_DURATION = 300;
+const BARGE_IN_THRESHOLD_MS = 500;
 
 interface ActiveCall {
   session: CallSession;
@@ -16,8 +17,11 @@ interface ActiveCall {
   deepgram: DeepgramFlux;
   audioQueue: Buffer[];
   isSpeaking: boolean;
+  isProcessing: boolean;
   pacingTimer: ReturnType<typeof setInterval> | null;
   callTimer: ReturnType<typeof setTimeout> | null;
+  silenceTimer: ReturnType<typeof setTimeout> | null;
+  speakingStartedAt: number;
   ws: WebSocket;
 }
 
@@ -62,9 +66,16 @@ export async function handleMediaStream(ws: WebSocket): Promise<void> {
         case "media":
           if (currentCall) {
             const audioPayload = Buffer.from(msg.media.payload, "base64");
-            if (currentCall.isSpeaking) {
-              break;
+
+            if (currentCall.isSpeaking && !currentCall.isProcessing) {
+              const elapsed = Date.now() - currentCall.speakingStartedAt;
+              if (elapsed > BARGE_IN_THRESHOLD_MS) {
+                console.log("[MediaStream] Barge-in detected, stopping playback");
+                stopAudioPlayback(currentCall);
+                currentCall.isSpeaking = false;
+              }
             }
+
             currentCall.deepgram.sendAudio(audioPayload);
           }
           break;
@@ -149,30 +160,46 @@ async function initializeCall(
       deepgram: null as any,
       audioQueue: [],
       isSpeaking: false,
+      isProcessing: false,
       pacingTimer: null,
       callTimer: null,
+      silenceTimer: null,
+      speakingStartedAt: 0,
       ws,
     };
 
     const deepgram = new DeepgramFlux({
-      onTranscript: () => {},
+      onTranscript: () => {
+        resetSilenceTimer(call);
+      },
       onEndOfTurn: async (utterance: string) => {
         console.log(`[MediaStream] Caller said: "${utterance}"`);
-        call.isSpeaking = true;
+
+        if (call.silenceTimer) {
+          clearTimeout(call.silenceTimer);
+          call.silenceTimer = null;
+        }
+
+        call.isProcessing = true;
         stopAudioPlayback(call);
+        call.isSpeaking = false;
 
         try {
           const response = await conversation.processUserInput(utterance);
           console.log(`[MediaStream] AI response: "${response}"`);
+          call.isProcessing = false;
           await speakResponse(call, response);
         } catch (err) {
           console.error("[MediaStream] Response error:", err);
+          call.isProcessing = false;
           call.isSpeaking = false;
         }
 
         if (session.outcome === "transferred" && config.transferNumber) {
           await handleTransfer(call, config.transferNumber);
         }
+
+        resetSilenceTimer(call);
       },
       onError: (err: Error) => {
         console.error("[MediaStream] Deepgram error:", err.message);
@@ -206,11 +233,35 @@ async function initializeCall(
       }, 3000);
     }, config.maxCallDuration * 1000);
 
+    resetSilenceTimer(call);
+
     return call;
   } catch (err) {
     console.error("[MediaStream] Failed to initialize call:", err);
     return null;
   }
+}
+
+function resetSilenceTimer(call: ActiveCall): void {
+  if (call.silenceTimer) {
+    clearTimeout(call.silenceTimer);
+  }
+
+  call.silenceTimer = setTimeout(async () => {
+    if (call.isSpeaking || call.isProcessing) {
+      resetSilenceTimer(call);
+      return;
+    }
+
+    console.log("[MediaStream] Silence detected, prompting caller");
+    const prompt = "Are you still there? Is there anything else I can help with?";
+    call.session.transcript.push({
+      role: "assistant",
+      content: prompt,
+      timestamp: new Date(),
+    });
+    await speakResponse(call, prompt);
+  }, 15000);
 }
 
 async function speakResponse(call: ActiveCall, text: string): Promise<void> {
@@ -220,6 +271,7 @@ async function speakResponse(call: ActiveCall, text: string): Promise<void> {
 
     call.audioQueue = frames;
     call.isSpeaking = true;
+    call.speakingStartedAt = Date.now();
     startAudioPlayback(call);
   } catch (err) {
     console.error("[MediaStream] TTS error:", err);
@@ -315,8 +367,17 @@ async function cleanupCall(
       clearTimeout(call.callTimer);
       call.callTimer = null;
     }
+    if (call.silenceTimer) {
+      clearTimeout(call.silenceTimer);
+      call.silenceTimer = null;
+    }
     stopAudioPlayback(call);
     call.deepgram.close();
+
+    const summary = await call.conversation.generateCallSummary();
+    if (summary) {
+      (call.session as any)._generatedSummary = summary;
+    }
 
     await finalizeCallLog(call.session);
 

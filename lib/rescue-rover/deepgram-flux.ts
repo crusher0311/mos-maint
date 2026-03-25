@@ -26,10 +26,23 @@ export class DeepgramFlux {
       channels: "1",
       punctuate: "true",
       interim_results: "true",
-      endpointing: "260",
-      utterance_end_ms: "1200",
+      endpointing: "300",
+      utterance_end_ms: "1000",
       vad_events: "true",
       smart_format: "true",
+      keywords: [
+        "VIN:2", "oil change:2", "brake:2", "transmission:2", "alignment:2",
+        "diagnostic:2", "check engine:2", "tire rotation:2", "coolant:2",
+        "spark plug:2", "timing belt:2", "serpentine belt:2", "radiator:2",
+        "alternator:2", "battery:2", "catalytic converter:2", "exhaust:2",
+        "suspension:2", "strut:2", "caliper:2", "rotor:2", "muffler:2",
+        "Toyota:1", "Honda:1", "Ford:1", "Chevrolet:1", "Chevy:1",
+        "Nissan:1", "Hyundai:1", "Kia:1", "BMW:1", "Mercedes:1",
+        "Subaru:1", "Mazda:1", "Volkswagen:1", "Jeep:1", "Dodge:1",
+        "RAM:1", "GMC:1", "Buick:1", "Cadillac:1", "Lexus:1", "Acura:1",
+        "appointment:1", "estimate:1", "quote:1", "warranty:1",
+        "Rescue Rover:2", "service advisor:1"
+      ].join(","),
     });
 
     const url = `${DEEPGRAM_WS_URL}?${params.toString()}`;
