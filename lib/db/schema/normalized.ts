@@ -252,6 +252,8 @@ export const normalizedVehicles = pgTable("normalized_vehicles", {
   totalServicesCount: integer("total_services_count").notNull().default(0),
   totalServicesAmount: decimal("total_services_amount", { precision: 12, scale: 2 }).notNull().default("0"),
 
+  rawData: jsonb("raw_data"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -323,6 +325,8 @@ export const normalizedCustomers = pgTable("normalized_customers", {
   loyaltyTier: text("loyalty_tier"),
 
   dedupeKey: text("dedupe_key"),
+
+  rawData: jsonb("raw_data"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -414,6 +418,8 @@ export const normalizedWorkOrders = pgTable("normalized_work_orders", {
   tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
   customFields: jsonb("custom_fields").notNull().default(sql`'{}'::jsonb`),
 
+  rawData: jsonb("raw_data"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -497,6 +503,8 @@ export const normalizedServiceJobs = pgTable("normalized_service_jobs", {
 
   tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
   customFields: jsonb("custom_fields").notNull().default(sql`'{}'::jsonb`),
+
+  rawData: jsonb("raw_data"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -584,6 +592,8 @@ export const normalizedLineItems = pgTable("normalized_line_items", {
 
   customFields: jsonb("custom_fields").notNull().default(sql`'{}'::jsonb`),
 
+  rawData: jsonb("raw_data"),
+
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -643,6 +653,8 @@ export const normalizedPayments = pgTable("normalized_payments", {
   notes: text("notes"),
 
   customFields: jsonb("custom_fields").notNull().default(sql`'{}'::jsonb`),
+
+  rawData: jsonb("raw_data"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

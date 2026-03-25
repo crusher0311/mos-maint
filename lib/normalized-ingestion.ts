@@ -30,6 +30,7 @@ import {
   INormalizedAdapter,
 } from './normalized-adapters';
 import { updateRepairPattern } from './repair-patterns';
+import { SupabaseDualWriter } from './supabase-dual-writer';
 
 // =============================================================================
 // TYPES
@@ -59,6 +60,7 @@ export interface IngestionOptions {
   createAuditLog?: boolean;
   dualWriteToJobIndex?: boolean;
   dualWriteToRepairPatterns?: boolean;
+  dualWriteToSupabase?: boolean;
 }
 
 // =============================================================================
@@ -71,6 +73,7 @@ export class NormalizedIngestionService {
   private shopId: number;
   private enterpriseId?: string;
   private options: IngestionOptions;
+  private supabaseDualWriter: SupabaseDualWriter | null = null;
   
   constructor(
     db: Db,
@@ -91,8 +94,18 @@ export class NormalizedIngestionService {
     this.options = {
       createAuditLog: true,
       dualWriteToJobIndex: true,
+      dualWriteToSupabase: true,
       ...options,
     };
+
+    if (this.options.dualWriteToSupabase) {
+      try {
+        const { getDb: getPgDb } = require('./db/drizzle');
+        this.supabaseDualWriter = new SupabaseDualWriter(getPgDb());
+      } catch (err) {
+        console.error('[DualWrite] Failed to initialize Supabase dual writer:', err instanceof Error ? err.message : err);
+      }
+    }
   }
   
   // ---------------------------------------------------------------------------
@@ -171,6 +184,10 @@ export class NormalizedIngestionService {
           }
         );
         
+        await this.dualWriteToSupabase('vehicle', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertVehicle({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        
         if (this.options.createAuditLog) {
           await this.createAuditEntry('vehicle', existing._id, 'update', mapped);
         }
@@ -209,6 +226,10 @@ export class NormalizedIngestionService {
       } as NormalizedVehicle;
       
       await collection.insertOne(newVehicle);
+      
+      await this.dualWriteToSupabase('vehicle', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertVehicle(newVehicle)
+      );
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('vehicle', newId, 'create', mapped);
@@ -284,6 +305,10 @@ export class NormalizedIngestionService {
           }
         );
         
+        await this.dualWriteToSupabase('customer', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertCustomer({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        
         if (this.options.createAuditLog) {
           await this.createAuditEntry('customer', existing._id, 'update', mapped);
         }
@@ -326,6 +351,10 @@ export class NormalizedIngestionService {
       } as NormalizedCustomer;
       
       await collection.insertOne(newCustomer);
+      
+      await this.dualWriteToSupabase('customer', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertCustomer(newCustomer)
+      );
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('customer', newId, 'create', mapped);
@@ -442,6 +471,10 @@ export class NormalizedIngestionService {
           await this.writeToRepairPatterns(sourceData, serviceJobs);
         }
         
+        await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertWorkOrder({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        
         if (this.options.createAuditLog) {
           await this.createAuditEntry('work_order', existing._id, 'update', mapped);
         }
@@ -509,6 +542,10 @@ export class NormalizedIngestionService {
       if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
         await this.writeToRepairPatterns(sourceData, serviceJobs);
       }
+      
+      await this.dualWriteToSupabase('work_order', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertWorkOrder(newWorkOrder)
+      );
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('work_order', newId, 'create', mapped);
@@ -583,6 +620,10 @@ export class NormalizedIngestionService {
           }
         );
         
+        await this.dualWriteToSupabase('service_job', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertServiceJob({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        
         return {
           success: true,
           entityType: 'service_job',
@@ -633,6 +674,10 @@ export class NormalizedIngestionService {
       } as NormalizedServiceJob;
       
       await collection.insertOne(newServiceJob);
+      
+      await this.dualWriteToSupabase('service_job', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertServiceJob(newServiceJob)
+      );
       
       return {
         success: true,
@@ -703,6 +748,10 @@ export class NormalizedIngestionService {
           }
         );
         
+        await this.dualWriteToSupabase('payment', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertPayment({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        
         return {
           success: true,
           entityType: 'payment',
@@ -739,6 +788,10 @@ export class NormalizedIngestionService {
       } as NormalizedPayment;
       
       await collection.insertOne(newPayment);
+      
+      await this.dualWriteToSupabase('payment', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertPayment(newPayment)
+      );
       
       return {
         success: true,
@@ -1264,6 +1317,22 @@ export class NormalizedIngestionService {
   // ---------------------------------------------------------------------------
   // HELPER METHODS
   // ---------------------------------------------------------------------------
+  
+  private async dualWriteToSupabase(
+    entityType: string,
+    entityId: string,
+    action: string,
+    upsertFn: () => Promise<void>
+  ): Promise<void> {
+    if (!this.supabaseDualWriter) return;
+    try {
+      await upsertFn();
+    } catch (err) {
+      console.error(
+        `[DualWrite] Supabase write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, error: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
   
   private mergeSourceIds(existing: any[], incoming: any[]): any[] {
     const merged = [...existing];

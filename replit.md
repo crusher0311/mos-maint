@@ -99,3 +99,11 @@ Six Drizzle ORM tables in Supabase PostgreSQL that mirror the core normalized Mo
 *   **Foreign Keys**: `normalized_service_jobs` → `normalized_work_orders`, `normalized_line_items` → `normalized_work_orders` + `normalized_service_jobs`, `normalized_payments` → `normalized_work_orders`
 *   **JSONB Columns**: Deeply nested objects stored as JSONB: provenance, softDelete, vinDecodeData, odometerHistory, contacts, addresses, statusHistory, technicians, payments snapshots, laborOperationCodes, componentsCodes, tags, customFields
 *   **Indexes**: 44 indexes covering shopId, enterpriseId, VIN, workOrderNumber, foreign keys, timestamps, and key lookup fields
+
+## Normalized Data Dual-Write to Supabase
+The NormalizedIngestionService now performs dual-write to both MongoDB and Supabase/PostgreSQL for the six core normalized entity types:
+*   **Dual Writer**: `lib/supabase-dual-writer.ts` — SupabaseDualWriter utility class with upsert methods for each entity type, mapping MongoDB document shapes to Drizzle insert shapes
+*   **Toggle**: `dualWriteToSupabase` flag on `IngestionOptions` interface (defaults to `true`). Set to `false` to disable Supabase writes.
+*   **Non-blocking**: Supabase write failures are logged with structured error details (entity type, ID, action, shop ID, error message) but do not fail the MongoDB write. MongoDB remains source of truth.
+*   **Raw Data**: Each table includes a `raw_data` JSONB column preserving the complete MongoDB document for full fidelity
+*   **Migration script**: `scripts/apply-normalized-tables.ts` — creates/alters tables and indexes idempotently
