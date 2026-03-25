@@ -40,6 +40,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **CRM Onboarding & Content System**: Provides a Trello-style onboarding board with configurable stages and steps, tours, guides, banners, and content assignment to user types.
 *   **Normalized Data Schema (Supabase)**: Six Drizzle ORM tables in Supabase PostgreSQL mirror core normalized MongoDB collections for vehicles, customers, work orders, service jobs, line items, and payments, including JSONB columns for nested objects and comprehensive indexing.
 *   **Normalized Data Dual-Write to Supabase**: The `NormalizedIngestionService` performs dual-writes to both MongoDB and Supabase/PostgreSQL for core normalized entity types. Supabase write failures are logged but do not block MongoDB writes.
+*   **Support Tickets Dual-Write**: Support tickets are written to both MongoDB (`support_tickets` collection) and Supabase PostgreSQL (`support_tickets` table). Both the web API route and Rescue Rover call-created tickets perform dual-writes. Supabase failures are non-blocking.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)

@@ -119,6 +119,33 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection("support_tickets").insertOne(ticket);
 
+    try {
+      const { getDb: getSupabaseDb } = await import("@/lib/db/drizzle");
+      const { supportTickets } = await import("@/lib/db/schema/support-tickets");
+      const pgDb = getSupabaseDb();
+      const validCategories = ["technical", "billing", "integration", "feature_request", "general"] as const;
+      const validPriorities = ["low", "medium", "high", "urgent"] as const;
+      const pgCategory = validCategories.includes(ticket.category as any) ? ticket.category : "general";
+      const pgPriority = validPriorities.includes(ticket.priority as any) ? ticket.priority : "medium";
+      await pgDb.insert(supportTickets).values({
+        ticketNumber: ticket.ticketNumber,
+        subject: ticket.subject,
+        description: ticket.description,
+        category: pgCategory as any,
+        priority: pgPriority as any,
+        status: "open",
+        source: "web",
+        shopId: ticket.shopId != null ? Number(ticket.shopId) : null,
+        shopName: ticket.shopName,
+        locationIdentifier: ticket.locationIdentifier,
+        userEmail: ticket.userEmail,
+        userName: ticket.userName,
+        messages: ticket.messages,
+      });
+    } catch (pgErr) {
+      console.error("Supabase ticket dual-write failed (non-blocking):", pgErr);
+    }
+
     const categoryLabels: Record<string, string> = {
       general: "General",
       billing: "Billing",

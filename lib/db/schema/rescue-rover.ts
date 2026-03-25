@@ -19,6 +19,7 @@ export const callOutcomeEnum = pgEnum("call_outcome", [
   "failed",
   "transferred",
   "callback_scheduled",
+  "ticket_created",
 ]);
 
 export const callSentimentEnum = pgEnum("call_sentiment", [

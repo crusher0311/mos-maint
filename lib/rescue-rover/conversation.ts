@@ -431,16 +431,16 @@ export class ConversationEngine {
           const db = await getMongoDb();
 
           const ticketNumber = `RR-${Date.now().toString(36).toUpperCase()}`;
-
-          await db.collection("support_tickets").insertOne({
+          const shopId = this.clientContext?.shopId || this.session.shopId;
+          const ticketData = {
             ticketNumber,
-            subject: args.subject,
-            description: args.description,
-            category: args.category,
-            priority: args.priority,
+            subject: args.subject as string,
+            description: args.description as string,
+            category: args.category as string,
+            priority: args.priority as string,
             status: "open",
             source: "rescue_rover_call",
-            shopId: this.clientContext?.shopId || this.session.shopId,
+            shopId,
             shopName: this.clientContext?.shopName || null,
             userEmail: this.clientContext?.email || null,
             userName: this.clientContext?.contactName || null,
@@ -449,7 +449,37 @@ export class ConversationEngine {
             messages: [],
             createdAt: new Date(),
             updatedAt: new Date(),
-          });
+          };
+
+          await db.collection("support_tickets").insertOne(ticketData);
+
+          try {
+            const { getDb: getSupabaseDb } = await import("@/lib/db/drizzle");
+            const { supportTickets } = await import("@/lib/db/schema/support-tickets");
+            const pgDb = getSupabaseDb();
+            const validCategories = ["technical", "billing", "integration", "feature_request", "general"];
+            const validPriorities = ["low", "medium", "high", "urgent"];
+            const pgCategory = validCategories.includes(ticketData.category) ? ticketData.category : "general";
+            const pgPriority = validPriorities.includes(ticketData.priority) ? ticketData.priority : "medium";
+            await pgDb.insert(supportTickets).values({
+              ticketNumber,
+              subject: ticketData.subject,
+              description: ticketData.description,
+              category: pgCategory as any,
+              priority: pgPriority as any,
+              status: "open",
+              source: "rescue_rover_call",
+              shopId: shopId != null ? Number(shopId) : null,
+              shopName: ticketData.shopName,
+              userEmail: ticketData.userEmail,
+              userName: ticketData.userName,
+              callerPhone: ticketData.callerPhone,
+              callSid: ticketData.callSid,
+              messages: [],
+            });
+          } catch (pgErr) {
+            console.error("[RescueRover] Supabase ticket write failed (non-blocking):", pgErr);
+          }
 
           this.session.intentDetected = "support_ticket_created";
           this.session.outcome = "ticket_created";
