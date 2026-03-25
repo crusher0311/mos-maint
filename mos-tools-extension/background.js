@@ -27,6 +27,7 @@ let lastAppliedRoId = null; // Prevent duplicate applications
 let ownJobPostInFlight = false; // Track our own POST /job calls to avoid loops
 let lastJobCount = 0; // Track job count to detect new jobs
 let laborReapplyTimer = null; // Debounce timer for re-applying after new jobs
+let lastInspectionFetchRoId = null; // Prevent duplicate inspection fetches
 
 // ==================== PERSISTENCE ====================
 // Restore all persisted state on startup as a single awaitable promise.
@@ -218,6 +219,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
       autoApplyLaborRate(currentSmsContext).catch(err => {
         console.warn("[LaborRate] Auto-apply error:", err.message);
+      });
+    }
+
+    // Fetch and relay inspections for this RO
+    if (currentSmsContext?.roId && currentSmsContext?.provider === 'tekmetric') {
+      fetchAndRelayInspections(currentSmsContext).catch(err => {
+        console.warn("[MOS Inspections] Fetch error:", err.message);
       });
     }
 
@@ -1137,6 +1145,68 @@ function findMatchingRule(rules, vehicleData) {
   }
 
   return null;
+}
+
+// ==================== TEKMETRIC INSPECTION FETCH ====================
+async function fetchAndRelayInspections(context) {
+  await _stateReady;
+  if (!context?.roId || !context?.shopId) return;
+  if (context.provider && context.provider !== 'tekmetric') return;
+  if (!smsTokens.tekmetric) return;
+  if (context.roId === lastInspectionFetchRoId) return;
+
+  lastInspectionFetchRoId = context.roId;
+
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const shopId = context.shopId || tekmetricShopId;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
+      headers: {
+        'x-auth-token': smsTokens.tekmetric,
+        'content-type': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      if (res.status !== 404) {
+        console.warn(`[MOS Inspections] Failed to fetch inspections: ${res.status}`);
+      }
+      return;
+    }
+
+    const inspections = await res.json();
+    const inspArr = Array.isArray(inspections) ? inspections : (inspections.content || inspections.data || []);
+    if (!inspArr || inspArr.length === 0) return;
+
+    console.log(`[MOS Inspections] Fetched ${inspArr.length} inspection(s) for RO ${context.roId}`);
+
+    if (!mosApiToken || !mosApiUrl) return;
+
+    const relayRes = await fetch(`${mosApiUrl}/api/extension/inspections`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mosApiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        provider: 'tekmetric',
+        smsShopId: shopId,
+        roId: context.roId,
+        vin: context.vin || null,
+        inspections: inspArr
+      })
+    });
+
+    if (relayRes.ok) {
+      const result = await relayRes.json();
+      console.log(`[MOS Inspections] Relayed inspections to MOS:`, result);
+    } else {
+      console.warn(`[MOS Inspections] Failed to relay to MOS: ${relayRes.status}`);
+    }
+  } catch (err) {
+    console.warn("[MOS Inspections] Error:", err.message);
+  }
 }
 
 async function autoApplyLaborRate(context, options = {}) {

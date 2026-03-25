@@ -599,7 +599,24 @@ export async function GET(request: NextRequest) {
           displayMiles: "$odometer",
           displayRo: "$workOrderNumber",
           workOrderId: "$workOrderId",
-          dviDone: { $ifNull: ["$dviDone", false] },
+          dviDone: {
+            $cond: {
+              if: { $eq: ["$dviDone", true] },
+              then: true,
+              else: {
+                $cond: {
+                  if: {
+                    $and: [
+                      { $ifNull: ["$label", false] },
+                      { $regexMatch: { input: { $ifNull: ["$label", ""] }, regex: /insp|dvi|multi.?point|courtesy.check|complimentary.check/i } }
+                    ]
+                  },
+                  then: true,
+                  else: false
+                }
+              }
+            }
+          },
           source: { $literal: "tekmetric" },
           displayStatus: { 
             $cond: {

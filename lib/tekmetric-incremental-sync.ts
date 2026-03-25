@@ -4,7 +4,6 @@ import {
   getVehicle, 
   getCustomer,
   getTekmetricWorkOrderStatus,
-  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -13,6 +12,34 @@ import {
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const DVI_LABEL_PATTERNS = [
+  /\binsp/i,
+  /\bdvi\b/i,
+  /\bdigital\s*vehicle\s*inspect/i,
+  /\bmulti[- ]?point/i,
+  /\bcomplimentary\s+check/i,
+  /\bcourtesy\s+check/i,
+];
+
+const DVI_JOB_NAME_PATTERNS = [
+  /\bdigital\s*(vehicle\s*)?inspect/i,
+  /\bdvi\b/i,
+  /\bmulti[- ]?point\s*inspect/i,
+  /\bcomplimentary\s*inspect/i,
+  /\bcourtesy\s*(check|inspect)/i,
+  /\bvisual\s*inspect/i,
+  /\bsafety\s*inspect/i,
+  /\bfull\s*inspect/i,
+];
+
+function inferDviFromLabelOrJobs(label: string, jobs: any[]): boolean {
+  if (label && DVI_LABEL_PATTERNS.some(p => p.test(label))) return true;
+  if (jobs && Array.isArray(jobs)) {
+    return jobs.some((j: any) => DVI_JOB_NAME_PATTERNS.some(p => p.test(j.name || "")));
+  }
+  return false;
+}
 const MAX_PAGES_PER_CYCLE = 3; // Process up to 3 pages (300 records) per shop per cycle
 const MAX_QUEUED_PAGES = 20; // Max pages to queue for later processing
 const TERMINAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
@@ -289,6 +316,13 @@ async function upsertWorkOrder(
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
 
+  const dviDetected = inferDviFromLabelOrJobs(label, (ro as any).jobs || []);
+
+  const existing = await db.collection("tekmetric_work_orders").findOne({
+    shopId: { $in: [String(shopId), Number(shopId)] },
+    workOrderId: String(ro.id)
+  });
+
   await db.collection("tekmetric_work_orders").updateOne(
     { 
       shopId: { $in: [String(shopId), Number(shopId)] },
@@ -317,22 +351,12 @@ async function upsertWorkOrder(
         completedDate: ro.completedDate,
         fetchedAt: new Date(),
         data: ro,
+        dviDone: dviDetected || (existing?.dviDone === true),
       },
-      $setOnInsert: { dviDone: false, dviCompletedAt: null, lastInspection: null }
+      $setOnInsert: { dviCompletedAt: null, lastInspection: null }
     },
     { upsert: true }
   );
-
-  try {
-    const inspections = await getRepairOrderInspections(ro.id);
-    if (inspections.length > 0) {
-      await db.collection("tekmetric_work_orders").updateOne(
-        { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: String(ro.id) },
-        { $set: { dviDone: true, dviCompletedAt: new Date() } }
-      );
-    }
-  } catch (err) {
-  }
 }
 
 async function sweepTerminalStatuses(

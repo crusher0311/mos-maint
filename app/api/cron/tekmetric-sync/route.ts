@@ -4,7 +4,6 @@ import {
   getRepairOrders, 
   getVehicle, 
   getCustomer,
-  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -29,6 +28,47 @@ function isSyncDisabled() {
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
 
+const DVI_LABEL_PATTERNS = [
+  /\binsp/i,
+  /\bdvi\b/i,
+  /\bdigital\s*vehicle\s*inspect/i,
+  /\bmulti[- ]?point/i,
+  /\bcomplimentary\s+check/i,
+  /\bcourtesy\s+check/i,
+];
+
+const DVI_COMPLETE_LABEL_PATTERNS = [
+  /\binsp.*\b(sent|complete|done|approved|reviewed)\b/i,
+  /\bdvi.*\b(sent|complete|done|approved|reviewed)\b/i,
+  /\b(sent|complete|done|approved|reviewed).*\binsp/i,
+];
+
+const DVI_JOB_NAME_PATTERNS = [
+  /\bdigital\s*(vehicle\s*)?inspect/i,
+  /\bdvi\b/i,
+  /\bmulti[- ]?point\s*inspect/i,
+  /\bcomplimentary\s*inspect/i,
+  /\bcourtesy\s*(check|inspect)/i,
+  /\bvisual\s*inspect/i,
+  /\bsafety\s*inspect/i,
+  /\bfull\s*inspect/i,
+];
+
+function inferDviFromLabel(label: string): { hasDvi: boolean; dviComplete: boolean } {
+  if (!label) return { hasDvi: false, dviComplete: false };
+  const hasDvi = DVI_LABEL_PATTERNS.some(p => p.test(label));
+  const dviComplete = DVI_COMPLETE_LABEL_PATTERNS.some(p => p.test(label));
+  return { hasDvi, dviComplete };
+}
+
+function inferDviFromJobs(jobs: any[]): boolean {
+  if (!jobs || !Array.isArray(jobs)) return false;
+  return jobs.some((job: any) => {
+    const name = job.name || "";
+    return DVI_JOB_NAME_PATTERNS.some(p => p.test(name));
+  });
+}
+
 interface TekmetricWorkOrderSnapshot {
   shopId: number | string;
   workOrderId: string;
@@ -52,6 +92,7 @@ interface TekmetricWorkOrderSnapshot {
   fetchedAt: Date;
   data?: TekmetricRepairOrderFull;
   dviDone?: boolean;
+  dviComplete?: boolean;
   inspections?: any[];
 }
 
@@ -70,6 +111,11 @@ async function upsertTekmetricWorkOrderSnapshot(
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
   
+  const labelDvi = inferDviFromLabel(label);
+  const jobsHaveDvi = inferDviFromJobs((ro as any).jobs || []);
+  const dviDetected = labelDvi.hasDvi || labelDvi.dviComplete || jobsHaveDvi;
+  const dviComplete = labelDvi.dviComplete;
+
   const snapshot: TekmetricWorkOrderSnapshot = {
     shopId,
     workOrderId: String(ro.id),
@@ -92,7 +138,8 @@ async function upsertTekmetricWorkOrderSnapshot(
     completedDate: ro.completedDate,
     fetchedAt: new Date(),
     data: ro,
-    dviDone: inspections && inspections.length > 0,
+    dviDone: dviDetected,
+    dviComplete,
     inspections: inspections || []
   };
 
@@ -101,9 +148,12 @@ async function upsertTekmetricWorkOrderSnapshot(
     workOrderId: String(ro.id)
   });
   
-  if (existing?.dviDone) {
+  if (existing?.dviDone && !dviDetected) {
     snapshot.dviDone = true;
     snapshot.inspections = existing.inspections || [];
+  }
+  if (existing?.dviComplete) {
+    snapshot.dviComplete = true;
   }
   
   await db.collection("tekmetric_work_orders").updateOne(
