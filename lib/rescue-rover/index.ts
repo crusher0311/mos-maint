@@ -4,7 +4,7 @@ export { ConversationEngine } from "./conversation";
 export { handleMediaStream } from "./media-stream-handler";
 export { finalizeCallLog } from "./call-logger";
 export { loadSafetyRules, buildSafetyPrompt, clearSafetyCache } from "./safety-rules";
-export { lookupCustomerByPhone, buildCustomerContextPrompt } from "./customer-context";
+export { lookupClientByPhone, buildClientContextPrompt } from "./client-context";
 export { estimateTotalCallCost, logApiUsage } from "./cost-tracking";
 export type {
   RescueRoverConfig,
@@ -12,6 +12,5 @@ export type {
   TranscriptEntry,
   CallOutcome,
   SafetyRule,
-  CustomerContext,
-  VehicleContext,
+  ClientContext,
 } from "./types";

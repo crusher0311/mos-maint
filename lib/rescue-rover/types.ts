@@ -48,7 +48,8 @@ export type CallOutcome =
   | "missed"
   | "failed"
   | "transferred"
-  | "callback_scheduled";
+  | "callback_scheduled"
+  | "ticket_created";
 
 export interface SafetyRule {
   id: number;
@@ -60,21 +61,29 @@ export interface SafetyRule {
   priority: number;
 }
 
-export interface CustomerContext {
-  name: string | null;
+export interface ClientContext {
+  shopId: number;
+  shopName: string | null;
+  contactName: string | null;
+  email: string | null;
   phone: string;
-  vehicles: VehicleContext[];
-}
-
-export interface VehicleContext {
-  vin: string;
-  year: number | null;
-  make: string | null;
-  model: string | null;
-  vhiScore: number | null;
-  vhiTier: string | null;
-  overdueItems: string[];
-  dueSoonItems: string[];
+  billing: {
+    status: string;
+    plan: string | null;
+    stripeCustomerId: string | null;
+  };
+  integrations: {
+    protractor: boolean;
+    tekmetric: boolean;
+    shopware: boolean;
+    autoflow: boolean;
+    carfax: boolean;
+    smsProvider: string | null;
+  };
+  enabledFeatures: string[];
+  vehicleCount: number;
+  lastActivity: Date | null;
+  openTickets: number;
 }
 
 export interface DeepgramFluxEvents {

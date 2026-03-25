@@ -2,44 +2,59 @@ import OpenAI from "openai";
 import type {
   CallSession,
   RescueRoverConfig,
-  CustomerContext,
+  ClientContext,
   SafetyRule,
   ConversationTool,
   TranscriptEntry,
 } from "./types";
 import { loadSafetyRules, buildSafetyPrompt } from "./safety-rules";
 import {
-  lookupCustomerByPhone,
-  buildCustomerContextPrompt,
-} from "./customer-context";
+  lookupClientByPhone,
+  buildClientContextPrompt,
+} from "./client-context";
 import { logApiUsage } from "./cost-tracking";
 
 const openai = new OpenAI();
 
-const DEFAULT_SYSTEM_PROMPT = `You are Rescue Rover, a friendly and knowledgeable AI phone assistant for an automotive repair shop. Your role is to:
+const DEFAULT_SYSTEM_PROMPT = `You are Rescue Rover, a friendly and knowledgeable AI phone support assistant for MOS Tools — a SaaS platform that helps auto repair shops manage vehicle maintenance recommendations, customer data, and shop operations.
 
+Your callers are shop owners, service advisors, and managers who use the MOS Tools platform. You are NOT speaking to vehicle owners or end customers.
+
+Your role is to:
 1. Greet callers warmly and professionally
-2. Answer questions about the shop's services, hours, and location
-3. Help customers understand their vehicle's maintenance needs
-4. Schedule callback requests when needed
-5. Transfer calls to human staff when you cannot help or when requested
+2. Help them with questions about the MOS Tools platform — features, settings, integrations
+3. Troubleshoot common issues with their account, integrations, or features
+4. Check their account status, billing, and integration health
+5. Create support tickets for issues that need follow-up from the team
+6. Transfer calls to the MOS support team when you cannot resolve an issue
 
 Communication style:
 - Be concise — phone conversations should be brief and clear
-- Speak naturally, as if talking to a friend
-- Use simple language, avoid technical jargon unless the caller uses it
+- Speak naturally, as if talking to a helpful colleague
+- Use simple language, avoid overly technical jargon unless the caller uses it first
 - Confirm understanding before taking action
 - Never make up information you don't have
 - Use brief affirmations like "Sure thing" or "Absolutely" to sound natural
 - When listing items, limit to 2-3 most important ones and offer to share more
 
 Important:
-- You cannot actually book appointments — only note the request for a callback
-- Always offer to transfer to a human if the caller seems frustrated or the topic is beyond your scope
-- Never discuss specific pricing or provide dollar estimates — say a service advisor will discuss that
+- Always offer to transfer to a human support team member if the caller seems frustrated or needs help beyond your capabilities
+- You cannot make changes to their account, billing, or integrations — only check status and log tickets
+- If asked about pricing or billing changes, offer to connect them with the billing team or log a ticket
 - Keep responses under 2-3 sentences when possible for natural phone conversation
 - If you hear silence for a while, ask if the caller is still there
-- End calls gracefully — confirm any actions taken and wish them a great day`;
+- End calls gracefully — confirm any actions taken and wish them a great day
+
+Platform features you should know about:
+- Vehicle Health Intelligence (VHI): Analyzes maintenance needs based on OEM schedules and service history
+- Oil Sticker / Key Tag printing: Custom sticker and keytag generation with QR codes
+- Chrome Extension "Detect Dog": Adds maintenance recommendations to shop management systems
+- Shop management integrations: Protractor, Tekmetric, Shop-Ware, AutoFlow
+- CARFAX integration: Vehicle history data
+- Auto Booking: Automated appointment scheduling
+- AI features: Smart job autocomplete, common failures advisor, customer concern assistant
+- CRM: Account management, contacts, sales pipeline
+- Communications: SMS, voice calling, email via platform`;
 
 interface ConversationMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -48,21 +63,11 @@ interface ConversationMessage {
   tool_calls?: any[];
 }
 
-interface ShopContext {
-  name: string;
-  address: string | null;
-  phone: string | null;
-  businessHours: Record<string, { open: string; close: string } | null> | null;
-  timezone: string;
-  services: string[];
-}
-
 export class ConversationEngine {
   private messages: ConversationMessage[] = [];
   private session: CallSession;
   private tools: ConversationTool[] = [];
-  private customerContext: CustomerContext | null = null;
-  private shopContext: ShopContext | null = null;
+  private clientContext: ClientContext | null = null;
   private ttsCharacters = 0;
 
   constructor(session: CallSession) {
@@ -71,19 +76,17 @@ export class ConversationEngine {
   }
 
   async initialize(): Promise<string> {
-    const [safetyRules, customerCtx, shopCtx] = await Promise.all([
+    const [safetyRules, clientCtx] = await Promise.all([
       loadSafetyRules(this.session.shopId),
-      lookupCustomerByPhone(this.session.callerPhone, this.session.shopId),
-      this.loadShopContext(),
+      lookupClientByPhone(this.session.callerPhone, this.session.shopId),
     ]);
 
-    this.customerContext = customerCtx;
-    this.shopContext = shopCtx;
-    if (customerCtx?.name) {
-      this.session.callerName = customerCtx.name;
+    this.clientContext = clientCtx;
+    if (clientCtx?.contactName) {
+      this.session.callerName = clientCtx.contactName;
     }
 
-    const systemPrompt = this.buildSystemPrompt(safetyRules, customerCtx);
+    const systemPrompt = this.buildSystemPrompt(safetyRules, clientCtx);
     this.messages = [{ role: "system", content: systemPrompt }];
 
     const greeting = this.session.config.greeting || this.getDefaultGreeting();
@@ -182,7 +185,7 @@ export class ConversationEngine {
     } catch (err) {
       console.error("[ConversationEngine] OpenAI error:", err);
       response =
-        "I'm having a little trouble right now. Would you like me to transfer you to one of our team members?";
+        "I'm having a little trouble right now. Would you like me to transfer you to the support team?";
       this.messages.push({ role: "assistant", content: response });
       this.addTranscript("assistant", response);
     }
@@ -197,7 +200,7 @@ export class ConversationEngine {
       const transcriptText = this.session.transcript
         .map(
           (t) =>
-            `[${t.role === "caller" ? "Caller" : "Rescue Rover"}] ${t.content}`,
+            `[${t.role === "caller" ? "Client" : "Rescue Rover"}] ${t.content}`,
         )
         .join("\n");
 
@@ -207,11 +210,11 @@ export class ConversationEngine {
           {
             role: "system",
             content:
-              "You are a call summarizer for an auto shop AI phone system. Write a brief, actionable summary of this phone call. Include: (1) reason for call, (2) outcome, (3) any follow-up actions needed. Keep it to 2-3 sentences. Use plain language.",
+              "You are a call summarizer for MOS Tools, an automotive SaaS platform support line. The callers are shop owners and managers who use the platform. Write a brief, actionable summary of this support call. Include: (1) reason for call, (2) outcome, (3) any follow-up actions needed. Keep it to 2-3 sentences. Use plain language.",
           },
           {
             role: "user",
-            content: `Summarize this call transcript:\n\n${transcriptText}`,
+            content: `Summarize this support call transcript:\n\n${transcriptText}`,
           },
         ],
         temperature: 0.3,
@@ -238,45 +241,9 @@ export class ConversationEngine {
     return this.session.tokensUsed;
   }
 
-  private async loadShopContext(): Promise<ShopContext | null> {
-    try {
-      const { getDb: getMongoDb } = await import("@/lib/mongo");
-      const db = await getMongoDb();
-      const shop = await db.collection("shops").findOne({
-        shopId: { $in: [this.session.shopId, String(this.session.shopId)] },
-      });
-
-      if (!shop) return null;
-
-      const services: string[] = [];
-      if (shop.enabledFeatures?.maintenance) services.push("Maintenance planning");
-      if (shop.enabledFeatures?.oil_sticker) services.push("Oil change reminders");
-      if (shop.enabledFeatures?.auto_booking) services.push("Appointment scheduling");
-      if (shop.enabledFeatures?.keytags) services.push("Key tags");
-
-      const address = shop.address
-        ? [shop.address.street, shop.address.city, shop.address.state, shop.address.zip]
-            .filter(Boolean)
-            .join(", ")
-        : shop.locationAddress || null;
-
-      return {
-        name: shop.name || `Shop ${this.session.shopId}`,
-        address,
-        phone: shop.phone || shop.phoneNumber || null,
-        businessHours: this.session.config.businessHours,
-        timezone: this.session.config.timezone,
-        services,
-      };
-    } catch (err) {
-      console.error("[ConversationEngine] Failed to load shop context:", err);
-      return null;
-    }
-  }
-
   private buildSystemPrompt(
     safetyRules: SafetyRule[],
-    customerCtx: CustomerContext | null,
+    clientCtx: ClientContext | null,
   ): string {
     const parts: string[] = [];
 
@@ -284,214 +251,264 @@ export class ConversationEngine {
       this.session.config.customInstructions || DEFAULT_SYSTEM_PROMPT,
     );
 
-    if (this.shopContext) {
-      parts.push(this.buildShopContextPrompt());
-    }
-
-    parts.push(buildCustomerContextPrompt(customerCtx));
+    parts.push(buildClientContextPrompt(clientCtx));
     parts.push(buildSafetyPrompt(safetyRules));
 
     const now = new Date();
-    parts.push(`\n## CURRENT INFO\nDate/Time: ${now.toLocaleString("en-US", { timeZone: this.session.config.timezone })}`);
+    parts.push(
+      `\n## CURRENT INFO\nDate/Time: ${now.toLocaleString("en-US", { timeZone: this.session.config.timezone })}`,
+    );
     parts.push(`Timezone: ${this.session.config.timezone}`);
-    parts.push(`Max call duration: ${this.session.config.maxCallDuration} seconds`);
+    parts.push(
+      `Max call duration: ${this.session.config.maxCallDuration} seconds`,
+    );
 
     if (this.session.config.transferNumber) {
       parts.push(
-        `Transfer number available: You can transfer the caller to a human staff member.`,
+        `Transfer number available: You can transfer the caller to the MOS support team.`,
       );
     }
 
     return parts.join("\n");
   }
 
-  private buildShopContextPrompt(): string {
-    if (!this.shopContext) return "";
-    const lines = ["\n## SHOP INFO"];
-    lines.push(`Shop Name: ${this.shopContext.name}`);
-    if (this.shopContext.address) {
-      lines.push(`Address: ${this.shopContext.address}`);
-    }
-    if (this.shopContext.phone) {
-      lines.push(`Shop Phone: ${this.shopContext.phone}`);
-    }
-    if (this.shopContext.services.length > 0) {
-      lines.push(`Services: ${this.shopContext.services.join(", ")}`);
-    }
-    if (this.shopContext.businessHours) {
-      lines.push("\nBusiness Hours:");
-      const dayOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-      for (const day of dayOrder) {
-        const hours = this.shopContext.businessHours[day];
-        if (hours) {
-          lines.push(`  ${day.charAt(0).toUpperCase() + day.slice(1)}: ${this.formatTime(hours.open)} - ${this.formatTime(hours.close)}`);
-        } else {
-          lines.push(`  ${day.charAt(0).toUpperCase() + day.slice(1)}: Closed`);
-        }
-      }
-    }
-    return lines.join("\n") + "\n";
-  }
-
-  private formatTime(time24: string): string {
-    const [h, m] = time24.split(":");
-    const hour = parseInt(h, 10);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${hour12}:${m} ${ampm}`;
-  }
-
   private getDefaultGreeting(): string {
-    const shopName = this.shopContext?.name || "our shop";
-    const name = this.customerContext?.name;
+    const name = this.clientContext?.contactName;
     if (name) {
-      return `Hello ${name.split(" ")[0]}! Thanks for calling ${shopName}. How can I help you today?`;
+      return `Hey ${name.split(" ")[0]}! Thanks for calling MOS Tools support. How can I help you today?`;
     }
-    return `Hello! Thanks for calling ${shopName}. How can I help you today?`;
+    return `Hello! Thanks for calling MOS Tools support. How can I help you today?`;
   }
 
   private setupTools(): void {
     this.tools.push({
-      name: "lookup_customer",
+      name: "lookup_account",
       description:
-        "Look up the caller's customer record, vehicles, and maintenance history. Use this when the caller asks about their vehicle or service history.",
-      parameters: {
-        type: "object",
-        properties: {
-          phone: {
-            type: "string",
-            description: "The caller's phone number",
-          },
-        },
-      },
-      handler: async () => {
-        if (this.customerContext) {
-          return buildCustomerContextPrompt(this.customerContext);
-        }
-        const ctx = await lookupCustomerByPhone(
-          this.session.callerPhone,
-          this.session.shopId,
-        );
-        if (ctx) {
-          this.customerContext = ctx;
-          return buildCustomerContextPrompt(ctx);
-        }
-        return "No customer record found for this caller.";
-      },
-    });
-
-    this.tools.push({
-      name: "check_business_hours",
-      description:
-        "Check the shop's business hours for a specific day or all days. Use when the caller asks about hours, when the shop is open, or operating schedule.",
-      parameters: {
-        type: "object",
-        properties: {
-          day: {
-            type: "string",
-            description:
-              "The day to check (e.g., 'monday', 'today', 'tomorrow', 'saturday'). Use 'all' for the full weekly schedule.",
-          },
-        },
-      },
-      handler: async (args) => {
-        if (!this.shopContext?.businessHours) {
-          return "Business hours are not configured. Please suggest the caller contact the shop directly for hours.";
-        }
-
-        const requestedDay = (args.day as string || "all").toLowerCase();
-        const hours = this.shopContext.businessHours;
-
-        if (requestedDay === "all") {
-          const dayOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-          const lines = dayOrder.map((d) => {
-            const h = hours[d];
-            return h
-              ? `${d.charAt(0).toUpperCase() + d.slice(1)}: ${this.formatTime(h.open)} - ${this.formatTime(h.close)}`
-              : `${d.charAt(0).toUpperCase() + d.slice(1)}: Closed`;
-          });
-          return `Business hours:\n${lines.join("\n")}`;
-        }
-
-        let targetDay = requestedDay;
-        if (requestedDay === "today" || requestedDay === "tomorrow") {
-          const now = new Date();
-          const offset = requestedDay === "tomorrow" ? 1 : 0;
-          const d = new Date(now.getTime() + offset * 86400000);
-          targetDay = d.toLocaleDateString("en-US", {
-            weekday: "long",
-            timeZone: this.shopContext.timezone,
-          }).toLowerCase();
-        }
-
-        const dayHours = hours[targetDay];
-        if (dayHours) {
-          return `${targetDay.charAt(0).toUpperCase() + targetDay.slice(1)}: Open ${this.formatTime(dayHours.open)} to ${this.formatTime(dayHours.close)}`;
-        }
-        return `The shop is closed on ${targetDay.charAt(0).toUpperCase() + targetDay.slice(1)}.`;
-      },
-    });
-
-    this.tools.push({
-      name: "get_shop_info",
-      description:
-        "Get the shop's name, address, phone number, and available services. Use when the caller asks where the shop is located, the shop's phone number, or what services are offered.",
+        "Look up the caller's shop account details including billing status, plan, connected integrations, enabled features, and vehicle count. Use this when the caller asks about their account, subscription, or wants to verify what's set up.",
       parameters: {
         type: "object",
         properties: {},
       },
       handler: async () => {
-        if (!this.shopContext) {
-          return "Shop information is not available.";
+        if (this.clientContext) {
+          return buildClientContextPrompt(this.clientContext);
         }
-        const info = [`Shop: ${this.shopContext.name}`];
-        if (this.shopContext.address) info.push(`Address: ${this.shopContext.address}`);
-        if (this.shopContext.phone) info.push(`Phone: ${this.shopContext.phone}`);
-        if (this.shopContext.services.length > 0) {
-          info.push(`Services: ${this.shopContext.services.join(", ")}`);
+        const ctx = await lookupClientByPhone(
+          this.session.callerPhone,
+          this.session.shopId,
+        );
+        if (ctx) {
+          this.clientContext = ctx;
+          return buildClientContextPrompt(ctx);
         }
-        return info.join("\n");
+        return "No account record found for this caller's phone number.";
       },
     });
 
     this.tools.push({
-      name: "schedule_callback",
+      name: "check_integration_status",
       description:
-        "Note a callback request from the caller. Use when they want someone to call them back about scheduling, pricing, or any topic requiring human assistance.",
+        "Check the status of the caller's shop management system integrations (Protractor, Tekmetric, Shop-Ware, AutoFlow, CARFAX). Use when they ask about sync issues, data not showing up, or integration problems.",
       parameters: {
         type: "object",
         properties: {
-          reason: {
-            type: "string",
-            description: "The reason for the callback request",
-          },
-          preferred_time: {
+          integration: {
             type: "string",
             description:
-              "When the caller would prefer to be called back (e.g., 'morning', 'afternoon', 'anytime')",
-          },
-          vehicle_info: {
-            type: "string",
-            description: "Any vehicle information mentioned (year, make, model, or VIN)",
+              "Specific integration to check (protractor, tekmetric, shopware, autoflow, carfax), or 'all' for everything",
           },
         },
-        required: ["reason"],
       },
       handler: async (args) => {
-        this.session.intentDetected = "callback_requested";
-        this.session.outcome = "callback_scheduled";
-        const parts = [`Callback request noted: ${args.reason}`];
-        if (args.preferred_time) parts.push(`Preferred time: ${args.preferred_time}`);
-        if (args.vehicle_info) parts.push(`Vehicle: ${args.vehicle_info}`);
-        parts.push("A team member will follow up.");
-        return parts.join(". ");
+        if (!this.clientContext) {
+          return "Unable to look up integration status — no account found for this caller.";
+        }
+        const integration = (
+          (args.integration as string) || "all"
+        ).toLowerCase();
+        const integrations = this.clientContext.integrations;
+
+        if (integration === "all") {
+          const lines = ["Integration Status:"];
+          lines.push(
+            `  Protractor: ${integrations.protractor ? "Connected" : "Not connected"}`,
+          );
+          lines.push(
+            `  Tekmetric: ${integrations.tekmetric ? "Connected" : "Not connected"}`,
+          );
+          lines.push(
+            `  Shop-Ware: ${integrations.shopware ? "Connected" : "Not connected"}`,
+          );
+          lines.push(
+            `  AutoFlow: ${integrations.autoflow ? "Connected" : "Not connected"}`,
+          );
+          lines.push(
+            `  CARFAX: ${integrations.carfax ? "Connected" : "Not connected"}`,
+          );
+          if (integrations.smsProvider) {
+            lines.push(`  SMS Provider: ${integrations.smsProvider}`);
+          }
+          return lines.join("\n");
+        }
+
+        const statusMap: Record<string, boolean> = {
+          protractor: integrations.protractor,
+          tekmetric: integrations.tekmetric,
+          shopware: integrations.shopware,
+          autoflow: integrations.autoflow,
+          carfax: integrations.carfax,
+        };
+
+        const isConnected = statusMap[integration];
+        if (isConnected === undefined) {
+          return `Unknown integration: ${integration}. Available: Protractor, Tekmetric, Shop-Ware, AutoFlow, CARFAX.`;
+        }
+
+        return `${integration.charAt(0).toUpperCase() + integration.slice(1)}: ${isConnected ? "Connected and configured" : "Not connected. The team can help set this up."}`;
+      },
+    });
+
+    this.tools.push({
+      name: "check_feature_status",
+      description:
+        "Check which platform features are enabled for the caller's shop. Use when they ask about specific features, why something isn't available, or what their plan includes.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+      handler: async () => {
+        if (!this.clientContext) {
+          return "Unable to check features — no account found for this caller.";
+        }
+
+        const features = this.clientContext.enabledFeatures;
+        if (features.length === 0) {
+          return "No features are currently enabled for this shop. The support team can help configure features based on the shop's plan.";
+        }
+
+        return `Enabled features for ${this.clientContext.shopName || "this shop"}:\n${features.join(", ")}\n\nPlan: ${this.clientContext.billing.plan || "Unknown"}`;
+      },
+    });
+
+    this.tools.push({
+      name: "create_support_ticket",
+      description:
+        "Create a support ticket for an issue that needs follow-up from the MOS team. Use when the caller reports a bug, needs a configuration change, or has an issue you can't resolve on the call.",
+      parameters: {
+        type: "object",
+        properties: {
+          subject: {
+            type: "string",
+            description: "Brief summary of the issue",
+          },
+          description: {
+            type: "string",
+            description:
+              "Detailed description of the problem or request, including any troubleshooting already attempted",
+          },
+          category: {
+            type: "string",
+            enum: [
+              "technical",
+              "billing",
+              "integration",
+              "feature_request",
+              "general",
+            ],
+            description: "The category of the support ticket",
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high", "urgent"],
+            description: "Priority level based on impact to the shop",
+          },
+        },
+        required: ["subject", "description", "category", "priority"],
+      },
+      handler: async (args) => {
+        try {
+          const { getDb: getMongoDb } = await import("@/lib/mongo");
+          const db = await getMongoDb();
+
+          const ticketNumber = `RR-${Date.now().toString(36).toUpperCase()}`;
+
+          await db.collection("support_tickets").insertOne({
+            ticketNumber,
+            subject: args.subject,
+            description: args.description,
+            category: args.category,
+            priority: args.priority,
+            status: "open",
+            source: "rescue_rover_call",
+            shopId: this.clientContext?.shopId || this.session.shopId,
+            shopName: this.clientContext?.shopName || null,
+            userEmail: this.clientContext?.email || null,
+            userName: this.clientContext?.contactName || null,
+            callerPhone: this.session.callerPhone,
+            callSid: this.session.callSid,
+            messages: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+
+          this.session.intentDetected = "support_ticket_created";
+          this.session.outcome = "ticket_created";
+
+          return `Support ticket ${ticketNumber} has been created. Subject: ${args.subject}. Priority: ${args.priority}. The support team will follow up.`;
+        } catch (err) {
+          console.error("[RescueRover] Failed to create ticket:", err);
+          return "I wasn't able to create the ticket in the system. Let me transfer you to the support team instead.";
+        }
+      },
+    });
+
+    this.tools.push({
+      name: "check_open_tickets",
+      description:
+        "Check the caller's existing open support tickets. Use when they ask about the status of a previous issue or want to know if there are outstanding tickets.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+      handler: async () => {
+        try {
+          const { getDb: getMongoDb } = await import("@/lib/mongo");
+          const db = await getMongoDb();
+          const shopId = this.clientContext?.shopId || this.session.shopId;
+
+          const tickets = await db
+            .collection("support_tickets")
+            .find({
+              shopId: { $in: [shopId, String(shopId)] },
+              status: { $in: ["open", "in_progress", "pending"] },
+            })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray();
+
+          if (tickets.length === 0) {
+            return "No open support tickets found for this shop.";
+          }
+
+          const lines = [`Open tickets (${tickets.length}):`];
+          for (const t of tickets) {
+            const created = new Date(t.createdAt).toLocaleDateString("en-US");
+            lines.push(
+              `  - ${t.ticketNumber || "No #"}: ${t.subject} (${t.priority || "normal"} priority, opened ${created})`,
+            );
+          }
+          return lines.join("\n");
+        } catch (err) {
+          console.error("[RescueRover] Failed to fetch tickets:", err);
+          return "Unable to retrieve ticket information right now.";
+        }
       },
     });
 
     this.tools.push({
       name: "request_transfer",
       description:
-        "Transfer the caller to a human staff member. Use when the caller explicitly asks to speak to a person, or when the topic requires human assistance.",
+        "Transfer the caller to the MOS support team. Use when the caller explicitly asks to speak to a person, when you cannot resolve their issue, or when they need account changes you can't make.",
       parameters: {
         type: "object",
         properties: {
@@ -505,8 +522,39 @@ export class ConversationEngine {
       handler: async (args) => {
         this.session.intentDetected = "transfer_requested";
         this.session.outcome = "transferred";
-        this.session.transferredTo = this.session.config.transferNumber || null;
-        return `Transfer initiated: ${args.reason}. Connecting to a team member now.`;
+        this.session.transferredTo =
+          this.session.config.transferNumber || null;
+        return `Transfer initiated: ${args.reason}. Connecting to the support team now.`;
+      },
+    });
+
+    this.tools.push({
+      name: "schedule_callback",
+      description:
+        "Schedule a callback from the MOS support team. Use when the caller needs help at a different time, or when the support team is unavailable for a transfer.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            description: "What the caller needs help with",
+          },
+          preferred_time: {
+            type: "string",
+            description:
+              "When the caller would prefer to be called back (e.g., 'morning', 'afternoon', 'anytime')",
+          },
+        },
+        required: ["reason"],
+      },
+      handler: async (args) => {
+        this.session.intentDetected = "callback_requested";
+        this.session.outcome = "callback_scheduled";
+        const parts = [`Callback request noted: ${args.reason}`];
+        if (args.preferred_time)
+          parts.push(`Preferred time: ${args.preferred_time}`);
+        parts.push("A team member will reach out.");
+        return parts.join(". ");
       },
     });
   }
@@ -520,7 +568,10 @@ export class ConversationEngine {
   }
 
   private trackTokenUsage(
-    usage: { prompt_tokens?: number; completion_tokens?: number } | null | undefined,
+    usage:
+      | { prompt_tokens?: number; completion_tokens?: number }
+      | null
+      | undefined,
   ): void {
     if (!usage) return;
     this.session.tokensUsed.input += usage.prompt_tokens || 0;

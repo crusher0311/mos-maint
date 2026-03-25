@@ -58,11 +58,11 @@ const DEFAULT_HOURS: OperatingSlot[] = [
 ];
 
 const DEFAULT_SAFETY_RULES: SafetyRule[] = [
-  { id: "s1", rule: "Never provide specific repair cost estimates without advisor approval" },
-  { id: "s2", rule: "Always recommend professional inspection for safety-related concerns" },
-  { id: "s3", rule: "Do not diagnose vehicle problems - only describe what the customer reports" },
-  { id: "s4", rule: "Transfer to a human advisor if the caller becomes upset or frustrated" },
-  { id: "s5", rule: "Never share other customers' personal information" },
+  { id: "s1", rule: "Never make changes to client accounts, billing, or integrations — only check status and log tickets" },
+  { id: "s2", rule: "Transfer to the support team if the caller becomes upset or frustrated" },
+  { id: "s3", rule: "Never share other clients' account information or data" },
+  { id: "s4", rule: "Do not provide specific pricing or billing amounts — refer billing questions to the billing team" },
+  { id: "s5", rule: "Never attempt to troubleshoot by asking the client to modify database or server settings" },
 ];
 
 export default function RescueRoverSettingsPage() {
@@ -74,10 +74,10 @@ export default function RescueRoverSettingsPage() {
   const [mode, setMode] = useState<"full" | "after_hours" | "overflow">("full");
 
   const [systemPrompt, setSystemPrompt] = useState(
-    "You are Rescue Rover, a friendly and professional AI phone assistant for an auto repair shop. Help customers with appointment scheduling, status updates, and general inquiries. Be warm, helpful, and concise."
+    "You are Rescue Rover, a friendly and professional AI phone support assistant for MOS Tools — a SaaS platform for auto repair shops. Help clients with platform questions, account status, integration troubleshooting, and support ticket creation. Be warm, helpful, and concise."
   );
   const [greeting, setGreeting] = useState(
-    "Thank you for calling! This is Rescue Rover, your virtual assistant. How can I help you today?"
+    "Thank you for calling MOS Tools support! This is Rescue Rover. How can I help you today?"
   );
   const [voiceId, setVoiceId] = useState("nova");
   const [speechSpeed, setSpeechSpeed] = useState(1.0);
@@ -87,7 +87,7 @@ export default function RescueRoverSettingsPage() {
   const [maxDuration, setMaxDuration] = useState(300);
   const [transferNumber, setTransferNumber] = useState("");
   const [voicemailGreeting, setVoicemailGreeting] = useState(
-    "Sorry we missed your call! Please leave a message and we'll get back to you as soon as possible."
+    "Thanks for calling MOS Tools support! Please leave a message and our team will get back to you as soon as possible."
   );
   const [enableTransfer, setEnableTransfer] = useState(true);
 
