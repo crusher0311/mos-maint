@@ -10,10 +10,43 @@ export const dynamic = "force-dynamic";
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
 
+function forwardWebhook(body: any, sourceHost: string) {
+  const targets = (process.env.WEBHOOK_FORWARD_TARGETS || "").split(",").map(t => t.trim()).filter(Boolean);
+  if (targets.length === 0) return;
+
+  for (const target of targets) {
+    if (sourceHost && target.includes(sourceHost)) continue;
+
+    const url = target.startsWith("http") ? target : `https://${target}/api/webhooks/tekmetric`;
+    const forwardUrl = url.includes("/api/webhooks/tekmetric") ? url : `${url}/api/webhooks/tekmetric`;
+
+    fetch(forwardUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Forwarded-From": sourceHost || "unknown",
+        "X-Webhook-Forward": "true",
+      },
+      body: JSON.stringify(body),
+    }).then(res => {
+      console.log(`[Tekmetric Webhook] Forwarded to ${forwardUrl}: ${res.status}`);
+    }).catch(err => {
+      console.warn(`[Tekmetric Webhook] Forward to ${forwardUrl} failed: ${err.message}`);
+    });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const db = await getDb();
+
+    const isForwarded = req.headers.get("x-webhook-forward") === "true";
+    const sourceHost = req.headers.get("host") || "";
+
+    if (!isForwarded) {
+      forwardWebhook(body, sourceHost);
+    }
     
     console.log("[Tekmetric Webhook] Received event:", JSON.stringify(body, null, 2).slice(0, 1000));
     
@@ -349,6 +382,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
+  const targets = (process.env.WEBHOOK_FORWARD_TARGETS || "").split(",").map(t => t.trim()).filter(Boolean);
   return NextResponse.json({ 
     status: "Tekmetric webhook endpoint active",
     events: [
@@ -358,6 +392,7 @@ export async function GET() {
       "RepairOrder.Invoiced",
       "RepairOrder.Updated"
     ],
+    forwardingTo: targets.length > 0 ? targets : "none",
     webhookUrl: process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/webhooks/tekmetric`
       : "/api/webhooks/tekmetric"
