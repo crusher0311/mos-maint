@@ -67,6 +67,9 @@ RESCUE_ROVER_ENABLED = "true"
 RESCUE_ROVER_WS_PORT = "3002"
 RESCUE_ROVER_CLIENT_IDENTITY = "rescue-rover"
 TWILIO_VALIDATE_SIGNATURE = "false"
+BETTERSTACK_QUERY_HOST = "eu-fsn-3-connect.betterstackdata.com"
+BETTERSTACK_QUERY_USERNAME = "u1mORtgs6N0od4MN40mkQ6zcYSdrA0tLS"
+BETTERSTACK_QUERY_SOURCE = "t500063_mos_production"
 
 [userenv.development]
 DEV_AUTO_LOGIN = "true"
