@@ -7,3 +7,4 @@ export * from "./crm-contacts";
 export * from "./sales-marketing";
 export * from "./normalized";
 export * from "./support-tickets";
+export * from "./logs";

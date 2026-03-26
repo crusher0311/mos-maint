@@ -1,30 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
+import { getDb as getMongoDb } from "@/lib/mongo";
+import { getDb } from "@/lib/db/drizzle";
+import { productionLogs } from "@/lib/db/schema/logs";
+import { desc, gte, ilike, inArray, and, sql } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const BETTERSTACK_HOST = process.env.BETTERSTACK_QUERY_HOST;
-const BETTERSTACK_USER = process.env.BETTERSTACK_QUERY_USERNAME;
-const BETTERSTACK_PASS = process.env.BETTERSTACK_QUERY_PASSWORD;
-const BETTERSTACK_SOURCE = process.env.BETTERSTACK_QUERY_SOURCE || "t500063_mos_production";
 
 async function isPlatformAdmin(): Promise<boolean> {
   const store = await cookies();
   const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
   if (!sid) return false;
 
-  const db = await getDb();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: new Date() } });
+  const db = await getMongoDb();
+  const sess = await db
+    .collection("sessions")
+    .findOne({ token: sid, expiresAt: { $gt: new Date() } });
   if (!sess) return false;
 
   const user = await db.collection("users").findOne({ _id: sess.userId });
   return user?.platformAdmin === true;
-}
-
-function escapeClickhouse(str: string): string {
-  return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 export async function GET(request: NextRequest) {
@@ -32,113 +28,73 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!BETTERSTACK_HOST || !BETTERSTACK_USER || !BETTERSTACK_PASS) {
-    return NextResponse.json(
-      { error: "Better Stack Query API not configured" },
-      { status: 500 }
-    );
-  }
-
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || "";
   const level = searchParams.get("level") || "";
   const source = searchParams.get("source") || "";
-  const minutes = parseInt(searchParams.get("minutes") || "60");
+  const minutes = Math.min(
+    parseInt(searchParams.get("minutes") || "60"),
+    43200,
+  );
   const limit = Math.min(parseInt(searchParams.get("limit") || "200"), 1000);
   const offset = parseInt(searchParams.get("offset") || "0");
 
-  const timeFilter = `dt >= now() - INTERVAL ${Math.min(minutes, 10080)} MINUTE`;
-
-  const conditions: string[] = [timeFilter];
-
-  if (search) {
-    conditions.push(`raw LIKE '%${escapeClickhouse(search)}%'`);
-  }
-
-  if (level) {
-    const levels = level.split(",").map((l) => `'${escapeClickhouse(l.trim())}'`).join(",");
-    conditions.push(
-      `(extractAllGroupsVertical(raw, '"level":"([^"]*)"')[1][1] IN (${levels}))`
-    );
-  }
-
-  if (source) {
-    conditions.push(
-      `raw LIKE '%"appname":"${escapeClickhouse(source)}"%'`
-    );
-  }
-
-  const whereClause = conditions.join(" AND ");
-
-  const countQuery = `SELECT count() as total FROM remote(${BETTERSTACK_SOURCE}_logs) WHERE ${whereClause} FORMAT JSONEachRow`;
-
-  const dataQuery = `SELECT dt, raw FROM remote(${BETTERSTACK_SOURCE}_logs) WHERE ${whereClause} ORDER BY dt DESC LIMIT ${limit} OFFSET ${offset} FORMAT JSONEachRow SETTINGS output_format_json_array_of_rows = 1`;
-
-  const endpoint = `https://${BETTERSTACK_HOST}?output_format_pretty_row_numbers=0`;
-  const auth = Buffer.from(`${BETTERSTACK_USER}:${BETTERSTACK_PASS}`).toString("base64");
-  const headers = {
-    Authorization: `Basic ${auth}`,
-    "Content-Type": "plain/text",
-  };
-
   try {
-    const [dataRes, countRes] = await Promise.all([
-      fetch(endpoint, { method: "POST", headers, body: dataQuery }),
-      fetch(endpoint, { method: "POST", headers, body: countQuery }),
+    const db = getDb();
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+    const conditions: any[] = [gte(productionLogs.dt, cutoff)];
+
+    if (search) {
+      conditions.push(ilike(productionLogs.message, `%${search}%`));
+    }
+
+    if (level) {
+      const levels = level.split(",").map((l) => l.trim().toLowerCase());
+      conditions.push(inArray(productionLogs.level, levels));
+    }
+
+    if (source) {
+      conditions.push(ilike(productionLogs.appname, `%${source}%`));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [logs, countResult] = await Promise.all([
+      db
+        .select()
+        .from(productionLogs)
+        .where(whereClause)
+        .orderBy(desc(productionLogs.dt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(productionLogs)
+        .where(whereClause),
     ]);
 
-    if (!dataRes.ok) {
-      const errText = await dataRes.text();
-      console.error("[BetterStack] Query error:", errText);
-      return NextResponse.json(
-        { error: "Log query failed" },
-        { status: 502 }
-      );
-    }
+    const total = Number(countResult[0]?.count || 0);
 
-    const rawData = await dataRes.text();
-    let logs: any[] = [];
-    try {
-      logs = JSON.parse(rawData || "[]");
-    } catch {
-      const lines = rawData.trim().split("\n").filter(Boolean);
-      logs = lines.map((line) => {
-        try { return JSON.parse(line); } catch { return null; }
-      }).filter(Boolean);
-    }
-
-    let total = logs.length;
-    try {
-      const countText = await countRes.text();
-      const countParsed = JSON.parse(countText.trim().split("\n")[0] || "{}");
-      total = parseInt(countParsed.total) || logs.length;
-    } catch {}
-
-    const parsed = logs.map((entry: any) => {
-      try {
-        const raw = typeof entry.raw === "string" ? JSON.parse(entry.raw) : entry.raw;
-        const message = typeof raw.message === "object"
-          ? raw.message
-          : { text: raw.message || "" };
-
-        return {
-          dt: entry.dt || raw.dt,
-          level: raw.level || "info",
-          message,
-          appname: raw.syslog?.appname || "",
-          host: raw.syslog?.host || "",
-          raw: entry.raw,
-        };
-      } catch {
-        return {
-          dt: entry.dt,
-          level: "unknown",
-          message: { text: entry.raw || "" },
-          appname: "",
-          host: "",
-          raw: entry.raw,
-        };
+    const parsed = logs.map((entry) => {
+      let message: any = { text: entry.message || "" };
+      if (entry.messageJson && typeof entry.messageJson === "object") {
+        const mj = entry.messageJson as any;
+        if (mj.message) {
+          message =
+            typeof mj.message === "object"
+              ? mj.message
+              : { text: mj.message };
+        }
       }
+
+      return {
+        dt: entry.dt?.toISOString(),
+        level: entry.level || "info",
+        message,
+        appname: entry.appname || "",
+        host: entry.host || "",
+        raw: entry.raw || entry.message,
+      };
     });
 
     return NextResponse.json({
@@ -146,13 +102,11 @@ export async function GET(request: NextRequest) {
       total,
       limit,
       offset,
+      source: "supabase",
       query: { search, level, source, minutes },
     });
   } catch (err: any) {
-    console.error("[BetterStack] Connection error:", err.message);
-    return NextResponse.json(
-      { error: "Failed to query logs" },
-      { status: 502 }
-    );
+    console.error("[Logs] Supabase query error:", err.message);
+    return NextResponse.json({ error: "Failed to query logs" }, { status: 502 });
   }
 }

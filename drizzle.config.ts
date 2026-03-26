@@ -66,5 +66,6 @@ export default defineConfig({
     "normalized_line_items",
     "normalized_payments",
     "support_tickets",
+    "production_logs",
   ],
 });

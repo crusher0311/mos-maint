@@ -137,7 +137,7 @@ export default function LogsPage() {
               </svg>
             </div>
             <h1 className="text-xl font-semibold text-white">Production Logs</h1>
-            <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Better Stack</span>
+            <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Cached (30 day retention)</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500">
@@ -203,6 +203,8 @@ export default function LogsPage() {
             <option value={1440}>Last 24 hours</option>
             <option value={4320}>Last 3 days</option>
             <option value={10080}>Last 7 days</option>
+            <option value={20160}>Last 14 days</option>
+            <option value={43200}>Last 30 days</option>
           </select>
         </div>
 
