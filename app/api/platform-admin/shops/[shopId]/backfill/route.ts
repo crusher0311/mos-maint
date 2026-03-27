@@ -67,6 +67,9 @@ async function triggerShopWareBackfill(shopId: number): Promise<{ ok: boolean; m
 async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; message: string }> {
   const db = await getDb();
 
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+
   await db.collection("tekmetric_backfill_progress").updateOne(
     { shopId },
     { 
@@ -74,6 +77,7 @@ async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; 
         shopId,
         completed: false,
         inProgress: false,
+        currentChunkEnd: now,
         queuedAt: new Date(),
         logicVersion: 2
       },
