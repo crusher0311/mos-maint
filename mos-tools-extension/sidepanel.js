@@ -1751,10 +1751,13 @@ async function loadCannedJobs() {
   elements.cannedSearch.value = '';
   
   try {
-    // Fetch from MOS enriched library (always)
+    const cannedProvider = currentContext.writeProvider || resolvedWriteProvider || currentContext.provider || '';
+    const cannedShopId = (cannedProvider === 'protractor' && currentContext.mosShopId) 
+      ? currentContext.mosShopId 
+      : currentContext.shopId;
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/canned-jobs?shopId=${currentContext.shopId}&provider=${currentContext.provider || ''}`
+      endpoint: `/api/extension/canned-jobs?shopId=${cannedShopId}&provider=${cannedProvider}`
     });
     
     // Handle error responses from MOS API
@@ -1917,7 +1920,55 @@ async function handleAddJob(job) {
     return;
   }
 
-  // Transform job data for Tekmetric
+  const effectiveWriteProvider = currentContext.writeProvider || resolvedWriteProvider || null;
+
+  if (effectiveWriteProvider === 'protractor' || currentContext.provider === 'protractor') {
+    const jobData = {
+      title: job.title || job.name,
+      description: job.note || job.description || '',
+      laborItems: (job.laborItems || job.lines?.filter(l => l.lineType === 'labor') || []).map(item => ({
+        name: item.name || item.description,
+        hours: item.hours || item.quantity || 1
+      })),
+      parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => ({
+        name: part.name || part.description,
+        partNumber: part.partNumber || '',
+        brand: part.brand || part.manufacturer || '',
+        quantity: part.quantity || 1,
+        cost: part.cost || part.unitPrice || 0,
+        retail: part.retail || part.price || part.extendedPrice || 0
+      }))
+    };
+
+    const mosShopId = currentContext.mosShopId || resolvedMosShopId || currentContext.shopId;
+
+    try {
+      const result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/jobs/add-to-ro`,
+        options: {
+          method: 'POST',
+          body: JSON.stringify({
+            shopId: Number(mosShopId),
+            roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
+            vin: currentContext.vehicle?.vin || undefined,
+            job: jobData
+          })
+        }
+      });
+
+      if (result.success) {
+        showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
+      } else {
+        throw new Error(result.error || 'Failed to add job to Protractor');
+      }
+    } catch (err) {
+      console.error('[MOS] Error adding Protractor job:', err);
+      showNotification(err.message, 'error');
+    }
+    return;
+  }
+
   const jobData = {
     name: job.title || job.name,
     laborItems: (job.laborItems || job.lines?.filter(l => l.lineType === 'labor') || []).map(item => ({
@@ -1983,13 +2034,53 @@ async function handleAddCannedJob(job) {
     return;
   }
 
-  // Get the tekmetric ID - could be in different fields
+  const effectiveWriteProvider = currentContext.writeProvider || resolvedWriteProvider || null;
+
+  if (effectiveWriteProvider === 'protractor' || currentContext.provider === 'protractor') {
+    const cannedJobId = job.tekmetricId || job.id || job.code;
+    const cannedJobTitle = job.name || job.title;
+    const mosShopId = currentContext.mosShopId || resolvedMosShopId || currentContext.shopId;
+
+    console.log('[MOS] Adding canned job via Protractor:', { cannedJobId, cannedJobTitle, mosShopId, roId: currentContext.roId });
+
+    if (cannedJobId && (job.source === 'protractor' || job.source === 'tekmetric')) {
+      try {
+        const result = await sendMessage({
+          action: 'MOS_API_REQUEST',
+          endpoint: `/api/extension/jobs/apply-canned`,
+          options: {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(mosShopId),
+              roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
+              vin: currentContext.vehicle?.vin || undefined,
+              cannedJobId: String(cannedJobId),
+              cannedJobTitle
+            })
+          }
+        });
+
+        if (result.success) {
+          showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
+        } else {
+          throw new Error(result.error || 'Failed to add canned job');
+        }
+      } catch (err) {
+        console.error('[MOS] Error adding Protractor canned job:', err);
+        showNotification(err.message || 'Failed to add canned job', 'error');
+      }
+    } else {
+      console.log('[MOS] Adding as generic Protractor job (no canned job ID)');
+      await handleAddJob(job);
+    }
+    return;
+  }
+
   const tekmetricId = job.tekmetricId || job.id;
   
   console.log('[MOS] Adding canned job:', { name: job.name, tekmetricId, source: job.source, roId: currentContext.roId });
   
   if (job.source === 'tekmetric' && tekmetricId) {
-    // Use MOS backend to add canned job via Tekmetric API
     try {
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
@@ -2012,7 +2103,6 @@ async function handleAddCannedJob(job) {
       
       showNotification(`Added: ${job.name}`, 'success');
       
-      // Trigger page refresh
       chrome.tabs.query({ url: "*://*.tekmetric.com/*" }, (tabs) => {
         for (const tab of tabs) {
           chrome.tabs.sendMessage(tab.id, { action: 'JOB_CREATED', jobName: job.name }).catch(() => {});
@@ -2023,7 +2113,6 @@ async function handleAddCannedJob(job) {
       showNotification(err.message || 'Failed to add canned job', 'error');
     }
   } else {
-    // MOS enriched job - convert to custom job
     console.log('[MOS] Adding as generic job (no tekmetricId)');
     await handleAddJob(job);
   }

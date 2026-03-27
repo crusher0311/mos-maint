@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getCannedJobs } from "@/lib/tekmetric";
+import { protractorAdapter } from "@/lib/integrations/protractor/adapter";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,60 @@ export async function GET(request: NextRequest) {
     let cannedJobs: any[] = [];
     let source = "none";
 
-    if (provider === "tekmetric" && tekmetricShopId) {
+    const hasProtractor = !!(shop?.protractor?.connectionId);
+
+    if (provider === "protractor" && hasProtractor) {
+      const ONE_HOUR = 60 * 60 * 1000;
+
+      if (!refresh) {
+        const cached = await db.collection("protractor_canned_jobs_cache").findOne({ shopId: mosShopId });
+        if (cached && cached.fetchedAt) {
+          const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
+          if (cacheAge < ONE_HOUR && cached.cannedJobs?.length > 0) {
+            cannedJobs = cached.cannedJobs;
+            source = "cache";
+            console.log(`[Extension Canned Jobs] Cache hit for Protractor shop ${mosShopId}: ${cannedJobs.length} jobs`);
+          }
+        }
+      }
+
+      if (cannedJobs.length === 0) {
+        try {
+          console.log(`[Extension Canned Jobs] Fetching from Protractor API for shop ${mosShopId}`);
+          const result = await protractorAdapter.getCannedJobs(mosShopId);
+          if (result.ok && result.data) {
+            cannedJobs = result.data.map((job: any) => ({
+              id: job.id || job.code,
+              code: job.code || job.id,
+              title: job.name || job.title || `Canned Job ${job.id}`,
+              name: job.name || job.title || `Canned Job ${job.id}`,
+              description: job.description || "",
+              category: job.category || "",
+              labor: job.labor || [],
+              parts: job.parts || [],
+              totalCost: job.totalCost || 0,
+            }));
+
+            await db.collection("protractor_canned_jobs_cache").updateOne(
+              { shopId: mosShopId },
+              {
+                $set: {
+                  shopId: mosShopId,
+                  cannedJobs,
+                  fetchedAt: new Date(),
+                }
+              },
+              { upsert: true }
+            );
+
+            source = "api";
+            console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Protractor API`);
+          }
+        } catch (err: any) {
+          console.error("[Extension Canned Jobs] Protractor API error:", err.message);
+        }
+      }
+    } else if (provider === "tekmetric" && tekmetricShopId) {
       const ONE_HOUR = 60 * 60 * 1000;
       
       if (!refresh) {
@@ -127,6 +181,8 @@ export async function GET(request: NextRequest) {
 
     const shopIntervals = shop?.maintenanceIntervals || [];
 
+    const effectiveSource = (hasProtractor && provider === "protractor") ? "protractor" : "tekmetric";
+
     const jobs = [
       ...cannedJobs.map((job: any) => ({
         id: job.id || job.code,
@@ -135,7 +191,7 @@ export async function GET(request: NextRequest) {
         description: job.description || job.note || "",
         code: job.code,
         category: job.category || job.jobCategoryCode || "",
-        source: "tekmetric",
+        source: effectiveSource,
         labor: job.labor || [],
         parts: job.parts || [],
         totalCost: job.totalCost || 0,

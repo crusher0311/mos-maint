@@ -22,6 +22,7 @@ export async function findShopBySmsId(
   
   const shopQuery: any = {
     $or: [
+      ...(isNaN(tekShopIdNum) ? [] : [{ shopId: tekShopIdNum }]),
       { "tekmetric.shopId": tekShopIdNum },
       { "tekmetric.shopId": tekShopIdStr },
       { tekmetricShopId: tekShopIdNum },
