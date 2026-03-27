@@ -93,10 +93,12 @@ async function triggerTekmetricBackfill(shopId: number): Promise<{ ok: boolean; 
       : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
     
     fetch(`${baseUrl}/api/cron/tekmetric-backfill`, {
-      method: "GET",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({ shopId }),
     }).catch(err => {
       console.log(`[Backfill] Tekmetric cron trigger note: ${err.message}`);
     });
