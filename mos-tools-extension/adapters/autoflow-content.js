@@ -24,7 +24,7 @@ function detectContext() {
     mileage: null
   };
 
-  const tenantMatch = hostname.match(/^([^.]+)\.(autotest\.me|autotext\.me|autoflow\.com)/);
+  const tenantMatch = hostname.match(/^([^.]+)\.(autotext\.me|autoflow\.com)/);
   if (tenantMatch) {
     context.shopId = tenantMatch[1];
   }
@@ -35,7 +35,9 @@ function detectContext() {
     /\/tickets?\/(\d+)/,
     /\/invoices?\/(\d+)/,
     /\/inspections?\/(\d+)/,
-    /\/dvi\/(\d+)/
+    /\/dvi[_v0-9]*\/.*[?&]status_id=(\d+)/,
+    /\/dvi\/(\d+)/,
+    /[?&](?:status_id|ticket_id|invoice_id|ro_id)=(\d+)/
   ];
   for (const pattern of ticketPatterns) {
     const m = url.match(pattern);
@@ -48,13 +50,14 @@ function detectContext() {
   try {
     const roPatterns = [
       /(?:Invoice|Ticket|RO|Work\s*Order)\s*#?\s*:?\s*(\d+)/i,
-      /(?:Invoice|Ticket)\s*(?:Number|No\.?)\s*:?\s*(\d+)/i
+      /(?:Invoice|Ticket)\s*(?:Number|No\.?)\s*:?\s*(\d+)/i,
+      /Est\/Invoice#\s*(\d+)/i
     ];
     for (const p of roPatterns) {
       const m = pageText.match(p);
       if (m) {
         context.roNumber = m[1];
-        if (!context.roId) context.roId = m[1];
+        context.roId = m[1];
         break;
       }
     }

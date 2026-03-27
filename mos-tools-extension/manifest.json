@@ -17,7 +17,6 @@
     "https://*.protractor.com/*",
     "https://*.autoflow.com/*",
     "https://*.autotext.me/*",
-    "https://*.autotest.me/*",
     "https://*.shop-ware.com/*",
     "https://*.shop-ware-api-sandbox.com/*",
     "https://mos.tools/*",
@@ -61,8 +60,7 @@
     {
       "matches": [
         "https://*.autoflow.com/*",
-        "https://*.autotext.me/*",
-        "https://*.autotest.me/*"
+        "https://*.autotext.me/*"
       ],
       "js": ["adapters/autoflow-content.js"],
       "run_at": "document_idle"
@@ -102,8 +100,7 @@
       "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png"],
       "matches": [
         "https://*.autoflow.com/*",
-        "https://*.autotext.me/*",
-        "https://*.autotest.me/*"
+        "https://*.autotext.me/*"
       ]
     }
   ]
