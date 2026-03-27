@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.22.20",
+  "version": "1.22.21",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -17,6 +17,7 @@
     "https://*.protractor.com/*",
     "https://*.autoflow.com/*",
     "https://*.autotext.me/*",
+    "https://*.autotest.me/*",
     "https://*.shop-ware.com/*",
     "https://*.shop-ware-api-sandbox.com/*",
     "https://mos.tools/*",
@@ -60,7 +61,8 @@
     {
       "matches": [
         "https://*.autoflow.com/*",
-        "https://*.autotext.me/*"
+        "https://*.autotext.me/*",
+        "https://*.autotest.me/*"
       ],
       "js": ["adapters/autoflow-content.js"],
       "run_at": "document_idle"
@@ -100,7 +102,8 @@
       "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png"],
       "matches": [
         "https://*.autoflow.com/*",
-        "https://*.autotext.me/*"
+        "https://*.autotext.me/*",
+        "https://*.autotest.me/*"
       ]
     }
   ]

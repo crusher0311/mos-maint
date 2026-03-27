@@ -24,7 +24,7 @@ function detectContext() {
     mileage: null
   };
 
-  const tenantMatch = hostname.match(/^([^.]+)\.(autotext\.me|autoflow\.com)/);
+  const tenantMatch = hostname.match(/^([^.]+)\.(autotest\.me|autotext\.me|autoflow\.com)/);
   if (tenantMatch) {
     context.shopId = tenantMatch[1];
   }
