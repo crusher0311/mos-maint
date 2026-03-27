@@ -172,11 +172,25 @@ export async function POST(request: NextRequest) {
         smsShopId = s.autoflow?.subdomain || s.autoflow?.shopId || s.autoflow?.domain || null;
       }
 
+      const integrations: string[] = [];
+      if (s.tekmetric?.shopId || s.tekmetricShopId) integrations.push("tekmetric");
+      if (s.protractor?.connectionId || s.protractorConnectionId) integrations.push("protractor");
+      if (s.shopware?.tenantId) integrations.push("shopware");
+      if (s.autoflow?.domain || s.autoflow?.subdomain || s.autoflow?.shopId) integrations.push("autoflow");
+
+      let writeProvider: string | null = null;
+      if (provider === "autoflow") {
+        const writeIntegration = integrations.find(i => i !== "autoflow");
+        if (writeIntegration) writeProvider = writeIntegration;
+      }
+
       return {
         shopId: s.shopId,
         name: s.name || s.shopName || s.tekmetric?.shopName || `Shop ${s.shopId}`,
         provider,
         smsShopId,
+        integrations,
+        writeProvider,
         plan: s.billing?.plan || "trial",
         status: s.billing?.status || "trial",
       };

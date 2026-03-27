@@ -22,7 +22,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **Notification System**: Email notifications are handled via Resend API, complemented by in-app notifications.
 *   **AI Support Chatbot**: An OpenAI-powered floating chat widget provides instant answers and knowledge base retrieval.
 *   **Sticker & Keytag Generation**: QR codes are generated via HoverCode API, and stickers/keytags are rendered using `node-canvas` for efficient printing with Dymo label printer support.
-*   **Chrome Extensions**: Extensions enhance functionality for Shop-Ware (context detection, repair order items) and "Detect Dog" (maintenance recommendations, job history, AI customer concern assistant).
+*   **Chrome Extensions**: Extensions enhance functionality for Shop-Ware (context detection, repair order items), AutoFlow (DVI context detection with multi-integration shop resolution), and "Detect Dog" (maintenance recommendations, job history, AI customer concern assistant). AutoFlow shops can have a separate write integration (e.g., Protractor) for pushing data, while reading DVI context from AutoFlow pages.
 *   **AI & Recommendations**: The system provides AI-powered maintenance recommendations, job search, smart job autocomplete, and a common failures advisor.
 *   **Work Order Creation**: A multi-step wizard facilitates creating Protractor work orders from the dashboard, integrating AI assistance and VIN/license plate recognition.
 *   **Vehicle Health Report (VHR)**: A shareable, mobile-friendly customer-facing report page displays a health score, overdue items, and a service timeline.

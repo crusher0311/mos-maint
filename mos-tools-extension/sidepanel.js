@@ -68,6 +68,9 @@ let shopFeatures = {
   labor_rates: false,
   concern_assistant: false
 };
+let mosShops = [];
+let resolvedMosShopId = null;
+let resolvedWriteProvider = null;
 let concernState = {
   concern: '',
   conversationId: null,
@@ -212,12 +215,86 @@ const elements = {
   concernError: document.getElementById('concern-error')
 };
 
+// ==================== SHOP RESOLUTION ====================
+function resolveAutoflowShop(autoflowSubdomain) {
+  if (!mosShops.length || !autoflowSubdomain) return null;
+  
+  for (const shop of mosShops) {
+    if (shop.smsShopId === autoflowSubdomain && shop.provider === 'autoflow') {
+      return shop;
+    }
+  }
+  for (const shop of mosShops) {
+    if (shop.smsShopId && shop.provider === 'autoflow' && (
+      autoflowSubdomain === shop.smsShopId.replace(/\.autotext\.me$/i, '')
+    )) {
+      return shop;
+    }
+  }
+  if (mosShops.length === 1) {
+    return mosShops[0];
+  }
+  return null;
+}
+
+function getWriteProvider(mosShopId) {
+  if (!mosShops.length || !mosShopId) return null;
+  
+  for (const shop of mosShops) {
+    if (shop.shopId === mosShopId && shop.writeProvider) {
+      return shop.writeProvider;
+    }
+  }
+  
+  for (const shop of mosShops) {
+    if (shop.shopId === mosShopId) {
+      if (shop.provider === 'tekmetric' || shop.provider === 'protractor' || shop.provider === 'shopware') {
+        return shop.provider;
+      }
+    }
+  }
+  return null;
+}
+
+function enrichContextWithMosShop(context) {
+  if (!context || context.provider !== 'autoflow') return context;
+  
+  const autoflowSubdomain = context.shopId;
+  const matchedShop = resolveAutoflowShop(autoflowSubdomain);
+  
+  if (matchedShop) {
+    resolvedMosShopId = matchedShop.shopId;
+    context.mosShopId = matchedShop.shopId;
+    context.autoflowSubdomain = autoflowSubdomain;
+    context.shopName = matchedShop.name;
+    
+    const writeProvider = getWriteProvider(matchedShop.shopId);
+    if (writeProvider && writeProvider !== 'autoflow') {
+      resolvedWriteProvider = writeProvider;
+      context.writeProvider = writeProvider;
+    }
+    
+    console.log('[MOS] AutoFlow shop resolved:', {
+      autoflowSubdomain,
+      mosShopId: matchedShop.shopId,
+      shopName: matchedShop.name,
+      readProvider: 'autoflow',
+      writeProvider: writeProvider || 'none'
+    });
+  } else {
+    console.warn('[MOS] Could not resolve AutoFlow subdomain to MOS shop:', autoflowSubdomain);
+  }
+  
+  return context;
+}
+
 // ==================== INITIALIZATION ====================
 async function init() {
   const authStatus = await sendMessage({ action: 'GET_MOS_AUTH' });
   
   if (authStatus.isAuthenticated) {
     isAuthenticated = true;
+    mosShops = authStatus.shops || [];
 
     if (authStatus.defaultExtensionTab) {
       userDefaultTab = authStatus.defaultExtensionTab;
@@ -564,6 +641,10 @@ function switchTab(tab) {
 }
 
 function updateContext(context) {
+  if (context && context.provider === 'autoflow') {
+    context = enrichContextWithMosShop(context);
+  }
+  
   const prevContext = currentContext;
   currentContext = context;
   
@@ -661,6 +742,18 @@ async function fetchShopFeatures() {
     if (result && result.features) {
       shopFeatures = result.features;
       updateTabAccessibility();
+      
+      if (result.shopId && currentContext) {
+        currentContext.mosShopId = result.shopId;
+        resolvedMosShopId = result.shopId;
+      }
+      if (result.writeProvider && currentContext) {
+        resolvedWriteProvider = result.writeProvider;
+        currentContext.writeProvider = result.writeProvider;
+      }
+      if (result.integrations && currentContext) {
+        currentContext.integrations = result.integrations;
+      }
     } else if (result && result.error) {
       console.error('[MOS] Features API error:', result.error);
     }
@@ -751,6 +844,7 @@ async function handleLogin(e) {
     
     if (result.success) {
       isAuthenticated = true;
+      mosShops = result.shops || [];
 
       if (result.user?.defaultExtensionTab) {
         userDefaultTab = result.user.defaultExtensionTab;

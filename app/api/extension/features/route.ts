@@ -28,10 +28,11 @@ export async function GET(request: NextRequest) {
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     let mosShopId: number | null = null;
+    let shopResult: Awaited<ReturnType<typeof findShopBySmsId>> = null;
     
     if (smsShopId) {
       const provider = searchParams.get("provider") || undefined;
-      const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
+      shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
       }
@@ -58,9 +59,27 @@ export async function GET(request: NextRequest) {
 
     const entitlements = await getFeatureEntitlements(mosShopId);
 
+    let integrations: string[] = [];
+    let writeProvider: string | null = null;
+    if (shopResult) {
+      const shopDoc = shopResult.shopDoc;
+      if (shopDoc.tekmetric?.shopId || shopDoc.tekmetricShopId) integrations.push("tekmetric");
+      if (shopDoc.protractor?.connectionId || shopDoc.protractorConnectionId) integrations.push("protractor");
+      if (shopDoc.shopware?.tenantId) integrations.push("shopware");
+      if (shopDoc.autoflow?.domain || shopDoc.autoflow?.subdomain || shopDoc.autoflow?.shopId) integrations.push("autoflow");
+      
+      const provider = searchParams.get("provider");
+      if (provider === "autoflow") {
+        const writeInt = integrations.find(i => i !== "autoflow");
+        if (writeInt) writeProvider = writeInt;
+      }
+    }
+
     return NextResponse.json({ 
       features: entitlements.effectiveFeatures,
       shopId: mosShopId,
+      integrations,
+      writeProvider,
       billing: {
         plan: entitlements.billing.plan,
         status: entitlements.billing.status

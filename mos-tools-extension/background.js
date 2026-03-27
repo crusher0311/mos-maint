@@ -5,6 +5,7 @@
 let mosApiToken = null;
 let mosApiUrl = null;
 let currentSmsContext = null;
+let mosShops = [];
 
 // SMS-specific session tokens (memory-only for security)
 const smsTokens = {
@@ -35,7 +36,7 @@ let lastInspectionFetchRoId = null; // Prevent duplicate inspection fetches
 // chrome.storage callbacks complete (e.g. after service worker restart).
 const _stateReady = Promise.all([
   new Promise(resolve => {
-    chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser'], (result) => {
+    chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser', 'mosShops'], (result) => {
       if (result.mosApiToken) {
         mosApiToken = result.mosApiToken;
         console.log("[MOS] Restored API token from storage");
@@ -43,6 +44,10 @@ const _stateReady = Promise.all([
       if (result.mosApiUrl) {
         mosApiUrl = result.mosApiUrl;
         console.log("[MOS] Restored API URL:", mosApiUrl);
+      }
+      if (result.mosShops) {
+        mosShops = result.mosShops;
+        console.log("[MOS] Restored shops:", mosShops.length);
       }
       resolve();
     });
@@ -183,19 +188,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "MOS_LOGOUT") {
     mosApiToken = null;
-    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosLoginEmail', 'mosLoginPass', 'mosRememberMe']);
+    mosShops = [];
+    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosShops', 'mosLoginEmail', 'mosLoginPass', 'mosRememberMe']);
     sendResponse({ success: true });
     return false;
   }
 
   if (message.action === "GET_MOS_AUTH") {
     _stateReady.then(() => {
-      chrome.storage.local.get(['mosUser'], (result) => {
+      chrome.storage.local.get(['mosUser', 'mosShops'], (result) => {
         sendResponse({
           isAuthenticated: !!mosApiToken,
           apiUrl: mosApiUrl,
           defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
-          shopwareAddMode: result.mosUser?.shopwareAddMode || null
+          shopwareAddMode: result.mosUser?.shopwareAddMode || null,
+          shops: result.mosShops || [],
+          user: result.mosUser || null
         });
       });
     });
@@ -677,10 +685,13 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
     const data = await response.json();
     mosApiToken = data.token;
     
+    mosShops = data.shops || [];
+    
     const storageData = {
       mosApiToken: data.token,
       mosApiUrl: mosApiUrl,
       mosUser: data.user,
+      mosShops: mosShops,
       mosRememberMe: rememberMe
     };
     
@@ -709,7 +720,7 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
       console.warn("[MOS] Token verify fetch failed:", e.message);
     }
 
-    return { success: true, user: data.user };
+    return { success: true, user: data.user, shops: data.shops || [] };
   } catch (err) {
     console.error("[MOS] Login error:", err);
     throw err;
