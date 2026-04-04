@@ -59,7 +59,7 @@ export default function ForgotForm() {
       </button>
 
       {msg && <div className="text-sm whitespace-pre-wrap">{msg}</div>}
-      {resetUrl && (
+      {resetUrl && process.env.NODE_ENV !== "production" && (
         <div className="space-y-2 text-sm">
           <div>Dev reset URL (copy):</div>
           <input className="w-full border rounded p-2" value={resetUrl} readOnly />

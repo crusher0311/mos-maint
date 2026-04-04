@@ -99,8 +99,9 @@ export async function POST(req: NextRequest) {
       usedAt: null,
     });
 
-    // Build the reset URL
-    const base = process.env.PUBLIC_BASE_URL || req.nextUrl.origin;
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+    const proto = req.headers.get("x-forwarded-proto") || "https";
+    const base = process.env.PUBLIC_BASE_URL || `${proto}://${host}`;
     const resetUrl = `${base}/reset?token=${token}`;
 
     // Try to send an email (non-blocking for success)
@@ -111,11 +112,12 @@ export async function POST(req: NextRequest) {
       console.warn("sendEmail failed:", e);
     }
 
+    const isDev = process.env.NODE_ENV !== "production";
     return NextResponse.json({
       ok: true,
-      resetUrl,
+      ...(isDev ? { resetUrl } : {}),
       expiresAt,
-      note, // includes the soft hint only when applicable
+      note,
     });
   } catch (e: any) {
     return NextResponse.json(
