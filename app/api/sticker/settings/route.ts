@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
       phone: shop.phone || "",
       appointmentUrl: shop.websiteUrl || "",
       colors: { 
-        primary: "#1976d2", 
+        primary: "#111111", 
         text: "#ffffff",
         background: "#ffffff",
         phoneColor: "#000000",

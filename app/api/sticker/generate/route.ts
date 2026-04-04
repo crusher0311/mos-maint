@@ -147,7 +147,7 @@ async function createHovercodeQR(
   url: string,
   options: { size?: number; color?: string; backgroundColor?: string; displayName?: string } = {}
 ): Promise<HovercodeCreateResult | null> {
-  const { size = 300, color = "#1976d2", backgroundColor = "#ffffff", displayName } = options;
+  const { size = 300, color = "#111111", backgroundColor = "#ffffff", displayName } = options;
 
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
     console.error("[Sticker Generate] HoverCode credentials not configured");
@@ -352,7 +352,7 @@ export async function POST(req: NextRequest) {
     let qrDataUrl: string | null = null;
     if (includeQR) {
       const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-      const qrColor = config.colors?.primary || "#1976d2";
+      const qrColor = config.colors?.primary || "#111111";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       

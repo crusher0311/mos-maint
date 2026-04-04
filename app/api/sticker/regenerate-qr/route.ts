@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
     const config = shop.stickerConfig || {};
     const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
-    const qrColor = config.colors?.primary || "#1976d2";
+    const qrColor = config.colors?.primary || "#111111";
     const qrBgColor = config.colors?.background || "#ffffff";
     const shopName = shop.name || `Shop ${shopId}`;
 

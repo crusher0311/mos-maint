@@ -144,7 +144,7 @@ async function generateStyledQR(
 ): Promise<Buffer> {
   const {
     size = 300,
-    color = "#000000",
+    color = "#111111",
     backgroundColor = "#ffffff",
     includeLogo = true,
   } = options;
@@ -273,7 +273,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const size = parseInt(searchParams.get("size") || "300", 10);
-  const color = searchParams.get("color") || "#000000";
+  const color = searchParams.get("color") || "#111111";
   const backgroundColor = searchParams.get("backgroundColor") || "#ffffff";
   const includeLogo = searchParams.get("includeLogo") !== "false";
 
@@ -339,7 +339,7 @@ export async function POST(req: NextRequest) {
     const {
       customUrl,
       size = 300,
-      color = "#000000",
+      color = "#111111",
       backgroundColor = "#ffffff",
       includeLogo = true,
     } = body;

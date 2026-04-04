@@ -40,7 +40,7 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
         dynamic: true,
         pattern: "Squares",
         size: 300,
-        primary_color: "#000000",
+        primary_color: "#111111",
         background_color: "#ffffff",
         logo_image: logoUrl,
         logo_size: 0.25,

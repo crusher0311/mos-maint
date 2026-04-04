@@ -238,7 +238,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<string | nul
   }
 }
 
-async function fallbackQRGeneration(url: string, color: string = "#1976d2"): Promise<string> {
+async function fallbackQRGeneration(url: string, color: string = "#111111"): Promise<string> {
   return await QRCode.toDataURL(url, {
     width: 300,
     margin: 2,
@@ -677,7 +677,7 @@ export async function POST(request: NextRequest) {
 
     let qrDataUrl: string | null = null;
     const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(mosShopId!);
-    const qrColor = stickerConfig.colors?.primary || "#1976d2";
+    const qrColor = stickerConfig.colors?.primary || "#111111";
 
     if (stickerConfig.hovercodeQRId && mosShopId) {
       try {
