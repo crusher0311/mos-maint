@@ -458,9 +458,10 @@ export async function POST(req: NextRequest) {
         useKilometers: config.useKilometers,
         roundMileage: config.roundMileage,
       };
-      const useKilometers = dataConfig.useKilometers ?? false;
+      const useKilometers = body.useKilometers ?? dataConfig.useKilometers ?? false;
+      const useHours = body.useHours ?? false;
       const roundMileage = dataConfig.roundMileage ?? true;
-      const distanceUnit = useKilometers ? "km" : "mi";
+      const distanceUnit = useHours ? "hrs" : useKilometers ? "km" : "mi";
       const formattedDate = body.nextServiceDate
         ? new Date(body.nextServiceDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         : "";
