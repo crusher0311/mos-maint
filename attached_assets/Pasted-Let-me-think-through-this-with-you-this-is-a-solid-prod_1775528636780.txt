@@ -1,0 +1,37 @@
+Let me think through this with you — this is a solid product opportunity sitting right at the intersection of your existing platform and advisor workflow.
+The Core Problem You’re Solving
+Service advisors lose time and accuracy at three moments:
+	1.	Translating a diagnosis into a written estimate (wording, labor ops, pricing)
+	2.	Sourcing the right parts (wrong part number, wrong application, wrong supplier)
+	3.	Connecting those two things — the estimate and the parts quote — into something coherent fast
+
+Feature Concept: “Estimate Assist” inside Detect Dog
+Here’s how it could work as a layered feature:
+Layer 1 — Smart Job Builder
+	∙	Advisor selects (or types) the repair job — e.g., “front brake service”
+	∙	Detect Dog, already knowing the VIN/year/make/model from the sticker/VHI data, auto-populates:
+	∙	Standard labor description (professional, customer-friendly language)
+	∙	Estimated flat-rate labor hours (pulling from a labor guide or your own baseline)
+	∙	Flagged related jobs to upsell (e.g., brake fluid if doing brakes)
+Layer 2 — PartsTech Integration
+	∙	Once the job is built, a “Source Parts” button fires a pre-filled PartsTech query using the decoded VIN data you already have
+	∙	No re-keying year/make/model — it flows through
+	∙	Results surface directly in the estimate builder with price/availability
+	∙	Advisor picks the part, it locks into the estimate line item
+Layer 3 — AI-Assisted Estimate Language
+	∙	Claude (or your own prompt layer) rewrites the estimate line in customer-friendly language automatically
+	∙	Advisor can toggle between “technical” and “customer-facing” language
+	∙	Catches missing information before the estimate goes out (e.g., “you added labor but no part”)
+
+Why This Works in Your Stack
+You already have the hardest part: VIN-decoded vehicle data tied to a customer record. That’s what makes PartsTech lookups accurate — wrong VIN application is the #1 source of bad parts orders. Most shops are re-keying that data every time. You’d eliminate that entirely.
+The MOS sticker/VHI is already the first touchpoint. Estimate Assist becomes the second touchpoint — you’re not just reminding them the car exists, you’re helping them act on it.
+
+Competitive Angle vs. Detect Auto
+If Detect Auto doesn’t have deep PartsTech integration or an AI estimate layer, this is a meaningful differentiation — especially for independent shops and small MSOs who don’t have dedicated parts managers. You’re giving a 2-person shop the workflow efficiency of a 5-person operation.
+
+Questions Worth Answering Before Building
+	1.	Does PartsTech have a public API you can hit, or would this require a partnership/reseller arrangement? Worth checking their developer docs — some integrations go through a distributor layer.
+	2.	What’s your current data model for vehicle records? If VIN is already stored and decoded, Layer 2 is mostly plumbing.
+	3.	Is the estimate written inside MOS Tools, or does it go into their shop management system (SMS)? If it’s SMS-native (Mitchell, Tekmetric, etc.), you may want this to be a copy-paste assist rather than a full builder.
+What’s the current workflow when a shop advisor actually uses Detect Dog day-to-day — where does the estimate get written?​​​​​​​​​​​​​​​​
