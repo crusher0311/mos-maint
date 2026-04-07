@@ -133,6 +133,16 @@
           </svg>
           <span>Concern</span>
         </button>
+        <button class="tab-btn" data-tab="estimate" title="Estimate Assist">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Estimate</span>
+        </button>
         <button class="tab-btn" data-tab="sticker" data-feature="oil_sticker" title="Oil Sticker">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -586,6 +596,54 @@
           
           <div id="sticker-disabled" class="panel-empty hidden">
             <p>Printing features are not enabled for your shop. Contact your administrator to enable them.</p>
+          </div>
+        </div>
+
+        <!-- Estimate Assist tab -->
+        <div id="tab-estimate" class="tab-panel hidden">
+          <div class="estimate-container" style="padding: 12px;">
+            <div class="estimate-subtabs" style="display:flex; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--gray-200); padding-bottom:8px;">
+              <button class="estimate-subtab active" data-subtab="builder" style="padding:6px 12px; font-size:12px; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; color:var(--gray-500);">Job Builder</button>
+              <button class="estimate-subtab" data-subtab="audit" style="padding:6px 12px; font-size:12px; font-weight:600; border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; color:var(--gray-500);">Audit RO</button>
+            </div>
+
+            <!-- Job Builder Sub-tab -->
+            <div id="estimate-builder-panel">
+              <div style="margin-bottom:8px;">
+                <input type="text" id="estimate-job-search" class="input-modern" placeholder="Search job... (e.g., brake pads, oil change)" style="width:100%; margin-bottom:6px;">
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                  <button id="estimate-lang-customer" class="btn-secondary" style="flex:1; font-size:11px; padding:4px 8px; background:var(--primary); color:white; border-color:var(--primary);">Customer</button>
+                  <button id="estimate-lang-technical" class="btn-secondary" style="flex:1; font-size:11px; padding:4px 8px;">Technical</button>
+                </div>
+                <button id="estimate-build-btn" class="btn-primary" style="width:100%; padding:8px; font-size:13px;">
+                  Build Estimate Line
+                </button>
+              </div>
+              <div id="estimate-builder-loading" class="panel-loading hidden" style="padding:20px 0;">
+                <div class="spinner-small"></div>
+                <span>Building estimate...</span>
+              </div>
+              <div id="estimate-builder-result" class="hidden" style="margin-top:8px;"></div>
+            </div>
+
+            <!-- Audit Sub-tab -->
+            <div id="estimate-audit-panel" class="hidden">
+              <div style="margin-bottom:8px;">
+                <p style="font-size:12px; color:var(--gray-500); margin-bottom:8px;">Audit the current repair order for missing parts, labor, companion services, and pricing anomalies.</p>
+                <button id="estimate-audit-btn" class="btn-primary" style="width:100%; padding:8px; font-size:13px;">
+                  Audit Current RO
+                </button>
+              </div>
+              <div id="estimate-audit-loading" class="panel-loading hidden" style="padding:20px 0;">
+                <div class="spinner-small"></div>
+                <span>Auditing estimate...</span>
+              </div>
+              <div id="estimate-audit-result" class="hidden" style="margin-top:8px;"></div>
+            </div>
+
+            <div id="estimate-empty" class="panel-empty hidden">
+              <p>Navigate to a repair order to use Estimate Assist.</p>
+            </div>
           </div>
         </div>
 

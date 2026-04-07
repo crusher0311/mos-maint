@@ -535,6 +535,7 @@ function switchTab(tab) {
     'canned': null,
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
+    'estimate': null,
     'sticker': 'oil_sticker',
     'specs': null
   };
@@ -3829,6 +3830,395 @@ function hideConcernError() {
   }
 }
 
+// ==================== ESTIMATE ASSIST ====================
+let estimateLanguageMode = 'customer';
+
+function escEstimate(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function initEstimateAssist() {
+  const jobSearchInput = document.getElementById('estimate-job-search');
+  const buildBtn = document.getElementById('estimate-build-btn');
+  const langCustomerBtn = document.getElementById('estimate-lang-customer');
+  const langTechnicalBtn = document.getElementById('estimate-lang-technical');
+  const auditBtn = document.getElementById('estimate-audit-btn');
+  const subtabs = document.querySelectorAll('.estimate-subtab');
+
+  subtabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      subtabs.forEach(b => {
+        b.classList.remove('active');
+        b.style.borderBottomColor = 'transparent';
+        b.style.color = 'var(--gray-500)';
+      });
+      btn.classList.add('active');
+      btn.style.borderBottomColor = 'var(--primary)';
+      btn.style.color = 'var(--primary)';
+
+      const subtab = btn.dataset.subtab;
+      document.getElementById('estimate-builder-panel').classList.toggle('hidden', subtab !== 'builder');
+      document.getElementById('estimate-audit-panel').classList.toggle('hidden', subtab !== 'audit');
+    });
+  });
+
+  const activeSubtab = document.querySelector('.estimate-subtab.active');
+  if (activeSubtab) {
+    activeSubtab.style.borderBottomColor = 'var(--primary)';
+    activeSubtab.style.color = 'var(--primary)';
+  }
+
+  langCustomerBtn.addEventListener('click', () => {
+    estimateLanguageMode = 'customer';
+    langCustomerBtn.style.background = 'var(--primary)';
+    langCustomerBtn.style.color = 'white';
+    langCustomerBtn.style.borderColor = 'var(--primary)';
+    langTechnicalBtn.style.background = '';
+    langTechnicalBtn.style.color = '';
+    langTechnicalBtn.style.borderColor = '';
+  });
+
+  langTechnicalBtn.addEventListener('click', () => {
+    estimateLanguageMode = 'technical';
+    langTechnicalBtn.style.background = 'var(--primary)';
+    langTechnicalBtn.style.color = 'white';
+    langTechnicalBtn.style.borderColor = 'var(--primary)';
+    langCustomerBtn.style.background = '';
+    langCustomerBtn.style.color = '';
+    langCustomerBtn.style.borderColor = '';
+  });
+
+  buildBtn.addEventListener('click', () => runEstimateBuilder());
+  jobSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') runEstimateBuilder();
+  });
+
+  auditBtn.addEventListener('click', () => runEstimateAudit());
+}
+
+async function runEstimateBuilder() {
+  const query = document.getElementById('estimate-job-search').value.trim();
+  if (!query) return;
+
+  const loadingEl = document.getElementById('estimate-builder-loading');
+  const resultEl = document.getElementById('estimate-builder-result');
+  
+  loadingEl.classList.remove('hidden');
+  resultEl.classList.add('hidden');
+  resultEl.innerHTML = '';
+
+  try {
+    const vin = currentContext?.vehicle?.vin || undefined;
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/job-builder',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          jobNameOrId: query,
+          vin: vin,
+          languageMode: estimateLanguageMode
+        })
+      }
+    });
+
+    loadingEl.classList.add('hidden');
+
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.estimate) throw new Error('No estimate returned');
+
+    const est = result.estimate;
+    const desc = estimateLanguageMode === 'customer' ? est.customerDescription : est.technicalDescription;
+    
+    let html = `
+      <div style="background:white; border:1px solid var(--gray-200); border-radius:8px; padding:12px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px; flex-wrap:wrap;">
+          <span style="font-size:10px; padding:2px 6px; background:var(--gray-100); border-radius:10px; color:var(--gray-600);">${escEstimate(est.category)}</span>
+          ${est.safetyRelated ? '<span style="font-size:10px; padding:2px 6px; background:#fef2f2; border-radius:10px; color:#dc2626;">Safety</span>' : ''}
+          ${est.aiEnhanced ? '<span style="font-size:10px; padding:2px 6px; background:#f5f3ff; border-radius:10px; color:#7c3aed;">AI</span>' : ''}
+        </div>
+        <h4 style="font-size:14px; font-weight:700; margin:0 0 6px 0; color:var(--gray-900);">${escEstimate(est.title)}</h4>
+        <p style="font-size:12px; color:var(--gray-600); margin:0 0 10px 0; line-height:1.4;">${escEstimate(desc)}</p>
+        
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
+          <div style="background:var(--gray-50); border-radius:6px; padding:8px;">
+            <div style="font-size:10px; color:var(--gray-500);">Labor (typical)</div>
+            <div style="font-size:16px; font-weight:700; color:var(--gray-900);">${escEstimate(est.laborHours.typical)}h</div>
+            <div style="font-size:10px; color:var(--gray-400);">${escEstimate(est.laborHours.min)}-${escEstimate(est.laborHours.max)}h range</div>
+          </div>
+          ${est.laborHours.shopAverage ? `
+          <div style="background:#f0fdf4; border-radius:6px; padding:8px;">
+            <div style="font-size:10px; color:var(--gray-500);">Shop Avg</div>
+            <div style="font-size:16px; font-weight:700; color:#16a34a;">${escEstimate(est.laborHours.shopAverage)}h</div>
+          </div>` : `
+          <div style="background:var(--gray-50); border-radius:6px; padding:8px;">
+            <div style="font-size:10px; color:var(--gray-500);">Shop Avg</div>
+            <div style="font-size:12px; color:var(--gray-400);">No data</div>
+          </div>`}
+        </div>`;
+
+    if (est.requiredParts && est.requiredParts.length > 0) {
+      html += `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase; margin-bottom:4px;">Parts</div>
+          <div style="display:flex; flex-wrap:wrap; gap:4px;">
+            ${est.requiredParts.map(p => `<span style="font-size:11px; padding:2px 8px; background:var(--gray-100); border-radius:10px; color:var(--gray-700);">${escEstimate(p)}</span>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    if (est.vehicleContext?.vinAdjustments) {
+      html += `
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:8px; margin-bottom:10px;">
+          <div style="font-size:11px; font-weight:600; color:#92400e;">VIN Adjustments</div>
+          <div style="font-size:11px; color:#78350f;">+${escEstimate(est.vehicleContext.vinAdjustments.laborHoursAdded)}h labor${est.vehicleContext.vinAdjustments.additionalParts.length > 0 ? ' | Extra: ' + escEstimate(est.vehicleContext.vinAdjustments.additionalParts.join(', ')) : ''}</div>
+        </div>`;
+    }
+
+    html += `
+        <button class="estimate-send-to-ro-btn" data-job-title="${escEstimate(est.title)}" data-job-desc="${escEstimate(desc)}" data-labor-hours="${escEstimate(est.laborHours.typical)}" data-parts="${escEstimate(JSON.stringify(est.requiredParts || []))}" style="width:100%; margin-top:6px; padding:8px; background:#2563eb; color:white; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">Send to RO</button>
+      </div>`;
+
+    if (est.companionJobs && est.companionJobs.length > 0) {
+      html += `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase; margin-bottom:4px;">Related Jobs</div>
+          ${est.companionJobs.map(j => `
+            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; background:var(--gray-50); border-radius:6px; margin-bottom:3px; cursor:pointer;">
+              <div>
+                <span style="font-size:12px; font-weight:600; color:var(--gray-800);">${escEstimate(j.title)}</span>
+                ${j.safetyRelated ? '<span style="font-size:9px; color:#dc2626; margin-left:4px;">Safety</span>' : ''}
+              </div>
+              <span style="font-size:11px; color:var(--gray-500);">${escEstimate(j.laborHoursTypical)}h</span>
+            </div>
+          `).join('')}
+        </div>`;
+    }
+
+    if (est.upsellJobs && est.upsellJobs.length > 0) {
+      html += `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase; margin-bottom:4px;">Upsell Opportunities</div>
+          ${est.upsellJobs.map(j => `
+            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; margin-bottom:3px; cursor:pointer;">
+              <span style="font-size:12px; font-weight:600; color:var(--gray-800);">${escEstimate(j.title)}</span>
+              <span style="font-size:11px; color:var(--gray-500);">${escEstimate(j.laborHoursTypical)}h</span>
+            </div>
+          `).join('')}
+        </div>`;
+    }
+
+    resultEl.innerHTML = html;
+    resultEl.classList.remove('hidden');
+
+    resultEl.querySelectorAll('.estimate-companion-job').forEach(el => {
+      el.addEventListener('click', () => {
+        const title = el.dataset.jobTitle;
+        if (title) {
+          document.getElementById('estimate-job-search').value = title;
+          runEstimateBuilder();
+        }
+      });
+    });
+
+    resultEl.querySelectorAll('.estimate-send-to-ro-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const title = btn.dataset.jobTitle || '';
+        const desc = btn.dataset.jobDesc || '';
+        const laborHours = parseFloat(btn.dataset.laborHours) || 1;
+        let parts = [];
+        try { parts = JSON.parse(btn.dataset.parts || '[]'); } catch (e) { console.warn('[MOS] Failed to parse parts data', e); }
+
+        const job = {
+          title: title,
+          name: title,
+          description: desc,
+          note: desc,
+          laborItems: [{ name: title, hours: laborHours }],
+          parts: parts.map(p => ({ name: p, quantity: 1 }))
+        };
+
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        try {
+          await handleAddJob(job);
+          btn.textContent = 'Sent!';
+          btn.style.background = '#16a34a';
+          setTimeout(() => {
+            btn.textContent = 'Send to RO';
+            btn.style.background = '#2563eb';
+            btn.disabled = false;
+          }, 2000);
+        } catch (err) {
+          console.warn('[MOS] Send to RO failed:', err);
+          btn.textContent = 'Failed';
+          btn.style.background = '#dc2626';
+          setTimeout(() => {
+            btn.textContent = 'Send to RO';
+            btn.style.background = '#2563eb';
+            btn.disabled = false;
+          }, 2000);
+        }
+      });
+    });
+
+  } catch (err) {
+    loadingEl.classList.add('hidden');
+    resultEl.innerHTML = `<p style="color:#dc2626; font-size:12px; padding:8px;">${escEstimate(err.message || 'Failed to build estimate')}</p>`;
+    resultEl.classList.remove('hidden');
+  }
+}
+
+async function runEstimateAudit() {
+  const loadingEl = document.getElementById('estimate-audit-loading');
+  const resultEl = document.getElementById('estimate-audit-result');
+
+  if (!currentContext?.roId) {
+    resultEl.innerHTML = '<p style="color:#dc2626; font-size:12px; padding:8px;">Navigate to a repair order first to run an audit.</p>';
+    resultEl.classList.remove('hidden');
+    return;
+  }
+
+  loadingEl.classList.remove('hidden');
+  resultEl.classList.add('hidden');
+  resultEl.innerHTML = '';
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/audit',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          workOrderId: String(currentContext.roId)
+        })
+      }
+    });
+
+    loadingEl.classList.add('hidden');
+
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.report) throw new Error('No audit report returned');
+
+    const report = result.report;
+    const scoreColor = report.summary.score >= 85 ? '#16a34a' : report.summary.score >= 60 ? '#d97706' : '#dc2626';
+    const scoreBg = report.summary.score >= 85 ? '#f0fdf4' : report.summary.score >= 60 ? '#fffbeb' : '#fef2f2';
+
+    let html = `
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:4px; margin-bottom:10px;">
+        <div style="background:${scoreBg}; border-radius:6px; padding:6px; text-align:center;">
+          <div style="font-size:9px; color:var(--gray-500);">Score</div>
+          <div style="font-size:18px; font-weight:700; color:${scoreColor};">${report.summary.score}</div>
+        </div>
+        <div style="background:#fef2f2; border-radius:6px; padding:6px; text-align:center;">
+          <div style="font-size:9px; color:var(--gray-500);">Critical</div>
+          <div style="font-size:18px; font-weight:700; color:#dc2626;">${report.summary.critical}</div>
+        </div>
+        <div style="background:#fffbeb; border-radius:6px; padding:6px; text-align:center;">
+          <div style="font-size:9px; color:var(--gray-500);">Warn</div>
+          <div style="font-size:18px; font-weight:700; color:#d97706;">${report.summary.warnings}</div>
+        </div>
+        <div style="background:#eff6ff; border-radius:6px; padding:6px; text-align:center;">
+          <div style="font-size:9px; color:var(--gray-500);">Info</div>
+          <div style="font-size:18px; font-weight:700; color:#2563eb;">${report.summary.info}</div>
+        </div>
+      </div>`;
+
+    if (report.vehicleDisplay) {
+      html += `<p style="font-size:11px; color:var(--gray-500); margin-bottom:8px;">${escEstimate(report.vehicleDisplay)}${report.workOrderNumber ? ' &middot; WO# ' + escEstimate(report.workOrderNumber) : ''}</p>`;
+    }
+
+    if (report.findings.length === 0) {
+      html += '<p style="font-size:12px; color:#16a34a; text-align:center; padding:16px;">No issues found - this estimate looks complete!</p>';
+    } else {
+      const severityStyles = {
+        critical: { bg: '#fef2f2', border: '#fecaca', badge: '#dc2626', badgeBg: '#fee2e2' },
+        warning: { bg: '#fffbeb', border: '#fde68a', badge: '#d97706', badgeBg: '#fef3c7' },
+        info: { bg: '#eff6ff', border: '#bfdbfe', badge: '#2563eb', badgeBg: '#dbeafe' }
+      };
+
+      for (const finding of report.findings) {
+        const s = severityStyles[finding.severity] || severityStyles.info;
+        html += `
+          <div style="background:${s.bg}; border:1px solid ${s.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
+            <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px; flex-wrap:wrap;">
+              <span style="font-size:9px; font-weight:700; padding:1px 5px; background:${s.badgeBg}; color:${s.badge}; border-radius:8px; text-transform:uppercase;">${escEstimate(finding.severity)}</span>
+              <span style="font-size:10px; color:var(--gray-500);">${escEstimate(finding.category)}</span>
+              <span style="font-size:10px; color:var(--gray-400);">${Math.round(finding.confidence * 100)}%</span>
+            </div>
+            <div style="font-size:12px; font-weight:600; color:var(--gray-800); margin-bottom:2px;">${escEstimate(finding.title)}</div>
+            <div style="font-size:11px; color:var(--gray-600); line-height:1.3;">${escEstimate(finding.description)}</div>
+            ${finding.suggestedAction ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px; font-style:italic;">${escEstimate(finding.suggestedAction)}</div>` : ''}
+            ${finding.suggestedJobTitle ? `
+              <div style="display:flex; gap:4px; margin-top:4px;">
+                <button class="estimate-audit-build-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Build Estimate</button>
+                <button class="estimate-audit-add-to-ro-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" data-finding-desc="${escEstimate(finding.description)}" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">+ Add to RO</button>
+              </div>` : ''}
+          </div>`;
+      }
+    }
+
+    resultEl.innerHTML = html;
+    resultEl.classList.remove('hidden');
+
+    resultEl.querySelectorAll('.estimate-audit-build-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const title = btn.dataset.jobTitle;
+        if (title) {
+          document.getElementById('estimate-job-search').value = title;
+          document.querySelector('.estimate-subtab[data-subtab="builder"]').click();
+          runEstimateBuilder();
+        }
+      });
+    });
+
+    resultEl.querySelectorAll('.estimate-audit-add-to-ro-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const title = btn.dataset.jobTitle || '';
+        const desc = btn.dataset.findingDesc || '';
+
+        const job = {
+          title: title,
+          name: title,
+          description: desc,
+          note: desc,
+          laborItems: [{ name: title, hours: 1 }],
+          parts: []
+        };
+
+        btn.disabled = true;
+        btn.textContent = 'Adding...';
+        try {
+          await handleAddJob(job);
+          btn.textContent = 'Added!';
+          btn.style.background = '#16a34a';
+          setTimeout(() => {
+            btn.textContent = '+ Add to RO';
+            btn.style.background = '#2563eb';
+            btn.disabled = false;
+          }, 2000);
+        } catch (err) {
+          console.warn('[MOS] Audit add to RO failed:', err);
+          btn.textContent = 'Failed';
+          btn.style.background = '#dc2626';
+          setTimeout(() => {
+            btn.textContent = '+ Add to RO';
+            btn.style.background = '#2563eb';
+            btn.disabled = false;
+          }, 2000);
+        }
+      });
+    });
+
+  } catch (err) {
+    loadingEl.classList.add('hidden');
+    resultEl.innerHTML = `<p style="color:#dc2626; font-size:12px; padding:8px;">${escEstimate(err.message || 'Audit failed')}</p>`;
+    resultEl.classList.remove('hidden');
+  }
+}
+
 // ==================== START ====================
 init();
 initSupportChat();
+initEstimateAssist();
