@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({
-      logoUrl: `/api/sticker/logo/${shopId}`,
+      logoUrl: `/api/sticker/logo/${shopId}?t=${Date.now()}`,
       success: true,
     });
   } catch (error) {

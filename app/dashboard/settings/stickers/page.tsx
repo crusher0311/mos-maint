@@ -194,7 +194,7 @@ export default function StickerSettingsPage() {
         if (data.config) {
           const fetchedConfig = {
             enabled: data.config.enabled ?? DEFAULT_CONFIG.enabled,
-            logo: data.config.logo ?? DEFAULT_CONFIG.logo,
+            logo: data.config.logo ? `${data.config.logo.split('?')[0]}?t=${Date.now()}` : DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
             taglineLine2: data.config.taglineLine2 ?? DEFAULT_CONFIG.taglineLine2,
