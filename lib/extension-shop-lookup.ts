@@ -102,7 +102,7 @@ export async function findShopBySmsId(
       : 'tekmetric') as 'tekmetric' | 'protractor' | 'shopware' | 'autoflow';
   
   return {
-    mosShopId: shopDoc.shopId,
+    mosShopId: Number(shopDoc.shopId),
     shopDoc,
     provider
   };
