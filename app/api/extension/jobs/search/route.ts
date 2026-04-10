@@ -200,14 +200,10 @@ export async function GET(request: NextRequest) {
     if (make) {
       matchStage["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
     }
-    if (model) {
-      const variants = getModelVariants(model);
-      if (variants.length > 1) {
-        matchStage["vehicle.model"] = { $regex: variants.map(escapeRegex).join("|"), $options: "i" };
-      } else {
-        matchStage["vehicle.model"] = { $regex: escapeRegex(model), $options: "i" };
-      }
-    }
+    // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
+    // This matches the dashboard behavior and allows "oil change on HHR" to find
+    // results from other Chevrolet models (Trax, Cruze, etc.) when no exact
+    // HHR-specific jobs exist in the shop's history.
 
     const [jobIndexResults, normalizedResults] = await Promise.all([
       jobsCollection
@@ -250,10 +246,6 @@ export async function GET(request: NextRequest) {
       }
       fallbackMatch["job.title"] = { $regex: coreTokens.map(escapeRegex).join(".*"), $options: "i" };
       if (make) fallbackMatch["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
-      if (model) {
-        const variants = getModelVariants(model);
-        fallbackMatch["vehicle.model"] = { $regex: variants.map(escapeRegex).join("|"), $options: "i" };
-      }
       jobs = await jobsCollection
         .aggregate([
           { $match: fallbackMatch },
