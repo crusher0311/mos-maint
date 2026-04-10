@@ -85,11 +85,12 @@ async function resolveSearchShopIds(
     return [mosShopId];
   }
   
-  const shop = await db.collection("shops").findOne({ shopId: mosShopId });
+  const shop = await db.collection("shops").findOne({ shopId: { $in: [Number(mosShopId), String(mosShopId)] } });
   const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
   
   if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
-    const filtered = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
+    const enterpriseSet = new Set(enterprise.shopIds.map(Number));
+    const filtered = jobHistoryShopIds.map(Number).filter((id: number) => enterpriseSet.has(id));
     if (!filtered.includes(mosShopId)) filtered.push(mosShopId);
     console.log(`[Jobs Search] Enterprise search (custom): shops ${filtered.join(', ')}`);
     return filtered;
@@ -179,10 +180,11 @@ export async function GET(request: NextRequest) {
     
     const matchStage: Record<string, any> = {};
     
+    const shopIdVariants = searchShopIds.flatMap(id => [Number(id), String(id)]);
     if (searchShopIds.length === 1) {
-      matchStage.shopId = searchShopIds[0];
+      matchStage.shopId = { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] };
     } else if (searchShopIds.length > 1) {
-      matchStage.shopId = { $in: searchShopIds };
+      matchStage.shopId = { $in: shopIdVariants };
     }
     
     if (coreTokens.length > 0) {
@@ -217,9 +219,9 @@ export async function GET(request: NextRequest) {
     if (jobs.length === 0 && coreTokens.length > 0) {
       const fallbackMatch: Record<string, any> = {};
       if (searchShopIds.length === 1) {
-        fallbackMatch.shopId = searchShopIds[0];
+        fallbackMatch.shopId = { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] };
       } else if (searchShopIds.length > 1) {
-        fallbackMatch.shopId = { $in: searchShopIds };
+        fallbackMatch.shopId = { $in: shopIdVariants };
       }
       fallbackMatch["job.title"] = { $regex: coreTokens.map(escapeRegex).join(".*"), $options: "i" };
       if (make) fallbackMatch["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
@@ -280,7 +282,7 @@ export async function GET(request: NextRequest) {
     const shopLaborRateMap = new Map<number, number>();
     if (resultShopIds.length > 0) {
       const shopDocs = await db.collection("shops").find(
-        { shopId: { $in: resultShopIds } },
+        { shopId: { $in: resultShopIds.flatMap((id: any) => [Number(id), String(id)]) } },
         { projection: { shopId: 1, locationIdentifier: 1, name: 1, cachedLaborRate: 1 } }
       ).toArray();
       for (const s of shopDocs) {

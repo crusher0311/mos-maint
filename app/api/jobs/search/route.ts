@@ -89,9 +89,10 @@ async function searchNormalizedCollections(
   if (coreTokens.length === 0) return [];
 
   try {
+    const normalizedShopIdVariants = searchShopIds.flatMap(id => [Number(id), String(id)]);
     const shopMatch = searchShopIds.length === 1 
-      ? { shopId: searchShopIds[0] }
-      : { shopId: { $in: searchShopIds } };
+      ? { shopId: { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] } }
+      : { shopId: { $in: normalizedShopIdVariants } };
 
     // Build regex match conditions - each token must match in at least one of the text fields
     // Using $and to require ALL tokens, with $or to allow matching in any field
@@ -230,13 +231,13 @@ export async function GET(req: NextRequest) {
   const enterprise = await getEnterpriseByShopId(shopId);
   if (enterprise && enterprise.shopIds.length > 1) {
     // Check shop preferences for job history location selection
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await db.collection("shops").findOne({ shopId: { $in: [Number(shopId), String(shopId)] } });
     const jobHistoryShopIds = shop?.preferences?.jobHistoryShopIds;
     
     if (Array.isArray(jobHistoryShopIds) && jobHistoryShopIds.length > 0) {
       // Use the shop's selected locations (must be within enterprise)
-      searchShopIds = jobHistoryShopIds.filter((id: number) => enterprise.shopIds.includes(id));
-      // Always include own shop
+      const enterpriseSet = new Set(enterprise.shopIds.map(Number));
+      searchShopIds = jobHistoryShopIds.map(Number).filter((id: number) => enterpriseSet.has(id));
       if (!searchShopIds.includes(shopId)) {
         searchShopIds.push(shopId);
       }
@@ -250,7 +251,7 @@ export async function GET(req: NextRequest) {
   
   // Build shop lookup map for location names
   const shopDocs = await db.collection("shops")
-    .find({ shopId: { $in: searchShopIds } })
+    .find({ shopId: { $in: searchShopIds.flatMap(id => [Number(id), String(id)]) } })
     .project({ shopId: 1, name: 1, locationIdentifier: 1 })
     .toArray();
   
@@ -262,9 +263,10 @@ export async function GET(req: NextRequest) {
     });
   }
   
+  const shopIdVariants = searchShopIds.flatMap(id => [Number(id), String(id)]);
   const matchStage: any = searchShopIds.length === 1 
-    ? { shopId: searchShopIds[0] }
-    : { shopId: { $in: searchShopIds } };
+    ? { shopId: { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] } }
+    : { shopId: { $in: shopIdVariants } };
   
   // Stopwords: common verbs and filler terms that don't identify the service
   const stopwords = new Set([

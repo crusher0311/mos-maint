@@ -67,7 +67,7 @@ export async function getEnterpriseById(enterpriseId: ObjectId | string) {
 export async function getEnterpriseByShopId(shopId: number) {
   const db = await getDb();
   return db.collection<EnterpriseAccount>("enterprise_accounts").findOne({ 
-    shopIds: shopId 
+    shopIds: { $in: [Number(shopId), String(shopId)] as any[] }
   });
 }
 

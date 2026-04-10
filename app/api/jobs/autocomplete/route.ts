@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     let cachedEnterpriseShops = cache.get<number[]>(CACHE_KEYS.ENTERPRISE_SHOPS, enterpriseCacheKey);
     
     if (!cachedEnterpriseShops) {
-      const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
+      const shop = await db.collection("shops").findOne({ shopId: { $in: [Number(shopId), String(shopId)] } });
       const enterpriseId = shop?.enterpriseId as string | undefined;
       
       if (enterpriseId) {
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
   const pipeline: any[] = [
     {
       $match: {
-        shopId: { $in: enterpriseShopIds },
+        shopId: { $in: enterpriseShopIds.flatMap(id => [Number(id), String(id)]) },
         'softDelete.isDeleted': { $ne: true },
         status: { $in: ['completed', 'authorized'] },
         $and: escapedQueryWords.map(word => ({
