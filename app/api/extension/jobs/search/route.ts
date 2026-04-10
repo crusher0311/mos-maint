@@ -4,6 +4,7 @@ import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/li
 import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { searchNormalizedCollections } from "@/lib/normalized-job-search";
 
 // Model variants that share platforms and should cross-reference
 const MODEL_VARIANTS: Record<string, string[]> = {
@@ -208,13 +209,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let jobs: any[] = await jobsCollection
-      .aggregate([
-        { $match: matchStage },
-        { $sort: { performedAt: -1 } },
-        { $limit: limit * 5 }
-      ], { maxTimeMS: 8000 })
-      .toArray();
+    const [jobIndexResults, normalizedResults] = await Promise.all([
+      jobsCollection
+        .aggregate([
+          { $match: matchStage },
+          { $sort: { performedAt: -1 } },
+          { $limit: limit * 5 }
+        ], { maxTimeMS: 8000 })
+        .toArray(),
+      searchNormalizedCollections(db, searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined)
+    ]);
+
+    const seenKeys = new Set<string>();
+    let jobs: any[] = [];
+    
+    for (const job of jobIndexResults) {
+      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        jobs.push({ ...job, dataSource: 'job_index' });
+      }
+    }
+    
+    for (const job of normalizedResults) {
+      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        jobs.push({ ...job, dataSource: 'normalized' });
+      }
+    }
+
+    console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
 
     if (jobs.length === 0 && coreTokens.length > 0) {
       const fallbackMatch: Record<string, any> = {};
@@ -241,7 +266,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[Jobs Search] Found ${jobs.length} candidates for scoring`);
+    console.log(`[Jobs Search] Found ${jobs.length} total candidates for scoring`);
 
     // Score using shared scoring logic
     const targetVehicle = { year, make, model, engine };
@@ -379,6 +404,8 @@ export async function GET(request: NextRequest) {
       query,
       stats: {
         totalFound: jobs.length,
+        fromJobIndex: jobIndexResults.length,
+        fromNormalized: normalizedResults.length,
         gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
         belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 40).length,
         returned: formattedJobs.length,
