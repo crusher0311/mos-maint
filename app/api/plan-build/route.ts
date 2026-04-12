@@ -1030,7 +1030,106 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings];
+    let unresolvedHistoricalFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+    if (tekmetricWOs.length > 0) {
+      const historicalItems: Array<{
+        name: string;
+        status: "bad" | "marginal";
+        inspectionDate: Date | null;
+        workOrderId: string;
+      }> = [];
+
+      for (const wo of tekmetricWOs) {
+        const woInspections = wo.inspections || [];
+        if (!Array.isArray(woInspections) || woInspections.length === 0) continue;
+        const woDate = wo.completedDate ? new Date(wo.completedDate) 
+          : wo.updatedDate ? new Date(wo.updatedDate) 
+          : wo.createdDate ? new Date(wo.createdDate) : null;
+
+        for (const insp of woInspections) {
+          for (const item of insp.items || []) {
+            if (item.status === "bad" || item.status === "marginal") {
+              historicalItems.push({
+                name: item.name || item.categoryName || "",
+                status: item.status,
+                inspectionDate: woDate,
+                workOrderId: String(wo.workOrderId),
+              });
+            }
+          }
+        }
+      }
+
+      if (historicalItems.length > 0) {
+        const allHistoryByKey = new Map<string, { date: Date | null }[]>();
+        for (const sh of shopServiceHistory) {
+          const keys = toKeyFromFreeText(sh.serviceName || "");
+          for (const k of keys) {
+            if (!allHistoryByKey.has(k)) allHistoryByKey.set(k, []);
+            allHistoryByKey.get(k)!.push({ date: sh.date });
+          }
+        }
+
+        for (const r of (carfaxResult as any).ok ? ((carfaxResult as any).serviceRecords || []) : []) {
+          const desc = String(r.description || "").trim();
+          const rDate = parseCarfaxDate(r?.date ?? null);
+          const keys = toKeyFromFreeText(desc);
+          for (const k of keys) {
+            if (!allHistoryByKey.has(k)) allHistoryByKey.set(k, []);
+            allHistoryByKey.get(k)!.push({ date: rDate });
+          }
+        }
+
+        const seenUnresolved = new Set<string>();
+        const currentDviNames = new Set(
+          [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings]
+            .map(f => (f.name || "").toLowerCase().trim())
+            .filter(Boolean)
+        );
+
+        for (const hi of historicalItems) {
+          if (!hi.name) continue;
+          const nameLower = hi.name.toLowerCase().trim();
+          if (currentDviNames.has(nameLower)) continue;
+
+          const serviceKey = toKeyFromName(hi.name);
+          const dedupKey = serviceKey || nameLower;
+          if (seenUnresolved.has(dedupKey)) continue;
+
+          let remedied = false;
+          if (hi.inspectionDate) {
+            if (serviceKey) {
+              const serviceRecords = allHistoryByKey.get(serviceKey) || [];
+              remedied = serviceRecords.some(sr => 
+                sr.date && sr.date.getTime() > hi.inspectionDate!.getTime()
+              );
+            }
+            if (!remedied) {
+              remedied = shopServiceHistory.some(sh => {
+                if (!sh.date || sh.date.getTime() <= hi.inspectionDate!.getTime()) return false;
+                const shName = (sh.serviceName || "").toLowerCase();
+                return shName.includes(nameLower) || nameLower.includes(shName);
+              });
+            }
+          }
+
+          if (!remedied) {
+            seenUnresolved.add(dedupKey);
+            unresolvedHistoricalFindings.push({
+              name: hi.name,
+              status: hi.status === "bad" ? "0" : "1",
+              source: "tekmetric",
+            });
+          }
+        }
+
+        if (unresolvedHistoricalFindings.length > 0) {
+          console.log(`[PlanBuild] Unresolved historical inspections for ${vin}: ${unresolvedHistoricalFindings.length} items`);
+        }
+      }
+    }
+
+    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings, ...unresolvedHistoricalFindings];
 
     let protractorDeferredWork: ProtractorDeferredWork[] = [];
     if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
@@ -1203,7 +1302,7 @@ export async function POST(req: NextRequest) {
     await setCachedPlan(db, vin, shopId, mileage, planData);
 
     const duration = Date.now() - startTime;
-    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, Deferred: ${protractorDeferredWork.length})`);
+    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length})`);
 
     return NextResponse.json({
       ok: true,
