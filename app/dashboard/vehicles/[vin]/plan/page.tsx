@@ -24,8 +24,6 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
-import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
-import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 import { AddToROButton } from "@/components/ui/AddToROButton";
 import { AddToROWithHistory } from "@/components/ui/AddToROWithHistory";
 import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
@@ -1618,9 +1616,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
   }
 
   let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
-  if (activeIntegration === "tekmetric" && latestRepairOrderId && isTekmetricConfigured()) {
+  if (activeIntegration === "tekmetric" && latestRepairOrderId) {
     try {
-      const inspections = await getRepairOrderInspections(Number(latestRepairOrderId));
+      const cachedWO = await db.collection("tekmetric_work_orders").findOne({
+        workOrderId: String(latestRepairOrderId),
+        shopId: { $in: [String(shopId), Number(shopId)] }
+      });
+      const inspections = cachedWO?.inspections || [];
       for (const inspection of inspections) {
         for (const item of inspection.items || []) {
           if (item.status === "bad") {
@@ -1631,7 +1633,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         }
       }
       if (tekmetricDviFindings.length > 0) {
-        console.log(`[Plan Debug] Tekmetric DVI items: ${tekmetricDviFindings.length} from RO ${latestRepairOrderId}`);
+        console.log(`[Plan Debug] Tekmetric DVI items: ${tekmetricDviFindings.length} from cached RO ${latestRepairOrderId}`);
       }
     } catch (err: any) {
       console.warn(`[Plan Debug] Tekmetric DVI fetch failed:`, err.message);

@@ -299,18 +299,7 @@ async function backfillShopChunk(
 
       const jobs = jobsResult.data?.content || [];
 
-      let inspections: any[] = [];
-      try {
-        const inspResult = await tekmetricRequest<{ content: any[] }>(
-          `/inspections?repairOrder=${ro.id}`
-        );
-        if (inspResult.ok && inspResult.data?.content) {
-          inspections = inspResult.data.content;
-        }
-      } catch (inspErr: any) {
-      }
-
-      if (jobs.length === 0 && inspections.length === 0) return { indexed: 0, skipped: 0, roData: null };
+      if (jobs.length === 0) return { indexed: 0, skipped: 0, roData: null };
 
       let indexed = 0;
       let skipped = 0;
@@ -406,8 +395,9 @@ async function backfillShopChunk(
           labor: j.labor,
           parts: j.parts,
         })),
-        inspections: inspections,
-        rawPayload: { repairOrder: ro, vehicle, customer, jobs, inspections },
+        inspectionUrl: (ro as any).inspectionUrl || null,
+        inspectionShareDate: (ro as any).inspectionShareDate || null,
+        rawPayload: { repairOrder: ro, vehicle, customer, jobs },
       };
       
       return { indexed, skipped, roData: roDataForNormalized };

@@ -4,7 +4,6 @@ import {
   getRepairOrders, 
   getVehicle, 
   getCustomer,
-  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -95,6 +94,15 @@ interface TekmetricWorkOrderSnapshot {
   dviDone?: boolean;
   dviComplete?: boolean;
   inspections?: any[];
+  inspectionUrl?: string | null;
+  inspectionShareDate?: string | null;
+}
+
+interface InspectionStatusFromRO {
+  hasInspectionUrl: boolean;
+  inspectionShared: boolean;
+  inspectionShareDate: string | null;
+  inspectionUrl: string | null;
 }
 
 async function upsertTekmetricWorkOrderSnapshot(
@@ -103,7 +111,8 @@ async function upsertTekmetricWorkOrderSnapshot(
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
   customer?: TekmetricCustomer,
-  inspections?: any[] | null
+  inspections?: any[] | null,
+  inspectionStatus?: InspectionStatusFromRO
 ) {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -114,13 +123,10 @@ async function upsertTekmetricWorkOrderSnapshot(
   
   const labelDvi = inferDviFromLabel(label);
   const jobsHaveDvi = inferDviFromJobs((ro as any).jobs || []);
-  const inspectionFetchFailed = inspections === null;
   const hasActualInspections = Array.isArray(inspections) && inspections.length > 0;
-  const dviDetected = labelDvi.hasDvi || labelDvi.dviComplete || jobsHaveDvi || hasActualInspections;
-  const inspectionComplete = hasActualInspections && inspections!.some((i: any) => 
-    i.status === 'COMPLETED' || i.status === 'completed' || i.status === 'SENT' || i.status === 'sent'
-  );
-  const dviComplete = labelDvi.dviComplete || inspectionComplete;
+  const hasInspectionFromRO = inspectionStatus?.hasInspectionUrl || inspectionStatus?.inspectionShared;
+  const dviDetected = labelDvi.hasDvi || labelDvi.dviComplete || jobsHaveDvi || hasActualInspections || !!hasInspectionFromRO;
+  const dviComplete = labelDvi.dviComplete || !!inspectionStatus?.inspectionShared;
 
   const snapshot: TekmetricWorkOrderSnapshot = {
     shopId,
@@ -146,7 +152,9 @@ async function upsertTekmetricWorkOrderSnapshot(
     data: ro,
     dviDone: dviDetected,
     dviComplete,
-    inspections: hasActualInspections ? inspections! : []
+    inspections: hasActualInspections ? inspections! : [],
+    inspectionUrl: inspectionStatus?.inspectionUrl || null,
+    inspectionShareDate: inspectionStatus?.inspectionShareDate || null,
   };
 
   const existing = await db.collection("tekmetric_work_orders").findOne({
@@ -154,8 +162,16 @@ async function upsertTekmetricWorkOrderSnapshot(
     workOrderId: String(ro.id)
   });
   
-  if (inspectionFetchFailed && existing?.inspections?.length > 0) {
+  if (!snapshot.inspections?.length && existing?.inspections?.length > 0) {
     snapshot.inspections = existing.inspections;
+  }
+  
+  if (!snapshot.inspectionUrl && existing?.inspectionUrl) {
+    snapshot.inspectionUrl = existing.inspectionUrl;
+  }
+  if (!snapshot.inspectionShareDate && existing?.inspectionShareDate) {
+    snapshot.inspectionShareDate = existing.inspectionShareDate;
+    snapshot.dviComplete = true;
   }
   
   if (existing?.dviDone && !dviDetected) {
@@ -276,26 +292,16 @@ export async function GET(req: NextRequest) {
           const customer = customerCache.get(ro.customerId);
           
           if (vehicle?.vin) {
-            const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
-            const labelDviHint = inferDviFromLabel(label);
-            const jobDviHint = inferDviFromJobs((ro as any).jobs || []);
-            const shouldFetchInspections = labelDviHint.hasDvi || labelDviHint.dviComplete || jobDviHint;
+            const hasInspectionUrl = !!(ro as any).inspectionUrl;
+            const inspectionShared = !!(ro as any).inspectionShareDate;
+            if (hasInspectionUrl || inspectionShared) dviCount++;
             
-            let inspections: any[] | null = null;
-            if (shouldFetchInspections) {
-              try {
-                inspections = await getRepairOrderInspections(ro.id);
-                if (inspections && inspections.length > 0) {
-                  dviCount++;
-                  ro.inspections = inspections;
-                }
-              } catch (inspErr: any) {
-                inspections = null;
-                console.log(`[Tekmetric] Shop ${shopId}: Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
-              }
-            }
-            
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections);
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, null, {
+              hasInspectionUrl,
+              inspectionShared,
+              inspectionShareDate: (ro as any).inspectionShareDate || null,
+              inspectionUrl: (ro as any).inspectionUrl || null,
+            });
             shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }

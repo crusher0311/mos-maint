@@ -5,8 +5,6 @@ import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } 
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
-import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { buildReportUrl } from "@/lib/report-share";
 
@@ -1172,9 +1170,13 @@ export async function GET(request: NextRequest) {
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
 
     let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string }> = [];
-    if (provider === "tekmetric" && roId && isTekmetricConfigured()) {
+    if (provider === "tekmetric" && roId) {
       try {
-        const inspections = await getRepairOrderInspections(Number(roId));
+        const cachedWO = await db.collection("tekmetric_work_orders").findOne({
+          workOrderId: String(roId),
+          shopId: { $in: [String(mosShopId), Number(mosShopId)] }
+        });
+        const inspections = cachedWO?.inspections || [];
         for (const inspection of inspections) {
           for (const item of inspection.items || []) {
             if (item.status === "bad") {
@@ -1487,10 +1489,14 @@ export async function GET(request: NextRequest) {
         }
         
         let tekDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
-        if (provider === "tekmetric" && roId && isTekmetricConfigured()) {
+        if (provider === "tekmetric" && roId) {
           try {
-            const inspections = await getRepairOrderInspections(Number(roId));
-            for (const inspection of inspections) {
+            const cachedWOForDvi = await db.collection("tekmetric_work_orders").findOne({
+              workOrderId: String(roId),
+              shopId: { $in: [String(mosShopId), Number(mosShopId)] }
+            });
+            const inspectionsForDvi = cachedWOForDvi?.inspections || [];
+            for (const inspection of inspectionsForDvi) {
               for (const item of inspection.items || []) {
                 if (item.status === "bad") {
                   tekDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });

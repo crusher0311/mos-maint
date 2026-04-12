@@ -187,19 +187,25 @@ export async function getCannedJobs(
 }
 
 export async function getRepairOrderInspections(repairOrderId: number, shopId?: number): Promise<TekmetricInspection[]> {
+  return [];
+}
+
+export async function getRepairOrderInspectionStatus(repairOrderId: number, shopId?: number): Promise<{
+  hasInspection: boolean;
+  inspectionShared: boolean;
+  inspectionShareDate: string | null;
+  inspectionUrl: string | null;
+}> {
   try {
-    const response = await tekmetricRequest<PaginatedResponse<TekmetricInspection>>(
-      `/inspections?repairOrder=${repairOrderId}`,
-      {},
-      shopId
-    );
-    return response?.content || [];
+    const ro = await tekmetricRequest<any>(`/repair-orders/${repairOrderId}`, {}, shopId);
+    return {
+      hasInspection: !!ro?.inspectionUrl,
+      inspectionShared: !!ro?.inspectionShareDate,
+      inspectionShareDate: ro?.inspectionShareDate || null,
+      inspectionUrl: ro?.inspectionUrl || null,
+    };
   } catch (err: any) {
-    if (err?.message?.includes('404') || err?.message?.includes('Not Found')) {
-      return [];
-    }
-    console.warn(`[Tekmetric] Failed to fetch inspections for RO ${repairOrderId}: ${err.message}`);
-    return [];
+    return { hasInspection: false, inspectionShared: false, inspectionShareDate: null, inspectionUrl: null };
   }
 }
 

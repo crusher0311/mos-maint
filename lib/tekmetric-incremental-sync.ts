@@ -316,12 +316,18 @@ async function upsertWorkOrder(
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
 
-  const dviDetected = inferDviFromLabelOrJobs(label, (ro as any).jobs || []);
+  const hasInspectionUrl = !!(ro as any).inspectionUrl;
+  const inspectionShared = !!(ro as any).inspectionShareDate;
+  const dviDetected = inferDviFromLabelOrJobs(label, (ro as any).jobs || []) || hasInspectionUrl || inspectionShared;
+  const dviComplete = inspectionShared || /complete|done|finished/i.test(label);
 
   const existing = await db.collection("tekmetric_work_orders").findOne({
     shopId: { $in: [String(shopId), Number(shopId)] },
     workOrderId: String(ro.id)
   });
+
+  const inspectionUrl = (ro as any).inspectionUrl || existing?.inspectionUrl || null;
+  const inspectionShareDate = (ro as any).inspectionShareDate || existing?.inspectionShareDate || null;
 
   await db.collection("tekmetric_work_orders").updateOne(
     { 
@@ -352,6 +358,9 @@ async function upsertWorkOrder(
         fetchedAt: new Date(),
         data: ro,
         dviDone: dviDetected || (existing?.dviDone === true),
+        dviComplete: dviComplete || (existing?.dviComplete === true),
+        inspectionUrl,
+        inspectionShareDate,
       },
       $setOnInsert: { dviCompletedAt: null, lastInspection: null }
     },

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
-import { searchVehiclesByVin, getRepairOrders, getRepairOrderInspections } from "@/lib/tekmetric";
+import { searchVehiclesByVin, getRepairOrders } from "@/lib/tekmetric";
 import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices, fetchWorkOrdersForVehicle as fetchProtractorWorkOrders } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
@@ -500,11 +500,14 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         
         if (roResponse.content.length > 0) {
           const latestTekRo = roResponse.content[0];
-          console.log(`[Tekmetric] Fetching inspections for RO ${latestTekRo.id}`);
-          const inspections = await getRepairOrderInspections(latestTekRo.id);
+          const cachedWO = await db.collection("tekmetric_work_orders").findOne({
+            workOrderId: String(latestTekRo.id),
+            shopId: { $in: [String(shop.id), Number(shop.id)] }
+          });
+          const inspections = cachedWO?.inspections || [];
           
           if (inspections.length > 0) {
-            console.log(`[Tekmetric] Found ${inspections.length} inspections`);
+            console.log(`[Tekmetric] Found ${inspections.length} cached inspections for RO ${latestTekRo.id}`);
             tekmetricDvi = {
               ok: true,
               source: 'tekmetric',

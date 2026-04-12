@@ -15,8 +15,6 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
-import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
-import { isConfigured as isTekmetricConfigured } from "@/lib/integrations/tekmetric/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1004,28 +1002,22 @@ export async function POST(req: NextRequest) {
     }
 
     let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
-    if (isTekmetricConfigured() && tekmetricWOs.length > 0) {
-      const rosToTry = [...tekmetricWOs];
-      for (const tekRo of rosToTry) {
-        const tekRoId = tekRo?.workOrderId ? Number(tekRo.workOrderId) : null;
-        if (!tekRoId) continue;
-        try {
-          const inspections = await getRepairOrderInspections(tekRoId);
-          for (const inspection of inspections) {
-            for (const item of inspection.items || []) {
-              if (item.status === "bad") {
-                tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
-              } else if (item.status === "marginal") {
-                tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
-              }
+    if (tekmetricWOs.length > 0) {
+      for (const tekRo of tekmetricWOs) {
+        const woInspections = tekRo.inspections || [];
+        if (!Array.isArray(woInspections) || woInspections.length === 0) continue;
+        for (const inspection of woInspections) {
+          for (const item of inspection.items || []) {
+            if (item.status === "bad") {
+              tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+            } else if (item.status === "marginal") {
+              tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
             }
           }
-          if (tekmetricDviFindings.length > 0) {
-            console.log(`[PlanBuild] Tekmetric DVI: ${tekmetricDviFindings.length} findings from RO ${tekRoId}`);
-            break;
-          }
-        } catch (err: any) {
-          console.warn(`[PlanBuild] Tekmetric DVI fetch failed for RO ${tekRoId}:`, err.message);
+        }
+        if (tekmetricDviFindings.length > 0) {
+          console.log(`[PlanBuild] Tekmetric DVI: ${tekmetricDviFindings.length} findings from cached inspections on RO ${tekRo.workOrderId}`);
+          break;
         }
       }
     }
