@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
           keytags: false,
           auto_booking: false,
           part_xref: false,
-          concern_assistant: false
+          concern_assistant: false,
+          estimate_assist: false
         }
       }, { headers: corsHeaders });
     }

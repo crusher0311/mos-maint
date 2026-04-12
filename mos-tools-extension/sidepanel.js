@@ -66,7 +66,8 @@ let shopFeatures = {
   auto_booking: false,
   part_xref: false,
   labor_rates: false,
-  concern_assistant: false
+  concern_assistant: false,
+  estimate_assist: false
 };
 let mosShops = [];
 let resolvedMosShopId = null;
@@ -535,7 +536,7 @@ function switchTab(tab) {
     'canned': null,
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
-    'estimate': null,
+    'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
     'specs': null
   };
@@ -553,6 +554,7 @@ function switchTab(tab) {
           'lookup': 'Job Lookup / History Writer',
           'rates': 'Labor Rate Rules',
           'concern': 'Customer Concern Assistant',
+          'estimate': 'Estimate Assist',
           'sticker': 'Oil Sticker & Keytag Printing'
         };
         const featureName = featureNames[tab] || tab;
@@ -771,6 +773,7 @@ function updateTabAccessibility() {
     'canned': null,
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
+    'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
     'specs': null
   };

@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates" | "concern_assistant";
+export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates" | "concern_assistant" | "estimate_assist";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
@@ -16,6 +16,7 @@ export interface FeatureSettings {
   part_xref: boolean;
   labor_rates: boolean;
   concern_assistant: boolean;
+  estimate_assist: boolean;
 }
 
 export interface ShopBilling {
@@ -48,6 +49,7 @@ const DEFAULT_FEATURES: FeatureSettings = {
   part_xref: false,
   labor_rates: false,
   concern_assistant: false,
+  estimate_assist: false,
 };
 
 const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
@@ -69,6 +71,8 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "labor_rate_rules": "labor_rates",
   "concern-assistant": "concern_assistant",
   "concern_assistant": "concern_assistant",
+  "estimate-assist": "estimate_assist",
+  "estimate_assist": "estimate_assist",
 };
 
 const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
@@ -82,6 +86,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: false,
     labor_rates: false,
     concern_assistant: false,
+    estimate_assist: false,
   },
   starter: {
     maintenance: true,
@@ -93,6 +98,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: false,
     labor_rates: false,
     concern_assistant: false,
+    estimate_assist: false,
   },
   plus: {
     maintenance: true,
@@ -104,6 +110,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: false,
     labor_rates: false,
     concern_assistant: true,
+    estimate_assist: true,
   },
   elite: {
     maintenance: true,
@@ -115,6 +122,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     labor_rates: true,
     concern_assistant: true,
+    estimate_assist: true,
   },
   professional: {
     maintenance: true,
@@ -126,6 +134,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     labor_rates: true,
     concern_assistant: true,
+    estimate_assist: true,
   },
   oil_sticker_legacy: {
     maintenance: false,
@@ -137,6 +146,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: false,
     labor_rates: true,
     concern_assistant: false,
+    estimate_assist: false,
   },
   enterprise: {
     maintenance: true,
@@ -148,6 +158,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     labor_rates: true,
     concern_assistant: true,
+    estimate_assist: true,
   },
   demo: {
     maintenance: true,
@@ -159,6 +170,7 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     part_xref: true,
     labor_rates: true,
     concern_assistant: true,
+    estimate_assist: true,
   },
 };
 
@@ -185,6 +197,7 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
       part_xref: false,
       labor_rates: false,
       concern_assistant: false,
+      estimate_assist: false,
     };
 
     for (const pf of platformFeatures) {
@@ -240,6 +253,7 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     part_xref: shopFeatures.part_xref ?? enterpriseFeatures.part_xref ?? planFeatures.part_xref,
     labor_rates: shopFeatures.labor_rates ?? enterpriseFeatures.labor_rates ?? planFeatures.labor_rates,
     concern_assistant: shopFeatures.concern_assistant ?? enterpriseFeatures.concern_assistant ?? planFeatures.concern_assistant,
+    estimate_assist: shopFeatures.estimate_assist ?? enterpriseFeatures.estimate_assist ?? planFeatures.estimate_assist,
   };
   
   const billing: ShopBilling = {

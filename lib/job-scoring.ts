@@ -164,7 +164,7 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
       }
     }
   } else if (!targetEngine.cylinders && !jobEngine.cylinders) {
-    powertrainScore = 20;
+    powertrainScore = 5;
   }
   
   // Make/Model scoring
@@ -212,8 +212,7 @@ export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
     }
   }
   
-  // Base constraints score
-  let constraintScore = 10;
+  let constraintScore = 5;
   
   // Evidence scoring
   let evidenceScore = 0;
