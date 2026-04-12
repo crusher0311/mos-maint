@@ -205,7 +205,18 @@ export interface TekmetricInspection {
 }
 
 export async function getRepairOrderInspections(repairOrderId: number): Promise<TekmetricInspection[]> {
-  return [];
+  try {
+    const response = await tekmetricRequest<{ content: TekmetricInspection[] }>(
+      `/inspections?repairOrder=${repairOrderId}`
+    );
+    return response?.content || [];
+  } catch (err: any) {
+    if (err?.message?.includes('404') || err?.message?.includes('Not Found')) {
+      return [];
+    }
+    console.warn(`[Tekmetric] Failed to fetch inspections for RO ${repairOrderId}: ${err.message}`);
+    return [];
+  }
 }
 
 export interface TekmetricRepairOrderFull {

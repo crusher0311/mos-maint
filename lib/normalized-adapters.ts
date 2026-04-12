@@ -1006,6 +1006,21 @@ export class TekmetricAdapter implements INormalizedAdapter {
   
   mapInspection(shopId: number, workOrderId: string, vehicleId: string, sourceData: any): Partial<NormalizedInspection> {
     const i = sourceData;
+    
+    const items = Array.isArray(i.items) ? i.items : [];
+    const sections = items.map((item: any) => ({
+      name: cleanString(item.name || item.categoryName),
+      finding: this.mapInspectionItemStatus(item.status),
+      notes: cleanString(item.notes),
+      mediaUrls: Array.isArray(item.mediaUrls) ? item.mediaUrls : [],
+    }));
+    
+    const hasRed = items.some((item: any) => item.status === 'bad');
+    const hasYellow = items.some((item: any) => item.status === 'marginal');
+    const overallCondition = hasRed ? 'immediate_attention' as InspectionFinding 
+      : hasYellow ? 'caution' as InspectionFinding 
+      : this.mapInspectionFinding(i.overallCondition);
+    
     return {
       shopId,
       workOrderId,
@@ -1014,15 +1029,31 @@ export class TekmetricAdapter implements INormalizedAdapter {
       templateName: cleanString(i.templateName || i.name),
       status: this.mapInspectionStatus(i.status),
       technicianName: cleanString(i.technicianName),
-      startedAt: parseDate(i.startedAt),
-      completedAt: parseDate(i.completedAt),
-      overallCondition: this.mapInspectionFinding(i.overallCondition),
+      startedAt: parseDate(i.createdDate || i.startedAt),
+      completedAt: parseDate(i.completedDate || i.updatedDate || i.completedAt),
+      overallCondition,
       summary: cleanString(i.summary),
-      sections: [],
+      sections,
       mediaItems: [],
       recommendations: [],
-      customFields: {},
+      customFields: {
+        ...(i.templateId ? { templateId: i.templateId } : {}),
+        itemCount: items.length,
+        redCount: items.filter((item: any) => item.status === 'bad').length,
+        yellowCount: items.filter((item: any) => item.status === 'marginal').length,
+        greenCount: items.filter((item: any) => item.status === 'good').length,
+      },
     };
+  }
+  
+  private mapInspectionItemStatus(status: string): InspectionFinding {
+    const statusMap: Record<string, InspectionFinding> = {
+      'good': 'pass',
+      'bad': 'immediate_attention',
+      'marginal': 'caution',
+      'not_inspected': 'not_inspected',
+    };
+    return statusMap[String(status).toLowerCase()] || 'not_inspected';
   }
   
   mapRecommendation(shopId: number, vehicleId: string, sourceData: any): Partial<NormalizedRecommendation> {

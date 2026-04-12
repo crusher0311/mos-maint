@@ -108,15 +108,21 @@ export interface TekmetricInspectionItem {
   name: string;
   status: 'good' | 'bad' | 'marginal' | 'not_inspected';
   notes?: string;
+  categoryId?: number;
+  categoryName?: string;
   mediaUrls?: string[];
 }
 
 export interface TekmetricInspection {
   id: number;
   repairOrderId: number;
+  templateId?: number;
+  templateName?: string;
   status: string;
+  completedDate?: string;
   createdDate?: string;
   updatedDate?: string;
+  technicianName?: string;
   items?: TekmetricInspectionItem[];
 }
 

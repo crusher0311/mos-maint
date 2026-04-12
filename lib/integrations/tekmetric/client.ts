@@ -187,7 +187,20 @@ export async function getCannedJobs(
 }
 
 export async function getRepairOrderInspections(repairOrderId: number, shopId?: number): Promise<TekmetricInspection[]> {
-  return [];
+  try {
+    const response = await tekmetricRequest<PaginatedResponse<TekmetricInspection>>(
+      `/inspections?repairOrder=${repairOrderId}`,
+      {},
+      shopId
+    );
+    return response?.content || [];
+  } catch (err: any) {
+    if (err?.message?.includes('404') || err?.message?.includes('Not Found')) {
+      return [];
+    }
+    console.warn(`[Tekmetric] Failed to fetch inspections for RO ${repairOrderId}: ${err.message}`);
+    return [];
+  }
 }
 
 export async function validateShopAccess(shopId: number): Promise<{ valid: boolean; shop?: TekmetricShop; error?: string }> {

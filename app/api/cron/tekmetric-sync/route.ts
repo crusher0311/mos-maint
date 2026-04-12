@@ -4,6 +4,7 @@ import {
   getRepairOrders, 
   getVehicle, 
   getCustomer,
+  getRepairOrderInspections,
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
@@ -102,7 +103,7 @@ async function upsertTekmetricWorkOrderSnapshot(
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
   customer?: TekmetricCustomer,
-  inspections?: any[]
+  inspections?: any[] | null
 ) {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -113,8 +114,13 @@ async function upsertTekmetricWorkOrderSnapshot(
   
   const labelDvi = inferDviFromLabel(label);
   const jobsHaveDvi = inferDviFromJobs((ro as any).jobs || []);
-  const dviDetected = labelDvi.hasDvi || labelDvi.dviComplete || jobsHaveDvi;
-  const dviComplete = labelDvi.dviComplete;
+  const inspectionFetchFailed = inspections === null;
+  const hasActualInspections = Array.isArray(inspections) && inspections.length > 0;
+  const dviDetected = labelDvi.hasDvi || labelDvi.dviComplete || jobsHaveDvi || hasActualInspections;
+  const inspectionComplete = hasActualInspections && inspections!.some((i: any) => 
+    i.status === 'COMPLETED' || i.status === 'completed' || i.status === 'SENT' || i.status === 'sent'
+  );
+  const dviComplete = labelDvi.dviComplete || inspectionComplete;
 
   const snapshot: TekmetricWorkOrderSnapshot = {
     shopId,
@@ -140,7 +146,7 @@ async function upsertTekmetricWorkOrderSnapshot(
     data: ro,
     dviDone: dviDetected,
     dviComplete,
-    inspections: inspections || []
+    inspections: hasActualInspections ? inspections! : []
   };
 
   const existing = await db.collection("tekmetric_work_orders").findOne({
@@ -148,9 +154,15 @@ async function upsertTekmetricWorkOrderSnapshot(
     workOrderId: String(ro.id)
   });
   
+  if (inspectionFetchFailed && existing?.inspections?.length > 0) {
+    snapshot.inspections = existing.inspections;
+  }
+  
   if (existing?.dviDone && !dviDetected) {
     snapshot.dviDone = true;
-    snapshot.inspections = existing.inspections || [];
+    if (!snapshot.inspections?.length) {
+      snapshot.inspections = existing.inspections || [];
+    }
   }
   if (existing?.dviComplete) {
     snapshot.dviComplete = true;
@@ -196,7 +208,7 @@ export async function GET(req: NextRequest) {
       ]
     }).toArray();
 
-    const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; error?: string }[] = [];
+    const results: { shopId: number; tekmetricShopId: number; synced: number; removed: number; jobsIndexed?: number; inspections?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
     
     await checkAndRunBackfillForNewShops();
@@ -264,7 +276,26 @@ export async function GET(req: NextRequest) {
           const customer = customerCache.get(ro.customerId);
           
           if (vehicle?.vin) {
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, []);
+            const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
+            const labelDviHint = inferDviFromLabel(label);
+            const jobDviHint = inferDviFromJobs((ro as any).jobs || []);
+            const shouldFetchInspections = labelDviHint.hasDvi || labelDviHint.dviComplete || jobDviHint;
+            
+            let inspections: any[] | null = null;
+            if (shouldFetchInspections) {
+              try {
+                inspections = await getRepairOrderInspections(ro.id);
+                if (inspections && inspections.length > 0) {
+                  dviCount++;
+                  ro.inspections = inspections;
+                }
+              } catch (inspErr: any) {
+                inspections = null;
+                console.log(`[Tekmetric] Shop ${shopId}: Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
+              }
+            }
+            
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections);
             shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }
@@ -342,12 +373,15 @@ export async function GET(req: NextRequest) {
           { $set: { "tekmetric.lastSync": new Date() } }
         );
 
+        console.log(`[Tekmetric] Shop ${shopId}: ${dviCount} ROs with inspections out of ${activeWOs.length} active`);
+        
         results.push({ 
           shopId, 
           tekmetricShopId, 
           synced: activeWOs.length, 
           removed: removedCount,
-          jobsIndexed: indexedJobsCount
+          jobsIndexed: indexedJobsCount,
+          inspections: dviCount
         });
         
         if (shopSyncedVins.length > 0) {
