@@ -1,14 +1,4 @@
-// lib/job-scoring.ts
-// Shared job scoring logic for Job Lookup
-
-type EngineInfo = {
-  cylinders: number | null;
-  displacement: number | null;
-  aspiration: "na" | "turbo" | "supercharged" | null;
-  fuelType: "gas" | "diesel" | "hybrid" | "electric" | null;
-};
-
-export type ScoreBand = "exact" | "likely" | "possible" | "poor";
+export type ScoreBand = "exact" | "likely" | "possible" | "low_confidence";
 
 export const STOPWORDS = new Set([
   "replace", "inspect", "check", "service", "repair", "install", "remove",
@@ -16,57 +6,14 @@ export const STOPWORDS = new Set([
   "change", "perform", "complete", "top", "off", "the", "and", "for"
 ]);
 
-export function parseEngineString(engine: string): EngineInfo {
-  if (!engine) return { cylinders: null, displacement: null, aspiration: null, fuelType: null };
-  
-  const normalized = engine.toUpperCase();
-  
-  let cylinders: number | null = null;
-  if (/V\s*8|8\s*CYL|8[-\s]?CYLINDER/.test(normalized)) cylinders = 8;
-  else if (/V\s*6|6\s*CYL|6[-\s]?CYLINDER/.test(normalized)) cylinders = 6;
-  else if (/I\s*4|L\s*4|4\s*CYL|4[-\s]?CYLINDER/.test(normalized)) cylinders = 4;
-  else if (/V\s*10|10\s*CYL/.test(normalized)) cylinders = 10;
-  else if (/I\s*6|L\s*6/.test(normalized)) cylinders = 6;
-  else if (/I\s*3|L\s*3|3\s*CYL/.test(normalized)) cylinders = 3;
-  
-  let displacement: number | null = null;
-  const literMatch = normalized.match(/(\d+\.?\d*)\s*L(?:ITER)?/);
-  if (literMatch) {
-    displacement = parseFloat(literMatch[1]);
-  } else {
-    const ccMatch = normalized.match(/(\d{3,4})\s*CC/);
-    if (ccMatch) {
-      displacement = parseInt(ccMatch[1]) / 1000;
-    }
-  }
-  
-  let aspiration: EngineInfo["aspiration"] = "na";
-  if (/TURBO|TWIN\s*TURBO|TT|ECOBOOST/.test(normalized)) aspiration = "turbo";
-  else if (/SUPERCHARGE|SC|BLOWER/.test(normalized)) aspiration = "supercharged";
-  
-  let fuelType: EngineInfo["fuelType"] = "gas";
-  if (/DIESEL|TDI|DURAMAX|POWERSTROKE|CUMMINS/.test(normalized)) fuelType = "diesel";
-  else if (/HYBRID|HEV|PHEV/.test(normalized)) fuelType = "hybrid";
-  else if (/ELECTRIC|EV|BATTERY/.test(normalized)) fuelType = "electric";
-  
-  return { cylinders, displacement, aspiration, fuelType };
-}
+export type GvwrBand = "light" | "medium" | "heavy";
 
-export function getScoreBand(score: number, yearDiff?: number): ScoreBand {
-  // "Exact" requires high score AND close year match (within 1 year)
-  if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
-  if (score >= 75) return "likely";
-  if (score >= 50) return "possible";
-  return "poor";
-}
-
-export function getBandLabel(band: ScoreBand): string {
-  switch (band) {
-    case "exact": return "Exact Fit";
-    case "likely": return "Great Match";
-    case "possible": return "Good Match";
-    case "poor": return "Low Match";
-  }
+export interface VehicleSpecs {
+  gvwrBand: GvwrBand | null;
+  bodyType: string | null;
+  driveType: string | null;
+  displacement: number | null;
+  fuelType: string | null;
 }
 
 export interface VehicleContext {
@@ -74,6 +21,7 @@ export interface VehicleContext {
   make?: string | null;
   model?: string | null;
   engine?: string | null;
+  vin?: string | null;
 }
 
 export interface ScoredJob {
@@ -82,185 +30,356 @@ export interface ScoredJob {
   matchBandLabel: string;
   matchReason: string;
   gatePass: boolean;
+  lowConfidence: boolean;
+  crossClassPenalized: boolean;
   scoreBreakdown?: {
-    powertrain: number;
-    makeModel: number;
+    gvwrClass: number;
+    bodyStyle: number;
+    model: number;
+    make: number;
+    displacement: number;
+    driveType: number;
     year: number;
-    constraints: number;
-    evidence: number;
-    recency: number;
+    serviceCategory: number;
+    crossClassMultiplier: number;
   };
   [key: string]: any;
 }
 
-export function scoreJob(job: any, targetVehicle: VehicleContext): ScoredJob {
-  const targetEngine = parseEngineString(targetVehicle.engine || "");
+export function parseGvwrBand(gvwrRange: string | null | undefined): GvwrBand | null {
+  if (!gvwrRange) return null;
+  const upper = gvwrRange.toUpperCase();
+  const lbsMatch = upper.match(/([\d,]+)\s*(?:LBS?|POUNDS?)/);
+  if (lbsMatch) {
+    const weight = parseInt(lbsMatch[1].replace(/,/g, ''));
+    if (weight <= 10000) return "light";
+    if (weight <= 16000) return "medium";
+    return "heavy";
+  }
+  if (/CLASS\s*[12]\b/.test(upper)) return "light";
+  if (/CLASS\s*[34]\b/.test(upper)) return "medium";
+  if (/CLASS\s*[5-8]\b/.test(upper)) return "heavy";
+  return null;
+}
+
+export function inferGvwrBandFromModel(make: string | null, model: string | null): GvwrBand | null {
+  if (!model) return null;
+  const m = model.toUpperCase();
+  const mk = (make || '').toUpperCase();
+  if (/F[-\s]?[4-9]50|F[-\s]?[5-9]50|F[-\s]?[6-9]50|SUPER\s*DUTY|SILVERADO\s*[3-6]500|RAM\s*[3-6]500|KODIAK|TOPKICK|C[4-8]500|INTERNATIONAL|HINO|FREIGHTLINER|KENWORTH|PETERBILT/i.test(m)) return "heavy";
+  if (/F[-\s]?[23]50|SILVERADO\s*2500|RAM\s*2500|SIERRA\s*2500|RANGER|TACOMA|COLORADO|CANYON|FRONTIER|MAVERICK|SANTA\s*CRUZ/i.test(m)) return "medium";
+  if (/TRANSIT|SPRINTER|PROMASTER|E[-\s]?[23]50|EXPRESS|SAVANA|NV\s*[23]500/i.test(m)) return "medium";
+  if (/F[-\s]?150|SILVERADO(?:\s*1500)?$|SIERRA(?:\s*1500)?$|RAM\s*1500|TUNDRA|TITAN/i.test(m)) return "light";
+  if (/CIVIC|ACCORD|CAMRY|COROLLA|ALTIMA|SENTRA|FOCUS|FUSION|MALIBU|CRUZE|JETTA|GOLF|ELANTRA|SONATA|FORTE|OPTIMA|MAZDA|IMPREZA|LEGACY|PRIUS|VERSA|FIT|FIESTA|YARIS|MIATA|MUSTANG|CHARGER|CHALLENGER|CAMARO|MODEL\s*[3SXY]/i.test(m)) return "light";
+  if (/EXPLORER|ESCAPE|RAV4|CR[-\s]?V|HIGHLANDER|PILOT|PATHFINDER|4RUNNER|WRANGLER|CHEROKEE|EQUINOX|TRAVERSE|TAHOE|SUBURBAN|EXPEDITION|DURANGO|SEQUOIA|LAND\s*CRUISER|BRONCO|EDGE|FLEX|TERRAIN|ACADIA|TUCSON|SANTA\s*FE|SORENTO|SPORTAGE|OUTBACK|FORESTER|ROGUE|MURANO|ARMADA|TELLURIDE|PALISADE|ATLAS/i.test(m)) return "light";
+  return null;
+}
+
+const BODY_TYPE_GROUPS: Record<string, string[]> = {
+  sedan: ["sedan", "coupe", "convertible", "hatchback", "liftback"],
+  suv: ["suv", "sport utility", "crossover", "cuv", "wagon"],
+  pickup: ["pickup", "crew cab", "extended cab", "regular cab", "double cab", "king cab"],
+  van: ["van", "minivan", "cargo van", "passenger van"],
+  commercial: ["cab chassis", "cab/chassis", "cutaway", "stripped chassis", "chassis cab"],
+};
+
+function normalizeBodyGroup(bodyType: string | null | undefined): string | null {
+  if (!bodyType) return null;
+  const lower = bodyType.toLowerCase();
+  for (const [group, keywords] of Object.entries(BODY_TYPE_GROUPS)) {
+    if (keywords.some(kw => lower.includes(kw))) return group;
+  }
+  return lower;
+}
+
+const SERVICE_CATEGORIES: Record<string, string[]> = {
+  tire: ["tire", "rotation", "balance", "alignment", "wheel", "rim", "tpms"],
+  brake: ["brake", "rotor", "caliper", "pad", "drum", "shoe"],
+  engine: ["engine", "motor", "valve", "gasket", "timing", "piston", "cylinder head", "head gasket"],
+  electrical: ["battery", "alternator", "starter", "wiring", "fuse", "light", "bulb", "ignition"],
+  hvac: ["a/c", "air conditioning", "heater", "compressor", "evaporator", "refrigerant", "freon", "blower"],
+  suspension: ["suspension", "shock", "strut", "spring", "control arm", "ball joint", "tie rod", "sway bar", "bushing"],
+  exhaust: ["exhaust", "muffler", "catalytic", "converter", "manifold", "o2 sensor", "oxygen sensor"],
+  transmission: ["transmission", "trans fluid", "clutch", "differential", "transfer case", "axle", "cv joint", "cv axle"],
+  cooling: ["coolant", "radiator", "thermostat", "water pump", "cooling"],
+  fluids: ["oil change", "oil filter", "fluid", "atf", "power steering fluid", "brake fluid"],
+  steering: ["steering", "power steering", "rack", "steering pump", "tie rod"],
+  diagnostic: ["diagnostic", "scan", "code", "dtc", "check engine"],
+  maintenance: ["tune up", "spark plug", "wiper", "cabin filter", "air filter", "serpentine", "belt"],
+};
+
+function getServiceCategory(title: string | null | undefined): string | null {
+  if (!title) return null;
+  const lower = title.toLowerCase();
+  for (const [category, keywords] of Object.entries(SERVICE_CATEGORIES)) {
+    if (keywords.some(kw => lower.includes(kw))) return category;
+  }
+  return null;
+}
+
+export function getScoreBand(score: number): ScoreBand {
+  if (score >= 85) return "exact";
+  if (score >= 60) return "likely";
+  if (score >= 35) return "possible";
+  return "low_confidence";
+}
+
+export function getBandLabel(band: ScoreBand): string {
+  switch (band) {
+    case "exact": return "Exact Fit";
+    case "likely": return "Great Match";
+    case "possible": return "Good Match";
+    case "low_confidence": return "Low Confidence";
+  }
+}
+
+export function extractVehicleSpecs(decoded: any): VehicleSpecs {
+  let displacement: number | null = null;
+  if (decoded.engine_size && typeof decoded.engine_size === 'number' && decoded.engine_size > 0) {
+    displacement = decoded.engine_size;
+  }
+
+  let fuelType: string | null = null;
+  if (decoded.fuel_type) {
+    const ft = decoded.fuel_type.toUpperCase();
+    if (ft === 'D' || ft.includes('DIESEL')) fuelType = 'diesel';
+    else if (ft === 'E' || ft.includes('ELECTRIC')) fuelType = 'electric';
+    else if (ft.includes('HYBRID')) fuelType = 'hybrid';
+    else fuelType = 'gas';
+  }
+
+  return {
+    gvwrBand: parseGvwrBand(decoded.gross_vehicle_weight_range),
+    bodyType: decoded.body_type || null,
+    driveType: decoded.drive_type || null,
+    displacement,
+    fuelType,
+  };
+}
+
+export function scoreJob(
+  job: any, 
+  targetVehicle: VehicleContext, 
+  targetSpecs: VehicleSpecs | null,
+  jobSpecs: VehicleSpecs | null,
+  searchQuery?: string | null
+): ScoredJob {
+  const matchDetails: string[] = [];
   const targetYear = targetVehicle.year ? parseInt(String(targetVehicle.year)) : null;
   const vehicleMake = targetVehicle.make;
   const vehicleModel = targetVehicle.model;
-  
-  const jobEngine = parseEngineString(job.vehicle?.engine || "");
-  const jobYear = job.vehicle?.year;
-  const matchDetails: string[] = [];
-  let gatePass = true;
-  let gateReason = "";
-  let enginePenalty = 0;
-  
-  // ONLY fuel type is a hard gate - diesel vs gas is truly incompatible
-  if (targetEngine.fuelType && jobEngine.fuelType && 
-      targetEngine.fuelType !== jobEngine.fuelType) {
-    // Diesel/gas mismatch is a hard gate
-    if ((targetEngine.fuelType === "diesel" || jobEngine.fuelType === "diesel") &&
-        targetEngine.fuelType !== jobEngine.fuelType) {
-      gatePass = false;
-      gateReason = `Fuel mismatch (${targetEngine.fuelType} vs ${jobEngine.fuelType})`;
+  const jobYear = job.vehicle?.year ? parseInt(String(job.vehicle.year)) : null;
+
+  const tFuel = targetSpecs?.fuelType || parseSimpleFuel(targetVehicle.engine);
+  const jFuel = jobSpecs?.fuelType || parseSimpleFuel(job.vehicle?.engine);
+  if (tFuel && jFuel && tFuel !== jFuel) {
+    if ((tFuel === "diesel" || jFuel === "diesel") && tFuel !== jFuel) {
+      return {
+        ...job,
+        matchScore: 0,
+        matchBand: "low_confidence" as ScoreBand,
+        matchBandLabel: "Failed Gate",
+        matchReason: `Fuel mismatch (${tFuel} vs ${jFuel})`,
+        gatePass: false,
+        lowConfidence: true,
+        crossClassPenalized: false,
+      };
     }
   }
-  
-  // Cylinder and aspiration mismatches are soft penalties, not hard gates
-  // Many jobs (oil change, brakes, filters) work across different engine configs
-  if (gatePass && targetEngine.cylinders && jobEngine.cylinders && 
-      targetEngine.cylinders !== jobEngine.cylinders) {
-    enginePenalty += 15;
-    matchDetails.push(`Different cylinder count (${jobEngine.cylinders}-cyl)`);
-  }
-  
-  if (gatePass && targetEngine.aspiration && jobEngine.aspiration &&
-      targetEngine.aspiration !== jobEngine.aspiration) {
-    enginePenalty += 10;
-    matchDetails.push(`Different aspiration`);
-  }
-  
-  if (!gatePass) {
-    return {
-      ...job,
-      matchScore: 0,
-      matchBand: "poor" as ScoreBand,
-      matchBandLabel: "Failed Gate",
-      matchReason: gateReason,
-      gatePass: false,
-    };
-  }
-  
-  // Powertrain scoring
-  let powertrainScore = 0;
-  if (targetEngine.cylinders && jobEngine.cylinders) {
-    if (targetEngine.cylinders === jobEngine.cylinders) {
-      if (targetEngine.displacement && jobEngine.displacement) {
-        const dispDiff = Math.abs(targetEngine.displacement - jobEngine.displacement);
-        if (dispDiff < 0.1) {
-          powertrainScore = 40;
-          matchDetails.push("Exact engine match");
-        } else if (dispDiff < 0.3) {
-          powertrainScore = 36;
-          matchDetails.push("Same cylinders, similar displacement");
-        } else {
-          powertrainScore = 30;
-          matchDetails.push("Same cylinders");
-        }
-      } else {
-        powertrainScore = 28;
-        matchDetails.push("Same cylinders");
-      }
+
+  const tGvwr = targetSpecs?.gvwrBand || inferGvwrBandFromModel(vehicleMake || null, vehicleModel || null);
+  const jGvwr = jobSpecs?.gvwrBand || inferGvwrBandFromModel(job.vehicle?.make || null, job.vehicle?.model || null);
+
+  let gvwrScore = 0;
+  let gvwrMatch = false;
+  if (tGvwr && jGvwr) {
+    if (tGvwr === jGvwr) {
+      gvwrScore = 25;
+      gvwrMatch = true;
+      matchDetails.push(`Same vehicle class (${tGvwr})`);
+    } else {
+      matchDetails.push(`Class mismatch (${tGvwr} vs ${jGvwr})`);
     }
-  } else if (!targetEngine.cylinders && !jobEngine.cylinders) {
-    powertrainScore = 5;
   }
-  
-  // Make/Model scoring
-  let makeModelScore = 0;
-  const targetMakeLower = vehicleMake?.toLowerCase() || "";
+
+  const tBodyGroup = normalizeBodyGroup(targetSpecs?.bodyType);
+  const jBodyGroup = normalizeBodyGroup(jobSpecs?.bodyType);
+  let bodyScore = 0;
+  if (tBodyGroup && jBodyGroup) {
+    if (tBodyGroup === jBodyGroup) {
+      bodyScore = 20;
+      matchDetails.push("Same body style");
+    }
+  }
+
   const targetModelLower = vehicleModel?.toLowerCase() || "";
-  const jobMakeLower = job.vehicle?.make?.toLowerCase() || "";
   const jobModelLower = job.vehicle?.model?.toLowerCase() || "";
-  
-  if (targetMakeLower === jobMakeLower) {
-    makeModelScore += 15;
-    matchDetails.push("Same make");
-  }
-  
+  let modelScore = 0;
   if (targetModelLower && jobModelLower) {
     if (targetModelLower === jobModelLower) {
-      makeModelScore += 15;
+      modelScore = 20;
       matchDetails.push("Same model");
     } else if (targetModelLower.includes(jobModelLower) || jobModelLower.includes(targetModelLower)) {
-      makeModelScore += 10;
+      modelScore = 12;
       matchDetails.push("Model family match");
     }
   }
-  
-  // Year scoring
+
+  const targetMakeLower = vehicleMake?.toLowerCase() || "";
+  const jobMakeLower = job.vehicle?.make?.toLowerCase() || "";
+  let makeScore = 0;
+  if (targetMakeLower && jobMakeLower && targetMakeLower === jobMakeLower) {
+    if (gvwrMatch) {
+      makeScore = 10;
+      matchDetails.push("Same make");
+    } else if (!tGvwr && !jGvwr) {
+      makeScore = 5;
+      matchDetails.push("Same make (class unknown)");
+    } else if (!tGvwr || !jGvwr) {
+      makeScore = 3;
+      matchDetails.push("Same make (partial class data)");
+    } else {
+      matchDetails.push("Same make (cross-class, no credit)");
+    }
+  }
+
+  const tDisp = targetSpecs?.displacement || parseDisplacementFromEngine(targetVehicle.engine);
+  const jDisp = jobSpecs?.displacement || parseDisplacementFromEngine(job.vehicle?.engine);
+  let displacementScore = 0;
+  if (tDisp && jDisp) {
+    const diff = Math.abs(tDisp - jDisp);
+    if (diff <= 0.5) {
+      displacementScore = 15;
+      matchDetails.push(`Engine displacement match (${jDisp}L)`);
+    } else if (diff <= 1.5) {
+      displacementScore = 8;
+      matchDetails.push(`Similar displacement (${jDisp}L)`);
+    }
+  }
+
+  const tDrive = (targetSpecs?.driveType || '').toUpperCase();
+  const jDrive = (jobSpecs?.driveType || '').toUpperCase();
+  let driveScore = 0;
+  if (tDrive && jDrive) {
+    if (tDrive === jDrive) {
+      driveScore = 10;
+      matchDetails.push("Same drive type");
+    } else if (
+      (tDrive.includes('AWD') && jDrive.includes('4WD')) ||
+      (tDrive.includes('4WD') && jDrive.includes('AWD'))
+    ) {
+      driveScore = 7;
+      matchDetails.push("Similar drive type");
+    }
+  }
+
   let yearScore = 0;
   if (targetYear && jobYear) {
     const yearDiff = Math.abs(targetYear - jobYear);
-    if (yearDiff === 0) {
+    if (yearDiff <= 2) {
       yearScore = 10;
-      matchDetails.push("Exact year");
-    } else if (yearDiff <= 2) {
-      yearScore = 8;
-      matchDetails.push(`${yearDiff} year${yearDiff > 1 ? 's' : ''} off`);
-    } else if (yearDiff <= 4) {
+      matchDetails.push(yearDiff === 0 ? "Exact year" : `${yearDiff} year${yearDiff > 1 ? 's' : ''} off`);
+    } else if (yearDiff <= 5) {
       yearScore = 5;
       matchDetails.push(`${yearDiff} years off`);
     } else {
-      yearScore = 2;
       matchDetails.push(`${yearDiff} years off`);
     }
-    
-    if (powertrainScore >= 36 && yearDiff <= 4) {
-      yearScore = Math.min(yearScore + 2, 10);
+  }
+
+  const jobTitle = job.job?.title || job.title || '';
+  const jobCategory = getServiceCategory(jobTitle);
+  const queryCategory = searchQuery ? getServiceCategory(searchQuery) : null;
+  let categoryScore = 0;
+  if (queryCategory && jobCategory) {
+    if (queryCategory === jobCategory) {
+      categoryScore = 15;
+      matchDetails.push(`Service category match (${jobCategory})`);
     }
+  } else if (jobCategory) {
+    categoryScore = 5;
   }
-  
-  let constraintScore = 5;
-  
-  // Evidence scoring
-  let evidenceScore = 0;
-  const hasPartNumbers = job.lines?.some((l: any) => l.lineType === "part" && l.partNumber);
-  if (hasPartNumbers) {
-    evidenceScore += 6;
-    matchDetails.push("Has part numbers");
+
+  let rawScore = gvwrScore + bodyScore + modelScore + makeScore + displacementScore + driveScore + yearScore + categoryScore;
+
+  let crossClassMultiplier = 1.0;
+  let crossClassPenalized = false;
+  if (tGvwr && jGvwr && tGvwr !== jGvwr) {
+    crossClassMultiplier = 0.2;
+    crossClassPenalized = true;
+    rawScore = Math.round(rawScore * crossClassMultiplier);
   }
-  
-  // Recency scoring - exponential decay with 180-day half-life (max +10 points)
-  // Recent jobs likely have more up-to-date pricing
-  let recencyScore = 0;
-  if (job.performedAt) {
-    const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-    // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
-    recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
-    recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
-    
-    if (recencyScore >= 8) {
-      matchDetails.push("Very recent job");
-    } else if (recencyScore >= 5) {
-      matchDetails.push("Recent job");
-    }
-  }
-  
-  const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore - enginePenalty;
-  const normalizedScore = Math.max(0, Math.min(100, totalScore));
-  
-  // Calculate year difference for band determination
-  const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
-  const band = getScoreBand(normalizedScore, yearDiffForBand);
-  
+
+  const finalScore = Math.max(0, Math.min(100, rawScore));
+  const band = getScoreBand(finalScore);
+
   return {
     ...job,
-    matchScore: normalizedScore,
+    matchScore: finalScore,
     matchBand: band,
     matchBandLabel: getBandLabel(band),
     matchReason: matchDetails.join(" | ") || "Keyword match",
     gatePass: true,
+    lowConfidence: band === "low_confidence",
+    crossClassPenalized,
     scoreBreakdown: {
-      powertrain: powertrainScore,
-      makeModel: makeModelScore,
+      gvwrClass: gvwrScore,
+      bodyStyle: bodyScore,
+      model: modelScore,
+      make: makeScore,
+      displacement: displacementScore,
+      driveType: driveScore,
       year: yearScore,
-      constraints: constraintScore,
-      evidence: evidenceScore,
-      recency: recencyScore,
+      serviceCategory: categoryScore,
+      crossClassMultiplier,
     },
   };
+}
+
+function parseSimpleFuel(engine: string | null | undefined): string | null {
+  if (!engine) return null;
+  const upper = engine.toUpperCase();
+  if (/DIESEL|TDI|DURAMAX|POWERSTROKE|CUMMINS/.test(upper)) return "diesel";
+  if (/HYBRID|HEV|PHEV/.test(upper)) return "hybrid";
+  if (/ELECTRIC|EV|BATTERY/.test(upper)) return "electric";
+  return "gas";
+}
+
+function parseDisplacementFromEngine(engine: string | null | undefined): number | null {
+  if (!engine) return null;
+  const upper = engine.toUpperCase();
+  const literMatch = upper.match(/(\d+\.?\d*)\s*L(?:ITER)?/);
+  if (literMatch) return parseFloat(literMatch[1]);
+  const ccMatch = upper.match(/(\d{3,4})\s*CC/);
+  if (ccMatch) return parseInt(ccMatch[1]) / 1000;
+  return null;
+}
+
+export function applyMinimumResults(
+  scoredJobs: ScoredJob[], 
+  minThreshold: number = 15, 
+  minResults: number = 3
+): ScoredJob[] {
+  const aboveThreshold = scoredJobs.filter(j => j.gatePass && j.matchScore >= minThreshold);
+  
+  if (aboveThreshold.length >= minResults) {
+    return aboveThreshold;
+  }
+
+  const allPassing = scoredJobs
+    .filter(j => j.gatePass)
+    .sort((a, b) => b.matchScore - a.matchScore);
+  
+  const results: ScoredJob[] = [];
+  for (const job of allPassing) {
+    if (job.matchScore >= minThreshold) {
+      results.push(job);
+    } else if (results.length < minResults) {
+      results.push({ ...job, lowConfidence: true, matchBand: "low_confidence", matchBandLabel: "Low Confidence" });
+    }
+  }
+  
+  return results;
 }
 
 export function buildSearchQuery(query: string): { coreTokens: string[]; allTokens: string[] } {

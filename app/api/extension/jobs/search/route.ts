@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
-import { scoreJob, buildSearchQuery, STOPWORDS, ScoredJob } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
+import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
 
-// Model variants that share platforms and should cross-reference
 const MODEL_VARIANTS: Record<string, string[]> = {
   "EXPEDITION": ["EXPEDITION", "EXPEDITION MAX"],
   "EXPEDITION MAX": ["EXPEDITION", "EXPEDITION MAX"],
@@ -37,11 +37,11 @@ function escapeRegex(str: string): string {
 
 async function resolveVehicleContext(
   db: any,
-  params: { year: string | null; make: string | null; model: string | null; engine: string | null; roId: string | null; mosShopId: number | null; provider: string }
-): Promise<{ year: string | null; make: string | null; model: string | null; engine: string | null }> {
-  let { year, make, model, engine, roId, mosShopId, provider } = params;
+  params: { year: string | null; make: string | null; model: string | null; engine: string | null; vin: string | null; roId: string | null; mosShopId: number | null; provider: string }
+): Promise<{ year: string | null; make: string | null; model: string | null; engine: string | null; vin: string | null }> {
+  let { year, make, model, engine, vin, roId, mosShopId, provider } = params;
   if (year || make || model || !roId || !mosShopId) {
-    return { year, make, model, engine };
+    return { year, make, model, engine, vin };
   }
   
   const workOrder = await db.collection("tekmetric_work_orders").findOne({
@@ -54,6 +54,7 @@ async function resolveVehicleContext(
     make = workOrder.vehicleMake || null;
     model = workOrder.vehicleModel || null;
     engine = workOrder.vehicleEngine || null;
+    vin = workOrder.vehicleVin || workOrder.vin || vin;
     console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
   } else if (provider === "tekmetric") {
     console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
@@ -65,10 +66,11 @@ async function resolveVehicleContext(
       make = tekRo.vehicle.make || null;
       model = tekRo.vehicle.model || null;
       engine = tekRo.vehicle.engine || null;
+      vin = tekRo.vehicle.vin || vin;
       console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model}`);
     }
   }
-  return { year, make, model, engine };
+  return { year, make, model, engine, vin };
 }
 
 async function resolveSearchShopIds(
@@ -101,6 +103,60 @@ async function resolveSearchShopIds(
   return enterprise.shopIds;
 }
 
+async function resolveDataOneSpecs(
+  targetVin: string | null,
+  jobs: any[]
+): Promise<{ targetSpecs: VehicleSpecs | null; jobSpecsMap: Map<string, VehicleSpecs> }> {
+  const jobSpecsMap = new Map<string, VehicleSpecs>();
+  let targetSpecs: VehicleSpecs | null = null;
+
+  const squishToVin = new Map<string, string>();
+  if (targetVin && targetVin.length >= 11) {
+    try {
+      squishToVin.set(toSquishPublic(targetVin), targetVin);
+    } catch {}
+  }
+  for (const job of jobs) {
+    const jVin = job.vehicle?.vin;
+    if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
+      try {
+        const sq = toSquishPublic(jVin);
+        if (!squishToVin.has(sq)) squishToVin.set(sq, jVin);
+      } catch {}
+    }
+  }
+
+  if (squishToVin.size === 0) return { targetSpecs, jobSpecsMap };
+
+  try {
+    const decoded = await batchDecodeSquishes([...squishToVin.keys()]);
+    
+    if (targetVin && targetVin.length >= 11) {
+      const tSquish = toSquishPublic(targetVin);
+      const tDecoded = decoded.get(tSquish);
+      if (tDecoded) targetSpecs = extractVehicleSpecs(tDecoded);
+    }
+
+    for (const job of jobs) {
+      const jVin = job.vehicle?.vin;
+      if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
+        try {
+          const sq = toSquishPublic(jVin);
+          const jDecoded = decoded.get(sq);
+          if (jDecoded) {
+            const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+            jobSpecsMap.set(jobId, extractVehicleSpecs(jDecoded));
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.error("[Jobs Search] DataOne specs resolution failed (non-blocking):", err);
+  }
+
+  return { targetSpecs, jobSpecsMap };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -121,6 +177,7 @@ export async function GET(request: NextRequest) {
     let make = searchParams.get("make");
     let model = searchParams.get("model");
     let engine = searchParams.get("engine");
+    let vin = searchParams.get("vin");
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
 
     const auth = await validateExtensionToken(request);
@@ -165,15 +222,16 @@ export async function GET(request: NextRequest) {
     }
     
     const [vehicleContext, searchShopIds] = await Promise.all([
-      resolveVehicleContext(db, { year, make, model, engine, roId, mosShopId, provider }),
+      resolveVehicleContext(db, { year, make, model, engine, vin, roId, mosShopId, provider }),
       resolveSearchShopIds(db, mosShopId, isPlatformAdmin, userShopIds),
     ]);
     year = vehicleContext.year;
     make = vehicleContext.make;
     model = vehicleContext.model;
     engine = vehicleContext.engine;
+    vin = vehicleContext.vin;
     
-    console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, shopIds: ${searchShopIds.join(',')}`);
+    console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, VIN: ${vin ? vin.slice(0, 8) + '...' : 'none'}, shopIds: ${searchShopIds.join(',')}`);
 
     const jobsCollection = db.collection("job_index");
 
@@ -200,10 +258,6 @@ export async function GET(request: NextRequest) {
     if (make) {
       matchStage["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
     }
-    // NOTE: Model is NOT used as a hard filter - it's used for scoring only.
-    // This matches the dashboard behavior and allows "oil change on HHR" to find
-    // results from other Chevrolet models (Trax, Cruze, etc.) when no exact
-    // HHR-specific jobs exist in the shop's history.
 
     const [jobIndexResults, normalizedResults] = await Promise.all([
       jobsCollection
@@ -260,31 +314,39 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Jobs Search] Found ${jobs.length} total candidates for scoring`);
 
-    // Score using shared scoring logic
-    const targetVehicle = { year, make, model, engine };
-    const scoredJobs: ScoredJob[] = jobs.map(job => scoreJob(job, targetVehicle));
+    const { targetSpecs, jobSpecsMap } = await resolveDataOneSpecs(vin || null, jobs);
     
-    // Log scoring results for debugging
+    if (targetSpecs) {
+      console.log(`[Jobs Search] Target vehicle specs: GVWR=${targetSpecs.gvwrBand}, body=${targetSpecs.bodyType}, drive=${targetSpecs.driveType}, disp=${targetSpecs.displacement}`);
+    }
+
+    const targetVehicle = { year, make, model, engine, vin };
+    const scoredJobs: ScoredJob[] = jobs.map(job => {
+      const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+      const jobSpecs = jobSpecsMap.get(jobId) || null;
+      return scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query);
+    });
+    
     if (scoredJobs.length > 0) {
       console.log(`[Jobs Search] Scoring results:`, scoredJobs.slice(0, 5).map(j => ({
         title: j.job?.title || j.title,
         score: j.matchScore,
+        band: j.matchBand,
         gatePass: j.gatePass,
+        crossClass: j.crossClassPenalized,
         reason: j.matchReason,
-        vehicle: j.vehicle
+        vehicle: `${j.vehicle?.year} ${j.vehicle?.make} ${j.vehicle?.model}`,
       })));
     }
     
-    // Filter by gate pass only - lower threshold to 20 for extension searches
-    // We want to show more potential matches even if they're not perfect
-    const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 20);
+    const eligible = applyMinimumResults(
+      scoredJobs.sort((a, b) => b.matchScore - a.matchScore),
+      15,
+      3
+    );
     
-    // Sort by score
-    eligibleJobs.sort((a, b) => b.matchScore - a.matchScore);
-    
-    // Deduplicate by job title + vehicle
     const uniqueJobs = new Map<string, ScoredJob>();
-    for (const job of eligibleJobs) {
+    for (const job of eligible) {
       const key = `${job.job?.title || job.title || ''}-${job.vehicle?.make || ''}-${job.vehicle?.model || ''}-${job.vehicle?.year || ''}`;
       const existing = uniqueJobs.get(key);
       if (!existing || existing.matchScore < job.matchScore) {
@@ -384,6 +446,8 @@ export async function GET(request: NextRequest) {
         matchBand: job.matchBand,
         matchBandLabel: job.matchBandLabel,
         matchReason: job.matchReason,
+        lowConfidence: job.lowConfidence || false,
+        crossClassPenalized: job.crossClassPenalized || false,
         source: sourceType,
         shopId: job.shopId || null,
         location: shopLocationMap.get(job.shopId) || null,
@@ -394,12 +458,13 @@ export async function GET(request: NextRequest) {
       jobs: formattedJobs,
       total: formattedJobs.length,
       query,
+      dataOneEnhanced: !!targetSpecs,
       stats: {
         totalFound: jobs.length,
         fromJobIndex: jobIndexResults.length,
         fromNormalized: normalizedResults.length,
         gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
-        belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 40).length,
+        belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,
         returned: formattedJobs.length,
       }
     }, { headers: corsHeaders });

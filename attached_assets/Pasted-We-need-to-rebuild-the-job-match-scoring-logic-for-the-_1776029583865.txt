@@ -1,0 +1,26 @@
+We need to rebuild the job match scoring logic for the job lookup function. The current system is too generous — it awards points for missing data and has a default floor that makes bad matches like a 2019 Ford F550 matching a 2012 Ford Focus tire install at 50% possible. We want smarter scoring without making it so strict that results stop populating.
+The core problems to fix:
+	•	Remove any default/base points awarded when data is missing — unknown fields should contribute 0, not a positive score
+	•	Remove any hardcoded floor/base score that fires regardless of match quality
+	•	Same make without same vehicle class should not award points
+	•	Year proximity should be a sliding bonus, not a flat reward for being “close enough”
+We use DataOne as our VIN decoder. Pull the following fields from the decoded vehicle record and incorporate them into scoring:
+	•	GVWR (use this to assign a vehicle class band: Class 1-2 under 10,000 lbs, Class 3-4 10,000-16,000 lbs, Class 5+ above 16,000 lbs)
+	•	Body style (sedan, pickup, SUV, cab/chassis, van, etc.)
+	•	Engine displacement
+	•	Drive type (FWD, RWD, AWD, 4WD)
+New scoring logic — start from 0, earn up:
+	•	GVWR class band match: +25 pts. If bands do NOT match, apply a 0.2 multiplier to the entire final score before returning it — this is the primary kill switch for cross-class mismatches
+	•	Body style match: +20 pts
+	•	Exact model match: +20 pts
+	•	Make match (only awarded if GVWR band also matches): +10 pts
+	•	Engine displacement within 0.5L: +15 pts, within 0.5-1.5L: +8 pts, beyond 1.5L or unknown: 0 pts
+	•	Drive type match: +10 pts
+	•	Year proximity: within 2 years +10 pts, 3-5 years +5 pts, 6+ years 0 pts
+	•	Job/service category match (tire, brake, engine, electrical, etc.): +15 pts
+Threshold and population rules — important:
+	•	Still return results below the kill switch threshold, but sort them lower and label them clearly as low-confidence matches
+	•	Minimum display threshold should be around 15 pts after multipliers — don’t return pure noise, but don’t hide potentially useful results either
+	•	If fewer than 3 results meet the threshold, relax it and surface the next best matches with a “low confidence” flag rather than returning an empty state
+	•	The goal is: relevant matches rank high, cross-class mismatches rank at the bottom or are flagged, but the user never sees a blank result
+Do not change the job lookup UI, the DataOne API call itself, or any unrelated scoring functions. Only modify the match scoring logic and how results are ranked and labeled on return.

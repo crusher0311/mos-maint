@@ -195,6 +195,28 @@ export async function decodeVinLocal(vin: string): Promise<{
   }
 }
 
+export async function batchDecodeSquishes(squishes: string[]): Promise<Map<string, VinReferenceData>> {
+  const result = new Map<string, VinReferenceData>();
+  if (squishes.length === 0) return result;
+  const unique = [...new Set(squishes)];
+  try {
+    const rows = await withRetry((db) => db<VinReferenceData[]>`
+      SELECT DISTINCT ON (vin_pattern) * FROM dataone_vin_reference 
+      WHERE vin_pattern = ANY(${unique})
+    `);
+    for (const row of rows) {
+      result.set(row.vin_pattern, row);
+    }
+  } catch (error) {
+    console.error("[DataOne] Batch decode error:", error);
+  }
+  return result;
+}
+
+export function toSquishPublic(vin: string): string {
+  return toSquish(vin);
+}
+
 export async function getMaintenanceScheduleLocal(vin: string): Promise<{
   ok: boolean;
   vin: string;

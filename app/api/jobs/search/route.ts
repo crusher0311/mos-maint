@@ -1,78 +1,13 @@
-// app/api/jobs/search/route.ts
-// Job Lookup / Parts Intelligence - Search API
-// Uses two-stage matching: Hard gates + Weighted scoring
-// Queries both legacy job_index and normalized collections for SMS migration support
-
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
+import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
+import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 
 export const dynamic = "force-dynamic";
-
-type EngineInfo = {
-  cylinders: number | null;
-  displacement: number | null;
-  aspiration: "na" | "turbo" | "supercharged" | null;
-  fuelType: "gas" | "diesel" | "hybrid" | "electric" | null;
-};
-
-type ScoreBand = "exact" | "likely" | "possible" | "poor";
-
-function parseEngineString(engine: string): EngineInfo {
-  if (!engine) return { cylinders: null, displacement: null, aspiration: null, fuelType: null };
-  
-  const normalized = engine.toUpperCase();
-  
-  let cylinders: number | null = null;
-  if (/V\s*8|8\s*CYL|8[-\s]?CYLINDER/.test(normalized)) cylinders = 8;
-  else if (/V\s*6|6\s*CYL|6[-\s]?CYLINDER/.test(normalized)) cylinders = 6;
-  else if (/I\s*4|L\s*4|4\s*CYL|4[-\s]?CYLINDER/.test(normalized)) cylinders = 4;
-  else if (/V\s*10|10\s*CYL/.test(normalized)) cylinders = 10;
-  else if (/I\s*6|L\s*6/.test(normalized)) cylinders = 6;
-  else if (/I\s*3|L\s*3|3\s*CYL/.test(normalized)) cylinders = 3;
-  
-  let displacement: number | null = null;
-  const literMatch = normalized.match(/(\d+\.?\d*)\s*L(?:ITER)?/);
-  if (literMatch) {
-    displacement = parseFloat(literMatch[1]);
-  } else {
-    const ccMatch = normalized.match(/(\d{3,4})\s*CC/);
-    if (ccMatch) {
-      displacement = parseInt(ccMatch[1]) / 1000;
-    }
-  }
-  
-  let aspiration: EngineInfo["aspiration"] = "na";
-  if (/TURBO|TWIN\s*TURBO|TT|ECOBOOST/.test(normalized)) aspiration = "turbo";
-  else if (/SUPERCHARGE|SC|BLOWER/.test(normalized)) aspiration = "supercharged";
-  
-  let fuelType: EngineInfo["fuelType"] = "gas";
-  if (/DIESEL|TDI|DURAMAX|POWERSTROKE|CUMMINS/.test(normalized)) fuelType = "diesel";
-  else if (/HYBRID|HEV|PHEV/.test(normalized)) fuelType = "hybrid";
-  else if (/ELECTRIC|EV|BATTERY/.test(normalized)) fuelType = "electric";
-  
-  return { cylinders, displacement, aspiration, fuelType };
-}
-
-function getScoreBand(score: number, yearDiff?: number): ScoreBand {
-  // "Exact" requires high score AND close year match (within 1 year)
-  if (score >= 90 && (yearDiff === undefined || yearDiff <= 1)) return "exact";
-  if (score >= 75) return "likely";
-  if (score >= 50) return "possible";
-  return "poor";
-}
-
-function getBandLabel(band: ScoreBand): string {
-  switch (band) {
-    case "exact": return "Exact Fit";
-    case "likely": return "Great Match";
-    case "possible": return "Good Match";
-    case "poor": return "Low Match";
-  }
-}
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -156,31 +91,12 @@ export async function GET(req: NextRequest) {
     ? { shopId: { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] } }
     : { shopId: { $in: shopIdVariants } };
   
-  // Stopwords: common verbs and filler terms that don't identify the service
-  const stopwords = new Set([
-    "replace", "inspect", "check", "service", "repair", "install", "remove",
-    "adjust", "flush", "bleed", "test", "clean", "lube", "lubricate", 
-    "change", "perform", "complete", "top", "off", "the", "and", "for"
-  ]);
-  
-  let useTextSearch = false;
-  let textSearchQuery = "";
+  const { coreTokens, allTokens } = buildSearchQuery(query);
   
   if (query) {
-    const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    // Core tokens: remove stopwords to get the essential service identifiers
-    const coreTokens = allTokens.filter(w => !stopwords.has(w));
-    
     if (coreTokens.length > 0) {
-      // Use keywords array match (uses compound index shopId_keywords)
-      // This is fast with the index and more precise than text search
       matchStage["job.keywords"] = { $all: coreTokens };
-      
-      // Also enable text search as alternative query strategy
-      useTextSearch = true;
-      textSearchQuery = coreTokens.join(" ");
     } else if (allTokens.length > 0) {
-      // Fallback: if only stopwords, match any token in keywords
       matchStage["job.keywords"] = { $in: allTokens };
     }
   }
@@ -214,13 +130,9 @@ export async function GET(req: NextRequest) {
     }},
   ];
 
-  // Query both legacy job_index and normalized collections in parallel
-  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  const coreTokensForNormalized = allTokens.filter(w => !stopwords.has(w));
-  
   const [jobIndexResults, normalizedResults] = await Promise.all([
     db.collection("job_index").aggregate(pipeline).toArray(),
-    searchNormalizedCollections(db, searchShopIds, coreTokensForNormalized, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel)
+    searchNormalizedCollections(db, searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel)
   ]);
   
   // Merge results from both sources, deduping by workOrderId + job title
@@ -245,190 +157,75 @@ export async function GET(req: NextRequest) {
   
   console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
   
-  const targetEngine = parseEngineString(vehicleEngine || "");
-  const targetYear = vehicleYear ? parseInt(vehicleYear) : null;
+  const vehicleVin = searchParams.get("vin");
 
-  const scoredJobs = jobs.map((job: any) => {
-    const jobEngine = parseEngineString(job.vehicle?.engine || "");
-    const jobYear = job.vehicle?.year;
-    const matchDetails: string[] = [];
-    let gatePass = true;
-    let gateReason = "";
-    
-    if (targetEngine.fuelType && jobEngine.fuelType && 
-        targetEngine.fuelType !== jobEngine.fuelType) {
-      gatePass = false;
-      gateReason = `Fuel mismatch (${targetEngine.fuelType} vs ${jobEngine.fuelType})`;
+  let targetSpecs: VehicleSpecs | null = null;
+  const jobSpecsMap = new Map<string, VehicleSpecs>();
+  
+  try {
+    const squishToVin = new Map<string, string>();
+    if (vehicleVin && vehicleVin.length >= 11) {
+      try { squishToVin.set(toSquishPublic(vehicleVin), vehicleVin); } catch {}
     }
-    
-    if (gatePass && targetEngine.cylinders && jobEngine.cylinders && 
-        targetEngine.cylinders !== jobEngine.cylinders) {
-      gatePass = false;
-      gateReason = `Cylinder mismatch (${targetEngine.cylinders} vs ${jobEngine.cylinders})`;
+    for (const job of jobs) {
+      const jVin = job.vehicle?.vin || job.vin;
+      if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
+        try {
+          const sq = toSquishPublic(jVin);
+          if (!squishToVin.has(sq)) squishToVin.set(sq, jVin);
+        } catch {}
+      }
     }
-    
-    if (gatePass && targetEngine.aspiration && jobEngine.aspiration &&
-        targetEngine.aspiration !== jobEngine.aspiration) {
-      gatePass = false;
-      gateReason = `Aspiration mismatch (${targetEngine.aspiration} vs ${jobEngine.aspiration})`;
-    }
-    
-    if (!gatePass) {
-      return {
-        ...job,
-        matchScore: 0,
-        matchBand: "poor" as ScoreBand,
-        matchBandLabel: "Failed Gate",
-        matchReason: gateReason,
-        gatePass: false,
-      };
-    }
-    
-    let powertrainScore = 0;
-    if (targetEngine.cylinders && jobEngine.cylinders) {
-      if (targetEngine.cylinders === jobEngine.cylinders) {
-        if (targetEngine.displacement && jobEngine.displacement) {
-          const dispDiff = Math.abs(targetEngine.displacement - jobEngine.displacement);
-          if (dispDiff < 0.1) {
-            powertrainScore = 40;
-            matchDetails.push("Exact engine match");
-          } else if (dispDiff < 0.3) {
-            powertrainScore = 36;
-            matchDetails.push("Same cylinders, similar displacement");
-          } else {
-            powertrainScore = 30;
-            matchDetails.push("Same cylinders");
-          }
-        } else {
-          powertrainScore = 28;
-          matchDetails.push("Same cylinders");
+    if (squishToVin.size > 0) {
+      const decoded = await batchDecodeSquishes([...squishToVin.keys()]);
+      if (vehicleVin && vehicleVin.length >= 11) {
+        const tDecoded = decoded.get(toSquishPublic(vehicleVin));
+        if (tDecoded) targetSpecs = extractVehicleSpecs(tDecoded);
+      }
+      for (const job of jobs) {
+        const jVin = job.vehicle?.vin || job.vin;
+        if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
+          try {
+            const jDecoded = decoded.get(toSquishPublic(jVin));
+            if (jDecoded) {
+              const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+              jobSpecsMap.set(jobId, extractVehicleSpecs(jDecoded));
+            }
+          } catch {}
         }
       }
-    } else if (!targetEngine.cylinders && !jobEngine.cylinders) {
-      powertrainScore = 20;
     }
+  } catch (err) {
+    console.error("[Jobs Search] DataOne specs resolution failed (non-blocking):", err);
+  }
+
+  const targetVehicle = { year: vehicleYear, make: vehicleMake, model: vehicleModel, engine: vehicleEngine, vin: vehicleVin };
+  const scoredJobs = jobs.map((job: any) => {
+    const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+    const jobSpecs = jobSpecsMap.get(jobId) || null;
+    const scored = scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query);
     
-    let makeModelScore = 0;
-    const targetMakeLower = vehicleMake?.toLowerCase() || "";
-    const targetModelLower = vehicleModel?.toLowerCase() || "";
-    const jobMakeLower = job.vehicle?.make?.toLowerCase() || "";
-    const jobModelLower = job.vehicle?.model?.toLowerCase() || "";
-    
-    if (targetMakeLower === jobMakeLower) {
-      makeModelScore += 15;
-      matchDetails.push("Same make");
-    }
-    
-    if (targetModelLower && jobModelLower) {
-      if (targetModelLower === jobModelLower) {
-        makeModelScore += 15;
-        matchDetails.push("Same model");
-      } else if (targetModelLower.includes(jobModelLower) || jobModelLower.includes(targetModelLower)) {
-        makeModelScore += 10;
-        matchDetails.push("Model family match");
-      }
-    }
-    
-    let yearScore = 0;
-    if (targetYear && jobYear) {
-      const yearDiff = Math.abs(targetYear - jobYear);
-      if (yearDiff === 0) {
-        yearScore = 10;
-        matchDetails.push("Exact year");
-      } else if (yearDiff <= 2) {
-        yearScore = 8;
-        matchDetails.push(`${yearDiff} year${yearDiff > 1 ? 's' : ''} off`);
-      } else if (yearDiff <= 4) {
-        yearScore = 5;
-        matchDetails.push(`${yearDiff} years off`);
-      } else {
-        yearScore = 2;
-        matchDetails.push(`${yearDiff} years off`);
-      }
-      
-      if (powertrainScore >= 36 && yearDiff <= 4) {
-        yearScore = Math.min(yearScore + 2, 10);
-      }
-    }
-    
-    let constraintScore = 10;
-    
-    let evidenceScore = 0;
-    const hasPartNumbers = job.lines?.some((l: any) => l.lineType === "part" && l.partNumber);
-    if (hasPartNumbers) {
-      evidenceScore += 6;
-      matchDetails.push("Has part numbers");
-    }
-    
-    // Recency scoring - exponential decay with 180-day half-life (max +10 points)
-    // Recent jobs likely have more up-to-date pricing
-    let recencyScore = 0;
-    if (job.performedAt) {
-      const daysSincePerformed = (Date.now() - new Date(job.performedAt).getTime()) / (1000 * 60 * 60 * 24);
-      // Formula: 10 * 2^(-days/180) gives +10 at day 0, +5 at 180 days, +2.5 at 360 days
-      recencyScore = Math.round(10 * Math.pow(2, -(daysSincePerformed / 180)));
-      recencyScore = Math.max(0, Math.min(10, recencyScore)); // Clamp to 0-10
-      
-      if (recencyScore >= 8) {
-        matchDetails.push("Very recent job");
-      } else if (recencyScore >= 5) {
-        matchDetails.push("Recent job");
-      }
-    }
-    
-    // Location bonus: prefer jobs from current shop
     const jobShopId = Number(job.shopId);
     const isCurrentLocation = jobShopId === shopId;
-    const locationBonus = isCurrentLocation ? 5 : 0;
-    
-    // Get location info for display
     const shopInfo = shopLookup.get(jobShopId);
     const locationName = shopInfo?.locationIdentifier || shopInfo?.name || `Shop ${jobShopId}`;
     
-    const totalScore = powertrainScore + makeModelScore + yearScore + constraintScore + evidenceScore + recencyScore + locationBonus;
-    const normalizedScore = Math.max(0, Math.min(100, totalScore));
-    
-    // Calculate year difference for band determination
-    const yearDiffForBand = (targetYear && jobYear) ? Math.abs(targetYear - jobYear) : undefined;
-    const band = getScoreBand(normalizedScore, yearDiffForBand);
-    
     return {
-      ...job,
-      matchScore: normalizedScore,
-      matchBand: band,
-      matchBandLabel: getBandLabel(band),
-      matchReason: matchDetails.join(" | ") || "Keyword match",
-      gatePass: true,
+      ...scored,
       isCurrentLocation,
       locationName,
       locationShopId: jobShopId,
-      scoreBreakdown: {
-        powertrain: powertrainScore,
-        makeModel: makeModelScore,
-        year: yearScore,
-        constraints: constraintScore,
-        evidence: evidenceScore,
-        recency: recencyScore,
-        locationBonus,
-      },
     };
   });
   
-  // Lower threshold to 40 to include more results - let user decide relevance
-  const eligibleJobs = scoredJobs.filter(j => j.gatePass && j.matchScore >= 40);
-  
-  // Sort by score descending, then by band quality (exact > likely > possible > poor)
-  const bandOrder: Record<string, number> = { exact: 0, likely: 1, possible: 2, poor: 3 };
-  eligibleJobs.sort((a, b) => {
-    if (b.matchScore !== a.matchScore) {
-      return b.matchScore - a.matchScore;
-    }
-    // When scores are equal, prioritize by band (Exact Fit before Great Match)
-    return (bandOrder[a.matchBand] ?? 3) - (bandOrder[b.matchBand] ?? 3);
-  });
+  const eligible = applyMinimumResults(
+    scoredJobs.sort((a, b) => b.matchScore - a.matchScore),
+    15,
+    3
+  );
 
-  const uniqueJobs = new Map<string, typeof eligibleJobs[0]>();
-  for (const job of eligibleJobs) {
+  const uniqueJobs = new Map<string, typeof eligible[0]>();
+  for (const job of eligible) {
     const key = `${job.job?.title || ''}-${job.vehicle?.make || ''}-${job.vehicle?.model || ''}-${job.vehicle?.year || ''}`;
     const existing = uniqueJobs.get(key);
     if (!existing || existing.matchScore < job.matchScore) {
@@ -438,20 +235,18 @@ export async function GET(req: NextRequest) {
 
   const results = Array.from(uniqueJobs.values()).slice(0, limit);
   
-  const gateFailCount = scoredJobs.filter(j => !j.gatePass).length;
-  const belowThresholdCount = scoredJobs.filter(j => j.gatePass && j.matchScore < 70).length;
-
   return NextResponse.json({
     ok: true,
     query,
     vehicle: { year: vehicleYear, make: vehicleMake, model: vehicleModel, engine: vehicleEngine },
+    dataOneEnhanced: !!targetSpecs,
     results,
     stats: {
       totalFound: jobs.length,
       fromJobIndex: jobIndexResults.length,
       fromNormalized: normalizedResults.length,
-      gatesFailed: gateFailCount,
-      belowThreshold: belowThresholdCount,
+      gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
+      belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,
       returned: results.length,
     },
   });
