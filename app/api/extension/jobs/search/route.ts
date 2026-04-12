@@ -5,6 +5,7 @@ import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, S
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
+import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
 import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
 
 const MODEL_VARIANTS: Record<string, string[]> = {
@@ -259,7 +260,7 @@ export async function GET(request: NextRequest) {
       matchStage["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
     }
 
-    const [jobIndexResults, normalizedResults] = await Promise.all([
+    const [jobIndexResults, normalizedResults, supabaseResults] = await Promise.all([
       jobsCollection
         .aggregate([
           { $match: matchStage },
@@ -267,7 +268,8 @@ export async function GET(request: NextRequest) {
           { $limit: limit * 5 }
         ], { maxTimeMS: 8000 })
         .toArray(),
-      searchNormalizedCollections(db, searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined)
+      searchNormalizedCollections(db, searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined),
+      searchSupabaseServiceJobs(searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined),
     ]);
 
     const seenKeys = new Set<string>();
@@ -288,8 +290,16 @@ export async function GET(request: NextRequest) {
         jobs.push({ ...job, dataSource: 'normalized' });
       }
     }
+    
+    for (const job of supabaseResults) {
+      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}-pg`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        jobs.push(job);
+      }
+    }
 
-    console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
+    console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized_mongo, ${supabaseResults.length} from supabase`);
 
     if (jobs.length === 0 && coreTokens.length > 0) {
       const fallbackMatch: Record<string, any> = {};
@@ -463,6 +473,7 @@ export async function GET(request: NextRequest) {
         totalFound: jobs.length,
         fromJobIndex: jobIndexResults.length,
         fromNormalized: normalizedResults.length,
+        fromSupabase: supabaseResults.length,
         gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
         belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,
         returned: formattedJobs.length,

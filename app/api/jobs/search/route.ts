@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
+import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
 import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 
@@ -130,12 +131,12 @@ export async function GET(req: NextRequest) {
     }},
   ];
 
-  const [jobIndexResults, normalizedResults] = await Promise.all([
+  const [jobIndexResults, normalizedResults, supabaseResults] = await Promise.all([
     db.collection("job_index").aggregate(pipeline).toArray(),
-    searchNormalizedCollections(db, searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel)
+    searchNormalizedCollections(db, searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel),
+    searchSupabaseServiceJobs(searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel),
   ]);
   
-  // Merge results from both sources, deduping by workOrderId + job title
   const seenKeys = new Set<string>();
   const jobs: any[] = [];
   
@@ -155,7 +156,15 @@ export async function GET(req: NextRequest) {
     }
   }
   
-  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized`);
+  for (const job of supabaseResults) {
+    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}-pg`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      jobs.push(job);
+    }
+  }
+  
+  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized_mongo, ${supabaseResults.length} from supabase`);
   
   const vehicleVin = searchParams.get("vin");
 
@@ -245,6 +254,7 @@ export async function GET(req: NextRequest) {
       totalFound: jobs.length,
       fromJobIndex: jobIndexResults.length,
       fromNormalized: normalizedResults.length,
+      fromSupabase: supabaseResults.length,
       gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
       belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,
       returned: results.length,

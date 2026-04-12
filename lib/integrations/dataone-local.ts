@@ -49,12 +49,12 @@ async function ensureAwake(): Promise<void> {
         await resetConnection();
         for (let attempt = 0; attempt < 3; attempt++) {
           const delayMs = 2000 * Math.pow(2, attempt);
-          console.log(`[DataOne] Waking Neon endpoint, attempt ${attempt + 1}/3 (waiting ${Math.round(delayMs)}ms)...`);
+          console.log(`[DataOne] Waking DB endpoint, attempt ${attempt + 1}/3 (waiting ${Math.round(delayMs)}ms)...`);
           await new Promise(r => setTimeout(r, delayMs));
           try {
             const db = getSql();
             await db`SELECT 1`;
-            console.log(`[DataOne] Neon endpoint awake after attempt ${attempt + 1}`);
+            console.log(`[DataOne] DB endpoint awake after attempt ${attempt + 1}`);
             return;
           } catch (retryErr: any) {
             if (attempt < 2) {
@@ -62,8 +62,8 @@ async function ensureAwake(): Promise<void> {
             }
           }
         }
-        console.error(`[DataOne] Failed to wake Neon endpoint after 3 attempts`);
-        throw new Error("DataOne Neon endpoint unavailable after retries");
+        console.error(`[DataOne] Failed to wake DB endpoint after 3 attempts`);
+        throw new Error("DataOne DB endpoint unavailable after retries");
       }
       throw err;
     }
