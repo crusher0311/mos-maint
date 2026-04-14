@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
 
 export const runtime = "nodejs";
@@ -304,9 +304,10 @@ async function backfillShopChunk(
       let inspections: any[] = [];
       const hasInspectionUrl = !!(ro as any).inspectionUrl;
       const inspectionShared = !!(ro as any).inspectionShareDate;
-      if (hasInspectionUrl || inspectionShared) {
+      const backfillXAuthToken = shop?.tekmetric?.xAuthToken || null;
+      if ((hasInspectionUrl || inspectionShared) && backfillXAuthToken) {
         try {
-          inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+          inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, backfillXAuthToken);
         } catch (inspErr: any) {
           console.warn(`[Tekmetric Backfill] Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
         }

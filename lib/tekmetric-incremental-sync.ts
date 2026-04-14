@@ -8,7 +8,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
-import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
+import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
@@ -53,6 +53,7 @@ export interface ShopSyncState {
   lastClosedSweepAt: Date | null;
   consecutiveAuthFailures: number;
   pausedUntil: Date | null;
+  xAuthToken?: string | null;
 }
 
 interface OverflowPage {
@@ -172,7 +173,8 @@ export async function cacheCustomer(db: any, customerId: number, customer: Tekme
 export async function syncShopIncremental(
   shopId: number,
   tekmetricShopId: number,
-  state: ShopSyncState
+  state: ShopSyncState,
+  xAuthToken?: string | null
 ): Promise<IncrementalSyncResult> {
   const db = await getDb();
   const result: IncrementalSyncResult = {
@@ -259,7 +261,7 @@ export async function syncShopIncremental(
       }
 
       if (vehicle?.vin) {
-        await upsertWorkOrder(db, shopId, tekmetricShopId, ro, vehicle, customer);
+        await upsertWorkOrder(db, shopId, tekmetricShopId, ro, vehicle, customer, xAuthToken || state.xAuthToken);
         result.synced++;
       }
     }
@@ -309,7 +311,8 @@ async function upsertWorkOrder(
   tekmetricShopId: number,
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
-  customer?: TekmetricCustomer | null
+  customer?: TekmetricCustomer | null,
+  xAuthToken?: string | null
 ): Promise<void> {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -332,11 +335,11 @@ async function upsertWorkOrder(
   const inspectionShareDate = (ro as any).inspectionShareDate || existing?.inspectionShareDate || null;
 
   let inspections: any[] | null = null;
-  if (dviDetected && tekmetricShopId) {
+  if (dviDetected && tekmetricShopId && xAuthToken) {
     try {
-      inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+      inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, xAuthToken);
       if (inspections && inspections.length > 0) {
-        console.log(`[Tekmetric Incremental] Fetched ${inspections.length} inspection(s) for RO ${ro.id}`);
+        console.log(`[Tekmetric Incremental] Fetched ${inspections.length} inspection(s) for RO ${ro.id} via stored x-auth-token`);
       }
     } catch (inspErr: any) {
       console.warn(`[Tekmetric Incremental] Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
@@ -445,6 +448,7 @@ export async function runIncrementalSyncCycle(): Promise<{
   for (const shop of shops) {
     const state = await getShopSyncState(db, Number(shop.shopId));
     if (state) {
+      state.xAuthToken = shop.tekmetric?.xAuthToken || null;
       shopStates.push(state);
     }
   }
@@ -458,7 +462,7 @@ export async function runIncrementalSyncCycle(): Promise<{
       if (index > 0) {
         await new Promise(resolve => setTimeout(resolve, index * 400));
       }
-      return syncShopIncremental(state.shopId, state.tekmetricShopId, state);
+      return syncShopIncremental(state.shopId, state.tekmetricShopId, state, state.xAuthToken);
     });
     
     const batchResults = await Promise.all(batchPromises);

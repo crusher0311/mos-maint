@@ -29,6 +29,8 @@ let ownJobPostInFlight = false; // Track our own POST /job calls to avoid loops
 let lastJobCount = 0; // Track job count to detect new jobs
 let laborReapplyTimer = null; // Debounce timer for re-applying after new jobs
 let lastInspectionFetchRoId = null; // Prevent duplicate inspection fetches
+const xAuthTokenRelayMap = {}; // Per-shop timestamp of last successful x-auth-token relay
+const XAUTH_RELAY_INTERVAL = 30 * 60 * 1000; // Relay x-auth-token at most once per 30 minutes per shop
 
 // ==================== PERSISTENCE ====================
 // Restore all persisted state on startup as a single awaitable promise.
@@ -136,6 +138,34 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       if (isNewToken && laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
         autoApplyLaborRate(currentSmsContext).catch(err => {
           console.warn("[LaborRate] Deferred auto-apply error:", err.message);
+        });
+      }
+
+      // Relay x-auth-token to MOS backend for server-side inspection fetching (debounced per shop)
+      const now = Date.now();
+      const shopRelayKey = tekmetricShopId || 'unknown';
+      const lastRelay = xAuthTokenRelayMap[shopRelayKey] || 0;
+      if (mosApiToken && mosApiUrl && tekmetricShopId && (now - lastRelay > XAUTH_RELAY_INTERVAL)) {
+        fetch(`${mosApiUrl}/api/extension/auth-token`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${mosApiToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            provider: 'tekmetric',
+            smsShopId: tekmetricShopId,
+            token: tokenHeader.value
+          })
+        }).then(res => {
+          if (res.ok) {
+            xAuthTokenRelayMap[shopRelayKey] = Date.now();
+            console.log("[MOS] Relayed x-auth-token for shop", tekmetricShopId);
+          } else {
+            console.warn("[MOS] x-auth-token relay failed:", res.status);
+          }
+        }).catch(err => {
+          console.warn("[MOS] x-auth-token relay error:", err.message);
         });
       }
     }

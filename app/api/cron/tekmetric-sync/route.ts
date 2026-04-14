@@ -8,7 +8,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
-import { resetTekmetricApiCallCount, getRepairOrderInspections, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
+import { resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
@@ -232,6 +232,7 @@ export async function GET(req: NextRequest) {
     for (const shop of shops) {
       const shopId = Number(shop.shopId);
       const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
+      const xAuthToken = shop.tekmetric?.xAuthToken || null;
       
       if (!tekmetricShopId) continue;
 
@@ -300,17 +301,19 @@ export async function GET(req: NextRequest) {
             const hasDviSignal = hasInspectionUrl || inspectionShared || labelDvi.hasDvi || labelDvi.dviComplete || jobDvi;
             
             let inspections: any[] | null = null;
-            if (hasDviSignal) {
+            if (hasDviSignal && xAuthToken) {
               dviCount++;
               try {
-                inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+                inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, xAuthToken);
                 if (inspections && inspections.length > 0) {
-                  console.log(`[Tekmetric] Shop ${shopId}: Fetched ${inspections.length} inspection(s) for RO ${ro.id}`);
+                  console.log(`[Tekmetric] Shop ${shopId}: Fetched ${inspections.length} inspection(s) for RO ${ro.id} via stored x-auth-token`);
                 }
               } catch (inspErr: any) {
                 console.warn(`[Tekmetric] Shop ${shopId}: Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
                 inspections = null;
               }
+            } else if (hasDviSignal) {
+              dviCount++;
             }
             
             await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections, {
