@@ -1,0 +1,1002 @@
+[
+    {
+        "id": 55851638,
+        "name": "HEART Certified Auto Care Inspection",
+        "repairOrderId": 318261818,
+        "technician": {
+            "id": 107741,
+            "name": "Daniel Arroyo"
+        },
+        "inspectionId": 115783,
+        "inspectionTasks": [
+            {
+                "title": "Customer Concerns",
+                "groupSortOrder": 1,
+                "tasks": [
+                    {
+                        "id": 1473605702,
+                        "name": "Customer Concerns",
+                        "inspectionRating": {
+                            "id": 2,
+                            "code": "MAYRQRATTN",
+                            "name": "May Require Attention Soon"
+                        },
+                        "finding": "VEHICLE OVERHEATING, TOWED IN. WAS TOLD HAS HEAD GASKET(S) FAILURE. ",
+                        "inspectionGroup": "Customer Concerns",
+                        "groupSortOrder": 1,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477078,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    }
+                ]
+            },
+            {
+                "title": "Exterior Of Vehicle",
+                "groupSortOrder": 2,
+                "tasks": [
+                    {
+                        "id": 1473605703,
+                        "name": "Exterior Photos Of Vehicle",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Exterior Of Vehicle",
+                        "groupSortOrder": 2,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477079,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605704,
+                        "name": "Exterior Lighting",
+                        "inspectionRating": {
+                            "id": 3,
+                            "code": "RQRSATTN",
+                            "name": "Requires Immediate Attention"
+                        },
+                        "finding": "Both front side markers and right rear tail light out",
+                        "inspectionGroup": "Exterior Of Vehicle",
+                        "groupSortOrder": 2,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477080,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605705,
+                        "name": "Body Damage",
+                        "inspectionRating": {
+                            "id": 2,
+                            "code": "MAYRQRATTN",
+                            "name": "May Require Attention Soon"
+                        },
+                        "finding": "Hood wont latch closed",
+                        "inspectionGroup": "Exterior Of Vehicle",
+                        "groupSortOrder": 2,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477081,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605706,
+                        "name": "Missing Wheel Hub Caps/Center Caps",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Exterior Of Vehicle",
+                        "groupSortOrder": 2,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477082,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    }
+                ]
+            },
+            {
+                "title": "Test Drive",
+                "groupSortOrder": 3,
+                "tasks": [
+                    {
+                        "id": 1473605707,
+                        "name": "Warning Lights",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Test Drive",
+                        "groupSortOrder": 3,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477083,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605708,
+                        "name": "Horn",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Test Drive",
+                        "groupSortOrder": 3,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477084,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605709,
+                        "name": "Wiper Blades",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Test Drive",
+                        "groupSortOrder": 3,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477085,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605710,
+                        "name": "Noises Heard",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": "NONE HEARD ON TEST DRIVE",
+                        "inspectionGroup": "Test Drive",
+                        "groupSortOrder": 3,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477086,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605711,
+                        "name": "Powertrain, Drivetrain, Steering, Suspension, & Braking Drivability Issues",
+                        "inspectionRating": {
+                            "id": 3,
+                            "code": "RQRSATTN",
+                            "name": "Requires Immediate Attention"
+                        },
+                        "finding": "OVERHEATING ON TEST DRIVE",
+                        "inspectionGroup": "Test Drive",
+                        "groupSortOrder": 3,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477087,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    }
+                ]
+            },
+            {
+                "title": "Vehicle Inspection",
+                "groupSortOrder": 4,
+                "tasks": [
+                    {
+                        "id": 1473605712,
+                        "name": "Diagnostic Findings",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "PASSED BLOCK TEST (TO CHECK FOR CYLINDER HEAD GASKET FAILURE).TECH CONFIRMED THERMOSTAT OPENING/CLOSING PROPERLY. FLOW TO HEATER HOSES VERY WEAK (DRIBBLE). TECH BELIEVES WATER PUMP BINDING/LACK OF COOLANT FLOW THROUGH ENGINE BLOCK. ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477088,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605713,
+                        "name": "Engine Oil",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477089,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605714,
+                        "name": "Engine Air Filter",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477090,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113427,
+                                "name": "Air filter dirty. Recommend replacement.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 909543,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605715,
+                        "name": "Cabin Air Filter",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477091,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113428,
+                                "name": "Cabin air filter dirty. Recommend replacement.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 906026,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605716,
+                        "name": "Cowling/Vent Intake",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477092,
+                        "potentialFindingsToSelect": null,
+                        "motoVisualsAnimationId": null,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605717,
+                        "name": "Brake Fluid",
+                        "inspectionRating": {
+                            "id": 2,
+                            "code": "MAYRQRATTN",
+                            "name": "May Require Attention Soon"
+                        },
+                        "finding": "LEVEL & CONDITION OKAY/LAST SERVICED AT 94,484 MILES, 09/13/2021 PER CARFAX",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477093,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113429,
+                                "name": "A brake fluid exchange is vital because old fluid absorbs moisture, lowering its boiling point and causing brake failure. It also prevents corrosion and maintains brake system efficiency, ensuring safe and reliable braking performance. This is typically performed every 2 years",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 602512,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605718,
+                        "name": "Power Steering Fluid",
+                        "inspectionRating": {
+                            "id": 2,
+                            "code": "MAYRQRATTN",
+                            "name": "May Require Attention Soon"
+                        },
+                        "finding": "DARK IN COLOR ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477094,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113430,
+                                "name": "Power steering service is vital for smooth and responsive steering, enhancing driving safety and comfort. Regular maintenance ensures the steering fluid is clean and at the proper level, preventing pump wear and steering difficulties. This service helps avoid costly repairs, maintains optimal steering performance, and ensures a safer driving experience.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 605017,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605719,
+                        "name": "Coolant/Cooling System",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": "LAST SERVICED AT 129,348 MILES, 05/22/2025 PER CARFAX",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477095,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113431,
+                                "name": "Coolant service is crucial for preventing engine overheating and protecting against corrosion. By regularly checking and replacing the coolant, you ensure optimal engine temperature, efficient performance, and prevent potential damage from overheating. This maintenance task helps avoid costly repairs, extends the lifespan of the engine, and ensures your vehicle runs smoothly, especially in extreme weather conditions.",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113432,
+                                "name": "The water pump circulates coolant through the engine and radiator to regulate temperature. This constant flow removes heat from the engine, preventing overheating and potential damage such as warped components, blown head gaskets, or complete engine failure.",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113433,
+                                "name": "The thermostat regulates engine temperature by controlling when coolant flows from the engine to the radiator. It stays closed while the engine warms up, then opens at a set temperature to allow coolant to circulate, maintaining the engine’s optimal operating temperature.",
+                                "sortOrder": 3
+                            },
+                            {
+                                "id": 2113434,
+                                "name": "The radiator removes heat from the coolant after it passes through the engine. As coolant flows through the radiator’s fins, air cools it down before it circulates back through the engine, helping maintain proper operating temperature and prevent overheating.",
+                                "sortOrder": 4
+                            }
+                        ],
+                        "motoVisualsAnimationId": 905014,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605720,
+                        "name": "Transmission Fluid",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "SEALED TRANSMISSION/LAST SERVICED AT 129,348 MILES, 05/22/2025 PER CARFAX",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477096,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113435,
+                                "name": "A transmission flush is important for removing old, contaminated fluid and debris from the transmission system. This helps maintain smooth shifting, improves overall performance, and extends the life of the transmission. Regular flushing prevents overheating, reduces wear, and can help avoid costly repairs by keeping the transmission clean and properly lubricated.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 909546,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605721,
+                        "name": "Battery & Charging System",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477097,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113436,
+                                "name": "Battery needs replacement. ",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113437,
+                                "name": "Alternator needs replacement. An alternator generates electrical power to recharge the battery and supply electricity to a vehicle’s electrical systems while the engine runs. It ensures proper functioning of components like lights and radio, and its failure can lead to battery drain and loss of electrical functions.",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113438,
+                                "name": "Starter needs replacement. A starter motor initiates the engine's combustion process by turning the flywheel when you start the vehicle. It converts electrical energy from the battery into mechanical energy to get the engine running. A malfunctioning starter motor can prevent the engine from starting.",
+                                "sortOrder": 3
+                            }
+                        ],
+                        "motoVisualsAnimationId": 907501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605722,
+                        "name": "Drive Belt(s)",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477098,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113439,
+                                "name": "Drive belts power crucial engine components like the alternator, water pump, and air conditioning. They ensure these systems operate smoothly, affecting engine performance and vehicle comfort. Worn or broken belts can lead to component failure and potential breakdowns.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 903518,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605723,
+                        "name": "Ignition System",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "NO RECORD OF SPARK PLUG REPLACEMENT ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477099,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113440,
+                                "name": "Spark plugs",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113441,
+                                "name": "Ignition Coils",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113442,
+                                "name": "Ignition Wires",
+                                "sortOrder": 3
+                            }
+                        ],
+                        "motoVisualsAnimationId": 6501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605724,
+                        "name": "Fuel Induction ",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "NO RECORD OF FUEL INDUCTION SERVICE",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477100,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113443,
+                                "name": "Fuel induction service due. ",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 905022,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605725,
+                        "name": "Tires",
+                        "inspectionRating": {
+                            "id": 3,
+                            "code": "RQRSATTN",
+                            "name": "Requires Immediate Attention"
+                        },
+                        "finding": "Tires show cracks and dry rotting, tires are at 7/32NDS, Right rear came in at 10 psi, had temp plug (LEAKING). RECOMMEND REPLACING TIRES WITH ALIGNMENT. ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477101,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113444,
+                                "name": "Needs tires replaced",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113445,
+                                "name": "Tire rotation recommended ",
+                                "sortOrder": 2
+                            }
+                        ],
+                        "motoVisualsAnimationId": 9562,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605726,
+                        "name": "Front Brakes",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": "Front brakes are at 8mm,  rotors show surface rust ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477102,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113446,
+                                "name": "Brake pads and rotors require replacement",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113447,
+                                "name": "Brake caliper service needed",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113448,
+                                "name": "Rotors warped",
+                                "sortOrder": 3
+                            }
+                        ],
+                        "motoVisualsAnimationId": 2510,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605727,
+                        "name": "Rear Brakes",
+                        "inspectionRating": {
+                            "id": 2,
+                            "code": "MAYRQRATTN",
+                            "name": "May Require Attention Soon"
+                        },
+                        "finding": "Rear brakes are at 4mm, rotor show surface rust (MAY CAUSE NOISE) ",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477103,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113449,
+                                "name": "Brake pads and rotors require replacement",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113450,
+                                "name": "Brake caliper service needed",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113451,
+                                "name": "Rotors wapred",
+                                "sortOrder": 3
+                            },
+                            {
+                                "id": 2113452,
+                                "name": "Brake shoes, hardware, and drums require replacement",
+                                "sortOrder": 4
+                            }
+                        ],
+                        "motoVisualsAnimationId": 902501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605728,
+                        "name": "Front Suspension",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477104,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113453,
+                                "name": "Shock absorbers maintain vehicle stability and comfort by controlling suspension movement. They reduce vibrations and impacts from the road, enhancing handling, safety, and tire longevity. Properly functioning shocks ensure a smoother ride and better vehicle control. ",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113454,
+                                "name": "Ball joints connect the vehicle's suspension to the wheels, allowing for smooth movement and steering. They ensure proper alignment, handling, and stability, contributing to safe driving and even tire wear. Worn ball joints can lead to handling issues and safety risks.",
+                                "sortOrder": 2
+                            },
+                            {
+                                "id": 2113455,
+                                "name": "Control arm bushings absorb road shocks and reduce vibrations, maintaining proper alignment and handling. They ensure a smoother ride, better vehicle control, and even tire wear. Worn bushings can lead to steering issues and increased suspension stress.",
+                                "sortOrder": 3
+                            },
+                            {
+                                "id": 2113456,
+                                "name": "Sway bar links connect the sway bar to the suspension, helping to reduce body roll during turns and improve vehicle stability. They enhance handling, cornering performance, and overall safety by keeping the vehicle's weight evenly distributed. Worn links can lead to poor handling and increased risk of rollover. ",
+                                "sortOrder": 4
+                            }
+                        ],
+                        "motoVisualsAnimationId": 908501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605729,
+                        "name": "Rear Suspension",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477195,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113467,
+                                "name": "Shock absorbers maintain vehicle stability and comfort by controlling suspension movement. They reduce vibrations and impacts from the road, enhancing handling, safety, and tire longevity. Properly functioning shocks ensure a smoother ride and better vehicle control.",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113468,
+                                "name": "Sway bar links connect the sway bar to the suspension, helping to reduce body roll during turns and improve vehicle stability. They enhance handling, cornering performance, and overall safety by keeping the vehicle's weight evenly distributed. Worn links can lead to poor handling and increased risk of rollover. ",
+                                "sortOrder": 2
+                            }
+                        ],
+                        "motoVisualsAnimationId": 8501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605730,
+                        "name": "Steering Linkage",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477196,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113469,
+                                "name": "Tie rods connect the steering system to the wheels, enabling precise steering and stability. They ensure proper alignment and handling by transferring steering movements to the wheels. Worn tie rods can cause poor steering response and affect vehicle control, leading to safety issues.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 908012,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605731,
+                        "name": "Power Steering System",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477197,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113470,
+                                "name": "The rack and pinion system converts steering wheel movements into wheel direction changes. It provides precise and responsive steering, enhancing vehicle control and handling. Proper function is crucial for safe, smooth driving, as issues can lead to erratic steering and reduced safety.",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113471,
+                                "name": "The power steering pump provides hydraulic pressure to assist steering, making it easier to turn the wheel. It enhances steering responsiveness and comfort. A failing pump can result in hard-to-turn steering and increased driver effort, compromising vehicle control and safety.",
+                                "sortOrder": 2
+                            }
+                        ],
+                        "motoVisualsAnimationId": 8001,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605732,
+                        "name": "Fluid Leaks",
+                        "inspectionRating": {
+                            "id": 3,
+                            "code": "RQRSATTN",
+                            "name": "Requires Immediate Attention"
+                        },
+                        "finding": "Left valve cover gasket leaking. Oil pressure switch leaking engine oil.",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": true,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477198,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113472,
+                                "name": "Need to clean and degrease engine. Cleaning and degreasing the engine is crucial for accurate oil leak detection. Removing grime and old oil ensures that new leaks are easily visible against a clean surface. This process prevents misidentifying the source of the leak and allows for precise repairs. A clean engine also helps in maintaining optimal performance and prevents further damage from accumulating contaminants.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 3545,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605733,
+                        "name": "Exhaust System",
+                        "inspectionRating": {
+                            "id": 1,
+                            "code": "CHCKD",
+                            "name": "Checked & Okay"
+                        },
+                        "finding": null,
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477199,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113473,
+                                "name": "An exhaust system directs and controls engine emissions, reducing noise and harmful gases. It includes components like the muffler and catalytic converter, which lower noise and convert pollutants into less harmful substances. A well-functioning exhaust system ensures compliance with emissions standards and improves engine performance.  ",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 904501,
+                        "images": null
+                    },
+                    {
+                        "id": 1473605734,
+                        "name": "Powertrain & Drivetrain",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "NO RECORD OF DRIVETRAIN FLUID CHANGES (FRONT & REAR DIFFERENTIAL)",
+                        "inspectionGroup": "Vehicle Inspection",
+                        "groupSortOrder": 4,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477200,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113474,
+                                "name": "Transfer case service due: A transfer case service ensures smooth operation of a vehicle's four-wheel drive system by maintaining proper lubrication and functionality. Regular service prevents wear and tear, avoids drivetrain issues, and ensures reliable power distribution between the front and rear axles for optimal traction and handling.",
+                                "sortOrder": 1
+                            },
+                            {
+                                "id": 2113475,
+                                "name": "Differential service due: Differential service maintains proper lubrication and function of the differential gears, which distribute power to the wheels. Regular service prevents gear wear, reduces noise, and avoids costly repairs, ensuring smooth operation and optimal handling and traction.",
+                                "sortOrder": 2
+                            }
+                        ],
+                        "motoVisualsAnimationId": 5016,
+                        "images": null
+                    }
+                ]
+            },
+            {
+                "title": "Alignment",
+                "groupSortOrder": 5,
+                "tasks": [
+                    {
+                        "id": 1473605735,
+                        "name": "Alignment",
+                        "inspectionRating": {
+                            "id": 4,
+                            "code": "NA",
+                            "name": "Not Applicable"
+                        },
+                        "finding": "NO RECORD OF ALIGNMENT ",
+                        "inspectionGroup": "Alignment",
+                        "groupSortOrder": 5,
+                        "reported": false,
+                        "externalImages": [],
+                        "cannedJob": null,
+                        "inspectionTaskId": 3477201,
+                        "potentialFindingsToSelect": [
+                            {
+                                "id": 2113476,
+                                "name": "Proper vehicle alignment ensures even tire wear, stable handling, and improved fuel efficiency. It optimizes steering response and driving safety by keeping the wheels parallel and perpendicular to the road. Misalignment can lead to poor handling, tire damage, and increased fuel consumption.",
+                                "sortOrder": 1
+                            }
+                        ],
+                        "motoVisualsAnimationId": 8024,
+                        "images": null
+                    }
+                ]
+            }
+        ],
+        "images": [
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605725/1776113179.3eb5d030.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605725/1776113179.4c92b16b.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605725/1776113179.e424064c.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605732/1776113193.6999a9ef.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605732/1776114235.4bfdc09f.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605705/1776114314.4bf8548c.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114327.13feec5b.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114327.41f8ef6e.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114328.016cf2c0.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114328.64137852.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114330.06cf7927.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            },
+            {
+                "id": null,
+                "path": "shop/7718/repair-orders/318261818/inspection/55851638/tasks/1473605703/1776114330.87f62d65.jpg",
+                "contentType": "image/jpeg",
+                "processed": 1,
+                "processingTimeSeconds": 0
+            }
+        ],
+        "completedDate": null,
+        "createdDate": "2026-04-05T00:14:57Z",
+        "notifyServiceWriter": null,
+        "internalInspection": false,
+        "sortOrder": null
+    }
+]

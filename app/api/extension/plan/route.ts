@@ -1169,7 +1169,7 @@ export async function GET(request: NextRequest) {
     // First try to use the dashboard's cached plan for consistency
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
 
-    let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string }> = [];
+    let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string; finding?: string }> = [];
     if (provider === "tekmetric" && roId) {
       try {
         const cachedWO = await db.collection("tekmetric_work_orders").findOne({
@@ -1178,11 +1178,23 @@ export async function GET(request: NextRequest) {
         });
         const inspections = cachedWO?.inspections || [];
         for (const inspection of inspections) {
-          for (const item of inspection.items || []) {
-            if (item.status === "bad") {
-              currentRoDviFindings.push({ name: item.name, status: "red", dviSource: "tekmetric" });
-            } else if (item.status === "marginal") {
-              currentRoDviFindings.push({ name: item.name, status: "yellow", dviSource: "tekmetric" });
+          for (const group of inspection.inspectionTasks || []) {
+            for (const task of group.tasks || []) {
+              const code = task.inspectionRating?.code;
+              if (code === "RQRSATTN") {
+                currentRoDviFindings.push({ name: task.name, status: "red", dviSource: "tekmetric", finding: task.finding });
+              } else if (code === "MAYRQRATTN") {
+                currentRoDviFindings.push({ name: task.name, status: "yellow", dviSource: "tekmetric", finding: task.finding });
+              }
+            }
+          }
+          if (currentRoDviFindings.length === 0) {
+            for (const item of inspection.items || []) {
+              if (item.status === "bad") {
+                currentRoDviFindings.push({ name: item.name, status: "red", dviSource: "tekmetric" });
+              } else if (item.status === "marginal") {
+                currentRoDviFindings.push({ name: item.name, status: "yellow", dviSource: "tekmetric" });
+              }
             }
           }
         }
@@ -1488,7 +1500,7 @@ export async function GET(request: NextRequest) {
           console.log(`[Extension] CARFAX: ${carfaxRecords.length} service records`);
         }
         
-        let tekDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+        let tekDviFindings: Array<{ name?: string; status?: string | number; source?: string; finding?: string }> = [];
         if (provider === "tekmetric" && roId) {
           try {
             const cachedWOForDvi = await db.collection("tekmetric_work_orders").findOne({
@@ -1497,11 +1509,23 @@ export async function GET(request: NextRequest) {
             });
             const inspectionsForDvi = cachedWOForDvi?.inspections || [];
             for (const inspection of inspectionsForDvi) {
-              for (const item of inspection.items || []) {
-                if (item.status === "bad") {
-                  tekDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
-                } else if (item.status === "marginal") {
-                  tekDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+              for (const group of inspection.inspectionTasks || []) {
+                for (const task of group.tasks || []) {
+                  const code = task.inspectionRating?.code;
+                  if (code === "RQRSATTN") {
+                    tekDviFindings.push({ name: task.name, status: "0", source: "tekmetric", finding: task.finding });
+                  } else if (code === "MAYRQRATTN") {
+                    tekDviFindings.push({ name: task.name, status: "1", source: "tekmetric", finding: task.finding });
+                  }
+                }
+              }
+              if (tekDviFindings.length === 0) {
+                for (const item of inspection.items || []) {
+                  if (item.status === "bad") {
+                    tekDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+                  } else if (item.status === "marginal") {
+                    tekDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+                  }
                 }
               }
             }

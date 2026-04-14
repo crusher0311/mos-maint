@@ -13,6 +13,7 @@ import type {
 } from "./types";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
+const TEKMETRIC_INTERNAL_BASE_URL = 'https://shop.tekmetric.com/api';
 
 let tekmetricApiCallCounter = 0;
 
@@ -186,8 +187,137 @@ export async function getCannedJobs(
   return tekmetricRequest<PaginatedResponse<TekmetricCannedJob>>(`/canned-jobs?${params.toString()}`, {}, shopId);
 }
 
-export async function getRepairOrderInspections(repairOrderId: number, shopId?: number): Promise<TekmetricInspection[]> {
-  return [];
+export async function getRepairOrderInspections(
+  repairOrderId: number, 
+  tekmetricShopId: number
+): Promise<TekmetricInspection[]> {
+  if (!tekmetricShopId) {
+    console.warn(`[Tekmetric] Cannot fetch inspections without tekmetricShopId for RO ${repairOrderId}`);
+    return [];
+  }
+  
+  try {
+    const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
+    if (!rateSlot.acquired) {
+      console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
+      return [];
+    }
+    tekmetricApiCallCounter++;
+
+    const token = await getValidToken();
+    const url = `${TEKMETRIC_INTERNAL_BASE_URL}/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
+    const startTime = Date.now();
+    
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const latencyMs = Date.now() - startTime;
+    trackApiRequest('tekmetric', `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
+
+    if (response.status === 401) {
+      clearCachedToken();
+      await refreshToken();
+      const retryToken = await getValidToken();
+      const retryResponse = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${retryToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!retryResponse.ok) {
+        console.warn(`[Tekmetric] Inspection fetch retry failed for RO ${repairOrderId}: ${retryResponse.status}`);
+        return [];
+      }
+      return retryResponse.json();
+    }
+
+    if (response.status === 429) {
+      const backoffMs = Math.min(5000 + Math.random() * 2000, 10000);
+      console.warn(`[Tekmetric] 429 rate limited on inspection fetch for RO ${repairOrderId}, backing off ${Math.round(backoffMs)}ms`);
+      await new Promise(r => setTimeout(r, backoffMs));
+      tekmetricApiCallCounter++;
+      const retryToken = await getValidToken();
+      const retryResponse = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${retryToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!retryResponse.ok) {
+        console.warn(`[Tekmetric] Inspection fetch retry after 429 failed for RO ${repairOrderId}: ${retryResponse.status}`);
+        return [];
+      }
+      return retryResponse.json();
+    }
+
+    if (!response.ok) {
+      console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
+      return [];
+    }
+
+    return response.json();
+  } catch (err: any) {
+    console.warn(`[Tekmetric] Inspection fetch error for RO ${repairOrderId}: ${err.message}`);
+    return [];
+  }
+}
+
+export function mapInspectionRatingToStatus(code: string): 'good' | 'bad' | 'marginal' | 'not_inspected' {
+  switch (code) {
+    case 'CHCKD': return 'good';
+    case 'RQRSATTN': return 'bad';
+    case 'MAYRQRATTN': return 'marginal';
+    case 'NA': return 'not_inspected';
+    default: return 'not_inspected';
+  }
+}
+
+export function flattenInspectionTasks(inspections: TekmetricInspection[]): Array<{
+  name: string;
+  status: 'good' | 'bad' | 'marginal' | 'not_inspected';
+  finding: string | null;
+  group: string;
+  reported: boolean;
+  ratingCode: string;
+  ratingName: string;
+  taskId: number;
+}> {
+  const tasks: Array<{
+    name: string;
+    status: 'good' | 'bad' | 'marginal' | 'not_inspected';
+    finding: string | null;
+    group: string;
+    reported: boolean;
+    ratingCode: string;
+    ratingName: string;
+    taskId: number;
+  }> = [];
+
+  for (const inspection of inspections) {
+    for (const group of inspection.inspectionTasks || []) {
+      for (const task of group.tasks || []) {
+        tasks.push({
+          name: task.name,
+          status: mapInspectionRatingToStatus(task.inspectionRating?.code),
+          finding: task.finding,
+          group: group.title || task.inspectionGroup,
+          reported: task.reported,
+          ratingCode: task.inspectionRating?.code,
+          ratingName: task.inspectionRating?.name,
+          taskId: task.id,
+        });
+      }
+    }
+  }
+
+  return tasks;
 }
 
 export async function getRepairOrderInspectionStatus(repairOrderId: number, shopId?: number): Promise<{

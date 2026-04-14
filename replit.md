@@ -14,7 +14,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 
 **Technical Implementations:**
 *   **Data Management**: Core CRM and communication data reside in Supabase PostgreSQL, accessed via Drizzle ORM. MongoDB Atlas is used for caching.
-*   **Integration Mechanisms**: A modular integration layer supports various shop management systems (e.g., Tekmetric, Protractor, Shop-Ware) using adapter and facade patterns.
+*   **Integration Mechanisms**: A modular integration layer supports various shop management systems (e.g., Tekmetric, Protractor, Shop-Ware) using adapter and facade patterns. Tekmetric inspection data is fetched via internal API at `/api/shop/{tekmetricShopId}/repair-orders/{roId}/inspections` (not the public v1 API). Inspections use `inspectionTasks[].tasks[].inspectionRating.code` with values: `CHCKD` (green), `MAYRQRATTN` (yellow), `RQRSATTN` (red), `NA` (skip). Inspection results are cached on `tekmetric_work_orders` documents in MongoDB.
 *   **Authentication & Authorization**: Role-based access is implemented with bcrypt hashing and token-based authentication.
 *   **Billing & Licensing**: Stripe integration handles VIN-based billing, supports modular feature flags, and manages various plan tiers.
 *   **Admin & Monitoring**: The system includes admin audit logging, unified API usage monitoring, a support ticketing system, a platform observability page, and a Client Health Score dashboard.

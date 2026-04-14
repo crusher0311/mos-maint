@@ -8,6 +8,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
+import { getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
@@ -258,7 +259,7 @@ export async function syncShopIncremental(
       }
 
       if (vehicle?.vin) {
-        await upsertWorkOrder(db, shopId, ro, vehicle, customer);
+        await upsertWorkOrder(db, shopId, tekmetricShopId, ro, vehicle, customer);
         result.synced++;
       }
     }
@@ -305,6 +306,7 @@ export async function syncShopIncremental(
 async function upsertWorkOrder(
   db: any,
   shopId: number,
+  tekmetricShopId: number,
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
   customer?: TekmetricCustomer | null
@@ -328,6 +330,22 @@ async function upsertWorkOrder(
 
   const inspectionUrl = (ro as any).inspectionUrl || existing?.inspectionUrl || null;
   const inspectionShareDate = (ro as any).inspectionShareDate || existing?.inspectionShareDate || null;
+
+  let inspections: any[] | null = null;
+  if (dviDetected && tekmetricShopId) {
+    try {
+      inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+      if (inspections && inspections.length > 0) {
+        console.log(`[Tekmetric Incremental] Fetched ${inspections.length} inspection(s) for RO ${ro.id}`);
+      }
+    } catch (inspErr: any) {
+      console.warn(`[Tekmetric Incremental] Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
+      inspections = null;
+    }
+  }
+
+  const hasNewInspections = Array.isArray(inspections) && inspections.length > 0;
+  const inspectionsToStore = hasNewInspections ? inspections! : (existing?.inspections || []);
 
   await db.collection("tekmetric_work_orders").updateOne(
     { 
@@ -361,6 +379,7 @@ async function upsertWorkOrder(
         dviComplete: dviComplete || (existing?.dviComplete === true),
         inspectionUrl,
         inspectionShareDate,
+        inspections: inspectionsToStore,
       },
       $setOnInsert: { dviCompletedAt: null, lastInspection: null }
     },

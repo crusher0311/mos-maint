@@ -103,6 +103,57 @@ export interface TekmetricCannedJob {
   partsAmount?: number;
 }
 
+export interface TekmetricInspectionRating {
+  id: number;
+  code: 'CHCKD' | 'MAYRQRATTN' | 'RQRSATTN' | 'NA';
+  name: string;
+}
+
+export interface TekmetricInspectionTask {
+  id: number;
+  name: string;
+  inspectionRating: TekmetricInspectionRating;
+  finding: string | null;
+  inspectionGroup: string;
+  groupSortOrder: number;
+  reported: boolean;
+  externalImages: any[];
+  cannedJob: any | null;
+  inspectionTaskId: number;
+  potentialFindingsToSelect: Array<{ id: number; name: string; sortOrder: number }> | null;
+  motoVisualsAnimationId: number | null;
+  images: any[] | null;
+}
+
+export interface TekmetricInspectionTaskGroup {
+  title: string;
+  groupSortOrder: number;
+  tasks: TekmetricInspectionTask[];
+}
+
+export interface TekmetricInspectionImage {
+  id: number | null;
+  path: string;
+  contentType: string;
+  processed: number;
+  processingTimeSeconds: number;
+}
+
+export interface TekmetricInspection {
+  id: number;
+  name: string;
+  repairOrderId: number;
+  technician: { id: number; name: string } | null;
+  inspectionId: number;
+  inspectionTasks: TekmetricInspectionTaskGroup[];
+  images: TekmetricInspectionImage[];
+  completedDate: string | null;
+  createdDate: string | null;
+  notifyServiceWriter: boolean | null;
+  internalInspection: boolean;
+  sortOrder: number | null;
+}
+
 export interface TekmetricInspectionItem {
   id: number;
   name: string;
@@ -111,19 +162,6 @@ export interface TekmetricInspectionItem {
   categoryId?: number;
   categoryName?: string;
   mediaUrls?: string[];
-}
-
-export interface TekmetricInspection {
-  id: number;
-  repairOrderId: number;
-  templateId?: number;
-  templateName?: string;
-  status: string;
-  completedDate?: string;
-  createdDate?: string;
-  updatedDate?: string;
-  technicianName?: string;
-  items?: TekmetricInspectionItem[];
 }
 
 export interface TekmetricRepairOrderFull extends TekmetricRepairOrder {

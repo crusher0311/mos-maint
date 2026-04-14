@@ -508,18 +508,40 @@ export default async function VehicleDetailPage({ params }: PageProps) {
           
           if (inspections.length > 0) {
             console.log(`[Tekmetric] Found ${inspections.length} cached inspections for RO ${latestTekRo.id}`);
+            const items: any[] = [];
+            for (const insp of inspections) {
+              for (const group of insp.inspectionTasks || []) {
+                for (const task of group.tasks || []) {
+                  const code = task.inspectionRating?.code;
+                  let status = 'good';
+                  if (code === 'RQRSATTN') status = 'bad';
+                  else if (code === 'MAYRQRATTN') status = 'marginal';
+                  else if (code === 'NA') status = 'not_inspected';
+                  items.push({
+                    name: task.name || 'Unknown',
+                    status,
+                    notes: task.finding,
+                    group: group.title,
+                    source: 'tekmetric'
+                  });
+                }
+              }
+              if (items.length === 0 && insp.items) {
+                for (const item of insp.items) {
+                  items.push({
+                    name: item.name || item.categoryName || 'Unknown',
+                    status: item.status,
+                    notes: item.notes,
+                    source: 'tekmetric'
+                  });
+                }
+              }
+            }
             tekmetricDvi = {
               ok: true,
               source: 'tekmetric',
               inspections: inspections,
-              items: inspections.flatMap((insp: any) => 
-                (insp.items || []).map((item: any) => ({
-                  name: item.name || item.categoryName || 'Unknown',
-                  status: item.status,
-                  notes: item.notes,
-                  source: 'tekmetric'
-                }))
-              )
+              items
             };
           }
         }

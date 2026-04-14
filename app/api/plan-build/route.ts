@@ -1001,17 +1001,29 @@ export async function POST(req: NextRequest) {
         }));
     }
 
-    let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+    let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string; finding?: string }> = [];
     if (tekmetricWOs.length > 0) {
       for (const tekRo of tekmetricWOs) {
         const woInspections = tekRo.inspections || [];
         if (!Array.isArray(woInspections) || woInspections.length === 0) continue;
         for (const inspection of woInspections) {
-          for (const item of inspection.items || []) {
-            if (item.status === "bad") {
-              tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
-            } else if (item.status === "marginal") {
-              tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+          for (const group of inspection.inspectionTasks || []) {
+            for (const task of group.tasks || []) {
+              const code = task.inspectionRating?.code;
+              if (code === "RQRSATTN") {
+                tekmetricDviFindings.push({ name: task.name, status: "0", source: "tekmetric", finding: task.finding });
+              } else if (code === "MAYRQRATTN") {
+                tekmetricDviFindings.push({ name: task.name, status: "1", source: "tekmetric", finding: task.finding });
+              }
+            }
+          }
+          if (tekmetricDviFindings.length === 0 && inspection.items) {
+            for (const item of inspection.items) {
+              if (item.status === "bad") {
+                tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+              } else if (item.status === "marginal") {
+                tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+              }
             }
           }
         }
@@ -1039,14 +1051,31 @@ export async function POST(req: NextRequest) {
           : wo.createdDate ? new Date(wo.createdDate) : null;
 
         for (const insp of woInspections) {
-          for (const item of insp.items || []) {
-            if (item.status === "bad" || item.status === "marginal") {
-              historicalItems.push({
-                name: item.name || item.categoryName || "",
-                status: item.status,
-                inspectionDate: woDate,
-                workOrderId: String(wo.workOrderId),
-              });
+          let foundFromGroups = false;
+          for (const group of insp.inspectionTasks || []) {
+            for (const task of group.tasks || []) {
+              const code = task.inspectionRating?.code;
+              if (code === "RQRSATTN" || code === "MAYRQRATTN") {
+                foundFromGroups = true;
+                historicalItems.push({
+                  name: task.name || "",
+                  status: code === "RQRSATTN" ? "bad" : "marginal",
+                  inspectionDate: woDate,
+                  workOrderId: String(wo.workOrderId),
+                });
+              }
+            }
+          }
+          if (!foundFromGroups) {
+            for (const item of insp.items || []) {
+              if (item.status === "bad" || item.status === "marginal") {
+                historicalItems.push({
+                  name: item.name || item.categoryName || "",
+                  status: item.status,
+                  inspectionDate: woDate,
+                  workOrderId: String(wo.workOrderId),
+                });
+              }
             }
           }
         }

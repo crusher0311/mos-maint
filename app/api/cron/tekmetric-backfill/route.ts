@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspections } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
 
 export const runtime = "nodejs";
@@ -301,6 +301,17 @@ async function backfillShopChunk(
 
       if (jobs.length === 0) return { indexed: 0, skipped: 0, roData: null };
 
+      let inspections: any[] = [];
+      const hasInspectionUrl = !!(ro as any).inspectionUrl;
+      const inspectionShared = !!(ro as any).inspectionShareDate;
+      if (hasInspectionUrl || inspectionShared) {
+        try {
+          inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+        } catch (inspErr: any) {
+          console.warn(`[Tekmetric Backfill] Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
+        }
+      }
+
       let indexed = 0;
       let skipped = 0;
       
@@ -395,9 +406,10 @@ async function backfillShopChunk(
           labor: j.labor,
           parts: j.parts,
         })),
+        inspections: inspections.length > 0 ? inspections : [],
         inspectionUrl: (ro as any).inspectionUrl || null,
         inspectionShareDate: (ro as any).inspectionShareDate || null,
-        rawPayload: { repairOrder: ro, vehicle, customer, jobs },
+        rawPayload: { repairOrder: ro, vehicle, customer, jobs, inspections: inspections.length > 0 ? inspections : undefined },
       };
       
       return { indexed, skipped, roData: roDataForNormalized };

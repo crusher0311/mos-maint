@@ -1615,7 +1615,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
   }
 
-  let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+  let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string; finding?: string }> = [];
   if (activeIntegration === "tekmetric" && latestRepairOrderId) {
     try {
       const cachedWO = await db.collection("tekmetric_work_orders").findOne({
@@ -1624,11 +1624,23 @@ async function PlanContent({ params, searchParams }: PageProps) {
       });
       const inspections = cachedWO?.inspections || [];
       for (const inspection of inspections) {
-        for (const item of inspection.items || []) {
-          if (item.status === "bad") {
-            tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
-          } else if (item.status === "marginal") {
-            tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+        for (const group of inspection.inspectionTasks || []) {
+          for (const task of group.tasks || []) {
+            const code = task.inspectionRating?.code;
+            if (code === "RQRSATTN") {
+              tekmetricDviFindings.push({ name: task.name, status: "0", source: "tekmetric", finding: task.finding });
+            } else if (code === "MAYRQRATTN") {
+              tekmetricDviFindings.push({ name: task.name, status: "1", source: "tekmetric", finding: task.finding });
+            }
+          }
+        }
+        if (tekmetricDviFindings.length === 0 && inspection.items) {
+          for (const item of inspection.items) {
+            if (item.status === "bad") {
+              tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+            } else if (item.status === "marginal") {
+              tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+            }
           }
         }
       }

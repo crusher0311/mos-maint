@@ -8,7 +8,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
-import { resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
+import { resetTekmetricApiCallCount, getRepairOrderInspections, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
@@ -294,9 +294,26 @@ export async function GET(req: NextRequest) {
           if (vehicle?.vin) {
             const hasInspectionUrl = !!(ro as any).inspectionUrl;
             const inspectionShared = !!(ro as any).inspectionShareDate;
-            if (hasInspectionUrl || inspectionShared) dviCount++;
+            const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
+            const labelDvi = inferDviFromLabel(label);
+            const jobDvi = inferDviFromJobs((ro as any).jobs || []);
+            const hasDviSignal = hasInspectionUrl || inspectionShared || labelDvi.hasDvi || labelDvi.dviComplete || jobDvi;
             
-            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, null, {
+            let inspections: any[] | null = null;
+            if (hasDviSignal) {
+              dviCount++;
+              try {
+                inspections = await getRepairOrderInspections(ro.id, tekmetricShopId);
+                if (inspections && inspections.length > 0) {
+                  console.log(`[Tekmetric] Shop ${shopId}: Fetched ${inspections.length} inspection(s) for RO ${ro.id}`);
+                }
+              } catch (inspErr: any) {
+                console.warn(`[Tekmetric] Shop ${shopId}: Inspection fetch failed for RO ${ro.id}: ${inspErr.message}`);
+                inspections = null;
+              }
+            }
+            
+            await upsertTekmetricWorkOrderSnapshot(db, shopId, ro, vehicle, customer, inspections, {
               hasInspectionUrl,
               inspectionShared,
               inspectionShareDate: (ro as any).inspectionShareDate || null,
