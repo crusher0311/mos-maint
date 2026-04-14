@@ -350,19 +350,11 @@ body {
   background: white;
   border-bottom: 1px solid var(--gray-200);
   padding: 0 4px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.tab-nav::-webkit-scrollbar {
-  display: none;
 }
 
 .tab-btn {
-  flex: 0 0 auto;
-  min-width: 44px;
-  padding: 8px 6px;
+  flex: 1;
+  padding: 8px 2px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -381,6 +373,41 @@ body {
 
 .tab-btn svg {
   flex-shrink: 0;
+}
+
+/* Sub-tab navigation (inside combined tabs) */
+.sub-tab-nav {
+  display: flex;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+  padding: 0 8px;
+  gap: 0;
+}
+
+.sub-tab-btn {
+  flex: 1;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.sub-tab-btn:hover {
+  color: var(--gray-700);
+}
+
+.sub-tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.sub-tab-panel.hidden {
+  display: none;
 }
 
 .tab-btn:hover {

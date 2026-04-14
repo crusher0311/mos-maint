@@ -356,6 +356,13 @@ function setupEventListeners() {
       switchTab(btn.dataset.tab);
     });
   });
+
+  // Sub-tab navigation (inside Jobs tab)
+  document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchJobsSubTab(btn.dataset.subtab);
+    });
+  });
   
   // Canned job search
   elements.cannedSearch.addEventListener('input', () => {
@@ -517,7 +524,19 @@ function showMainState() {
 
 const RO_INDEPENDENT_TABS = ['rates', 'concern'];
 
+function switchJobsSubTab(subtab) {
+  const subBtns = document.querySelectorAll('#tab-jobs .sub-tab-btn');
+  subBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.subtab === subtab));
+  const lookupPanel = document.getElementById('subtab-lookup');
+  const cannedPanel = document.getElementById('subtab-canned');
+  if (lookupPanel) lookupPanel.classList.toggle('hidden', subtab !== 'lookup');
+  if (cannedPanel) cannedPanel.classList.toggle('hidden', subtab !== 'canned');
+}
+
 function switchTab(tab) {
+  if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
+  else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
+
   currentTab = tab;
   
   elements.tabBtns.forEach(btn => {
@@ -532,8 +551,7 @@ function switchTab(tab) {
   const featureMap = {
     'plan': 'maintenance',
     'failures': 'common_failures',
-    'lookup': 'job_lookup',
-    'canned': null,
+    'jobs': 'job_lookup',
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
     'estimate': 'estimate_assist',
@@ -551,7 +569,7 @@ function switchTab(tab) {
         const featureNames = {
           'plan': 'Vehicle Health Indicator',
           'failures': 'Common Failures Advisor',
-          'lookup': 'Job Lookup / History Writer',
+          'jobs': 'Job Lookup / History Writer',
           'rates': 'Labor Rate Rules',
           'concern': 'Customer Concern Assistant',
           'estimate': 'Estimate Assist',
@@ -631,7 +649,7 @@ function switchTab(tab) {
     loadPlan();
   } else if (tab === 'failures' && currentContext?.roId) {
     loadCommonFailures();
-  } else if (tab === 'canned' && currentContext?.roId) {
+  } else if (tab === 'jobs' && currentContext?.roId) {
     loadCannedJobs();
   } else if (tab === 'rates') {
     loadLaborRates();
@@ -717,7 +735,7 @@ function updateContext(context) {
         loadPlan();
       } else if (currentTab === 'failures') {
         loadCommonFailures();
-      } else if (currentTab === 'canned') {
+      } else if (currentTab === 'jobs') {
         loadCannedJobs();
       } else if (currentTab === 'specs') {
         loadVehicleSpecs();
@@ -769,8 +787,7 @@ function updateTabAccessibility() {
   const featureMap = {
     'plan': 'maintenance',
     'failures': 'common_failures',
-    'lookup': 'job_lookup',
-    'canned': null,
+    'jobs': 'job_lookup',
     'rates': 'labor_rates',
     'concern': 'concern_assistant',
     'estimate': 'estimate_assist',
@@ -779,7 +796,7 @@ function updateTabAccessibility() {
   };
 
   const isShopWare = currentContext?.provider === 'shopware';
-  const hiddenForProvider = isShopWare ? ['lookup', 'canned'] : [];
+  const hiddenForProvider = isShopWare ? ['jobs'] : [];
   
   let firstAvailableTab = null;
   
