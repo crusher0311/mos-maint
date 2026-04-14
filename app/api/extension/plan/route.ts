@@ -289,7 +289,7 @@ async function backgroundPrefetchShopPlans(
   currentVin: string,
   showInspectItems: boolean,
   shopIntervals: ShopIntervals,
-  intervalApplyMode: string = "shop_only"
+  intervalApplyMode: string = "always"
 ) {
   if (shopPrefetchInProgress.has(mosShopId)) {
     return;
@@ -427,7 +427,7 @@ async function runOnDemandAnalysis(
   carfaxRecords: any[] | null = null,
   prefetched?: PrefetchedData,
   dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>,
-  intervalApplyMode: string = "shop_only",
+  intervalApplyMode: string = "always",
   currentRoAuthorizedJobs: string[] = [],
   currentRoAllJobs: string[] = []
 ) {
@@ -785,7 +785,7 @@ export async function GET(request: NextRequest) {
     const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
     
     const rawIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
-    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "shop_only";
+    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
       differential: ["front_differential", "rear_differential"],
       alignment: ["wheel_alignment"],

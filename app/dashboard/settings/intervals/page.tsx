@@ -59,7 +59,7 @@ async function getShopIntervals(shopId: number): Promise<{ intervals: ShopInterv
   );
   
   const saved = shop?.maintenance?.intervals || {};
-  const applyMode = shop?.maintenance?.intervalApplyMode || "shop_only";
+  const applyMode = shop?.maintenance?.intervalApplyMode || "always";
   
   const intervals = COMMON_SERVICES.map(svc => ({
     key: svc.key,

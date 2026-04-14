@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
+import { SERVICE_KEYS, SERVICE_KEY_DISPLAY_NAMES, toKeyFromName, toKeyFromFreeText } from "@/lib/service-keys";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
@@ -25,157 +26,6 @@ const PROTRACTOR_CACHE_TTL = 1000 * 60 * 60 * 6; // 6 hours
 const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
 const DEFAULT_SOON_MILES = 1000;
 const DEFAULT_SOON_DAYS = 30;
-
-// Service key mappings aligned with CARFAX categories
-const SERVICE_KEYS: Record<string, string[]> = {
-  oil: [
-    "oil and filter", "engine oil", "oil change", "replace engine oil", 
-    "oil filter", "replace oil filter", "change oil", "motor oil",
-    "crankcase oil", "oil & filter", "synthetic oil"
-  ],
-  tire_rotation: ["rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels"],
-  cabin_air: ["cabin air filter", "cabin filter", "pollen filter", "hvac filter", "interior air filter"],
-  engine_air: [
-    "engine air filter", "air cleaner element", "air filter element",
-    "remove & replace air filter", "air filter replace", "replace air filter"
-  ],
-  coolant: [
-    "engine coolant", "coolant flush", "replace coolant", "cooling system", 
-    "antifreeze", "radiator flush", "drain and fill coolant", "coolant service",
-    "bg coolant", "cooling system service"
-  ],
-  brake_fluid: [
-    "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush", 
-    "brake fluid service", "brake fluid change", "brake fluid flush"
-  ],
-  trans_auto: [
-    "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
-    "transmission service", "transmission flush", "bg automatic transmission",
-    "transmission fluid service"
-  ],
-  trans_manual: ["manual transmission fluid", "manual trans fluid", "mtf fluid"],
-  transfer_case: ["transfer case fluid", "transfer case flush", "transfer case oil"],
-  front_differential: [
-    "front differential", "front axle fluid", "front diff",
-    "front differential fluid", "front differential service"
-  ],
-  rear_differential: [
-    "rear differential", "rear axle fluid", "rear diff",
-    "rear differential fluid", "rear differential service", "gear oil"
-  ],
-  power_steering: ["power steering fluid", "power steering flush", "power steering service"],
-  fuel_filter: ["fuel filter"],
-  spark_plugs: ["spark plug", "spark plugs", "ignition tune", "tune-up", "tune up"],
-  serpentine_belt: ["serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt"],
-  timing_belt: ["timing belt", "timing chain", "cam belt", "replace timing belt"],
-  fuel_system: [
-    "fuel system cleaning", "fuel injector cleaning", "fuel system service", "fuel induction",
-    "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning"
-  ],
-  front_brake_pads: [
-    "front brake pads", "front brake lining", "front brakes replaced",
-    "front brake pads replaced", "front disc brake"
-  ],
-  rear_brake_pads: [
-    "rear brake pads", "rear brake lining", "rear brakes replaced",
-    "rear brake pads replaced", "rear disc brake", "brake shoes"
-  ],
-  front_brake_rotors: [
-    "front brake rotor", "front rotor", "front brake rotors replaced"
-  ],
-  rear_brake_rotors: [
-    "rear brake rotor", "rear rotor", "rear brake rotors replaced"
-  ],
-  front_shocks: ["front shock", "front strut", "front shocks", "front struts"],
-  rear_shocks: ["rear shock", "rear strut", "rear shocks", "rear struts"],
-  wheel_alignment: ["wheel alignment", "alignment", "all wheel alignment", "front alignment", "rear alignment"],
-  battery: ["battery replaced", "battery replacement", "battery/charging", "replace battery", "new battery"],
-  wiper_blades: [
-    "wiper blade", "windshield wiper", "wiper replace", "wiper insert",
-    "replace wiper", "wiper blades"
-  ],
-  ac_refrigerant: [
-    "a/c refrigerant", "ac refrigerant", "air conditioning refill", 
-    "a/c recharge", "ac recharge", "refrigerant", "r-134a", "r134a",
-    "a/c service", "ac service", "air conditioning service"
-  ],
-  emissions: ["emissions test", "emissions inspection", "smog test", "smog check", "emission test"],
-  coolant_hoses: [
-    "coolant hose", "coolant hoses", "radiator hose", "heater hose",
-    "upper radiator hose", "lower radiator hose", "bypass hose"
-  ],
-};
-
-const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
-  oil: "Oil Change",
-  tire_rotation: "Tire Rotation",
-  cabin_air: "Cabin Air Filter",
-  engine_air: "Engine Air Filter",
-  coolant: "Coolant Service",
-  brake_fluid: "Brake Fluid Service",
-  trans_auto: "Automatic Transmission Fluid",
-  trans_manual: "Manual Transmission Fluid",
-  transfer_case: "Transfer Case Fluid",
-  front_differential: "Front Differential Fluid",
-  rear_differential: "Rear Differential Fluid",
-  power_steering: "Power Steering Fluid",
-  fuel_filter: "Fuel Filter",
-  spark_plugs: "Spark Plugs",
-  serpentine_belt: "Serpentine Belt",
-  timing_belt: "Timing Belt",
-  fuel_system: "Fuel System Cleaning",
-  front_brake_pads: "Front Brake Pads",
-  rear_brake_pads: "Rear Brake Pads",
-  front_brake_rotors: "Front Brake Rotors",
-  rear_brake_rotors: "Rear Brake Rotors",
-  front_shocks: "Front Shocks / Struts",
-  rear_shocks: "Rear Shocks / Struts",
-  wheel_alignment: "Wheel Alignment",
-  battery: "Battery",
-  wiper_blades: "Wiper Blades",
-  ac_refrigerant: "A/C Service",
-  emissions: "Emissions Inspection",
-  coolant_hoses: "Coolant Hoses",
-};
-
-function toKeyFromName(name: string): string | null {
-  const n = name.toLowerCase();
-  if (n.includes("cabin") && n.includes("air") && n.includes("filter")) return "cabin_air";
-  for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
-    if (vals.some((v) => n.includes(v))) return key;
-  }
-  if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
-  if (n.includes("exhaust system")) return "exhaust";
-  if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
-  if (n.includes("differential") && !n.includes("front") && !n.includes("rear")) return "rear_differential";
-  if (n.includes("shock") || n.includes("strut")) {
-    if (n.includes("front")) return "front_shocks";
-    if (n.includes("rear")) return "rear_shocks";
-    return "front_shocks";
-  }
-  if (n.includes("brake rotor") || n.includes("rotor replaced") || n.includes("rotor(s) replaced")) {
-    if (n.includes("front")) return "front_brake_rotors";
-    if (n.includes("rear")) return "rear_brake_rotors";
-    return "front_brake_rotors";
-  }
-  if (n.includes("brake pad") || n.includes("brake lining") || n.includes("brakes replaced") || n.includes("brakes serviced") || n.includes("disc brake")) {
-    if (n.includes("front")) return "front_brake_pads";
-    if (n.includes("rear")) return "rear_brake_pads";
-    return "front_brake_pads";
-  }
-  return null;
-}
-
-function toKeyFromFreeText(desc: string): string[] {
-  const d = desc.toLowerCase();
-  const hits: string[] = [];
-  for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
-    if (vals.some((v) => d.includes(v))) hits.push(key);
-  }
-  if (d.includes("oil") && !hits.includes("oil")) hits.push("oil");
-  if (d.includes("rotate") && d.includes("tire") && !hits.includes("tire_rotation")) hits.push("tire_rotation");
-  return Array.from(new Set(hits));
-}
 
 function parseCarfaxDate(d?: string | null): Date | null {
   if (!d) return null;
@@ -385,7 +235,7 @@ function triage({
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
   shopIntervals = {},
-  intervalApplyMode = "shop_only",
+  intervalApplyMode = "always",
   vehicleYear = null,
   vehicleTransType = null,
 }: {
@@ -882,7 +732,7 @@ export async function POST(req: NextRequest) {
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
     const distanceUnit = (shopDoc?.settings?.distanceUnit ?? "miles") as "miles" | "kilometers";
     const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
-    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "shop_only";
+    const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
       differential: ["front_differential", "rear_differential"],
       alignment: ["wheel_alignment"],
@@ -964,6 +814,17 @@ export async function POST(req: NextRequest) {
         const serviceName = job.name ?? job.description ?? "";
         if (serviceName) shopServiceHistory.push({ serviceName, mileage: wMileage, date });
       }
+    }
+
+    const unmatchedJobNames: string[] = [];
+    for (const sh of shopServiceHistory) {
+      const keys = toKeyFromFreeText(sh.serviceName || "");
+      if (keys.length === 0 && sh.serviceName) {
+        unmatchedJobNames.push(sh.serviceName);
+      }
+    }
+    if (unmatchedJobNames.length > 0) {
+      console.log(`[PlanBuild] Shop ${shopId} VIN ${vin}: ${unmatchedJobNames.length} unmatched job names: ${unmatchedJobNames.slice(0, 10).join(" | ")}`);
     }
 
     let latestRoNumber: string | null = null;
