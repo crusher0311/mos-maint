@@ -56,8 +56,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const internalShopId = shopResult.shopId;
+    const internalShopId = shopResult.mosShopId;
     const db = await getDb();
+
+    let taskCount = 0;
+    let redCount = 0;
+    let yellowCount = 0;
+    let greenCount = 0;
+    for (const insp of inspections) {
+      for (const group of insp.inspectionTasks || []) {
+        for (const task of group.tasks || []) {
+          taskCount++;
+          const code = task.inspectionRating?.code;
+          if (code === "RQRSATTN") redCount++;
+          else if (code === "MAYRQRATTN") yellowCount++;
+          else if (code === "CHCKD") greenCount++;
+        }
+      }
+    }
 
     const result = await db.collection("tekmetric_work_orders").updateOne(
       {
@@ -68,12 +84,9 @@ export async function POST(request: NextRequest) {
         $set: {
           dviDone: true,
           dviCompletedAt: new Date(),
-          lastInspection: inspections[0],
-          inspections: inspections.map((insp: any) => ({
-            ...insp,
-            receivedAt: new Date(),
-            source: "extension",
-          })),
+          inspections: inspections,
+          inspectionsCachedAt: new Date(),
+          inspectionsCachedVia: "extension",
           ...(vin ? { vin: vin.toUpperCase() } : {}),
         },
       }
@@ -91,12 +104,9 @@ export async function POST(request: NextRequest) {
             workOrderId: String(roId),
             dviDone: true,
             dviCompletedAt: new Date(),
-            lastInspection: inspections[0],
-            inspections: inspections.map((insp: any) => ({
-              ...insp,
-              receivedAt: new Date(),
-              source: "extension",
-            })),
+            inspections: inspections,
+            inspectionsCachedAt: new Date(),
+            inspectionsCachedVia: "extension",
             ...(vin ? { vin: vin.toUpperCase() } : {}),
             fetchedAt: new Date(),
           },
@@ -110,13 +120,18 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `[Extension Inspections] Stored ${inspections.length} inspection(s) for RO ${roId}, shop ${internalShopId}. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`
+      `[Extension Inspections] Cached ${inspections.length} inspection(s) for RO ${roId} (shop ${internalShopId}): ` +
+      `${taskCount} tasks (RED=${redCount}, YELLOW=${yellowCount}, GREEN=${greenCount}), ` +
+      `matched=${result.matchedCount}, modified=${result.modifiedCount}`
     );
 
     return NextResponse.json(
       {
         ok: true,
+        cached: true,
+        mosShopId: internalShopId,
         stored: inspections.length,
+        findings: { red: redCount, yellow: yellowCount, green: greenCount, total: taskCount },
         matched: result.matchedCount,
         modified: result.modifiedCount,
       },

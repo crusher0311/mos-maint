@@ -191,8 +191,15 @@ export async function getRepairOrderInspections(
   repairOrderId: number, 
   tekmetricShopId: number
 ): Promise<TekmetricInspection[]> {
-  if (!tekmetricShopId) {
-    console.warn(`[Tekmetric] Cannot fetch inspections without tekmetricShopId for RO ${repairOrderId}`);
+  return [];
+}
+
+export async function getRepairOrderInspectionsWithXAuth(
+  repairOrderId: number, 
+  tekmetricShopId: number,
+  xAuthToken: string
+): Promise<TekmetricInspection[]> {
+  if (!tekmetricShopId || !xAuthToken) {
     return [];
   }
   
@@ -204,14 +211,13 @@ export async function getRepairOrderInspections(
     }
     tekmetricApiCallCounter++;
 
-    const token = await getValidToken();
     const url = `${TEKMETRIC_INTERNAL_BASE_URL}/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
     const startTime = Date.now();
     
     const response = await fetch(url, {
       cache: 'no-store',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'x-auth-token': xAuthToken,
         'Content-Type': 'application/json',
       },
     });
@@ -219,34 +225,15 @@ export async function getRepairOrderInspections(
     const latencyMs = Date.now() - startTime;
     trackApiRequest('tekmetric', `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
 
-    if (response.status === 401) {
-      clearCachedToken();
-      await refreshToken();
-      const retryToken = await getValidToken();
-      const retryResponse = await fetch(url, {
-        cache: 'no-store',
-        headers: {
-          'Authorization': `Bearer ${retryToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!retryResponse.ok) {
-        console.warn(`[Tekmetric] Inspection fetch retry failed for RO ${repairOrderId}: ${retryResponse.status}`);
-        return [];
-      }
-      return retryResponse.json();
-    }
-
     if (response.status === 429) {
       const backoffMs = Math.min(5000 + Math.random() * 2000, 10000);
       console.warn(`[Tekmetric] 429 rate limited on inspection fetch for RO ${repairOrderId}, backing off ${Math.round(backoffMs)}ms`);
       await new Promise(r => setTimeout(r, backoffMs));
       tekmetricApiCallCounter++;
-      const retryToken = await getValidToken();
       const retryResponse = await fetch(url, {
         cache: 'no-store',
         headers: {
-          'Authorization': `Bearer ${retryToken}`,
+          'x-auth-token': xAuthToken,
           'Content-Type': 'application/json',
         },
       });
@@ -258,7 +245,9 @@ export async function getRepairOrderInspections(
     }
 
     if (!response.ok) {
-      console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
+      if (response.status !== 401 && response.status !== 403) {
+        console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
+      }
       return [];
     }
 
