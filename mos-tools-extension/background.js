@@ -1002,19 +1002,36 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     throw new Error("Could not detect vehicle mileage. Use right-click to customize.");
   }
   
-  // Build request body
+  // Determine unit — check context flag first, then fetch shop config
+  let unit = 'mi';
+  if (context.useKilometers === true) {
+    unit = 'km';
+  } else if (context.useKilometers == null) {
+    try {
+      const configResp = await fetch(
+        `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
+        { headers: { 'Authorization': `Bearer ${mosApiToken}` } }
+      );
+      if (configResp.ok) {
+        const configData = await configResp.json();
+        if (configData.config?.useKilometers) unit = 'km';
+      }
+    } catch (err) {
+      console.warn('[MOS] Could not fetch sticker config for unit, defaulting to mi:', err.message);
+    }
+  }
+
   const requestBody = {
     currentMileage: mileage,
-    unit: 'mi',
+    unit,
     smsShopId: context.shopId,
     provider: context.provider || ''
   };
   
-  // If override interval provided, use custom miles/months; otherwise auto-detect
   if (overrideInterval && overrideInterval.miles && overrideInterval.months) {
     requestBody.customMiles = overrideInterval.miles;
     requestBody.customMonths = overrideInterval.months;
-    console.log(`[MOS] Using custom interval: ${overrideInterval.miles} mi / ${overrideInterval.months} mo`);
+    console.log(`[MOS] Using custom interval: ${overrideInterval.miles} ${unit} / ${overrideInterval.months} mo`);
   } else {
     requestBody.intervalType = detectOilType(context.vehicle);
     console.log(`[MOS] Auto-detected oil type: ${requestBody.intervalType} for ${context.vehicle?.make || 'unknown'}`);

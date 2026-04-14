@@ -568,6 +568,7 @@ async function showIntervalDropdown(event, buttonElement) {
   document.body.appendChild(dropdown);
 
   let intervals = [];
+  let useKilometers = false;
   try {
     const result = await new Promise((resolve) => {
       chrome.runtime.sendMessage({
@@ -576,19 +577,24 @@ async function showIntervalDropdown(event, buttonElement) {
       }, resolve);
     });
 
-    if (result && result.config && result.config.intervals) {
-      const cfg = result.config.intervals;
-      if (cfg.conventional) {
-        intervals.push({ label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} mi / ${cfg.conventional.months} mo`, miles: cfg.conventional.mileage, months: cfg.conventional.months });
-      }
-      if (cfg.synthetic) {
-        intervals.push({ label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} mi / ${cfg.synthetic.months} mo`, miles: cfg.synthetic.mileage, months: cfg.synthetic.months });
-      }
-      if (cfg.euro) {
-        intervals.push({ label: `Euro: ${cfg.euro.mileage.toLocaleString()} mi / ${cfg.euro.months} mo`, miles: cfg.euro.mileage, months: cfg.euro.months });
-      }
-      if (cfg.diesel) {
-        intervals.push({ label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} mi / ${cfg.diesel.months} mo`, miles: cfg.diesel.mileage, months: cfg.diesel.months });
+    if (result && result.config) {
+      useKilometers = result.config.useKilometers === true;
+      const unitLabel = useKilometers ? 'km' : 'mi';
+
+      if (result.config.intervals) {
+        const cfg = result.config.intervals;
+        if (cfg.conventional) {
+          intervals.push({ label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} ${unitLabel} / ${cfg.conventional.months} mo`, miles: cfg.conventional.mileage, months: cfg.conventional.months });
+        }
+        if (cfg.synthetic) {
+          intervals.push({ label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} ${unitLabel} / ${cfg.synthetic.months} mo`, miles: cfg.synthetic.mileage, months: cfg.synthetic.months });
+        }
+        if (cfg.euro) {
+          intervals.push({ label: `Euro: ${cfg.euro.mileage.toLocaleString()} ${unitLabel} / ${cfg.euro.months} mo`, miles: cfg.euro.mileage, months: cfg.euro.months });
+        }
+        if (cfg.diesel) {
+          intervals.push({ label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} ${unitLabel} / ${cfg.diesel.months} mo`, miles: cfg.diesel.mileage, months: cfg.diesel.months });
+        }
       }
     }
   } catch (err) {
@@ -596,11 +602,12 @@ async function showIntervalDropdown(event, buttonElement) {
   }
 
   if (intervals.length === 0) {
+    const unitLabel = useKilometers ? 'km' : 'mi';
     intervals = [
-      { label: 'Conventional: 3,000 mi / 3 mo', miles: 3000, months: 3 },
-      { label: 'Synthetic: 5,000 mi / 6 mo', miles: 5000, months: 6 },
-      { label: 'Euro: 10,000 mi / 12 mo', miles: 10000, months: 12 },
-      { label: 'Diesel: 7,500 mi / 6 mo', miles: 7500, months: 6 }
+      { label: `Conventional: 3,000 ${unitLabel} / 3 mo`, miles: 3000, months: 3 },
+      { label: `Synthetic: 5,000 ${unitLabel} / 6 mo`, miles: 5000, months: 6 },
+      { label: `Euro: 10,000 ${unitLabel} / 12 mo`, miles: 10000, months: 12 },
+      { label: `Diesel: 7,500 ${unitLabel} / 6 mo`, miles: 7500, months: 6 }
     ];
   }
 
@@ -627,10 +634,11 @@ async function showIntervalDropdown(event, buttonElement) {
       } else {
         const ctx = detectContext();
         if (!ctx.roId || !ctx.shopId) { showToast('No work order detected', 'error'); return; }
-        showToast(`Generating sticker (${interval.miles.toLocaleString()} mi)...`, 'info');
+        const uLabel = useKilometers ? 'km' : 'mi';
+        showToast(`Generating sticker (${interval.miles.toLocaleString()} ${uLabel})...`, 'info');
         chrome.runtime.sendMessage({
           action: 'PRINT_STICKER_IMMEDIATE',
-          context: ctx,
+          context: { ...ctx, useKilometers },
           overrideInterval: { miles: interval.miles, months: interval.months }
         }, (response) => {
           if (response?.success) {

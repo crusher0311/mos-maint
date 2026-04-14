@@ -679,6 +679,7 @@ async function showIntervalDropdown(event, buttonElement) {
   
   // Fetch shop's configured intervals
   let intervals = [];
+  let useKilometers = false;
   try {
     const result = await new Promise((resolve) => {
       safeSendMessage({
@@ -687,40 +688,44 @@ async function showIntervalDropdown(event, buttonElement) {
       }, resolve);
     });
     
-    if (result && result.config && result.config.intervals) {
-      const cfg = result.config.intervals;
-      // Build intervals from shop config
-      if (cfg.conventional) {
-        intervals.push({ 
-          label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} mi / ${cfg.conventional.months} mo`, 
-          miles: cfg.conventional.mileage, 
-          months: cfg.conventional.months,
-          type: 'conventional'
-        });
-      }
-      if (cfg.synthetic) {
-        intervals.push({ 
-          label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} mi / ${cfg.synthetic.months} mo`, 
-          miles: cfg.synthetic.mileage, 
-          months: cfg.synthetic.months,
-          type: 'synthetic'
-        });
-      }
-      if (cfg.euro) {
-        intervals.push({ 
-          label: `Euro: ${cfg.euro.mileage.toLocaleString()} mi / ${cfg.euro.months} mo`, 
-          miles: cfg.euro.mileage, 
-          months: cfg.euro.months,
-          type: 'euro'
-        });
-      }
-      if (cfg.diesel) {
-        intervals.push({ 
-          label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} mi / ${cfg.diesel.months} mo`, 
-          miles: cfg.diesel.mileage, 
-          months: cfg.diesel.months,
-          type: 'diesel'
-        });
+    if (result && result.config) {
+      useKilometers = result.config.useKilometers === true;
+      const unitLabel = useKilometers ? 'km' : 'mi';
+      
+      if (result.config.intervals) {
+        const cfg = result.config.intervals;
+        if (cfg.conventional) {
+          intervals.push({ 
+            label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} ${unitLabel} / ${cfg.conventional.months} mo`, 
+            miles: cfg.conventional.mileage, 
+            months: cfg.conventional.months,
+            type: 'conventional'
+          });
+        }
+        if (cfg.synthetic) {
+          intervals.push({ 
+            label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} ${unitLabel} / ${cfg.synthetic.months} mo`, 
+            miles: cfg.synthetic.mileage, 
+            months: cfg.synthetic.months,
+            type: 'synthetic'
+          });
+        }
+        if (cfg.euro) {
+          intervals.push({ 
+            label: `Euro: ${cfg.euro.mileage.toLocaleString()} ${unitLabel} / ${cfg.euro.months} mo`, 
+            miles: cfg.euro.mileage, 
+            months: cfg.euro.months,
+            type: 'euro'
+          });
+        }
+        if (cfg.diesel) {
+          intervals.push({ 
+            label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} ${unitLabel} / ${cfg.diesel.months} mo`, 
+            miles: cfg.diesel.mileage, 
+            months: cfg.diesel.months,
+            type: 'diesel'
+          });
+        }
       }
     }
   } catch (err) {
@@ -729,11 +734,12 @@ async function showIntervalDropdown(event, buttonElement) {
   
   // Fallback to defaults if no intervals fetched
   if (intervals.length === 0) {
+    const unitLabel = useKilometers ? 'km' : 'mi';
     intervals = [
-      { label: 'Conventional: 3,000 mi / 3 mo', miles: 3000, months: 3, type: 'conventional' },
-      { label: 'Synthetic: 5,000 mi / 6 mo', miles: 5000, months: 6, type: 'synthetic' },
-      { label: 'Euro: 10,000 mi / 12 mo', miles: 10000, months: 12, type: 'euro' },
-      { label: 'Diesel: 7,500 mi / 6 mo', miles: 7500, months: 6, type: 'diesel' }
+      { label: `Conventional: 3,000 ${unitLabel} / 3 mo`, miles: 3000, months: 3, type: 'conventional' },
+      { label: `Synthetic: 5,000 ${unitLabel} / 6 mo`, miles: 5000, months: 6, type: 'synthetic' },
+      { label: `Euro: 10,000 ${unitLabel} / 12 mo`, miles: 10000, months: 12, type: 'euro' },
+      { label: `Diesel: 7,500 ${unitLabel} / 6 mo`, miles: 7500, months: 6, type: 'diesel' }
     ];
   }
   
@@ -766,7 +772,7 @@ async function showIntervalDropdown(event, buttonElement) {
       if (interval.action === 'customize') {
         openStickerPanel();
       } else {
-        handleImmediatePrintWithInterval(interval.miles, interval.months);
+        handleImmediatePrintWithInterval(interval.miles, interval.months, useKilometers);
       }
     });
     
@@ -783,21 +789,22 @@ async function showIntervalDropdown(event, buttonElement) {
   setTimeout(() => document.addEventListener('click', closeDropdown), 0);
 }
 
-function handleImmediatePrintWithInterval(miles, months) {
+function handleImmediatePrintWithInterval(miles, months, useKm) {
   const context = detectContext();
   if (!context.roId || !context.shopId) {
     showToast('No repair order detected', 'error');
     return;
   }
   
-  showToast(`Generating sticker (${miles.toLocaleString()} mi)...`, 'info');
+  const unitLabel = useKm ? 'km' : 'mi';
+  showToast(`Generating sticker (${miles.toLocaleString()} ${unitLabel})...`, 'info');
   
-  // Send message to background to generate and print sticker with custom interval
   safeSendMessage({
     action: 'PRINT_STICKER_IMMEDIATE',
     context: {
       ...context,
-      vehicle: getVehicleDetails()
+      vehicle: getVehicleDetails(),
+      useKilometers: !!useKm
     },
     overrideInterval: { miles, months }
   }, (response) => {
