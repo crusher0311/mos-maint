@@ -1045,17 +1045,17 @@ function injectPrefillButton() {
   btn.title = 'Pre-fill DVI with VHI data';
   btn.type = 'button';
   const iconUrl = chrome.runtime.getURL('icons/VHI_icon.png');
-  btn.innerHTML = `<img src="${iconUrl}" width="22" height="22" style="object-fit:contain;" />`;
+  btn.innerHTML = `<img src="${iconUrl}" width="32" height="32" style="object-fit:contain;" />`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    padding: '0',
+    width: '36px',
+    height: '36px',
+    padding: '2px',
     backgroundColor: 'transparent',
-    border: '1px solid #3B82F6',
+    border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
     marginLeft: '8px',
@@ -1063,13 +1063,11 @@ function injectPrefillButton() {
   });
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.backgroundColor = 'rgba(59,130,246,0.1)';
-    btn.style.borderColor = '#2563EB';
+    btn.style.opacity = '0.7';
   });
 
   btn.addEventListener('mouseleave', () => {
-    btn.style.backgroundColor = 'transparent';
-    btn.style.borderColor = '#3B82F6';
+    btn.style.opacity = '1';
   });
 
   btn.addEventListener('click', (e) => {
@@ -1105,21 +1103,18 @@ function injectEnhanceButton() {
   btn.id = 'mos-enhance-notes-btn';
   btn.title = 'Enhance technician notes with AI';
   btn.type = 'button';
-  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 20h9"/>
-    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-    <path d="M9 2l1.5 3L9 8l-1.5-3L9 2z" fill="#8B5CF6" stroke="none"/>
-  </svg>`;
+  const enhanceIconUrl = chrome.runtime.getURL('icons/enhance_notes_icon.png');
+  btn.innerHTML = `<img src="${enhanceIconUrl}" width="32" height="32" style="object-fit:contain;" />`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    padding: '0',
+    width: '36px',
+    height: '36px',
+    padding: '2px',
     backgroundColor: 'transparent',
-    border: '1px solid #8B5CF6',
+    border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
     marginLeft: '6px',
@@ -1127,17 +1122,11 @@ function injectEnhanceButton() {
   });
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.backgroundColor = '#8B5CF6';
-    btn.querySelector('svg').setAttribute('stroke', '#fff');
-    const sparkle = btn.querySelector('svg path[fill]');
-    if (sparkle) sparkle.setAttribute('fill', '#fff');
+    btn.style.opacity = '0.7';
   });
 
   btn.addEventListener('mouseleave', () => {
-    btn.style.backgroundColor = 'transparent';
-    btn.querySelector('svg').setAttribute('stroke', '#8B5CF6');
-    const sparkle = btn.querySelector('svg path[fill]');
-    if (sparkle) sparkle.setAttribute('fill', '#8B5CF6');
+    btn.style.opacity = '1';
   });
 
   btn.addEventListener('click', (e) => {
