@@ -1,0 +1,325 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://mos.tools
+ [MOS] Restored shops: 34
+ [MOS] Side panel opens on action click
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [Tekmetric] Shop ID captured: 524
+ [MOS Inspections] Fetched 1 inspection(s) for RO 319927617
+ [MOS] Relayed x-auth-token for shop 524
+ [LaborRate] Fetched 0 rules for shop 524
+ [LaborRate] No rules configured, skipping
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS Inspections] Relayed inspections to MOS: Object
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_LOGOUT
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+ [MOS] Token verify: 200
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_LOGOUT
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+background.js:983 [MOS] Token verify: 200
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: SNIFFER_STATUS
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_TOGGLE
+background.js:760 [MOS Sniffer] Started capture
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1345 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1345 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:1478 [MOS Inspections] Fetched 1 inspection(s) for RO 320824980
+background.js:1345 [LaborRate] Fetched 0 rules for shop 524
+background.js:1529 [LaborRate] No rules configured, skipping
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1502 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:1345 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_CAPTURE_FROM_PAGE
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_TOGGLE
+background.js:760 [MOS Sniffer] Stopped capture
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+mos.tools/api/extension/sniffer-upload:1  Failed to load resource: the server responded with a status of 500 ()
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_EXPORT
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+mos.tools/api/extension/sniffer-upload:1  Failed to load resource: the server responded with a status of 500 ()
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+sniffer-ui.js:255  POST https://mos.tools/api/extension/sniffer-upload 500 (Internal Server Error)
+uploadCaptures @ sniffer-ui.js:255
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
+background.js:244 [MOS] Message received: SNIFFER_GET_CAPTURES
