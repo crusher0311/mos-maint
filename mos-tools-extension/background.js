@@ -1904,48 +1904,51 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
 
   if (!inspArr || inspArr.length === 0) return { success: false, error: "No inspections found on this RO" };
 
-  let inspection;
-  if (inspId) {
-    inspection = inspArr.find(i => String(i.id) === String(inspId));
-  } else {
-    const incomplete = inspArr.filter(i => {
-      const status = i.inspectionStatus?.code || i.status || "";
-      const completed = i.completed === true || status === "COMPLETED" || status === "COMPLETE";
-      return !completed;
-    });
-    inspection = incomplete.length > 0 ? incomplete[incomplete.length - 1] : inspArr[inspArr.length - 1];
-  }
-  if (!inspection) return { success: false, error: "Inspection not found" };
-
-  const allTasks = [];
-  const groups = inspection.inspectionTasks || inspection.groups || [];
-  console.log(`[Enhance Findings] Inspection ${inspection.id} has ${groups.length} groups`);
-  for (const group of groups) {
-    const tasks = group.tasks || [];
-    for (const task of tasks) {
-      const t = { ...task };
-      if (!t.inspectionGroup && group.title) t.inspectionGroup = group.title;
-      allTasks.push(t);
-    }
-  }
-
-  console.log(`[Enhance Findings] Total tasks: ${allTasks.length}`);
-  if (allTasks.length > 0) {
-    const sample = allTasks[0];
-    console.log(`[Enhance Findings] Sample task keys:`, Object.keys(sample).join(', '));
-    console.log(`[Enhance Findings] Sample task finding field:`, JSON.stringify(sample.finding), `note:`, JSON.stringify(sample.note), `notes:`, JSON.stringify(sample.notes), `comment:`, JSON.stringify(sample.comment));
-  }
-
   const getFinding = (t) => {
     return t.finding || t.note || t.notes || t.comment || t.comments || null;
   };
 
-  const tasksWithFindings = allTasks.filter(t => {
-    const f = getFinding(t);
-    return f && typeof f === "string" && f.trim().length > 0;
-  });
+  let inspectionsToSearch = [];
+  if (inspId) {
+    const match = inspArr.find(i => String(i.id) === String(inspId));
+    if (match) inspectionsToSearch = [match];
+  } else {
+    inspectionsToSearch = inspArr;
+  }
 
-  console.log(`[Enhance Findings] Tasks with findings: ${tasksWithFindings.length} out of ${allTasks.length}`);
+  if (inspectionsToSearch.length === 0) return { success: false, error: "Inspection not found" };
+
+  console.log(`[Enhance Findings] Searching ${inspectionsToSearch.length} inspection(s) for findings`);
+
+  const allTasks = [];
+  let usedInspectionId = null;
+
+  for (const insp of inspectionsToSearch) {
+    const groups = insp.inspectionTasks || insp.groups || [];
+    const status = insp.inspectionStatus?.code || insp.status || "";
+    console.log(`[Enhance Findings] Inspection ${insp.id} (${status || 'unknown status'}) has ${groups.length} groups`);
+    for (const group of groups) {
+      const tasks = group.tasks || [];
+      for (const task of tasks) {
+        const f = getFinding(task);
+        if (f && typeof f === "string" && f.trim().length > 0) {
+          const t = { ...task, _inspectionId: insp.id };
+          if (!t.inspectionGroup && group.title) t.inspectionGroup = group.title;
+          allTasks.push(t);
+          if (!usedInspectionId) usedInspectionId = insp.id;
+        }
+      }
+    }
+  }
+
+  console.log(`[Enhance Findings] Found ${allTasks.length} tasks with findings across all inspections`);
+
+  if (allTasks.length > 0) {
+    const sample = allTasks[0];
+    console.log(`[Enhance Findings] Sample task keys:`, Object.keys(sample).join(', '));
+  }
+
+  const tasksWithFindings = allTasks;
 
   if (tasksWithFindings.length === 0) {
     return { success: false, error: "No findings to enhance — tasks have no notes yet" };
@@ -1991,10 +1994,15 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
   const changed = enhanceData.enhanced.filter(e => e.enhanced !== e.original);
   console.log(`[Enhance Findings] AI returned ${enhanceData.enhanced.length} enhancements, ${changed.length} have changes`);
 
+  const changedWithInspId = changed.map(e => {
+    const task = tasksWithFindings.find(t => t.id === e.taskId);
+    return { ...e, _inspectionId: task?._inspectionId || usedInspectionId };
+  });
+
   return {
     success: true,
-    enhanced: changed,
-    inspectionId: inspection.id,
+    enhanced: changedWithInspId,
+    inspectionId: usedInspectionId,
   };
 }
 
@@ -2018,14 +2026,14 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
     return { success: false, error: "Failed to fetch inspections: " + err.message };
   }
 
-  const inspection = inspArr.find(i => String(i.id) === String(inspectionId));
-  if (!inspection) return { success: false, error: "Inspection not found" };
-
-  const allTasks = [];
-  const groups = inspection.inspectionTasks || inspection.groups || [];
-  for (const group of groups) {
-    for (const task of (group.tasks || [])) {
-      allTasks.push({ ...task });
+  const tasksByInspection = {};
+  for (const insp of inspArr) {
+    const groups = insp.inspectionTasks || insp.groups || [];
+    for (const group of groups) {
+      for (const task of (group.tasks || [])) {
+        if (!tasksByInspection[insp.id]) tasksByInspection[insp.id] = {};
+        tasksByInspection[insp.id][task.id] = { ...task };
+      }
     }
   }
 
@@ -2033,7 +2041,8 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   let failed = 0;
 
   for (const item of approved) {
-    const task = allTasks.find(t => t.id === item.taskId);
+    const itemInspId = item._inspectionId || inspectionId;
+    const task = tasksByInspection[itemInspId]?.[item.taskId];
     if (!task) { failed++; continue; }
 
     const putBody = { ...task };
@@ -2042,7 +2051,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
 
     try {
       const res = await fetch(
-        `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
+        `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${itemInspId}/tasks/${task.id}`,
         {
           method: "PUT",
           headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
