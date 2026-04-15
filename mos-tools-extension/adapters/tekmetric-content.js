@@ -1044,10 +1044,8 @@ function injectPrefillButton() {
   btn.id = 'mos-prefill-dvi-btn';
   btn.title = 'Pre-fill DVI with VHI data';
   btn.type = 'button';
-  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/>
-    <path d="M9 14l2 2 4-4"/>
-  </svg>`;
+  const iconUrl = chrome.runtime.getURL('icons/aiVHI_icon.png');
+  btn.innerHTML = `<img src="${iconUrl}" width="22" height="22" style="object-fit:contain;" />`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',
@@ -1065,13 +1063,13 @@ function injectPrefillButton() {
   });
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.backgroundColor = '#3B82F6';
-    btn.querySelector('svg').setAttribute('stroke', '#fff');
+    btn.style.backgroundColor = 'rgba(59,130,246,0.1)';
+    btn.style.borderColor = '#2563EB';
   });
 
   btn.addEventListener('mouseleave', () => {
     btn.style.backgroundColor = 'transparent';
-    btn.querySelector('svg').setAttribute('stroke', '#3B82F6');
+    btn.style.borderColor = '#3B82F6';
   });
 
   btn.addEventListener('click', (e) => {

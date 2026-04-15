@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.25.0",
+  "version": "1.25.1",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -82,7 +82,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png", "adapters/interceptor.js"],
+      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png", "icons/aiVHI_icon.png", "adapters/interceptor.js"],
       "matches": [
         "https://shop.tekmetric.com/*",
         "https://sandbox.tekmetric.com/*",
