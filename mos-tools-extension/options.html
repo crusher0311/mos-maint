@@ -326,39 +326,46 @@
     let swSaveTimeout = null;
 
     async function init() {
-      const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
+      try {
+        const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
+        console.log('[Options] Auth status:', JSON.stringify(authStatus));
 
-      if (!authStatus.isAuthenticated) {
+        if (!authStatus || !authStatus.isAuthenticated) {
+          notLoggedIn.style.display = 'block';
+          settingsContent.style.display = 'none';
+          return;
+        }
+
+        notLoggedIn.style.display = 'none';
+        settingsContent.style.display = 'block';
+
+        if (authStatus.defaultExtensionTab) {
+          tabSelect.value = authStatus.defaultExtensionTab;
+        }
+        if (authStatus.shopwareAddMode) {
+          swAddModeSelect.value = authStatus.shopwareAddMode;
+        }
+
+        loadFeatures();
+        checkShopwareIntegration();
+        checkPlatformAdmin(authStatus);
+
+        tabSelect.addEventListener('change', () => {
+          clearTimeout(saveTimeout);
+          showStatus('Saving...', 'loading');
+          saveTimeout = setTimeout(() => saveDefaultTab(tabSelect.value), 300);
+        });
+
+        swAddModeSelect.addEventListener('change', () => {
+          clearTimeout(swSaveTimeout);
+          showStatus('Saving...', 'loading');
+          swSaveTimeout = setTimeout(() => saveSwAddMode(swAddModeSelect.value), 300);
+        });
+      } catch (err) {
+        console.error('[Options] Init error:', err);
         notLoggedIn.style.display = 'block';
         settingsContent.style.display = 'none';
-        return;
       }
-
-      notLoggedIn.style.display = 'none';
-      settingsContent.style.display = 'block';
-
-      if (authStatus.defaultExtensionTab) {
-        tabSelect.value = authStatus.defaultExtensionTab;
-      }
-      if (authStatus.shopwareAddMode) {
-        swAddModeSelect.value = authStatus.shopwareAddMode;
-      }
-
-      loadFeatures();
-      checkShopwareIntegration();
-      checkPlatformAdmin(authStatus);
-
-      tabSelect.addEventListener('change', () => {
-        clearTimeout(saveTimeout);
-        showStatus('Saving...', 'loading');
-        saveTimeout = setTimeout(() => saveDefaultTab(tabSelect.value), 300);
-      });
-
-      swAddModeSelect.addEventListener('change', () => {
-        clearTimeout(swSaveTimeout);
-        showStatus('Saving...', 'loading');
-        swSaveTimeout = setTimeout(() => saveSwAddMode(swAddModeSelect.value), 300);
-      });
     }
 
     async function loadFeatures() {
