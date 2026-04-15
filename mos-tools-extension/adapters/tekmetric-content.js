@@ -1322,7 +1322,9 @@ function showEnhanceReviewModal(enhanced, inspectionId, context) {
           taskId: enhanced[idx].taskId,
           taskName: enhanced[idx].taskName,
           original: enhanced[idx].original,
+          aiOriginal: enhanced[idx].enhanced,
           enhanced: textarea ? textarea.value : enhanced[idx].enhanced,
+          _inspectionId: enhanced[idx]._inspectionId || null,
         });
       }
     });

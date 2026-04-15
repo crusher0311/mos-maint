@@ -1974,6 +1974,7 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
           rating: t.inspectionRating?.code || null,
         })),
         vehicleInfo: context.vehicleInfo || null,
+        shopId: context.shopId || null,
       }),
     });
 
@@ -2067,6 +2068,34 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   }
 
   console.log(`[Enhance Findings] Applied: ${applied}, Failed: ${failed}`);
+
+  const corrections = approved.filter(item =>
+    item.aiOriginal && item.enhanced !== item.aiOriginal
+  ).map(item => ({
+    taskName: item.taskName,
+    aiSuggested: item.aiOriginal,
+    advisorWrote: item.enhanced,
+  }));
+
+  if (corrections.length > 0 && mosApiToken && mosApiUrl && context.shopId) {
+    try {
+      await fetch(`${mosApiUrl}/api/extension/enhance-corrections`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${mosApiToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          shopId: context.shopId,
+          corrections,
+        }),
+      });
+      console.log(`[Enhance Findings] Saved ${corrections.length} advisor corrections for shop ${context.shopId}`);
+    } catch (err) {
+      console.warn("[Enhance Findings] Failed to save corrections:", err.message);
+    }
+  }
+
   return { success: applied > 0, applied, failed };
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getOpenAI, DEFAULT_MODEL } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
   }
 
-  const { findings, vehicleInfo } = body;
+  const { findings, vehicleInfo, shopId } = body;
 
   if (!findings || !Array.isArray(findings) || findings.length === 0) {
     return NextResponse.json(
@@ -106,13 +107,47 @@ export async function POST(request: NextRequest) {
       ? `Vehicle: ${vehicleInfo.year || ""} ${vehicleInfo.make || ""} ${vehicleInfo.model || ""} ${vehicleInfo.trim || ""}`.trim()
       : "";
 
+    let shopExamples = "";
+    if (shopId) {
+      try {
+        const db = await getDb();
+        const corrections = await db.collection("enhance_corrections")
+          .find({ shopId: String(shopId) })
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .toArray();
+
+        if (corrections.length > 0) {
+          const deduped = new Map<string, string>();
+          for (const c of corrections) {
+            if (c.aiSuggested && c.advisorWrote && c.aiSuggested !== c.advisorWrote) {
+              deduped.set(c.aiSuggested, c.advisorWrote);
+            }
+          }
+          if (deduped.size > 0) {
+            const examples = Array.from(deduped.entries())
+              .slice(0, 15)
+              .map(([ai, advisor]) => `- "${ai}" → "${advisor}"`)
+              .join("\n");
+            shopExamples = `\n\nThis shop's advisors prefer the following phrasing (use these as guidance for terminology and style):\n${examples}`;
+          }
+        }
+      } catch (err) {
+        console.warn("[Enhance Findings] Failed to load shop corrections:", err);
+      }
+    }
+
     const userPrompt = validFindings.map((f, i) =>
       `${i + 1}. [${f.taskName}] "${f.finding}"`
     ).join("\n");
 
-    const fullPrompt = vehicleContext
-      ? `${vehicleContext}\n\nRewrite each technician finding below into professional customer-facing language. Return ONLY a JSON array of objects with "index" (1-based) and "enhanced" fields. No markdown, no explanation.\n\n${userPrompt}`
-      : `Rewrite each technician finding below into professional customer-facing language. Return ONLY a JSON array of objects with "index" (1-based) and "enhanced" fields. No markdown, no explanation.\n\n${userPrompt}`;
+    const baseInstruction = "Rewrite each technician finding below into professional customer-facing language. Return ONLY a JSON array of objects with \"index\" (1-based) and \"enhanced\" fields. No markdown, no explanation.";
+
+    let fullPrompt = "";
+    if (vehicleContext) fullPrompt += vehicleContext + "\n\n";
+    fullPrompt += baseInstruction;
+    if (shopExamples) fullPrompt += shopExamples;
+    fullPrompt += "\n\n" + userPrompt;
 
     const completion = await openai.chat.completions.create({
       model: DEFAULT_MODEL,
