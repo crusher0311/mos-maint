@@ -208,6 +208,7 @@ export async function POST(request: NextRequest) {
         shopId: user.shopId,
         shopIds: allShopIds,
         role: user.role,
+        isPlatformAdmin: user.isPlatformAdmin === true || user.role === 'platform_admin',
         defaultExtensionTab: user.defaultExtensionTab || null,
         shopwareAddMode: effectiveSwMode
       },
