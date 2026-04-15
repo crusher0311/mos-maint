@@ -1,0 +1,54 @@
+2026-04-15T17:03:49Z clientIP="73.112.133.127" requestID="2ee6fcda-533b-4229" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:49Z clientIP="73.112.133.127" requestID="f489e757-68dc-44d8" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:49.992335617Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:03:50Z clientIP="73.112.133.127" requestID="f7261510-4e8a-4b73" responseTimeMS=70 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:51.944746852Z [Protractor Callback GET] Update WorkOrder 7201b901-a9e2-40dd-80c1-79c459451662 for shop 69
+2026-04-15T17:03:52.085056707Z [Protractor Callback GET] Logged WorkOrder 7201b901-a9e2-40dd-80c1-79c459451662 for shop 69
+2026-04-15T17:03:52.965202698Z [Protractor Callback] Processed work order 7201b901-a9e2-40dd-80c1-79c459451662
+2026-04-15T17:03:53Z clientIP="162.212.202.163" requestID="56adcfc5-e690-4544" responseTimeMS=1507 responseBytes=308 userAgent=""
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="cea37a96-c6ea-4f97" responseTimeMS=212 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="09ccab10-f073-4bcf" responseTimeMS=71 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="73.112.133.127" requestID="a867c790-12e3-4433" responseTimeMS=73 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="c26a5f7b-3075-467d" responseTimeMS=203 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="7084db68-b98b-4d90" responseTimeMS=272 responseBytes=484 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="76b82dc0-e1da-4215" responseTimeMS=209 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="75dc68e9-4014-4da2" responseTimeMS=210 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="71.195.39.148" requestID="d93848ab-3a39-452c" responseTimeMS=586 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:03:55Z clientIP="73.112.133.127" requestID="7593c28b-9bd8-4dbf" responseTimeMS=71 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:55.176162183Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:03:55.261777509Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-15T17:03:55.270682598Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-15T17:03:55.303474781Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-15T17:03:55.380974298Z [Extension Inspections] Cached 1 inspection(s) for RO 320804034 (shop 99): 31 tasks (RED=1, YELLOW=10, GREEN=20), matched=1, modified=1
+2026-04-15T17:03:55.611629226Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:03:55.701365573Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-15T17:03:55.799982718Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:03:55.879860043Z [AutoFlow Config] Shop 16: domain=bigotires-Virginia.autotext.me, base=https://bigotires-Virginia.autotext.me, configured=true
+2026-04-15T17:03:55.879992367Z [AutoFlow] Fetching DVI from: https://bigotires-Virginia.autotext.me/api/v1/dvi/220112
+2026-04-15T17:03:56Z clientIP="73.112.133.127" requestID="f98d4e6f-49e5-40c8" responseTimeMS=338 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:56Z clientIP="54.148.221.117" requestID="1ebaccf6-b3c3-43e4" responseTimeMS=718 responseBytes=275 userAgent="axios/1.5.0"
+2026-04-15T17:03:56Z clientIP="73.112.133.127" requestID="a8ebe6eb-dc73-4e38" responseTimeMS=71 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:03:56.443368291Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:03:58Z clientIP="54.148.221.117" requestID="83ecbff3-be76-48ca" responseTimeMS=212 responseBytes=275 userAgent="axios/1.5.0"
+2026-04-15T17:03:58.058252412Z [Tekmetric Incremental] Shop 78: Fetched page 0, got 0 ROs (updated since 2026-04-15T17:02:54.898Z)
+2026-04-15T17:03:58.480277565Z [Tekmetric Incremental] Shop 82: Fetched page 0, got 0 ROs (updated since 2026-04-15T17:02:55.285Z)
+2026-04-15T17:03:58.847679831Z [Tekmetric Incremental] Shop 83: Fetched page 0, got 0 ROs (updated since 2026-04-15T17:02:55.656Z)
+2026-04-15T17:03:59.266948777Z [Tekmetric Incremental] Shop 84: Fetched page 0, got 1 ROs (updated since 2026-04-15T17:02:56.087Z)
+2026-04-15T17:03:59.663267351Z [Tekmetric Incremental] Shop 85: Fetched page 0, got 0 ROs (updated since 2026-04-15T17:02:56.646Z)
+2026-04-15T17:04:02Z clientIP="100.14.92.241" requestID="3aa1b62a-99f0-4521" responseTimeMS=81 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:02Z clientIP="73.112.133.127" requestID="af4b73bb-8e07-4635" responseTimeMS=78 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:02Z clientIP="73.112.133.127" requestID="f899aebc-7690-4aea" responseTimeMS=75 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:02Z clientIP="100.14.92.241" requestID="cc58aa5a-fce7-47d4" responseTimeMS=74 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:02.461110136Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:02.481885935Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:02.514261368Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:02.963498617Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:03Z clientIP="73.112.133.127" requestID="6627bfc9-4cdd-441a" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:03.452993163Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:04Z clientIP="71.195.39.148" requestID="55784385-59b4-4897" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:04Z clientIP="71.195.39.148" requestID="cb961e12-b554-450c" responseTimeMS=206 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+2026-04-15T17:04:04.196798595Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:06.763807269Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:06.931363241Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-15T17:04:06Z clientIP="100.14.92.241" requestID="e41af706-7f31-4a44" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-15T17:04:06Z clientIP="100.14.92.241" requestID="33a97513-2202-4a64" responseTimeMS=72 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
