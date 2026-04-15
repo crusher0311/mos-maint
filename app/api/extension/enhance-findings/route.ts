@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         { role: "user", content: fullPrompt },
       ],
       temperature: 0.3,
-      max_tokens: 2000,
+      max_tokens: 4000,
     });
 
     const responseText = completion.choices?.[0]?.message?.content?.trim() || "";
