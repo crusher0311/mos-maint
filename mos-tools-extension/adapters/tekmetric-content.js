@@ -447,6 +447,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "ENHANCE_FINDINGS_COMPLETE") {
+    console.log("[MOS Tools] Findings enhancement complete:", message.result);
+    resetEnhanceButton();
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "ENHANCE_FINDINGS_FAILED") {
+    resetEnhanceButton();
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "INJECT_CONCERN_TEXT") {
     console.log("[MOS Tools] Injecting concern text into RO");
     const injected = injectConcernText(message.text);
@@ -956,11 +972,16 @@ function checkAndInjectButton() {
   }
   if (context.roId) {
     setTimeout(injectPrefillButton, 1200);
+    setTimeout(injectEnhanceButton, 1500);
   } else {
     const existingPrefill = document.getElementById('mos-prefill-dvi-btn');
     if (existingPrefill) existingPrefill.remove();
     prefillButtonInjected = false;
     prefillInFlight = false;
+    const existingEnhance = document.getElementById('mos-enhance-notes-btn');
+    if (existingEnhance) existingEnhance.remove();
+    enhanceButtonInjected = false;
+    enhanceInFlight = false;
   }
 }
 
@@ -1066,6 +1087,120 @@ function injectPrefillButton() {
 }
 
 let prefillInFlight = false;
+let enhanceButtonInjected = false;
+let enhanceInFlight = false;
+
+function injectEnhanceButton() {
+  if (enhanceButtonInjected) return;
+  if (document.getElementById('mos-enhance-notes-btn')) {
+    enhanceButtonInjected = true;
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId) return;
+
+  const prefillBtn = document.getElementById('mos-prefill-dvi-btn');
+  const targetContainer = prefillBtn?.parentElement;
+  if (!targetContainer) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'mos-enhance-notes-btn';
+  btn.title = 'Enhance technician findings with AI';
+  btn.type = 'button';
+  btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+  </svg>`;
+
+  Object.assign(btn.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4px 8px',
+    backgroundColor: 'transparent',
+    border: '1px solid #8B5CF6',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    marginLeft: '6px',
+    transition: 'all 0.2s',
+    gap: '4px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#8B5CF6',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const label = document.createElement('span');
+  label.textContent = 'Enhance Notes';
+  label.style.whiteSpace = 'nowrap';
+  btn.appendChild(label);
+
+  btn.addEventListener('mouseenter', () => {
+    btn.style.backgroundColor = '#8B5CF6';
+    btn.style.color = '#fff';
+    btn.querySelector('svg').setAttribute('stroke', '#fff');
+  });
+
+  btn.addEventListener('mouseleave', () => {
+    btn.style.backgroundColor = 'transparent';
+    btn.style.color = '#8B5CF6';
+    btn.querySelector('svg').setAttribute('stroke', '#8B5CF6');
+  });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleEnhanceNotes(btn);
+  });
+
+  targetContainer.appendChild(btn);
+  enhanceButtonInjected = true;
+  console.log('[MOS Tools] Enhance Notes button injected');
+}
+
+function handleEnhanceNotes(buttonEl) {
+  if (enhanceInFlight) {
+    showToast('Enhancement already in progress', 'info');
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId || !context.shopId) {
+    showToast('No repair order detected', 'error');
+    return;
+  }
+
+  enhanceInFlight = true;
+  buttonEl.disabled = true;
+  buttonEl.style.opacity = '0.5';
+  buttonEl.style.cursor = 'wait';
+  const label = buttonEl.querySelector('span');
+  if (label) label.textContent = 'Enhancing...';
+
+  safeSendMessage({
+    action: 'ENHANCE_FINDINGS',
+    context: {
+      shopId: context.shopId,
+      roId: context.roId,
+      vin: context.vin,
+      mileage: context.mileage,
+      provider: 'tekmetric',
+      vehicleInfo: context.vehicle || null,
+    }
+  }, (response) => {});
+}
+
+function resetEnhanceButton() {
+  enhanceInFlight = false;
+  const btn = document.getElementById('mos-enhance-notes-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    const label = btn.querySelector('span');
+    if (label) label.textContent = 'Enhance Notes';
+  }
+}
 
 function handlePrefillDvi(buttonEl) {
   if (prefillInFlight) {
