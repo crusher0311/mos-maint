@@ -269,7 +269,9 @@
       <input type="text" id="filter-search" class="toolbar-input" placeholder="Search URL or body...">
 
       <button id="export-btn" class="toolbar-btn">Export JSON</button>
+      <button id="upload-btn" class="toolbar-btn" title="Upload captures to MOS server">⬆ Upload</button>
 
+      <span id="upload-status" class="capture-count" style="display:none;"></span>
       <span id="capture-count" class="capture-count">0 captures</span>
     </div>
 
@@ -287,6 +289,8 @@
     const toggleBtn = document.getElementById('toggle-btn');
     const clearBtn = document.getElementById('clear-btn');
     const exportBtn = document.getElementById('export-btn');
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadStatus = document.getElementById('upload-status');
     const statusDot = document.getElementById('status-dot');
     const capturesList = document.getElementById('captures-list');
     const emptyState = document.getElementById('empty-state');
@@ -318,6 +322,7 @@
       toggleBtn.addEventListener('click', toggleSniffer);
       clearBtn.addEventListener('click', clearCaptures);
       exportBtn.addEventListener('click', exportCaptures);
+      uploadBtn.addEventListener('click', uploadCaptures);
       filterPlatform.addEventListener('change', refreshCaptures);
       filterCategory.addEventListener('change', refreshCaptures);
       filterMethod.addEventListener('change', refreshCaptures);
@@ -501,6 +506,65 @@
       a.download = `mos-api-sniffer-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    async function uploadCaptures() {
+      const result = await chrome.runtime.sendMessage({
+        action: 'SNIFFER_GET_CAPTURES',
+        filters: {}
+      });
+      const captures = result?.captures || [];
+      if (captures.length === 0) {
+        alert('No captures to upload.');
+        return;
+      }
+
+      const label = prompt('Optional label for this upload session:', '') || '';
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = '⬆ Uploading...';
+      uploadStatus.style.display = 'inline';
+      uploadStatus.textContent = `Uploading ${captures.length} captures...`;
+      uploadStatus.style.color = '#d29922';
+
+      try {
+        const { mosApiUrl, mosApiToken } = await new Promise(resolve => {
+          chrome.storage.local.get(['mosApiUrl', 'mosApiToken'], resolve);
+        });
+
+        if (!mosApiUrl || !mosApiToken) {
+          throw new Error('Not authenticated with MOS. Please log in via the extension.');
+        }
+
+        const platforms = [...new Set(captures.map(c => c.platform).filter(Boolean))];
+        const platformStr = platforms.length === 1 ? platforms[0] : platforms.join(',') || null;
+
+        const res = await fetch(`${mosApiUrl}/api/extension/sniffer-upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${mosApiToken}`
+          },
+          body: JSON.stringify({
+            captures,
+            label: label || undefined,
+            platform: platformStr
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+        uploadStatus.textContent = `Uploaded ${data.captureCount} captures (session #${data.sessionId})`;
+        uploadStatus.style.color = '#3fb950';
+      } catch (err) {
+        uploadStatus.textContent = `Upload failed: ${err.message}`;
+        uploadStatus.style.color = '#f85149';
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '⬆ Upload';
+        setTimeout(() => { uploadStatus.style.display = 'none'; }, 5000);
+      }
     }
 
     init();

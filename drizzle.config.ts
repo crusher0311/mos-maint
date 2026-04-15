@@ -67,5 +67,6 @@ export default defineConfig({
     "normalized_payments",
     "support_tickets",
     "production_logs",
+    "sniffer_sessions",
   ],
 });
