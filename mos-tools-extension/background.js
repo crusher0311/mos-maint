@@ -1668,7 +1668,18 @@ async function prefillDviInspection(context, inspId, tabId) {
 
   if (!inspArr || inspArr.length === 0) return { success: false, error: "No inspections found on this RO" };
 
-  const inspection = inspId ? inspArr.find(i => String(i.id) === String(inspId)) : inspArr[0];
+  let inspection;
+  if (inspId) {
+    inspection = inspArr.find(i => String(i.id) === String(inspId));
+  } else {
+    const incomplete = inspArr.filter(i => {
+      const status = i.inspectionStatus?.code || i.status || "";
+      const completed = i.completed === true || status === "COMPLETED" || status === "COMPLETE";
+      return !completed;
+    });
+    inspection = incomplete.length > 0 ? incomplete[incomplete.length - 1] : inspArr[inspArr.length - 1];
+    console.log(`[Prefill DVI] ${inspArr.length} inspections found, ${incomplete.length} incomplete, using inspection ${inspection.id} (status: ${inspection.inspectionStatus?.code || inspection.status || 'unknown'})`);
+  }
   if (!inspection) return { success: false, error: "Inspection not found" };
 
   const allTasks = [];
