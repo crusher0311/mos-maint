@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
           auto_booking: false,
           part_xref: false,
           concern_assistant: false,
-          estimate_assist: false
+          estimate_assist: false,
+          dvi_prefill: false,
+          enhance_notes: false
         }
       }, { headers: corsHeaders });
     }

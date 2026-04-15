@@ -1,6 +1,6 @@
 import { getDb } from "./mongo";
 
-export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates" | "concern_assistant" | "estimate_assist";
+export type FeatureKey = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "labor_rates" | "concern_assistant" | "estimate_assist" | "dvi_prefill" | "enhance_notes";
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
@@ -17,6 +17,8 @@ export interface FeatureSettings {
   labor_rates: boolean;
   concern_assistant: boolean;
   estimate_assist: boolean;
+  dvi_prefill: boolean;
+  enhance_notes: boolean;
 }
 
 export interface ShopBilling {
@@ -50,6 +52,8 @@ const DEFAULT_FEATURES: FeatureSettings = {
   labor_rates: false,
   concern_assistant: false,
   estimate_assist: false,
+  dvi_prefill: false,
+  enhance_notes: false,
 };
 
 const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
@@ -73,6 +77,10 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "concern_assistant": "concern_assistant",
   "estimate-assist": "estimate_assist",
   "estimate_assist": "estimate_assist",
+  "dvi-prefill": "dvi_prefill",
+  "dvi_prefill": "dvi_prefill",
+  "enhance-notes": "enhance_notes",
+  "enhance_notes": "enhance_notes",
 };
 
 const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
@@ -87,6 +95,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: false,
     concern_assistant: false,
     estimate_assist: false,
+    dvi_prefill: false,
+    enhance_notes: false,
   },
   starter: {
     maintenance: true,
@@ -99,6 +109,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: false,
     concern_assistant: false,
     estimate_assist: false,
+    dvi_prefill: false,
+    enhance_notes: false,
   },
   plus: {
     maintenance: true,
@@ -111,6 +123,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: false,
     concern_assistant: true,
     estimate_assist: true,
+    dvi_prefill: true,
+    enhance_notes: true,
   },
   elite: {
     maintenance: true,
@@ -123,6 +137,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: true,
     concern_assistant: true,
     estimate_assist: true,
+    dvi_prefill: true,
+    enhance_notes: true,
   },
   professional: {
     maintenance: true,
@@ -135,6 +151,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: true,
     concern_assistant: true,
     estimate_assist: true,
+    dvi_prefill: true,
+    enhance_notes: true,
   },
   oil_sticker_legacy: {
     maintenance: false,
@@ -147,6 +165,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: true,
     concern_assistant: false,
     estimate_assist: false,
+    dvi_prefill: false,
+    enhance_notes: false,
   },
   enterprise: {
     maintenance: true,
@@ -159,6 +179,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: true,
     concern_assistant: true,
     estimate_assist: true,
+    dvi_prefill: true,
+    enhance_notes: true,
   },
   demo: {
     maintenance: true,
@@ -171,6 +193,8 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = {
     labor_rates: true,
     concern_assistant: true,
     estimate_assist: true,
+    dvi_prefill: true,
+    enhance_notes: true,
   },
 };
 
@@ -198,6 +222,8 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
       labor_rates: false,
       concern_assistant: false,
       estimate_assist: false,
+      dvi_prefill: false,
+      enhance_notes: false,
     };
 
     for (const pf of platformFeatures) {

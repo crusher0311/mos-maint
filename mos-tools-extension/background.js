@@ -308,6 +308,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "GET_SHOP_FEATURES") {
+    const shopId = message.shopId || currentSmsContext?.shopId;
+    if (!mosApiToken || !shopId) {
+      sendResponse({ success: false, features: {} });
+      return false;
+    }
+    (async () => {
+      try {
+        const provider = message.provider || currentSmsContext?.provider || '';
+        const res = await fetch(`${mosApiUrl}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
+          headers: { 'Authorization': `Bearer ${mosApiToken}` }
+        });
+        if (!res.ok) {
+          sendResponse({ success: false, features: {} });
+          return;
+        }
+        const data = await res.json();
+        sendResponse({ success: true, features: data.features || {} });
+      } catch (err) {
+        console.warn("[MOS] Feature fetch error:", err.message);
+        sendResponse({ success: false, features: {} });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === "ENHANCE_FINDINGS") {
     console.log("[Enhance Findings] Enhance requested");
     const tabId = sender?.tab?.id || currentSmsContext?._tabId;

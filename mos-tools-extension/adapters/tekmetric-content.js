@@ -980,8 +980,10 @@ function checkAndInjectButton() {
     }
   }
   if (context.roId) {
-    setTimeout(injectPrefillButton, 1200);
-    setTimeout(injectEnhanceButton, 1500);
+    fetchShopFeatures(context.shopId, (features) => {
+      if (features.dvi_prefill) setTimeout(injectPrefillButton, 200);
+      if (features.enhance_notes) setTimeout(injectEnhanceButton, 400);
+    });
   } else {
     const existingPrefill = document.getElementById('mos-prefill-dvi-btn');
     if (existingPrefill) existingPrefill.remove();
@@ -991,10 +993,28 @@ function checkAndInjectButton() {
     if (existingEnhance) existingEnhance.remove();
     enhanceButtonInjected = false;
     enhanceInFlight = false;
+    cachedFeatures = null;
   }
 }
 
 let prefillButtonInjected = false;
+let cachedFeatures = null;
+let featuresFetchInFlight = false;
+
+function fetchShopFeatures(shopId, callback) {
+  if (cachedFeatures) { callback(cachedFeatures); return; }
+  if (featuresFetchInFlight) return;
+  featuresFetchInFlight = true;
+  safeSendMessage({ action: 'GET_SHOP_FEATURES', shopId, provider: 'tekmetric' }, (resp) => {
+    featuresFetchInFlight = false;
+    if (resp && resp.success) {
+      cachedFeatures = resp.features;
+    } else {
+      cachedFeatures = {};
+    }
+    callback(cachedFeatures);
+  });
+}
 
 function injectPrefillButton() {
   if (prefillButtonInjected) return;
