@@ -1,4 +1,13 @@
 (function() {
+  var snifferActive = false;
+
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'MOS_SNIFFER_STATE') {
+      snifferActive = !!event.data.active;
+      console.log('[MOS Intercept] Sniffer ' + (snifferActive ? 'enabled' : 'disabled'));
+    }
+  });
+
   var origFetch = window.fetch;
   window.fetch = function() {
     var url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url) || '';
@@ -40,6 +49,48 @@
         } catch(e) {}
       }
     }
+
+    if (snifferActive) {
+      var reqBody = null;
+      try {
+        if (opts.body) reqBody = (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)).substring(0, 10000);
+      } catch(e) {}
+
+      var reqHeaders = null;
+      try {
+        if (opts.headers) {
+          reqHeaders = opts.headers instanceof Headers
+            ? Object.fromEntries(opts.headers.entries())
+            : Object.assign({}, opts.headers);
+          if (reqHeaders['x-auth-token']) reqHeaders['x-auth-token'] = '[REDACTED]';
+          if (reqHeaders['authorization']) reqHeaders['authorization'] = '[REDACTED]';
+          if (reqHeaders['Authorization']) reqHeaders['Authorization'] = '[REDACTED]';
+        }
+      } catch(e) {}
+
+      var capturedUrl = url;
+      var capturedMethod = method;
+
+      return origFetch.apply(this, arguments).then(function(response) {
+        var cloned = response.clone();
+        cloned.text().then(function(responseText) {
+          window.postMessage({
+            type: 'MOS_SNIFFER_CAPTURE',
+            data: {
+              method: capturedMethod,
+              url: capturedUrl,
+              requestHeaders: reqHeaders,
+              requestBody: reqBody,
+              responseStatus: response.status,
+              responseBody: responseText.substring(0, 10000),
+              source: 'page_fetch'
+            }
+          }, '*');
+        }).catch(function() {});
+        return response;
+      });
+    }
+
     return origFetch.apply(this, arguments);
   };
 
@@ -79,6 +130,34 @@
         } catch(e) {}
       }
     }
+
+    if (snifferActive && this._mosMethod) {
+      var xhrRef = this;
+      var reqBody = null;
+      try {
+        if (body) reqBody = (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 10000);
+      } catch(e) {}
+
+      var xhrMethod = this._mosMethod;
+      var xhrUrl = this._mosUrl;
+
+      this.addEventListener('load', function() {
+        try {
+          window.postMessage({
+            type: 'MOS_SNIFFER_CAPTURE',
+            data: {
+              method: xhrMethod,
+              url: xhrUrl,
+              requestBody: reqBody,
+              responseStatus: xhrRef.status,
+              responseBody: (xhrRef.responseText || '').substring(0, 10000),
+              source: 'page_xhr'
+            }
+          }, '*');
+        } catch(e) {}
+      });
+    }
+
     return origSend.apply(this, arguments);
   };
 

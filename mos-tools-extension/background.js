@@ -32,6 +32,9 @@ let lastInspectionFetchRoId = null; // Prevent duplicate inspection fetches
 const xAuthTokenRelayMap = {}; // Per-shop timestamp of last successful x-auth-token relay
 const XAUTH_RELAY_INTERVAL = 30 * 60 * 1000; // Relay x-auth-token at most once per 30 minutes per shop
 
+// API Sniffer state (platform admin only)
+let snifferActive = false;
+
 // ==================== PERSISTENCE ====================
 // Restore all persisted state on startup as a single awaitable promise.
 // This prevents race conditions where message handlers fire before
@@ -79,6 +82,13 @@ const _stateReady = Promise.all([
       }
       resolve();
     });
+  }),
+  new Promise(resolve => {
+    chrome.storage.local.get(['mosSnifferActive'], (result) => {
+      snifferActive = !!result.mosSnifferActive;
+      if (snifferActive) console.log("[MOS Sniffer] Restored active state");
+      resolve();
+    });
   })
 ]);
 
@@ -123,6 +133,28 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       } else {
         tekmetricShopId = newShopId;
       }
+    }
+
+    // Sniffer: capture webRequest-level data for API discovery
+    if (snifferActive && details.method !== 'GET') {
+      const safeHeaders = {};
+      (details.requestHeaders || []).forEach(h => {
+        const name = h.name.toLowerCase();
+        if (name === 'x-auth-token' || name === 'authorization') {
+          safeHeaders[h.name] = '[REDACTED]';
+        } else if (name !== 'cookie') {
+          safeHeaders[h.name] = h.value;
+        }
+      });
+      snifferStoreCapture({
+        method: details.method,
+        url: details.url,
+        requestHeaders: safeHeaders,
+        requestBody: null,
+        responseStatus: null,
+        responseBody: null,
+        source: 'webRequest'
+      });
     }
 
     // Capture auth token from header (memory + session storage only)
@@ -174,7 +206,10 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     urls: [
       "https://shop.tekmetric.com/api/*",
       "https://sandbox.tekmetric.com/api/*",
-      "https://cba.tekmetric.com/api/*"
+      "https://cba.tekmetric.com/api/*",
+      "https://*.autoflow.com/api/*",
+      "https://*.autotext.me/api/*",
+      "https://*.shop-ware.com/api/*"
     ],
     types: ["xmlhttprequest"]
   },
@@ -693,7 +728,207 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // Async response
   }
+
+  // -------------------- API Sniffer (Platform Admin Only) --------------------
+  if (message.action === "SNIFFER_STATUS") {
+    (async () => {
+      const { mosUser } = await chrome.storage.local.get('mosUser');
+      if (mosUser?.role !== 'platform_admin') {
+        sendResponse({ active: false });
+        return;
+      }
+      const { mosSnifferActive } = await chrome.storage.local.get('mosSnifferActive');
+      sendResponse({ active: !!mosSnifferActive });
+    })();
+    return true;
+  }
+
+  if (message.action === "SNIFFER_TOGGLE") {
+    (async () => {
+      const { mosUser } = await chrome.storage.local.get('mosUser');
+      if (mosUser?.role !== 'platform_admin') {
+        sendResponse({ success: false, error: 'Not authorized' });
+        return;
+      }
+      const active = !!message.active;
+      await chrome.storage.local.set({ mosSnifferActive: active });
+      snifferActive = active;
+      console.log(`[MOS Sniffer] ${active ? 'Started' : 'Stopped'} capture`);
+
+      broadcastSnifferState(active);
+
+      sendResponse({ success: true, active });
+    })();
+    return true;
+  }
+
+  if (message.action === "SNIFFER_GET_CAPTURES") {
+    (async () => {
+      const { mosUser } = await chrome.storage.local.get('mosUser');
+      if (mosUser?.role !== 'platform_admin') {
+        sendResponse({ captures: [] });
+        return;
+      }
+      const { mosSnifferCaptures } = await chrome.storage.local.get('mosSnifferCaptures');
+      let captures = mosSnifferCaptures || [];
+      const f = message.filters || {};
+      if (f.platform) captures = captures.filter(c => c.platform === f.platform);
+      if (f.category) captures = captures.filter(c => c.categories?.includes(f.category));
+      if (f.method) captures = captures.filter(c => c.method === f.method);
+      if (f.search) {
+        const term = f.search.toLowerCase();
+        captures = captures.filter(c =>
+          (c.url && c.url.toLowerCase().includes(term)) ||
+          (c.requestBody && c.requestBody.toLowerCase().includes(term)) ||
+          (c.responseBody && c.responseBody.toLowerCase().includes(term))
+        );
+      }
+      sendResponse({ captures });
+    })();
+    return true;
+  }
+
+  if (message.action === "SNIFFER_CLEAR") {
+    (async () => {
+      const { mosUser } = await chrome.storage.local.get('mosUser');
+      if (mosUser?.role !== 'platform_admin') {
+        sendResponse({ success: false, error: 'Not authorized' });
+        return;
+      }
+      await chrome.storage.local.set({ mosSnifferCaptures: [] });
+      sendResponse({ success: true });
+    })();
+    return true;
+  }
+
+  if (message.action === "SNIFFER_EXPORT") {
+    (async () => {
+      const { mosUser } = await chrome.storage.local.get('mosUser');
+      if (mosUser?.role !== 'platform_admin') {
+        sendResponse({ data: null });
+        return;
+      }
+      const { mosSnifferCaptures } = await chrome.storage.local.get('mosSnifferCaptures');
+      let captures = mosSnifferCaptures || [];
+      const f = message.filters || {};
+      if (f.platform) captures = captures.filter(c => c.platform === f.platform);
+      if (f.category) captures = captures.filter(c => c.categories?.includes(f.category));
+      if (f.method) captures = captures.filter(c => c.method === f.method);
+      if (f.search) {
+        const term = f.search.toLowerCase();
+        captures = captures.filter(c =>
+          (c.url && c.url.toLowerCase().includes(term)) ||
+          (c.requestBody && c.requestBody.toLowerCase().includes(term)) ||
+          (c.responseBody && c.responseBody.toLowerCase().includes(term))
+        );
+      }
+      sendResponse({
+        data: {
+          exportedAt: new Date().toISOString(),
+          count: captures.length,
+          captures
+        }
+      });
+    })();
+    return true;
+  }
+
+  if (message.action === "SNIFFER_CAPTURE_FROM_PAGE") {
+    if (snifferActive && message.data) {
+      snifferStoreCapture(message.data);
+    }
+    sendResponse({ success: true });
+    return false;
+  }
 });
+
+// ==================== API SNIFFER HELPERS ====================
+const SNIFFER_CATEGORY_PATTERNS = {
+  dvi: [/inspection/i, /dvi/i, /finding/i, /inspection.?task/i, /inspection.?rating/i],
+  estimates: [/estimate/i, /job/i, /labor/i, /part[s]?\b/i, /canned.?job/i],
+  scheduling: [/appointment/i, /schedule/i, /calendar/i, /booking/i],
+  customers: [/customer/i, /contact/i, /client/i],
+  vehicles: [/vehicle/i, /vin/i],
+  communication: [/message/i, /sms/i, /email/i, /share/i, /send/i],
+  authorization: [/authorize/i, /approval/i],
+  repair_orders: [/repair.?order/i, /work.?order/i, /\/ro\//i, /summary/i]
+};
+
+function snifferCategorize(method, url) {
+  const categories = [];
+  const testStr = `${method} ${url}`;
+  for (const [cat, patterns] of Object.entries(SNIFFER_CATEGORY_PATTERNS)) {
+    if (patterns.some(p => p.test(testStr))) categories.push(cat);
+  }
+  return categories.length ? categories : ['other'];
+}
+
+function snifferDetectPlatform(url) {
+  if (/tekmetric\.com/i.test(url)) return 'tekmetric';
+  if (/autoflow\.com|autotext\.me/i.test(url)) return 'autoflow';
+  if (/shop-ware\.com/i.test(url)) return 'shopware';
+  return 'unknown';
+}
+
+const SNIFFER_MAX_BODY = 10000;
+const SNIFFER_MAX_CAPTURES = 500;
+
+async function snifferStoreCapture(entry) {
+  if (!snifferActive) return;
+  const capture = {
+    id: `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    timestamp: Date.now(),
+    platform: snifferDetectPlatform(entry.url),
+    categories: snifferCategorize(entry.method, entry.url),
+    method: entry.method,
+    url: entry.url,
+    path: (() => { try { return new URL(entry.url).pathname; } catch { return entry.url; } })(),
+    requestHeaders: entry.requestHeaders || null,
+    requestBody: entry.requestBody ? String(entry.requestBody).substring(0, SNIFFER_MAX_BODY) : null,
+    responseStatus: entry.responseStatus || null,
+    responseBody: entry.responseBody ? String(entry.responseBody).substring(0, SNIFFER_MAX_BODY) : null,
+    source: entry.source || 'unknown'
+  };
+
+  try {
+    const { mosSnifferCaptures: existing } = await chrome.storage.local.get('mosSnifferCaptures');
+    const captures = existing || [];
+    captures.push(capture);
+    if (captures.length > SNIFFER_MAX_CAPTURES) captures.splice(0, captures.length - SNIFFER_MAX_CAPTURES);
+    await chrome.storage.local.set({ mosSnifferCaptures: captures });
+  } catch (err) {
+    console.warn('[MOS Sniffer] Storage write failed, evicting old captures:', err.message);
+    try {
+      const { mosSnifferCaptures: existing } = await chrome.storage.local.get('mosSnifferCaptures');
+      const captures = (existing || []).slice(-100);
+      captures.push(capture);
+      await chrome.storage.local.set({ mosSnifferCaptures: captures });
+    } catch (e) {
+      console.error('[MOS Sniffer] Storage critically full, clearing:', e.message);
+      await chrome.storage.local.set({ mosSnifferCaptures: [capture] });
+    }
+  }
+}
+
+function broadcastSnifferState(active) {
+  chrome.tabs.query({
+    url: [
+      'https://shop.tekmetric.com/*',
+      'https://sandbox.tekmetric.com/*',
+      'https://cba.tekmetric.com/*',
+      'https://*.autoflow.com/*',
+      'https://*.autotext.me/*',
+      'https://*.shop-ware.com/*'
+    ]
+  }, (tabs) => {
+    (tabs || []).forEach(tab => {
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'MOS_SNIFFER_STATE_UPDATE',
+        active
+      }).catch(() => {});
+    });
+  });
+}
 
 // ==================== MOS API FUNCTIONS ====================
 async function handleMosLogin(email, password, apiUrl, rememberMe = true) {

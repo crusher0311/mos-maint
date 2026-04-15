@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Sniffer - Detect Dog Dev Tools</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+    }
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .toolbar-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f0f6fc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: 8px;
+    }
+    .toolbar-title img { width: 20px; height: 20px; }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .status-dot.active { background: #3fb950; box-shadow: 0 0 6px #3fb95088; }
+    .status-dot.inactive { background: #6e7681; }
+    .toolbar-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #c9d1d9;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toolbar-btn:hover { background: #30363d; border-color: #484f58; }
+    .toolbar-btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+    .toolbar-btn.primary:hover { background: #2ea043; }
+    .toolbar-btn.danger { background: #b6291088; border-color: #da3633; color: #f85149; }
+    .toolbar-btn.danger:hover { background: #da363388; }
+    .toolbar-select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #c9d1d9;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .toolbar-input {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-size: 12px;
+      width: 200px;
+    }
+    .toolbar-input::placeholder { color: #484f58; }
+    .toolbar-input:focus { outline: none; border-color: #58a6ff; }
+    .toolbar-spacer { flex: 1; }
+    .capture-count {
+      font-size: 12px;
+      color: #8b949e;
+      padding: 4px 10px;
+      background: #0d1117;
+      border-radius: 12px;
+    }
+    .captures-list { padding: 0 20px 20px; }
+    .capture-item {
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      margin-top: 8px;
+      background: #161b22;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .capture-item:hover { border-color: #30363d; }
+    .capture-header {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .capture-header:hover { background: #1c2128; }
+    .method-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      min-width: 52px;
+      text-align: center;
+    }
+    .method-badge.POST { background: #238636; color: #fff; }
+    .method-badge.PUT { background: #9e6a03; color: #fff; }
+    .method-badge.PATCH { background: #8957e5; color: #fff; }
+    .method-badge.DELETE { background: #da3633; color: #fff; }
+    .method-badge.GET { background: #1f6feb; color: #fff; }
+    .capture-path {
+      font-size: 13px;
+      color: #c9d1d9;
+      font-family: monospace;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .platform-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .platform-badge.tekmetric { background: #1f6feb22; color: #58a6ff; border: 1px solid #1f6feb44; }
+    .platform-badge.autoflow { background: #23863622; color: #3fb950; border: 1px solid #23863644; }
+    .platform-badge.shopware { background: #9e6a0322; color: #d29922; border: 1px solid #9e6a0344; }
+    .platform-badge.unknown { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+    .category-tag {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: #30363d;
+      color: #8b949e;
+    }
+    .category-tag.dvi { background: #da363322; color: #f85149; }
+    .category-tag.estimates { background: #9e6a0322; color: #d29922; }
+    .category-tag.scheduling { background: #1f6feb22; color: #58a6ff; }
+    .category-tag.communication { background: #8957e522; color: #bc8cff; }
+    .category-tag.authorization { background: #23863622; color: #3fb950; }
+    .capture-time {
+      font-size: 11px;
+      color: #484f58;
+      white-space: nowrap;
+    }
+    .capture-status {
+      font-size: 11px;
+      font-weight: 600;
+      font-family: monospace;
+    }
+    .capture-status.s2xx { color: #3fb950; }
+    .capture-status.s3xx { color: #d29922; }
+    .capture-status.s4xx { color: #f85149; }
+    .capture-status.s5xx { color: #f85149; }
+    .capture-body {
+      display: none;
+      border-top: 1px solid #21262d;
+      padding: 16px;
+    }
+    .capture-body.open { display: block; }
+    .body-section {
+      margin-bottom: 16px;
+    }
+    .body-section:last-child { margin-bottom: 0; }
+    .body-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .body-content {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+      line-height: 1.6;
+      color: #c9d1d9;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: #484f58;
+    }
+    .empty-state h2 { font-size: 18px; margin-bottom: 8px; color: #8b949e; }
+    .empty-state p { font-size: 13px; line-height: 1.6; max-width: 400px; margin: 0 auto; }
+    .expand-arrow {
+      font-size: 10px;
+      color: #484f58;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .capture-item.expanded .expand-arrow { transform: rotate(90deg); }
+    .not-admin {
+      text-align: center;
+      padding: 100px 20px;
+    }
+    .not-admin h2 { color: #f85149; margin-bottom: 8px; }
+    .not-admin p { color: #8b949e; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="not-admin" class="not-admin" style="display:none;">
+    <h2>Access Denied</h2>
+    <p>The API Sniffer is only available to platform administrators.</p>
+  </div>
+
+  <div id="app" style="display:none;">
+    <div class="toolbar">
+      <div class="toolbar-title">
+        <img src="icons/icon48.png" alt="MOS">
+        <span>API Sniffer</span>
+        <span id="status-dot" class="status-dot inactive"></span>
+      </div>
+
+      <button id="toggle-btn" class="toolbar-btn primary">Start Capture</button>
+      <button id="clear-btn" class="toolbar-btn danger">Clear</button>
+
+      <div class="toolbar-spacer"></div>
+
+      <select id="filter-platform" class="toolbar-select">
+        <option value="">All Platforms</option>
+        <option value="tekmetric">Tekmetric</option>
+        <option value="autoflow">AutoFlow</option>
+        <option value="shopware">Shop-Ware</option>
+      </select>
+
+      <select id="filter-category" class="toolbar-select">
+        <option value="">All Categories</option>
+        <option value="dvi">DVI / Inspections</option>
+        <option value="estimates">Estimates / Jobs</option>
+        <option value="scheduling">Scheduling</option>
+        <option value="customers">Customers</option>
+        <option value="vehicles">Vehicles</option>
+        <option value="communication">Communication</option>
+        <option value="authorization">Authorization</option>
+        <option value="repair_orders">Repair Orders</option>
+        <option value="other">Other</option>
+      </select>
+
+      <select id="filter-method" class="toolbar-select">
+        <option value="">All Methods</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="PATCH">PATCH</option>
+        <option value="DELETE">DELETE</option>
+        <option value="GET">GET</option>
+      </select>
+
+      <input type="text" id="filter-search" class="toolbar-input" placeholder="Search URL or body...">
+
+      <button id="export-btn" class="toolbar-btn">Export JSON</button>
+
+      <span id="capture-count" class="capture-count">0 captures</span>
+    </div>
+
+    <div id="captures-list" class="captures-list"></div>
+
+    <div id="empty-state" class="empty-state">
+      <h2>No Captures Yet</h2>
+      <p>Click "Start Capture" to begin recording API calls. Use your SMS normally — the sniffer will record all matching requests in the background.</p>
+    </div>
+  </div>
+
+  <script>
+    const app = document.getElementById('app');
+    const notAdmin = document.getElementById('not-admin');
+    const toggleBtn = document.getElementById('toggle-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const statusDot = document.getElementById('status-dot');
+    const capturesList = document.getElementById('captures-list');
+    const emptyState = document.getElementById('empty-state');
+    const captureCount = document.getElementById('capture-count');
+    const filterPlatform = document.getElementById('filter-platform');
+    const filterCategory = document.getElementById('filter-category');
+    const filterMethod = document.getElementById('filter-method');
+    const filterSearch = document.getElementById('filter-search');
+
+    let isActive = false;
+    let refreshInterval = null;
+
+    async function init() {
+      const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
+
+      if (!authStatus.isAuthenticated || authStatus.user?.role !== 'platform_admin') {
+        notAdmin.style.display = 'block';
+        app.style.display = 'none';
+        return;
+      }
+
+      app.style.display = 'block';
+      notAdmin.style.display = 'none';
+
+      const result = await chrome.runtime.sendMessage({ action: 'SNIFFER_STATUS' });
+      isActive = result?.active || false;
+      updateToggleUI();
+
+      toggleBtn.addEventListener('click', toggleSniffer);
+      clearBtn.addEventListener('click', clearCaptures);
+      exportBtn.addEventListener('click', exportCaptures);
+      filterPlatform.addEventListener('change', refreshCaptures);
+      filterCategory.addEventListener('change', refreshCaptures);
+      filterMethod.addEventListener('change', refreshCaptures);
+
+      let searchTimeout;
+      filterSearch.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(refreshCaptures, 300);
+      });
+
+      refreshCaptures();
+      refreshInterval = setInterval(refreshCaptures, 2000);
+    }
+
+    async function toggleSniffer() {
+      isActive = !isActive;
+      await chrome.runtime.sendMessage({
+        action: 'SNIFFER_TOGGLE',
+        active: isActive
+      });
+      updateToggleUI();
+    }
+
+    function updateToggleUI() {
+      toggleBtn.textContent = isActive ? 'Stop Capture' : 'Start Capture';
+      toggleBtn.className = isActive ? 'toolbar-btn danger' : 'toolbar-btn primary';
+      statusDot.className = isActive ? 'status-dot active' : 'status-dot inactive';
+    }
+
+    async function refreshCaptures() {
+      const filters = {};
+      if (filterPlatform.value) filters.platform = filterPlatform.value;
+      if (filterCategory.value) filters.category = filterCategory.value;
+      if (filterMethod.value) filters.method = filterMethod.value;
+      if (filterSearch.value) filters.search = filterSearch.value;
+
+      const result = await chrome.runtime.sendMessage({
+        action: 'SNIFFER_GET_CAPTURES',
+        filters
+      });
+
+      const captures = result?.captures || [];
+      captureCount.textContent = `${captures.length} capture${captures.length !== 1 ? 's' : ''}`;
+
+      if (captures.length === 0) {
+        emptyState.style.display = 'block';
+        capturesList.innerHTML = '';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      const existingIds = new Set();
+      capturesList.querySelectorAll('.capture-item').forEach(el => {
+        existingIds.add(el.dataset.id);
+      });
+
+      const newIds = new Set(captures.map(c => c.id));
+
+      capturesList.querySelectorAll('.capture-item').forEach(el => {
+        if (!newIds.has(el.dataset.id)) el.remove();
+      });
+
+      const reversed = [...captures].reverse();
+      let insertBefore = capturesList.firstChild;
+
+      reversed.forEach(capture => {
+        if (existingIds.has(capture.id)) return;
+        const el = createCaptureElement(capture);
+        if (insertBefore) {
+          capturesList.insertBefore(el, insertBefore);
+        } else {
+          capturesList.appendChild(el);
+        }
+        insertBefore = el.nextSibling;
+      });
+    }
+
+    function createCaptureElement(capture) {
+      const item = document.createElement('div');
+      item.className = 'capture-item';
+      item.dataset.id = capture.id;
+
+      const time = new Date(capture.timestamp);
+      const timeStr = time.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const statusClass = capture.responseStatus
+        ? (capture.responseStatus < 300 ? 's2xx' : capture.responseStatus < 400 ? 's3xx' : capture.responseStatus < 500 ? 's4xx' : 's5xx')
+        : '';
+
+      const categoriesHTML = capture.categories
+        .map(c => `<span class="category-tag ${c}">${c}</span>`)
+        .join(' ');
+
+      const header = document.createElement('div');
+      header.className = 'capture-header';
+      header.innerHTML = `
+        <span class="expand-arrow">&#9654;</span>
+        <span class="method-badge ${capture.method}">${capture.method}</span>
+        <span class="capture-path" title="${escapeHtml(capture.url)}">${escapeHtml(capture.path)}</span>
+        ${categoriesHTML}
+        <span class="platform-badge ${capture.platform}">${capture.platform}</span>
+        ${capture.responseStatus ? `<span class="capture-status ${statusClass}">${capture.responseStatus}</span>` : ''}
+        <span class="capture-time">${timeStr}</span>
+      `;
+
+      const body = document.createElement('div');
+      body.className = 'capture-body';
+
+      let bodyHTML = '';
+
+      bodyHTML += `<div class="body-section"><div class="body-section-title">Full URL</div><div class="body-content">${escapeHtml(capture.url)}</div></div>`;
+
+      if (capture.requestHeaders) {
+        bodyHTML += `<div class="body-section"><div class="body-section-title">Request Headers</div><div class="body-content">${escapeHtml(formatJSON(capture.requestHeaders))}</div></div>`;
+      }
+      if (capture.requestBody) {
+        bodyHTML += `<div class="body-section"><div class="body-section-title">Request Body</div><div class="body-content">${escapeHtml(formatJSON(capture.requestBody))}</div></div>`;
+      }
+      if (capture.responseBody) {
+        bodyHTML += `<div class="body-section"><div class="body-section-title">Response Body</div><div class="body-content">${escapeHtml(formatJSON(capture.responseBody))}</div></div>`;
+      }
+
+      body.innerHTML = bodyHTML;
+
+      header.addEventListener('click', () => {
+        const isOpen = item.classList.contains('expanded');
+        item.classList.toggle('expanded');
+        body.classList.toggle('open');
+      });
+
+      item.appendChild(header);
+      item.appendChild(body);
+      return item;
+    }
+
+    function formatJSON(data) {
+      if (!data) return '';
+      if (typeof data === 'string') {
+        try {
+          return JSON.stringify(JSON.parse(data), null, 2);
+        } catch {
+          return data;
+        }
+      }
+      return JSON.stringify(data, null, 2);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const s = typeof str === 'string' ? str : JSON.stringify(str);
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function clearCaptures() {
+      if (!confirm('Clear all captured requests?')) return;
+      await chrome.runtime.sendMessage({ action: 'SNIFFER_CLEAR' });
+      capturesList.innerHTML = '';
+      emptyState.style.display = 'block';
+      captureCount.textContent = '0 captures';
+    }
+
+    async function exportCaptures() {
+      const filters = {};
+      if (filterPlatform.value) filters.platform = filterPlatform.value;
+      if (filterCategory.value) filters.category = filterCategory.value;
+      if (filterMethod.value) filters.method = filterMethod.value;
+      if (filterSearch.value) filters.search = filterSearch.value;
+
+      const result = await chrome.runtime.sendMessage({
+        action: 'SNIFFER_EXPORT',
+        filters
+      });
+
+      if (!result?.data) return;
+
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mos-api-sniffer-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    init();
+  </script>
+</body>
+</html>

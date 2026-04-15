@@ -275,6 +275,31 @@
           </svg>
         </a>
       </div>
+
+      <div id="dev-tools-section" class="settings-card" style="display:none;">
+        <div class="card-header">
+          <h2 style="color: #9333ea;">Developer Tools</h2>
+          <p>Platform admin tools for API discovery and debugging.</p>
+        </div>
+        <div class="card-body">
+          <a href="sniffer.html" target="_blank" class="settings-link" style="margin: -16px -24px; border-radius: 0;">
+            <div class="settings-link-content">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+                <path d="M11 8v6M8 11h6"/>
+              </svg>
+              <div class="settings-link-text">
+                <h3>API Sniffer</h3>
+                <p>Capture and analyze SMS platform API calls for integration development</p>
+              </div>
+            </div>
+            <svg class="arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -321,6 +346,7 @@
 
       loadFeatures();
       checkShopwareIntegration();
+      checkPlatformAdmin(authStatus);
 
       tabSelect.addEventListener('change', () => {
         clearTimeout(saveTimeout);
@@ -436,6 +462,12 @@
       } catch (err) {
         console.error('[Options] Save error:', err);
         showStatus('Failed to save. Please try again.', 'error');
+      }
+    }
+
+    function checkPlatformAdmin(authStatus) {
+      if (authStatus.user?.role === 'platform_admin') {
+        document.getElementById('dev-tools-section').style.display = 'block';
       }
     }
 

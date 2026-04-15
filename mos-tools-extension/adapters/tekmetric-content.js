@@ -1150,6 +1150,19 @@ function startCategoryChangeObserver() {
         });
       }, 1500);
     }
+
+    if (e.data && e.data.type === 'MOS_SNIFFER_CAPTURE') {
+      safeSendMessage({
+        action: 'SNIFFER_CAPTURE_FROM_PAGE',
+        data: e.data.data
+      });
+    }
+  });
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'MOS_SNIFFER_STATE_UPDATE') {
+      window.postMessage({ type: 'MOS_SNIFFER_STATE', active: message.active }, '*');
+    }
   });
 
   console.log('[MOS Tools] Category change listener registered (network-based)');
