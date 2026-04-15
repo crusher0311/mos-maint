@@ -1044,7 +1044,7 @@ function injectPrefillButton() {
   btn.id = 'mos-prefill-dvi-btn';
   btn.title = 'Pre-fill DVI with VHI data';
   btn.type = 'button';
-  const iconUrl = chrome.runtime.getURL('icons/aiVHI_icon.png');
+  const iconUrl = chrome.runtime.getURL('icons/VHI_icon.png');
   btn.innerHTML = `<img src="${iconUrl}" width="22" height="22" style="object-fit:contain;" />`;
 
   Object.assign(btn.style, {
