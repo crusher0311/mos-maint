@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getOpenAI, DEFAULT_MODEL } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { getDb } from "@/lib/mongo";
+import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
+import { enhanceCorrections } from "@/lib/db/schema/enhance-corrections";
+import { desc, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,12 +112,16 @@ export async function POST(request: NextRequest) {
     let shopExamples = "";
     if (shopId) {
       try {
-        const db = await getDb();
-        const corrections = await db.collection("enhance_corrections")
-          .find({ shopId: String(shopId) })
-          .sort({ createdAt: -1 })
-          .limit(20)
-          .toArray();
+        const pgDb = getSupabaseDb();
+        const corrections = await pgDb
+          .select({
+            aiSuggested: enhanceCorrections.aiSuggested,
+            advisorWrote: enhanceCorrections.advisorWrote,
+          })
+          .from(enhanceCorrections)
+          .where(eq(enhanceCorrections.shopId, String(shopId)))
+          .orderBy(desc(enhanceCorrections.createdAt))
+          .limit(20);
 
         if (corrections.length > 0) {
           const deduped = new Map<string, string>();

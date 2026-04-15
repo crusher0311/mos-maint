@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
-import { getDb } from "@/lib/mongo";
+import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
+import { enhanceCorrections } from "@/lib/db/schema/enhance-corrections";
+import { getDb as getMongoDb } from "@/lib/mongo";
+import { desc, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,25 +44,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const collection = db.collection("enhance_corrections");
-
-    const docs = corrections.map((c: any) => ({
+    const rows = corrections.map((c: any) => ({
       shopId: String(shopId),
       taskName: c.taskName || "",
       aiSuggested: c.aiSuggested,
       advisorWrote: c.advisorWrote,
       advisorEmail: auth.user!.email,
-      createdAt: new Date(),
     }));
 
-    await collection.insertMany(docs);
+    const db = getSupabaseDb();
+    await db.insert(enhanceCorrections).values(rows);
 
-    console.log(`[Enhance Corrections] Saved ${docs.length} corrections for shop ${shopId} by ${auth.user.email}`);
+    getMongoDb().then(mongoDB => {
+      const docs = rows.map(r => ({ ...r, createdAt: new Date() }));
+      mongoDB.collection("enhance_corrections").insertMany(docs).catch(err => {
+        console.warn("[Enhance Corrections] MongoDB dual-write failed:", err.message);
+      });
+    }).catch(() => {});
+
+    console.log(`[Enhance Corrections] Saved ${rows.length} corrections for shop ${shopId} by ${auth.user.email}`);
 
     return NextResponse.json({
       success: true,
-      saved: docs.length,
+      saved: rows.length,
     }, { headers: corsHeaders });
   } catch (err: any) {
     console.error("[Enhance Corrections] Error:", err.message);
@@ -85,22 +92,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const collection = db.collection("enhance_corrections");
-
-    const corrections = await collection
-      .find({ shopId: String(shopId) })
-      .sort({ createdAt: -1 })
-      .limit(30)
-      .toArray();
+    const db = getSupabaseDb();
+    const rows = await db
+      .select({
+        taskName: enhanceCorrections.taskName,
+        aiSuggested: enhanceCorrections.aiSuggested,
+        advisorWrote: enhanceCorrections.advisorWrote,
+      })
+      .from(enhanceCorrections)
+      .where(eq(enhanceCorrections.shopId, String(shopId)))
+      .orderBy(desc(enhanceCorrections.createdAt))
+      .limit(30);
 
     return NextResponse.json({
       success: true,
-      corrections: corrections.map(c => ({
-        taskName: c.taskName,
-        aiSuggested: c.aiSuggested,
-        advisorWrote: c.advisorWrote,
-      })),
+      corrections: rows,
     }, { headers: corsHeaders });
   } catch (err: any) {
     console.error("[Enhance Corrections] Error:", err.message);
