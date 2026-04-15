@@ -730,10 +730,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // -------------------- API Sniffer (Platform Admin Only) --------------------
+  function isPlatformAdminUser(user) {
+    return user?.role === 'platform_admin' || user?.isPlatformAdmin === true;
+  }
+
   if (message.action === "SNIFFER_STATUS") {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
-      if (mosUser?.role !== 'platform_admin') {
+      if (!isPlatformAdminUser(mosUser)) {
         sendResponse({ active: false });
         return;
       }
@@ -746,7 +750,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "SNIFFER_TOGGLE") {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
-      if (mosUser?.role !== 'platform_admin') {
+      if (!isPlatformAdminUser(mosUser)) {
         sendResponse({ success: false, error: 'Not authorized' });
         return;
       }
@@ -765,7 +769,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "SNIFFER_GET_CAPTURES") {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
-      if (mosUser?.role !== 'platform_admin') {
+      if (!isPlatformAdminUser(mosUser)) {
         sendResponse({ captures: [] });
         return;
       }
@@ -791,7 +795,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "SNIFFER_CLEAR") {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
-      if (mosUser?.role !== 'platform_admin') {
+      if (!isPlatformAdminUser(mosUser)) {
         sendResponse({ success: false, error: 'Not authorized' });
         return;
       }
@@ -804,7 +808,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "SNIFFER_EXPORT") {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
-      if (mosUser?.role !== 'platform_admin') {
+      if (!isPlatformAdminUser(mosUser)) {
         sendResponse({ data: null });
         return;
       }

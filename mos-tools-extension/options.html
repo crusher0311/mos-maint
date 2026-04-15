@@ -466,7 +466,7 @@
     }
 
     function checkPlatformAdmin(authStatus) {
-      if (authStatus.user?.role === 'platform_admin') {
+      if (authStatus.user?.role === 'platform_admin' || authStatus.user?.isPlatformAdmin === true) {
         document.getElementById('dev-tools-section').style.display = 'block';
       }
     }

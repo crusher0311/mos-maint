@@ -306,7 +306,7 @@
     async function init() {
       const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
 
-      if (!authStatus.isAuthenticated || authStatus.user?.role !== 'platform_admin') {
+      if (!authStatus.isAuthenticated || (authStatus.user?.role !== 'platform_admin' && authStatus.user?.isPlatformAdmin !== true)) {
         notAdmin.style.display = 'block';
         app.style.display = 'none';
         return;

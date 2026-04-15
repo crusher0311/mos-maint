@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (auth.user.role !== "platform_admin") {
+    if (auth.user.role !== "platform_admin" && auth.user.isPlatformAdmin !== true) {
       return NextResponse.json(
         { error: "Platform admin access required" },
         { status: 403, headers: corsHeaders }
