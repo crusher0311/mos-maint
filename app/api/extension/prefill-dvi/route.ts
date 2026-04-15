@@ -7,6 +7,16 @@ import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 const RATINGS = {
   CHCKD: { id: 1, code: "CHCKD", name: "Checked & Okay" },
   MAYRQRATTN: { id: 2, code: "MAYRQRATTN", name: "May Require Future Attention" },
@@ -30,7 +40,7 @@ export async function POST(request: NextRequest) {
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
       { error: auth.error || "Unauthorized" },
-      { status: getAuthErrorStatus(auth) }
+      { status: getAuthErrorStatus(auth), headers: corsHeaders }
     );
   }
 
@@ -38,21 +48,21 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
   }
 
   const { vin, smsShopId, provider, mileage, inspectionTasks } = body;
 
   if (!vin || typeof vin !== "string" || vin.length !== 17) {
-    return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400, headers: corsHeaders });
   }
 
   if (!smsShopId) {
-    return NextResponse.json({ error: "smsShopId required" }, { status: 400 });
+    return NextResponse.json({ error: "smsShopId required" }, { status: 400, headers: corsHeaders });
   }
 
   if (!inspectionTasks || !Array.isArray(inspectionTasks) || inspectionTasks.length === 0) {
-    return NextResponse.json({ error: "inspectionTasks array required" }, { status: 400 });
+    return NextResponse.json({ error: "inspectionTasks array required" }, { status: 400, headers: corsHeaders });
   }
 
   const isPlatformAdmin =
@@ -66,18 +76,18 @@ export async function POST(request: NextRequest) {
   });
 
   if (!shopResult) {
-    return NextResponse.json({ error: `No shop found for SMS ID: ${smsShopId}` }, { status: 404 });
+    return NextResponse.json({ error: `No shop found for SMS ID: ${smsShopId}` }, { status: 404, headers: corsHeaders });
   }
 
   if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
-    return NextResponse.json({ error: "Unauthorized shop access" }, { status: 403 });
+    return NextResponse.json({ error: "Unauthorized shop access" }, { status: 403, headers: corsHeaders });
   }
 
   const resolvedShopId = shopResult.mosShopId;
   const resolvedMileage = mileage ? Number(mileage) : null;
 
   if (!resolvedMileage || isNaN(resolvedMileage)) {
-    return NextResponse.json({ error: "Valid mileage required" }, { status: 400 });
+    return NextResponse.json({ error: "Valid mileage required" }, { status: 400, headers: corsHeaders });
   }
 
   let vhi;
@@ -85,7 +95,7 @@ export async function POST(request: NextRequest) {
     vhi = await rebuildVhi(resolvedShopId, vin.toUpperCase(), resolvedMileage);
   } catch (err: any) {
     console.error("[Prefill DVI] Error rebuilding VHI:", err.message);
-    return NextResponse.json({ error: "Failed to generate VHI data" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to generate VHI data" }, { status: 500, headers: corsHeaders });
   }
 
   if (!vhi.success || !vhi.buckets) {
@@ -93,7 +103,7 @@ export async function POST(request: NextRequest) {
       success: false,
       error: vhi.error || "No VHI data available for this vehicle",
       updates: [],
-    });
+    }, { headers: corsHeaders });
   }
 
   const vhiByKey: Record<string, { status: string; item: any }> = {};
@@ -210,5 +220,5 @@ export async function POST(request: NextRequest) {
       ok: okCount,
     },
     updates,
-  });
+  }, { headers: corsHeaders });
 }

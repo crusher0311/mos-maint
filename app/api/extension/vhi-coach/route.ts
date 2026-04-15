@@ -7,6 +7,16 @@ import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 interface TaskMatch {
   taskName: string;
   serviceKey: string | null;
@@ -27,7 +37,7 @@ export async function POST(request: NextRequest) {
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
       { error: auth.error || "Unauthorized" },
-      { status: getAuthErrorStatus(auth) }
+      { status: getAuthErrorStatus(auth), headers: corsHeaders }
     );
   }
 
@@ -35,7 +45,7 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
   }
 
   const { vin, smsShopId, provider, inspectionTasks, mileage } = body;
@@ -43,21 +53,21 @@ export async function POST(request: NextRequest) {
   if (!vin || typeof vin !== "string" || vin.length !== 17) {
     return NextResponse.json(
       { error: "Valid 17-character VIN required" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
   if (!smsShopId) {
     return NextResponse.json(
       { error: "smsShopId required" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
   if (!inspectionTasks || !Array.isArray(inspectionTasks) || inspectionTasks.length === 0) {
     return NextResponse.json(
       { error: "inspectionTasks array required" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
@@ -74,14 +84,14 @@ export async function POST(request: NextRequest) {
   if (!shopResult) {
     return NextResponse.json(
       { error: `No shop found for SMS ID: ${smsShopId}` },
-      { status: 404 }
+      { status: 404, headers: corsHeaders }
     );
   }
 
   if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
     return NextResponse.json(
       { error: "Unauthorized shop access" },
-      { status: 403 }
+      { status: 403, headers: corsHeaders }
     );
   }
 
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
   if (!resolvedMileage || isNaN(resolvedMileage)) {
     return NextResponse.json(
       { error: "Valid mileage required for VHI analysis" },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
@@ -102,7 +112,7 @@ export async function POST(request: NextRequest) {
     console.error("[VHI Coach] Error rebuilding VHI:", err.message);
     return NextResponse.json(
       { error: "Failed to generate VHI data" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 
@@ -113,7 +123,7 @@ export async function POST(request: NextRequest) {
       vehicle: vhi.vehicle || null,
       score: vhi.score || null,
       taskMatches: [],
-    });
+    }, { headers: corsHeaders });
   }
 
   const vhiByKey: Record<string, { status: string; item: any }> = {};
@@ -212,5 +222,5 @@ export async function POST(request: NextRequest) {
     taskMatches,
     vhiScore: vhi.score,
     vhiBuckets: vhi.summary,
-  });
+  }, { headers: corsHeaders });
 }

@@ -1,0 +1,158 @@
+ [MOS Tools] Background service worker loaded
+ [Tekmetric] Restored session token
+ [MOS] Restored API token from storage
+ [MOS] Restored API URL: https://qa.mos.tools
+ [MOS] Restored shops: 34
+ [MOS] Side panel opens on action click
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_LOGOUT
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+ [MOS] Token verify: 200
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_LOGOUT
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+ [MOS] Token verify: 200
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] x-auth-token relay failed: 401
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS Inspections] Fetched 4 inspection(s) for RO 319017922
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [LaborRate] Fetched 0 rules for shop 524
+ [LaborRate] No rules configured, skipping
+ [MOS] x-auth-token relay failed: 401
+ [MOS Inspections] Failed to relay to MOS: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] x-auth-token relay failed: 401
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] x-auth-token relay failed: 401
+ [MOS] Message received: PREFILL_DVI
+ [Prefill DVI] Prefill requested
+ [MOS] x-auth-token relay failed: 401
+ [Prefill DVI] API error 401: {"error":"Missing authorization"}
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated context with vehicle from API: Object
+ [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+ [MOS] Plan response mileage: 109146 estimated: false fromCache: undefined
+ [MOS] Updated RO number from API: 26000
+ [MOS] Updated customer name from API: Brandon Crusha
+ [MOS] Updated context with vehicle from API: Object
+sidepanel.js:989 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:992 [MOS] Plan response mileage: 109146 estimated: false fromCache: undefined
+sidepanel.js:1016 [MOS] Updated RO number from API: 26000
+sidepanel.js:1021 [MOS] Updated customer name from API: Brandon Crusha
+background.js:244 [MOS] Message received: MOS_LOGOUT
+background.js:244 [MOS] Message received: MOS_LOGIN
+background.js:1018 [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+background.js:1025 [MOS] Token verify: 200
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:982 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:989 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:992 [MOS] Plan response mileage: 109146 estimated: false fromCache: undefined
+sidepanel.js:1016 [MOS] Updated RO number from API: 26000
+sidepanel.js:1021 [MOS] Updated customer name from API: Brandon Crusha
+sidepanel.js:982 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:989 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:992 [MOS] Plan response mileage: 109146 estimated: false fromCache: undefined
+sidepanel.js:1016 [MOS] Updated RO number from API: 26000
+sidepanel.js:1021 [MOS] Updated customer name from API: Brandon Crusha
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1520 [MOS Inspections] Fetched 4 inspection(s) for RO 319017922
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:1387 [LaborRate] Fetched 0 rules for shop 524
+background.js:1544 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:1387 [LaborRate] Fetched 0 rules for shop 524
+background.js:1806 [LaborRate] No rules configured, skipping
+background.js:1387 [LaborRate] Fetched 0 rules for shop 524
+sidepanel.js:982 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:989 [MOS] Updated VIN from API: 1FT8W3BT0BEA08647
+sidepanel.js:992 [MOS] Plan response mileage: 109146 estimated: false fromCache: undefined
+sidepanel.js:1016 [MOS] Updated RO number from API: 26000
+sidepanel.js:1021 [MOS] Updated customer name from API: Brandon Crusha
+background.js:244 [MOS] Message received: PREFILL_DVI
+background.js:312 [Prefill DVI] Prefill requested
+Access to fetch at 'https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev/api/extension/prefill-dvi' from origin 'chrome-extension://pdknldeccllioobniincphailcbpcnid' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
