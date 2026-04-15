@@ -447,9 +447,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "ENHANCE_FINDINGS_PREVIEW") {
+    console.log("[MOS Tools] Showing enhance review modal:", message.enhanced?.length, "items");
+    showEnhanceReviewModal(message.enhanced, message.inspectionId, message.context);
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "ENHANCE_FINDINGS_COMPLETE") {
     console.log("[MOS Tools] Findings enhancement complete:", message.result);
     resetEnhanceButton();
+    const modal = document.getElementById('mos-enhance-review-modal');
+    if (modal) modal.remove();
     setTimeout(() => {
       window.location.reload();
     }, 2000);
@@ -1033,45 +1042,35 @@ function injectPrefillButton() {
 
   const btn = document.createElement('button');
   btn.id = 'mos-prefill-dvi-btn';
-  btn.title = 'Pre-fill DVI with VHI maintenance data';
+  btn.title = 'Pre-fill DVI with VHI data';
   btn.type = 'button';
-  btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9 11l3 3L22 4"/>
-    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/>
+    <path d="M9 14l2 2 4-4"/>
   </svg>`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '4px 8px',
+    width: '32px',
+    height: '32px',
+    padding: '0',
     backgroundColor: 'transparent',
     border: '1px solid #3B82F6',
     borderRadius: '6px',
     cursor: 'pointer',
     marginLeft: '8px',
     transition: 'all 0.2s',
-    gap: '4px',
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#3B82F6',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   });
-
-  const label = document.createElement('span');
-  label.textContent = 'Pre-fill DVI';
-  label.style.whiteSpace = 'nowrap';
-  btn.appendChild(label);
 
   btn.addEventListener('mouseenter', () => {
     btn.style.backgroundColor = '#3B82F6';
-    btn.style.color = '#fff';
     btn.querySelector('svg').setAttribute('stroke', '#fff');
   });
 
   btn.addEventListener('mouseleave', () => {
     btn.style.backgroundColor = 'transparent';
-    btn.style.color = '#3B82F6';
     btn.querySelector('svg').setAttribute('stroke', '#3B82F6');
   });
 
@@ -1106,45 +1105,41 @@ function injectEnhanceButton() {
 
   const btn = document.createElement('button');
   btn.id = 'mos-enhance-notes-btn';
-  btn.title = 'Enhance technician findings with AI';
+  btn.title = 'Enhance technician notes with AI';
   btn.type = 'button';
-  btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20h9"/>
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    <path d="M9 2l1.5 3L9 8l-1.5-3L9 2z" fill="#8B5CF6" stroke="none"/>
   </svg>`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '4px 8px',
+    width: '32px',
+    height: '32px',
+    padding: '0',
     backgroundColor: 'transparent',
     border: '1px solid #8B5CF6',
     borderRadius: '6px',
     cursor: 'pointer',
     marginLeft: '6px',
     transition: 'all 0.2s',
-    gap: '4px',
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#8B5CF6',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   });
-
-  const label = document.createElement('span');
-  label.textContent = 'Enhance Notes';
-  label.style.whiteSpace = 'nowrap';
-  btn.appendChild(label);
 
   btn.addEventListener('mouseenter', () => {
     btn.style.backgroundColor = '#8B5CF6';
-    btn.style.color = '#fff';
     btn.querySelector('svg').setAttribute('stroke', '#fff');
+    const sparkle = btn.querySelector('svg path[fill]');
+    if (sparkle) sparkle.setAttribute('fill', '#fff');
   });
 
   btn.addEventListener('mouseleave', () => {
     btn.style.backgroundColor = 'transparent';
-    btn.style.color = '#8B5CF6';
     btn.querySelector('svg').setAttribute('stroke', '#8B5CF6');
+    const sparkle = btn.querySelector('svg path[fill]');
+    if (sparkle) sparkle.setAttribute('fill', '#8B5CF6');
   });
 
   btn.addEventListener('click', (e) => {
@@ -1174,8 +1169,6 @@ function handleEnhanceNotes(buttonEl) {
   buttonEl.disabled = true;
   buttonEl.style.opacity = '0.5';
   buttonEl.style.cursor = 'wait';
-  const label = buttonEl.querySelector('span');
-  if (label) label.textContent = 'Enhancing...';
 
   safeSendMessage({
     action: 'ENHANCE_FINDINGS',
@@ -1197,9 +1190,180 @@ function resetEnhanceButton() {
     btn.disabled = false;
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
-    const label = btn.querySelector('span');
-    if (label) label.textContent = 'Enhance Notes';
   }
+}
+
+function showEnhanceReviewModal(enhanced, inspectionId, context) {
+  if (!Array.isArray(enhanced) || enhanced.length === 0) {
+    showToast('No changes to review', 'info');
+    resetEnhanceButton();
+    return;
+  }
+
+  const existing = document.getElementById('mos-enhance-review-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-enhance-review-modal';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: '999999',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, {
+    backgroundColor: '#fff', borderRadius: '12px', width: '680px', maxWidth: '90vw',
+    maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  });
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">Review Enhanced Notes <span style="color:#6b7280;font-weight:400;font-size:13px">(${enhanced.length} items)</span></div>`;
+
+  const selectAllWrap = document.createElement('label');
+  Object.assign(selectAllWrap.style, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer' });
+  const selectAllCb = document.createElement('input');
+  selectAllCb.type = 'checkbox';
+  selectAllCb.checked = true;
+  selectAllWrap.appendChild(selectAllCb);
+  selectAllWrap.appendChild(document.createTextNode('Select all'));
+  header.appendChild(selectAllWrap);
+  modal.appendChild(header);
+
+  const body = document.createElement('div');
+  Object.assign(body.style, { overflowY: 'auto', padding: '12px 20px', flex: '1' });
+
+  const checkboxes = [];
+
+  enhanced.forEach((item, idx) => {
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px',
+      marginBottom: '10px', backgroundColor: '#fafafa',
+    });
+
+    const topRow = document.createElement('div');
+    Object.assign(topRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' });
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.idx = idx;
+    checkboxes.push(cb);
+
+    const taskLabel = document.createElement('span');
+    Object.assign(taskLabel.style, { fontWeight: '600', fontSize: '13px', color: '#111' });
+    taskLabel.textContent = item.taskName || `Task ${item.taskId}`;
+
+    topRow.appendChild(cb);
+    topRow.appendChild(taskLabel);
+    card.appendChild(topRow);
+
+    const origRow = document.createElement('div');
+    Object.assign(origRow.style, { fontSize: '12px', color: '#6b7280', marginBottom: '6px' });
+    origRow.innerHTML = `<span style="font-weight:500;color:#9ca3af">ORIGINAL:</span> ${escapeHtml(item.original)}`;
+    card.appendChild(origRow);
+
+    const enhancedInput = document.createElement('textarea');
+    enhancedInput.value = item.enhanced;
+    enhancedInput.dataset.idx = idx;
+    Object.assign(enhancedInput.style, {
+      width: '100%', minHeight: '48px', padding: '8px', border: '1px solid #d1d5db',
+      borderRadius: '6px', fontSize: '13px', color: '#111', resize: 'vertical',
+      lineHeight: '1.4', boxSizing: 'border-box',
+    });
+    card.appendChild(enhancedInput);
+
+    body.appendChild(card);
+  });
+
+  selectAllCb.addEventListener('change', () => {
+    checkboxes.forEach(cb => { cb.checked = selectAllCb.checked; });
+  });
+
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, {
+    padding: '12px 20px', borderTop: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'flex-end', gap: '10px',
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  Object.assign(cancelBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db',
+    backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
+  });
+  cancelBtn.addEventListener('click', () => {
+    overlay.remove();
+    resetEnhanceButton();
+  });
+
+  const applyBtn = document.createElement('button');
+  applyBtn.textContent = 'Apply Selected';
+  Object.assign(applyBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: 'none',
+    backgroundColor: '#8B5CF6', color: '#fff', cursor: 'pointer',
+    fontSize: '13px', fontWeight: '600',
+  });
+  applyBtn.addEventListener('click', () => {
+    const approved = [];
+    checkboxes.forEach((cb, idx) => {
+      if (cb.checked) {
+        const textarea = body.querySelector(`textarea[data-idx="${idx}"]`);
+        approved.push({
+          taskId: enhanced[idx].taskId,
+          taskName: enhanced[idx].taskName,
+          original: enhanced[idx].original,
+          enhanced: textarea ? textarea.value : enhanced[idx].enhanced,
+        });
+      }
+    });
+
+    if (approved.length === 0) {
+      showToast('No items selected', 'info');
+      return;
+    }
+
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying...';
+    applyBtn.style.opacity = '0.6';
+    cancelBtn.disabled = true;
+
+    safeSendMessage({
+      action: 'APPLY_ENHANCED_FINDINGS',
+      context: context,
+      inspectionId: inspectionId,
+      approved: approved,
+    }, () => {});
+  });
+
+  footer.appendChild(cancelBtn);
+  footer.appendChild(applyBtn);
+  modal.appendChild(footer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      resetEnhanceButton();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 function handlePrefillDvi(buttonEl) {
@@ -1226,8 +1390,6 @@ function handlePrefillDvi(buttonEl) {
   buttonEl.disabled = true;
   buttonEl.style.opacity = '0.5';
   buttonEl.style.cursor = 'wait';
-  const label = buttonEl.querySelector('span');
-  if (label) label.textContent = 'Pre-filling...';
 
   safeSendMessage({
     action: 'PREFILL_DVI',
@@ -1248,8 +1410,6 @@ function resetPrefillButton() {
     btn.disabled = false;
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
-    const label = btn.querySelector('span');
-    if (label) label.textContent = 'Pre-fill DVI';
   }
 }
 

@@ -322,18 +322,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    enhanceInspectionFindings(ctx, message.inspectionId || null, tabId).then(result => {
+    fetchEnhancedFindings(ctx, message.inspectionId || null, tabId).then(result => {
       if (tabId) {
-        if (result.success && result.applied > 0) {
+        if (result.success && result.enhanced && result.enhanced.length > 0) {
           chrome.tabs.sendMessage(tabId, {
-            action: "SHOW_TOAST",
-            message: `Enhanced ${result.applied} findings with AI`,
-            type: "success"
+            action: "ENHANCE_FINDINGS_PREVIEW",
+            enhanced: result.enhanced,
+            inspectionId: result.inspectionId,
+            context: ctx,
           }).catch(() => {});
-          setTimeout(() => {
-            chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_COMPLETE", result }).catch(() => {});
-          }, 500);
-        } else if (result.success && result.applied === 0) {
+        } else if (result.success && (!result.enhanced || result.enhanced.length === 0)) {
           chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Notes already look good — no changes needed", type: "info" }).catch(() => {});
           chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
         } else {
@@ -346,6 +344,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error("[Enhance Findings] Error:", err);
       if (tabId) {
         chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Enhance error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
+  if (message.action === "APPLY_ENHANCED_FINDINGS") {
+    console.log("[Enhance Findings] Applying approved findings");
+    const tabId = sender?.tab?.id;
+    const ctx = message.context;
+    const approved = message.approved;
+
+    if (!ctx || !approved || approved.length === 0) {
+      sendResponse({ success: false });
+      return false;
+    }
+
+    applyEnhancedFindings(ctx, message.inspectionId, approved, tabId).then(result => {
+      if (tabId) {
+        if (result.success && result.applied > 0) {
+          chrome.tabs.sendMessage(tabId, {
+            action: "SHOW_TOAST",
+            message: `Updated ${result.applied} findings`,
+            type: "success"
+          }).catch(() => {});
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_COMPLETE", result }).catch(() => {});
+          }, 500);
+        } else {
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: result.error || "Failed to apply", type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Apply error: " + err.message, type: "error" }).catch(() => {});
         chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
       }
     });
@@ -1842,7 +1877,7 @@ async function prefillDviInspection(context, inspId, tabId) {
   };
 }
 
-async function enhanceInspectionFindings(context, inspId, tabId) {
+async function fetchEnhancedFindings(context, inspId, tabId) {
   await _stateReady;
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
   if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
@@ -1852,11 +1887,7 @@ async function enhanceInspectionFindings(context, inspId, tabId) {
   if (!shopId) return { success: false, error: "No shop ID" };
 
   if (tabId) {
-    chrome.tabs.sendMessage(tabId, {
-      action: "SHOW_TOAST",
-      message: "Fetching inspection findings...",
-      type: "info"
-    }).catch(() => {});
+    chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Fetching inspection findings...", type: "info" }).catch(() => {});
   }
 
   let inspArr;
@@ -1903,14 +1934,8 @@ async function enhanceInspectionFindings(context, inspId, tabId) {
     return { success: false, error: "No findings to enhance — tasks have no notes yet" };
   }
 
-  console.log(`[Enhance Findings] Found ${tasksWithFindings.length} tasks with findings out of ${allTasks.length} total`);
-
   if (tabId) {
-    chrome.tabs.sendMessage(tabId, {
-      action: "SHOW_TOAST",
-      message: `Enhancing ${tasksWithFindings.length} findings with AI...`,
-      type: "info"
-    }).catch(() => {});
+    chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: `Enhancing ${tasksWithFindings.length} findings with AI...`, type: "info" }).catch(() => {});
   }
 
   let enhanceData;
@@ -1934,7 +1959,6 @@ async function enhanceInspectionFindings(context, inspId, tabId) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.warn(`[Enhance Findings] API error ${res.status}:`, text.substring(0, 200));
       return { success: false, error: `AI enhancement failed (${res.status})` };
     }
 
@@ -1943,69 +1967,80 @@ async function enhanceInspectionFindings(context, inspId, tabId) {
     return { success: false, error: "Failed to call enhance API: " + err.message };
   }
 
-  if (!enhanceData.success || !enhanceData.enhanced || enhanceData.enhanced.length === 0) {
+  if (!enhanceData.success || !enhanceData.enhanced) {
     return { success: false, error: enhanceData.error || "No enhancements returned" };
   }
 
-  if (tabId) {
-    chrome.tabs.sendMessage(tabId, {
-      action: "SHOW_TOAST",
-      message: `Writing ${enhanceData.enhanced.length} enhanced findings...`,
-      type: "info"
-    }).catch(() => {});
+  const changed = enhanceData.enhanced.filter(e => e.enhanced !== e.original);
+  console.log(`[Enhance Findings] AI returned ${enhanceData.enhanced.length} enhancements, ${changed.length} have changes`);
+
+  return {
+    success: true,
+    enhanced: changed,
+    inspectionId: inspection.id,
+  };
+}
+
+async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
+  await _stateReady;
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+
+  let inspArr;
+  try {
+    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
+      headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" }
+    });
+    if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
+    const data = await res.json();
+    inspArr = Array.isArray(data) ? data : (data.content || data.data || []);
+  } catch (err) {
+    return { success: false, error: "Failed to fetch inspections: " + err.message };
+  }
+
+  const inspection = inspArr.find(i => String(i.id) === String(inspectionId));
+  if (!inspection) return { success: false, error: "Inspection not found" };
+
+  const allTasks = [];
+  const groups = inspection.inspectionTasks || inspection.groups || [];
+  for (const group of groups) {
+    for (const task of (group.tasks || [])) {
+      allTasks.push({ ...task });
+    }
   }
 
   let applied = 0;
   let failed = 0;
 
-  for (const enhanced of enhanceData.enhanced) {
-    if (enhanced.enhanced === enhanced.original) {
-      continue;
-    }
-
-    const task = allTasks.find(t => t.id === enhanced.taskId);
+  for (const item of approved) {
+    const task = allTasks.find(t => t.id === item.taskId);
     if (!task) { failed++; continue; }
 
     const putBody = { ...task };
-    putBody.finding = enhanced.enhanced;
+    putBody.finding = item.enhanced;
 
     try {
       const res = await fetch(
         `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
         {
           method: "PUT",
-          headers: {
-            "x-auth-token": smsTokens.tekmetric,
-            "content-type": "application/json",
-          },
+          headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
           body: JSON.stringify(putBody),
         }
       );
-
-      if (res.ok) {
-        applied++;
-      } else {
-        console.warn(`[Enhance Findings] Failed to update task ${task.name}: ${res.status}`);
-        failed++;
-      }
-    } catch (err) {
-      console.warn(`[Enhance Findings] Error updating task ${task.name}:`, err.message);
-      failed++;
-    }
+      if (res.ok) { applied++; } else { failed++; }
+    } catch { failed++; }
 
     if (applied % 5 === 0 && applied > 0) {
       await new Promise(r => setTimeout(r, 100));
     }
   }
 
-  console.log(`[Enhance Findings] Complete: ${applied} applied, ${failed} failed`);
-
-  return {
-    success: true,
-    applied,
-    failed,
-    totalFindings: tasksWithFindings.length,
-  };
+  console.log(`[Enhance Findings] Applied: ${applied}, Failed: ${failed}`);
+  return { success: applied > 0, applied, failed };
 }
 
 async function autoApplyLaborRate(context, options = {}) {
