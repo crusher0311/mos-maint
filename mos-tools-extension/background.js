@@ -1919,6 +1919,7 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
 
   const allTasks = [];
   const groups = inspection.inspectionTasks || inspection.groups || [];
+  console.log(`[Enhance Findings] Inspection ${inspection.id} has ${groups.length} groups`);
   for (const group of groups) {
     const tasks = group.tasks || [];
     for (const task of tasks) {
@@ -1928,7 +1929,23 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
     }
   }
 
-  const tasksWithFindings = allTasks.filter(t => t.finding && typeof t.finding === "string" && t.finding.trim().length > 0);
+  console.log(`[Enhance Findings] Total tasks: ${allTasks.length}`);
+  if (allTasks.length > 0) {
+    const sample = allTasks[0];
+    console.log(`[Enhance Findings] Sample task keys:`, Object.keys(sample).join(', '));
+    console.log(`[Enhance Findings] Sample task finding field:`, JSON.stringify(sample.finding), `note:`, JSON.stringify(sample.note), `notes:`, JSON.stringify(sample.notes), `comment:`, JSON.stringify(sample.comment));
+  }
+
+  const getFinding = (t) => {
+    return t.finding || t.note || t.notes || t.comment || t.comments || null;
+  };
+
+  const tasksWithFindings = allTasks.filter(t => {
+    const f = getFinding(t);
+    return f && typeof f === "string" && f.trim().length > 0;
+  });
+
+  console.log(`[Enhance Findings] Tasks with findings: ${tasksWithFindings.length} out of ${allTasks.length}`);
 
   if (tasksWithFindings.length === 0) {
     return { success: false, error: "No findings to enhance — tasks have no notes yet" };
@@ -1950,7 +1967,7 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
         findings: tasksWithFindings.map(t => ({
           taskId: t.id,
           taskName: t.name,
-          finding: t.finding,
+          finding: getFinding(t),
           rating: t.inspectionRating?.code || null,
         })),
         vehicleInfo: context.vehicleInfo || null,
@@ -2020,7 +2037,8 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
     if (!task) { failed++; continue; }
 
     const putBody = { ...task };
-    putBody.finding = item.enhanced;
+    const findingField = task.finding !== undefined ? 'finding' : task.note !== undefined ? 'note' : task.notes !== undefined ? 'notes' : task.comment !== undefined ? 'comment' : 'finding';
+    putBody[findingField] = item.enhanced;
 
     try {
       const res = await fetch(
