@@ -308,6 +308,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "PREFILL_DVI") {
+    console.log("[Prefill DVI] Prefill requested");
+    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+    const ctx = message.context || currentSmsContext;
+    if (tabId) ctx._tabId = tabId;
+
+    if (!ctx?.roId || !ctx?.vin || !ctx?.shopId) {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Missing RO context for pre-fill", type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+      sendResponse({ success: false, error: "Missing context" });
+      return false;
+    }
+
+    prefillDviInspection(ctx, message.inspectionId || null, tabId).then(result => {
+      if (tabId) {
+        if (result.success && result.applied > 0) {
+          const msg = `DVI pre-filled: ${result.applied} tasks updated (${result.summary?.overdue || 0} red, ${result.summary?.dueSoon || 0} yellow, ${result.summary?.ok || 0} green)`;
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: msg, type: "success" }).catch(() => {});
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_COMPLETE", result }).catch(() => {});
+          }, 500);
+        } else {
+          const errMsg = result.error || (result.applied === 0 ? "No tasks could be updated" : "Pre-fill failed");
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: errMsg, type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      console.error("[Prefill DVI] Error:", err);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Pre-fill error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
   if (message.action === "CATEGORY_CHANGED") {
     console.log("[LaborRate] Job category changed:", message.jobName, "→", message.newCategory);
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId) {
@@ -1593,6 +1633,157 @@ async function fetchVhiCoachData(context, inspections) {
   } catch (err) {
     console.warn("[VHI Coach] Error:", err.message);
   }
+}
+
+async function prefillDviInspection(context, inspId, tabId) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
+  if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
+
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "SHOW_TOAST",
+      message: "Fetching inspection data...",
+      type: "info"
+    }).catch(() => {});
+  }
+
+  let inspArr;
+  try {
+    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
+      headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" }
+    });
+    if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
+    const data = await res.json();
+    inspArr = Array.isArray(data) ? data : (data.content || data.data || []);
+  } catch (err) {
+    return { success: false, error: "Failed to fetch inspections: " + err.message };
+  }
+
+  if (!inspArr || inspArr.length === 0) return { success: false, error: "No inspections found on this RO" };
+
+  const inspection = inspId ? inspArr.find(i => String(i.id) === String(inspId)) : inspArr[0];
+  if (!inspection) return { success: false, error: "Inspection not found" };
+
+  const allTasks = [];
+  const groups = inspection.inspectionTasks || inspection.groups || [];
+  for (const group of groups) {
+    const tasks = group.tasks || [];
+    for (const task of tasks) {
+      const t = { ...task };
+      if (!t.inspectionGroup && group.title) t.inspectionGroup = group.title;
+      allTasks.push(t);
+    }
+  }
+
+  if (allTasks.length === 0) return { success: false, error: "No inspection tasks found" };
+
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "SHOW_TOAST",
+      message: `Analyzing ${allTasks.length} tasks with VHI data...`,
+      type: "info"
+    }).catch(() => {});
+  }
+
+  let prefillData;
+  try {
+    const res = await fetch(`${mosApiUrl}/api/extension/prefill-dvi`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vin: context.vin,
+        smsShopId: shopId,
+        provider: "tekmetric",
+        mileage: context.mileage,
+        inspectionTasks: allTasks.map(t => ({ id: t.id, name: t.name, inspectionGroup: t.inspectionGroup })),
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[Prefill DVI] API error ${res.status}:`, text.substring(0, 200));
+      return { success: false, error: `VHI analysis failed (${res.status})` };
+    }
+
+    prefillData = await res.json();
+  } catch (err) {
+    return { success: false, error: "VHI analysis failed: " + err.message };
+  }
+
+  if (!prefillData.success || !prefillData.updates || prefillData.updates.length === 0) {
+    return { success: false, error: prefillData.error || "No VHI data matched to inspection tasks" };
+  }
+
+  console.log(`[Prefill DVI] Got ${prefillData.updates.length} updates to apply`);
+
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "SHOW_TOAST",
+      message: `Applying ${prefillData.updates.length} ratings...`,
+      type: "info"
+    }).catch(() => {});
+  }
+
+  let applied = 0;
+  let failed = 0;
+
+  for (const update of prefillData.updates) {
+    const task = allTasks.find(t => t.id === update.taskId);
+    if (!task) { failed++; continue; }
+
+    const putBody = { ...task };
+    putBody.inspectionRating = update.rating;
+    putBody.finding = update.finding || task.finding || null;
+
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "x-auth-token": smsTokens.tekmetric,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(putBody),
+        }
+      );
+
+      if (res.ok) {
+        applied++;
+      } else {
+        console.warn(`[Prefill DVI] Failed to update task ${task.name}: ${res.status}`);
+        failed++;
+      }
+    } catch (err) {
+      console.warn(`[Prefill DVI] Error updating task ${task.name}:`, err.message);
+      failed++;
+    }
+
+    if (applied % 5 === 0 && applied > 0) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  console.log(`[Prefill DVI] Complete: ${applied} applied, ${failed} failed`);
+
+  return {
+    success: true,
+    applied,
+    failed,
+    summary: prefillData.summary,
+    vehicle: prefillData.vehicle,
+    score: prefillData.score,
+  };
 }
 
 async function autoApplyLaborRate(context, options = {}) {

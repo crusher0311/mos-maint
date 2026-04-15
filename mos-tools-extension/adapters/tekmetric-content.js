@@ -431,6 +431,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "PREFILL_DVI_COMPLETE") {
+    console.log("[MOS Tools] DVI pre-fill complete:", message.result);
+    resetPrefillButton();
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "PREFILL_DVI_FAILED") {
+    resetPrefillButton();
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "INJECT_CONCERN_TEXT") {
     console.log("[MOS Tools] Injecting concern text into RO");
     const injected = injectConcernText(message.text);
@@ -930,15 +946,175 @@ function printStickerFromContentScript(sticker) {
 function checkAndInjectButton() {
   const context = detectContext();
   if (context.roId && !printButtonInjected) {
-    // Delay to ensure page is fully loaded
     setTimeout(injectPrintButton, 1000);
   } else if (!context.roId) {
-    // Remove button if we navigated away from RO
     const existingButton = document.getElementById('mos-print-button');
     if (existingButton) {
       existingButton.remove();
       printButtonInjected = false;
     }
+  }
+  if (context.roId) {
+    setTimeout(injectPrefillButton, 1200);
+  } else {
+    const existingPrefill = document.getElementById('mos-prefill-dvi-btn');
+    if (existingPrefill) existingPrefill.remove();
+    prefillButtonInjected = false;
+    prefillInFlight = false;
+  }
+}
+
+let prefillButtonInjected = false;
+
+function injectPrefillButton() {
+  if (prefillButtonInjected) return;
+  if (document.getElementById('mos-prefill-dvi-btn')) {
+    prefillButtonInjected = true;
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId) return;
+
+  let targetContainer = null;
+  const allButtons = document.querySelectorAll('button');
+  for (const btn of allButtons) {
+    const svg = btn.querySelector('svg');
+    if (svg) {
+      const svgContent = svg.innerHTML.toLowerCase();
+      if (svgContent.includes('polyline') && svgContent.includes('rect') &&
+          (btn.title?.toLowerCase().includes('print') ||
+           btn.getAttribute('aria-label')?.toLowerCase().includes('print') ||
+           svgContent.includes('6 9 6 2 18 2 18 9'))) {
+        targetContainer = btn.parentElement;
+        break;
+      }
+    }
+    if (btn.dataset.testid?.includes('print') ||
+        btn.className?.includes('print') ||
+        btn.title?.toLowerCase() === 'print') {
+      targetContainer = btn.parentElement;
+      break;
+    }
+  }
+
+  if (!targetContainer) {
+    const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
+    for (const row of iconRows) {
+      if (row.querySelectorAll('button').length >= 2) {
+        targetContainer = row;
+        break;
+      }
+    }
+  }
+
+  if (!targetContainer) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'mos-prefill-dvi-btn';
+  btn.title = 'Pre-fill DVI with VHI maintenance data';
+  btn.type = 'button';
+  btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 11l3 3L22 4"/>
+    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  </svg>`;
+
+  Object.assign(btn.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4px 8px',
+    backgroundColor: 'transparent',
+    border: '1px solid #3B82F6',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    marginLeft: '8px',
+    transition: 'all 0.2s',
+    gap: '4px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#3B82F6',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const label = document.createElement('span');
+  label.textContent = 'Pre-fill DVI';
+  label.style.whiteSpace = 'nowrap';
+  btn.appendChild(label);
+
+  btn.addEventListener('mouseenter', () => {
+    btn.style.backgroundColor = '#3B82F6';
+    btn.style.color = '#fff';
+    btn.querySelector('svg').setAttribute('stroke', '#fff');
+  });
+
+  btn.addEventListener('mouseleave', () => {
+    btn.style.backgroundColor = 'transparent';
+    btn.style.color = '#3B82F6';
+    btn.querySelector('svg').setAttribute('stroke', '#3B82F6');
+  });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handlePrefillDvi(btn);
+  });
+
+  targetContainer.appendChild(btn);
+  prefillButtonInjected = true;
+  console.log('[MOS Tools] Pre-fill DVI button injected');
+}
+
+let prefillInFlight = false;
+
+function handlePrefillDvi(buttonEl) {
+  if (prefillInFlight) {
+    showToast('Pre-fill already in progress', 'info');
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId || !context.shopId) {
+    showToast('No repair order detected', 'error');
+    return;
+  }
+  if (!context.vin) {
+    showToast('No VIN detected — cannot pre-fill DVI', 'error');
+    return;
+  }
+  if (!context.mileage) {
+    showToast('No mileage detected — cannot pre-fill DVI', 'error');
+    return;
+  }
+
+  prefillInFlight = true;
+  buttonEl.disabled = true;
+  buttonEl.style.opacity = '0.5';
+  buttonEl.style.cursor = 'wait';
+  const label = buttonEl.querySelector('span');
+  if (label) label.textContent = 'Pre-filling...';
+
+  safeSendMessage({
+    action: 'PREFILL_DVI',
+    context: {
+      shopId: context.shopId,
+      roId: context.roId,
+      vin: context.vin,
+      mileage: context.mileage,
+      provider: 'tekmetric',
+    }
+  }, (response) => {});
+}
+
+function resetPrefillButton() {
+  prefillInFlight = false;
+  const btn = document.getElementById('mos-prefill-dvi-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    const label = btn.querySelector('span');
+    if (label) label.textContent = 'Pre-fill DVI';
   }
 }
 
