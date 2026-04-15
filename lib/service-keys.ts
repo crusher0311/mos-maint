@@ -203,14 +203,20 @@ export const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
 
 export function toKeyFromName(name: string): string | null {
   const n = name.toLowerCase();
+  const DVI_SKIP = ["oil change sticker", "walk around video", "walk around", "other"];
+  if (DVI_SKIP.some((s) => n === s)) return null;
   if (n.includes("cabin") && n.includes("air") && n.includes("filter")) return "cabin_air";
+  if (n === "cabin air filter" || n === "cabin air") return "cabin_air";
   for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
     if (vals.some((v) => n.includes(v))) return key;
   }
   if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
+  if (n === "air filter") return "engine_air";
   if (n.includes("exhaust system")) return "exhaust";
   if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
   if (n.includes("differential") && !n.includes("front") && !n.includes("rear")) return "rear_differential";
+  if (n.includes("coolant") && n.includes("hose")) return "coolant_hoses";
+  if (n === "coolant/hoses") return "coolant_hoses";
   if (n.includes("shock") || n.includes("strut")) {
     if (n.includes("front")) return "front_shocks";
     if (n.includes("rear")) return "rear_shocks";
@@ -226,6 +232,9 @@ export function toKeyFromName(name: string): string | null {
     if (n.includes("rear")) return "rear_brake_pads";
     return "front_brake_pads";
   }
+  if (n === "front brakes" || n === "front brake") return "front_brake_pads";
+  if (n === "rear brakes" || n === "rear brake") return "rear_brake_pads";
+  if (n.includes("windshield wiper") || n === "windshield wipers" || n === "wipers") return "wiper_blades";
   return null;
 }
 

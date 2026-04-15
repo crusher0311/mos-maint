@@ -300,6 +300,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       fetchAndRelayInspections(currentSmsContext).catch(err => {
         console.warn("[MOS Inspections] Fetch error:", err.message);
       });
+    } else if (sender?.tab?.id) {
+      chrome.tabs.sendMessage(sender.tab.id, { action: "VHI_COACH_HIDE" }).catch(() => {});
     }
 
     sendResponse({ success: true });
@@ -1504,8 +1506,92 @@ async function fetchAndRelayInspections(context) {
     } else {
       console.warn(`[MOS Inspections] Failed to relay to MOS: ${relayRes.status}`);
     }
+
+    fetchVhiCoachData(context, inspArr).catch(err => {
+      console.warn("[VHI Coach] Fetch error:", err.message);
+    });
   } catch (err) {
     console.warn("[MOS Inspections] Error:", err.message);
+  }
+}
+
+let lastCoachRoId = null;
+
+async function fetchVhiCoachData(context, inspections) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return;
+  if (!context?.vin || !context?.shopId) return;
+  if (context.vin.length !== 17) return;
+  const coachKey = `${context.shopId}:${context.roId}`;
+  if (coachKey === lastCoachRoId) return;
+
+  const taskNames = [];
+  const inspArr = Array.isArray(inspections) ? inspections : (inspections.content || inspections.data || []);
+
+  function extractTaskNames(items) {
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      const name = item.name || item.taskName || item.label;
+      if (name && !taskNames.includes(name)) {
+        taskNames.push(name);
+      }
+      if (item.tasks && Array.isArray(item.tasks)) {
+        extractTaskNames(item.tasks);
+      }
+    }
+  }
+
+  for (const insp of inspArr) {
+    const groups = insp.inspectionTasks || insp.groups || [];
+    extractTaskNames(groups);
+
+    const flatTasks = insp.tasks || [];
+    extractTaskNames(flatTasks);
+  }
+
+  if (taskNames.length === 0) {
+    console.log("[VHI Coach] No inspection task names found");
+    return;
+  }
+
+  console.log(`[VHI Coach] Fetching for VIN ${context.vin}, ${taskNames.length} tasks`);
+
+  try {
+    const res = await fetch(`${mosApiUrl}/api/extension/vhi-coach`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vin: context.vin,
+        smsShopId: context.shopId,
+        provider: "tekmetric",
+        mileage: context.mileage || null,
+        inspectionTasks: taskNames,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[VHI Coach] API error ${res.status}:`, text.substring(0, 200));
+      return;
+    }
+
+    const data = await res.json();
+    console.log(`[VHI Coach] Got data:`, data.summary);
+
+    lastCoachRoId = coachKey;
+
+    const tabId = context._tabId;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        action: "VHI_COACH_DATA",
+        data: data,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[VHI Coach] Error:", err.message);
   }
 }
 
