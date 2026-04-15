@@ -328,7 +328,6 @@
     async function init() {
       try {
         const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
-        console.log('[Options] Auth status:', JSON.stringify(authStatus));
 
         if (!authStatus || !authStatus.isAuthenticated) {
           notLoggedIn.style.display = 'block';
