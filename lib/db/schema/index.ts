@@ -10,3 +10,4 @@ export * from "./support-tickets";
 export * from "./logs";
 export * from "./sniffer";
 export * from "./enhance-corrections";
+export * from "./platform-features";

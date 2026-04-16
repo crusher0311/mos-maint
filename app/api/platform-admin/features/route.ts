@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin, getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
+import { platformFeatures } from "@/lib/db/schema/platform-features";
+import { eq } from "drizzle-orm";
 import { ObjectId } from "mongodb";
 
 export interface PlatformFeature {
@@ -84,6 +87,18 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection("platform_features").insertOne(feature);
 
+    const pg = getSupabaseDb();
+    pg.insert(platformFeatures).values({
+      order: newOrder,
+      name,
+      slug,
+      description: description || null,
+      status: status || "active",
+      includedInTiers: includedInTiers || [],
+    }).onConflictDoNothing().catch(err => {
+      console.warn("[Platform Features] Supabase dual-write failed:", err.message);
+    });
+
     return NextResponse.json({
       ok: true,
       feature: { ...feature, _id: result.insertedId }
@@ -129,6 +144,25 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 });
     }
 
+    const slug = result.slug || updates.slug;
+    if (slug) {
+      const pg = getSupabaseDb();
+      const pgUpdates: Record<string, any> = { updatedAt: new Date() };
+      if (updates.name !== undefined) pgUpdates.name = updates.name;
+      if (updates.slug !== undefined) pgUpdates.slug = updates.slug;
+      if (updates.description !== undefined) pgUpdates.description = updates.description;
+      if (updates.status !== undefined) pgUpdates.status = updates.status;
+      if (updates.includedInTiers !== undefined) pgUpdates.includedInTiers = updates.includedInTiers;
+      if (updates.order !== undefined) pgUpdates.order = updates.order;
+
+      pg.update(platformFeatures)
+        .set(pgUpdates)
+        .where(eq(platformFeatures.slug, slug))
+        .catch(err => {
+          console.warn("[Platform Features] Supabase dual-write (update) failed:", err.message);
+        });
+    }
+
     return NextResponse.json({
       ok: true,
       feature: result
@@ -158,10 +192,21 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDb();
+
+    const feature = await db.collection("platform_features").findOne({ _id: new ObjectId(id) });
     const result = await db.collection("platform_features").deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 });
+    }
+
+    if (feature?.slug) {
+      const pg = getSupabaseDb();
+      pg.delete(platformFeatures)
+        .where(eq(platformFeatures.slug, feature.slug))
+        .catch(err => {
+          console.warn("[Platform Features] Supabase dual-write (delete) failed:", err.message);
+        });
     }
 
     return NextResponse.json({ ok: true });

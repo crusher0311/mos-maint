@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
+import { platformFeatures } from "@/lib/db/schema/platform-features";
+import { eq } from "drizzle-orm";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -59,6 +62,20 @@ export async function POST(req: NextRequest) {
     }));
 
     const result = await collection.bulkWrite(bulkOps);
+
+    const pg = getSupabaseDb();
+    const mongoIds = validUpdates.map((u: any) => new ObjectId(u.id));
+    const mongoDocs = await collection.find({ _id: { $in: mongoIds } }).toArray();
+    for (const doc of mongoDocs) {
+      if (doc.slug) {
+        pg.update(platformFeatures)
+          .set({ includedInTiers: doc.includedInTiers || [], updatedAt: new Date() })
+          .where(eq(platformFeatures.slug, doc.slug))
+          .catch(err => {
+            console.warn("[Platform Features] Supabase bulk-update dual-write failed:", err.message);
+          });
+      }
+    }
 
     return NextResponse.json({ 
       ok: true, 
