@@ -1,0 +1,50 @@
+2026-04-16T18:38:21Z clientIP="152.117.99.75" requestID="bc60811d-b49d-43ce" responseTimeMS=169 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="73.112.133.127" requestID="e8af5d78-ee8a-4931" responseTimeMS=66 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="73.112.133.127" requestID="87e6d273-01ad-4b39" responseTimeMS=64 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="73.112.133.127" requestID="2caa4dfd-1688-47e8" responseTimeMS=65 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="152.117.99.75" requestID="c4c47ea7-71aa-4e89" responseTimeMS=186 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="73.112.133.127" requestID="864c04bd-b1e3-46d3" responseTimeMS=71 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="152.117.99.75" requestID="4181fd93-f4b4-424c" responseTimeMS=177 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22Z clientIP="71.195.39.148" requestID="39f71132-4384-4fe6" responseTimeMS=59 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T18:38:22.381081193Z       "id": 12,
+2026-04-16T18:38:22.381084283Z       "code": "WORKNOTSTRTD",
+2026-04-16T18:38:22.381087204Z       "name": "Work Not Started",
+2026-04-16T18:38:22.381089893Z       "status": {
+2026-04-16T18:38:22.381092513Z         "id": 2,
+2026-04-16T18:38:22.381095074Z         "code": "WORKINPROGRESS",
+2026-04-16T18:38:22.381097824Z         "name": "Work-In-Progress",
+2026-04-16T18:38:22.381115554Z         "postedOrAccrecv": false
+2026-04-16T18:38:22.381118774Z       }
+2026-04-16T18:38:22.381121494Z     },
+2026-04-16T18:38:22.381124264Z     "color": "#0d4a80",
+2026-04-16T18:38:22.381127224Z     "repairOrderCustomLabel": {
+2026-04-16T18:38:22.381129944Z       "name": "PERFORMING WORK"
+2026-04-16T18:38:22.381132585Z     },
+2026-04-16T18:38:22.381135105Z     "customerId": 40551668,
+2026-04-16T18:38:22.381161165Z     "technicianId": null,
+2026-04-16T18:38:22.381164285Z     "serviceWriterId": 269577,
+2026-04-16T18:38:22.381166995Z     "vehicleId": 151337663,
+2026-04-16T18:38:22.381169645Z     "milesIn": null,
+2026-04-16T18:38:22.381172195Z     "milesOut": null,
+2026-04-16T18:38:22.381174845Z     "keytag": null,
+2026-04-16T18:38:22.381177606Z     "completedDate": null,
+2026-04-16T18:38:22.381180506Z     "postedDate": null,
+2026-04-16T18:38:22.381183515Z     "laborSales": 3780,
+2026-04-16T18:38:22.381186396Z     "partsSales": 0,
+2026-04-16T18:38:22.381188906Z     "subletSales": 0,
+2026-04-16T18:38:22.381191676Z     "discountTotal": 0,
+2026-04-16T18:38:22.381194386Z     "feeTotal": 265,
+2026-04-16T18:38:22.381197376Z     "taxes": 526,
+2026-04-16T18:38:22.381200056Z     "amountPaid": 0,
+2026-04-16T18:38:22.381202516Z     "totalSales": 4571,
+2026-04-16T18:38:22.381205176Z     "jobs":
+2026-04-16T18:38:22.381208566Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #11656 status updated by rykeraccessauto@gmail.com", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-04-16T18:38:22.381212246Z [Tekmetric Webhook] RO Update: #11656 (ID: 320853159), Status: Work-In-Progress (WORKINPROGRESS)
+2026-04-16T18:38:22.40035737Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-16T18:38:22.413751316Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-16T18:38:22.449764314Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-16T18:38:22.506858707Z [Tekmetric Webhook] Updated RO #11656: status=Work-In-Progress, label=PERFORMING WORK, odometer=unchanged, matched=1, modified=1
+2026-04-16T18:38:22.51513378Z [PlanBuild] Shop 90 VIN 1C4HJXEG2KW651791: 2 unmatched job names: 4 Tire Replacement | DVI
+2026-04-16T18:38:22.515185392Z [PlanBuild] Tekmetric DVI: 4 findings from cached inspections on RO 318633676
+2026-04-16T18:38:22.839783526Z [PlanCache] Cached plan for 1C4HJXEG2KW651791 at 31871 miles, TTL 4h
+2026-04-16T18:38:22.839818237Z [PlanBuild] Shop 90: Built and cached plan for 1C4HJXEG2KW651791 in 826ms (OEM: 29, Carfax: 0, ShopHistory: 4, DVI: 4, UnresolvedHistory: 0, Deferred: 0)

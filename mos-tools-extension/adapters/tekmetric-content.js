@@ -15,7 +15,43 @@ let lastContext = null;
 let contextCheckInterval = null;
 
 // ==================== CONTEXT DETECTION ====================
+// Cache of last-known good context fields per RO ID. Tekmetric hides the VIN
+// (and sometimes mileage) in the DOM when the user switches to the Inspections
+// tab, so once we've ever seen these fields for an RO, we reuse them.
+const roContextCache = new Map();
+
+function rememberRoContext(ctx) {
+  if (!ctx?.roId) return;
+  const prior = roContextCache.get(ctx.roId) || {};
+  const merged = {
+    vin: ctx.vin || prior.vin || null,
+    mileage: ctx.mileage || prior.mileage || null,
+    vehicle: ctx.vehicle || prior.vehicle || null,
+    vehicleDisplay: ctx.vehicleDisplay || prior.vehicleDisplay || null,
+  };
+  roContextCache.set(ctx.roId, merged);
+  return merged;
+}
+
+function hydrateContextFromCache(ctx) {
+  if (!ctx?.roId) return ctx;
+  const cached = roContextCache.get(ctx.roId);
+  if (!cached) return ctx;
+  if (!ctx.vin && cached.vin) ctx.vin = cached.vin;
+  if (!ctx.mileage && cached.mileage) ctx.mileage = cached.mileage;
+  if (!ctx.vehicle && cached.vehicle) ctx.vehicle = cached.vehicle;
+  if (!ctx.vehicleDisplay && cached.vehicleDisplay) ctx.vehicleDisplay = cached.vehicleDisplay;
+  return ctx;
+}
+
 function detectContext() {
+  const ctx = _detectContextRaw();
+  rememberRoContext(ctx);
+  hydrateContextFromCache(ctx);
+  return ctx;
+}
+
+function _detectContextRaw() {
   const url = window.location.href;
   const context = {
     provider: "tekmetric",
