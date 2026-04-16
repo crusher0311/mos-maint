@@ -21,6 +21,8 @@ interface ShopFeatures {
   part_xref?: boolean;
   labor_rates?: boolean;
   concern_assistant?: boolean;
+  dvi_prefill?: boolean;
+  enhance_notes?: boolean;
 }
 
 interface IntegrationDetails {
@@ -1178,6 +1180,8 @@ export default function PlatformShopsPage() {
                     { key: "part_xref", label: "Part Cross-Reference", desc: "Cross-reference parts across manufacturers" },
                     { key: "labor_rates", label: "Labor Rate Rules", desc: "Auto-apply labor rates based on vehicle, customer, and job criteria" },
                     { key: "concern_assistant", label: "Concern Assistant", desc: "AI-powered customer concern intake with follow-up questions and RO injection" },
+                    { key: "dvi_prefill", label: "DVI Pre-fill (VHI)", desc: "Auto-fill DVI inspection ratings using VHI maintenance data" },
+                    { key: "enhance_notes", label: "Enhance Notes (AI)", desc: "AI-powered rewriting of technician notes into customer-facing language" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input
@@ -1341,6 +1345,8 @@ export default function PlatformShopsPage() {
                     { key: "part_xref", label: "Part Cross-Reference" },
                     { key: "labor_rates", label: "Labor Rate Rules" },
                     { key: "concern_assistant", label: "Concern Assistant" },
+                    { key: "dvi_prefill", label: "DVI Pre-fill (VHI)" },
+                    { key: "enhance_notes", label: "Enhance Notes (AI)" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input

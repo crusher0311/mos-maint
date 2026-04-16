@@ -63,18 +63,19 @@ export async function POST(req: NextRequest) {
 
     const result = await collection.bulkWrite(bulkOps);
 
-    const pg = getSupabaseDb();
-    const mongoIds = validUpdates.map((u: any) => new ObjectId(u.id));
-    const mongoDocs = await collection.find({ _id: { $in: mongoIds } }).toArray();
-    for (const doc of mongoDocs) {
-      if (doc.slug) {
-        pg.update(platformFeatures)
-          .set({ includedInTiers: doc.includedInTiers || [], updatedAt: new Date() })
-          .where(eq(platformFeatures.slug, doc.slug))
-          .catch(err => {
-            console.warn("[Platform Features] Supabase bulk-update dual-write failed:", err.message);
-          });
+    try {
+      const pg = getSupabaseDb();
+      const mongoIds = validUpdates.map((u: any) => new ObjectId(u.id));
+      const mongoDocs = await collection.find({ _id: { $in: mongoIds } }).toArray();
+      for (const doc of mongoDocs) {
+        if (doc.slug) {
+          await pg.update(platformFeatures)
+            .set({ includedInTiers: doc.includedInTiers || [], updatedAt: new Date() })
+            .where(eq(platformFeatures.slug, doc.slug));
+        }
       }
+    } catch (err: any) {
+      console.warn("[Platform Features] Supabase bulk-update dual-write failed:", err.message);
     }
 
     return NextResponse.json({ 

@@ -87,17 +87,19 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection("platform_features").insertOne(feature);
 
-    const pg = getSupabaseDb();
-    pg.insert(platformFeatures).values({
-      order: newOrder,
-      name,
-      slug,
-      description: description || null,
-      status: status || "active",
-      includedInTiers: includedInTiers || [],
-    }).onConflictDoNothing().catch(err => {
+    try {
+      const pg = getSupabaseDb();
+      await pg.insert(platformFeatures).values({
+        order: newOrder,
+        name,
+        slug,
+        description: description || null,
+        status: status || "active",
+        includedInTiers: includedInTiers || [],
+      }).onConflictDoNothing();
+    } catch (err: any) {
       console.warn("[Platform Features] Supabase dual-write failed:", err.message);
-    });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -125,6 +127,9 @@ export async function PATCH(request: NextRequest) {
 
     const db = await getDb();
 
+    const existing = await db.collection("platform_features").findOne({ _id: new ObjectId(id) });
+    const oldSlug = existing?.slug;
+
     const updateFields: Record<string, any> = { updatedAt: new Date() };
     
     const allowedFields = ["name", "slug", "description", "category", "status", "icon", "compatibleSMS", "includedInTiers", "order", "stripeProductId", "stripePriceId", "pricePerMonth"];
@@ -144,23 +149,23 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 });
     }
 
-    const slug = result.slug || updates.slug;
-    if (slug) {
-      const pg = getSupabaseDb();
-      const pgUpdates: Record<string, any> = { updatedAt: new Date() };
-      if (updates.name !== undefined) pgUpdates.name = updates.name;
-      if (updates.slug !== undefined) pgUpdates.slug = updates.slug;
-      if (updates.description !== undefined) pgUpdates.description = updates.description;
-      if (updates.status !== undefined) pgUpdates.status = updates.status;
-      if (updates.includedInTiers !== undefined) pgUpdates.includedInTiers = updates.includedInTiers;
-      if (updates.order !== undefined) pgUpdates.order = updates.order;
+    if (oldSlug) {
+      try {
+        const pg = getSupabaseDb();
+        const pgUpdates: Record<string, any> = { updatedAt: new Date() };
+        if (updates.name !== undefined) pgUpdates.name = updates.name;
+        if (updates.slug !== undefined) pgUpdates.slug = updates.slug;
+        if (updates.description !== undefined) pgUpdates.description = updates.description;
+        if (updates.status !== undefined) pgUpdates.status = updates.status;
+        if (updates.includedInTiers !== undefined) pgUpdates.includedInTiers = updates.includedInTiers;
+        if (updates.order !== undefined) pgUpdates.order = updates.order;
 
-      pg.update(platformFeatures)
-        .set(pgUpdates)
-        .where(eq(platformFeatures.slug, slug))
-        .catch(err => {
-          console.warn("[Platform Features] Supabase dual-write (update) failed:", err.message);
-        });
+        await pg.update(platformFeatures)
+          .set(pgUpdates)
+          .where(eq(platformFeatures.slug, oldSlug));
+      } catch (err: any) {
+        console.warn("[Platform Features] Supabase dual-write (update) failed:", err.message);
+      }
     }
 
     return NextResponse.json({
@@ -201,12 +206,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (feature?.slug) {
-      const pg = getSupabaseDb();
-      pg.delete(platformFeatures)
-        .where(eq(platformFeatures.slug, feature.slug))
-        .catch(err => {
-          console.warn("[Platform Features] Supabase dual-write (delete) failed:", err.message);
-        });
+      try {
+        const pg = getSupabaseDb();
+        await pg.delete(platformFeatures)
+          .where(eq(platformFeatures.slug, feature.slug));
+      } catch (err: any) {
+        console.warn("[Platform Features] Supabase dual-write (delete) failed:", err.message);
+      }
     }
 
     return NextResponse.json({ ok: true });
