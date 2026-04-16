@@ -6,11 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
-
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session || !SUPER_ADMINS.includes(session.email)) {
+  if (!session || !session.isPlatformAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

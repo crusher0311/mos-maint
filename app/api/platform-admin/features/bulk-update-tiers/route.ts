@@ -5,7 +5,6 @@ import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 
-const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
 const VALID_TIERS = ["starter", "plus", "elite", "enterprise"];
 
 function isValidObjectId(id: string): boolean {
@@ -22,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!sess) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!SUPER_ADMINS.includes(sess.email)) {
+  if (!sess.isPlatformAdmin) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 

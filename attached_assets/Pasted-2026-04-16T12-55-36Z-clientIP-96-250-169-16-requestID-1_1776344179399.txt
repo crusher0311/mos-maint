@@ -1,0 +1,50 @@
+2026-04-16T12:55:36Z clientIP="96.250.169.16" requestID="1102f305-2ddb-4778" responseTimeMS=467 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="b9504df1-3f7f-403b" responseTimeMS=465 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="c3bb46ce-3f2f-4c08" responseTimeMS=470 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="45404091-7d3c-4e55" responseTimeMS=444 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="3aef5a32-74d3-490d" responseTimeMS=462 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="f8123716-f92c-4b25" responseTimeMS=557 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="ca800a20-7be7-4e34" responseTimeMS=483 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="162.212.202.163" requestID="89276cd8-f6f9-4f47" responseTimeMS=1361 responseBytes=308 userAgent=""
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="f58b90b6-729d-4371" responseTimeMS=205 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37Z clientIP="96.250.169.16" requestID="261e4eec-3d5c-40af" responseTimeMS=476 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:37.347494405Z [Extension Auth Token] Stored x-auth-token for shop 88 (tekmetric 12764) from johnlebrini@gmail.com
+2026-04-16T12:55:37.358123938Z [Extension Auth Token] Stored x-auth-token for shop 88 (tekmetric 12764) from johnlebrini@gmail.com
+2026-04-16T12:55:37.364686539Z [Extension Auth Token] Stored x-auth-token for shop 88 (tekmetric 12764) from johnlebrini@gmail.com
+2026-04-16T12:55:37.367052127Z [Extension Auth Token] Stored x-auth-token for shop 88 (tekmetric 12764) from johnlebrini@gmail.com
+2026-04-16T12:55:37.408714125Z [Extension Auth Token] Stored x-auth-token for shop 88 (tekmetric 12764) from johnlebrini@gmail.com
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="fe215e47-2258-4d3d" responseTimeMS=279 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="6ad636e5-ea22-46df" responseTimeMS=269 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="f6ef9a71-3e3e-4f89" responseTimeMS=274 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="fe263d44-7933-4b16" responseTimeMS=283 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="d8c272f9-b2b6-41ca" responseTimeMS=271 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="21ebb784-aa81-4ceb" responseTimeMS=274 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="7c1c0b82-6157-4a9d" responseTimeMS=213 responseBytes=429 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="f9784c0b-66ba-4c04" responseTimeMS=268 responseBytes=414 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40Z clientIP="160.2.221.202" requestID="214920a7-2ab2-4858" responseTimeMS=257 responseBytes=484 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:40.250649544Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.258858758Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.260198361Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.267556247Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.299405265Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.315327647Z [Extension Auth Token] Stored x-auth-token for shop 73 (tekmetric 524) from jhubych86@gmail.com
+2026-04-16T12:55:40.411615869Z [Extension Inspections] Cached 1 inspection(s) for RO 296741597 (shop 73): 52 tasks (RED=0, YELLOW=0, GREEN=0), matched=1, modified=1
+2026-04-16T12:55:40.661799523Z [Shop Lookup] No match for smsShopId=524, userShopIds=["73"], isPlatformAdmin=false, providerHint=tekmetric
+2026-04-16T12:55:40.731982172Z [Shop Lookup] Shop exists (shopId=73, name=Oneway Automotive) but user lacks access. shopId type=number
+2026-04-16T12:55:41Z clientIP="96.250.169.16" requestID="27f08dfd-556c-4945" responseTimeMS=543 responseBytes=484 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:41Z clientIP="160.2.221.202" requestID="0e314130-2957-44a2" responseTimeMS=269 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:41Z clientIP="96.250.169.16" requestID="cd2e176e-c2a6-4aad" responseTimeMS=453 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:41Z clientIP="96.250.169.16" requestID="4f7d3d8c-f431-421b" responseTimeMS=558 responseBytes=580 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:41.676352024Z [Extension Inspections] Cached 2 inspection(s) for RO 318659053 (shop 88): 65 tasks (RED=0, YELLOW=0, GREEN=0), matched=1, modified=1
+2026-04-16T12:55:41.951315091Z [Shop Lookup] No match for smsShopId=12764, userShopIds=["88"], isPlatformAdmin=false, providerHint=tekmetric
+2026-04-16T12:55:42Z clientIP="96.250.169.16" requestID="fd31f23d-d089-4d48" responseTimeMS=195 responseBytes=431 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:42.014632178Z [Shop Lookup] Shop exists (shopId=88, name=Lebrini's Service Station Corp) but user lacks access. shopId type=number
+2026-04-16T12:55:46.623628909Z [Protractor Callback GET] Update WorkOrder 5f31a070-4c5e-41e8-9d75-7569efb8d4a8 for shop 69
+2026-04-16T12:55:46.759933297Z [Protractor Callback GET] Logged WorkOrder 5f31a070-4c5e-41e8-9d75-7569efb8d4a8 for shop 69
+2026-04-16T12:55:47Z clientIP="162.212.202.163" requestID="9d39b4fe-4f5a-43ef" responseTimeMS=1349 responseBytes=308 userAgent=""
+2026-04-16T12:55:47.492836979Z [Protractor Callback] Processed work order 5f31a070-4c5e-41e8-9d75-7569efb8d4a8
+2026-04-16T12:55:54Z clientIP="96.60.184.149" requestID="66aaa789-2883-498b" responseTimeMS=73 responseBytes=413 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:54Z clientIP="96.60.184.149" requestID="7875b683-a4fb-4d68" responseTimeMS=317 responseBytes=426 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-16T12:55:54.308342389Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-16T12:55:55Z clientIP="54.210.164.33" requestID="30c17387-17bc-457e" responseTimeMS=891 responseBytes=268 userAgent=""
+2026-04-16T12:55:56Z clientIP="74.220.48.7" requestID="d5f0ad52-514d-4639" responseTimeMS=759 responseBytes=374 userAgent="node"

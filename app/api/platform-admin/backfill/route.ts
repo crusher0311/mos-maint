@@ -7,14 +7,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
-
 async function requirePlatformAdmin() {
   const session = await getSession();
   if (!session) {
     return { error: "Unauthorized", status: 401 };
   }
-  if (!SUPER_ADMINS.includes(session.email)) {
+  if (!session.isPlatformAdmin) {
     return { error: "Platform admin access required", status: 403 };
   }
   return { session };

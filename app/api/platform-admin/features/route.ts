@@ -3,8 +3,6 @@ import { requirePlatformAdmin, getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
-const SUPER_ADMINS = ["brandoncrusha@gmail.com", "brandoncrusha+1@gmail.com"];
-
 export interface PlatformFeature {
   _id?: ObjectId;
   order: number;
@@ -148,7 +146,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await requirePlatformAdmin();
 
-    if (!SUPER_ADMINS.includes(session.email)) {
+    if (!session.isPlatformAdmin) {
       return NextResponse.json({ error: "Only super admins can delete features" }, { status: 403 });
     }
 
