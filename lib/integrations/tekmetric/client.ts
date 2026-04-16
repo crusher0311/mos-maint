@@ -27,66 +27,86 @@ export function resetTekmetricApiCallCount(): number {
   return count;
 }
 
+const MAX_429_RETRIES = 5;
+const MAX_BACKOFF_MS = 60_000;
+
+function compute429Backoff(attempt: number, retryAfterHeader: string | null): number {
+  if (retryAfterHeader) {
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return Math.min(seconds * 1000 + Math.random() * 1000, MAX_BACKOFF_MS);
+    }
+  }
+  const exponential = Math.pow(2, attempt) * 1000;
+  const jitter = Math.random() * 1000;
+  return Math.min(exponential + jitter, MAX_BACKOFF_MS);
+}
+
 export async function tekmetricRequest<T = any>(
   endpoint: string, 
   options: RequestInit = {}, 
   shopId?: number, 
-  isRetry = false
+  authRetry = false
 ): Promise<T> {
-  const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
-  if (!rateSlot.acquired) {
-    throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
-  }
-  tekmetricApiCallCounter++;
-
-  const token = await getValidToken();
   const method = options.method || 'GET';
-  const startTime = Date.now();
-  
-  let statusCode = 0;
-  try {
-    const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
-      ...options,
-      cache: 'no-store',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
 
-    statusCode = response.status;
-    const latencyMs = Date.now() - startTime;
-    
-    trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
-
-    if (response.status === 401 && !isRetry) {
-      console.log('[Tekmetric] Received 401, refreshing token and retrying...');
-      clearCachedToken();
-      await refreshToken();
-      return tekmetricRequest<T>(endpoint, options, shopId, true);
+  for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
+    const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
+    if (!rateSlot.acquired) {
+      throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
+    tekmetricApiCallCounter++;
 
-    if (response.status === 429 && !isRetry) {
-      const backoffMs = Math.min(5000 + Math.random() * 2000, 10000);
-      console.warn(`[Tekmetric] 429 rate limited on ${endpoint}, backing off ${Math.round(backoffMs)}ms`);
-      await new Promise(r => setTimeout(r, backoffMs));
-      return tekmetricRequest<T>(endpoint, options, shopId, true);
-    }
+    const token = await getValidToken();
+    const startTime = Date.now();
+    let statusCode = 0;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
-    }
+    try {
+      const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
+        ...options,
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
 
-    return response.json();
-  } catch (err: any) {
-    if (!statusCode) {
+      statusCode = response.status;
       const latencyMs = Date.now() - startTime;
-      trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId).catch(() => {});
+      trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
+
+      if (response.status === 401 && !authRetry) {
+        console.log('[Tekmetric] Received 401, refreshing token and retrying...');
+        clearCachedToken();
+        await refreshToken();
+        return tekmetricRequest<T>(endpoint, options, shopId, true);
+      }
+
+      if (response.status === 429 && attempt <= MAX_429_RETRIES) {
+        const retryAfter = response.headers.get('Retry-After');
+        const backoffMs = compute429Backoff(attempt, retryAfter);
+        console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+      }
+
+      return response.json();
+    } catch (err: any) {
+      if (!statusCode) {
+        const latencyMs = Date.now() - startTime;
+        trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId).catch(() => {});
+      }
+      throw err;
     }
-    throw err;
   }
+
+  throw new Error(`Tekmetric API error 429: exceeded ${MAX_429_RETRIES} retries on ${endpoint}`);
 }
 
 export async function getShop(shopId: number): Promise<TekmetricShop> {
@@ -203,59 +223,54 @@ export async function getRepairOrderInspectionsWithXAuth(
     return [];
   }
   
-  try {
-    const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
-    if (!rateSlot.acquired) {
-      console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
-      return [];
-    }
-    tekmetricApiCallCounter++;
+  const url = `${TEKMETRIC_INTERNAL_BASE_URL}/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
+  const endpointPath = `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
 
-    const url = `${TEKMETRIC_INTERNAL_BASE_URL}/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
-    const startTime = Date.now();
-    
-    const response = await fetch(url, {
-      cache: 'no-store',
-      headers: {
-        'x-auth-token': xAuthToken,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const latencyMs = Date.now() - startTime;
-    trackApiRequest('tekmetric', `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
-
-    if (response.status === 429) {
-      const backoffMs = Math.min(5000 + Math.random() * 2000, 10000);
-      console.warn(`[Tekmetric] 429 rate limited on inspection fetch for RO ${repairOrderId}, backing off ${Math.round(backoffMs)}ms`);
-      await new Promise(r => setTimeout(r, backoffMs));
+  for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
+    try {
+      const rateSlot = await acquireRateLimitSlot('tekmetric', 10);
+      if (!rateSlot.acquired) {
+        console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
+        return [];
+      }
       tekmetricApiCallCounter++;
-      const retryResponse = await fetch(url, {
+
+      const startTime = Date.now();
+      const response = await fetch(url, {
         cache: 'no-store',
         headers: {
           'x-auth-token': xAuthToken,
           'Content-Type': 'application/json',
         },
       });
-      if (!retryResponse.ok) {
-        console.warn(`[Tekmetric] Inspection fetch retry after 429 failed for RO ${repairOrderId}: ${retryResponse.status}`);
+
+      const latencyMs = Date.now() - startTime;
+      trackApiRequest('tekmetric', endpointPath, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
+
+      if (response.status === 429 && attempt <= MAX_429_RETRIES) {
+        const retryAfter = response.headers.get('Retry-After');
+        const backoffMs = compute429Backoff(attempt, retryAfter);
+        console.warn(`[Tekmetric] 429 on inspection fetch RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        if (response.status !== 401 && response.status !== 403) {
+          console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
+        }
         return [];
       }
-      return retryResponse.json();
-    }
 
-    if (!response.ok) {
-      if (response.status !== 401 && response.status !== 403) {
-        console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
-      }
+      return response.json();
+    } catch (err: any) {
+      console.warn(`[Tekmetric] Inspection fetch error for RO ${repairOrderId}: ${err.message}`);
       return [];
     }
-
-    return response.json();
-  } catch (err: any) {
-    console.warn(`[Tekmetric] Inspection fetch error for RO ${repairOrderId}: ${err.message}`);
-    return [];
   }
+
+  console.warn(`[Tekmetric] Inspection fetch RO ${repairOrderId} exceeded ${MAX_429_RETRIES} retries`);
+  return [];
 }
 
 export function mapInspectionRatingToStatus(code: string): 'good' | 'bad' | 'marginal' | 'not_inspected' {

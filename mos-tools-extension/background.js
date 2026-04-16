@@ -1199,6 +1199,35 @@ async function handleMosApiRequest(endpoint, options = {}, _retried = false) {
 }
 
 // ==================== TEKMETRIC API FUNCTIONS ====================
+const TEK_MAX_429_RETRIES = 5;
+const TEK_MAX_BACKOFF_MS = 60000;
+
+function compute429BackoffMs(attempt, retryAfterHeader) {
+  if (retryAfterHeader) {
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds) && seconds > 0) {
+      return Math.min(seconds * 1000 + Math.random() * 1000, TEK_MAX_BACKOFF_MS);
+    }
+  }
+  const exponential = Math.pow(2, attempt) * 1000;
+  const jitter = Math.random() * 1000;
+  return Math.min(exponential + jitter, TEK_MAX_BACKOFF_MS);
+}
+
+async function tekmetricFetchWithBackoff(url, init, label) {
+  for (let attempt = 1; attempt <= TEK_MAX_429_RETRIES + 1; attempt++) {
+    const response = await fetch(url, init);
+    if (response.status !== 429 || attempt > TEK_MAX_429_RETRIES) {
+      return response;
+    }
+    const retryAfter = response.headers.get('Retry-After');
+    const backoffMs = compute429BackoffMs(attempt, retryAfter);
+    console.warn(`[Tekmetric] 429 on ${label || url} (attempt ${attempt}/${TEK_MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+    await new Promise(r => setTimeout(r, backoffMs));
+  }
+  throw new Error(`Tekmetric exceeded ${TEK_MAX_429_RETRIES} retries on ${label || url}`);
+}
+
 async function handleTekmetricApiRequest(endpoint, options = {}) {
   if (!smsTokens.tekmetric) {
     throw new Error("No Tekmetric session. Please navigate to a repair order first.");
@@ -1206,14 +1235,14 @@ async function handleTekmetricApiRequest(endpoint, options = {}) {
 
   const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   
-  const response = await fetch(`${baseUrl}${endpoint}`, {
+  const response = await tekmetricFetchWithBackoff(`${baseUrl}${endpoint}`, {
     ...options,
     headers: {
       'x-auth-token': smsTokens.tekmetric,
       'Content-Type': 'application/json',
       ...options.headers
     }
-  });
+  }, endpoint);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -1863,7 +1892,7 @@ async function prefillDviInspection(context, inspId, tabId) {
     putBody.finding = update.finding || task.finding || null;
 
     try {
-      const res = await fetch(
+      const res = await tekmetricFetchWithBackoff(
         `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
         {
           method: "PUT",
@@ -1872,7 +1901,8 @@ async function prefillDviInspection(context, inspId, tabId) {
             "content-type": "application/json",
           },
           body: JSON.stringify(putBody),
-        }
+        },
+        `prefill-dvi PUT task ${task.id}`
       );
 
       if (res.ok) {
@@ -2077,13 +2107,14 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
     putBody[findingField] = item.enhanced;
 
     try {
-      const res = await fetch(
+      const res = await tekmetricFetchWithBackoff(
         `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${itemInspId}/tasks/${task.id}`,
         {
           method: "PUT",
           headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
           body: JSON.stringify(putBody),
-        }
+        },
+        `enhance-notes PUT task ${task.id}`
       );
       if (res.ok) { applied++; } else { failed++; }
     } catch { failed++; }
