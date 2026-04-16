@@ -280,6 +280,8 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     labor_rates: shopFeatures.labor_rates ?? enterpriseFeatures.labor_rates ?? planFeatures.labor_rates,
     concern_assistant: shopFeatures.concern_assistant ?? enterpriseFeatures.concern_assistant ?? planFeatures.concern_assistant,
     estimate_assist: shopFeatures.estimate_assist ?? enterpriseFeatures.estimate_assist ?? planFeatures.estimate_assist,
+    dvi_prefill: shopFeatures.dvi_prefill ?? enterpriseFeatures.dvi_prefill ?? planFeatures.dvi_prefill,
+    enhance_notes: shopFeatures.enhance_notes ?? enterpriseFeatures.enhance_notes ?? planFeatures.enhance_notes,
   };
   
   const billing: ShopBilling = {
