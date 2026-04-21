@@ -6,14 +6,15 @@ import {
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
+import { getPaceConfig, describePace } from "@/lib/integrations/backfill-pace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const CHUNK_DAYS = 90;
-const MAX_CHUNKS_PER_RUN = 4;
+const STALE_LOCK_MS = 3 * 60 * 1000; // shrunk from 10min so a crashed run unblocks fast
+const YEARS_TO_BACKFILL = 5;
 
 function isAuthorized(req: NextRequest): boolean {
   if (!CRON_SECRET) return true;
@@ -277,9 +278,12 @@ export async function GET(req: NextRequest) {
     const { tenantId, swShopId } = shop.shopware;
     const mosShopId = Number(shop.shopId);
 
+    const shopDoc = await db.collection("shops").findOne({ shopId: { $in: [mosShopId, String(mosShopId)] as any } });
+    const pace = getPaceConfig("shopware", shopDoc?.timezone, new Date());
+
     let progress = await db.collection("shopware_backfill_progress").findOne({ shopId: mosShopId });
 
-    if (progress?.completed) {
+    if (progress?.completed && progress?.logicVersion === 2) {
       console.log(`[SW Backfill] Shop ${mosShopId} already completed, skipping`);
       allResults.push({ shopId: mosShopId, status: "already_completed" });
       continue;
@@ -289,22 +293,32 @@ export async function GET(req: NextRequest) {
       const lastActiveAt = progress.lastChunkAt || progress.startedAt;
       if (lastActiveAt) {
         const progressAge = Date.now() - new Date(lastActiveAt).getTime();
-        if (progressAge < 10 * 60 * 1000) {
-          console.log(`[SW Backfill] Shop ${mosShopId} already in progress, skipping`);
+        if (progressAge < STALE_LOCK_MS) {
+          console.log(`[SW Backfill] Shop ${mosShopId} already in progress (${Math.round(progressAge/1000)}s ago), skipping`);
           allResults.push({ shopId: mosShopId, status: "in_progress" });
           continue;
         }
       }
     }
 
-    const fiveYearsAgo = new Date();
-    fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+    const oldestDate = new Date();
+    oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+    oldestDate.setHours(0, 0, 0, 0);
 
-    const currentCursor = progress?.currentCursor
-      ? new Date(progress.currentCursor)
-      : fiveYearsAgo;
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
 
-    const now = new Date();
+    // REVERSE CHRONOLOGICAL: cursor = chunkEnd, walking backwards.
+    // currentCursor here represents the END of the next chunk to process.
+    // Fresh start (or upgrading from old forward-walking logic v1) -> begin at today.
+    const isFreshOrUpgrading = !progress?.currentChunkEnd || progress?.logicVersion !== 2;
+    const chunkEndCursor: Date = isFreshOrUpgrading
+      ? today
+      : new Date(progress.currentChunkEnd);
+
+    if (isFreshOrUpgrading) {
+      console.log(`[SW Backfill] Shop ${mosShopId}: starting fresh in REVERSE mode (was logicVersion=${progress?.logicVersion ?? "none"})`);
+    }
 
     await db.collection("shopware_backfill_progress").updateOne(
       { shopId: mosShopId },
@@ -314,16 +328,18 @@ export async function GET(req: NextRequest) {
           inProgress: true,
           startedAt: progress?.startedAt || new Date(),
           lastChunkAt: new Date(),
+          logicVersion: 2,
+          ...(isFreshOrUpgrading ? { currentChunkEnd: chunkEndCursor, completed: false } : {}),
         },
       },
       { upsert: true }
     );
 
     console.log(
-      `[SW Backfill] Shop ${mosShopId} (tenant ${tenantId}): starting from ${currentCursor.toISOString()}`
+      `[SW Backfill] Shop ${mosShopId} (tenant ${tenantId}): reverse from ${chunkEndCursor.toISOString().split("T")[0]} ${describePace(pace)}`
     );
 
-    let cursor = new Date(currentCursor);
+    let cursor = new Date(chunkEndCursor);
     let totalRos = 0;
     let totalJobs = 0;
     let totalVehicles = 0;
@@ -331,15 +347,15 @@ export async function GET(req: NextRequest) {
     let chunksProcessed = 0;
     let chunkError: string | undefined;
 
-    for (let i = 0; i < MAX_CHUNKS_PER_RUN && cursor < now; i++) {
-      const chunkEnd = new Date(cursor.getTime() + CHUNK_DAYS * 24 * 60 * 60 * 1000);
-      const effectiveEnd = chunkEnd > now ? now : chunkEnd;
+    for (let i = 0; i < pace.maxChunksPerRun && cursor > oldestDate; i++) {
+      const chunkStart = new Date(cursor.getTime() - pace.chunkDays * 24 * 60 * 60 * 1000);
+      const effectiveStart = chunkStart < oldestDate ? oldestDate : chunkStart;
 
       console.log(
-        `[SW Backfill] Shop ${mosShopId}: chunk ${i + 1} — ${cursor.toISOString()} to ${effectiveEnd.toISOString()}`
+        `[SW Backfill] Shop ${mosShopId}: chunk ${i + 1} — ${effectiveStart.toISOString().split("T")[0]} to ${cursor.toISOString().split("T")[0]}`
       );
 
-      const result = await backfillShopChunk(mosShopId, tenantId, swShopId, cursor, effectiveEnd);
+      const result = await backfillShopChunk(mosShopId, tenantId, swShopId, effectiveStart, cursor);
 
       totalRos += result.rosStored;
       totalJobs += result.jobsIndexed;
@@ -349,7 +365,8 @@ export async function GET(req: NextRequest) {
 
       if (result.error) {
         chunkError = result.error;
-        console.error(`[SW Backfill] Shop ${mosShopId} chunk error: ${result.error}`);
+        console.error(`[SW Backfill] Shop ${mosShopId} chunk error (HOLDING cursor): ${result.error}`);
+        // Do NOT advance cursor on error — next run will retry the same chunk.
         break;
       }
 
@@ -357,14 +374,17 @@ export async function GET(req: NextRequest) {
         `[SW Backfill] Shop ${mosShopId}: chunk done — ${result.rosFetched} ROs, ${result.jobsIndexed} jobs, ${result.vehiclesStored} vehicles, ${result.customersStored} customers`
       );
 
-      cursor = effectiveEnd;
+      cursor = effectiveStart;
 
       await db.collection("shopware_backfill_progress").updateOne(
         { shopId: mosShopId },
         {
           $set: {
+            currentChunkEnd: cursor,
             currentCursor: cursor.toISOString(),
             lastChunkAt: new Date(),
+            lastError: null,
+            lastErrorAt: null,
           },
           $inc: {
             totalRosProcessed: result.rosStored,
@@ -376,7 +396,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const isComplete = cursor >= now && !chunkError;
+    const isComplete = cursor <= oldestDate && !chunkError;
 
     await db.collection("shopware_backfill_progress").updateOne(
       { shopId: mosShopId },
@@ -385,8 +405,10 @@ export async function GET(req: NextRequest) {
           inProgress: false,
           completed: isComplete,
           completedAt: isComplete ? new Date() : undefined,
+          currentChunkEnd: cursor,
           currentCursor: cursor.toISOString(),
           lastChunkAt: new Date(),
+          ...(chunkError ? { lastError: chunkError, lastErrorAt: new Date() } : {}),
         },
       }
     );
@@ -394,7 +416,7 @@ export async function GET(req: NextRequest) {
     if (isComplete) {
       const finalProgress = await db.collection("shopware_backfill_progress").findOne({ shopId: mosShopId });
       await db.collection("shops").updateOne(
-        { shopId: { $in: [mosShopId, String(mosShopId)] } },
+        { shopId: { $in: [mosShopId, String(mosShopId)] as any } },
         {
           $set: {
             backfill: {
@@ -418,6 +440,7 @@ export async function GET(req: NextRequest) {
       totalCustomers,
       error: chunkError,
       cursor: cursor.toISOString(),
+      pace: { isOffHours: pace.isOffHours, chunkDays: pace.chunkDays, maxChunksPerRun: pace.maxChunksPerRun },
     });
   }
 

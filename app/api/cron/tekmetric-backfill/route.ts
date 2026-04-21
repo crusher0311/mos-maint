@@ -5,13 +5,13 @@ import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
+import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 1;
 const YEARS_TO_BACKFILL = 5;
 
@@ -183,9 +183,12 @@ async function backfillShopChunk(
     );
   }
 
+  // Pace config — off-hours boosts concurrency + chunk size
+  const pace = getPaceConfig("tekmetric", shop?.timezone, new Date());
+
   // Calculate chunk start (going backwards)
   const chunkStart = new Date(chunkEnd);
-  chunkStart.setMonth(chunkStart.getMonth() - MONTHS_PER_RUN);
+  chunkStart.setDate(chunkStart.getDate() - pace.chunkDays);
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
@@ -202,19 +205,21 @@ async function backfillShopChunk(
   const startStr = chunkStart.toISOString();
   const endStr = chunkEnd.toISOString();
 
-  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]} (reverse chronological)`);
+  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]} (reverse) ${describePace(pace)}`);
 
   let jobsIndexed = 0;
   let skippedUnchanged = 0;
   let page = 0;
   let totalPages = 1;
+  let chunkHadError = false;
+  let hitPageCap = false;
   const seenROIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
-  const limit = pLimit(2);
+  const limit = pLimit(pace.concurrency);
   const rosForNormalized: any[] = [];
 
-  while (page < totalPages && page < 50) {
+  while (page < totalPages && page < pace.maxPagesPerChunk) {
     const queryParams = new URLSearchParams({
       shop: tekmetricShopId.toString(),
       page: page.toString(),
@@ -231,10 +236,14 @@ async function backfillShopChunk(
 
     if (!rosResult.ok || !rosResult.data) {
       console.error(`[Tekmetric Backfill] Shop ${shopId} page ${page} error:`, rosResult.error);
+      chunkHadError = true;
       break;
     }
 
     totalPages = rosResult.data.totalPages;
+    if (totalPages > pace.maxPagesPerChunk && page + 1 >= pace.maxPagesPerChunk) {
+      hitPageCap = true;
+    }
     const ros = rosResult.data.content || [];
 
     console.log(`[Tekmetric Backfill] Shop ${shopId} page ${page + 1}/${totalPages}: ${ros.length} ROs`);
@@ -294,6 +303,7 @@ async function backfillShopChunk(
 
       if (!jobsResult.ok) {
         console.warn(`[Tekmetric Backfill] Failed to fetch jobs for RO ${ro.id}: ${jobsResult.error}`);
+        chunkHadError = true;
         return { indexed: 0, skipped: 0, roData: null };
       }
 
@@ -440,9 +450,25 @@ async function backfillShopChunk(
     console.error(`[Tekmetric Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
-  // Move cursor backwards for next run
-  const nextChunkEnd = chunkStart;
-  const isComplete = nextChunkEnd <= oldestDate;
+  // Decide cursor advancement strategy:
+  //  - On error: do NOT advance; next run retries the same window.
+  //  - On hitting the page cap: only advance halfway, leaving the older half for the next run.
+  //  - Otherwise: advance fully to the chunk start.
+  let nextChunkEnd: Date;
+  let advanceMode: string;
+  if (chunkHadError) {
+    nextChunkEnd = chunkEnd;
+    advanceMode = "HOLD (error in chunk)";
+  } else if (hitPageCap) {
+    nextChunkEnd = midpoint(chunkStart, chunkEnd);
+    advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split("T")[0]})`;
+  } else {
+    nextChunkEnd = chunkStart;
+    advanceMode = "FULL";
+  }
+  const isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate;
+
+  console.log(`[Tekmetric Backfill] Shop ${shopId}: cursor advance ${advanceMode}`);
 
   await db.collection("tekmetric_backfill_progress").updateOne(
     { shopId },
@@ -452,6 +478,9 @@ async function backfillShopChunk(
         lastRunAt: new Date(),
         completed: isComplete,
         ...(isComplete ? { completedAt: new Date() } : {}),
+        ...(chunkHadError
+          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
+          : { lastError: null, lastErrorAt: null }),
       },
       $inc: { totalJobsIndexed: jobsIndexed }
     }

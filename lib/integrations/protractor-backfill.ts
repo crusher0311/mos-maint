@@ -7,26 +7,28 @@ import {
 } from "@/lib/integrations/protractor";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/normalized-ingestion";
+import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import pLimit from "p-limit";
 
 const YEARS_TO_BACKFILL = 5;
-const MAX_CHUNKS_PER_RUN = 100;
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 
 async function fetchInvoicesForDateRange(
   shopId: number,
   startDate: string,
-  endDate: string
-): Promise<any[]> {
+  endDate: string,
+  maxPages: number = 50
+): Promise<{ invoices: any[]; hitPageCap: boolean; hadError: boolean }> {
   const config = await resolveProtractorConfig(shopId);
-  if (!config.configured) return [];
+  if (!config.configured) return { invoices: [], hitPageCap: false, hadError: false };
 
   const allInvoices: any[] = [];
   const pageSize = 100;
   let skip = 0;
   const seenIds = new Set<string>();
-  const maxPages = 50;
   let pageCount = 0;
+  let hadError = false;
+  let lastPageWasFull = false;
 
   while (pageCount < maxPages) {
     const params = new URLSearchParams();
@@ -42,6 +44,7 @@ async function fetchInvoicesForDateRange(
 
     if (!result.ok) {
       console.error(`[Backfill] Shop ${shopId} Invoice error at skip=${skip}:`, result.error);
+      hadError = true;
       break;
     }
 
@@ -56,15 +59,17 @@ async function fetchInvoicesForDateRange(
       }
     }
 
+    lastPageWasFull = pageItems.length >= pageSize;
     if (newItems === 0 || pageItems.length === 0) break;
-    if (pageItems.length < pageSize) break;
+    if (!lastPageWasFull) break;
 
     skip += pageSize;
     pageCount++;
     await new Promise(r => setTimeout(r, 30));
   }
 
-  return allInvoices;
+  const hitPageCap = pageCount >= maxPages && lastPageWasFull;
+  return { invoices: allInvoices, hitPageCap, hadError };
 }
 
 async function getOrFetchVehicle(
@@ -128,7 +133,7 @@ async function getOrFetchVehicle(
 async function backfillShopChunk(
   db: any, 
   shopId: number,
-  rateLimiter: ReturnType<typeof pLimit>
+  _rateLimiter: ReturnType<typeof pLimit>
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -137,6 +142,8 @@ async function backfillShopChunk(
   
   const shop = await db.collection("shops").findOne({ shopId });
   const enterpriseId = shop?.enterpriseId;
+  const pace = getPaceConfig("protractor", shop?.timezone, new Date());
+  const rateLimiter = pLimit(pace.concurrency);
   
   const ingestionService = createIngestionService(
     db,
@@ -184,17 +191,21 @@ async function backfillShopChunk(
     );
   }
 
-  let daysToProcess = 60;
+  let daysToProcess = pace.chunkDays;
   const lastCount = progress?.lastInvoiceCount;
   if (lastCount) {
-    if (lastCount > 1500) {
-      daysToProcess = 21;
-    } else if (lastCount > 800) {
-      daysToProcess = 30;
-    } else if (lastCount > 400) {
-      daysToProcess = 45;
-    } else if (lastCount < 150) {
-      daysToProcess = 120;
+    const dense = pace.isOffHours ? 3500 : 1500;
+    const heavy = pace.isOffHours ? 1800 : 800;
+    const medium = pace.isOffHours ? 900 : 400;
+    const light = pace.isOffHours ? 300 : 150;
+    if (lastCount > dense) {
+      daysToProcess = Math.max(21, Math.floor(pace.chunkDays / 3));
+    } else if (lastCount > heavy) {
+      daysToProcess = Math.max(30, Math.floor(pace.chunkDays / 2));
+    } else if (lastCount > medium) {
+      daysToProcess = Math.max(45, Math.floor(pace.chunkDays * 0.75));
+    } else if (lastCount < light) {
+      daysToProcess = Math.min(180, Math.floor(pace.chunkDays * 1.5));
     }
   }
   
@@ -225,12 +236,16 @@ async function backfillShopChunk(
   let skippedUnchanged = 0;
   let vehiclesFetched = 0;
 
-  const invoices = await fetchInvoicesForDateRange(shopId, startStr, endStr);
-  console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices`);
+  const fetchResult = await fetchInvoicesForDateRange(shopId, startStr, endStr, pace.maxPagesPerChunk);
+  const invoices = fetchResult.invoices;
+  let chunkHadError = fetchResult.hadError;
+  const hitPageCap = fetchResult.hitPageCap;
+  console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices ${describePace(pace)} ${hitPageCap ? "[HIT PAGE CAP]" : ""}${chunkHadError ? " [HAD ERROR]" : ""}`);
 
   if (invoices.length === 0) {
-    const nextChunkEnd = chunkStart;
-    const isComplete = nextChunkEnd <= oldestDate;
+    // Empty chunk: if it was empty due to error, hold cursor; else advance.
+    const nextChunkEnd = chunkHadError ? chunkEnd : chunkStart;
+    const isComplete = !chunkHadError && nextChunkEnd <= oldestDate;
     await db.collection("backfill_progress").updateOne(
       { shopId },
       {
@@ -240,6 +255,9 @@ async function backfillShopChunk(
           lastInvoiceCount: 0,
           completed: isComplete,
           ...(isComplete ? { completedAt: new Date() } : {}),
+          ...(chunkHadError
+            ? { lastError: "empty chunk after error", lastErrorAt: new Date() }
+            : { lastError: null, lastErrorAt: null }),
         }
       }
     );
@@ -249,19 +267,23 @@ async function backfillShopChunk(
         { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
       );
     }
-    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices`, vehiclesFetched: 0, normalizedCount: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices${chunkHadError ? " (HOLD)" : ""}`, vehiclesFetched: 0, normalizedCount: 0 };
   }
 
   const allJobEntries: any[] = [];
   const serviceItemIds = new Set<string>();
   const invoicesForNormalized: any[] = [];
+  let invoiceDetailErrors = 0;
 
   await Promise.all(
     invoices.map((inv: any) =>
       rateLimiter(async () => {
         try {
           const detailResult = await fetchInvoiceById(shopId, inv.ID);
-          if (!detailResult.ok || !detailResult.invoice) return;
+          if (!detailResult.ok || !detailResult.invoice) {
+            invoiceDetailErrors++;
+            return;
+          }
 
           const fullInv = detailResult.invoice as any;
           invoicesForNormalized.push(fullInv);
@@ -278,10 +300,16 @@ async function backfillShopChunk(
             allJobEntries.push(...jobEntries);
           }
         } catch (err) {
+          invoiceDetailErrors++;
         }
       })
     )
   );
+
+  if (invoiceDetailErrors > 0) {
+    chunkHadError = true;
+    console.warn(`[Backfill] Shop ${shopId}: ${invoiceDetailErrors}/${invoices.length} invoice-detail fetches failed; will hold cursor`);
+  }
 
   console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch`);
 
@@ -378,10 +406,21 @@ async function backfillShopChunk(
     console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
-  const nextChunkEnd = chunkStart;
-  const isComplete = nextChunkEnd <= oldestDate;
+  let nextChunkEnd: Date;
+  let advanceMode: string;
+  if (chunkHadError) {
+    nextChunkEnd = chunkEnd;
+    advanceMode = "HOLD (error in chunk)";
+  } else if (hitPageCap) {
+    nextChunkEnd = midpoint(chunkStart, chunkEnd);
+    advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split('T')[0]})`;
+  } else {
+    nextChunkEnd = chunkStart;
+    advanceMode = "FULL";
+  }
+  const isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate;
 
-  console.log(`[Backfill] Shop ${shopId}: Advancing currentChunkEnd from ${chunkEnd.toISOString().split('T')[0]} to ${nextChunkEnd.toISOString().split('T')[0]}`);
+  console.log(`[Backfill] Shop ${shopId}: ${advanceMode} — currentChunkEnd ${chunkEnd.toISOString().split('T')[0]} -> ${nextChunkEnd.toISOString().split('T')[0]}`);
 
   await db.collection("backfill_progress").updateOne(
     { shopId },
@@ -392,6 +431,9 @@ async function backfillShopChunk(
         lastInvoiceCount: invoices.length,
         completed: isComplete,
         ...(isComplete ? { completedAt: new Date() } : {}),
+        ...(chunkHadError
+          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
+          : { lastError: null, lastErrorAt: null }),
       },
       $inc: { totalJobsIndexed: jobsIndexed }
     }
@@ -453,8 +495,13 @@ export async function runProtractorBackfill(shopId: number): Promise<{
 
   console.log(`[Backfill] Starting inline backfill for shop ${shopId}`);
 
+  const shopDoc = await db.collection("shops").findOne({ shopId });
+  const shopTz = (shopDoc as any)?.timezone || "America/Chicago";
+  const runPace = getPaceConfig("protractor", shopTz);
+  const maxChunksPerRun = runPace.maxChunksPerRun;
+
   try {
-    while (chunksProcessed < MAX_CHUNKS_PER_RUN) {
+    while (chunksProcessed < maxChunksPerRun) {
       if (Date.now() - startTime > MAX_WALL_CLOCK_MS) {
         console.log(`[Backfill] Shop ${shopId}: Wall clock limit reached after ${chunksProcessed} chunks`);
         break;
