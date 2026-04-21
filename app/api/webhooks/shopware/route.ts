@@ -48,6 +48,12 @@ function extractShopwareJobIndex(
   const vin = ro.vehicle?.vin?.toUpperCase() ?? null;
   const entries = [];
 
+  const roMileage =
+    (typeof (ro as any).odometer_out === "number" && (ro as any).odometer_out > 0 ? (ro as any).odometer_out : null) ??
+    (typeof (ro as any).odometer === "number" && (ro as any).odometer > 0 ? (ro as any).odometer : null) ??
+    (typeof (ro as any).odometer_in === "number" && (ro as any).odometer_in > 0 ? (ro as any).odometer_in : null) ??
+    null;
+
   for (const service of ro.services ?? []) {
     const laborHours = (service.labors ?? []).reduce((s, l) => s + l.hours, 0);
     const partsAmount = (service.parts ?? []).reduce(
@@ -82,6 +88,7 @@ function extractShopwareJobIndex(
       partsAmount,
       totalAmount,
       completedAt: ro.closed_at ? new Date(ro.closed_at) : undefined,
+      mileage: roMileage,
       indexedAt: new Date(),
     });
   }

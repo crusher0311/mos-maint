@@ -330,6 +330,17 @@ async function backfillShopChunk(
         const laborAmountDollars = (job.laborTotal || 0) / 100;
         const partsAmountDollars = (job.partsTotal || 0) / 100;
 
+        const roMileage =
+          (typeof ro.milesOut === "number" && ro.milesOut > 0 ? ro.milesOut : null) ??
+          (typeof ro.milesIn === "number" && ro.milesIn > 0 ? ro.milesIn : null) ??
+          (vehicle && typeof (vehicle as any).mileageOut === "number" && (vehicle as any).mileageOut > 0
+            ? (vehicle as any).mileageOut
+            : null) ??
+          (vehicle && typeof (vehicle as any).mileageIn === "number" && (vehicle as any).mileageIn > 0
+            ? (vehicle as any).mileageIn
+            : null) ??
+          null;
+
         const entry = {
           shopId,
           sourceSystem: "tekmetric",
@@ -338,12 +349,14 @@ async function backfillShopChunk(
           servicePackageId: String(job.id),
           jobName: job.name,
           closedAt: ro.postedDate || ro.completedDate || ro.updatedDate,
+          mileage: roMileage,
           vehicle: vehicle ? {
             vin: vehicle.vin,
             year: vehicle.year,
             make: vehicle.make,
             model: vehicle.model,
             engine: vehicle.engine,
+            mileage: roMileage,
           } : null,
           customer: customer ? {
             name: `${customer.firstName || ""} ${customer.lastName || ""}`.trim(),

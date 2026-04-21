@@ -39,6 +39,7 @@ export type TekmetricJobIndexEntry = {
   workOrderNumber: number;
   servicePackageId: string;
   performedAt: Date;
+  mileage?: number | null; // Odometer at time of service
   
   vehicle: {
     vin?: string;
@@ -46,6 +47,7 @@ export type TekmetricJobIndexEntry = {
     make?: string;
     model?: string;
     engine?: string;
+    mileage?: number | null;
   };
   
   job: {
@@ -102,7 +104,8 @@ export async function indexTekmetricWorkOrderJobs(
   workOrderId: number,
   workOrderNumber: number,
   vehicle: { vin?: string; year?: number; make?: string; model?: string; engine?: string },
-  completedDate: string
+  completedDate: string,
+  mileage?: number | null
 ): Promise<number> {
   const db = await getDb();
   const jobIndexCollection = db.collection("job_index");
@@ -203,7 +206,8 @@ export async function indexTekmetricWorkOrderJobs(
         workOrderNumber,
         servicePackageId: String(job.id),
         performedAt: new Date(completedDate || new Date()),
-        vehicle,
+        mileage: mileage ?? null,
+        vehicle: { ...vehicle, mileage: mileage ?? null },
         job: {
           title: job.name,
           keywords: extractKeywords(job.name)

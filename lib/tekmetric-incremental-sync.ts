@@ -350,6 +350,8 @@ async function upsertWorkOrder(
   const hasNewInspections = Array.isArray(inspections) && inspections.length > 0;
   const inspectionsToStore = hasNewInspections ? inspections! : (existing?.inspections || []);
 
+  const odometer = ro.milesOut || ro.milesIn || vehicle.mileageOut || vehicle.mileageIn || null;
+
   await db.collection("tekmetric_work_orders").updateOne(
     { 
       shopId: { $in: [String(shopId), Number(shopId)] },
@@ -372,7 +374,7 @@ async function upsertWorkOrder(
         vehicleMake: vehicle.make,
         vehicleModel: vehicle.model,
         vehicleEngine: vehicle.engine,
-        odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
+        odometer,
         createdDate: ro.createdDate,
         updatedDate: ro.updatedDate,
         completedDate: ro.completedDate,
@@ -388,6 +390,42 @@ async function upsertWorkOrder(
     },
     { upsert: true }
   );
+
+  // If this RO is terminal (Posted/Invoiced/Completed) and we haven't already
+  // indexed its jobs into job_index, do it now. job_index is the authoritative
+  // shop-history table that plan-build queries — without this, incremental sync
+  // would leave a gap between "WO doc cached" and "job history available".
+  const upperStatus = String(statusCode || "").toUpperCase();
+  const isTerminal = ["POSTED", "INVOICED", "INVOICE", "COMPLETED", "CLOSED"].includes(upperStatus);
+  if (isTerminal && !existing?.jobsIndexed) {
+    try {
+      const { indexTekmetricWorkOrderJobs } = await import("@/lib/tekmetric-job-index");
+      const jobsIndexed = await indexTekmetricWorkOrderJobs(
+        shopId,
+        tekmetricShopId,
+        ro.id,
+        ro.repairOrderNumber,
+        {
+          vin,
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
+          engine: vehicle.engine,
+        },
+        ro.completedDate || ro.postedDate || ro.updatedDate || new Date().toISOString(),
+        odometer
+      );
+      if (jobsIndexed > 0) {
+        await db.collection("tekmetric_work_orders").updateOne(
+          { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: String(ro.id) },
+          { $set: { jobsIndexed: true } }
+        );
+        console.log(`[Tekmetric Incremental] Indexed ${jobsIndexed} jobs into job_index for RO #${ro.repairOrderNumber}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Tekmetric Incremental] job_index population failed for RO #${ro.repairOrderNumber}: ${err.message}`);
+    }
+  }
 }
 
 async function sweepTerminalStatuses(

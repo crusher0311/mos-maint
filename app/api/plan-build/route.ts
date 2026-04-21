@@ -804,16 +804,76 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+    // Track which (workOrderId, servicePackageId) combos came from full WO docs
+    // so the job_index fallback below doesn't double-count them.
+    const seenFromWoDocs = new Set<string>();
+
     for (const wo of tekmetricWOs) {
-      const isCompleted = !!wo.completedDate;
+      // Treat status as "closed" if completedDate is present OR statusCode is terminal.
+      // Older/backfilled WO docs may have completedDate=null/undefined even though
+      // they're truly invoiced — so we also accept a terminal statusCode.
+      const statusCode = String(wo.statusCode || wo.data?.repairOrderStatus?.code || "").toUpperCase();
+      const terminalStatus = ["POSTED", "INVOICED", "INVOICE", "COMPLETED", "CLOSED"].includes(statusCode);
+      const isCompleted = !!wo.completedDate || terminalStatus;
       const wMileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn ?? null;
-      const date = wo.completedDate ? new Date(wo.completedDate) : null;
+      const date = wo.completedDate
+        ? new Date(wo.completedDate)
+        : (wo.updatedDate ? new Date(wo.updatedDate) : null);
       const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
         if (!isCompleted && !job.authorized) continue;
         const serviceName = job.name ?? job.description ?? "";
         if (serviceName) shopServiceHistory.push({ serviceName, mileage: wMileage, date });
+        if (job.id != null) {
+          seenFromWoDocs.add(`${wo.workOrderId}:${job.id}`);
+        }
       }
+    }
+
+    // ---- job_index fallback ----
+    // tekmetric_work_orders is often sparse (full WO docs missing or lacking
+    // jobs[]) for shops with backfill but limited live sync. job_index is the
+    // authoritative shop-history table written by every backfill / cron / webhook.
+    // Pull it as a defensive secondary source so plan-build never misses real
+    // service history just because the WO doc didn't get jobs persisted.
+    try {
+      const jobIndexEntries = await db.collection("job_index").find({
+        shopId: { $in: [Number(shopId), String(shopId)] },
+        $or: [
+          { "vehicle.vin": vinUpper },
+          { vin: vinUpper },
+        ],
+      }).limit(500).toArray();
+
+      for (const ji of jobIndexEntries) {
+        const woId = String(ji.workOrderId ?? "");
+        const svcId = String(ji.servicePackageId ?? "");
+        const dedupKey = `${woId}:${svcId}`;
+        if (seenFromWoDocs.has(dedupKey)) continue;
+
+        const serviceName = ji.jobName || ji.job?.title || ji.title || "";
+        if (!serviceName) continue;
+
+        const dateRaw = ji.closedAt || ji.performedAt || ji.completedAt || ji.indexedAt || null;
+        const date = dateRaw ? new Date(dateRaw) : null;
+        if (date && isNaN(date.getTime())) continue;
+
+        const mileage =
+          (typeof ji.mileage === "number" ? ji.mileage : null) ??
+          (typeof ji.odometer === "number" ? ji.odometer : null) ??
+          (typeof ji.vehicle?.mileage === "number" ? ji.vehicle.mileage : null) ??
+          null;
+
+        shopServiceHistory.push({ serviceName, mileage, date });
+      }
+
+      if (jobIndexEntries.length > 0) {
+        console.log(
+          `[PlanBuild] Shop ${shopId} VIN ${vinUpper}: pulled ${jobIndexEntries.length} job_index entries as shop-history fallback`
+        );
+      }
+    } catch (jiErr: any) {
+      console.warn(`[PlanBuild] job_index fallback failed for ${vinUpper}: ${jiErr.message}`);
     }
 
     const unmatchedJobNames: string[] = [];

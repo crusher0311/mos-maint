@@ -25,6 +25,11 @@ function isAuthorized(req: NextRequest): boolean {
 
 function extractJobEntries(mosShopId: number, ro: ShopWareRepairOrder, tenantId: number) {
   const vin = ro.vehicle?.vin?.toUpperCase() ?? null;
+  const roMileage =
+    (typeof (ro as any).odometer_out === "number" && (ro as any).odometer_out > 0 ? (ro as any).odometer_out : null) ??
+    (typeof (ro as any).odometer === "number" && (ro as any).odometer > 0 ? (ro as any).odometer : null) ??
+    (typeof (ro as any).odometer_in === "number" && (ro as any).odometer_in > 0 ? (ro as any).odometer_in : null) ??
+    null;
   return (ro.services ?? []).map((service) => {
     const laborHours = (service.labors ?? []).reduce((s, l) => s + l.hours, 0);
     const partsAmount = (service.parts ?? []).reduce(
@@ -58,6 +63,7 @@ function extractJobEntries(mosShopId: number, ro: ShopWareRepairOrder, tenantId:
       partsAmount,
       totalAmount: laborAmount + partsAmount + subletsAmount,
       completedAt: ro.closed_at ? new Date(ro.closed_at) : undefined,
+      mileage: roMileage,
       indexedAt: new Date(),
     };
   });

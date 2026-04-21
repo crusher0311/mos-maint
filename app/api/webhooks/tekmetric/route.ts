@@ -118,7 +118,8 @@ export async function POST(req: NextRequest) {
                   model: cached.vehicleModel,
                   engine: cached.vehicleEngine
                 },
-                new Date().toISOString()
+                new Date().toISOString(),
+                cached.odometer ?? cached.data?.milesOut ?? cached.data?.milesIn ?? null
               );
               
               console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber}`);

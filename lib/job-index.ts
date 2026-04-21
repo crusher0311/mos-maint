@@ -25,6 +25,7 @@ export type JobIndexEntry = {
   servicePackageId: string;
   performedAt: Date;
   isDeferred?: boolean; // True if this was deferred/declined work (not completed)
+  mileage?: number | null; // Odometer reading at time of service (top-level for fast access)
   
   vehicle: {
     vin?: string;
@@ -33,6 +34,7 @@ export type JobIndexEntry = {
     model?: string;
     engine?: string;
     serviceItemId?: string;
+    mileage?: number | null;
   };
   
   job: {
@@ -230,6 +232,21 @@ export function extractJobIndexFromWorkOrder(
     
     if (lines.length === 0) continue;
     
+    // Capture odometer at time of service. Field names vary by source system:
+    //   Protractor: OutUsage / InUsage / Odometer (top-level on workOrder)
+    //   Tekmetric (when adapted into this shape): milesOut / milesIn
+    //   Generic: odometer / mileage on the vehicle sub-doc
+    const woMileage =
+      (typeof workOrder.OutUsage === "number" && workOrder.OutUsage > 0 ? workOrder.OutUsage : null) ??
+      (typeof workOrder.InUsage === "number" && workOrder.InUsage > 0 ? workOrder.InUsage : null) ??
+      (typeof workOrder.Odometer === "number" && workOrder.Odometer > 0 ? workOrder.Odometer : null) ??
+      (typeof workOrder.milesOut === "number" && workOrder.milesOut > 0 ? workOrder.milesOut : null) ??
+      (typeof workOrder.milesIn === "number" && workOrder.milesIn > 0 ? workOrder.milesIn : null) ??
+      (typeof workOrder.odometer === "number" && workOrder.odometer > 0 ? workOrder.odometer : null) ??
+      (typeof vehicle.Mileage === "number" && vehicle.Mileage > 0 ? vehicle.Mileage : null) ??
+      (typeof vehicle.mileage === "number" && vehicle.mileage > 0 ? vehicle.mileage : null) ??
+      null;
+
     entries.push({
       shopId,
       workOrderId: workOrder.ID || workOrder.id,
@@ -237,6 +254,7 @@ export function extractJobIndexFromWorkOrder(
       servicePackageId: pkg.ID || pkg.id,
       performedAt: new Date(performedAt),
       isDeferred, // Track if this was deferred/declined work
+      mileage: woMileage,
       
       vehicle: {
         vin: vehicle.VIN || vehicle.vin,
@@ -245,6 +263,7 @@ export function extractJobIndexFromWorkOrder(
         model: vehicle.Model || vehicle.model,
         engine: vehicle.Engine || vehicle.engine,
         serviceItemId: vehicle.ID || vehicle.id,
+        mileage: woMileage,
       },
       
       job: {
