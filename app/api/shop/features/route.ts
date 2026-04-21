@@ -3,7 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
+import { getFeatureEntitlements, FEATURE_KEYS, FEATURE_METADATA } from "@/lib/featureResolver";
 import { FEATURES } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -16,24 +16,23 @@ export async function GET() {
 
   const shopId = Number(session.shopId);
   const entitlements = await getFeatureEntitlements(shopId);
-  
+
   const enabledFeatureIds: string[] = [];
-  const featureKeys: FeatureKey[] = ["maintenance", "job_lookup", "common_failures", "oil_sticker", "keytags", "auto_booking", "part_xref", "labor_rates", "concern_assistant"];
-  
-  for (const key of featureKeys) {
+  for (const key of FEATURE_KEYS) {
     if (entitlements.effectiveFeatures[key]) {
       enabledFeatureIds.push(key);
     }
   }
-  
-  const enabledFeatures = FEATURES.filter(f => 
-    enabledFeatureIds.includes(f.id)
-  ).map(f => ({
-    id: f.id,
-    name: f.name,
-    description: f.description,
-    icon: f.icon,
-  }));
+
+  const featuresById = new Map(FEATURES.map(f => [f.id as string, f]));
+  const enabledFeatures = enabledFeatureIds.map(id => {
+    const f = featuresById.get(id);
+    if (f) {
+      return { id: f.id, name: f.name, description: f.description, icon: f.icon };
+    }
+    const meta = FEATURE_METADATA[id as keyof typeof FEATURE_METADATA];
+    return { id, name: meta.name, description: meta.description, icon: "Sparkles" };
+  });
 
   return NextResponse.json({
     ok: true,

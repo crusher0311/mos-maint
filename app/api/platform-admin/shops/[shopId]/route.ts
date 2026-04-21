@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { 
-  updateShopFeatures, 
+import {
+  updateShopFeatures,
   updateShopBilling,
-  type FeatureSettings,
+  pickValidFeatures,
   type BillingPlan,
   type BillingStatus
 } from "@/lib/featureResolver";
@@ -126,15 +126,8 @@ export async function PATCH(
     }
 
     if (features) {
-      const featureUpdate: Partial<FeatureSettings> = {};
-      const validFeatures = ["maintenance", "job_lookup", "common_failures", "oil_sticker", "keytags", "auto_booking", "part_xref", "labor_rates", "concern_assistant", "dvi_prefill", "enhance_notes"];
-      
-      for (const key of validFeatures) {
-        if (features[key] !== undefined) {
-          featureUpdate[key as keyof FeatureSettings] = features[key];
-        }
-      }
-      
+      const featureUpdate = pickValidFeatures(features);
+
       await updateShopFeatures(shopId as number, featureUpdate);
       
       await db.collection("audit_logs").insertOne({

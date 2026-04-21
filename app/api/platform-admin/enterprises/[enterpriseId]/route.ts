@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
-import { 
+import {
   updateEnterpriseFeatures,
-  type FeatureSettings
+  pickValidFeatures,
 } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
@@ -139,15 +139,8 @@ export async function PATCH(
     }
 
     if (features) {
-      const featureUpdate: Partial<FeatureSettings> = {};
-      const validFeatures = ["maintenance", "job_lookup", "common_failures", "oil_sticker", "keytags", "auto_booking", "part_xref"];
-      
-      for (const key of validFeatures) {
-        if (features[key] !== undefined) {
-          featureUpdate[key as keyof FeatureSettings] = features[key];
-        }
-      }
-      
+      const featureUpdate = pickValidFeatures(features);
+
       await updateEnterpriseFeatures(enterpriseId, featureUpdate);
       
       await db.collection("audit_logs").insertOne({
