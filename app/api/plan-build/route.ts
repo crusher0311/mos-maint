@@ -837,19 +837,30 @@ export async function POST(req: NextRequest) {
     // Pull it as a defensive secondary source so plan-build never misses real
     // service history just because the WO doc didn't get jobs persisted.
     try {
+      // Sort newest-first so when limit truncates we keep the most recent
+      // service history (oldest entries are far less useful for "last service"
+      // signals). Without explicit sort, Mongo natural order is non-deterministic.
       const jobIndexEntries = await db.collection("job_index").find({
         shopId: { $in: [Number(shopId), String(shopId)] },
         $or: [
           { "vehicle.vin": vinUpper },
           { vin: vinUpper },
         ],
-      }).limit(500).toArray();
+      })
+        .sort({ closedAt: -1, performedAt: -1, completedAt: -1, indexedAt: -1 })
+        .limit(500)
+        .toArray();
+
+      // Track ALL appended (workOrderId, servicePackageId) keys — including
+      // those added by this fallback — to prevent duplicates from cross-source
+      // collisions in job_index itself, not just WO-loop overlaps.
+      const seenAppendedKeys = new Set<string>(seenFromWoDocs);
 
       for (const ji of jobIndexEntries) {
         const woId = String(ji.workOrderId ?? "");
         const svcId = String(ji.servicePackageId ?? "");
         const dedupKey = `${woId}:${svcId}`;
-        if (seenFromWoDocs.has(dedupKey)) continue;
+        if (woId && svcId && seenAppendedKeys.has(dedupKey)) continue;
 
         const serviceName = ji.jobName || ji.job?.title || ji.title || "";
         if (!serviceName) continue;
@@ -865,6 +876,7 @@ export async function POST(req: NextRequest) {
           null;
 
         shopServiceHistory.push({ serviceName, mileage, date });
+        if (woId && svcId) seenAppendedKeys.add(dedupKey);
       }
 
       if (jobIndexEntries.length > 0) {

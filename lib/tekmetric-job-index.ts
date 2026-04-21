@@ -304,6 +304,11 @@ export async function runTekmetricHistoryBackfill(
         
         rosProcessed++;
         
+        const roMileage =
+          (typeof ro.milesOut === "number" ? ro.milesOut : null) ??
+          (typeof ro.milesIn === "number" ? ro.milesIn : null) ??
+          null;
+
         const indexed = await indexTekmetricWorkOrderJobs(
           shopId,
           tekmetricShopId,
@@ -316,7 +321,8 @@ export async function runTekmetricHistoryBackfill(
             model: vehicle.model,
             engine: vehicle.engine
           },
-          ro.completedDate || ro.updatedDate || ro.createdDate || new Date().toISOString()
+          ro.completedDate || ro.updatedDate || ro.createdDate || new Date().toISOString(),
+          roMileage
         );
         
         jobsIndexed += indexed;
