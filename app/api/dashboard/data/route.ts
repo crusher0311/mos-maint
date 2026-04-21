@@ -1,6 +1,6 @@
 // app/api/dashboard/data/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
@@ -105,30 +105,14 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(100, Math.max(10, parseInt(searchParams.get('pageSize') || '50', 10)));
     const search = searchParams.get('search')?.toLowerCase() || '';
     const showArchived = searchParams.get('archived') === 'true';
-    // Session check
-    const store = await cookies();
-    const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-    if (!sid) {
+    // Session check (shared helper: honors dev auto-login, e2e test auth, and the canonical session_token cookie)
+    const session = await getSession();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const db = await getDb();
-    const sessions = db.collection("sessions");
-    const users = db.collection("users");
-    const now = new Date();
-
-    const sess = await sessions.findOne({ token: sid, expiresAt: { $gt: now } });
-    if (!sess) {
-      return NextResponse.json({ error: "Session expired" }, { status: 401 });
-    }
-
-    const user = await users.findOne(
-      { _id: sess.userId },
-      { projection: { email: 1, role: 1, shopId: 1 } }
-    );
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const user = { shopId: session.shopId, email: session.email, role: session.role };
 
     // Check shop SMS configuration to skip unnecessary queries
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });

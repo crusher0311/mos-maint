@@ -38,33 +38,39 @@ export async function getSession(): Promise<SessionInfo | null> {
   // ✅ Next.js 15: await cookies()
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
-  
-  // Dev auto-login: skip auth in development mode
-  if (!token && process.env.NODE_ENV === "development" && process.env.DEV_AUTO_LOGIN === "true") {
-    const devShopId = Number(process.env.DEV_SHOP_ID || "1");
-    const devEmail = process.env.DEV_USER_EMAIL || "dev@example.com";
-    return {
-      token: "dev-auto-login",
-      shopId: devShopId,
-      email: devEmail,
-      role: "owner",
-    };
+
+  const devAutoLoginEnabled =
+    process.env.NODE_ENV === "development" && process.env.DEV_AUTO_LOGIN === "true";
+  const devSession: SessionInfo = {
+    token: "dev-auto-login",
+    shopId: Number(process.env.DEV_SHOP_ID || "1"),
+    email: process.env.DEV_USER_EMAIL || "dev@example.com",
+    role: "owner",
+    isPlatformAdmin: process.env.DEV_PLATFORM_ADMIN === "true",
+  };
+
+  if (!token) {
+    return devAutoLoginEnabled ? devSession : null;
   }
-  
-  if (!token) return null;
 
   const db = await getDb();
   const sess = await db.collection("sessions").findOne({
     token,
     expiresAt: { $gt: new Date() },
   });
-  if (!sess) return null;
+  if (!sess) {
+    // Stale cookie (session wiped, expired, or container restart). In dev, fall back to auto-login
+    // so engineers don't have to manually clear cookies after every Mongo reset.
+    return devAutoLoginEnabled ? devSession : null;
+  }
 
   const user = await db.collection("users").findOne(
     { _id: sess.userId },
     { projection: { email: 1, role: 1, isPlatformAdmin: 1 } }
   );
-  if (!user) return null;
+  if (!user) {
+    return devAutoLoginEnabled ? devSession : null;
+  }
 
   return {
     token,
