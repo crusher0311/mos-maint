@@ -147,122 +147,146 @@ export async function POST(req: NextRequest) {
         
         console.log(`[Tekmetric Webhook] Updated ${result.modifiedCount} cache entries for RO #${roNumber} to ${statusName || "Posted"}`);
       } else {
-        // Check if this work order already exists
+        // Always upsert the work order row from whatever the webhook payload contains, so that
+        // a missing vehicle/customer never leaves us with no row at all. Vehicle/customer
+        // enrichment runs after the upsert and patches in whatever it can fetch.
         const existingWO = await db.collection("tekmetric_work_orders").findOne({
           workOrderId: String(roId)
         });
-        
-        if (existingWO) {
-          const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
-          const DVI_LABEL_RE = /\binsp|dvi\b|\bmulti.?point|\bcourtesy.check|\bcomplimentary.check/i;
-          const dviFromLabel = newLabel && DVI_LABEL_RE.test(newLabel);
 
-          const updateFields: any = { 
-            status: statusName,
-            statusCode: statusCode,
-            label: newLabel,
-            labelColor: repairOrder.color || null,
-            updatedAt: new Date(),
-            ...(dviFromLabel && !existingWO.dviDone ? { dviDone: true } : {}),
-          };
-          const newOdometer = repairOrder.milesIn || repairOrder.milesOut;
-          if (newOdometer && newOdometer > 0) {
-            updateFields.odometer = newOdometer;
-          }
-          if (repairOrder.customerName || (repairOrder.customer?.firstName && repairOrder.customer?.lastName)) {
-            updateFields.customerName = repairOrder.customerName || 
-              `${repairOrder.customer.firstName} ${repairOrder.customer.lastName}`.trim();
-          }
-          const result = await db.collection("tekmetric_work_orders").updateOne(
-            { workOrderId: String(roId) },
-            { $set: updateFields }
-          );
-          console.log(`[Tekmetric Webhook] Updated RO #${roNumber}: status=${statusName}, label=${newLabel}, odometer=${newOdometer || 'unchanged'}, matched=${result.matchedCount}, modified=${result.modifiedCount}`);
+        const shop = await db.collection("shops").findOne({
+          "tekmetric.shopId": tekmetricShopId
+        });
 
-          if (existingWO.vin && newOdometer && newOdometer > 0) {
-            const tekShop = await db.collection("shops").findOne(
-              { "tekmetric.shopId": tekmetricShopId },
-              { projection: { shopId: 1 } }
+        const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
+        const DVI_LABEL_RE = /\binsp|dvi\b|\bmulti.?point|\bcourtesy.check|\bcomplimentary.check/i;
+        const dviFromLabel = newLabel && DVI_LABEL_RE.test(newLabel);
+        const newOdometer = repairOrder.milesIn || repairOrder.milesOut;
+        const payloadCustomerName =
+          repairOrder.customerName ||
+          (repairOrder.customer?.firstName || repairOrder.customer?.lastName
+            ? `${repairOrder.customer.firstName || ''} ${repairOrder.customer.lastName || ''}`.trim()
+            : null);
+
+        const setFields: any = {
+          workOrderNumber: roNumber,
+          tekmetricShopId,
+          status: statusName,
+          statusCode,
+          label: newLabel,
+          labelColor: repairOrder.color || null,
+          updatedAt: new Date(),
+          fetchedAt: new Date(),
+        };
+        if (shop?.shopId != null) setFields.shopId = String(shop.shopId);
+        if (newOdometer && newOdometer > 0) setFields.odometer = newOdometer;
+        if (payloadCustomerName) setFields.customerName = payloadCustomerName;
+        if (repairOrder.customerId != null) setFields.customerId = repairOrder.customerId;
+        if (dviFromLabel && !existingWO?.dviDone) setFields.dviDone = true;
+
+        const setOnInsert: any = {
+          workOrderId: String(roId),
+          createdAt: new Date(),
+        };
+
+        const upsertResult = await db.collection("tekmetric_work_orders").updateOne(
+          { workOrderId: String(roId) },
+          { $set: setFields, $setOnInsert: setOnInsert },
+          { upsert: true }
+        );
+        const wasInsert = !!upsertResult.upsertedId;
+        console.log(
+          `[Tekmetric Webhook] Upserted RO #${roNumber}: ${wasInsert ? 'INSERT' : 'UPDATE'} status=${statusName}, label=${newLabel}, odometer=${newOdometer || 'unchanged'}, customer=${payloadCustomerName || 'unchanged'}, shop=${shop?.shopId || 'unknown'}`
+        );
+
+        // Enrich with vehicle + customer data if we're missing it. Fetches are independent and run
+        // in parallel; partial failures still preserve whatever data did come back.
+        const needsVehicle = !!repairOrder.vehicleId && !(existingWO?.vin);
+        const needsCustomer =
+          !!repairOrder.customerId &&
+          !(existingWO?.customerName && existingWO.customerName !== "Unknown Customer") &&
+          !payloadCustomerName;
+
+        if (shop && (needsVehicle || needsCustomer)) {
+          const [vehicleResult, customerResult] = await Promise.allSettled([
+            needsVehicle ? getVehicle(repairOrder.vehicleId) : Promise.resolve(null),
+            needsCustomer ? getCustomer(repairOrder.customerId) : Promise.resolve(null),
+          ]);
+
+          const enrichFields: any = {};
+          let enrichedVin: string | null = null;
+          let enrichedMileage: number | null = null;
+
+          if (vehicleResult.status === 'fulfilled' && vehicleResult.value) {
+            const vehicle: any = vehicleResult.value;
+            if (vehicle.vin) {
+              enrichedVin = String(vehicle.vin).toUpperCase();
+              enrichFields.vin = enrichedVin;
+            }
+            if (vehicle.year != null) enrichFields.vehicleYear = vehicle.year;
+            if (vehicle.make) enrichFields.vehicleMake = vehicle.make;
+            if (vehicle.model) enrichFields.vehicleModel = vehicle.model;
+            if (vehicle.engine) enrichFields.vehicleEngine = vehicle.engine;
+            const vehicleMileage = vehicle.mileageIn || vehicle.mileageOut;
+            if (!enrichFields.odometer && !setFields.odometer && vehicleMileage > 0) {
+              enrichFields.odometer = vehicleMileage;
+              enrichedMileage = vehicleMileage;
+            }
+          } else if (vehicleResult.status === 'rejected') {
+            console.error(`[Tekmetric Webhook] Vehicle enrichment failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, (vehicleResult.reason as any)?.message);
+          }
+
+          if (customerResult.status === 'fulfilled' && customerResult.value) {
+            const customer: any = customerResult.value;
+            const fullName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
+            if (fullName) enrichFields.customerName = fullName;
+          } else if (customerResult.status === 'rejected') {
+            console.error(`[Tekmetric Webhook] Customer enrichment failed for RO #${roNumber}, customerId=${repairOrder.customerId}:`, (customerResult.reason as any)?.message);
+          }
+
+          if (Object.keys(enrichFields).length > 0) {
+            enrichFields.updatedAt = new Date();
+            await db.collection("tekmetric_work_orders").updateOne(
+              { workOrderId: String(roId) },
+              { $set: enrichFields }
             );
-            if (tekShop) {
-              triggerVhiOnWorkOrderCreate(db, {
-                vin: existingWO.vin,
-                shopId: Number(tekShop.shopId),
-                provider: "tekmetric",
-                roNumber: String(roNumber),
-                mileage: newOdometer,
-                source: "webhook",
-              }).catch((err: any) =>
-                console.error(`[Tekmetric Webhook] VHI create-build on update failed for VIN ${existingWO.vin}:`, err.message)
-              );
-            }
+            console.log(`[Tekmetric Webhook] Enriched RO #${roNumber} with: ${Object.keys(enrichFields).filter(k => k !== 'updatedAt').join(', ')}`);
           }
-        } else {
-          // New work order - fetch vehicle and customer details, then create
-          const shop = await db.collection("shops").findOne({
-            "tekmetric.shopId": tekmetricShopId
-          });
-          
-          if (shop && repairOrder.vehicleId) {
-            try {
-              const vehicle = await getVehicle(repairOrder.vehicleId);
-              
-              if (vehicle?.vin) {
-                let customerName = "Unknown Customer";
-                try {
-                  const customer = await getCustomer(repairOrder.customerId);
-                  customerName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer";
-                } catch (e) {
-                  // Customer fetch failed, use default
-                }
-                
-                const mileage = repairOrder.milesIn || repairOrder.milesOut || vehicle.mileageIn || vehicle.mileageOut;
-                
-                await db.collection("tekmetric_work_orders").insertOne({
-                  workOrderId: String(roId),
-                  workOrderNumber: roNumber,
-                  shopId: String(shop.shopId),
-                  tekmetricShopId: tekmetricShopId,
-                  vin: vehicle.vin.toUpperCase(),
-                  vehicleYear: vehicle.year,
-                  vehicleMake: vehicle.make,
-                  vehicleModel: vehicle.model,
-                  vehicleEngine: vehicle.engine,
-                  customerName,
-                  customerId: repairOrder.customerId,
-                  odometer: mileage,
-                  status: statusName || "Estimate",
-                  statusCode: statusCode,
-                  label: repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null,
-                  labelColor: repairOrder.color || null,
-                  fetchedAt: new Date(),
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                });
-                
-                console.log(`[Tekmetric Webhook] Created new work order #${roNumber} for VIN ${vehicle.vin}`);
-                
-                if (mileage && mileage > 0) {
-                  triggerVhiOnWorkOrderCreate(db, {
-                    vin: vehicle.vin.toUpperCase(),
-                    shopId: Number(shop.shopId),
-                    provider: "tekmetric",
-                    roNumber: String(roNumber),
-                    mileage,
-                    source: "webhook",
-                  }).catch((err: any) =>
-                    console.error(`[Tekmetric Webhook] VHI create-build failed for VIN ${vehicle.vin}:`, err.message)
-                  );
-                }
-              } else {
-                console.log(`[Tekmetric Webhook] Skipped RO #${roNumber} - vehicle has no VIN`);
-              }
-            } catch (err: any) {
-              console.error(`[Tekmetric Webhook] Failed to fetch vehicle ${repairOrder.vehicleId}:`, err.message);
-            }
-          } else {
-            console.log(`[Tekmetric Webhook] Skipped RO #${roNumber} - shop not found or no vehicleId`);
+
+          // Trigger VHI build once we have vin + mileage (from payload, existing row, or enrichment)
+          const finalVin = enrichedVin || existingWO?.vin;
+          const finalMileage =
+            (newOdometer && newOdometer > 0 ? newOdometer : null) ||
+            enrichedMileage ||
+            (existingWO?.odometer || null);
+          if (finalVin && finalMileage && finalMileage > 0) {
+            triggerVhiOnWorkOrderCreate(db, {
+              vin: finalVin,
+              shopId: Number(shop.shopId),
+              provider: "tekmetric",
+              roNumber: String(roNumber),
+              mileage: finalMileage,
+              source: "webhook",
+            }).catch((err: any) =>
+              console.error(`[Tekmetric Webhook] VHI create-build failed for VIN ${finalVin}:`, err.message)
+            );
           }
+        } else if (existingWO?.vin && newOdometer && newOdometer > 0 && shop) {
+          // Existing row already has vehicle info; just trigger VHI on mileage update
+          triggerVhiOnWorkOrderCreate(db, {
+            vin: existingWO.vin,
+            shopId: Number(shop.shopId),
+            provider: "tekmetric",
+            roNumber: String(roNumber),
+            mileage: newOdometer,
+            source: "webhook",
+          }).catch((err: any) =>
+            console.error(`[Tekmetric Webhook] VHI create-build on update failed for VIN ${existingWO.vin}:`, err.message)
+          );
+        }
+
+        if (!shop) {
+          console.warn(`[Tekmetric Webhook] No MOS shop found for tekmetric.shopId=${tekmetricShopId}; row was upserted with shopId=unknown`);
         }
       }
       
