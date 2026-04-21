@@ -6,8 +6,12 @@ import {
   DesignerLayout,
   DEFAULT_LAYOUT,
   SAMPLE_DATA,
-  DYMO_30252,
 } from "@/lib/keytag-designer-types";
+import {
+  resolvePaperSize,
+  rescaleElements,
+  type PaperSizeConfig,
+} from "@/lib/keytag-paper-sizes";
 import { DesignerCanvas } from "./DesignerCanvas";
 import { ElementPanel } from "./ElementPanel";
 import { ToolbarPanel } from "./ToolbarPanel";
@@ -25,10 +29,30 @@ interface HistoryState {
   future: DesignerLayout[];
 }
 
+function normalizeLayout(input: DesignerLayout): DesignerLayout {
+  const resolved = resolvePaperSize(input.paperSize);
+  // Ensure canvasWidth/Height always match the resolved paper size so the
+  // designer surface and renderer can never drift out of sync (defensive
+  // hydration guard for legacy saved layouts).
+  if (
+    input.canvasWidth === resolved.designWidth &&
+    input.canvasHeight === resolved.designHeight &&
+    input.paperSize
+  ) {
+    return input;
+  }
+  return {
+    ...input,
+    paperSize: input.paperSize || { presetId: resolved.id },
+    canvasWidth: resolved.designWidth,
+    canvasHeight: resolved.designHeight,
+  };
+}
+
 export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesignerProps) {
   const [history, setHistory] = useState<HistoryState>({
     past: [],
-    present: initialLayout || DEFAULT_LAYOUT,
+    present: normalizeLayout(initialLayout || DEFAULT_LAYOUT),
     future: [],
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -57,6 +81,22 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
       el.id === id ? { ...el, ...updates } : el
     );
     pushHistory({ ...layout, elements: newElements });
+  }, [layout, pushHistory]);
+
+  const changePaperSize = useCallback((next: PaperSizeConfig) => {
+    const resolved = resolvePaperSize(next);
+    const oldW = layout.canvasWidth;
+    const oldH = layout.canvasHeight;
+    const newW = resolved.designWidth;
+    const newH = resolved.designHeight;
+    const elementsRescaled = rescaleElements(layout.elements, oldW, oldH, newW, newH);
+    pushHistory({
+      ...layout,
+      paperSize: next,
+      canvasWidth: newW,
+      canvasHeight: newH,
+      elements: elementsRescaled,
+    });
   }, [layout, pushHistory]);
 
   const undo = useCallback(() => {
@@ -250,13 +290,21 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
               onUpdateLayout={updateLayout}
               onUpdateElement={updateElement}
               onSelectElement={setSelectedId}
+              onChangePaperSize={changePaperSize}
             />
           )}
         </div>
       </div>
 
       <div className="p-2 text-center text-xs text-gray-500 border-t bg-white">
-        Canvas: {DYMO_30252.actualWidth}" × {DYMO_30252.actualHeight}" (Dymo 30252) | 
+        {(() => {
+          const r = resolvePaperSize(layout.paperSize);
+          return (
+            <>
+              Canvas: {r.widthIn.toFixed(3)}" × {r.heightIn.toFixed(3)}" ({r.label}) |{" "}
+            </>
+          );
+        })()}
         Click element to select, drag to move, drag corners to resize
       </div>
     </div>

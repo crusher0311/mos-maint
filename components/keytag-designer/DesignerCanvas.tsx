@@ -1,7 +1,15 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { DesignerElement, DesignerLayout, SAMPLE_DATA, DYMO_30252 } from "@/lib/keytag-designer-types";
+import { DesignerElement, DesignerLayout, SAMPLE_DATA } from "@/lib/keytag-designer-types";
+
+const MAX_CANVAS_PX = 720;
+const BASE_SCALE = 1.5;
+function getDisplayScale(canvasWidth: number, canvasHeight: number): number {
+  const longest = Math.max(canvasWidth, canvasHeight);
+  if (longest <= 0) return BASE_SCALE;
+  return Math.min(BASE_SCALE, MAX_CANVAS_PX / longest);
+}
 
 interface DesignerCanvasProps {
   layout: DesignerLayout;
@@ -204,13 +212,14 @@ export function DesignerCanvas({
     }
   }, [onSelectElement]);
 
+  const scale = getDisplayScale(layout.canvasWidth, layout.canvasHeight);
   return (
     <div
       ref={canvasRef}
       className="relative bg-white shadow-lg border border-gray-300"
       style={{
-        width: DYMO_30252.width * 1.5,
-        height: DYMO_30252.height * 1.5,
+        width: layout.canvasWidth * scale,
+        height: layout.canvasHeight * scale,
         backgroundColor: layout.backgroundColor,
       }}
       onMouseMove={handleMouseMove}
@@ -227,12 +236,12 @@ export function DesignerCanvas({
           <defs>
             <pattern
               id="grid"
-              width={layout.gridSize * 1.5}
-              height={layout.gridSize * 1.5}
+              width={layout.gridSize * scale}
+              height={layout.gridSize * scale}
               patternUnits="userSpaceOnUse"
             >
               <path
-                d={`M ${layout.gridSize * 1.5} 0 L 0 0 0 ${layout.gridSize * 1.5}`}
+                d={`M ${layout.gridSize * scale} 0 L 0 0 0 ${layout.gridSize * scale}`}
                 fill="none"
                 stroke="#e5e7eb"
                 strokeWidth="0.5"
@@ -249,8 +258,8 @@ export function DesignerCanvas({
           className="absolute bg-blue-500 pointer-events-none"
           style={
             guide.type === "vertical"
-              ? { left: guide.position * 1.5, top: 0, width: 1, height: "100%" }
-              : { top: guide.position * 1.5, left: 0, height: 1, width: "100%" }
+              ? { left: guide.position * scale, top: 0, width: 1, height: "100%" }
+              : { top: guide.position * scale, left: 0, height: 1, width: "100%" }
           }
         />
       ))}
@@ -271,11 +280,11 @@ export function DesignerCanvas({
               isSelected ? "ring-2 ring-blue-500 ring-offset-1" : "hover:ring-2 hover:ring-blue-300"
             }`}
             style={{
-              left: element.x * 1.5,
-              top: element.y * 1.5,
-              width: element.width * 1.5,
-              height: element.height * 1.5,
-              fontSize: element.fontSize * 1.5,
+              left: element.x * scale,
+              top: element.y * scale,
+              width: element.width * scale,
+              height: element.height * scale,
+              fontSize: element.fontSize * scale,
               textAlign: element.textAlign,
               color: layout.textColor,
               display: "flex",

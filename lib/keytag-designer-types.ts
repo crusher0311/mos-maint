@@ -21,6 +21,8 @@ export interface DesignerElement {
   vinLast8FontStyle?: 'normal' | 'italic';
 }
 
+import { resolvePaperSize, type PaperSizeConfig, DEFAULT_PAPER_SIZE_ID } from "./keytag-paper-sizes";
+
 export interface DesignerLayout {
   elements: DesignerElement[];
   canvasWidth: number;
@@ -29,16 +31,18 @@ export interface DesignerLayout {
   showGrid: boolean;
   backgroundColor: string;
   textColor: string;
+  paperSize?: PaperSizeConfig;
 }
 
+const _dymo = resolvePaperSize({ presetId: "dymo_30252" });
 export const DYMO_30252 = {
-  width: 350,
-  height: 112.5,
-  actualWidth: 3.5,
-  actualHeight: 1.125,
-  dpi: 300,
-  renderWidth: 1050,
-  renderHeight: 338,
+  width: _dymo.designWidth,
+  height: _dymo.designHeight,
+  actualWidth: _dymo.widthIn,
+  actualHeight: _dymo.heightIn,
+  dpi: _dymo.dpi,
+  renderWidth: _dymo.renderWidth,
+  renderHeight: _dymo.renderHeight,
 };
 
 export const DEFAULT_ELEMENTS: DesignerElement[] = [
@@ -127,6 +131,7 @@ export const DEFAULT_LAYOUT: DesignerLayout = {
   showGrid: true,
   backgroundColor: '#FFFFFF',
   textColor: '#000000',
+  paperSize: { presetId: DEFAULT_PAPER_SIZE_ID },
 };
 
 export const SAMPLE_DATA: Record<string, string> = {

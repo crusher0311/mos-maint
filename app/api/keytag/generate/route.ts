@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-designer-types";
+import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ interface KeytagConfig {
     text?: string;
     background?: string;
   };
-  defaultSize?: "dymo30252";
+  defaultSize?: string;
   designerLayout?: DesignerLayout;
 }
 
@@ -73,14 +74,16 @@ export async function POST(req: NextRequest) {
     const config: KeytagConfig = body.previewConfig || shop?.keytagConfig || {};
     const designerLayout = body.designerLayout || config.designerLayout;
 
+    const paper = resolvePaperSize(designerLayout?.paperSize);
+
     let imageBuffer: Buffer;
     if (designerLayout) {
-      console.log("[Keytag Generate] Using designer layout (canvas)");
+      console.log(`[Keytag Generate] Using designer layout (paper=${paper.id} ${paper.widthIn}"x${paper.heightIn}" @ ${paper.dpi}dpi)`);
       imageBuffer = await renderKeytagDesigner(
         {
           elements: designerLayout.elements,
-          canvasWidth: designerLayout.canvasWidth || DYMO_30252.width,
-          canvasHeight: designerLayout.canvasHeight || DYMO_30252.height,
+          canvasWidth: designerLayout.canvasWidth || paper.designWidth,
+          canvasHeight: designerLayout.canvasHeight || paper.designHeight,
           backgroundColor: designerLayout.backgroundColor || "#FFFFFF",
           textColor: designerLayout.textColor || "#000000",
         },
@@ -91,8 +94,8 @@ export async function POST(req: NextRequest) {
           roNumber: body.roNumber,
           mileage: body.mileage,
         },
-        DYMO_30252.renderWidth,
-        DYMO_30252.renderHeight,
+        paper.renderWidth,
+        paper.renderHeight,
         2
       );
     } else {
@@ -106,8 +109,8 @@ export async function POST(req: NextRequest) {
           roNumber: body.roNumber,
           mileage: body.mileage,
         },
-        DYMO_30252.renderWidth,
-        DYMO_30252.renderHeight,
+        paper.renderWidth,
+        paper.renderHeight,
         2
       );
     }
@@ -116,9 +119,10 @@ export async function POST(req: NextRequest) {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `inline; filename="keytag-${body.roNumber}.png"`,
-        'X-Keytag-Size': 'dymo30252',
-        'X-Keytag-Width': '3.45in',
-        'X-Keytag-Height': '1.11in',
+        'X-Keytag-Size': paper.id,
+        'X-Keytag-Width': `${paper.widthIn.toFixed(3)}in`,
+        'X-Keytag-Height': `${paper.heightIn.toFixed(3)}in`,
+        'X-Keytag-DPI': String(paper.dpi),
       },
     });
   } catch (error) {

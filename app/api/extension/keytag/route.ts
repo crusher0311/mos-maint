@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
-import { DesignerLayout, DYMO_30252 } from "@/lib/keytag-designer-types";
+import { DesignerLayout } from "@/lib/keytag-designer-types";
+import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ interface KeytagConfig {
     text?: string;
     background?: string;
   };
-  defaultSize?: "dymo30252";
+  defaultSize?: string;
   designerLayout?: DesignerLayout;
 }
 
@@ -150,14 +151,16 @@ export async function POST(req: NextRequest) {
       defaultSize: "dymo30252",
     };
 
+    const paper = resolvePaperSize(config.designerLayout?.paperSize);
+
     let imageBuffer: Buffer;
     if (config.designerLayout) {
-      console.log("[Extension Keytag] Using designer layout (canvas)");
+      console.log(`[Extension Keytag] Using designer layout (paper=${paper.id} ${paper.widthIn}"x${paper.heightIn}" @ ${paper.dpi}dpi)`);
       imageBuffer = await renderKeytagDesigner(
         {
           elements: config.designerLayout.elements,
-          canvasWidth: config.designerLayout.canvasWidth || DYMO_30252.width,
-          canvasHeight: config.designerLayout.canvasHeight || DYMO_30252.height,
+          canvasWidth: config.designerLayout.canvasWidth || paper.designWidth,
+          canvasHeight: config.designerLayout.canvasHeight || paper.designHeight,
           backgroundColor: config.designerLayout.backgroundColor || "#FFFFFF",
           textColor: config.designerLayout.textColor || "#000000",
         },
@@ -168,8 +171,8 @@ export async function POST(req: NextRequest) {
           roNumber: body.roNumber,
           mileage: body.mileage,
         },
-        DYMO_30252.renderWidth,
-        DYMO_30252.renderHeight,
+        paper.renderWidth,
+        paper.renderHeight,
         2
       );
     } else {
@@ -183,8 +186,8 @@ export async function POST(req: NextRequest) {
           roNumber: body.roNumber,
           mileage: body.mileage,
         },
-        DYMO_30252.renderWidth,
-        DYMO_30252.renderHeight,
+        paper.renderWidth,
+        paper.renderHeight,
         2
       );
     }
@@ -195,11 +198,12 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         image: `data:image/png;base64,${base64}`,
-        size: "dymo30252",
+        size: paper.id,
         dimensions: {
-          width: "3.45in",
-          height: "1.11in",
+          width: `${paper.widthIn.toFixed(3)}in`,
+          height: `${paper.heightIn.toFixed(3)}in`,
         },
+        dpi: paper.dpi,
         roNumber: body.roNumber,
       },
       { headers: corsHeaders }
