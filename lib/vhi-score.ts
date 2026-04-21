@@ -1,6 +1,8 @@
 import { Db } from "mongodb";
 import { type TriagedItemCache } from "@/lib/plan-cache";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
+import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
+import { getStatusIconSvg, type IconStatus } from "@/lib/vhi-icons";
 
 export function categoryMultiplier(category: string): number {
   const cat = (category || "").toLowerCase();
@@ -66,7 +68,56 @@ export function getScoreTier(score: number): { label: string; color: string } {
   return { label: "Critical", color: "red" };
 }
 
-export function formatVhiItem(item: TriagedItemCache) {
+export interface FormatVhiItemOptions {
+  /** Current odometer in the plan's distance unit. Required to emit `progress`. */
+  currentMiles?: number | null;
+  /** "Now" reference for time-axis math. Defaults to new Date(). */
+  today?: Date;
+  /**
+   * Bucket the item came from — used to pick the icon when it's better than
+   * the per-axis progress status (e.g. "deferred" items get the deferred
+   * icon, not derived from interval math).
+   */
+  bucket?: "overdue" | "dueSoon" | "upcoming" | "complimentary" | "deferred";
+  /**
+   * Set true to inline the status SVG on every item. Default false — the
+   * top-level `icons` map on the response is the cheaper, canonical source.
+   * Only enable when the consumer can't fetch the top-level map (e.g.
+   * row-by-row streaming).
+   */
+  includeIconSvg?: boolean;
+}
+
+function bucketToStatus(b?: FormatVhiItemOptions["bucket"]): IconStatus | null {
+  if (b === "overdue") return "overdue";
+  if (b === "dueSoon") return "soon";
+  if (b === "upcoming" || b === "complimentary") return "ok";
+  if (b === "deferred") return "deferred";
+  return null;
+}
+
+/**
+ * Item shape returned to API consumers. Status semantics:
+ *
+ *   - `progress.status` and `progress.{miles,time}.status` are derived purely
+ *     from interval math (overdue / soon / ok). Use these to render bars and
+ *     headlines.
+ *   - `iconStatus` is the *triage* status — it follows the bucket the system
+ *     placed the item in (overdue / soon / ok / deferred). It can disagree
+ *     with `progress.status` (for example, a deferred item still shows the
+ *     blue deferred icon even when its interval math reads "ok"). Use this
+ *     to pick the SVG from the top-level `icons` map.
+ */
+export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions = {}) {
+  const { currentMiles = null, today = new Date(), bucket, includeIconSvg = false } = opts;
+
+  let progress: IntervalProgress | null = null;
+  if (currentMiles != null || item.intervalMonths) {
+    progress = computeIntervalProgress(item, currentMiles, today);
+  }
+
+  const iconStatus: IconStatus | null = bucketToStatus(bucket) ?? progress?.status ?? null;
+
   return {
     key: item.key,
     serviceKey: item.serviceKey,
@@ -89,6 +140,9 @@ export function formatVhiItem(item: TriagedItemCache) {
     source: item.source ?? null,
     dviSource: item.dviSource ?? null,
     declined: !!item.declined,
+    progress,
+    iconStatus,
+    iconSvg: includeIconSvg ? getStatusIconSvg(iconStatus) : null,
   };
 }
 
@@ -163,10 +217,18 @@ export async function getVhiFromAnalysisCache(
       complimentary: separated.complimentary.length,
     },
     buckets: {
-      overdue: separated.overdue.map(formatVhiItem),
-      dueSoon: separated.dueSoon.map(formatVhiItem),
-      upcoming: separated.upcoming.map(formatVhiItem),
-      complimentary: separated.complimentary.map(formatVhiItem),
+      overdue: separated.overdue.map((it) =>
+        formatVhiItem(it, { currentMiles: doc.mileageAtAnalysis ?? null, bucket: "overdue" })
+      ),
+      dueSoon: separated.dueSoon.map((it) =>
+        formatVhiItem(it, { currentMiles: doc.mileageAtAnalysis ?? null, bucket: "dueSoon" })
+      ),
+      upcoming: separated.upcoming.map((it) =>
+        formatVhiItem(it, { currentMiles: doc.mileageAtAnalysis ?? null, bucket: "upcoming" })
+      ),
+      complimentary: separated.complimentary.map((it) =>
+        formatVhiItem(it, { currentMiles: doc.mileageAtAnalysis ?? null, bucket: "complimentary" })
+      ),
     },
     vehicle: {
       year: vehicleDoc?.year ?? null,

@@ -152,10 +152,18 @@ export async function rebuildVhi(
       complimentary: separated.complimentary.length,
     },
     buckets: {
-      overdue: separated.overdue.map(formatVhiItem),
-      dueSoon: separated.dueSoon.map(formatVhiItem),
-      upcoming: separated.upcoming.map(formatVhiItem),
-      complimentary: separated.complimentary.map(formatVhiItem),
+      overdue: separated.overdue.map((it) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+      ),
+      dueSoon: separated.dueSoon.map((it) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+      ),
+      upcoming: separated.upcoming.map((it) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+      ),
+      complimentary: separated.complimentary.map((it) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+      ),
     },
     cachedAt: cached.createdAt,
   };

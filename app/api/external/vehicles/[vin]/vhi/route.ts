@@ -3,6 +3,7 @@ import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
+import { getStatusIconSet } from "@/lib/vhi-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
@@ -112,11 +113,20 @@ export const GET = createExternalEndpoint(
           complimentary: separated.complimentary.length,
         },
         buckets: {
-          overdue: separated.overdue.map(formatVhiItem),
-          dueSoon: separated.dueSoon.map(formatVhiItem),
-          upcoming: separated.upcoming.map(formatVhiItem),
-          complimentary: separated.complimentary.map(formatVhiItem),
+          overdue: separated.overdue.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+          ),
+          dueSoon: separated.dueSoon.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+          ),
+          upcoming: separated.upcoming.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+          ),
+          complimentary: separated.complimentary.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+          ),
         },
+        icons: getStatusIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         cachedAt: cached.createdAt,
         source: "cached_plan",
@@ -132,6 +142,7 @@ export const GET = createExternalEndpoint(
         success: true,
         vin,
         ...analysisResult,
+        icons: getStatusIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
       });
@@ -227,6 +238,7 @@ export const GET = createExternalEndpoint(
       score: result.score,
       summary: result.summary,
       buckets: result.buckets,
+      icons: getStatusIconSet(),
       reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",

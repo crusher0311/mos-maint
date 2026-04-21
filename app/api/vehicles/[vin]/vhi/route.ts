@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
+import { getStatusIconSet } from "@/lib/vhi-icons";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 
 export const runtime = "nodejs";
@@ -65,11 +66,20 @@ export async function GET(
           complimentary: separated.complimentary.length,
         },
         buckets: {
-          overdue: separated.overdue.map(formatVhiItem),
-          dueSoon: separated.dueSoon.map(formatVhiItem),
-          upcoming: separated.upcoming.map(formatVhiItem),
-          complimentary: separated.complimentary.map(formatVhiItem),
+          overdue: separated.overdue.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+          ),
+          dueSoon: separated.dueSoon.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+          ),
+          upcoming: separated.upcoming.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+          ),
+          complimentary: separated.complimentary.map((it) =>
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+          ),
         },
+        icons: getStatusIconSet(),
         cachedAt: cached.createdAt,
         source: "cached_plan",
       });
@@ -84,6 +94,7 @@ export async function GET(
         success: true,
         vin,
         ...analysisResult,
+        icons: getStatusIconSet(),
         source: "analysis_cache",
       });
     }
@@ -141,11 +152,20 @@ export async function GET(
               complimentary: separated.complimentary.length,
             },
             buckets: {
-              overdue: separated.overdue.map(formatVhiItem),
-              dueSoon: separated.dueSoon.map(formatVhiItem),
-              upcoming: separated.upcoming.map(formatVhiItem),
-              complimentary: separated.complimentary.map(formatVhiItem),
+              overdue: separated.overdue.map((it) =>
+                formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+              ),
+              dueSoon: separated.dueSoon.map((it) =>
+                formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+              ),
+              upcoming: separated.upcoming.map((it) =>
+                formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+              ),
+              complimentary: separated.complimentary.map((it) =>
+                formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+              ),
             },
+            icons: getStatusIconSet(),
             cachedAt: cached.createdAt,
             source: "fresh_build",
           });
