@@ -3,6 +3,7 @@ import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/li
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
+import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ interface TaskMatch {
   displayName: string | null;
   status: "overdue" | "due_soon" | "upcoming" | "ok" | "unknown";
   recommendation: string | null;
+  /** Which interval axis triggered the status: "mileage", "time", "both", or null. */
+  overdueBy: "mileage" | "time" | "both" | null;
   intervalMiles: number | null;
   intervalMonths: number | null;
   lastPerformedMiles: number | null;
@@ -30,6 +33,7 @@ interface TaskMatch {
   dueAtMiles: number | null;
   dueAtDate: string | null;
   milesUntilDue: number | null;
+  progress: IntervalProgress | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -149,6 +153,7 @@ export async function POST(request: NextRequest) {
       displayName: serviceKey ? (SERVICE_KEY_DISPLAY_NAMES[serviceKey] || serviceKey) : null,
       status: "unknown",
       recommendation: null,
+      overdueBy: null,
       intervalMiles: null,
       intervalMonths: null,
       lastPerformedMiles: null,
@@ -156,6 +161,7 @@ export async function POST(request: NextRequest) {
       dueAtMiles: null,
       dueAtDate: null,
       milesUntilDue: null,
+      progress: null,
     };
 
     if (!serviceKey) return match;
@@ -175,16 +181,74 @@ export async function POST(request: NextRequest) {
       match.milesUntilDue = vhiItem.item.dueAtMiles - resolvedMileage;
     }
 
+    // Compute progress + figure out which axis is driving the status so the
+    // tech sees "overdue by mileage" / "by time" / "by both".
+    const progress = computeIntervalProgress(
+      {
+        intervalMiles: vhiItem.item.intervalMiles ?? null,
+        intervalMonths: vhiItem.item.intervalMonths ?? null,
+        last: vhiItem.item.last ?? (vhiItem.item.lastMiles || vhiItem.item.lastDate
+          ? { miles: vhiItem.item.lastMiles ?? null, date: vhiItem.item.lastDate ?? null }
+          : null),
+        dueAtMiles: vhiItem.item.dueAtMiles ?? null,
+        dueAtDate: vhiItem.item.dueAtDate ?? null,
+        milesToGo: vhiItem.item.milesToGo ?? null,
+      },
+      resolvedMileage || null
+    );
+    match.progress = progress;
+
+    const milesOver = progress.miles.status === "overdue";
+    const timeOver = progress.time.status === "overdue";
+    const milesSoon = progress.miles.status === "soon";
+    const timeSoon = progress.time.status === "soon";
+
     if (vhiItem.status === "overdue") {
-      const overBy = match.milesUntilDue ? Math.abs(match.milesUntilDue) : null;
-      match.recommendation = overBy
-        ? `OVERDUE by ${overBy.toLocaleString()} miles — recommend immediate service`
-        : `OVERDUE — recommend immediate service`;
+      // Pick axis label
+      let axis: "mileage" | "time" | "both" | null = null;
+      if (milesOver && timeOver) axis = "both";
+      else if (milesOver) axis = "mileage";
+      else if (timeOver) axis = "time";
+      match.overdueBy = axis;
+
+      const milesPart = progress.miles.headline; // e.g. "1,247 mi over"
+      const timePart = progress.time.headline; // e.g. "5 mos over"
+
+      if (axis === "both" && milesPart && timePart) {
+        match.recommendation = `OVERDUE by mileage AND time (${milesPart}, ${timePart}) — recommend immediate service`;
+      } else if (axis === "mileage" && milesPart) {
+        match.recommendation = `OVERDUE by mileage (${milesPart}) — recommend immediate service`;
+      } else if (axis === "time" && timePart) {
+        match.recommendation = `OVERDUE by time (${timePart}) — recommend immediate service`;
+      } else {
+        // Fallback when axis math couldn't be computed
+        const overBy = match.milesUntilDue ? Math.abs(match.milesUntilDue) : null;
+        match.recommendation = overBy
+          ? `OVERDUE by ${overBy.toLocaleString()} miles — recommend immediate service`
+          : `OVERDUE — recommend immediate service`;
+      }
     } else if (vhiItem.status === "due_soon") {
-      const remaining = match.milesUntilDue || null;
-      match.recommendation = remaining
-        ? `Due soon — ${remaining.toLocaleString()} miles remaining`
-        : `Due soon — recommend scheduling service`;
+      let axis: "mileage" | "time" | "both" | null = null;
+      if (milesSoon && timeSoon) axis = "both";
+      else if (milesSoon) axis = "mileage";
+      else if (timeSoon) axis = "time";
+      match.overdueBy = axis;
+
+      const milesPart = progress.miles.headline; // "1,247 mi left"
+      const timePart = progress.time.headline; // "28 days left"
+
+      if (axis === "both" && milesPart && timePart) {
+        match.recommendation = `Due soon by mileage AND time (${milesPart}, ${timePart})`;
+      } else if (axis === "mileage" && milesPart) {
+        match.recommendation = `Due soon by mileage (${milesPart})`;
+      } else if (axis === "time" && timePart) {
+        match.recommendation = `Due soon by time (${timePart})`;
+      } else {
+        const remaining = match.milesUntilDue || null;
+        match.recommendation = remaining
+          ? `Due soon — ${remaining.toLocaleString()} miles remaining`
+          : `Due soon — recommend scheduling service`;
+      }
     } else if (vhiItem.status === "upcoming") {
       const remaining = match.milesUntilDue || null;
       match.recommendation = remaining

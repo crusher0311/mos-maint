@@ -6,6 +6,7 @@ import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
+import { computeIntervalProgress } from "@/lib/vhi-progress";
 import { buildReportUrl } from "@/lib/report-share";
 
 const corsHeaders = {
@@ -1227,7 +1228,11 @@ export async function GET(request: NextRequest) {
         complimentary: [] as any[]
       };
       
-      const convertItem = (item: any) => {
+      const cachedCurrentMiles = mileage || cachedPlan.plan.currentMiles || 0;
+      // Synthetic DVI-only findings have no interval data; they get the
+      // overdue icon directly because they were flagged red on inspection.
+      const dviSyntheticProgress = computeIntervalProgress({}, null);
+      const convertItem = (item: any, bucket?: "overdue" | "dueSoon" | "upcoming" | "complimentary") => {
         let estimatedDueDate: string | null = null;
         const existingDueDate = item.daysToGo != null && item.daysToGo > 0
           ? new Date(Date.now() + item.daysToGo * 86400000).toISOString()
@@ -1235,6 +1240,7 @@ export async function GET(request: NextRequest) {
         const est = computeEstimatedDate(item.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, existingDueDate);
         let daysToGo = est.daysToGo;
         estimatedDueDate = est.estimatedDueDate;
+        const progress = computeIntervalProgress(item, cachedCurrentMiles || null);
         return {
         service: item.title || item.key,
         name: item.title || item.key,
@@ -1273,6 +1279,14 @@ export async function GET(request: NextRequest) {
         declined: item.declined || null,
         approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs, item.serviceKey),
         onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs, item.serviceKey),
+        progress,
+        // Match partner-API semantics: bucket/triage drives the icon, with
+        // progress.status as a fallback when caller didn't pass a bucket.
+        iconStatus:
+          bucket === "overdue" ? "overdue" :
+          bucket === "dueSoon" ? "soon" :
+          (bucket === "upcoming" || bucket === "complimentary") ? "ok" :
+          (progress.status ?? null),
       }};
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
@@ -1289,41 +1303,44 @@ export async function GET(request: NextRequest) {
         const DUE_SOON_THRESHOLD = 1000;
         for (const item of allItems) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-          const converted = convertItem(item);
           const dueAt = item.dueAtMiles;
           if (isComplimentaryItem(item)) {
-            plan.complimentary.push(converted);
+            plan.complimentary.push(convertItem(item, "complimentary"));
           } else if (dueAt != null && dueAt > 0) {
-            converted.milesToGo = dueAt - currentMiles;
+            const milesToGo = dueAt - currentMiles;
+            let targetBucket: "overdue" | "dueSoon" | "upcoming" =
+              currentMiles >= dueAt ? "overdue" :
+              (dueAt - currentMiles <= DUE_SOON_THRESHOLD) ? "dueSoon" :
+              "upcoming";
+            // Refresh milesToGo on the source object BEFORE convertItem so
+            // computeIntervalProgress sees the new mileage anchor and the
+            // resulting `progress` matches the recategorized bucket.
+            item.milesToGo = milesToGo;
+            const converted = convertItem(item, targetBucket);
+            converted.milesToGo = milesToGo;
             const recat = computeEstimatedDate(converted.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, item.dueAtDate);
             converted.daysToGo = recat.daysToGo;
             converted.estimatedDueDate = recat.estimatedDueDate;
-            if (currentMiles >= dueAt) {
-              plan.overdue.push(converted);
-            } else if (dueAt - currentMiles <= DUE_SOON_THRESHOLD) {
-              plan.dueSoon.push(converted);
-            } else {
-              plan.recommended.push(converted);
-            }
+            (targetBucket === "overdue" ? plan.overdue : targetBucket === "dueSoon" ? plan.dueSoon : plan.recommended).push(converted);
           } else {
-            plan.recommended.push(converted);
+            plan.recommended.push(convertItem(item, "upcoming"));
           }
         }
       } else {
         for (const item of (cachedPlan.plan.buckets.overdue || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
-          plan.overdue.push(convertItem(item));
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
+          plan.overdue.push(convertItem(item, "overdue"));
         }
         for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
-          plan.dueSoon.push(convertItem(item));
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
+          plan.dueSoon.push(convertItem(item, "dueSoon"));
         }
         for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
           if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
-          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item)); continue; }
-          plan.recommended.push(convertItem(item));
+          if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
+          plan.recommended.push(convertItem(item, "upcoming"));
         }
       }
       
@@ -1342,8 +1359,11 @@ export async function GET(request: NextRequest) {
           }
         }
         const usedDviKeys = new Set<string>();
+        // Iterate in reverse so in-place splice() doesn't skip the next
+        // item in the same bucket when a red DVI promotes one to overdue.
         for (const bucket of [plan.overdue, plan.dueSoon, plan.recommended]) {
-          for (const item of bucket) {
+          for (let idx = bucket.length - 1; idx >= 0; idx--) {
+            const item = bucket[idx];
             const itemKey = mapServiceToKey(item.name || item.service);
             if (itemKey && dviMap.has(itemKey)) {
               const dvi = dviMap.get(itemKey)!;
@@ -1351,8 +1371,15 @@ export async function GET(request: NextRequest) {
               item.dviSource = dvi.dviSource;
               usedDviKeys.add(itemKey);
               if (dvi.status === "red" && bucket !== plan.overdue) {
-                bucket.splice(bucket.indexOf(item), 1);
+                bucket.splice(idx, 1);
+                // Realign icon to new bucket so the side panel shows the
+                // overdue icon, matching partner-API triage semantics.
+                item.iconStatus = "overdue";
                 plan.overdue.push(item);
+              } else if (dvi.status === "yellow" && bucket === plan.recommended) {
+                // A yellow DVI bumps a recommended item into "due soon"
+                // visually; keep the row but escalate the icon.
+                if (item.iconStatus === "ok") item.iconStatus = "soon";
               }
             }
           }
@@ -1368,6 +1395,8 @@ export async function GET(request: NextRequest) {
             last: null, reason: `Flagged ${dvi.status === "red" ? "bad" : "marginal"} on current inspection`,
             approvedThisVisit: isApprovedThisVisit(dvi.name, currentRoAuthorizedJobs, dviKey),
             onCurrentRO: isOnCurrentRO(dvi.name, currentRoAllJobs, dviKey),
+            progress: dviSyntheticProgress,
+            iconStatus: "overdue",
           });
         }
         for (const unmapped of unmappedDvi) {
@@ -1380,6 +1409,8 @@ export async function GET(request: NextRequest) {
             last: null, reason: `Flagged ${unmapped.status === "red" ? "bad" : "marginal"} on current inspection`,
             approvedThisVisit: isApprovedThisVisit(unmapped.name, currentRoAuthorizedJobs),
             onCurrentRO: isOnCurrentRO(unmapped.name, currentRoAllJobs),
+            progress: dviSyntheticProgress,
+            iconStatus: "overdue",
           });
         }
         console.log(`[Extension] DVI overlay on cached plan: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
@@ -1610,6 +1641,23 @@ export async function GET(request: NextRequest) {
         const est2 = computeEstimatedDate(rec.milesToGo, rec.interval || rec.intervalMiles, rec.intervalMonths, rec.last?.date, existingDueDate2);
         let itemDaysToGo = est2.daysToGo;
         let itemEstDate = est2.estimatedDueDate;
+        const recProgress = computeIntervalProgress(
+          {
+            intervalMiles: rec.interval || rec.intervalMiles || null,
+            intervalMonths: rec.intervalMonths || null,
+            last: rec.last || null,
+            dueAtMiles: rec.dueMileage ?? null,
+            dueAtDate: rec.dueAtDate ?? null,
+            milesToGo: rec.milesToGo ?? null,
+          },
+          mileage || null
+        );
+        const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };
+        const recBucket: "overdue" | "dueSoon" | "upcoming" | "complimentary" =
+          isComplimentaryItem(nameForCheck) ? "complimentary" :
+          (rec.status === "overdue" || rec.isOverdue) ? "overdue" :
+          (rec.status === "due_soon" || rec.isDueSoon) ? "dueSoon" :
+          "upcoming";
         const item = {
           name: rec.service || rec.name,
           serviceKey: rec.serviceKey || null,
@@ -1637,18 +1685,21 @@ export async function GET(request: NextRequest) {
           dviSource: rec.dviSource || null,
           approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs, rec.serviceKey || undefined),
           onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs, rec.serviceKey || undefined),
+          progress: recProgress,
+          // Bucket-driven (matches partner API semantics): an item triaged
+          // into "overdue" always shows the overdue icon even if it had no
+          // mileage anchors for progress math.
+          iconStatus:
+            recBucket === "overdue" ? "overdue" :
+            recBucket === "dueSoon" ? "soon" :
+            (recBucket === "upcoming" || recBucket === "complimentary") ? "ok" :
+            (recProgress.status ?? null),
         };
 
-        const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };
-        if (isComplimentaryItem(nameForCheck)) {
-          plan.complimentary.push(item);
-        } else if (rec.status === "overdue" || rec.isOverdue) {
-          plan.overdue.push(item);
-        } else if (rec.status === "due_soon" || rec.isDueSoon) {
-          plan.dueSoon.push(item);
-        } else {
-          plan.recommended.push(item);
-        }
+        if (recBucket === "complimentary") plan.complimentary.push(item);
+        else if (recBucket === "overdue") plan.overdue.push(item);
+        else if (recBucket === "dueSoon") plan.dueSoon.push(item);
+        else plan.recommended.push(item);
       }
     }
 
