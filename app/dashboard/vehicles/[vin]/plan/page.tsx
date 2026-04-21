@@ -2195,37 +2195,47 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     status="overdue"
                   />
 
-                  <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
-                    {t.dueAtMiles != null && (
-                      <>
-                        Due at <strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
-                        {t.milesToGo != null && (
+                  {(() => {
+                    // Prefer the time-interval anchor (last service date +
+                    // intervalMonths) over the stored dueAtDate, which can be
+                    // a mileage-projected date for high-mileage drivers. This
+                    // keeps the "(N months overdue)" pill aligned with the
+                    // time progress bar's "X mos over" headline.
+                    const timeAxisDate =
+                      t.last?.date && t.intervalMonths
+                        ? addMonths(t.last.date, t.intervalMonths)
+                        : t.dueAtDate ?? null;
+                    const overdueFmt = timeAxisDate ? formatOverdueDate(timeAxisDate) : null;
+                    return (
+                      <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
+                        {t.dueAtMiles != null && (
                           <>
-                            {" • "}
-                            <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
-                              {fmtDistance(Math.abs(t.milesToGo), distanceUnit)} {distLabel} overdue
-                            </span>
+                            Due at <strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
+                            {t.milesToGo != null && (
+                              <>
+                                {" • "}
+                                <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
+                                  {fmtDistance(Math.abs(t.milesToGo), distanceUnit)} {distLabel} overdue
+                                </span>
+                              </>
+                            )}
                           </>
                         )}
-                      </>
-                    )}
-                    {t.dueAtMiles != null && t.dueAtDate != null && <> • </>}
-                    {(() => {
-                      if (t.dueAtDate == null) return null;
-                      const { text, isVeryOverdue, yearsOverdue } = formatOverdueDate(t.dueAtDate);
-                      return (
-                        <span className={isVeryOverdue ? "inline-flex items-center gap-1" : ""}>
-                          By{" "}
-                          <strong className={isVeryOverdue ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300" : ""}>
-                            {text}
-                          </strong>
-                          {yearsOverdue >= 2 && (
-                            <span className="text-red-600 font-bold">⚠️</span>
-                          )}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                        {t.dueAtMiles != null && timeAxisDate != null && <> • </>}
+                        {overdueFmt && (
+                          <span className={overdueFmt.isVeryOverdue ? "inline-flex items-center gap-1" : ""}>
+                            By{" "}
+                            <strong className={overdueFmt.isVeryOverdue ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300" : ""}>
+                              {overdueFmt.text}
+                            </strong>
+                            {overdueFmt.yearsOverdue >= 2 && (
+                              <span className="text-red-600 font-bold">⚠️</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
