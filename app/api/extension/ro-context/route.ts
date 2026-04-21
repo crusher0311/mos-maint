@@ -82,6 +82,66 @@ export async function GET(request: NextRequest) {
         vehicleMake = wo.vehicleMake || null;
         vehicleModel = wo.vehicleModel || null;
       }
+
+      const cacheIncomplete = !vin || !customerName || !vehicleYear || !vehicleMake || !vehicleModel;
+      const tekShopId = shopDoc?.tekmetric?.shopId;
+      if (cacheIncomplete && tekShopId) {
+        try {
+          const { getRepairOrder, getVehicle, getCustomer } = await import("@/lib/integrations/tekmetric/client");
+          const ro = await getRepairOrder(parseInt(roId), tekShopId);
+          if (ro) {
+            if (!repairOrderNumber && ro.repairOrderNumber) {
+              repairOrderNumber = String(ro.repairOrderNumber);
+            }
+            if (!mileage) {
+              mileage = ro.mileageIn || ro.mileageOut || null;
+            }
+
+            const [vehicleRes, customerRes] = await Promise.all([
+              ro.vehicleId ? getVehicle(ro.vehicleId, tekShopId).catch(() => null) : Promise.resolve(null),
+              ro.customerId ? getCustomer(ro.customerId, tekShopId).catch(() => null) : Promise.resolve(null),
+            ]);
+
+            if (vehicleRes) {
+              if (!vin && (vehicleRes as any).vin) vin = String((vehicleRes as any).vin).toUpperCase();
+              if (!vehicleYear && (vehicleRes as any).year) vehicleYear = (vehicleRes as any).year;
+              if (!vehicleMake && (vehicleRes as any).make) vehicleMake = (vehicleRes as any).make;
+              if (!vehicleModel && (vehicleRes as any).model) vehicleModel = (vehicleRes as any).model;
+            }
+
+            if (customerRes && !customerName) {
+              const first = (customerRes as any).firstName || "";
+              const last = (customerRes as any).lastName || "";
+              const composed = `${first} ${last}`.trim();
+              customerName = composed || (customerRes as any).customerName || null;
+            }
+
+            // Backfill the cache so subsequent loads are fast.
+            if (vin) {
+              const updateFields: any = {};
+              if (vin) updateFields.vin = vin;
+              if (customerName) updateFields.customerName = customerName;
+              if (repairOrderNumber) updateFields.repairOrderNumber = repairOrderNumber;
+              if (mileage) updateFields.odometer = mileage;
+              if (vehicleYear) updateFields.vehicleYear = vehicleYear;
+              if (vehicleMake) updateFields.vehicleMake = vehicleMake;
+              if (vehicleModel) updateFields.vehicleModel = vehicleModel;
+              db.collection("tekmetric_work_orders").updateOne(
+                { shopId: { $in: [String(mosShopId), Number(mosShopId)] }, workOrderId: String(roId) },
+                {
+                  $set: { ...updateFields, updatedAt: new Date() },
+                  $setOnInsert: { shopId: mosShopId, workOrderId: String(roId), createdAt: new Date() },
+                },
+                { upsert: true }
+              ).catch((e: any) =>
+                console.warn(`[ro-context] Tekmetric cache backfill failed:`, e.message)
+              );
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[ro-context] Tekmetric live API fallback failed for RO ${roId}:`, e.message);
+        }
+      }
     } else if (resolvedProvider === "shopware") {
       const swRo = await db.collection("shopware_repair_orders").findOne({
         mosShopId,

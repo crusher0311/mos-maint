@@ -671,6 +671,9 @@ function updateContext(context) {
   
   if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
     keytagContextEnriched = false;
+    keytagStatus = 'idle';
+    keytagInFlightKey = null;
+    keytagLastEnrichedKey = null;
     currentPlanShopLogo = null;
     currentPlanLocationId = null;
     currentReportUrl = null;
@@ -2556,6 +2559,33 @@ async function loadStickerConfig() {
   }
 }
 
+// Status enum drives the Print button lock state.
+//   idle: section just opened, no fetch yet
+//   loading: fetch in flight
+//   ready: webhook/API gave us customerName + vehicleDisplay → safe to print
+//   insufficient: API returned but missing required fields → keep locked
+//   error: fetch failed → keep locked
+let keytagStatus = 'idle';
+let keytagInFlightKey = null; // shopId|roId of the currently-in-flight enrichment
+let keytagLastEnrichedKey = null; // shopId|roId we last successfully enriched
+
+function makeRoKey(ctx) {
+  if (!ctx?.shopId || !ctx?.roId) return null;
+  return `${ctx.shopId}|${ctx.roId}`;
+}
+
+function recomputeKeytagPrintLock() {
+  if (keytagStatus === 'ready') {
+    setKeytagPrintLocked(false, '');
+  } else if (keytagStatus === 'loading' || keytagStatus === 'idle') {
+    setKeytagPrintLocked(true, 'Loading vehicle info…');
+  } else if (keytagStatus === 'insufficient') {
+    setKeytagPrintLocked(true, 'Vehicle info not yet synced from Tekmetric. Try again in a moment.');
+  } else if (keytagStatus === 'error') {
+    setKeytagPrintLocked(true, 'Could not load vehicle info. Try refreshing.');
+  }
+}
+
 async function loadKeytagSection() {
   keytagEnabled = shopFeatures.keytags === true;
   
@@ -2565,45 +2595,105 @@ async function loadKeytagSection() {
   }
   
   elements.keytagSection.classList.remove('hidden');
-  
-  updateKeytagFields();
 
-  if (!keytagContextEnriched && currentContext?.roId && currentContext?.shopId) {
-    try {
-      const params = new URLSearchParams({
-        shopId: currentContext.shopId,
-        roId: currentContext.roId,
-      });
-      if (currentContext.provider) params.set('provider', currentContext.provider);
-      if (currentContext.vin) params.set('vin', currentContext.vin);
+  const roKey = makeRoKey(currentContext);
 
-      const result = await sendMessage({
-        action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/ro-context?${params}`
-      });
+  // If we've already successfully enriched THIS ro, just refresh the form.
+  if (roKey && keytagLastEnrichedKey === roKey && keytagStatus === 'ready') {
+    updateKeytagFields();
+    recomputeKeytagPrintLock();
+    return;
+  }
 
-      if (result && !result.error) {
-        keytagContextEnriched = true;
-        if (result.customerName) {
-          currentContext.customerName = result.customerName;
-        }
-        if (result.repairOrderNumber) {
-          currentContext.roNumber = String(result.repairOrderNumber);
-        }
-        if (result.mileage) {
-          currentContext.mileage = result.mileage;
-        }
-        if (result.vehicle) {
-          currentContext.vehicle = { year: result.vehicle.year, make: result.vehicle.make, model: result.vehicle.model, engine: null };
-          currentContext.vehicleDisplay = result.vehicleDisplay || `${result.vehicle.year} ${result.vehicle.make} ${result.vehicle.model}`;
-        }
-        if (result.vin) {
-          currentContext.vin = result.vin.toUpperCase();
-        }
-        updateKeytagFields();
+  // If a fetch for this same RO is already in flight, just let it finish.
+  if (roKey && keytagInFlightKey === roKey) {
+    recomputeKeytagPrintLock();
+    return;
+  }
+
+  // New / different RO context: clear the form (DOM scrape is unreliable —
+  // Tekmetric sometimes renders literal label text like "Name"/"Vehicle"
+  // before React hydrates) and lock Print until the API responds.
+  if (elements.keytagCustomer) elements.keytagCustomer.value = '';
+  if (elements.keytagVehicle) elements.keytagVehicle.value = '';
+  if (elements.keytagRo) elements.keytagRo.value = '';
+  if (elements.keytagMileage) elements.keytagMileage.value = '';
+  keytagStatus = 'loading';
+  recomputeKeytagPrintLock();
+
+  if (!roKey) return;
+
+  keytagInFlightKey = roKey;
+  try {
+    const params = new URLSearchParams({
+      shopId: currentContext.shopId,
+      roId: currentContext.roId,
+    });
+    if (currentContext.provider) params.set('provider', currentContext.provider);
+    if (currentContext.vin) params.set('vin', currentContext.vin);
+
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/ro-context?${params}`
+    });
+
+    // Stale-response guard: discard if the user navigated to a different RO
+    // while this request was in flight.
+    if (makeRoKey(currentContext) !== roKey) {
+      return;
+    }
+
+    if (result && !result.error) {
+      const newCustomerName = result.customerName || null;
+      const newVehicleDisplay = result.vehicleDisplay
+        || (result.vehicle ? `${result.vehicle.year} ${result.vehicle.make} ${result.vehicle.model}` : null);
+
+      if (newCustomerName) currentContext.customerName = newCustomerName;
+      if (result.repairOrderNumber) currentContext.roNumber = String(result.repairOrderNumber);
+      if (result.mileage) currentContext.mileage = result.mileage;
+      if (result.vehicle) {
+        currentContext.vehicle = { year: result.vehicle.year, make: result.vehicle.make, model: result.vehicle.model, engine: null };
+        currentContext.vehicleDisplay = newVehicleDisplay;
       }
-    } catch (e) {
-      console.log('[MOS] Keytag context enrichment failed:', e);
+      if (result.vin) currentContext.vin = result.vin.toUpperCase();
+
+      updateKeytagFields();
+
+      if (newCustomerName && newVehicleDisplay) {
+        keytagStatus = 'ready';
+        keytagContextEnriched = true;
+        keytagLastEnrichedKey = roKey;
+      } else {
+        keytagStatus = 'insufficient';
+      }
+    } else {
+      keytagStatus = 'insufficient';
+    }
+  } catch (e) {
+    console.log('[MOS] Keytag context enrichment failed:', e);
+    if (makeRoKey(currentContext) === roKey) {
+      keytagStatus = 'error';
+    }
+  } finally {
+    if (keytagInFlightKey === roKey) keytagInFlightKey = null;
+    if (makeRoKey(currentContext) === roKey) {
+      recomputeKeytagPrintLock();
+    }
+  }
+}
+
+function setKeytagPrintLocked(locked, message) {
+  if (elements.keytagPrintBtn) {
+    elements.keytagPrintBtn.disabled = !!locked;
+    elements.keytagPrintBtn.style.opacity = locked ? '0.5' : '1';
+    elements.keytagPrintBtn.style.cursor = locked ? 'not-allowed' : 'pointer';
+  }
+  if (elements.keytagError) {
+    if (locked && message) {
+      elements.keytagError.textContent = message;
+      elements.keytagError.classList.remove('hidden');
+    } else {
+      elements.keytagError.classList.add('hidden');
     }
   }
 }
@@ -2689,7 +2779,9 @@ async function handleKeytagPrint() {
     }
   } finally {
     elements.stickerLoading.classList.add('hidden');
-    if (elements.keytagPrintBtn) elements.keytagPrintBtn.disabled = false;
+    // Restore the lock state owned by enrichment, not a blanket re-enable.
+    // If the RO is still ready, this re-enables Print; otherwise it stays locked.
+    recomputeKeytagPrintLock();
   }
 }
 
