@@ -33,6 +33,7 @@ import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
+import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
 import PlanLoading from "./loading";
 
 export const runtime = "nodejs";
@@ -2187,6 +2188,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     })()}
                   </div>
 
+                  <IntervalProgressRow
+                    task={t}
+                    currentMiles={currentMiles}
+                    distanceUnit={distanceUnit}
+                    status="overdue"
+                  />
+
                   <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
                     {t.dueAtMiles != null && (
                       <>
@@ -2353,6 +2361,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       );
                     })()}
                   </div>
+                  <IntervalProgressRow
+                    task={t}
+                    currentMiles={currentMiles}
+                    distanceUnit={distanceUnit}
+                    status="deferred"
+                  />
+
                   {t.reason && (
                     <div className="text-xs text-blue-700 mt-2 bg-blue-50 rounded px-2 py-1">
                       {t.reason}
@@ -2436,6 +2451,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       );
                     })()}
                   </div>
+
+                  <IntervalProgressRow
+                    task={t}
+                    currentMiles={currentMiles}
+                    distanceUnit={distanceUnit}
+                    status="soon"
+                  />
 
                   <div className="text-sm mt-2">
                     {t.source === "protractor" && t.reason && (
@@ -2632,6 +2654,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       );
                     })()}
                   </div>
+
+                  <IntervalProgressRow
+                    task={t}
+                    currentMiles={currentMiles}
+                    distanceUnit={distanceUnit}
+                    status="upcoming"
+                  />
 
                   <div className="text-sm mt-2">
                     {t.dueAtMiles != null && (
