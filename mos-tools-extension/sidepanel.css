@@ -2662,3 +2662,46 @@ body {
   color: var(--gray-400);
   font-size: 13px;
 }
+
+/* ==================== VHI Progress Bars ==================== */
+/* Mirrors components/ui/IntervalProgressRow.tsx in the dashboard so
+   the extension side panel reads the same as the advisor view. */
+.vhi-bars {
+  margin: 8px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vhi-bar-row {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.vhi-bar-label {
+  color: var(--gray-500, #64748b);
+  font-weight: 500;
+}
+.vhi-bar-track {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.vhi-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+.vhi-bar-fill.overdue { background: #ef4444; }
+.vhi-bar-fill.soon    { background: #f59e0b; }
+.vhi-bar-fill.ok      { background: #22c55e; }
+.vhi-bar-headline {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vhi-bar-headline.overdue { color: #b91c1c; }
+.vhi-bar-headline.soon    { color: #b45309; }
+.vhi-bar-headline.ok      { color: #166534; }

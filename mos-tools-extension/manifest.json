@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.26.4",
+  "version": "1.26.5",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -36,7 +36,9 @@
         "https://sandbox.tekmetric.com/*",
         "https://cba.tekmetric.com/*"
       ],
-      "js": ["adapters/interceptor.js"],
+      "js": [
+        "adapters/interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
@@ -46,7 +48,10 @@
         "https://sandbox.tekmetric.com/*",
         "https://cba.tekmetric.com/*"
       ],
-      "js": ["adapters/tekmetric-content.js", "vhi-coach.js"],
+      "js": [
+        "adapters/tekmetric-content.js",
+        "vhi-coach.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -54,7 +59,9 @@
         "https://*.shop-ware.com/*",
         "https://*.shop-ware-api-sandbox.com/*"
       ],
-      "js": ["adapters/shopware-content.js"],
+      "js": [
+        "adapters/shopware-content.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -62,7 +69,9 @@
         "https://*.autoflow.com/*",
         "https://*.autotext.me/*"
       ],
-      "js": ["adapters/autoflow-content.js"],
+      "js": [
+        "adapters/autoflow-content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -82,7 +91,16 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png", "icons/VHI_icon.png", "icons/enhance_notes_icon.png", "adapters/interceptor.js"],
+      "resources": [
+        "icons/mos-print-button.png",
+        "icons/icon48.png",
+        "icons/mos-toolbox.png",
+        "icons/mos-logo.png",
+        "icons/mos-fab.png",
+        "icons/VHI_icon.png",
+        "icons/enhance_notes_icon.png",
+        "adapters/interceptor.js"
+      ],
       "matches": [
         "https://shop.tekmetric.com/*",
         "https://sandbox.tekmetric.com/*",
@@ -90,14 +108,26 @@
       ]
     },
     {
-      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png"],
+      "resources": [
+        "icons/mos-print-button.png",
+        "icons/icon48.png",
+        "icons/mos-toolbox.png",
+        "icons/mos-logo.png",
+        "icons/mos-fab.png"
+      ],
       "matches": [
         "https://*.shop-ware.com/*",
         "https://*.shop-ware-api-sandbox.com/*"
       ]
     },
     {
-      "resources": ["icons/mos-print-button.png", "icons/icon48.png", "icons/mos-toolbox.png", "icons/mos-logo.png", "icons/mos-fab.png"],
+      "resources": [
+        "icons/mos-print-button.png",
+        "icons/icon48.png",
+        "icons/mos-toolbox.png",
+        "icons/mos-logo.png",
+        "icons/mos-fab.png"
+      ],
       "matches": [
         "https://*.autoflow.com/*",
         "https://*.autotext.me/*"

@@ -1265,11 +1265,48 @@ function formatLastDone(last, currentMileage) {
 }
 
 function getOverdueText(item, type) {
+  // Axis-aware overdue summary: prefer the new structured progress so we can
+  // say "8,868 mi over • 4 mos over" matching the dashboard headlines.
+  const p = item && item.progress;
+  if (type === 'overdue' && p) {
+    const parts = [];
+    if (p.miles && p.miles.status === 'overdue' && p.miles.headline) parts.push(p.miles.headline);
+    if (p.time && p.time.status === 'overdue' && p.time.headline) parts.push(p.time.headline);
+    if (parts.length) return `<span class="overdue-amount">${parts.join(' • ')}</span>`;
+  }
   if (type === 'overdue' && item.milesToGo != null && item.milesToGo < 0) {
     const overdue = Math.abs(item.milesToGo);
     return `<span class="overdue-amount">${overdue.toLocaleString()} mi overdue</span>`;
   }
   return '';
+}
+
+// Renders the dual mileage/time progress bars when the API ships a
+// `progress` payload. Mirrors the dashboard's IntervalProgressRow.
+function renderProgressBars(item, type) {
+  const p = item && item.progress;
+  if (!p) return '';
+  const axisRow = (label, axis) => {
+    if (!axis || axis.percent == null) return '';
+    const pct = Math.max(0, Math.min(100, axis.percent));
+    const cls = axis.status === 'overdue' ? 'overdue'
+              : axis.status === 'soon' ? 'soon'
+              : 'ok';
+    const headline = axis.headline ? escapeHtml(axis.headline) : '';
+    // Overdue bars always render full; otherwise the consumed portion.
+    const fillPct = axis.status === 'overdue' ? 100 : pct;
+    return `
+      <div class="vhi-bar-row">
+        <span class="vhi-bar-label">${label}</span>
+        <div class="vhi-bar-track"><div class="vhi-bar-fill ${cls}" style="width:${fillPct}%"></div></div>
+        <span class="vhi-bar-headline ${cls}">${headline}</span>
+      </div>
+    `;
+  };
+  const milesRow = renderProgressBars && p.miles ? axisRow('Miles', p.miles) : '';
+  const timeRow = renderProgressBars && p.time ? axisRow('Time', p.time) : '';
+  if (!milesRow && !timeRow) return '';
+  return `<div class="vhi-bars">${milesRow}${timeRow}</div>`;
 }
 
 function createServiceItemHTML(item, type) {
@@ -1387,6 +1424,7 @@ function createServiceItemHTML(item, type) {
         ${badgeText ? `<span class="status-badge ${badgeClass}">${badgeText}</span>` : ''}
         <span class="interval-badge ${isShopInterval ? 'shop' : 'oem'}">${isShopInterval && currentPlanShopLogo ? `<img src="${escapeHtml(currentPlanShopLogo)}" alt="" class="interval-shop-logo" />` : ''}${intervalText}</span>
       </div>
+      ${renderProgressBars(item, type)}
       <div class="service-details">
         ${dueAtText ? `<div class="due-info">${dueAtText}${overdueText ? ' • ' + overdueText : ''}</div>` : ''}
         ${item.estimatedDueDate && (type === 'due-soon' || type === 'recommended') ? `<div class="estimated-date">Est. due ${new Date(item.estimatedDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>` : ''}
