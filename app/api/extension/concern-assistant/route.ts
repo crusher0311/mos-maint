@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { getOpenAI } from "@/lib/ai";
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -216,6 +217,22 @@ export async function POST(request: NextRequest) {
       if (denied) return denied;
     }
 
+    {
+      const blocked = await enforceAiBudget({
+        shopId: Number(body.shopId),
+        route: "/api/extension/concern-assistant",
+        isPlatformAdmin,
+      });
+      if (blocked) {
+        // Re-emit with CORS headers so the extension can read it.
+        const data = await blocked.json();
+        return NextResponse.json(data, {
+          status: blocked.status,
+          headers: { ...corsHeaders, ...(blocked.headers.get("Retry-After") ? { "Retry-After": blocked.headers.get("Retry-After")! } : {}) },
+        });
+      }
+    }
+
     const openai = getOpenAI();
     const db = await getDb();
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
@@ -240,7 +257,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/followup`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:followup", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -289,7 +306,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/review`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:review", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -330,7 +347,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/cleanup`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:cleanup", completion, elapsed);
 
       const cleanedText = completion.choices[0]?.message?.content?.trim() || conversationText;
 

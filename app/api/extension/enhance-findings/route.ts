@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
-import { getOpenAI, DEFAULT_MODEL } from "@/lib/ai";
+import { getOpenAI, DEFAULT_MODEL, trackOpenAiCall } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
 import { enhanceCorrections } from "@/lib/db/schema/enhance-corrections";
 import { desc, eq } from "drizzle-orm";
@@ -78,6 +79,21 @@ export async function POST(request: NextRequest) {
     corsHeaders,
   });
   if (!guard.ok) return guard.response;
+
+  {
+    const blocked = await enforceAiBudget({
+      shopId: shopId ? Number(shopId) : null,
+      route: "/api/extension/enhance-findings",
+      isPlatformAdmin: guard.user?.role === "platform_admin",
+    });
+    if (blocked) {
+      const data = await blocked.json();
+      return NextResponse.json(data, {
+        status: blocked.status,
+        headers: { ...corsHeaders, ...(blocked.headers.get("Retry-After") ? { "Retry-After": blocked.headers.get("Retry-After")! } : {}) },
+      });
+    }
+  }
 
   if (!findings || !Array.isArray(findings) || findings.length === 0) {
     return NextResponse.json(
@@ -196,15 +212,12 @@ export async function POST(request: NextRequest) {
 
     const latencyMs = Date.now() - startTime;
 
-    await trackApiRequest(
-      "openai",
-      "/enhance-findings",
-      "POST",
-      200,
-      latencyMs,
-      completion.usage?.total_tokens || 0,
-      { findingsCount: validFindings.length, user: guard.user.email }
-    ).catch(() => {});
+    trackOpenAiCall(
+      shopId ? Number(shopId) : undefined,
+      "/api/extension/enhance-findings",
+      completion,
+      latencyMs
+    );
 
     console.log(
       `[Enhance Findings] ${guard.user.email}: ${enhanced.length} findings enhanced in ${latencyMs}ms`

@@ -124,3 +124,45 @@ async function safeText(resp: Response) {
     return "";
   }
 }
+
+interface OpenAiUsageShape {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  } | null;
+}
+
+/**
+ * DRY helper for AI route handlers. Records token usage from a completed
+ * OpenAI chat/completions response into the shared api_usage telemetry so
+ * `enforceAiBudget` and the platform observability page can see it.
+ *
+ * Always pass a stable `route` string (e.g. "/api/extension/concern-assistant")
+ * so per-route token spend is queryable. Safe to call with undefined shopId.
+ */
+export function trackOpenAiCall(
+  shopId: number | null | undefined,
+  route: string,
+  completion: OpenAiUsageShape | null | undefined,
+  latencyMs: number,
+  statusCode: number = 200
+): void {
+  const usage = completion?.usage;
+  if (!usage) return;
+  trackApiRequest(
+    "openai",
+    route,
+    "POST",
+    statusCode,
+    latencyMs,
+    shopId ?? undefined,
+    {
+      tokens: {
+        prompt: usage.prompt_tokens ?? 0,
+        completion: usage.completion_tokens ?? 0,
+        total: usage.total_tokens ?? 0,
+      },
+    }
+  );
+}

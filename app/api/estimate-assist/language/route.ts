@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getOpenAI } from "@/lib/ai";
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
+import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,14 @@ export async function POST(req: NextRequest) {
     if (!text && (!lineItems || lineItems.length === 0)) {
       return NextResponse.json({ ok: false, error: "text or lineItems is required" }, { status: 400 });
     }
+
+    const isAdmin = await isPlatformAdminEmail(session.email);
+    const blocked = await enforceAiBudget({
+      shopId: Number(session.shopId),
+      route: "/api/estimate-assist/language",
+      isPlatformAdmin: isAdmin,
+    });
+    if (blocked) return blocked;
 
     const completionIssues: CompletionIssue[] = [];
     if (lineItems) {
@@ -112,7 +122,7 @@ If there are multiple line items, include each in the lineItems array. If just f
     });
 
     const elapsed = Date.now() - startTime;
-    trackApiRequest("openai", "/chat/completions", "POST", 200, elapsed, Number(session.shopId)).catch(() => {});
+    trackOpenAiCall(Number(session.shopId), "/api/estimate-assist/language", completion, elapsed);
 
     const aiContent = completion.choices[0]?.message?.content || "{}";
     let parsed: any = {};

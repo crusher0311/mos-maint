@@ -1,7 +1,8 @@
 // app/api/vehicle-analyzer/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { getOpenAI, DEFAULT_MODEL, MODELS } from "@/lib/ai";
+import { getOpenAI, DEFAULT_MODEL, MODELS, trackOpenAiCall } from "@/lib/ai";
+import { enforceAiBudget } from "@/lib/ai-budget";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost } from "@/lib/usage";
@@ -152,6 +153,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "vin and shopId are required" }, { status: 400 });
     }
 
+    const blocked = await enforceAiBudget({ shopId: Number(shopId), route: "/api/vehicle-analyzer" });
+    if (blocked) return blocked;
+
     // Validate/choose model
     const chosenModel = MODELS.includes(model) ? model : DEFAULT_MODEL;
 
@@ -295,8 +299,8 @@ export async function POST(req: NextRequest) {
       ],
     });
     
-    // Track API request for traffic monitoring
-    trackApiRequest('openai', '/chat/completions', 'POST', 200, Date.now() - startTime, Number(shopId)).catch(() => {});
+    // Track API request for traffic monitoring (with token usage)
+    trackOpenAiCall(Number(shopId), "/api/vehicle-analyzer", resp, Date.now() - startTime);
 
     const raw = resp.choices?.[0]?.message?.content || "{}";
     let parsed: any = {};

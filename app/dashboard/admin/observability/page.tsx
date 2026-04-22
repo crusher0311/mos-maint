@@ -36,8 +36,15 @@ interface ApiUsageStats {
   errors: number;
   driftCount?: number;
   verifyOkCount?: number;
+  tokensInWindow?: number;
   avgLatency: number;
-  endpoints: { endpoint: string; count: number; errors: number }[];
+  endpoints: { endpoint: string; count: number; errors: number; tokens?: number }[];
+}
+
+interface OpenAiSummary {
+  tokensToday: number;
+  topShopsByTokensToday: { shopId: number | null; tokens: number }[];
+  utcDayStart: string;
 }
 
 type TabType = "logs" | "api-usage";
@@ -58,6 +65,7 @@ export default function ObservabilityPage() {
   const [textSearch, setTextSearch] = useState<string>("");
   
   const [apiUsage, setApiUsage] = useState<ApiUsageStats[]>([]);
+  const [openAiSummary, setOpenAiSummary] = useState<OpenAiSummary | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
 
   const fetchLogs = useCallback(async () => {
@@ -97,6 +105,7 @@ export default function ObservabilityPage() {
       if (response.ok) {
         const data = await response.json();
         setApiUsage(data.providers || []);
+        setOpenAiSummary(data.openAi || null);
       }
     } catch (err) {
       console.error("Failed to fetch API usage:", err);
@@ -342,6 +351,26 @@ export default function ObservabilityPage() {
                       {provider.errors.toLocaleString()}
                     </span>
                   </div>
+                  {provider.providerId === "openai" && (provider.tokensInWindow ?? 0) > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500" title="Sum of OpenAI tokens (prompt + completion) used in this time range">
+                        Tokens (window)
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {(provider.tokensInWindow ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {provider.providerId === "openai" && openAiSummary ? (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500" title="OpenAI tokens used since UTC midnight (drives the per-shop daily budget)">
+                        Tokens today (UTC)
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {openAiSummary.tokensToday.toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
                   {(provider.driftCount ?? 0) > 0 || (provider.verifyOkCount ?? 0) > 0 ? (
                     <div className="flex justify-between">
                       <span className="text-gray-500" title="Read-back verifications that detected the API silently dropped a field (e.g. logo not applied)">

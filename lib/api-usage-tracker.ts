@@ -20,6 +20,9 @@ interface ApiUsageRecord {
   requestId?: string;
   retryCount?: number;
   sourceWorker?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
 }
 
 export interface TrackingOptions {
@@ -29,6 +32,7 @@ export interface TrackingOptions {
   requestId?: string;
   retryCount?: number;
   sourceWorker?: string;
+  tokens?: { prompt?: number; completion?: number; total?: number };
 }
 
 interface ProviderConfig {
@@ -258,7 +262,10 @@ export async function trackApiRequest(
     errorCode: options?.errorCode,
     requestId: options?.requestId || generateRequestId(),
     retryCount: options?.retryCount,
-    sourceWorker: options?.sourceWorker
+    sourceWorker: options?.sourceWorker,
+    promptTokens: options?.tokens?.prompt,
+    completionTokens: options?.tokens?.completion,
+    totalTokens: options?.tokens?.total,
   };
 
   inMemoryBuffer.push(record);

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getOpenAI } from "@/lib/ai";
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
+import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 
 const SYMPTOM_QUESTION_GUIDE = `
@@ -155,6 +157,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
+    const isAdmin = await isPlatformAdminEmail(session.email);
+    {
+      // Gate against the SESSION shopId only — token usage is also tracked
+      // against session.shopId below, so a spoofed body.shopId must never
+      // shift accounting away from the actual caller's shop.
+      const blocked = await enforceAiBudget({
+        shopId: Number(session.shopId),
+        route: "/api/dashboard/concern-assistant",
+        isPlatformAdmin: isAdmin,
+      });
+      if (blocked) return blocked;
+    }
+
     if (action === "followup") {
       const { concern, shopId, vin, vehicleDisplay } = body;
       if (!concern) {
@@ -176,7 +191,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/followup`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:followup", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -228,7 +243,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/review`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:review", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -269,7 +284,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackApiRequest("openai", `/concern-assistant/cleanup`, "POST", 200, elapsed).catch(() => {});
+      trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:cleanup", completion, elapsed);
 
       const cleanedText = completion.choices[0]?.message?.content?.trim() || conversationText;
 

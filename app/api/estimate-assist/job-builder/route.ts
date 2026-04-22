@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getOpenAI } from "@/lib/ai";
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
+import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import {
   searchJobs,
   getJobById,
@@ -45,6 +47,16 @@ export async function POST(req: NextRequest) {
     const body: JobBuilderRequest = await req.json();
     const { jobNameOrId, vin, year, make, model, submodel, drivetrain, engineCylinders, engineDescription, languageMode } = body;
     const shopId = Number(session.shopId);
+
+    const isAdmin = await isPlatformAdminEmail(session.email);
+    {
+      const blocked = await enforceAiBudget({
+        shopId,
+        route: "/api/estimate-assist/job-builder",
+        isPlatformAdmin: isAdmin,
+      });
+      if (blocked) return blocked;
+    }
 
     if (!jobNameOrId) {
       return NextResponse.json({ ok: false, error: "jobNameOrId is required" }, { status: 400 });
@@ -164,7 +176,7 @@ export async function POST(req: NextRequest) {
           response_format: { type: "json_object" },
         });
 
-        trackApiRequest("openai", "/chat/completions", "POST", 200, Date.now() - startTime, shopId).catch(() => {});
+        trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
 
         const aiContent = completion.choices[0]?.message?.content;
         if (aiContent) {

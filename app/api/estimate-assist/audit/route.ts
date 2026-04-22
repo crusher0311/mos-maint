@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getOpenAI } from "@/lib/ai";
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
+import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import {
   getJobKnowledgeBase,
   searchJobs,
@@ -70,6 +72,16 @@ export async function POST(req: NextRequest) {
 
     const body: AuditRequest = await req.json();
     const shopId = Number(session.shopId);
+
+    const isAdmin = await isPlatformAdminEmail(session.email);
+    {
+      const blocked = await enforceAiBudget({
+        shopId,
+        route: "/api/estimate-assist/audit",
+        isPlatformAdmin: isAdmin,
+      });
+      if (blocked) return blocked;
+    }
 
     let lineItems = body.lineItems || [];
     let vehicleInfo = body.vehicleInfo || null;
@@ -366,7 +378,7 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
         response_format: { type: "json_object" },
       });
 
-      trackApiRequest("openai", "/chat/completions", "POST", 200, Date.now() - startTime, shopId).catch(() => {});
+      trackOpenAiCall(shopId, "/api/estimate-assist/audit", completion, Date.now() - startTime);
 
       const aiContent = completion.choices[0]?.message?.content || "{}";
       let parsed: any;

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import OpenAI from "openai";
+import { trackOpenAiCall } from "@/lib/ai";
+import { enforceAiBudget } from "@/lib/ai-budget";
+import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +14,14 @@ export async function POST(req: NextRequest) {
   try {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const isAdmin = await isPlatformAdminEmail(sess.email);
+    const blocked = await enforceAiBudget({
+      shopId: Number(sess.shopId),
+      route: "/api/dashboard/protractor/vin-plate-ocr",
+      isPlatformAdmin: isAdmin,
+    });
+    if (blocked) return blocked;
 
     const formData = await req.formData();
     const file = formData.get("image") as File | null;
@@ -61,6 +72,7 @@ Return ONLY a JSON object with these fields:
 Return ONLY valid JSON, no other text.`;
     }
 
+    const ocrStart = Date.now();
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -81,6 +93,7 @@ Return ONLY valid JSON, no other text.`;
       max_tokens: 300,
       temperature: 0,
     });
+    trackOpenAiCall(Number(sess.shopId), "/api/dashboard/protractor/vin-plate-ocr", response, Date.now() - ocrStart);
 
     const rawText = response.choices[0]?.message?.content?.trim() || "";
 

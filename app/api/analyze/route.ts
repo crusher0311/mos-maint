@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { trackOpenAiCall } from "@/lib/ai";
+import { enforceAiBudget } from "@/lib/ai-budget";
 
 function safeJsonParse<T = unknown>(text: string): T | null {
   try {
@@ -101,6 +103,21 @@ export async function POST(req: NextRequest) {
   const vin = payload?.vin ?? null;
   const userEmail = payload?.userEmail ?? null;
 
+  // Refuse anonymous calls — without a shopId we cannot rate-limit or budget,
+  // which lets attackers drain the OpenAI quota with no attribution.
+  const shopIdNum = shopId != null ? Number(shopId) : NaN;
+  if (!Number.isFinite(shopIdNum) || shopIdNum <= 0) {
+    return Response.json(
+      { ok: false, error: "shopId is required" },
+      { status: 400 }
+    );
+  }
+  const blocked = await enforceAiBudget({
+    shopId: shopIdNum,
+    route: "/api/analyze",
+  });
+  if (blocked) return blocked;
+
   // Build source summaries (use whatever is available)
   const dviText = summarizeDvi(dviData);
   const carfaxText = summarizeCarfax(carfaxData);
@@ -191,14 +208,13 @@ Instructions:
     if (!resp.ok) {
       const t = await resp.text();
       // Track failed request
-      trackApiRequest('openai', '/chat/completions', 'POST', resp.status, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
+      trackApiRequest('openai', '/api/analyze', 'POST', resp.status, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
       return Response.json({ ok: false, error: `OpenAI error: ${resp.status} ${t}` }, { status: 500 });
     }
 
-    // Track successful request
-    trackApiRequest('openai', '/chat/completions', 'POST', 200, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
-
     const data = await resp.json();
+    // Track successful request with token usage
+    trackOpenAiCall(shopId ? Number(shopId) : undefined, "/api/analyze", { usage: data?.usage }, Date.now() - startTime);
     const raw =
       data?.choices?.[0]?.message?.content ??
       (typeof data === "string" ? data : JSON.stringify(data));

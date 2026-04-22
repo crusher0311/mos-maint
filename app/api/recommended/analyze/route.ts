@@ -5,6 +5,7 @@ import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/aut
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost, estimateTokens } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { enforceAiBudget } from "@/lib/ai-budget";
 
 export const runtime = "nodejs";
 
@@ -304,13 +305,40 @@ export async function POST(req: Request) {
       } catch {}
     }
 
+    // Refuse anonymous calls — without a shopId we cannot rate-limit or
+    // budget, which would let attackers drain OpenAI quota with no
+    // attribution.
+    const logShopIdNum = logShopId != null ? Number(logShopId) : NaN;
+    if (!Number.isFinite(logShopIdNum) || logShopIdNum <= 0) {
+      return NextResponse.json(
+        { ok: false, error: "shopId (or a VIN that resolves to a shop) is required" },
+        { status: 400 }
+      );
+    }
+    const blocked = await enforceAiBudget({
+      shopId: logShopIdNum,
+      route: "/api/recommended/analyze",
+    });
+    if (blocked) return blocked;
+
     // OpenAI call
     const aiStartTime = Date.now();
     const ai = await callOpenAI(model, systemPrompt, userPrompt);
     const aiDuration = Date.now() - aiStartTime;
-    
-    // Track API request for traffic monitoring
-    trackApiRequest('openai', '/responses', 'POST', ai.ok ? 200 : 500, aiDuration, logShopId ? Number(logShopId) : undefined).catch(() => {});
+
+    // Track API request for traffic monitoring (Responses API doesn't return
+    // usage, so we estimate prompt/completion tokens for budget accounting).
+    const estPrompt = estimateTokens(systemPrompt + userPrompt);
+    const estCompletion = estimateTokens(ai.text ?? "");
+    trackApiRequest(
+      "openai",
+      "/api/recommended/analyze",
+      "POST",
+      ai.ok ? 200 : 500,
+      aiDuration,
+      logShopId ? Number(logShopId) : undefined,
+      { tokens: { prompt: estPrompt, completion: estCompletion, total: estPrompt + estCompletion } }
+    ).catch(() => {});
     
     if (!ai.ok) {
       return NextResponse.json({ ok: false, error: ai.error ?? "Analyzer failed" }, { status: 500 });

@@ -33,43 +33,57 @@ export async function GET(request: NextRequest) {
       matchStage.provider = provider;
     }
 
-    const results = await collection.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: { provider: '$provider', endpoint: '$endpoint' },
-          count: { $sum: 1 },
-          errors: { $sum: { $cond: ['$isError', 1, 0] } },
-          totalLatency: { $sum: '$latencyMs' },
-        }
-      },
-      {
-        $group: {
-          _id: '$_id.provider',
-          total: { $sum: '$count' },
-          errors: { $sum: '$errors' },
-          totalLatency: { $sum: '$totalLatency' },
-          driftCount: {
-            $sum: {
-              $cond: [{ $eq: ['$_id.endpoint', '/verify/drift'] }, '$count', 0]
-            }
-          },
-          verifyOkCount: {
-            $sum: {
-              $cond: [{ $eq: ['$_id.endpoint', '/verify/ok'] }, '$count', 0]
-            }
-          },
-          endpoints: {
-            $push: {
-              endpoint: '$_id.endpoint',
-              count: '$count',
-              errors: '$errors'
+    // Today (UTC) bucket for OpenAI token-spend reporting.
+    const utcDayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    const [results, openAiTokensTodayAgg] = await Promise.all([
+      collection.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: { provider: '$provider', endpoint: '$endpoint' },
+            count: { $sum: 1 },
+            errors: { $sum: { $cond: ['$isError', 1, 0] } },
+            totalLatency: { $sum: '$latencyMs' },
+            tokens: { $sum: { $ifNull: ['$totalTokens', 0] } },
+          }
+        },
+        {
+          $group: {
+            _id: '$_id.provider',
+            total: { $sum: '$count' },
+            errors: { $sum: '$errors' },
+            totalLatency: { $sum: '$totalLatency' },
+            tokensInWindow: { $sum: '$tokens' },
+            driftCount: {
+              $sum: {
+                $cond: [{ $eq: ['$_id.endpoint', '/verify/drift'] }, '$count', 0]
+              }
+            },
+            verifyOkCount: {
+              $sum: {
+                $cond: [{ $eq: ['$_id.endpoint', '/verify/ok'] }, '$count', 0]
+              }
+            },
+            endpoints: {
+              $push: {
+                endpoint: '$_id.endpoint',
+                count: '$count',
+                errors: '$errors',
+                tokens: '$tokens',
+              }
             }
           }
-        }
-      },
-      { $sort: { total: -1 } }
-    ]).toArray();
+        },
+        { $sort: { total: -1 } }
+      ]).toArray(),
+      collection.aggregate([
+        { $match: { provider: 'openai', timestamp: { $gte: utcDayStart, $lte: now } } },
+        { $group: { _id: '$shopId', tokens: { $sum: { $ifNull: ['$totalTokens', 0] } } } },
+        { $sort: { tokens: -1 } },
+        { $limit: 10 },
+      ]).toArray(),
+    ]);
 
     const providers = results.map(r => ({
       provider: API_PROVIDER_CONFIGS[r._id as ApiProvider]?.name || r._id,
@@ -78,14 +92,26 @@ export async function GET(request: NextRequest) {
       errors: r.errors,
       driftCount: r.driftCount || 0,
       verifyOkCount: r.verifyOkCount || 0,
+      tokensInWindow: r.tokensInWindow || 0,
       avgLatency: r.total > 0 ? r.totalLatency / r.total : 0,
       endpoints: r.endpoints
         .sort((a: any, b: any) => b.count - a.count)
         .slice(0, 10)
     }));
 
+    const openAiTokensToday = openAiTokensTodayAgg.reduce((sum: number, r: any) => sum + (r.tokens || 0), 0);
+    const topShopsByTokensToday = openAiTokensTodayAgg.map((r: any) => ({
+      shopId: r._id ?? null,
+      tokens: r.tokens || 0,
+    }));
+
     return NextResponse.json({
       providers,
+      openAi: {
+        tokensToday: openAiTokensToday,
+        topShopsByTokensToday,
+        utcDayStart: utcDayStart.toISOString(),
+      },
       timeRange: {
         startTime: startTime.toISOString(),
         endTime: now.toISOString(),
