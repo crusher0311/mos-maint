@@ -1,0 +1,159 @@
+ [MOS Tools] Background service worker loaded
+ [MOS] Side panel opens on action click
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: GET_SHOP_FEATURES
+ [Tekmetric] Shop ID captured: 524
+ [MOS Inspections] Fetched 1 inspection(s) for RO 317428434
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: GET_SHOP_FEATURES
+ [MOS] Message received: GET_MOS_AUTH
+ [MOS] Message received: MOS_LOGIN
+ [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+ [MOS] Token verify: 200
+ [MOS] Message received: GET_SMS_CONTEXT
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated context with vehicle from API: Object
+ [MOS] Updated VIN from API: 1G6AC5SX1E0176892
+ [MOS] Plan response mileage: 97349 estimated: false fromCache: undefined
+ [MOS] Updated RO number from API: 25975
+ [MOS] Updated customer name from API: Jose Perales
+ [MOS] Updated context with vehicle from API: Object
+ [MOS] Updated VIN from API: 1G6AC5SX1E0176892
+ [MOS] Plan response mileage: 97349 estimated: false fromCache: undefined
+ [MOS] Updated RO number from API: 25975
+ [MOS] Updated customer name from API: Jose Perales
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [LaborRate] Fetched 0 rules for shop 524
+ [LaborRate] No rules configured, skipping
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Relayed x-auth-token for shop 524
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated context with vehicle from API: Object
+ [MOS] Updated VIN from API: 1G6AC5SX1E0176892
+ [MOS] Plan response mileage: 97349 estimated: false fromCache: undefined
+ [MOS] Updated RO number from API: 25975
+ [MOS] Updated customer name from API: Jose Perales
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_SHOP_FEATURES
+ [MOS Inspections] Fetched 1 inspection(s) for RO 320810867
+ [LaborRate] Fetched 0 rules for shop 524
+ [LaborRate] No rules configured, skipping
+ [MOS Inspections] Relayed inspections to MOS: Object
+ [VHI Coach] Fetching for VIN 1FTHX26F5SEA82853, 38 tasks
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [VHI Coach] API error 404: {"error":"No shop found for SMS ID: 524"}
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Updated context with vehicle from API: Object
+ [MOS] Updated VIN from API: 1FTHX26F5SEA82853
+ [MOS] Plan response mileage: 325364 estimated: true fromCache: undefined
+ [MOS] Updated RO number from API: 26040
+ [MOS] Updated customer name from API: Clarence Heptinstall
+ [MOS] Message received: SET_SMS_CONTEXT
+ [MOS] SMS context updated: Object
+ [MOS] Message received: MOS_API_REQUEST
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+ [MOS] Message received: GET_LABOR_RATE_RULES
+ [LaborRate] Fetched 0 rules for shop 524
+ [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1655 [MOS Inspections] Fetched 2 inspection(s) for RO 322277945
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:2176 [LaborRate] No rules configured, skipping
+background.js:1679 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:1732 [VHI Coach] Fetching for VIN 3N1CN8DV9PL825795, 68 tasks
+background.js:1752 [VHI Coach] API error 404: {"error":"No shop found for SMS ID: 524"}
+fetchVhiCoachData @ background.js:1752
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:985 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:992 [MOS] Updated VIN from API: 3N1CN8DV9PL825795
+sidepanel.js:995 [MOS] Plan response mileage: 76248 estimated: false fromCache: undefined
+sidepanel.js:1019 [MOS] Updated RO number from API: 26064
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1655 [MOS Inspections] Fetched 1 inspection(s) for RO 319899499
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:2176 [LaborRate] No rules configured, skipping
+background.js:1655 [MOS Inspections] Fetched 1 inspection(s) for RO 319899499
+background.js:1679 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:2176 [LaborRate] No rules configured, skipping
+background.js:1679 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:1732 [VHI Coach] Fetching for VIN 3FA6P0G78FR224947, 38 tasks
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:1752 [VHI Coach] API error 404: {"error":"No shop found for SMS ID: 524"}
+fetchVhiCoachData @ background.js:1752
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: PREFILL_DVI
+background.js:418 [Prefill DVI] Prefill requested
+background.js:1816 [Prefill DVI] 1 inspections found, 1 incomplete, using inspection 56529465 (status: unknown)
+background.js:1860 [Prefill DVI] API error 404: {"error":"No shop found for SMS ID: 524"}
+prefillDviInspection @ background.js:1860
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:985 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:992 [MOS] Updated VIN from API: 3FA6P0G78FR224947
+sidepanel.js:995 [MOS] Plan response mileage: 235341 estimated: false fromCache: undefined
+sidepanel.js:1019 [MOS] Updated RO number from API: 26022
+sidepanel.js:1024 [MOS] Updated customer name from API: Lillian Sunderman
+background.js:244 [MOS] Message received: PREFILL_DVI
+background.js:418 [Prefill DVI] Prefill requested
+background.js:1816 [Prefill DVI] 1 inspections found, 1 incomplete, using inspection 56529465 (status: unknown)
+background.js:1860 [Prefill DVI] API error 404: {"error":"No shop found for SMS ID: 524"}
+prefillDviInspection @ background.js:1860

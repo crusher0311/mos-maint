@@ -41,7 +41,13 @@ export async function findShopBySmsId(
   };
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
-    const shopIdVariants = userShopIds.flatMap(id => [id, String(id)]);
+    const shopIdVariants: (string | number)[] = [];
+    for (const id of userShopIds) {
+      const str = String(id);
+      const num = Number(id);
+      if (!shopIdVariants.includes(str)) shopIdVariants.push(str);
+      if (Number.isFinite(num) && !shopIdVariants.includes(num)) shopIdVariants.push(num);
+    }
     shopQuery.shopId = { $in: shopIdVariants };
   }
   
