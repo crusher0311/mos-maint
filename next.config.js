@@ -8,6 +8,16 @@ const nextConfig = {
     },
     instrumentationHook: true,
     serverComponentsExternalPackages: ['mongodb', 'node-cron'],
+    // The cron scheduler is loaded at runtime via eval("require") from
+    // src/instrumentation.ts so that webpack doesn't statically analyze it
+    // (which would emit noisy "Critical dependency" warnings on every Fast
+    // Refresh). The side effect is that Next's file tracer also can't see
+    // these files and would otherwise prune them from the deployed build,
+    // causing prod to log "Cannot find module '.../lib/cron/scheduler.cjs'"
+    // and the in-process scheduler never starts. Force-include them here.
+    outputFileTracingIncludes: {
+      '/': ['./lib/cron/*.cjs'],
+    },
   },
   webpack: (config, { isServer }) => {
     // The instrumentation hook intentionally uses dynamic require() to load

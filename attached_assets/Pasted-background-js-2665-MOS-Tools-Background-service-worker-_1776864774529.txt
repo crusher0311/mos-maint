@@ -1,0 +1,83 @@
+background.js:2665 [MOS Tools] Background service worker loaded
+background.js:47 [MOS] Restored API token from storage
+background.js:51 [MOS] Restored API URL: https://mos.tools
+background.js:55 [MOS] Restored shops: 1
+background.js:72 [Tekmetric] Restored session token
+background.js:221 [MOS] Side panel opens on action click
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:283 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1655 [MOS Inspections] Fetched 1 inspection(s) for RO 319899499
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:2176 [LaborRate] No rules configured, skipping
+background.js:195 [MOS] Relayed x-auth-token for shop 524
+background.js:1679 [MOS Inspections] Relayed inspections to MOS: Object
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:1522 [LaborRate] Fetched 0 rules for shop 524
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: false
+handleMosApiRequest @ background.js:1170
+background.js:1176 [MOS] 401 received, attempting silent re-auth...
+background.js:1124 [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+background.js:1131 [MOS] Token verify: 200
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: true
+handleMosApiRequest @ background.js:1170
+background.js:244 [MOS] Message received: SAVE_DEFAULT_TAB
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_LOGIN
+background.js:1124 [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+background.js:1131 [MOS] Token verify: 200
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: false
+handleMosApiRequest @ background.js:1170
+background.js:1176 [MOS] 401 received, attempting silent re-auth...
+background.js:1124 [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+background.js:1131 [MOS] Token verify: 200
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: true
+handleMosApiRequest @ background.js:1170
+background.js:244 [MOS] Message received: SAVE_DEFAULT_TAB
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_LOGIN
+background.js:1124 [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+background.js:1131 [MOS] Token verify: 200
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: false
+handleMosApiRequest @ background.js:1170
+background.js:1176 [MOS] 401 received, attempting silent re-auth...
+background.js:1124 [MOS] Login successful: brandon@onewayautomotiveservice.com | token: ext_69d8e80049a8343b...
+background.js:1131 [MOS] Token verify: 200
+background.js:1170 [MOS] 401 on /api/settings/integrations | server: Unauthorized | token match: true | retried: true
+handleMosApiRequest @ background.js:1170
+background.js:244 [MOS] Message received: SAVE_DEFAULT_TAB
+options.js:163 [Options] Save error: Error: Not authenticated with MOS
+    at saveDefaultTab (options.js:160:13)
+saveDefaultTab @ options.js:163
