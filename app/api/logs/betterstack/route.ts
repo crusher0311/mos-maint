@@ -20,7 +20,7 @@ async function isPlatformAdmin(): Promise<boolean> {
   if (!sess) return false;
 
   const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.platformAdmin === true;
+  return user?.isPlatformAdmin === true;
 }
 
 export async function GET(request: NextRequest) {
