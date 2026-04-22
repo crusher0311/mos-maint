@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
@@ -97,6 +98,29 @@ export async function POST(request: NextRequest) {
       { error: "Unauthorized shop access" },
       { status: 403, headers: corsHeaders }
     );
+  }
+
+  // Feature gate: only shops entitled to the `maintenance` feature should see
+  // the VHI Coach overlay. Platform admins bypass for support/debugging.
+  // Without this, any authenticated user from any shop got the overlay even
+  // when the shop's plan/overrides had VHI disabled.
+  if (!isPlatformAdmin) {
+    try {
+      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
+      if (!entitlements.effectiveFeatures.maintenance) {
+        return NextResponse.json(
+          { success: false, error: "VHI not enabled for this shop", code: "feature_disabled" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    } catch (err: any) {
+      console.error("[VHI Coach] feature entitlement check failed:", err.message);
+      // Fail closed — if we can't confirm entitlement, don't render the overlay.
+      return NextResponse.json(
+        { success: false, error: "Unable to verify feature entitlement" },
+        { status: 503, headers: corsHeaders }
+      );
+    }
   }
 
   const resolvedShopId = shopResult.mosShopId;
