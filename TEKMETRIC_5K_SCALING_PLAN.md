@@ -140,10 +140,11 @@ What to watch (over the next 3-7 days):
 ### Step 3 — Safety nets
 **Effort:** 1 week
 **Risk:** Low
+**Status:** Complete (3a + 3b shipped fully; 3c framework shipped, awaiting Tekmetric subscription API spec to enable).
 
-- **Webhook health monitor**: alert when a shop has received zero webhooks in >24h.
-- **Signature verification**: Tekmetric signs webhooks; we currently don't verify. Anyone with our URL can spoof us.
-- **Auto-subscription**: when a shop onboards, programmatically register the webhook URL with Tekmetric's API instead of doing it manually in their portal.
+- **3a. Webhook health monitor (DONE)**: `app/api/cron/tekmetric-webhook-health/route.ts` runs daily at 09:00 UTC, scans `tekmetric_webhook_logs` for the last 24h per Tekmetric shop, and emails platform admins about silent shops. Idempotent via `tekmetric_webhook_health_alerts` (unique index on `{tekmetricShopId, alertDate}`); re-running same day is a no-op. Registered in `lib/cron/jobs.cjs`.
+- **3b. Signature verification (DONE — framework, default-OFF)**: Webhook handler now reads raw body before parsing JSON, runs HMAC verification when `TEKMETRIC_WEBHOOK_SIGNING_SECRET` is set (header configurable via `TEKMETRIC_WEBHOOK_SIGNATURE_HEADER`, default `x-tekmetric-signature`; algo via `TEKMETRIC_WEBHOOK_SIGNATURE_ALGO`, default `sha256`). Strips `sha256=` prefix, uses `crypto.timingSafeEqual`, returns 401 with detail on mismatch. ALSO: started capturing `headers` field on every `tekmetric_webhook_logs` row (only the introspection-relevant ones — see `HEADERS_TO_CAPTURE` allowlist) so we can confirm Tekmetric's actual signing format from real traffic before flipping enforcement on.
+- **3c. Auto-subscription (DONE — framework + visibility, scaffolded)**: `lib/tekmetric-webhook-subscribe.ts` provides `subscribeShopToTekmetricWebhooks()` gated default-OFF behind `TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE=true`. The subscription endpoint URL is templated via `TEKMETRIC_WEBHOOK_SUBSCRIBE_URL_TEMPLATE` (token `{shopId}`) and the public callback via `TEKMETRIC_WEBHOOK_PUBLIC_URL` so the exact partner-API path can be confirmed without redeploying. Outcomes persist to `tekmetric_webhook_subscriptions` (one row per shop with `lastResult`, `lastAttemptAt`, `firstAttemptAt`). Visibility surface: `/api/platform-admin/tekmetric/webhook-subscription-status` reports per-shop `healthStatus` (`healthy`/`stale`/`silent`) plus 24h/7d/30d event counts and event-type breakdown — sorted silent-first so broken subscriptions surface immediately. Wiring into the onboarding flow is deferred until partner-eng confirms the subscribe API spec.
 
 ### Step 4 — Slow polling to weekly reconciliation
 **Effort:** Half a day

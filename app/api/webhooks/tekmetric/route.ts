@@ -117,9 +117,97 @@ function forwardWebhook(body: any, sourceHost: string) {
   }
 }
 
+// Capture the headers we want to introspect (Step 3b). Persisted into
+// `tekmetric_webhook_logs.headers` so we can confirm Tekmetric's actual
+// signature header name/format, then turn on enforcement with confidence.
+const HEADERS_TO_CAPTURE = [
+  "x-tekmetric-signature",
+  "x-tekmetric-event",
+  "x-tekmetric-delivery",
+  "x-signature",
+  "x-hub-signature",
+  "x-hub-signature-256",
+  "user-agent",
+  "content-type",
+];
+
+function captureHeaders(req: NextRequest): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of HEADERS_TO_CAPTURE) {
+    const v = req.headers.get(name);
+    if (v) out[name] = v;
+  }
+  return out;
+}
+
+/**
+ * Step 3b — HMAC signature verification framework.
+ *
+ * Default behavior: if `TEKMETRIC_WEBHOOK_SIGNING_SECRET` is unset, we skip
+ * verification entirely (matches pre-3b behavior — accept everything).
+ *
+ * When the secret IS set, we require a valid HMAC-SHA256 signature in the
+ * configured header. The header name and algorithm are env-tunable so we can
+ * adjust once Tekmetric confirms the exact format (the captured headers in
+ * `tekmetric_webhook_logs.headers` make this introspectable).
+ *
+ * Returns null if OK, or an error string for a 401 response.
+ */
+function verifySignature(rawBody: string, req: NextRequest): string | null {
+  const secret = process.env.TEKMETRIC_WEBHOOK_SIGNING_SECRET;
+  if (!secret) return null; // verification disabled
+
+  const headerName = (process.env.TEKMETRIC_WEBHOOK_SIGNATURE_HEADER || "x-tekmetric-signature").toLowerCase();
+  const algo = process.env.TEKMETRIC_WEBHOOK_SIGNATURE_ALGO || "sha256";
+  // Encoding can be "hex" (default) or "base64" — Tekmetric's exact format will
+  // be confirmed from the captured headers (3b introspection) before enabling.
+  const encoding = (process.env.TEKMETRIC_WEBHOOK_SIGNATURE_ENCODING || "hex").toLowerCase();
+  const provided = req.headers.get(headerName);
+  if (!provided) return `missing signature header: ${headerName}`;
+
+  const crypto = require("crypto");
+  const expected = crypto.createHmac(algo, secret).update(rawBody).digest(encoding);
+
+  // Strip a "sha256=" / "hmac-sha256=" prefix if present (common formats).
+  const normalized = provided.includes("=") && provided.indexOf("=") < provided.length - 1
+    ? provided.substring(provided.indexOf("=") + 1)
+    : provided;
+
+  try {
+    const a = encoding === "base64"
+      ? Buffer.from(expected, "base64")
+      : Buffer.from(expected, "hex");
+    const b = encoding === "base64"
+      ? Buffer.from(normalized, "base64")
+      : Buffer.from(normalized, "hex");
+    if (a.length !== b.length || a.length === 0) return "signature length mismatch";
+    if (!crypto.timingSafeEqual(a, b)) return "signature mismatch";
+    return null;
+  } catch (err: any) {
+    return `signature parse error: ${err?.message || "unknown"}`;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    // Read raw bytes first so signature verification (Step 3b) can run
+    // before JSON parse. JSON.parse below works on the same buffer.
+    const rawBody = await req.text();
+    const capturedHeaders = captureHeaders(req);
+
+    const sigError = verifySignature(rawBody, req);
+    if (sigError) {
+      console.warn(`[Tekmetric Webhook] Signature rejected: ${sigError}`);
+      return NextResponse.json({ error: "invalid_signature", detail: sigError }, { status: 401 });
+    }
+
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (err: any) {
+      return NextResponse.json({ error: "invalid_json", detail: err?.message }, { status: 400 });
+    }
+
     const db = await getDb();
 
     const isForwarded = req.headers.get("x-webhook-forward") === "true";
@@ -583,6 +671,7 @@ export async function POST(req: NextRequest) {
       eventType,
       data,
       rawBody: body,
+      headers: capturedHeaders, // Step 3b: introspectable header capture
       receivedAt: new Date()
     });
     
