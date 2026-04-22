@@ -61,6 +61,16 @@ export interface IngestionOptions {
   dualWriteToJobIndex?: boolean;
   dualWriteToRepairPatterns?: boolean;
   dualWriteToSupabase?: boolean;
+  /**
+   * Code path that triggered this ingestion (e.g. "poll", "webhook", "backfill").
+   * When set, each work_order doc gets two stamps:
+   *   - `firstIngestedVia` / `firstIngestedAt`: written ONCE the first time we
+   *     see the work order; never overwritten on subsequent ingestions.
+   *   - `lastIngestedVia` / `lastIngestedAt`: overwritten on every ingestion.
+   * Powers the soak metric for the trust-the-webhooks migration — see
+   * TEKMETRIC_5K_SCALING_PLAN.md (Step 2 Phase B).
+   */
+  ingestionVia?: string;
 }
 
 // =============================================================================
@@ -462,6 +472,7 @@ export class NormalizedIngestionService {
             },
           }
         );
+        await this._stampIngestionVia(existing._id);
         
         if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
           await this.writeToJobIndex(sourceData, serviceJobs);
@@ -534,6 +545,7 @@ export class NormalizedIngestionService {
       } as NormalizedWorkOrder;
       
       await collection.insertOne(newWorkOrder);
+      await this._stampIngestionVia(newId);
       
       if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
         await this.writeToJobIndex(sourceData, serviceJobs);
@@ -1349,6 +1361,38 @@ export class NormalizedIngestionService {
     return merged;
   }
   
+  /**
+   * Stamps `firstIngestedVia` / `firstIngestedAt` (set-if-missing) and
+   * `lastIngestedVia` / `lastIngestedAt` (always) on a normalized_work_orders
+   * doc. No-op when `options.ingestionVia` isn't set, so existing callers that
+   * don't pass it (e.g. tests, legacy entry points) keep their current
+   * behavior. Failures are logged but never thrown — instrumentation must
+   * never break the ingestion path.
+   */
+  private async _stampIngestionVia(workOrderId: string): Promise<void> {
+    const via = this.options.ingestionVia;
+    if (!via) return;
+    try {
+      const collection = this.db.collection(NORMALIZED_COLLECTIONS.workOrders);
+      const now = new Date();
+      // Two writes (rather than one with $setOnInsert) because we're not
+      // upserting — we're updating an already-inserted/updated row, so
+      // $setOnInsert wouldn't fire. The first updateOne is "set if missing"
+      // (immutable first-writer attribution); the second is unconditional
+      // (always-fresh diagnostic).
+      await collection.updateOne(
+        { _id: workOrderId as any, firstIngestedVia: { $exists: false } },
+        { $set: { firstIngestedVia: via, firstIngestedAt: now } }
+      );
+      await collection.updateOne(
+        { _id: workOrderId as any },
+        { $set: { lastIngestedVia: via, lastIngestedAt: now } }
+      );
+    } catch (err: any) {
+      console.log(`[NIS] _stampIngestionVia(${workOrderId}, ${via}) failed: ${err?.message}`);
+    }
+  }
+
   private async createAuditEntry(
     entityType: string,
     entityId: string,

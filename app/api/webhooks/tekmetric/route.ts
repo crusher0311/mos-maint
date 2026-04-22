@@ -4,11 +4,91 @@ import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
 import { getVehicle, getCustomer } from "@/lib/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
+import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import type { Db } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
+
+/**
+ * Phase B of the trust-the-webhooks migration: pipe webhook payloads through
+ * `NormalizedIngestionService` so the Postgres normalized tables (and the
+ * normalized Mongo collections) stay current without polling.
+ *
+ * Caller is responsible for already having an up-to-date `tekmetric_work_orders`
+ * cache row — we read VIN / customer fields off it (and fall back to live
+ * /vehicles + /customers fetches) when the webhook payload alone isn't enough
+ * to satisfy the adapter (which needs full `vehicle` and `customer` subdocs).
+ *
+ * Soft-fail by design: any error is logged but never thrown, because the webhook
+ * must always 200 OK back to Tekmetric regardless of dual-write health.
+ *
+ * See TEKMETRIC_5K_SCALING_PLAN.md (Step 2 Phase B).
+ */
+async function runWebhookNormalizedIngestion(
+  db: Db,
+  tekmetricShopId: number,
+  repairOrder: any,
+  cached: any | null,
+): Promise<void> {
+  try {
+    const shop = await db.collection("shops").findOne({ "tekmetric.shopId": tekmetricShopId });
+    if (!shop?.shopId) {
+      console.log(`[Tekmetric Webhook NIS] No internal shop found for tekmetricShopId=${tekmetricShopId}; skipping NIS`);
+      return;
+    }
+    const internalShopId = Number(shop.shopId);
+    const enterpriseId = shop?.enterpriseId as string | undefined;
+
+    // The Tekmetric adapter needs full `vehicle` and `customer` objects, not
+    // just IDs. Try cache fields first to avoid an API call; fall back to live
+    // fetch when missing. ~150 webhook events/hr × 2 lookups = 300/hr — well
+    // under the 600/min budget.
+    let vehicle: any = null;
+    if (cached?.vin) {
+      vehicle = {
+        id: repairOrder.vehicleId,
+        vin: cached.vin,
+        year: cached.vehicleYear,
+        make: cached.vehicleMake,
+        model: cached.vehicleModel,
+        engine: cached.vehicleEngine,
+      };
+    } else if (repairOrder.vehicleId) {
+      try { vehicle = await getVehicle(repairOrder.vehicleId); } catch {}
+    }
+    if (!vehicle?.vin) {
+      // Without a VIN the adapter rejects the work order. Polling will catch up.
+      console.log(`[Tekmetric Webhook NIS] No VIN available for RO ${repairOrder.id}; skipping NIS (poll will reconcile)`);
+      return;
+    }
+
+    let customer: any = null;
+    if (repairOrder.customer && (repairOrder.customer.firstName || repairOrder.customer.lastName)) {
+      customer = repairOrder.customer;
+    } else if (repairOrder.customerId) {
+      try { customer = await getCustomer(repairOrder.customerId, internalShopId); } catch {}
+    }
+
+    const enriched = { ...repairOrder, vehicle, customer };
+
+    const ingestionService = new NormalizedIngestionService(
+      db,
+      "tekmetric",
+      internalShopId,
+      enterpriseId,
+      { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook" },
+    );
+    const result = await ingestionService.ingestWorkOrderBatchWithAllEntities([enriched]);
+    console.log(
+      `[Tekmetric Webhook NIS] shop=${internalShopId} ro=${repairOrder.id} → WO ${result.workOrders.created}c/${result.workOrders.updated}u/${result.workOrders.skipped}s, payments=${result.payments.created}, inspections=${result.inspections.created}`
+    );
+  } catch (err: any) {
+    console.error(`[Tekmetric Webhook NIS] error for RO ${repairOrder?.id}:`, err?.message);
+  }
+}
 
 function forwardWebhook(body: any, sourceHost: string) {
   const targets = (process.env.WEBHOOK_FORWARD_TARGETS || "").split(",").map(t => t.trim()).filter(Boolean);
@@ -177,6 +257,9 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Phase B: dual-write into normalized tables. Soft-fail; webhook still 200s.
+        await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, cached);
+
         const wasInsert = !!result.upsertedId;
         console.log(`[Tekmetric Webhook] Terminal cache write for RO #${roNumber} (${wasInsert ? "INSERT" : "UPDATE"}) → ${statusName || "Posted"}`);
       } else {
@@ -329,6 +412,13 @@ export async function POST(req: NextRequest) {
         if (!shop) {
           console.warn(`[Tekmetric Webhook] No MOS shop found for tekmetric.shopId=${tekmetricShopId}; row was upserted with shopId=unknown`);
         }
+
+        // Phase B: dual-write to normalized tables. Re-read the cache row so any
+        // enrichment we just performed (vin/year/make/model) is reflected.
+        const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
+          { workOrderId: String(roId) }
+        );
+        await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, refreshedCached);
       }
       
       try {
