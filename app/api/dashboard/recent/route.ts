@@ -40,7 +40,7 @@ export async function GET() {
       {
         $match: {
           $and: [
-            { $or: [{ shopId: String(user.shopId) }, { shopId: Number(user.shopId) }] },
+            { $or: [{ shopId: String(sess.shopId) }, { shopId: Number(sess.shopId) }] },
             { provider: "autoflow" },
           ],
         },

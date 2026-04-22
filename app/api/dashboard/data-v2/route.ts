@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const shop = await db.collection("shops").findOne({ 
       shopId: { $in: [String(shopId), shopId] } 
     });
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
         },
       }));
 
-      await batchEstimateMileage(db, Number(user.shopId), rows);
+      await batchEstimateMileage(db, Number(sess.shopId), rows);
 
       return NextResponse.json({
         rows,
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
           hasNextPage: page < Math.ceil(totalCount / pageSize),
           hasPrevPage: page > 1,
         },
-        user: { email: user.email, role: user.role, shopId: user.shopId },
+        user: { email: user.email, role: user.role, shopId: sess.shopId },
         normalized: true
       });
     }
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
       }
     }));
 
-    await batchEstimateMileage(db, Number(user.shopId), rows);
+    await batchEstimateMileage(db, Number(sess.shopId), rows);
 
     rows.sort((a: any, b: any) => {
       const nameA = a.displayName || "";
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       },
-      user: { email: user.email, role: user.role, shopId: user.shopId },
+      user: { email: user.email, role: user.role, shopId: sess.shopId },
       smsType,
       distanceUnit: shop?.preferences?.distanceUnit || "miles",
       normalized: true
