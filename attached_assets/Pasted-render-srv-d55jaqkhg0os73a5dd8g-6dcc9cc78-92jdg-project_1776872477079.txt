@@ -1,0 +1,26 @@
+render@srv-d55jaqkhg0os73a5dd8g-6dcc9cc78-92jdg:~/project/src$ # 1. Scan all processes for the token
+for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+  v=$(cat /proc/$pid/environ 2>/dev/null | tr '\0' '\n' | grep ^TEKMETRIC_API_TOKEN= | head -1)
+  [ -n "$v" ] && echo "PID $pid has it" && break
+done
+
+# 2. See ALL tekmetric-related env vars on PID 1
+cat /proc/1/environ | tr '\0' '\n' | grep -i tekmetric
+
+# 3. Check what env-var names the code actually reads
+grep -rn "process\.env\.TEKMETRIC" lib/ scripts/ app/ 2>/dev/null | head -20
+TEKMETRIC_CLIENT_SECRET=fe1d09f7c16c43928b5bcb96
+TEKMETRIC_CLIENT_ID=2bbb609e116244d2
+lib/tekmetric-auth.ts:27:  const clientId = process.env.TEKMETRIC_CLIENT_ID;
+lib/tekmetric-auth.ts:28:  const clientSecret = process.env.TEKMETRIC_CLIENT_SECRET;
+lib/integrations/tekmetric/auth.ts:27:  const clientId = process.env.TEKMETRIC_CLIENT_ID;
+lib/integrations/tekmetric/auth.ts:28:  const clientSecret = process.env.TEKMETRIC_CLIENT_SECRET;
+lib/integrations/tekmetric/auth.ts:166:  return Boolean(process.env.TEKMETRIC_CLIENT_ID && process.env.TEKMETRIC_CLIENT_SECRET);
+scripts/job-index-mileage-backfill-tekmetric.ts:22:const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
+scripts/tekmetric-history-backfill.ts:8:const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
+app/dashboard/vehicles/[vin]/page.tsx:211:    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
+app/dashboard/vehicles/[vin]/page.tsx:492:    if (shop?.tekmetric?.shopId && process.env.TEKMETRIC_CLIENT_ID) {
+app/api/cron/tekmetric-backfill/route.ts:526:  if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+app/api/cron/tekmetric-backfill/route.ts:584:  if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+app/api/settings/tekmetric/route.ts:130:    if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+render@srv-d55jaqkhg0os73a5dd8g-6dcc9cc78-92jdg:~/project/src$ 

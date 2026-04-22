@@ -19,7 +19,10 @@
 import { getDb } from "../lib/mongo";
 
 const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
-const TEKMETRIC_API_TOKEN = process.env.TEKMETRIC_API_TOKEN;
+
+// Tekmetric uses OAuth client-credentials flow. Reuse the app's auth helper
+// so this script gets the same token (and benefits from its persisted cache).
+import { getValidToken, refreshToken } from "@/lib/tekmetric-auth";
 
 type Args = {
   shop?: number;
@@ -101,13 +104,19 @@ async function tekmetricFetchRO(roId: number): Promise<{
 } | null> {
   const url = `${TEKMETRIC_API_BASE}/repair-orders/${roId}`;
   for (let attempt = 1; attempt <= 5; attempt++) {
+    const token = await getValidToken();
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${TEKMETRIC_API_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         Accept: "application/json",
       },
       cache: "no-store",
     });
+    if (res.status === 401 || res.status === 403) {
+      console.log(`  [auth] RO ${roId}: ${res.status}, force-refreshing token`);
+      await refreshToken();
+      continue;
+    }
     if (res.status === 404) return null;
     if (res.status === 429) {
       const retryAfter = parseInt(res.headers.get("retry-after") || "0", 10);
@@ -134,8 +143,16 @@ async function main() {
   console.log("=== Tekmetric job_index Mileage Backfill ===");
   console.log("Args:", args);
 
-  if (!TEKMETRIC_API_TOKEN) {
-    console.error("Missing TEKMETRIC_API_TOKEN");
+  if (!process.env.TEKMETRIC_CLIENT_ID || !process.env.TEKMETRIC_CLIENT_SECRET) {
+    console.error("Missing TEKMETRIC_CLIENT_ID and/or TEKMETRIC_CLIENT_SECRET");
+    process.exit(1);
+  }
+  // Prime the OAuth token so we fail fast if creds are bad.
+  try {
+    await getValidToken();
+    console.log("[auth] OAuth token acquired.");
+  } catch (e: any) {
+    console.error("[auth] Failed to acquire Tekmetric OAuth token:", e?.message || e);
     process.exit(1);
   }
 
