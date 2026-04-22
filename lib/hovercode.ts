@@ -17,6 +17,141 @@ interface HovercodeCreateResponse {
   created: string;
 }
 
+interface HovercodeReadResponse {
+  id: string;
+  qr_data?: string;
+  logo_url?: string | null;
+  logo_image?: string | null;
+  logo?: string | null;
+  display_name?: string;
+  primary_color?: string;
+  background_color?: string;
+  [key: string]: any;
+}
+
+interface DriftExpectation {
+  qr_data?: string;
+  logo_url?: string;
+}
+
+/**
+ * Read-back guard: HoverCode returns 200 even when a field doesn't actually
+ * stick (e.g. logo upload silently dropped). After create/update we GET the
+ * record, compare the fields we set, and log a structured warning + push a
+ * synthetic "drift" entry into api_usage so it shows up on the platform
+ * observability page.
+ *
+ * This is purely advisory — failures here never bubble up to the caller.
+ */
+export async function verifyHovercode(
+  hovercodeId: string,
+  expected: DriftExpectation,
+  shopId?: number,
+  context: string = "verify"
+): Promise<void> {
+  const apiToken = process.env.HOVERCODE_API_TOKEN;
+  if (!apiToken) return;
+
+  const startTime = Date.now();
+  const url = `${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Token ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      // Read-back itself failed; record as a drift signal too.
+      const errText = await response.text().catch(() => "");
+      console.warn(
+        `[HoverCode-Drift] read-back GET failed for ${hovercodeId} (${context}): ${response.status} ${errText.slice(0, 120)}`
+      );
+      trackApiRequest(
+        "hovercode",
+        "/verify/drift",
+        "GET",
+        response.status,
+        latencyMs,
+        shopId,
+        { errorMessage: `read-back failed (${context}): ${response.status}` }
+      );
+      return;
+    }
+
+    const record = (await response.json()) as HovercodeReadResponse;
+    const mismatches: string[] = [];
+
+    if (expected.qr_data !== undefined) {
+      const actual = record.qr_data ?? "";
+      if (actual !== expected.qr_data) {
+        mismatches.push(
+          `qr_data expected="${expected.qr_data}" actual="${actual}"`
+        );
+      }
+    }
+
+    if (expected.logo_url !== undefined && expected.logo_url) {
+      // HoverCode commonly re-hosts logos, so we don't compare URLs verbatim;
+      // we only require *some* logo to be present after the call.
+      const hasLogo = Boolean(
+        record.logo_url || record.logo_image || record.logo
+      );
+      if (!hasLogo) {
+        mismatches.push(
+          `logo missing after upload (sent="${expected.logo_url}")`
+        );
+      }
+    }
+
+    if (mismatches.length === 0) {
+      // Track a successful verification so we can compute a drift rate later.
+      trackApiRequest(
+        "hovercode",
+        "/verify/ok",
+        "GET",
+        200,
+        latencyMs,
+        shopId
+      );
+      return;
+    }
+
+    const summary = mismatches.join("; ");
+    console.warn(
+      `[HoverCode-Drift] ${context} ${hovercodeId}${shopId ? ` shop=${shopId}` : ""}: ${summary}`
+    );
+    trackApiRequest(
+      "hovercode",
+      "/verify/drift",
+      "GET",
+      409,
+      latencyMs,
+      shopId,
+      { errorMessage: `${context}: ${summary}` }
+    );
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.warn(
+      `[HoverCode-Drift] read-back threw for ${hovercodeId} (${context}): ${err?.message || err}`
+    );
+    trackApiRequest(
+      "hovercode",
+      "/verify/drift",
+      "GET",
+      0,
+      latencyMs,
+      shopId,
+      { errorMessage: `read-back exception (${context}): ${err?.message || err}` }
+    );
+  }
+}
+
 interface CreateQRCodeOptions {
   shopId: number | string;
   shopName: string;
@@ -103,6 +238,14 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
 
     console.log(`[HoverCode] Created QR code ${data.id} for shop ${options.shopId}`);
 
+    // Read-back guard — don't trust the 200 from create. Fire-and-forget.
+    verifyHovercode(
+      data.id,
+      { qr_data: requestBody.qr_data, logo_url: requestBody.logo_url },
+      shopIdNum,
+      "create"
+    ).catch(() => {});
+
     return {
       success: true,
       hovercodeId: data.id,
@@ -124,7 +267,9 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
 
 async function patchHovercode(
   hovercodeId: string,
-  patch: Record<string, any>
+  patch: Record<string, any>,
+  shopId?: number,
+  context: string = "update"
 ): Promise<{ success: boolean; error?: string }> {
   const apiToken = process.env.HOVERCODE_API_TOKEN;
   if (!apiToken) return { success: false, error: "HoverCode API not configured" };
@@ -146,12 +291,21 @@ async function patchHovercode(
     });
 
     const latencyMs = Date.now() - startTime;
-    trackApiRequest("hovercode", `/${hovercodeId}/update/`, "PUT", response.status, latencyMs);
+    trackApiRequest("hovercode", `/${hovercodeId}/update/`, "PUT", response.status, latencyMs, shopId);
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
       return { success: false, error: `HoverCode API error: ${response.status} ${errText.slice(0, 200)}` };
     }
+
+    // Read-back guard — fire-and-forget verification of the patched fields.
+    const expected: DriftExpectation = {};
+    if (typeof patch.qr_data === "string") expected.qr_data = patch.qr_data;
+    if (typeof patch.logo_url === "string") expected.logo_url = patch.logo_url;
+    if (expected.qr_data !== undefined || expected.logo_url !== undefined) {
+      verifyHovercode(hovercodeId, expected, shopId, context).catch(() => {});
+    }
+
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || "Failed to update QR code" };
@@ -160,14 +314,16 @@ async function patchHovercode(
 
 export async function updateHovercodeDestination(
   hovercodeId: string,
-  newDestination: string
+  newDestination: string,
+  shopId?: number
 ): Promise<{ success: boolean; error?: string }> {
-  return patchHovercode(hovercodeId, { qr_data: newDestination });
+  return patchHovercode(hovercodeId, { qr_data: newDestination }, shopId, "update-destination");
 }
 
 export async function updateHovercodeLogo(
   hovercodeId: string,
-  logoUrl: string
+  logoUrl: string,
+  shopId?: number
 ): Promise<{ success: boolean; error?: string }> {
-  return patchHovercode(hovercodeId, { logo_url: logoUrl });
+  return patchHovercode(hovercodeId, { logo_url: logoUrl }, shopId, "update-logo");
 }

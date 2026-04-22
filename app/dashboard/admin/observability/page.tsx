@@ -31,8 +31,11 @@ interface ServiceInfo {
 
 interface ApiUsageStats {
   provider: string;
+  providerId?: string;
   total: number;
   errors: number;
+  driftCount?: number;
+  verifyOkCount?: number;
   avgLatency: number;
   endpoints: { endpoint: string; count: number; errors: number }[];
 }
@@ -339,6 +342,21 @@ export default function ObservabilityPage() {
                       {provider.errors.toLocaleString()}
                     </span>
                   </div>
+                  {(provider.driftCount ?? 0) > 0 || (provider.verifyOkCount ?? 0) > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500" title="Read-back verifications that detected the API silently dropped a field (e.g. logo not applied)">
+                        Drift
+                      </span>
+                      <span className={`font-medium ${(provider.driftCount ?? 0) > 0 ? "text-yellow-600" : "text-gray-900"}`}>
+                        {(provider.driftCount ?? 0).toLocaleString()}
+                        {(provider.verifyOkCount ?? 0) > 0 && (
+                          <span className="text-gray-400 text-xs ml-1">
+                            / {((provider.driftCount ?? 0) + (provider.verifyOkCount ?? 0)).toLocaleString()}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Avg Latency</span>
                     <span className="font-medium">{provider.avgLatency?.toFixed(0) || 0}ms</span>

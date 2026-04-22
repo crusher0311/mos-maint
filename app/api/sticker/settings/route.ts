@@ -1,44 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { updateHovercodeDestination as sharedUpdateHovercodeDestination } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
-const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
-
-async function updateHovercodeDestination(hovercodeId: string, newUrl: string): Promise<boolean> {
-  if (!HOVERCODE_API_TOKEN || !hovercodeId) {
+// Thin wrapper preserves the existing boolean return shape used by this route
+// while routing through the shared client (which handles read-back drift
+// detection and api_usage tracking).
+async function updateHovercodeDestination(
+  hovercodeId: string,
+  newUrl: string,
+  shopId?: number
+): Promise<boolean> {
+  if (!hovercodeId) return false;
+  console.log(`[Sticker Settings] Updating HoverCode ${hovercodeId} destination to: ${newUrl}`);
+  const result = await sharedUpdateHovercodeDestination(hovercodeId, newUrl, shopId);
+  if (!result.success) {
+    console.error("[Sticker Settings] HoverCode update failed:", result.error);
     return false;
   }
-
-  try {
-    console.log(`[Sticker Settings] Updating HoverCode ${hovercodeId} destination to: ${newUrl}`);
-    
-    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/update/`, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Token ${HOVERCODE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        qr_data: newUrl,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Sticker Settings] HoverCode update error:", response.status, errorText);
-      return false;
-    }
-
-    console.log("[Sticker Settings] HoverCode destination updated successfully");
-    return true;
-  } catch (error) {
-    console.error("[Sticker Settings] HoverCode update failed:", error);
-    return false;
-  }
+  console.log("[Sticker Settings] HoverCode destination updated successfully");
+  return true;
 }
 
 interface IntervalConfig {
@@ -251,7 +235,7 @@ export async function PUT(req: NextRequest) {
       // Only update HoverCode if the URL actually changed and we have a HoverCode ID
       if (hovercodeId && body.appointmentUrl !== existingUrl) {
         console.log(`[Sticker Settings] Appointment URL changed from "${existingUrl}" to "${body.appointmentUrl}"`);
-        const updated = await updateHovercodeDestination(hovercodeId, body.appointmentUrl);
+        const updated = await updateHovercodeDestination(hovercodeId, body.appointmentUrl, shopId);
         if (!updated) {
           console.warn("[Sticker Settings] Failed to update HoverCode destination, but continuing with save");
         }

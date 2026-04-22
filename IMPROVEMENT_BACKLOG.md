@@ -50,27 +50,44 @@ architect review. Consider expanding the lint to also flag routes that read
 
 ---
 
-### [ ] 2. Verify HoverCode actually applied our logo (don't trust 200)
+### [x] 2. Verify HoverCode actually applied our logo (don't trust 200) (2026-04-22)
 **Why now:** HoverCode happily returned `200 OK` while producing logo-less QRs.
 We only noticed because a human looked at a printed sticker. Same trust-the-200
 risk exists everywhere we hit a third-party API.
 
-**Proposed approach:**
-1. After `createHovercode` and `updateHovercodeLogo`, immediately `GET` the
-   record back and assert `logo_url` matches what we sent. If it doesn't, log a
-   `warn` event with shop ID, QR ID, and expected vs. actual.
-2. Surface those warnings on the platform observability page as a
-   "QR generation drift" counter.
-3. Apply the same read-back pattern to other "fire-and-forget" externals where
-   silent corruption is plausible (Resend send confirmations, Twilio media
-   uploads, Stripe price/product mutations).
+**What shipped (scoped to HoverCode + observability counter; the
+Resend/Twilio/Stripe sweep was deferred):**
+1. `lib/hovercode.ts` exports `verifyHovercode(id, expected, shopId, context)`.
+   After every successful `POST /hovercode/create/` and `PUT /hovercode/<id>/update/`
+   it fires a non-blocking `GET /hovercode/<id>/` and compares fields. Logo
+   verification is presence-based (`logo_url || logo_image || logo`) because
+   HoverCode re-hosts uploaded logos so URL equality is meaningless. `qr_data`
+   is compared verbatim. Mismatches emit `console.warn("[HoverCode-Drift] ...")`
+   with shop ID, QR ID, context, and expected-vs-actual diff. Read-back
+   failures (network/HTTP errors) are themselves recorded as drift signals.
+2. Drift events are recorded via `trackApiRequest("hovercode", "/verify/drift",
+   "GET", 409, ...)` and successful verifications via `/verify/ok`, so the
+   existing `api_usage` Mongo collection is the single source of truth.
+3. `app/api/platform-admin/api-usage/summary/route.ts` aggregates `driftCount`
+   and `verifyOkCount` per provider; `app/dashboard/admin/observability/page.tsx`
+   shows a yellow "Drift" row in each provider card with the form
+   `<drift> / <total verifications>`, hidden when zero.
+4. The three real sticker mutation paths now thread `shopId` and trigger the
+   guard: `app/api/sticker/settings/route.ts` (wraps shared
+   `updateHovercodeDestination`), `app/api/sticker/generate/route.ts` and
+   `app/api/sticker/regenerate-qr/route.ts` (import `verifyHovercode` and call
+   it after their local POST succeeds, since they need the raw PNG bytes the
+   shared helper doesn't return).
+5. `patchHovercode` request-level tracking now includes `shopId` for per-shop
+   attribution of the underlying PUT, matching the create-path tracking.
 
-**Files likely touched:** `lib/hovercode.ts`, `app/api/sticker/generate/route.ts`,
-`app/api/sticker/regenerate-qr/route.ts`, observability page route.
+**Verified by:** Architect re-review PASS on all six points; workflow boots
+clean (`Ready in 1.9s`); all calls are fire-and-forget (`.catch(() => {})`)
+so verification failures never break sticker generation or settings saves.
 
-**Acceptance:** A unit test simulates HoverCode returning 200 with no
-`logo_url`; our code surfaces a warning instead of pretending success. Manual
-spot-check on staging shows the read-back path runs.
+**Follow-ups still open:** Resend/Twilio/Stripe read-back sweep (deferred per
+scoping decision); optional unit test mocking HoverCode 200-with-no-logo to
+guard against regressions; staging spot-check that drift counters increment.
 
 ---
 

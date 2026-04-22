@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { verifyHovercode } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ interface HovercodeCreateResult {
 
 async function createHovercodeQR(
   redirectUrl: string,
-  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string; logoUrl?: string }
+  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string; logoUrl?: string; shopId?: number }
 ): Promise<HovercodeCreateResult | null> {
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
     return null;
@@ -94,6 +95,14 @@ async function createHovercodeQR(
 
     const data = await response.json();
     const hovercodeId = data.id;
+
+    // Read-back guard — verify HoverCode actually applied our payload.
+    verifyHovercode(
+      hovercodeId,
+      { qr_data: redirectUrl, logo_url: options.logoUrl },
+      options.shopId,
+      "sticker-regenerate"
+    ).catch(() => {});
 
     if (data.png) {
       const imageResponse = await fetch(data.png);
@@ -155,6 +164,7 @@ export async function POST(req: NextRequest) {
       backgroundColor: qrBgColor,
       displayName: `${shopName} - Oil Sticker`,
       logoUrl: logoUrl,
+      shopId,
     });
 
     // Save HoverCode ID even if we don't get dataUri

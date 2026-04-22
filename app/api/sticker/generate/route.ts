@@ -6,6 +6,7 @@ import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types"
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
+import { verifyHovercode } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -145,9 +146,9 @@ interface HovercodeCreateResult {
 
 async function createHovercodeQR(
   url: string,
-  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string } = {}
+  options: { size?: number; color?: string; backgroundColor?: string; displayName?: string; shopId?: number } = {}
 ): Promise<HovercodeCreateResult | null> {
-  const { size = 300, color = "#111111", backgroundColor = "#ffffff", displayName } = options;
+  const { size = 300, color = "#111111", backgroundColor = "#ffffff", displayName, shopId } = options;
 
   if (!HOVERCODE_API_TOKEN || !HOVERCODE_WORKSPACE_ID) {
     console.error("[Sticker Generate] HoverCode credentials not configured");
@@ -194,7 +195,17 @@ async function createHovercodeQR(
 
     const data = await response.json();
     const hovercodeId = data.id;
-    
+
+    // Read-back guard — verify HoverCode actually applied our payload (logo
+    // uploads are silently dropped on occasion). Fire-and-forget; failures
+    // never block sticker generation.
+    verifyHovercode(
+      hovercodeId,
+      { qr_data: url, logo_url: logoUrl },
+      shopId,
+      "sticker-generate"
+    ).catch(() => {});
+
     let dataUri: string | null = null;
     if (data.png) {
       dataUri = await fetchImageAsDataUri(data.png);
@@ -405,6 +416,7 @@ export async function POST(req: NextRequest) {
           color: qrColor,
           backgroundColor: qrBgColor,
           displayName: `${shopName} - Oil Sticker`,
+          shopId,
         });
         
         if (newQR?.dataUri) {

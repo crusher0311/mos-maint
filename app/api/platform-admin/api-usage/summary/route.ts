@@ -49,6 +49,16 @@ export async function GET(request: NextRequest) {
           total: { $sum: '$count' },
           errors: { $sum: '$errors' },
           totalLatency: { $sum: '$totalLatency' },
+          driftCount: {
+            $sum: {
+              $cond: [{ $eq: ['$_id.endpoint', '/verify/drift'] }, '$count', 0]
+            }
+          },
+          verifyOkCount: {
+            $sum: {
+              $cond: [{ $eq: ['$_id.endpoint', '/verify/ok'] }, '$count', 0]
+            }
+          },
           endpoints: {
             $push: {
               endpoint: '$_id.endpoint',
@@ -66,6 +76,8 @@ export async function GET(request: NextRequest) {
       providerId: r._id,
       total: r.total,
       errors: r.errors,
+      driftCount: r.driftCount || 0,
+      verifyOkCount: r.verifyOkCount || 0,
       avgLatency: r.total > 0 ? r.totalLatency / r.total : 0,
       endpoints: r.endpoints
         .sort((a: any, b: any) => b.count - a.count)
