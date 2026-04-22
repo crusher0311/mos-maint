@@ -76,9 +76,12 @@ function computeContentHash(entry: any): string {
   return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }
 
-async function tekmetricRequest<T>(endpoint: string, _retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
+// Wrapper that forwards the MOS shopId for proper per-shop attribution in
+// the api_usage tracker. Without this, every backfill call gets bucketed as
+// "Shop #null" and we lose visibility into who's burning the Tekmetric quota.
+async function tekmetricRequest<T>(endpoint: string, shopId?: number, _retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
-    const data = await centralTekmetricRequest<T>(endpoint);
+    const data = await centralTekmetricRequest<T>(endpoint, {}, shopId);
     return { ok: true, data };
   } catch (err: any) {
     return { ok: false, error: err.message };
@@ -231,7 +234,8 @@ async function backfillShopChunk(
     });
 
     const rosResult = await tekmetricRequest<{ content: TekmetricRepairOrder[]; totalPages: number }>(
-      `/repair-orders?${queryParams}`
+      `/repair-orders?${queryParams}`,
+      shopId,
     );
 
     if (!rosResult.ok || !rosResult.data) {
@@ -267,7 +271,7 @@ async function backfillShopChunk(
             vehicle = mongoVehicle as TekmetricVehicle;
             vehicleCache.set(ro.vehicleId, vehicle);
           } else {
-            const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`);
+            const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`, shopId);
             if (vehResult.ok && vehResult.data) {
               vehicle = vehResult.data;
               vehicleCache.set(ro.vehicleId, vehicle);
@@ -287,7 +291,7 @@ async function backfillShopChunk(
             customer = mongoCustomer as TekmetricCustomer;
             customerCache.set(ro.customerId, customer);
           } else {
-            const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`);
+            const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`, shopId);
             if (custResult.ok && custResult.data) {
               customer = custResult.data;
               customerCache.set(ro.customerId, customer);
@@ -298,7 +302,8 @@ async function backfillShopChunk(
       }
 
       const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
-        `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`
+        `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`,
+        shopId,
       );
 
       if (!jobsResult.ok) {
