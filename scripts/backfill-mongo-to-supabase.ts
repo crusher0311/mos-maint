@@ -145,6 +145,7 @@ interface Checkpoint {
     lastId: string | null;
     processed: number;
     upserted: number;
+    skipped: number; // duplicate-key conflicts (same logical row, different Mongo _id)
     failed: number;
     failedIds: string[]; // doc _ids that errored; retried on subsequent runs before advancing past them
     finishedAt?: string;
@@ -168,12 +169,27 @@ function saveCheckpoint(cp: Checkpoint): void {
   fs.writeFileSync(CHECKPOINT_FILE, JSON.stringify(cp, null, 2));
 }
 
+function isDuplicateKeyError(err: any): boolean {
+  // Postgres SQLSTATE 23505 = unique_violation. postgres-js surfaces it via e.cause.
+  const code = err?.code ?? err?.cause?.code;
+  if (code === "23505") return true;
+  const msg = String(err?.message ?? "") + " " + String(err?.cause?.message ?? "");
+  return /duplicate key value violates unique constraint/i.test(msg);
+}
+
 async function processInBatches<T extends { _id: any }>(
   items: T[],
   concurrency: number,
   worker: (item: T) => Promise<void>,
-): Promise<{ ok: number; failed: number; failedIds: string[]; errors: string[] }> {
+): Promise<{
+  ok: number;
+  skipped: number;
+  failed: number;
+  failedIds: string[];
+  errors: string[];
+}> {
   let ok = 0;
+  let skipped = 0;
   let failed = 0;
   const failedIds: string[] = [];
   const errors: string[] = [];
@@ -181,15 +197,20 @@ async function processInBatches<T extends { _id: any }>(
     const slice = items.slice(i, i + concurrency);
     const results = await Promise.allSettled(slice.map(worker));
     results.forEach((r, idx) => {
-      if (r.status === "fulfilled") ok++;
-      else {
+      if (r.status === "fulfilled") {
+        ok++;
+      } else if (isDuplicateKeyError(r.reason)) {
+        // Same logical entity already present under a different Mongo _id —
+        // expected drift between Mongo and Postgres, safe to skip.
+        skipped++;
+      } else {
         failed++;
         failedIds.push(String(slice[idx]._id));
         if (errors.length < 5) errors.push(String(r.reason?.message || r.reason));
       }
     });
   }
-  return { ok, failed, failedIds, errors };
+  return { ok, skipped, failed, failedIds, errors };
 }
 
 async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
@@ -204,10 +225,12 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
     lastId: null,
     processed: 0,
     upserted: 0,
+    skipped: 0,
     failed: 0,
     failedIds: [],
   };
   if (!Array.isArray(cp.failedIds)) cp.failedIds = [];
+  if (typeof cp.skipped !== "number") cp.skipped = 0;
 
   // Retry previously-failed docs first so checkpoint advancement stays safe.
   if (cp.failedIds.length > 0 && !args.dryRun) {
@@ -222,6 +245,7 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
     );
     const stillFailed = new Set(r.failedIds);
     cp.upserted += r.ok;
+    cp.skipped += r.skipped;
     cp.failed = stillFailed.size; // counter reflects current outstanding
     cp.failedIds = Array.from(stillFailed);
     cpAll[key] = cp;
@@ -264,12 +288,13 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
       buffer = [];
       return;
     }
-    const { ok, failed, failedIds, errors } = await processInBatches(
+    const { ok, skipped, failed, failedIds, errors } = await processInBatches(
       buffer,
       args.concurrency,
       (doc) => spec.upsert(writer, doc),
     );
     cp.upserted += ok;
+    cp.skipped += skipped;
     cp.failed += failed;
     cp.failedIds.push(...failedIds);
     cp.processed += buffer.length;
@@ -286,7 +311,7 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
     const rate = cp.processed / Math.max(elapsed, 1);
     const eta = (total - cp.processed) / Math.max(rate, 1);
     console.log(
-      `  [${spec.key}] processed=${cp.processed.toLocaleString()}/${total.toLocaleString()} ok=${cp.upserted} failed=${cp.failed} rate=${rate.toFixed(0)}/s eta=${Math.round(eta)}s`,
+      `  [${spec.key}] processed=${cp.processed.toLocaleString()}/${total.toLocaleString()} ok=${cp.upserted} skipped=${cp.skipped} failed=${cp.failed} rate=${rate.toFixed(0)}/s eta=${Math.round(eta)}s`,
     );
     buffer = [];
   };
@@ -301,7 +326,7 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
   cpAll[key] = cp;
   saveCheckpoint(cpAll);
   console.log(
-    `[${spec.key}] DONE — processed=${cp.processed.toLocaleString()} upserted=${cp.upserted.toLocaleString()} failedOutstanding=${cp.failedIds.length}`,
+    `[${spec.key}] DONE — processed=${cp.processed.toLocaleString()} upserted=${cp.upserted.toLocaleString()} skipped=${cp.skipped.toLocaleString()} failedOutstanding=${cp.failedIds.length}`,
   );
 }
 
