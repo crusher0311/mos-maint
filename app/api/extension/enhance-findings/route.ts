@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { getOpenAI, DEFAULT_MODEL } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
@@ -73,7 +75,56 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders });
   }
 
-  const { findings, vehicleInfo, shopId } = body;
+  const { findings, vehicleInfo, shopId, provider } = body;
+
+  // Feature gate: requires `enhance_notes` for the shop. We resolve the shop
+  // from the SMS shop ID the extension sends as `shopId` (same identifier used
+  // by vhi-coach / prefill-dvi), then check entitlements. Platform admins
+  // bypass for support/debugging.
+  const isPlatformAdmin =
+    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
+
+  if (!isPlatformAdmin) {
+    if (!shopId) {
+      return NextResponse.json(
+        { error: "shopId required" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    try {
+      const userShopIds = getUserShopIds(auth.user);
+      const shopResult = await findShopBySmsId(String(shopId), {
+        isPlatformAdmin,
+        userShopIds,
+        providerHint: provider || "tekmetric",
+      });
+      if (!shopResult) {
+        return NextResponse.json(
+          { error: `No shop found for SMS ID: ${shopId}` },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+      if (!userShopIds.includes(String(shopResult.mosShopId))) {
+        return NextResponse.json(
+          { error: "Unauthorized shop access" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
+      if (!entitlements.effectiveFeatures.enhance_notes) {
+        return NextResponse.json(
+          { success: false, error: "Enhance Notes not enabled for this shop", code: "feature_disabled" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    } catch (err: any) {
+      console.error("[Enhance Findings] feature entitlement check failed:", err.message);
+      return NextResponse.json(
+        { success: false, error: "Unable to verify feature entitlement" },
+        { status: 503, headers: corsHeaders }
+      );
+    }
+  }
 
   if (!findings || !Array.isArray(findings) || findings.length === 0) {
     return NextResponse.json(

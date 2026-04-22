@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 
@@ -81,6 +82,26 @@ export async function POST(request: NextRequest) {
 
   if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
     return NextResponse.json({ error: "Unauthorized shop access" }, { status: 403, headers: corsHeaders });
+  }
+
+  // Feature gate: requires both `maintenance` (VHI data source) and `dvi_prefill`.
+  if (!isPlatformAdmin) {
+    try {
+      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
+      const eff = entitlements.effectiveFeatures;
+      if (!eff.maintenance || !eff.dvi_prefill) {
+        return NextResponse.json(
+          { success: false, error: "DVI Pre-fill not enabled for this shop", code: "feature_disabled" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    } catch (err: any) {
+      console.error("[Prefill DVI] feature entitlement check failed:", err.message);
+      return NextResponse.json(
+        { success: false, error: "Unable to verify feature entitlement" },
+        { status: 503, headers: corsHeaders }
+      );
+    }
   }
 
   const resolvedShopId = shopResult.mosShopId;
