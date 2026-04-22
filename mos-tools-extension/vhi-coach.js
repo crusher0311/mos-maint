@@ -439,6 +439,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "VHI_COACH_DATA") {
     if (message.data && message.data.success) {
       createCoachPanel(message.data);
+    } else if (message.data && message.data.disabled) {
+      // Feature was turned off for this shop — clear any stale panel so the
+      // tech doesn't keep seeing yesterday's data.
+      removeCoachPanel();
     }
     sendResponse({ success: true });
     return false;

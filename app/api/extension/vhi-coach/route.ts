@@ -69,6 +69,22 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const resolvedShopId = guard.mosShopId;
+
+  // VHI Coach is opt-in per shop. Default OFF until a shop owner enables it
+  // from Settings → Extension Abilities. This prevents the overlay from
+  // popping up for shops that have not been onboarded to the feature yet.
+  const coachEnabled = Boolean(guard.shopDoc?.extensions?.vhiCoachEnabled);
+  if (!coachEnabled) {
+    return NextResponse.json(
+      {
+        success: false,
+        disabled: true,
+        error: "VHI Coach is disabled for this shop",
+      },
+      { headers: corsHeaders }
+    );
+  }
+
   const resolvedMileage = mileage ? Number(mileage) : null;
 
   if (!resolvedMileage || isNaN(resolvedMileage)) {

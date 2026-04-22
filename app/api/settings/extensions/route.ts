@@ -20,6 +20,7 @@ export async function GET() {
 
   return NextResponse.json({
     enabled: extensions.enabled || false,
+    vhiCoachEnabled: extensions.vhiCoachEnabled || false,
     apiKeys: (extensions.apiKeys || []).map((k: any) => ({
       key: `${k.key.substring(0, 12)}...${k.key.substring(k.key.length - 4)}`,
       keyId: k.key.substring(0, 20),
@@ -38,12 +39,24 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { enabled } = body;
+  const { enabled, vhiCoachEnabled } = body;
+
+  const update: Record<string, any> = { updatedAt: new Date() };
+  if (typeof enabled === "boolean") {
+    update["extensions.enabled"] = enabled;
+  }
+  if (typeof vhiCoachEnabled === "boolean") {
+    update["extensions.vhiCoachEnabled"] = vhiCoachEnabled;
+  }
+
+  if (Object.keys(update).length === 1) {
+    return NextResponse.json({ error: "No valid settings provided" }, { status: 400 });
+  }
 
   const db = await getDb();
   await db.collection("shops").updateOne(
     { shopId: sess.shopId },
-    { $set: { "extensions.enabled": enabled, updatedAt: new Date() } }
+    { $set: update }
   );
 
   return NextResponse.json({ ok: true });

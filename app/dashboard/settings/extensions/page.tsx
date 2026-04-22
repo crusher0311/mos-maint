@@ -12,11 +12,13 @@ interface ApiKeyInfo {
 
 interface ExtensionSettings {
   enabled: boolean;
+  vhiCoachEnabled: boolean;
   apiKeys: ApiKeyInfo[];
 }
 
 export default function ExtensionsSettingsPage() {
-  const [settings, setSettings] = useState<ExtensionSettings>({ enabled: false, apiKeys: [] });
+  const [settings, setSettings] = useState<ExtensionSettings>({ enabled: false, vhiCoachEnabled: false, apiKeys: [] });
+  const [savingCoach, setSavingCoach] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -51,6 +53,25 @@ export default function ExtensionsSettingsPage() {
       }
     } catch (err) {
       console.error("Failed to toggle extension:", err);
+    }
+  }
+
+  async function toggleVhiCoach() {
+    const next = !settings.vhiCoachEnabled;
+    setSavingCoach(true);
+    try {
+      const res = await fetch("/api/settings/extensions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vhiCoachEnabled: next }),
+      });
+      if (res.ok) {
+        setSettings({ ...settings, vhiCoachEnabled: next });
+      }
+    } catch (err) {
+      console.error("Failed to toggle VHI Coach:", err);
+    } finally {
+      setSavingCoach(false);
     }
   }
 
@@ -154,6 +175,31 @@ export default function ExtensionsSettingsPage() {
 
           {settings.enabled && (
             <div className="space-y-4">
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-gray-900">VHI Coach Overlay</h3>
+                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">Beta</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Floating panel that appears during Tekmetric Digital Vehicle Inspections. Shows techs which inspection items are overdue, due soon, or OK based on VHI maintenance data. Off by default while we roll this out.
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleVhiCoach}
+                    disabled={savingCoach}
+                    className={`flex-shrink-0 w-14 h-8 rounded-full transition-colors disabled:opacity-50 ${
+                      settings.vhiCoachEnabled ? "bg-blue-600" : "bg-gray-300"
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-full bg-white shadow transform transition-transform ${
+                      settings.vhiCoachEnabled ? "translate-x-7" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-gray-900">API Keys</h3>
                 <button
