@@ -155,9 +155,13 @@ async function createHovercodeQR(
   }
 
   try {
-    // Use the dev domain for the logo URL (publicly accessible)
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
-    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    // Use the stable production base URL for the logo. Previously this used
+    // REPLIT_DEV_DOMAIN, which is the ephemeral dev container hostname — when
+    // HoverCode tried to fetch it, the host was either dead or the
+    // /api/assets/ path 404'd, so HoverCode silently produced a logo-less QR.
+    // The file is served straight out of public/ at /appointment-logo.png.
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools").replace(/\/$/, "");
+    const logoUrl = `${baseUrl}/appointment-logo.png`;
     
     console.log("[Sticker Generate] Creating HoverCode with pattern: Squares, dynamic: true, logo:", logoUrl);
     

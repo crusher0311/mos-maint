@@ -139,8 +139,11 @@ export async function POST(req: NextRequest) {
 
     // Use the appointment logo via API route (publicly accessible)
     // Use the dev domain which serves the current development code
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || "mos-maintenance-mvp.replit.app";
-    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    // Use the stable production base URL — REPLIT_DEV_DOMAIN is the ephemeral
+    // dev container hostname and the /api/assets/ path doesn't serve the file.
+    // HoverCode silently produces a logo-less QR if it can't fetch this URL.
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools").replace(/\/$/, "");
+    const logoUrl = `${baseUrl}/appointment-logo.png`;
     console.log("[Regenerate QR] Using logo URL:", logoUrl);
 
     // Always create a new HoverCode QR with proper styling (dynamic + Squares pattern)

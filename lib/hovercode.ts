@@ -122,41 +122,52 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
   }
 }
 
-export async function updateHovercodeDestination(
+async function patchHovercode(
   hovercodeId: string,
-  newDestination: string
+  patch: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   const apiToken = process.env.HOVERCODE_API_TOKEN;
-
-  if (!apiToken) {
-    return { success: false, error: "HoverCode API not configured" };
-  }
+  if (!apiToken) return { success: false, error: "HoverCode API not configured" };
 
   const startTime = Date.now();
+  // Use the proven endpoint shape (PUT /hovercode/<id>/update/) — same as
+  // app/api/sticker/settings/route.ts. Note HOVERCODE_API_BASE here is
+  // .../api/v2 (no trailing /hovercode), so we add it explicitly.
+  const url = `${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/update/`;
 
   try {
-    const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/`, {
-      method: "PATCH",
+    const response = await fetch(url, {
+      method: "PUT",
       headers: {
         Authorization: `Token ${apiToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        qr_data: newDestination,
-      }),
+      body: JSON.stringify(patch),
     });
 
     const latencyMs = Date.now() - startTime;
+    trackApiRequest("hovercode", `/${hovercodeId}/update/`, "PUT", response.status, latencyMs);
 
     if (!response.ok) {
-      trackApiRequest("hovercode", `/hovercode/${hovercodeId}/`, "PATCH", response.status, latencyMs);
-      return { success: false, error: `HoverCode API error: ${response.status}` };
+      const errText = await response.text().catch(() => "");
+      return { success: false, error: `HoverCode API error: ${response.status} ${errText.slice(0, 200)}` };
     }
-
-    trackApiRequest("hovercode", `/hovercode/${hovercodeId}/`, "PATCH", 200, latencyMs);
-
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error?.message || "Failed to update QR code" };
   }
+}
+
+export async function updateHovercodeDestination(
+  hovercodeId: string,
+  newDestination: string
+): Promise<{ success: boolean; error?: string }> {
+  return patchHovercode(hovercodeId, { qr_data: newDestination });
+}
+
+export async function updateHovercodeLogo(
+  hovercodeId: string,
+  logoUrl: string
+): Promise<{ success: boolean; error?: string }> {
+  return patchHovercode(hovercodeId, { logo_url: logoUrl });
 }

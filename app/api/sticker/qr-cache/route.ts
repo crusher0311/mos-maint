@@ -23,8 +23,11 @@ async function fetchQRFromHoverCode(appointmentUrl: string): Promise<{ qrId: str
   }
 
   try {
-    const devDomain = process.env.REPLIT_DEV_DOMAIN || process.env.RENDER_EXTERNAL_HOSTNAME || "mos-maintenance-mvp.replit.app";
-    const logoUrl = `https://${devDomain}/api/assets/appointment-logo.png`;
+    // Use the stable production base URL — REPLIT_DEV_DOMAIN is the ephemeral
+    // dev container hostname and the /api/assets/ path doesn't serve the file.
+    // HoverCode silently produces a logo-less QR if it can't fetch this URL.
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools").replace(/\/$/, "");
+    const logoUrl = `${baseUrl}/appointment-logo.png`;
     
     console.log("[QR Cache] Calling HoverCode API for URL:", appointmentUrl, "with logo:", logoUrl);
     const response = await fetch(`${HOVERCODE_API_BASE}/`, {
