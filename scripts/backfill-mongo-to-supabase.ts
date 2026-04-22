@@ -259,8 +259,8 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
   const flush = async () => {
     if (!buffer.length) return;
     if (args.dryRun) {
-      cp.processed += buffer.length;
-      cp.lastId = String(buffer[buffer.length - 1]._id);
+      // Dry run: count only, never mutate or persist the checkpoint.
+      console.log(`  [${spec.key}] [dry-run] would process ${buffer.length} docs`);
       buffer = [];
       return;
     }
