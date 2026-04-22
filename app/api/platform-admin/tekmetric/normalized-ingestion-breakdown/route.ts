@@ -110,11 +110,60 @@ export async function GET(req: NextRequest) {
     })
     .sort((a, b) => b.poll + b.webhook - (a.poll + a.webhook));
 
+  // Phase C diagnostic: how many cache rows currently carry inspections, and
+  // by which source (webhook vs poll vs on-demand vs legacy). Helps decide
+  // when it's safe to flip TEKMETRIC_POLLING_FETCH_INSPECTIONS=false per env.
+  const inspectionRows = await db.collection("tekmetric_work_orders").aggregate([
+    {
+      $match: {
+        $and: [
+          { inspections: { $exists: true, $type: "array" } },
+          { $expr: { $gt: [{ $size: { $ifNull: ["$inspections", []] } }, 0] } },
+          {
+            $or: [
+              { inspectionsFetchedAt: { $gte: since } },
+              { dviCompletedAt: { $gte: since } },
+              { updatedAt: { $gte: since } },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $group: {
+        _id: {
+          shopId: "$shopId",
+          source: { $ifNull: ["$inspectionsSource", "polling-or-legacy"] },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        shopId: "$_id.shopId",
+        source: "$_id.source",
+        count: 1,
+      },
+    },
+    { $sort: { shopId: 1, source: 1 } },
+  ]).toArray();
+
+  const inspectionTotals: Record<string, number> = {};
+  for (const r of inspectionRows as Array<{ source: string; count: number }>) {
+    inspectionTotals[r.source] = (inspectionTotals[r.source] || 0) + r.count;
+  }
+
   return NextResponse.json({
     daysBack,
     totals,
     summary,
     perShopPerDay: rows,
+    inspections: {
+      totalsBySource: inspectionTotals,
+      perShopBySource: inspectionRows,
+      note: "Phase C diagnostic. `webhook` = Inspection.Complete fetched the full task list. `on-demand` = plan-build fallback fetched it. `polling-or-legacy` = pre-Phase-C polling rows OR pre-attribution legacy data. Once `webhook + on-demand` covers your active shops and the env flag TEKMETRIC_POLLING_FETCH_INSPECTIONS=false is safe to flip.",
+    },
     note: "webhookCoveragePct = webhook / (webhook + poll) on first ingestion. Once consistently near 100% per shop for several days, polling can be scaled back per TEKMETRIC_5K_SCALING_PLAN.md Step 4. `unattributed` rows are pre-Phase-B work orders that were ingested before firstIngestedVia tracking existed.",
   });
 }

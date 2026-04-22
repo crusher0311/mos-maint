@@ -334,8 +334,12 @@ async function upsertWorkOrder(
   const inspectionUrl = (ro as any).inspectionUrl || existing?.inspectionUrl || null;
   const inspectionShareDate = (ro as any).inspectionShareDate || existing?.inspectionShareDate || null;
 
+  // Phase C: env-flag gate. Default ON. Flip TEKMETRIC_POLLING_FETCH_INSPECTIONS=false
+  // per-env after the Inspection.Complete webhook handler has soaked. See
+  // TEKMETRIC_5K_SCALING_PLAN.md Step 2 Phase C.
+  const pollingFetchEnabled = process.env.TEKMETRIC_POLLING_FETCH_INSPECTIONS !== "false";
   let inspections: any[] | null = null;
-  if (dviDetected && tekmetricShopId && xAuthToken) {
+  if (dviDetected && tekmetricShopId && xAuthToken && pollingFetchEnabled) {
     try {
       inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, xAuthToken);
       if (inspections && inspections.length > 0) {

@@ -16,6 +16,7 @@ import {
   resolveAutoVitalsConfig,
   fetchAutoVitalsInspectionByVin,
 } from "@/lib/integrations/autovitals";
+import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -829,6 +830,72 @@ export async function POST(req: NextRequest) {
         vin: vinUpper
       }).sort({ completedDate: -1 }).limit(50).toArray(),
     ]);
+
+    // Phase C: on-demand inspection fallback. With polling-side inspection
+    // fetching gated behind TEKMETRIC_POLLING_FETCH_INSPECTIONS, some cache
+    // rows can show DVI signals (inspectionUrl/inspectionShareDate) but an
+    // empty `inspections` array — e.g. when Inspection.Complete arrived before
+    // we knew about that RO, or the webhook was dropped. Backfill them in
+    // parallel here, mutating the in-memory docs so the read sites below see
+    // the same shape as the cached path. Soft-fail; concurrency-bounded so a
+    // big VIN history doesn't fan out to dozens of API calls.
+    try {
+      const tekShopIdForFallback = (shopDoc as any)?.tekmetric?.shopId;
+      const xAuthTokenForFallback = (shopDoc as any)?.tekmetric?.xAuthToken;
+      if (tekShopIdForFallback && xAuthTokenForFallback) {
+        const needsFetch = tekmetricWOs.filter((wo: any) => {
+          const hasSignal = !!wo.inspectionUrl || !!wo.inspectionShareDate || !!wo.dviDone;
+          const empty = !Array.isArray(wo.inspections) || wo.inspections.length === 0 ||
+            // pre-Phase-C cache rows sometimes hold only the partial event
+            // payload (no `inspectionTasks`), which the read sites can't use.
+            !wo.inspections.some((i: any) => Array.isArray(i?.inspectionTasks) && i.inspectionTasks.length > 0);
+          return hasSignal && empty && wo.workOrderId;
+        });
+        if (needsFetch.length > 0) {
+          // Cap parallelism at 4 to stay polite to the Tekmetric rate limit
+          // (single-VIN plan-build × 50-WO ceiling × 4 concurrent ≈ 200 reqs
+          // worst case, but in practice almost always ≤ a handful).
+          const CONCURRENCY = 4;
+          const BUDGET_MS = 4000;
+          const start = Date.now();
+          let cursor = 0;
+          const fetched: number[] = [];
+          await Promise.all(
+            Array.from({ length: Math.min(CONCURRENCY, needsFetch.length) }).map(async () => {
+              while (true) {
+                if (Date.now() - start > BUDGET_MS) return;
+                const idx = cursor++;
+                if (idx >= needsFetch.length) return;
+                const wo = needsFetch[idx];
+                try {
+                  const insps = await getRepairOrderInspectionsWithXAuth(
+                    Number(wo.workOrderId),
+                    Number(tekShopIdForFallback),
+                    xAuthTokenForFallback
+                  );
+                  if (Array.isArray(insps) && insps.length > 0) {
+                    wo.inspections = insps;
+                    fetched.push(Number(wo.workOrderId));
+                    // Persist for next request so we don't re-fetch every plan build.
+                    db.collection("tekmetric_work_orders").updateOne(
+                      { _id: wo._id },
+                      { $set: { inspections: insps, inspectionsFetchedAt: new Date(), inspectionsSource: "on-demand" } }
+                    ).catch(() => {});
+                  }
+                } catch (err: any) {
+                  console.warn(`[PlanBuild] On-demand inspection fetch failed for RO ${wo.workOrderId}: ${err?.message}`);
+                }
+              }
+            })
+          );
+          if (fetched.length > 0) {
+            console.log(`[PlanBuild] Shop ${shopId} VIN ${vinUpper}: on-demand inspections fetched for ROs [${fetched.join(",")}] (${needsFetch.length} candidates, ${Date.now() - start}ms)`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[PlanBuild] On-demand inspection fallback errored:`, err?.message);
+    }
 
     const shopServiceHistory: ShopServiceHistory[] = [];
     for (const wo of protractorWOs) {

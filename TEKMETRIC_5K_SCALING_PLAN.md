@@ -1,6 +1,6 @@
 # Tekmetric 5K-Shop Scaling Plan
 
-**Status:** Step 2 Phase A complete (shadow mode) — soaking before Phase B
+**Status:** Step 2 Phases A + B + C complete (default-on, soaking before flag flip)
 **Owner:** Engineering
 **Last updated:** 2026-04-22
 
@@ -111,8 +111,31 @@ What to watch (over the next 3-7 days):
 - If `webhookCoveragePct` for a shop stays low while `poll` count is high, that shop is webhook-silent for terminal events — investigate before scaling polling back.
 
 What's still TO DO in Step 2:
-- Phase B — Pipe webhook payloads through `NormalizedIngestionService` so the Postgres normalized tables stay in sync without polling. Currently only the polling path dual-writes to PG.
-- Phase C — On-demand DVI inspection fetch: today inspection details still get pulled inline during polling. Move to lazy fetch (only when a VHI is built or a sticker is rendered).
+- _(none — Phases B + C complete; soak the metrics, then flip `TEKMETRIC_POLLING_FETCH_INSPECTIONS=false` per env)_
+
+#### Step 2 Phase B — Webhooks dual-write to NormalizedIngestionService  ✅ COMPLETE (2026-04-22)
+**Risk:** Low — soft-fail dual-write; webhook always 200s; polling stays on.
+
+What changed:
+- `lib/normalized-ingestion.ts`: added `IngestionOptions.ingestionVia` + private `_stampIngestionVia()` that writes immutable `firstIngestedVia/firstIngestedAt` (set-if-missing via `{$exists:false}` filter) and always-fresh `lastIngestedVia/lastIngestedAt` to `normalized_work_orders`. Stamped after both insert and update paths.
+- `app/api/cron/tekmetric-sync/route.ts`: polling NIS instantiation passes `ingestionVia: "poll"`.
+- `app/api/webhooks/tekmetric/route.ts`: new `runWebhookNormalizedIngestion()` helper resolves internal shop, enriches vehicle/customer (cache-first, API fallback, soft-fail on missing VIN), passes `ingestionVia: "webhook"`. Called from BOTH terminal and non-terminal RO branches.
+- `app/api/platform-admin/tekmetric/normalized-ingestion-breakdown/route.ts` (NEW): per-shop/per-day breakdown with `webhookCoveragePct = webhook/(webhook+poll)`. Mirrors the Phase A `index-source-breakdown` endpoint. Pre-Phase-B rows surface as `unattributed`.
+
+#### Step 2 Phase C — Webhook-driven inspection fetch + on-demand fallback  ✅ COMPLETE (2026-04-22)
+**Risk:** Medium-low — polling fetch stays on by default behind an env flag, so the change is reversible per-environment.
+
+What changed:
+- `app/api/webhooks/tekmetric/route.ts`: the `Inspection.Complete` handler now (a) resolves `tekmetricShopId` from event → cache row → cache.data, (b) fetches the FULL inspection task list via `getRepairOrderInspectionsWithXAuth` using the shop's stored `xAuthToken`, (c) replaces (not pushes) `tekmetric_work_orders.inspections` with the fresh list and stamps `inspectionsFetchedAt` + `inspectionsSource: "webhook"`, (d) re-runs `runWebhookNormalizedIngestion` with the enriched RO so normalized tables get the inspections without waiting for polling. Soft-fails throughout.
+- `app/api/cron/tekmetric-sync/route.ts`, `lib/tekmetric-incremental-sync.ts`, `app/api/cron/tekmetric-backfill/route.ts`: all 3 inline `getRepairOrderInspectionsWithXAuth` call sites are now gated by `process.env.TEKMETRIC_POLLING_FETCH_INSPECTIONS !== "false"` (default-on; flip to `"false"` per env to disable polling-time inspection fetching).
+- `app/api/plan-build/route.ts`: on-demand fallback runs right after `tekmetricWOs` loads — for any cached RO with a DVI signal (`inspectionUrl` / `inspectionShareDate` / `dviDone`) but missing `inspectionTasks`, fetch in parallel (concurrency=4, 4s budget, soft-fail), mutate the in-memory doc, and persist back to the cache row with `inspectionsSource: "on-demand"`. Both DVI-findings read sites at lines ~1117 and ~1158 see the populated inspections without further changes.
+- `app/api/platform-admin/tekmetric/normalized-ingestion-breakdown/route.ts`: response now includes an `inspections` block with per-shop counts grouped by `inspectionsSource` (`webhook` / `on-demand` / `polling-or-legacy`). Use this to decide when each environment is safe to flip.
+
+What to watch (over the next 3-7 days):
+- `inspections.totalsBySource.webhook` should grow steadily as `Inspection.Complete` events arrive.
+- `inspections.totalsBySource["on-demand"]` should stay low; spikes mean webhook delivery is dropping.
+- `[Tekmetric Webhook] Fetched N full inspection(s) for RO X (via=webhook)` log lines confirm the webhook fetch path is exercised in production.
+- Once `webhook + on-demand` covers your active shops for a few days, set `TEKMETRIC_POLLING_FETCH_INSPECTIONS=false` per env to drop the polling-time fetch entirely.
 
 ### Step 3 — Safety nets
 **Effort:** 1 week

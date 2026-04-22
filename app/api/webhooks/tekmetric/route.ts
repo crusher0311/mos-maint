@@ -5,6 +5,7 @@ import { getVehicle, getCustomer } from "@/lib/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
 import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import type { Db } from "mongodb";
 
 export const runtime = "nodejs";
@@ -465,24 +466,86 @@ export async function POST(req: NextRequest) {
       const inspectionData = data;
       
       if (repairOrderId) {
+        // Phase C: fetch the FULL inspection task list now that we know it's
+        // ready, so plan-build / VHI no longer relies on polling to pull this
+        // in. Look up the cache row first to get tekmetricShopId + the prior
+        // RO payload (Phase A persisted `data: repairOrder` on the cache row).
+        const cached = await db.collection("tekmetric_work_orders").findOne(
+          { workOrderId: String(repairOrderId) }
+        );
+        const tekShopIdForInsp =
+          (data as any).shopId ||
+          cached?.tekmetricShopId ||
+          cached?.data?.shopId ||
+          null;
+
+        let fetchedInspections: any[] | null = null;
+        if (tekShopIdForInsp) {
+          try {
+            const shopForInsp = await db.collection("shops").findOne(
+              { "tekmetric.shopId": Number(tekShopIdForInsp) },
+              { projection: { "tekmetric.xAuthToken": 1, shopId: 1 } }
+            );
+            const xAuthToken = shopForInsp?.tekmetric?.xAuthToken || null;
+            if (xAuthToken) {
+              fetchedInspections = await getRepairOrderInspectionsWithXAuth(
+                Number(repairOrderId),
+                Number(tekShopIdForInsp),
+                xAuthToken
+              );
+              console.log(`[Tekmetric Webhook] Fetched ${fetchedInspections?.length ?? 0} full inspection(s) for RO ${repairOrderId} (via=webhook)`);
+            } else {
+              console.log(`[Tekmetric Webhook] No xAuthToken for tek shop ${tekShopIdForInsp}; skipping full inspection fetch (poll fallback if enabled)`);
+            }
+          } catch (err: any) {
+            console.error(`[Tekmetric Webhook] Inspection fetch failed for RO ${repairOrderId}:`, err.message);
+          }
+        }
+
+        // Persist on the cache row. Replace `inspections` with the freshly
+        // fetched full list when we got it; otherwise fall back to recording
+        // the partial event payload so we at least know it happened.
+        const inspectionsSet =
+          Array.isArray(fetchedInspections) && fetchedInspections.length > 0
+            ? fetchedInspections
+            : null;
+        const update: any = {
+          $set: {
+            dviDone: true,
+            dviCompletedAt: new Date(),
+            lastInspection: inspectionData,
+          },
+        };
+        if (inspectionsSet) {
+          update.$set.inspections = inspectionsSet;
+          update.$set.inspectionsFetchedAt = new Date();
+          update.$set.inspectionsSource = "webhook";
+        } else {
+          update.$push = {
+            inspections: { ...inspectionData, receivedAt: new Date() },
+          };
+        }
         const result = await db.collection("tekmetric_work_orders").updateMany(
           { workOrderId: String(repairOrderId) },
-          { 
-            $set: { 
-              dviDone: true,
-              dviCompletedAt: new Date(),
-              lastInspection: inspectionData
-            },
-            $push: { 
-              inspections: {
-                ...inspectionData,
-                receivedAt: new Date()
-              } 
-            }
-          }
+          update
         );
-        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
-        
+        console.log(`[Tekmetric Webhook] Marked RO ${repairOrderId} as DVI complete. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}, fullInspections=${!!inspectionsSet}`);
+
+        // Phase C: dual-write inspections through NIS so normalized tables
+        // pick up the freshly-fetched DVI data without waiting for polling.
+        if (inspectionsSet && tekShopIdForInsp && cached?.data) {
+          const enrichedRo = { ...cached.data, inspections: inspectionsSet };
+          const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
+            { workOrderId: String(repairOrderId) }
+          );
+          await runWebhookNormalizedIngestion(
+            db,
+            Number(tekShopIdForInsp),
+            enrichedRo,
+            refreshedCached
+          );
+        }
+
         // Invalidate plan cache since DVI results affect recommendations
         try {
           const woForDvi = await db.collection("tekmetric_work_orders").findOne(

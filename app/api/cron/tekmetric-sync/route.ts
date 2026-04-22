@@ -300,8 +300,13 @@ export async function GET(req: NextRequest) {
             const jobDvi = inferDviFromJobs((ro as any).jobs || []);
             const hasDviSignal = hasInspectionUrl || inspectionShared || labelDvi.hasDvi || labelDvi.dviComplete || jobDvi;
             
+            // Phase C: env-flag gate. Default ON to preserve current behavior.
+            // Flip TEKMETRIC_POLLING_FETCH_INSPECTIONS=false per-env once the
+            // webhook-driven inspection fetch (Inspection.Complete handler) has
+            // soaked. See TEKMETRIC_5K_SCALING_PLAN.md Step 2 Phase C.
+            const pollingFetchEnabled = process.env.TEKMETRIC_POLLING_FETCH_INSPECTIONS !== "false";
             let inspections: any[] | null = null;
-            if (hasDviSignal && xAuthToken) {
+            if (hasDviSignal && xAuthToken && pollingFetchEnabled) {
               dviCount++;
               try {
                 inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, xAuthToken);

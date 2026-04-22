@@ -320,7 +320,10 @@ async function backfillShopChunk(
       const hasInspectionUrl = !!(ro as any).inspectionUrl;
       const inspectionShared = !!(ro as any).inspectionShareDate;
       const backfillXAuthToken = shop?.tekmetric?.xAuthToken || null;
-      if ((hasInspectionUrl || inspectionShared) && backfillXAuthToken) {
+      // Phase C: env-flag gate. Default ON. Flip TEKMETRIC_POLLING_FETCH_INSPECTIONS=false
+      // per-env after the Inspection.Complete webhook handler has soaked.
+      const pollingFetchEnabled = process.env.TEKMETRIC_POLLING_FETCH_INSPECTIONS !== "false";
+      if ((hasInspectionUrl || inspectionShared) && backfillXAuthToken && pollingFetchEnabled) {
         try {
           inspections = await getRepairOrderInspectionsWithXAuth(ro.id, tekmetricShopId, backfillXAuthToken);
         } catch (inspErr: any) {
