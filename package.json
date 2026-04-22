@@ -14,6 +14,7 @@
     "lint:extension-gates": "node scripts/check-extension-gates.cjs",
     "test:e2e:full": "tsx tests/e2e/full-suite.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
+    "backfill:mongo-to-supabase": "tsx scripts/backfill-mongo-to-supabase.ts",
     "migrate:shopid": "tsx scripts/migrate-shopid-to-numbers.ts",
     "setup:dev": "cp .env.template .env.local && echo 'Please edit .env.local with your configuration'",
     "admin:promote": "node -e \"const email = process.argv[1]; const token = process.env.ADMIN_TOKEN; if (!email || !token) { console.error('Usage: npm run admin:promote <email>'); process.exit(1); } fetch('http://localhost:3000/api/admin/promote-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, adminToken: token }) }).then(r => r.json()).then(console.log).catch(console.error);\"",
