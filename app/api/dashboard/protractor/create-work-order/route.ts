@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contact and vehicle are required" }, { status: 400 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const result = await createProtractorWorkOrder(shopId, {
       contactId,
       vehicleId,

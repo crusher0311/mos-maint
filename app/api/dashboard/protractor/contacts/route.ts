@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Search query must be at least 2 characters" }, { status: 400 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const result = await searchContacts(shopId, search);
 
     if (!result.ok) {

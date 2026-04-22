@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const q = req.nextUrl.searchParams.get("q")?.trim() || "";
 
     const rawCache = await db.collection("protractor_canned_jobs").findOne({ shopId });

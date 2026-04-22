@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const model = req.nextUrl.searchParams.get("model") || "";
     const engine = req.nextUrl.searchParams.get("engine") || "";
     const q = req.nextUrl.searchParams.get("q")?.trim() || "";
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
 
     const vinResults = await db.collection("job_index").find({
       shopId,

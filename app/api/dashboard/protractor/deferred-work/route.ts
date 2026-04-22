@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "vin and serviceItemId are required" }, { status: 400 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const result = await fetchDeferredWorkWithCache(shopId, vin, serviceItemId);
 
     if (!result.ok || !result.deferredWork) {

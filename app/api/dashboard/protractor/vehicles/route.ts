@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Owner ID is required" }, { status: 400 });
     }
 
-    const shopId = Number(user.shopId);
+    const shopId = Number(sess.shopId);
     const result = await fetchVehiclesByOwner(shopId, ownerId);
 
     if (!result.ok) {
