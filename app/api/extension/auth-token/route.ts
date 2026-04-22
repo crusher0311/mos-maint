@@ -1,3 +1,5 @@
+// gate-exempt: pre-feature plumbing — issues/refreshes the extension auth
+// token itself, so it must work even for shops with zero feature entitlements.
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";

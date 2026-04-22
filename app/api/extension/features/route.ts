@@ -1,3 +1,6 @@
+// gate-exempt: this endpoint *reports* a shop's feature entitlements to the
+// extension. Gating it on a feature would be circular — the extension calls it
+// to learn which features are enabled.
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";

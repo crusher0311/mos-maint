@@ -21,40 +21,32 @@ HoverCode QR generation across the sticker routes plus a backfill script.
 
 ## P0 — Do these next
 
-### [ ] 1. Audit & DRY the extension feature-gate pattern
-**Why now:** We just shipped the same fix three times. The "validate token →
-resolve shop → check user-shop access → check feature entitlement" block is
-copy-pasted across `vhi-coach`, `prefill-dvi`, and `enhance-findings`. Any new
-extension route is one forgotten line away from re-introducing the bug HEART
-Certified Auto Care reported.
+### [x] 1. Audit & DRY the extension feature-gate pattern (2026-04-22)
+**Shipped:**
+- `lib/extension-route-guard.ts` exposes `guardExtensionShopRequest()` (full
+  4-step flow) and `checkShopFeatureGate()` (lighter helper for routes that
+  resolve the shop ID through a custom path).
+- Refactored: `vhi-coach`, `prefill-dvi`, `enhance-findings` (each ~40+ lines
+  shorter).
+- New gates added: `inspections`, `ro-context`, `canned-jobs`, `jobs/search`,
+  `plan`, `labor-rates` (GET+PUT), `keytag` (GET+POST), `sticker` (GET+POST),
+  `concern-assistant`, `concern-assistant/inject-protractor`,
+  `enhance-corrections` (GET+POST). The last four also got explicit
+  user-shop-ownership checks (request-supplied shopId could otherwise be
+  spoofed across tenants — IDOR risk).
+- Marked exempt with `// gate-exempt: <reason>` in first 5 lines:
+  `auth-token`, `features`, `preferences`.
+- `scripts/check-extension-gates.cjs` (npm: `lint:extension-gates`) — fails
+  CI if a route imports `findShopBySmsId` without either importing AND
+  calling the guard, or carrying a top-of-file gate-exempt marker.
+- `tests/extension-route-guard.smoke.ts` (npm: `test:extension-guard`) —
+  exercises the helper's deny paths and runs the lint script as a subprocess.
 
-**Proposed approach:**
-1. Audit every route under `app/api/extension/**` and list which ones do/don't
-   call `getFeatureEntitlements`. Decide for each whether a feature gate is
-   appropriate (some, like `/features` itself, intentionally don't gate).
-2. Extract a helper, e.g. `lib/extension-route-guard.ts`, exposing:
-   ```ts
-   resolveExtensionShop(req, {
-     requiredFeatures: ["maintenance", "dvi_prefill"],
-     providerHint: "tekmetric",
-   }): Promise<{ ok: true, mosShopId, shopDoc, isPlatformAdmin } | { ok: false, response }>
-   ```
-   Helper handles: token validation, body parsing of `smsShopId`/`provider`,
-   shop lookup, user-shop access check, entitlement check, platform-admin
-   bypass, fail-closed behavior, and consistent CORS headers.
-3. Refactor the three current routes to use it. Net code should shrink.
-4. Add a lightweight grep-based check (CI step or `scripts/`) that fails if any
-   `app/api/extension/**` route imports `findShopBySmsId` without also
-   importing `resolveExtensionShop` (or explicitly opting out via a comment
-   like `// gate-exempt: <reason>`).
-
-**Files likely touched:** `lib/extension-route-guard.ts` (new), the 3 fixed
-routes, plus any other extension routes flagged by the audit, and a new
-`scripts/check-extension-gates.cjs`.
-
-**Acceptance:** All extension routes either gate or have an explicit exempt
-comment; the check script is green; the three fixed routes are 30+ lines
-shorter; one new test exercises the helper's deny path.
+**Follow-ups:** lint heuristic still only catches routes that import
+`findShopBySmsId` — routes resolving the shop through `auth.user.shopId` or a
+free-form `req.body.shopId` slip past the lint and were caught only by
+architect review. Consider expanding the lint to also flag routes that read
+`shopId` from `req.body`/query without an explicit ownership check.
 
 ---
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
@@ -221,7 +222,18 @@ export async function GET(request: NextRequest) {
     if (!query.trim()) {
       return NextResponse.json({ jobs: [] }, { headers: corsHeaders });
     }
-    
+
+    // Feature gate: requires `job_lookup`. Use the resolved mosShopId from
+    // either the SMS lookup or the user's primary shop.
+    if (mosShopId) {
+      const denied = await checkShopFeatureGate(mosShopId, ["job_lookup"], {
+        isPlatformAdmin,
+        featureLabel: "Job Lookup",
+        corsHeaders,
+      });
+      if (denied) return denied;
+    }
+
     const [vehicleContext, searchShopIds] = await Promise.all([
       resolveVehicleContext(db, { year, make, model, engine, vin, roId, mosShopId, provider }),
       resolveSearchShopIds(db, mosShopId, isPlatformAdmin, userShopIds),

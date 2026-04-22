@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 
@@ -46,6 +47,13 @@ export async function GET(req: NextRequest) {
       { status: 400, headers: CORS_HEADERS }
     );
   }
+
+  const denied = await checkShopFeatureGate(resolvedShopId, ["maintenance"], {
+    isPlatformAdmin,
+    featureLabel: "Labor Rates",
+    corsHeaders: CORS_HEADERS,
+  });
+  if (denied) return denied;
 
   const shop = await db.collection("shops").findOne(
     { shopId: resolvedShopId },
@@ -112,6 +120,13 @@ export async function PUT(req: NextRequest) {
       { status: 400, headers: CORS_HEADERS }
     );
   }
+
+  const denied = await checkShopFeatureGate(targetShopId, ["maintenance"], {
+    isPlatformAdmin,
+    featureLabel: "Labor Rates",
+    corsHeaders: CORS_HEADERS,
+  });
+  if (denied) return denied;
 
   const existingShop = await db.collection("shops").findOne(
     { shopId: targetShopId },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { getDb } from "@/lib/mongo";
 
@@ -30,6 +31,25 @@ export async function POST(request: NextRequest) {
     }
     if (!concernText) {
       return NextResponse.json({ error: "concernText is required" }, { status: 400, headers: corsHeaders });
+    }
+
+    // Cross-shop access check + feature gate. Without these, any valid
+    // extension token could write a concern to another shop's Protractor RO.
+    const isPlatformAdmin = auth.user.role === "platform_admin";
+    const userShopIds = getUserShopIds(auth.user);
+    if (!isPlatformAdmin && !userShopIds.includes(String(shopId))) {
+      return NextResponse.json(
+        { error: "Unauthorized shop access" },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+    {
+      const denied = await checkShopFeatureGate(Number(shopId), ["concern_assistant"], {
+        isPlatformAdmin,
+        featureLabel: "Concern Assistant",
+        corsHeaders,
+      });
+      if (denied) return denied;
     }
 
     const config = await resolveProtractorConfig(shopId);

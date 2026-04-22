@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
@@ -38,14 +36,6 @@ interface TaskMatch {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await validateExtensionToken(request);
-  if (!auth.authorized || !auth.user) {
-    return NextResponse.json(
-      { error: auth.error || "Unauthorized" },
-      { status: getAuthErrorStatus(auth), headers: corsHeaders }
-    );
-  }
-
   let body: any;
   try {
     body = await request.json();
@@ -62,13 +52,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!smsShopId) {
-    return NextResponse.json(
-      { error: "smsShopId required" },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
   if (!inspectionTasks || !Array.isArray(inspectionTasks) || inspectionTasks.length === 0) {
     return NextResponse.json(
       { error: "inspectionTasks array required" },
@@ -76,54 +59,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isPlatformAdmin =
-    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
-  const userShopIds = getUserShopIds(auth.user);
-
-  const shopResult = await findShopBySmsId(String(smsShopId), {
-    isPlatformAdmin,
-    userShopIds,
-    providerHint: provider || "tekmetric",
+  const guard = await guardExtensionShopRequest(request, {
+    smsShopId,
+    provider,
+    requiredFeatures: ["maintenance"],
+    featureLabel: "VHI",
+    corsHeaders,
   });
+  if (!guard.ok) return guard.response;
 
-  if (!shopResult) {
-    return NextResponse.json(
-      { error: `No shop found for SMS ID: ${smsShopId}` },
-      { status: 404, headers: corsHeaders }
-    );
-  }
-
-  if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
-    return NextResponse.json(
-      { error: "Unauthorized shop access" },
-      { status: 403, headers: corsHeaders }
-    );
-  }
-
-  // Feature gate: only shops entitled to the `maintenance` feature should see
-  // the VHI Coach overlay. Platform admins bypass for support/debugging.
-  // Without this, any authenticated user from any shop got the overlay even
-  // when the shop's plan/overrides had VHI disabled.
-  if (!isPlatformAdmin) {
-    try {
-      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
-      if (!entitlements.effectiveFeatures.maintenance) {
-        return NextResponse.json(
-          { success: false, error: "VHI not enabled for this shop", code: "feature_disabled" },
-          { status: 403, headers: corsHeaders }
-        );
-      }
-    } catch (err: any) {
-      console.error("[VHI Coach] feature entitlement check failed:", err.message);
-      // Fail closed — if we can't confirm entitlement, don't render the overlay.
-      return NextResponse.json(
-        { success: false, error: "Unable to verify feature entitlement" },
-        { status: 503, headers: corsHeaders }
-      );
-    }
-  }
-
-  const resolvedShopId = shopResult.mosShopId;
+  const resolvedShopId = guard.mosShopId;
   const resolvedMileage = mileage ? Number(mileage) : null;
 
   if (!resolvedMileage || isNaN(resolvedMileage)) {

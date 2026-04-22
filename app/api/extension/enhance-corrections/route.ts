@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
 import { enhanceCorrections } from "@/lib/db/schema/enhance-corrections";
 import { getDb as getMongoDb } from "@/lib/mongo";
@@ -41,6 +42,26 @@ export async function POST(request: NextRequest) {
       { error: "shopId and corrections array required" },
       { status: 400, headers: corsHeaders }
     );
+  }
+
+  // Cross-shop access check: caller must own the shop they're writing for
+  // (platform admins bypass).
+  const isPlatformAdmin = auth.user.role === "platform_admin";
+  const userShopIds = getUserShopIds(auth.user);
+  if (!isPlatformAdmin && !userShopIds.includes(String(shopId))) {
+    return NextResponse.json(
+      { error: "Unauthorized shop access" },
+      { status: 403, headers: corsHeaders }
+    );
+  }
+
+  {
+    const denied = await checkShopFeatureGate(Number(shopId), ["enhance_notes"], {
+      isPlatformAdmin,
+      featureLabel: "Enhance Notes",
+      corsHeaders,
+    });
+    if (denied) return denied;
   }
 
   try {
@@ -89,6 +110,24 @@ export async function GET(request: NextRequest) {
   const shopId = request.nextUrl.searchParams.get("shopId");
   if (!shopId) {
     return NextResponse.json({ error: "shopId required" }, { status: 400, headers: corsHeaders });
+  }
+
+  const isPlatformAdmin = auth.user.role === "platform_admin";
+  const userShopIds = getUserShopIds(auth.user);
+  if (!isPlatformAdmin && !userShopIds.includes(String(shopId))) {
+    return NextResponse.json(
+      { error: "Unauthorized shop access" },
+      { status: 403, headers: corsHeaders }
+    );
+  }
+
+  {
+    const denied = await checkShopFeatureGate(Number(shopId), ["enhance_notes"], {
+      isPlatformAdmin,
+      featureLabel: "Enhance Notes",
+      corsHeaders,
+    });
+    if (denied) return denied;
   }
 
   try {

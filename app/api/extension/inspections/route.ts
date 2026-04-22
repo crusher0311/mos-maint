@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,20 +14,12 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await validateExtensionToken(request);
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: getAuthErrorStatus(auth), headers: corsHeaders }
-      );
-    }
-
     const body = await request.json();
     const { provider, smsShopId, roId, vin, inspections } = body;
 
-    if (!smsShopId || !roId) {
+    if (!roId) {
       return NextResponse.json(
-        { error: "smsShopId and roId are required" },
+        { error: "roId is required" },
         { status: 400, headers: corsHeaders }
       );
     }
@@ -40,23 +31,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userShopIds = getUserShopIds(auth.user).map((id) => parseInt(id));
-    const isPlatformAdmin = auth.user.role === "platform_admin";
-
-    const shopResult = await findShopBySmsId(smsShopId, {
-      userShopIds,
-      isPlatformAdmin,
-      providerHint: provider,
+    const guard = await guardExtensionShopRequest(request, {
+      smsShopId,
+      provider,
+      requiredFeatures: ["maintenance"],
+      featureLabel: "VHI",
+      corsHeaders,
     });
+    if (!guard.ok) return guard.response;
 
-    if (!shopResult) {
-      return NextResponse.json(
-        { error: "Shop not found or access denied" },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-
-    const internalShopId = shopResult.mosShopId;
+    const internalShopId = guard.mosShopId;
     const db = await getDb();
 
     let taskCount = 0;

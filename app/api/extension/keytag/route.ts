@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout } from "@/lib/keytag-designer-types";
@@ -66,6 +67,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const denied = await checkShopFeatureGate(Number(shopId), ["oil_sticker"], {
+    isPlatformAdmin: authResult.user?.role === "platform_admin",
+    featureLabel: "Keytag",
+    corsHeaders,
+  });
+  if (denied) return denied;
+
   try {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
@@ -120,6 +128,13 @@ export async function POST(req: NextRequest) {
       { status: 400, headers: corsHeaders }
     );
   }
+
+  const denied = await checkShopFeatureGate(Number(shopId), ["oil_sticker"], {
+    isPlatformAdmin: authResult.user?.role === "platform_admin",
+    featureLabel: "Keytag",
+    corsHeaders,
+  });
+  if (denied) return denied;
 
   try {
     const body: KeytagRequest = await req.json();

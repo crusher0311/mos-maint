@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getCannedJobs } from "@/lib/tekmetric";
 import { protractorAdapter } from "@/lib/integrations/protractor/adapter";
 
@@ -22,32 +21,16 @@ export async function GET(request: NextRequest) {
     const provider = searchParams.get("provider") || "tekmetric";
     const refresh = searchParams.get("refresh") === "true";
 
-    if (!smsShopId) {
-      return NextResponse.json(
-        { error: "shopId is required" },
-        { status: 400, headers: corsHeaders }
-      );
-    }
+    const guard = await guardExtensionShopRequest(request, {
+      smsShopId,
+      provider,
+      requiredFeatures: ["job_lookup"],
+      featureLabel: "Job Lookup",
+      corsHeaders,
+    });
+    if (!guard.ok) return guard.response;
 
-    const auth = await validateExtensionToken(request);
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
-    }
-
-    const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
-    const isPlatformAdmin = auth.user.role === "platform_admin";
-
-    const providerParam = searchParams.get("provider") || undefined;
-    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: providerParam });
-    
-    if (!shopResult) {
-      return NextResponse.json(
-        { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
-        { status: 404, headers: corsHeaders }
-      );
-    }
-    
-    const mosShopId = shopResult.mosShopId;
+    const mosShopId = guard.mosShopId;
     const db = await getDb();
 
     const shop = await db.collection("shops").findOne({ shopId: mosShopId });

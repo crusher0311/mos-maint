@@ -10,6 +10,8 @@
     "lint": "eslint",
     "vercel-build": "next build",
     "test:e2e": "tsx tests/e2e/example.test.ts",
+    "test:extension-guard": "tsx tests/extension-route-guard.smoke.ts",
+    "lint:extension-gates": "node scripts/check-extension-gates.cjs",
     "test:e2e:full": "tsx tests/e2e/full-suite.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
     "migrate:shopid": "tsx scripts/migrate-shopid-to-numbers.ts",

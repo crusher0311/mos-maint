@@ -1,3 +1,5 @@
+// gate-exempt: extension UI preferences (toggles, layout, etc.) — not tied to
+// any specific shop feature; should remain available regardless of plan.
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";

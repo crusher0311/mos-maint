@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,40 +20,24 @@ export async function GET(request: NextRequest) {
     const providerHint = searchParams.get("provider");
     const vinHint = searchParams.get("vin");
 
-    if (!smsShopId || !roId) {
+    if (!roId) {
       return NextResponse.json(
-        { error: "shopId and roId are required" },
+        { error: "roId is required" },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    const auth = await validateExtensionToken(request);
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: getAuthErrorStatus(auth), headers: corsHeaders }
-      );
-    }
-
-    const userShopIds = getUserShopIds(auth.user).map((id) => parseInt(id));
-    const isPlatformAdmin = auth.user.role === "platform_admin";
-
-    const providerHintParam = new URL(request.url).searchParams.get("provider") || undefined;
-    const shopResult = await findShopBySmsId(smsShopId, {
-      userShopIds,
-      isPlatformAdmin,
-      providerHint: providerHintParam,
+    const guard = await guardExtensionShopRequest(request, {
+      smsShopId,
+      provider: providerHint,
+      requiredFeatures: ["maintenance"],
+      featureLabel: "VHI",
+      corsHeaders,
     });
+    if (!guard.ok) return guard.response;
 
-    if (!shopResult) {
-      return NextResponse.json(
-        { error: "Shop not found" },
-        { status: 404, headers: corsHeaders }
-      );
-    }
-
-    const { mosShopId, shopDoc } = shopResult;
-    const resolvedProvider = providerHint || shopResult.provider;
+    const { mosShopId, shopDoc } = guard;
+    const resolvedProvider = providerHint || guard.provider;
     const db = await getDb();
 
     let customerName: string | null = null;

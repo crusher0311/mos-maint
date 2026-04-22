@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 
@@ -37,14 +35,6 @@ interface TaskUpdate {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await validateExtensionToken(request);
-  if (!auth.authorized || !auth.user) {
-    return NextResponse.json(
-      { error: auth.error || "Unauthorized" },
-      { status: getAuthErrorStatus(auth), headers: corsHeaders }
-    );
-  }
-
   let body: any;
   try {
     body = await request.json();
@@ -58,53 +48,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400, headers: corsHeaders });
   }
 
-  if (!smsShopId) {
-    return NextResponse.json({ error: "smsShopId required" }, { status: 400, headers: corsHeaders });
-  }
-
   if (!inspectionTasks || !Array.isArray(inspectionTasks) || inspectionTasks.length === 0) {
     return NextResponse.json({ error: "inspectionTasks array required" }, { status: 400, headers: corsHeaders });
   }
 
-  const isPlatformAdmin =
-    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
-  const userShopIds = getUserShopIds(auth.user);
-
-  const shopResult = await findShopBySmsId(String(smsShopId), {
-    isPlatformAdmin,
-    userShopIds,
-    providerHint: provider || "tekmetric",
+  const guard = await guardExtensionShopRequest(request, {
+    smsShopId,
+    provider,
+    requiredFeatures: ["maintenance", "dvi_prefill"],
+    featureLabel: "DVI Pre-fill",
+    corsHeaders,
   });
+  if (!guard.ok) return guard.response;
 
-  if (!shopResult) {
-    return NextResponse.json({ error: `No shop found for SMS ID: ${smsShopId}` }, { status: 404, headers: corsHeaders });
-  }
-
-  if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
-    return NextResponse.json({ error: "Unauthorized shop access" }, { status: 403, headers: corsHeaders });
-  }
-
-  // Feature gate: requires both `maintenance` (VHI data source) and `dvi_prefill`.
-  if (!isPlatformAdmin) {
-    try {
-      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
-      const eff = entitlements.effectiveFeatures;
-      if (!eff.maintenance || !eff.dvi_prefill) {
-        return NextResponse.json(
-          { success: false, error: "DVI Pre-fill not enabled for this shop", code: "feature_disabled" },
-          { status: 403, headers: corsHeaders }
-        );
-      }
-    } catch (err: any) {
-      console.error("[Prefill DVI] feature entitlement check failed:", err.message);
-      return NextResponse.json(
-        { success: false, error: "Unable to verify feature entitlement" },
-        { status: 503, headers: corsHeaders }
-      );
-    }
-  }
-
-  const resolvedShopId = shopResult.mosShopId;
+  const resolvedShopId = guard.mosShopId;
   const resolvedMileage = mileage ? Number(mileage) : null;
 
   if (!resolvedMileage || isNaN(resolvedMileage)) {

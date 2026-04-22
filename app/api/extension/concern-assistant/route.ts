@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getOpenAI } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
@@ -189,6 +190,31 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { action } = body;
+
+    // Feature gate: concern_assistant. shopId is REQUIRED so the gate cannot
+    // be bypassed by omitting it. Also enforce caller owns that shop.
+    if (!body.shopId) {
+      return NextResponse.json(
+        { error: "shopId is required" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    const isPlatformAdmin = auth.user.role === "platform_admin";
+    const userShopIds = getUserShopIds(auth.user);
+    if (!isPlatformAdmin && !userShopIds.includes(String(body.shopId))) {
+      return NextResponse.json(
+        { error: "Unauthorized shop access" },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+    {
+      const denied = await checkShopFeatureGate(Number(body.shopId), ["concern_assistant"], {
+        isPlatformAdmin,
+        featureLabel: "Concern Assistant",
+        corsHeaders,
+      });
+      if (denied) return denied;
+    }
 
     const openai = getOpenAI();
     const db = await getDb();

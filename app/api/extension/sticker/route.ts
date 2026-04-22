@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
@@ -521,6 +522,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (mosShopId) {
+      const denied = await checkShopFeatureGate(Number(mosShopId), ["oil_sticker"], {
+        isPlatformAdmin: authResult.user?.role === "platform_admin",
+        featureLabel: "Oil Sticker",
+        corsHeaders,
+      });
+      if (denied) return denied;
+    }
+
     const stickerConfig: StickerConfig = shop.stickerConfig || {};
     const hasOilStickerFeature = shop.enabledFeatures?.oil_sticker === true;
 
@@ -603,6 +613,15 @@ export async function POST(request: NextRequest) {
         { error: "Shop not found" },
         { status: 404, headers: corsHeaders }
       );
+    }
+
+    if (mosShopId) {
+      const denied = await checkShopFeatureGate(Number(mosShopId), ["oil_sticker"], {
+        isPlatformAdmin: authResult.user?.role === "platform_admin",
+        featureLabel: "Oil Sticker",
+        corsHeaders,
+      });
+      if (denied) return denied;
     }
 
     const stickerConfig: StickerConfig = shop.stickerConfig || {};

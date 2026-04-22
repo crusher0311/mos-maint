@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, DEFAULT_MODEL } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
@@ -60,14 +58,6 @@ Examples:
 - "all good" → "Inspected and found to be in good condition."`;
 
 export async function POST(request: NextRequest) {
-  const auth = await validateExtensionToken(request);
-  if (!auth.authorized || !auth.user) {
-    return NextResponse.json(
-      { error: auth.error || "Unauthorized" },
-      { status: getAuthErrorStatus(auth), headers: corsHeaders }
-    );
-  }
-
   let body: any;
   try {
     body = await request.json();
@@ -77,54 +67,17 @@ export async function POST(request: NextRequest) {
 
   const { findings, vehicleInfo, shopId, provider } = body;
 
-  // Feature gate: requires `enhance_notes` for the shop. We resolve the shop
-  // from the SMS shop ID the extension sends as `shopId` (same identifier used
-  // by vhi-coach / prefill-dvi), then check entitlements. Platform admins
-  // bypass for support/debugging.
-  const isPlatformAdmin =
-    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
-
-  if (!isPlatformAdmin) {
-    if (!shopId) {
-      return NextResponse.json(
-        { error: "shopId required" },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-    try {
-      const userShopIds = getUserShopIds(auth.user);
-      const shopResult = await findShopBySmsId(String(shopId), {
-        isPlatformAdmin,
-        userShopIds,
-        providerHint: provider || "tekmetric",
-      });
-      if (!shopResult) {
-        return NextResponse.json(
-          { error: `No shop found for SMS ID: ${shopId}` },
-          { status: 404, headers: corsHeaders }
-        );
-      }
-      if (!userShopIds.includes(String(shopResult.mosShopId))) {
-        return NextResponse.json(
-          { error: "Unauthorized shop access" },
-          { status: 403, headers: corsHeaders }
-        );
-      }
-      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
-      if (!entitlements.effectiveFeatures.enhance_notes) {
-        return NextResponse.json(
-          { success: false, error: "Enhance Notes not enabled for this shop", code: "feature_disabled" },
-          { status: 403, headers: corsHeaders }
-        );
-      }
-    } catch (err: any) {
-      console.error("[Enhance Findings] feature entitlement check failed:", err.message);
-      return NextResponse.json(
-        { success: false, error: "Unable to verify feature entitlement" },
-        { status: 503, headers: corsHeaders }
-      );
-    }
-  }
+  // Feature gate: requires `enhance_notes`. The extension sends the SMS shop ID
+  // in the body field `shopId` (same identifier other extension endpoints call
+  // `smsShopId`), so we map it across.
+  const guard = await guardExtensionShopRequest(request, {
+    smsShopId: shopId,
+    provider,
+    requiredFeatures: ["enhance_notes"],
+    featureLabel: "Enhance Notes",
+    corsHeaders,
+  });
+  if (!guard.ok) return guard.response;
 
   if (!findings || !Array.isArray(findings) || findings.length === 0) {
     return NextResponse.json(
@@ -250,11 +203,11 @@ export async function POST(request: NextRequest) {
       200,
       latencyMs,
       completion.usage?.total_tokens || 0,
-      { findingsCount: validFindings.length, user: auth.user.email }
+      { findingsCount: validFindings.length, user: guard.user.email }
     ).catch(() => {});
 
     console.log(
-      `[Enhance Findings] ${auth.user.email}: ${enhanced.length} findings enhanced in ${latencyMs}ms`
+      `[Enhance Findings] ${guard.user.email}: ${enhanced.length} findings enhanced in ${latencyMs}ms`
     );
 
     return NextResponse.json({

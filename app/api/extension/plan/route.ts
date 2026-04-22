@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
@@ -786,6 +787,14 @@ export async function GET(request: NextRequest) {
     const mosShopId = shopResult.mosShopId;
     const shopDoc = shopResult.shopDoc;
     const provider = shopResult.provider;
+
+    // Feature gate: VHI plan requires the `maintenance` feature.
+    const denied = await checkShopFeatureGate(mosShopId, ["maintenance"], {
+      isPlatformAdmin,
+      featureLabel: "VHI",
+      corsHeaders,
+    });
+    if (denied) return denied;
     
     console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), provider: ${provider}`);
     
