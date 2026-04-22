@@ -117,8 +117,9 @@ export async function GET(req: NextRequest) {
   // Send a single consolidated email per cron run instead of one-per-shop.
   let emailed = 0;
   if (toAlert.length > 0) {
+    // Canonical field is `isPlatformAdmin` (see lib/auth.ts) — not `platformAdmin`.
     const admins = await db.collection("users").find(
-      { platformAdmin: true, email: { $exists: true, $ne: null } },
+      { isPlatformAdmin: true, email: { $exists: true, $ne: null } },
       { projection: { email: 1 } }
     ).toArray();
 

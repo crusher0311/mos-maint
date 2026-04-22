@@ -14,7 +14,8 @@ async function isPlatformAdmin(): Promise<boolean> {
   if (!sess) return false;
 
   const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.platformAdmin === true;
+  // Canonical field is `isPlatformAdmin` (see lib/auth.ts).
+  return user?.isPlatformAdmin === true;
 }
 
 /**
