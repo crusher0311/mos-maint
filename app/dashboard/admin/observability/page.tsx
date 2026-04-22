@@ -47,7 +47,48 @@ interface OpenAiSummary {
   utcDayStart: string;
 }
 
-type TabType = "logs" | "api-usage";
+interface CronBootEntry {
+  status: "running" | "failed" | "disabled";
+  bootedAt: string;
+  instanceId?: string;
+  host?: string;
+  pid?: number;
+  baseUrl?: string;
+  jobsRegistered?: number;
+  reason?: string;
+  error?: string;
+  jobs?: { name: string; schedule: string; method: string; path: string }[];
+}
+
+interface CronRunEntry {
+  name: string;
+  dt?: string;
+  ok?: boolean;
+  status?: number;
+  ms?: number;
+  error?: string | null;
+  schedule?: string;
+  instanceId?: string;
+}
+
+interface CronLockEntry {
+  jobName: string;
+  instanceId?: string;
+  lockedAt?: string;
+  expiresAt?: string;
+}
+
+interface CronStatusResponse {
+  health: "ok" | "warn" | "fail";
+  healthReason: string;
+  lastBoot: CronBootEntry | null;
+  sinceBootMs: number | null;
+  bootHistory: CronBootEntry[];
+  lastRuns: CronRunEntry[];
+  activeLocks: CronLockEntry[];
+}
+
+type TabType = "logs" | "api-usage" | "cron";
 
 export default function ObservabilityPage() {
   const [activeTab, setActiveTab] = useState<TabType>("logs");
@@ -67,6 +108,10 @@ export default function ObservabilityPage() {
   const [apiUsage, setApiUsage] = useState<ApiUsageStats[]>([]);
   const [openAiSummary, setOpenAiSummary] = useState<OpenAiSummary | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
+
+  const [cronStatus, setCronStatus] = useState<CronStatusResponse | null>(null);
+  const [cronLoading, setCronLoading] = useState(false);
+  const [cronError, setCronError] = useState<string | null>(null);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -114,13 +159,33 @@ export default function ObservabilityPage() {
     }
   }, [hoursBack]);
 
+  const fetchCronStatus = useCallback(async () => {
+    setCronLoading(true);
+    setCronError(null);
+    try {
+      const response = await fetch(`/api/platform-admin/cron-status`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Failed (${response.status})`);
+      }
+      const data = (await response.json()) as CronStatusResponse;
+      setCronStatus(data);
+    } catch (err) {
+      setCronError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setCronLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === "logs") {
       fetchLogs();
     } else if (activeTab === "api-usage") {
       fetchApiUsage();
+    } else if (activeTab === "cron") {
+      fetchCronStatus();
     }
-  }, [activeTab, fetchLogs, fetchApiUsage]);
+  }, [activeTab, fetchLogs, fetchApiUsage, fetchCronStatus]);
 
   const getLevelColor = (level: string) => {
     switch (level.toLowerCase()) {
@@ -161,6 +226,16 @@ export default function ObservabilityPage() {
             }`}
           >
             API Usage
+          </button>
+          <button
+            onClick={() => setActiveTab("cron")}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === "cron"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Cron Scheduler
           </button>
         </nav>
       </div>
@@ -412,6 +487,246 @@ export default function ObservabilityPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === "cron" && (
+        <div>
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-gray-700">In-process scheduler</h2>
+              <p className="text-xs text-gray-500">
+                Boot status and recent job runs are persisted to MongoDB so failures surface here even when production logs have rolled.
+              </p>
+            </div>
+            <button
+              onClick={fetchCronStatus}
+              disabled={cronLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {cronLoading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+
+          {cronError && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+              <p className="text-red-800">{cronError}</p>
+            </div>
+          )}
+
+          {cronStatus && (
+            <div className="space-y-6">
+              <div
+                className={`rounded-lg p-4 border ${
+                  cronStatus.health === "ok"
+                    ? "bg-green-50 border-green-200"
+                    : cronStatus.health === "warn"
+                    ? "bg-yellow-50 border-yellow-200"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`inline-block px-2 py-1 text-xs font-bold rounded ${
+                      cronStatus.health === "ok"
+                        ? "bg-green-600 text-white"
+                        : cronStatus.health === "warn"
+                        ? "bg-yellow-500 text-white"
+                        : "bg-red-600 text-white"
+                    }`}
+                  >
+                    {cronStatus.health.toUpperCase()}
+                  </span>
+                  <p className="text-sm font-medium text-gray-900">
+                    {cronStatus.healthReason}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Last Boot
+                </h3>
+                {cronStatus.lastBoot ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="text-gray-500">Status</div>
+                      <div className="font-medium">
+                        {cronStatus.lastBoot.status}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Booted At</div>
+                      <div className="font-medium">
+                        {new Date(cronStatus.lastBoot.bootedAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Instance</div>
+                      <div className="font-mono text-xs break-all">
+                        {cronStatus.lastBoot.instanceId || cronStatus.lastBoot.host || "—"}
+                      </div>
+                    </div>
+                    {typeof cronStatus.lastBoot.jobsRegistered === "number" && (
+                      <div>
+                        <div className="text-gray-500">Jobs Registered</div>
+                        <div className="font-medium">
+                          {cronStatus.lastBoot.jobsRegistered}
+                        </div>
+                      </div>
+                    )}
+                    {cronStatus.lastBoot.baseUrl && (
+                      <div className="md:col-span-2">
+                        <div className="text-gray-500">Base URL</div>
+                        <div className="font-mono text-xs break-all">
+                          {cronStatus.lastBoot.baseUrl}
+                        </div>
+                      </div>
+                    )}
+                    {cronStatus.lastBoot.reason && (
+                      <div className="md:col-span-3">
+                        <div className="text-gray-500">Reason</div>
+                        <div className="text-sm">{cronStatus.lastBoot.reason}</div>
+                      </div>
+                    )}
+                    {cronStatus.lastBoot.error && (
+                      <div className="md:col-span-3">
+                        <div className="text-gray-500">Error</div>
+                        <div className="text-sm text-red-700 break-all whitespace-pre-wrap">
+                          {cronStatus.lastBoot.error}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No boot record yet — scheduler has never reported.
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="p-6 pb-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Last Job Runs</h3>
+                </div>
+                {cronStatus.lastRuns.length === 0 ? (
+                  <div className="p-6 text-sm text-gray-500">
+                    No job runs recorded yet.
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Run</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Latency</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {cronStatus.lastRuns.map((run) => (
+                        <tr key={run.name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {run.name}
+                            {run.schedule && (
+                              <span className="block text-xs text-gray-400 font-mono">
+                                {run.schedule}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {run.dt ? new Date(run.dt).toLocaleString() : "—"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                run.ok
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {run.ok ? "OK" : "FAIL"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {run.status || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {typeof run.ms === "number" ? `${run.ms}ms` : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-red-700 max-w-xs truncate">
+                            {run.error || ""}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {cronStatus.activeLocks.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Active Locks
+                  </h3>
+                  <div className="space-y-2">
+                    {cronStatus.activeLocks.map((lock) => (
+                      <div
+                        key={lock.jobName}
+                        className="flex justify-between text-sm border-b last:border-b-0 pb-2"
+                      >
+                        <span className="font-medium">{lock.jobName}</span>
+                        <span className="text-gray-500 font-mono text-xs">
+                          {lock.instanceId} · expires{" "}
+                          {lock.expiresAt
+                            ? new Date(lock.expiresAt).toLocaleTimeString()
+                            : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {cronStatus.bootHistory.length > 1 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Recent Boots
+                  </h3>
+                  <div className="space-y-2">
+                    {cronStatus.bootHistory.slice(0, 10).map((boot, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between text-sm border-b last:border-b-0 pb-2"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`inline-block px-2 py-0.5 text-xs font-semibold rounded ${
+                              boot.status === "running"
+                                ? "bg-green-100 text-green-800"
+                                : boot.status === "disabled"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {boot.status}
+                          </span>
+                          <span className="text-gray-600">
+                            {new Date(boot.bootedAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500 font-mono truncate max-w-xs">
+                          {boot.error || boot.reason || boot.instanceId || boot.host || ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
