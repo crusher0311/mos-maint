@@ -18,11 +18,13 @@
 
 import { getDb } from "../lib/mongo";
 
-const TEKMETRIC_API_BASE = "https://shop.tekmetric.com/api/v1";
-
-// Tekmetric uses OAuth client-credentials flow. Reuse the app's auth helper
-// so this script gets the same token (and benefits from its persisted cache).
-import { getValidToken, refreshToken } from "@/lib/tekmetric-auth";
+// Use the centralized Tekmetric client so this script shares the same
+// rate-limit budget, OAuth token, retry logic, and observability metrics as
+// the cron jobs and app routes. Going through tekmetricRequest is the ONLY
+// way to safely call Tekmetric from anywhere in this codebase — raw fetch
+// bypasses the in-process rate limiter and causes 429 storms.
+import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
+import { getValidToken } from "@/lib/tekmetric-auth";
 
 type Args = {
   shop?: number;
@@ -101,57 +103,43 @@ function msUntilWindowOpens(args: Args): number {
   return deltaSec * 1000;
 }
 
-// Cross-call rate-limit signal. When Tekmetric throttles us hard, we want
-// the *whole* run to back off — not just the in-flight RO. The main loop
-// reads this and inserts a long cooldown when it grows.
-let consecutive429s = 0;
+// Track when the centralized rate limiter says "budget exhausted" so the
+// main loop can pause the whole run for a longer cooldown rather than
+// burning through the remaining ROs as no-ops.
+let budgetExhaustedHits = 0;
 
-async function tekmetricFetchRO(roId: number): Promise<{
-  milesIn: number | null;
-  milesOut: number | null;
-} | null> {
-  const url = `${TEKMETRIC_API_BASE}/repair-orders/${roId}`;
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const token = await getValidToken();
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-    if (res.status === 401 || res.status === 403) {
-      console.log(`  [auth] RO ${roId}: ${res.status}, force-refreshing token`);
-      await refreshToken();
-      continue;
-    }
-    if (res.status === 404) {
-      consecutive429s = 0;
-      return null;
-    }
-    if (res.status === 429) {
-      consecutive429s++;
-      const retryAfter = parseInt(res.headers.get("retry-after") || "0", 10);
-      const waitMs = retryAfter > 0 ? retryAfter * 1000 : Math.min(2 ** attempt * 1000, 30000);
-      console.log(`  [429] RO ${roId}: waiting ${waitMs}ms before retry ${attempt} (consecutive=${consecutive429s})`);
-      await new Promise((r) => setTimeout(r, waitMs));
-      continue;
-    }
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} for RO ${roId}: ${text.slice(0, 200)}`);
-    }
-    const body: any = await res.json();
-    consecutive429s = 0;
+async function tekmetricFetchRO(roId: number, shopId: number): Promise<
+  | { milesIn: number | null; milesOut: number | null }
+  | "budget_exhausted"
+  | null
+> {
+  try {
+    const body: any = await tekmetricRequest(`/repair-orders/${roId}`, {}, shopId);
+    budgetExhaustedHits = 0;
     return {
       milesIn: typeof body?.milesIn === "number" ? body.milesIn : (typeof body?.mileageIn === "number" ? body.mileageIn : null),
       milesOut: typeof body?.milesOut === "number" ? body.milesOut : (typeof body?.mileageOut === "number" ? body.mileageOut : null),
     };
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    // 404 — RO no longer exists in Tekmetric.
+    if (/error 404/i.test(msg)) return null;
+    // The centralized rate limiter ran out of budget; signal cooldown.
+    if (/rate limit budget exhausted/i.test(msg)) {
+      budgetExhaustedHits++;
+      console.log(`  [budget] RO ${roId}: ${msg} (consecutive=${budgetExhaustedHits})`);
+      return "budget_exhausted";
+    }
+    // 429 storms (after tekmetricRequest's own 5 retries).
+    if (/error 429/i.test(msg)) {
+      budgetExhaustedHits++;
+      console.log(`  [429-exhausted] RO ${roId}: ${msg} (consecutive=${budgetExhaustedHits})`);
+      return "budget_exhausted";
+    }
+    // Anything else — log and move on so one bad RO doesn't kill the run.
+    console.log(`  [error] RO ${roId}: ${msg.slice(0, 200)}`);
+    return null;
   }
-  // Don't throw — just return null and let the caller decide what to do.
-  // Throwing kills the whole run for one stubborn RO.
-  console.log(`  [skip] RO ${roId}: exhausted retries, will retry on next run`);
-  return null;
 }
 
 async function main() {
@@ -273,9 +261,9 @@ async function main() {
       // Cross-call cooldown: if Tekmetric has been throttling us back-to-back,
       // pause the whole run for several minutes so the quota window can reset.
       // 5 consecutive 429s ≈ a hard quota wall, not a momentary blip.
-      if (consecutive429s >= 5) {
-        const cooldownMin = Math.min(15, 2 * Math.floor(consecutive429s / 5));
-        console.log(`  [cooldown] ${consecutive429s} consecutive 429s — sleeping ${cooldownMin} min before next request.`);
+      if (budgetExhaustedHits >= 3) {
+        const cooldownMin = Math.min(15, 2 * Math.floor(budgetExhaustedHits / 3));
+        console.log(`  [cooldown] ${budgetExhaustedHits} consecutive budget-exhausted/429 errors — sleeping ${cooldownMin} min before next request.`);
         // Persist progress before the long pause so a kill is safe.
         if (!args.dryRun) {
           await progressColl.updateOne(
@@ -303,7 +291,12 @@ async function main() {
 
       let mileage: number | null = null;
       try {
-        const ro = await tekmetricFetchRO(roIdNum);
+        const ro = await tekmetricFetchRO(roIdNum, shopId);
+        if (ro === "budget_exhausted") {
+          // Don't mark completed — let the next iteration's cooldown
+          // logic kick in based on budgetExhaustedHits.
+          continue;
+        }
         if (ro === null) {
           apiNotFound.add(woId);
           grandSkipped++;
