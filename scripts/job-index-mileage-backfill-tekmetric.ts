@@ -40,7 +40,10 @@ function parseArgs(): Args {
   const argv = process.argv.slice(2);
   const out: Args = {
     dryRun: false,
-    reqsPerSec: 5,
+    // Tekmetric's sustained rate limit is ~1-2 req/sec in practice. Default
+    // to 2 so we stay under it without baked-in backoff churn. Override via
+    // --rate=N if you want to push harder.
+    reqsPerSec: 2,
     windowStartHourET: 20, // 8pm ET
     windowEndHourET: 5,    // 5am ET (next day)
     ignoreWindow: false,
