@@ -6,6 +6,8 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['*'],
     },
+    instrumentationHook: true,
+    serverComponentsExternalPackages: ['mongodb', 'node-cron'],
   },
 };
 module.exports = nextConfig;

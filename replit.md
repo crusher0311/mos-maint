@@ -50,6 +50,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **Job Search Triple-Source**: Job search queries three sources in parallel: legacy MongoDB, normalized MongoDB, and Supabase PostgreSQL, with results deduplicated and scored using DataOne-powered vehicle specs.
 *   **Support Tickets Dual-Write**: Support tickets are dual-written to MongoDB and Supabase PostgreSQL.
 *   **Production Log Caching**: Production logs from Better Stack are synced to a Supabase table with 30-day retention for fast, filterable access.
+*   **In-Process Cron Scheduler**: A `node-cron` based scheduler runs inside the main Render web service (no separate cron service). Boot is wired via `src/instrumentation.ts` (Next.js instrumentation hook, gated on `ENABLE_INPROCESS_CRON=true` and `CRON_SECRET`). The scheduler (`lib/cron/scheduler.ts`) self-fetches its own `/api/cron/*` endpoints with `Authorization: Bearer ${CRON_SECRET}`. Concurrency safety across autoscaled instances is provided by a Mongo-backed distributed lock (`cron_locks` collection, TTL-based). Job definitions live in `lib/cron/jobs.ts` (incremental syncs every 30min, overnight backfills, daily-grace-check 8am UTC). The scheduler module is loaded via runtime `require()` (not webpack-bundled) so it stays out of the instrumentation bundle when disabled.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)
