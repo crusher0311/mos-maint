@@ -402,7 +402,7 @@ async function resolveBookingDataServerSide(
             result.customerId = String(match.customerId);
 
             try {
-              const customerData = await getCustomer(match.customerId);
+              const customerData = await getCustomer(match.customerId, shop?.shopId ? Number(shop.shopId) : undefined);
               if (customerData) {
                 const firstName = customerData.firstName || "";
                 const lastName = customerData.lastName || "";

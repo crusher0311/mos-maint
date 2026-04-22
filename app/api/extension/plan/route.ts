@@ -274,7 +274,7 @@ const shopPrefetchInProgress = new Set<number>();
 const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
 const TEKMETRIC_RO_CACHE_TTL = 30 * 1000;
 
-async function fetchTekmetricRoCached(roId: string, forceRefresh = false): Promise<any | null> {
+async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosShopId?: number): Promise<any | null> {
   if (!forceRefresh) {
     const cached = tekmetricRoCache.get(roId);
     if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
@@ -283,7 +283,7 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false): Promi
   }
   try {
     const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-    const data = await tekmetricRequest(`/repair-orders/${roId}`);
+    const data = await tekmetricRequest(`/repair-orders/${roId}`, {}, mosShopId);
     tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
     if (tekmetricRoCache.size > 200) {
       const oldest = Array.from(tekmetricRoCache.entries())
@@ -839,7 +839,7 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
-        const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh);
+        const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
         if (liveData) {
           const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
           let roVin = liveData.vehicle?.vin || liveData.vehicleVin;
@@ -854,7 +854,7 @@ export async function GET(request: NextRequest) {
                 console.log(`[Extension] Vehicle ${vehicleId} found in MongoDB cache`);
               } else {
                 const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`);
+                const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`, {}, mosShopId ? Number(mosShopId) : undefined);
                 roVin = vehData?.vin;
                 if (vehData) await cacheVehicle(db, vehicleId, vehData).catch(() => {});
               }
@@ -982,7 +982,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (roId && vin && provider === "tekmetric" && currentRoAuthorizedJobs.length === 0) {
-      const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh);
+      const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
       if (liveData) {
         if (!mileage) {
           const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
@@ -1112,7 +1112,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
-      const data = await fetchTekmetricRoCached(String(roId), forceRefresh);
+      const data = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
       if (data) {
         if (!repairOrderNumber) repairOrderNumber = data.repairOrderNumber || null;
         if (!customerName) {
@@ -1136,7 +1136,7 @@ export async function GET(request: NextRequest) {
               } else {
                 console.log(`[Extension] API FALLBACK: Customer ${customerId} not in cache, fetching from API`);
                 const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                const custData = await tekmetricRequest(`/customers/${customerId}`);
+                const custData = await tekmetricRequest(`/customers/${customerId}`, {}, mosShopId ? Number(mosShopId) : undefined);
                 if (custData?.firstName && custData?.lastName) {
                   customerName = `${custData.firstName} ${custData.lastName}`;
                 } else if (custData?.name) {

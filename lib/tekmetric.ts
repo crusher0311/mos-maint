@@ -145,8 +145,8 @@ export async function getCustomers(
   return tekmetricRequest(`/customers?${queryParams}`, {}, shopId);
 }
 
-export async function getCustomer(customerId: number): Promise<TekmetricCustomer> {
-  return tekmetricRequest(`/customers/${customerId}`);
+export async function getCustomer(customerId: number, shopId?: number): Promise<TekmetricCustomer> {
+  return tekmetricRequest(`/customers/${customerId}`, {}, shopId);
 }
 
 export async function getVehicles(
@@ -274,8 +274,8 @@ export async function getRepairOrders(
   return tekmetricRequest(`/repair-orders?${queryParams}`, {}, shopId);
 }
 
-export async function getRepairOrder(roId: number): Promise<TekmetricRepairOrder> {
-  return tekmetricRequest(`/repair-orders/${roId}`);
+export async function getRepairOrder(roId: number, shopId?: number): Promise<TekmetricRepairOrder> {
+  return tekmetricRequest(`/repair-orders/${roId}`, {}, shopId);
 }
 
 export async function getTekmetricWorkOrderStatus(
@@ -283,7 +283,7 @@ export async function getTekmetricWorkOrderStatus(
   workOrderId: string
 ): Promise<string | null> {
   try {
-    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`);
+    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`, {}, shopId);
     return response?.repairOrderStatus?.code || response?.repairOrderStatus?.name || response?.status || null;
   } catch (err) {
     console.error("Error fetching Tekmetric RO status:", err);
@@ -292,10 +292,11 @@ export async function getTekmetricWorkOrderStatus(
 }
 
 export async function getTekmetricWorkOrderWithMileage(
-  workOrderId: string
+  workOrderId: string,
+  shopId?: number,
 ): Promise<{ status: string | null; mileageIn: number | null; mileageOut: number | null } | null> {
   try {
-    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`);
+    const response = await tekmetricRequest(`/repair-orders/${workOrderId}`, {}, shopId);
     return {
       status: response?.repairOrderStatus?.code || response?.repairOrderStatus?.name || response?.status || null,
       mileageIn: response?.milesIn || response?.mileageIn || null,
@@ -320,7 +321,7 @@ export async function getJobs(
   if (params.page !== undefined) queryParams.set('page', params.page.toString());
   if (params.size !== undefined) queryParams.set('size', params.size.toString());
   
-  return tekmetricRequest(`/jobs?${queryParams}`);
+  return tekmetricRequest(`/jobs?${queryParams}`, {}, shopId);
 }
 
 export async function getCannedJobs(
@@ -334,18 +335,19 @@ export async function getCannedJobs(
   if (params.page !== undefined) queryParams.set('page', params.page.toString());
   if (params.size !== undefined) queryParams.set('size', params.size.toString());
   
-  return tekmetricRequest(`/canned-jobs?${queryParams}`);
+  return tekmetricRequest(`/canned-jobs?${queryParams}`, {}, shopId);
 }
 
 export async function addCannedJobsToRepairOrder(
   repairOrderId: number,
-  cannedJobIds: number[]
+  cannedJobIds: number[],
+  shopId?: number,
 ): Promise<any> {
   // Tekmetric API expects an array of canned job IDs directly, not an object
   return tekmetricRequest(`/repair-orders/${repairOrderId}/canned-jobs`, {
     method: 'POST',
     body: JSON.stringify(cannedJobIds),
-  });
+  }, shopId);
 }
 
 export async function validateShopAccess(shopId: number): Promise<{ valid: boolean; shop?: TekmetricShop; error?: string }> {
@@ -458,24 +460,25 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   return { ...result, id: appointmentId };
 }
 
-export async function getAppointment(appointmentId: number): Promise<TekmetricAppointment> {
-  return tekmetricRequest(`/appointments/${appointmentId}`);
+export async function getAppointment(appointmentId: number, shopId?: number): Promise<TekmetricAppointment> {
+  return tekmetricRequest(`/appointments/${appointmentId}`, {}, shopId);
 }
 
 export async function updateAppointment(
   appointmentId: number,
-  updates: Partial<Omit<CreateAppointmentParams, 'shopId'>>
+  updates: Partial<Omit<CreateAppointmentParams, 'shopId'>>,
+  shopId?: number,
 ): Promise<TekmetricAppointment> {
   return tekmetricRequest(`/appointments/${appointmentId}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
-  });
+  }, shopId);
 }
 
-export async function deleteAppointment(appointmentId: number): Promise<void> {
+export async function deleteAppointment(appointmentId: number, shopId?: number): Promise<void> {
   await tekmetricRequest(`/appointments/${appointmentId}`, {
     method: 'DELETE',
-  });
+  }, shopId);
 }
 
 export async function getAppointments(

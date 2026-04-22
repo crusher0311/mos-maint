@@ -91,7 +91,7 @@ export async function syncSingleShop(
       
       if (!customerCache.has(ro.customerId)) {
         try {
-          const customer = await getCustomer(ro.customerId);
+          const customer = await getCustomer(ro.customerId, numericShopId);
           customerCache.set(ro.customerId, customer);
         } catch (err) {
         }

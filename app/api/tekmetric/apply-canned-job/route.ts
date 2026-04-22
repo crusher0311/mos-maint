@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await addCannedJobsToRepairOrder(targetRepairOrderId, [Number(cannedJobId)]);
+    const result = await addCannedJobsToRepairOrder(targetRepairOrderId, [Number(cannedJobId)], shopId ? Number(shopId) : undefined);
     
     await db.collection("canned_job_applications").insertOne({
       shopId,

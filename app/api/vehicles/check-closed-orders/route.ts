@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
               }
             } else if (source.provider === "tekmetric" && shop.tekmetric?.shopId) {
               try {
-                const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId);
+                const woData = await getTekmetricWorkOrderWithMileage(source.workOrderId, shopId ? Number(shopId) : undefined);
                 if (woData) {
                   const normalizedStatus = woData.status?.toUpperCase();
                   isClosed = normalizedStatus === "INVOICED" || normalizedStatus === "INVOICE" || 

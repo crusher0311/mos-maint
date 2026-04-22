@@ -88,7 +88,7 @@ type PaginatedResponse<T> = {
   last: boolean;
 };
 
-async function tekmetricRequest<T>(endpoint: string): Promise<T> {
+async function tekmetricRequest<T>(endpoint: string, mosShopId?: number): Promise<T> {
   const url = `${TEKMETRIC_API_BASE}${endpoint}`;
   
   const res = await fetch(url, {
@@ -116,7 +116,8 @@ async function getRepairOrders(
     updatedDateEnd?: string;
     sort?: string;
     sortDirection?: "ASC" | "DESC";
-  } = {}
+  } = {},
+  mosShopId?: number,
 ): Promise<PaginatedResponse<TekmetricRepairOrder>> {
   const queryParams = new URLSearchParams({ shop: tekmetricShopId.toString() });
   if (params.page !== undefined) queryParams.set("page", params.page.toString());
@@ -126,12 +127,13 @@ async function getRepairOrders(
   if (params.sort) queryParams.set("sort", params.sort);
   if (params.sortDirection) queryParams.set("sortDirection", params.sortDirection);
   
-  return tekmetricRequest(`/repair-orders?${queryParams}`);
+  return tekmetricRequest(`/repair-orders?${queryParams}`, mosShopId);
 }
 
 async function getJobs(
   tekmetricShopId: number,
-  repairOrderId: number
+  repairOrderId: number,
+  mosShopId?: number,
 ): Promise<PaginatedResponse<TekmetricJob>> {
   const queryParams = new URLSearchParams({
     shop: tekmetricShopId.toString(),
@@ -139,15 +141,15 @@ async function getJobs(
     size: "100",
   });
   
-  return tekmetricRequest(`/jobs?${queryParams}`);
+  return tekmetricRequest(`/jobs?${queryParams}`, mosShopId);
 }
 
-async function getVehicle(vehicleId: number): Promise<TekmetricVehicle> {
-  return tekmetricRequest(`/vehicles/${vehicleId}`);
+async function getVehicle(vehicleId: number, mosShopId?: number): Promise<TekmetricVehicle> {
+  return tekmetricRequest(`/vehicles/${vehicleId}`, mosShopId);
 }
 
-async function getCustomer(customerId: number): Promise<TekmetricCustomer> {
-  return tekmetricRequest(`/customers/${customerId}`);
+async function getCustomer(customerId: number, mosShopId?: number): Promise<TekmetricCustomer> {
+  return tekmetricRequest(`/customers/${customerId}`, mosShopId);
 }
 
 function extractKeywords(title: string): string[] {
@@ -278,7 +280,7 @@ async function main() {
           updatedDateEnd: endDateStr,
           sort: "updatedDate",
           sortDirection: "DESC",
-        });
+        }, shopId);
         
         totalPages = rosResponse.totalPages;
         const ros = rosResponse.content || [];
@@ -304,7 +306,7 @@ async function main() {
               vehicle = vehicleCache.get(ro.vehicleId)!;
             } else {
               try {
-                vehicle = await getVehicle(ro.vehicleId);
+                vehicle = await getVehicle(ro.vehicleId, shopId);
                 vehicleCache.set(ro.vehicleId, vehicle);
               } catch (err) {
                 console.log(`  Warning: Could not fetch vehicle ${ro.vehicleId}`);
@@ -319,7 +321,7 @@ async function main() {
               customer = customerCache.get(ro.customerId)!;
             } else {
               try {
-                customer = await getCustomer(ro.customerId);
+                customer = await getCustomer(ro.customerId, shopId);
                 customerCache.set(ro.customerId, customer);
               } catch (err) {
                 // Customer fetch is optional
@@ -330,7 +332,7 @@ async function main() {
           // Fetch jobs for this RO
           let jobs: TekmetricJob[] = [];
           try {
-            const jobsResponse = await getJobs(tekmetricShopId, ro.id);
+            const jobsResponse = await getJobs(tekmetricShopId, ro.id, shopId);
             jobs = jobsResponse.content || [];
           } catch (err) {
             console.log(`  Warning: Could not fetch jobs for RO ${ro.id}`);

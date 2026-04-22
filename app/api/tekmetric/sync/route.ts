@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
                 if (vehicle.vin) {
                   let customer: TekmetricCustomer | undefined;
                   try {
-                    customer = await getCustomer(ro.customerId);
+                    customer = await getCustomer(ro.customerId, shopId);
                   } catch (e) {
                   }
                   vehicleMap.set(ro.vehicleId, { vehicle, ro, customer });

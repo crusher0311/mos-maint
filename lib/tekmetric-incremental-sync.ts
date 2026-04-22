@@ -254,7 +254,7 @@ export async function syncShopIncremental(
         result.fromCache.customers++;
       } else {
         try {
-          customer = await getCustomer(ro.customerId);
+          customer = await getCustomer(ro.customerId, shopId);
           await cacheCustomer(db, ro.customerId, customer);
         } catch (err) {
         }

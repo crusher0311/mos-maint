@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
         if (shop && (needsVehicle || needsCustomer)) {
           const [vehicleResult, customerResult] = await Promise.allSettled([
             needsVehicle ? getVehicle(repairOrder.vehicleId) : Promise.resolve(null),
-            needsCustomer ? getCustomer(repairOrder.customerId) : Promise.resolve(null),
+            needsCustomer ? getCustomer(repairOrder.customerId, shop?.shopId ? Number(shop.shopId) : undefined) : Promise.resolve(null),
           ]);
 
           const enrichFields: any = {};
