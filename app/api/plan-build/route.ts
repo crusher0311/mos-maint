@@ -891,7 +891,7 @@ export async function POST(req: NextRequest) {
           { vin: vinUpper },
         ],
       })
-        .sort({ closedAt: -1, performedAt: -1, completedAt: -1, indexedAt: -1 })
+        .sort({ closedDate: -1, closedAt: -1, performedAt: -1, completedAt: -1, indexedAt: -1 })
         .limit(500)
         .toArray();
 
@@ -909,7 +909,7 @@ export async function POST(req: NextRequest) {
         const serviceName = ji.jobName || ji.job?.title || ji.title || "";
         if (!serviceName) continue;
 
-        const dateRaw = ji.closedAt || ji.performedAt || ji.completedAt || ji.indexedAt || null;
+        const dateRaw = ji.closedDate || ji.closedAt || ji.performedAt || ji.completedAt || ji.indexedAt || null;
         const date = dateRaw ? new Date(dateRaw) : null;
         if (date && isNaN(date.getTime())) continue;
 
