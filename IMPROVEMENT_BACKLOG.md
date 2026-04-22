@@ -226,7 +226,53 @@ written go/no-go on retirement.
 
 ---
 
-### [ ] 9. Architecture diagram & doc refresh
+### [ ] 9. Backfill missing odometer onto historical `job_index` entries from Tekmetric API
+**Why now:** During a VHI bug investigation (RO #150297, VIN `1C4PJMDS6HW621198`,
+Heart shop 82), we discovered that **58% of `job_index` rows for Heart-Libertyville
+have no `mileage` field** (20,479 of 35,560). The data was lost during whichever
+backfill pass originally populated `job_index` — the parent `tekmetric_work_orders`
+docs for those historical ROs also lack mileage (sample: 0/20 had it locally), so
+the only authoritative source remaining is the Tekmetric API itself
+(`GET /repair-orders/{id}` returns `milesIn` / `milesOut`).
+
+A short-term fix shipped on 2026-04-22 in `app/api/plan-build/route.ts` and the
+dashboard mirror: `computeAnchorMiles()` estimates the missing odometer as
+`currentMiles - daysSince(last.date) × milesPerDay`. That correctly stops the
+"falsely overdue" display ("31,859 mi over" for items already done last quarter)
+but the anchor is approximated, not exact. We want the real number.
+
+There is also a stale marker on the rows from a prior failed attempt:
+`mileageBackfillTriedAt: 2026-04-21T...`. The script that wrote it isn't in the
+repo — treat it as a hint, not a finished feature.
+
+**Proposed approach:**
+1. New script `scripts/job-index-mileage-backfill-tekmetric.ts` (model after
+   `scripts/tekmetric-history-backfill.ts`).
+2. Iterate `job_index` rows where `sourceSystem === 'tekmetric'` AND mileage is
+   missing, grouped by `(shopId, workOrderId)` so we only call Tekmetric once
+   per RO.
+3. For each group: resolve the shop's `tekmetric.shopId`, call `getRepairOrders`
+   with `repairOrderId` (or the single-RO endpoint), pull `milesOut ?? milesIn`,
+   and bulk-update every row sharing that `workOrderId` with
+   `{ mileage, vehicle.mileage, mileageBackfilledAt: now }`.
+4. Politeness: cap to ~2 req/sec per shop, persist progress in a
+   `tekmetric_mileage_backfill_progress` collection so crashes resume cleanly,
+   and ensure we don't re-process rows already touched after the marker date.
+5. Same defensive enrichment in `app/api/plan-build/route.ts`: when reading
+   `job_index` and `mileage` is null, look up the parent `tekmetric_work_orders`
+   doc for that `workOrderId` (single batched fetch) and use its odometer.
+   Avoids regressing if a new ingestion gap appears.
+
+**Files likely touched:** `scripts/job-index-mileage-backfill-tekmetric.ts` (new),
+`app/api/plan-build/route.ts`, possibly `lib/tekmetric-job-index.ts` (helper).
+
+**Acceptance:** Re-run the probe from 2026-04-22 against shop 82 and verify
+`nullMileage` count drops to <5% of total. Spot-check 5 historical ROs in VHI
+and confirm `last.miles` now matches the Tekmetric WO's `milesOut`.
+
+---
+
+### [ ] 10. Architecture diagram & doc refresh
 **Why now:** `replit.md` is becoming a kitchen-sink list of every feature.
 A new engineer (or a future agent session) can't form a mental model from it.
 
