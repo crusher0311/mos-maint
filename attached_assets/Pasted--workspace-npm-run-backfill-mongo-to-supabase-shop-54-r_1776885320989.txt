@@ -1,0 +1,49 @@
+~/workspace$ npm run backfill:mongo-to-supabase -- --shop=54 --reset
+
+> mos-maintenance-mvp@1.8.0 backfill:mongo-to-supabase
+> tsx scripts/backfill-mongo-to-supabase.ts --shop=54 --reset
+
+Backfill plan: vehicles → customers → work_orders → service_jobs → line_items → payments (shop=54)
+
+[vehicles] starting backfill — 1,240 docs to process (shop=54)
+  [vehicles] processed=250/1,240 ok=250 failed=0 rate=23/s eta=44s
+  [vehicles] processed=500/1,240 ok=500 failed=0 rate=23/s eta=32s
+  [vehicles] processed=750/1,240 ok=750 failed=0 rate=23/s eta=21s
+  [vehicles] processed=1,000/1,240 ok=1000 failed=0 rate=23/s eta=10s
+  [vehicles] processed=1,240/1,240 ok=1240 failed=0 rate=23/s eta=0s
+[vehicles] DONE — processed=1,240 upserted=1,240 failedOutstanding=0
+
+[customers] starting backfill — 1,619 docs to process (shop=54)
+  [customers] processed=250/1,619 ok=250 failed=0 rate=24/s eta=57s
+  [customers] processed=500/1,619 ok=500 failed=0 rate=24/s eta=47s
+  [customers] processed=750/1,619 ok=750 failed=0 rate=24/s eta=37s
+  [customers] processed=1,000/1,619 ok=1000 failed=0 rate=24/s eta=26s
+  [customers] processed=1,250/1,619 ok=1250 failed=0 rate=24/s eta=16s
+  [customers] processed=1,500/1,619 ok=1500 failed=0 rate=24/s eta=5s
+  [customers] processed=1,619/1,619 ok=1619 failed=0 rate=24/s eta=0s
+[customers] DONE — processed=1,619 upserted=1,619 failedOutstanding=0
+
+[work_orders] starting backfill — 1,619 docs to process (shop=54)
+  [work_orders] processed=250/1,619 ok=250 failed=0 rate=23/s eta=60s
+  [work_orders] processed=500/1,619 ok=500 failed=0 rate=23/s eta=49s
+  [work_orders] processed=750/1,619 ok=750 failed=0 rate=23/s eta=38s
+  [work_orders] processed=1,000/1,619 ok=1000 failed=0 rate=23/s eta=27s
+  [work_orders] processed=1,250/1,619 ok=1250 failed=0 rate=22/s eta=16s
+  [work_orders] processed=1,500/1,619 ok=1500 failed=0 rate=22/s eta=5s
+  [work_orders] processed=1,619/1,619 ok=1619 failed=0 rate=22/s eta=0s
+[work_orders] DONE — processed=1,619 upserted=1,619 failedOutstanding=0
+
+[service_jobs] starting backfill — 0 docs to process (shop=54)
+
+[line_items] starting backfill — 0 docs to process (shop=54)
+
+[payments] starting backfill — 0 docs to process (shop=54)
+
+=== Verification ===
+[verify vehicles] mongo=1,240 pg=1,240 diff=0 coverage=100.00% OK
+[verify customers] mongo=1,619 pg=1,619 diff=0 coverage=100.00% OK
+[verify work_orders] mongo=1,619 pg=1,619 diff=0 coverage=100.00% OK
+[verify service_jobs] mongo=0 pg=0 diff=0 coverage=100% OK
+[verify line_items] mongo=0 pg=0 diff=0 coverage=100% OK
+[verify payments] mongo=0 pg=0 diff=0 coverage=100% OK
+~/workspace$ 
