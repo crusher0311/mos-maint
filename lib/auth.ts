@@ -50,6 +50,65 @@ export async function getSession(): Promise<SessionInfo | null> {
   };
 
   if (!token) {
+    // Fallback: Chrome extension auth via "Authorization: Bearer ext_*".
+    // The extension never sets the session_token cookie, so without this
+    // fallback every getSession()-protected route returns 401 to the
+    // extension even though its token is valid against /api/auth/verify.
+    const hdrs = await headers();
+    const authHeader = hdrs.get("authorization") || hdrs.get("Authorization");
+    if (authHeader?.toLowerCase().startsWith("bearer ext_")) {
+      const extToken = authHeader.substring(7);
+      try {
+        const db = await getDb();
+        const user = await db
+          .collection("users")
+          .findOne({ extensionToken: extToken });
+        if (user) {
+          // Optional 30-day token age check (mirror lib/extension-auth.ts).
+          const createdAt = user.extensionTokenCreatedAt
+            ? new Date(user.extensionTokenCreatedAt).getTime()
+            : null;
+          const expired =
+            createdAt !== null &&
+            Date.now() - createdAt > 30 * 24 * 60 * 60 * 1000;
+          if (!expired) {
+            // Resolve target shopId: prefer explicit override headers/query
+            // (extension may set x-mos-shop-id when working in a specific
+            // shop), otherwise fall back to the user's primary shop.
+            const overrideShop =
+              hdrs.get("x-mos-shop-id") ||
+              hdrs.get("X-MOS-Shop-Id") ||
+              null;
+            const userShopIds: (string | number)[] = [
+              ...(user.shopId ? [user.shopId] : []),
+              ...(Array.isArray(user.shopIds) ? user.shopIds : []),
+            ];
+            const isPlatformAdmin = user.role === "platform_admin";
+            let shopId = Number(user.shopId ?? userShopIds[0] ?? 0);
+            if (overrideShop) {
+              const o = String(overrideShop);
+              const allowed =
+                isPlatformAdmin ||
+                userShopIds.map((id) => String(id)).includes(o);
+              if (allowed) shopId = Number(o);
+            }
+            if (shopId) {
+              return {
+                token: extToken,
+                shopId,
+                email: String(user.email ?? ""),
+                role: String(user.role ?? "owner"),
+                isPlatformAdmin: Boolean(
+                  user.isPlatformAdmin || isPlatformAdmin,
+                ),
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Auth] Extension token fallback failed:", err);
+      }
+    }
     return devAutoLoginEnabled ? devSession : null;
   }
 
