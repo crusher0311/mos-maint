@@ -101,6 +101,11 @@ function msUntilWindowOpens(args: Args): number {
   return deltaSec * 1000;
 }
 
+// Cross-call rate-limit signal. When Tekmetric throttles us hard, we want
+// the *whole* run to back off — not just the in-flight RO. The main loop
+// reads this and inserts a long cooldown when it grows.
+let consecutive429s = 0;
+
 async function tekmetricFetchRO(roId: number): Promise<{
   milesIn: number | null;
   milesOut: number | null;
@@ -120,11 +125,15 @@ async function tekmetricFetchRO(roId: number): Promise<{
       await refreshToken();
       continue;
     }
-    if (res.status === 404) return null;
+    if (res.status === 404) {
+      consecutive429s = 0;
+      return null;
+    }
     if (res.status === 429) {
+      consecutive429s++;
       const retryAfter = parseInt(res.headers.get("retry-after") || "0", 10);
       const waitMs = retryAfter > 0 ? retryAfter * 1000 : Math.min(2 ** attempt * 1000, 30000);
-      console.log(`  [429] RO ${roId}: waiting ${waitMs}ms before retry ${attempt}`);
+      console.log(`  [429] RO ${roId}: waiting ${waitMs}ms before retry ${attempt} (consecutive=${consecutive429s})`);
       await new Promise((r) => setTimeout(r, waitMs));
       continue;
     }
@@ -133,12 +142,16 @@ async function tekmetricFetchRO(roId: number): Promise<{
       throw new Error(`HTTP ${res.status} for RO ${roId}: ${text.slice(0, 200)}`);
     }
     const body: any = await res.json();
+    consecutive429s = 0;
     return {
       milesIn: typeof body?.milesIn === "number" ? body.milesIn : (typeof body?.mileageIn === "number" ? body.mileageIn : null),
       milesOut: typeof body?.milesOut === "number" ? body.milesOut : (typeof body?.mileageOut === "number" ? body.mileageOut : null),
     };
   }
-  throw new Error(`RO ${roId}: exhausted retries`);
+  // Don't throw — just return null and let the caller decide what to do.
+  // Throwing kills the whole run for one stubborn RO.
+  console.log(`  [skip] RO ${roId}: exhausted retries, will retry on next run`);
+  return null;
 }
 
 async function main() {
@@ -255,6 +268,32 @@ async function main() {
       if (!Number.isFinite(roIdNum)) {
         grandSkipped++;
         continue;
+      }
+
+      // Cross-call cooldown: if Tekmetric has been throttling us back-to-back,
+      // pause the whole run for several minutes so the quota window can reset.
+      // 5 consecutive 429s ≈ a hard quota wall, not a momentary blip.
+      if (consecutive429s >= 5) {
+        const cooldownMin = Math.min(15, 2 * Math.floor(consecutive429s / 5));
+        console.log(`  [cooldown] ${consecutive429s} consecutive 429s — sleeping ${cooldownMin} min before next request.`);
+        // Persist progress before the long pause so a kill is safe.
+        if (!args.dryRun) {
+          await progressColl.updateOne(
+            { _id: progressId as any },
+            {
+              $set: {
+                shopId,
+                completedWorkOrderIds: Array.from(completed),
+                apiNotFoundWorkOrderIds: Array.from(apiNotFound),
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            { upsert: true },
+          );
+        }
+        await new Promise((r) => setTimeout(r, cooldownMin * 60 * 1000));
+        consecutive429s = 0;
       }
 
       // Throttle
