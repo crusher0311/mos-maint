@@ -1,6 +1,6 @@
 # Tekmetric 5K-Shop Scaling Plan
 
-**Status:** Step 1 complete — proceeding to Step 2 planning
+**Status:** Step 2 Phase A complete (shadow mode) — soaking before Phase B
 **Owner:** Engineering
 **Last updated:** 2026-04-22
 
@@ -87,7 +87,7 @@ Result at 5K shops: **<200 req/min steady state** — comfortably under any reas
 
 **Implication for Step 2:** the elimination scope is wider than we thought. The `/repair-orders/{id}` and `/jobs?repairOrderId=X` polling can likely both be turned off — webhook payloads carry that data inline. Only `/repair-orders/{id}/inspections` (DVI task details) and `/customers/{id}` / `/vehicles/{id}` follow-ups when initially missing remain truly necessary.
 
-### Step 2 — Trust the webhooks (lazy fetching)
+### Step 2 — Trust the webhooks (lazy fetching)  🟡 IN PROGRESS
 **Effort:** 1-2 weeks
 **Risk:** Medium (changes core data flow)
 **Depends on:** Step 1 results
@@ -95,6 +95,24 @@ Result at 5K shops: **<200 req/min steady state** — comfortably under any reas
 - Stop polling for data webhooks already deliver (status, mileage, customer info, DVI completion).
 - Move job line items + inspection findings to **on-demand fetch** — only call `/jobs` or `/inspections` when a VHI is being built or a sticker generated, not preemptively for every RO.
 - Cache aggressively, invalidate via webhook.
+
+#### Step 2 Phase A — Webhooks contribute to job_index in shadow mode  ✅ COMPLETE (2026-04-22)
+**Risk:** Zero — purely additive. Polling stays fully on; readers unchanged.
+
+What changed in code:
+- `app/api/webhooks/tekmetric/route.ts`: webhook receiver now persists the full RO payload (`data: repairOrder`, including the `jobs[]` array) onto the cache row in BOTH the terminal and non-terminal branches. This was the missing piece that previously forced `indexTekmetricWorkOrderJobs` to fall back to a `/jobs` API call on the first terminal webhook for any RO.
+- `lib/tekmetric-job-index.ts`: `indexTekmetricWorkOrderJobs` now accepts an `options` arg with `{ indexedVia, preloadedJobs }`. When called from the webhook receiver, jobs are passed in directly from the webhook payload — zero outbound Tekmetric API calls per RO.
+- Every `job_index` write is now stamped with `metadata.indexedVia: "webhook" | "poll" | "backfill" | "reindex"` so we can measure webhook coverage.
+- New admin endpoint: `GET /api/platform-admin/tekmetric/index-source-breakdown?days=7` returns per-shop, per-day counts grouped by `indexedVia`, plus a summary with `webhookCoveragePct` per shop.
+
+What to watch (over the next 3-7 days):
+- Hit the breakdown endpoint daily. Per-shop, the goal is `webhookCoveragePct` trending toward ~100% — that means webhooks alone produce the same job_index rows polling does.
+- `[Tekmetric Webhook] Indexed N jobs for RO #X (via=webhook, preloaded=true)` log lines should appear in production logs as terminal RO webhooks arrive.
+- If `webhookCoveragePct` for a shop stays low while `poll` count is high, that shop is webhook-silent for terminal events — investigate before scaling polling back.
+
+What's still TO DO in Step 2:
+- Phase B — Pipe webhook payloads through `NormalizedIngestionService` so the Postgres normalized tables stay in sync without polling. Currently only the polling path dual-writes to PG.
+- Phase C — On-demand DVI inspection fetch: today inspection details still get pulled inline during polling. Move to lazy fetch (only when a VHI is built or a sticker is rendered).
 
 ### Step 3 — Safety nets
 **Effort:** 1 week

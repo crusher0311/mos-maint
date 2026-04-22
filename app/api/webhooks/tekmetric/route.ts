@@ -94,18 +94,60 @@ export async function POST(req: NextRequest) {
       
       if (isTerminal || isInvoicePosted) {
         console.log(`[Tekmetric Webhook] RO #${roNumber} is terminal/invoiced, updating cache immediately`);
-        
+
+        // Persist the rich webhook payload onto the cache row so future readers
+        // (planning, dashboards, re-indexing) don't need to call /repair-orders
+        // or /jobs to recover this data. This is the core of the
+        // trust-the-webhooks migration — see TEKMETRIC_5K_SCALING_PLAN.md.
+        const terminalUpdate: any = {
+          status: statusName || "Posted",
+          statusCode: statusCode || "POSTED",
+          tekmetricShopId,
+          closedAt: new Date(),
+          updatedAt: new Date(),
+          fetchedAt: new Date(),
+        };
+        if (repairOrder && typeof repairOrder === "object") terminalUpdate.data = repairOrder;
+        if (repairOrder?.completedDate) terminalUpdate.completedDate = repairOrder.completedDate;
+        if (repairOrder?.postedDate) terminalUpdate.postedDate = repairOrder.postedDate;
+        if (repairOrder?.repairOrderNumber != null) terminalUpdate.workOrderNumber = repairOrder.repairOrderNumber;
+        if (repairOrder?.customerId != null) terminalUpdate.customerId = repairOrder.customerId;
+        if (repairOrder?.vehicleId != null) terminalUpdate.vehicleId = repairOrder.vehicleId;
+        const terminalOdometer = repairOrder?.milesOut || repairOrder?.milesIn;
+        if (terminalOdometer && terminalOdometer > 0) terminalUpdate.odometer = terminalOdometer;
+
+        // Upsert (instead of updateMany) so terminal-first webhooks for brand-new
+        // ROs that have never been seen non-terminal still create a cache row +
+        // get indexed in the same call. Scoped by tekmetricShopId to avoid any
+        // cross-shop collision on workOrderId.
+        const result = await db.collection("tekmetric_work_orders").updateOne(
+          { tekmetricShopId, workOrderId: String(roId) },
+          {
+            $set: terminalUpdate,
+            $setOnInsert: { workOrderId: String(roId), createdAt: new Date() },
+          },
+          { upsert: true }
+        );
+
         const cached = await db.collection("tekmetric_work_orders").findOne({
-          workOrderId: String(roId)
+          tekmetricShopId,
+          workOrderId: String(roId),
         });
-        
+
         if (cached && !cached.jobsIndexed && cached.vin) {
           const shop = await db.collection("shops").findOne({
             "tekmetric.shopId": tekmetricShopId
           });
-          
+
           if (shop) {
             try {
+              // Pass jobs[] directly from the webhook payload when present, so
+              // we never need to call /jobs as a fallback. Falls back to cached
+              // payload if webhook omitted them.
+              const preloadedJobs = Array.isArray(repairOrder?.jobs) && repairOrder.jobs.length > 0
+                ? repairOrder.jobs
+                : (Array.isArray(cached?.data?.jobs) ? cached.data.jobs : undefined);
+
               const jobsIndexed = await indexTekmetricWorkOrderJobs(
                 Number(shop.shopId),
                 tekmetricShopId,
@@ -118,14 +160,15 @@ export async function POST(req: NextRequest) {
                   model: cached.vehicleModel,
                   engine: cached.vehicleEngine
                 },
-                new Date().toISOString(),
-                cached.odometer ?? cached.data?.milesOut ?? cached.data?.milesIn ?? null
+                repairOrder?.completedDate || repairOrder?.postedDate || new Date().toISOString(),
+                cached.odometer ?? terminalOdometer ?? null,
+                { indexedVia: "webhook", preloadedJobs }
               );
-              
-              console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber}`);
-              
-              await db.collection("tekmetric_work_orders").updateMany(
-                { workOrderId: String(roId) },
+
+              console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber} (via=webhook, preloaded=${!!preloadedJobs})`);
+
+              await db.collection("tekmetric_work_orders").updateOne(
+                { tekmetricShopId, workOrderId: String(roId) },
                 { $set: { jobsIndexed: true } }
               );
             } catch (err: any) {
@@ -133,20 +176,9 @@ export async function POST(req: NextRequest) {
             }
           }
         }
-        
-        const result = await db.collection("tekmetric_work_orders").updateMany(
-          { workOrderId: String(roId) },
-          { 
-            $set: { 
-              status: statusName || "Posted",
-              statusCode: statusCode || "POSTED",
-              closedAt: new Date(),
-              updatedAt: new Date()
-            }
-          }
-        );
-        
-        console.log(`[Tekmetric Webhook] Updated ${result.modifiedCount} cache entries for RO #${roNumber} to ${statusName || "Posted"}`);
+
+        const wasInsert = !!result.upsertedId;
+        console.log(`[Tekmetric Webhook] Terminal cache write for RO #${roNumber} (${wasInsert ? "INSERT" : "UPDATE"}) → ${statusName || "Posted"}`);
       } else {
         // Always upsert the work order row from whatever the webhook payload contains, so that
         // a missing vehicle/customer never leaves us with no row at all. Vehicle/customer
@@ -184,6 +216,14 @@ export async function POST(req: NextRequest) {
         if (payloadCustomerName) setFields.customerName = payloadCustomerName;
         if (repairOrder.customerId != null) setFields.customerId = repairOrder.customerId;
         if (dviFromLabel && !existingWO?.dviDone) setFields.dviDone = true;
+        // Persist the rich webhook payload (including jobs[], dates, totals) onto
+        // the cache row. This is what lets the terminal-status path index jobs
+        // without falling back to a /jobs API call. See TEKMETRIC_5K_SCALING_PLAN.md.
+        setFields.data = repairOrder;
+        if (repairOrder.createdDate) setFields.createdDate = repairOrder.createdDate;
+        if (repairOrder.updatedDate) setFields.updatedDate = repairOrder.updatedDate;
+        if (repairOrder.completedDate) setFields.completedDate = repairOrder.completedDate;
+        if (repairOrder.vehicleId != null) setFields.vehicleId = repairOrder.vehicleId;
 
         const setOnInsert: any = {
           workOrderId: String(roId),

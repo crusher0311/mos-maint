@@ -413,7 +413,8 @@ async function upsertWorkOrder(
           engine: vehicle.engine,
         },
         ro.completedDate || ro.postedDate || ro.updatedDate || new Date().toISOString(),
-        odometer
+        odometer,
+        { indexedVia: "poll" }
       );
       if (jobsIndexed > 0) {
         await db.collection("tekmetric_work_orders").updateOne(

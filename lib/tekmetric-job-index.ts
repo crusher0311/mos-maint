@@ -98,6 +98,24 @@ function extractKeywords(title: string): string[] {
   return [...new Set(words)];
 }
 
+export type IndexedVia = "webhook" | "poll" | "backfill" | "reindex";
+
+export type IndexJobsOptions = {
+  /**
+   * Where this indexing call is being triggered from. Stamped onto each
+   * `job_index` doc's `metadata.indexedVia` so we can measure webhook vs
+   * polling coverage during the trust-the-webhooks soak period.
+   * Defaults to "poll" for backwards compatibility.
+   */
+  indexedVia?: IndexedVia;
+  /**
+   * Pre-loaded jobs array (e.g. from a webhook payload). When supplied, we
+   * skip both the cache lookup AND the `/jobs` API fallback — meaning a single
+   * webhook can produce a fully indexed RO with zero outbound Tekmetric calls.
+   */
+  preloadedJobs?: TekmetricJobWithDetails[];
+};
+
 export async function indexTekmetricWorkOrderJobs(
   shopId: number,
   tekmetricShopId: number,
@@ -105,22 +123,28 @@ export async function indexTekmetricWorkOrderJobs(
   workOrderNumber: number,
   vehicle: { vin?: string; year?: number; make?: string; model?: string; engine?: string },
   completedDate: string,
-  mileage?: number | null
+  mileage?: number | null,
+  options?: IndexJobsOptions
 ): Promise<number> {
   const db = await getDb();
   const jobIndexCollection = db.collection("job_index");
+  const indexedVia: IndexedVia = options?.indexedVia ?? "poll";
   
   let indexedCount = 0;
   
   try {
     let jobs: TekmetricJobWithDetails[] = [];
     
-    const cachedWO = await db.collection("tekmetric_work_orders").findOne({
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      workOrderId: String(workOrderId)
-    });
-    if (cachedWO?.data?.jobs && cachedWO.data.jobs.length > 0) {
-      jobs = cachedWO.data.jobs as TekmetricJobWithDetails[];
+    if (options?.preloadedJobs && options.preloadedJobs.length > 0) {
+      jobs = options.preloadedJobs;
+    } else {
+      const cachedWO = await db.collection("tekmetric_work_orders").findOne({
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        workOrderId: String(workOrderId)
+      });
+      if (cachedWO?.data?.jobs && cachedWO.data.jobs.length > 0) {
+        jobs = cachedWO.data.jobs as TekmetricJobWithDetails[];
+      }
     }
     
     if (jobs.length === 0) {
@@ -219,19 +243,33 @@ export async function indexTekmetricWorkOrderJobs(
           partsAmount: partsAmountDollars,
           totalAmount: totalAmountDollars || (laborAmountDollars + partsAmountDollars)
         },
-        metadata: {
-          indexedAt: new Date(),
-          sourceType: "tekmetric"
-        }
       };
-      
+
+      // IMPORTANT: use dot-path $set for metadata.* (instead of replacing the
+      // whole `metadata` subdocument) so the immutable firstIndexedVia /
+      // firstIndexedAt fields written via $setOnInsert on the original insert
+      // are preserved across subsequent updates. Replacing `metadata` wholesale
+      // would wipe them and reintroduce last-writer-wins distortion.
+      const now = new Date();
       await jobIndexCollection.updateOne(
         {
           shopId,
           workOrderId: String(workOrderId),
           servicePackageId: String(job.id)
         },
-        { $set: jobEntry },
+        {
+          $set: {
+            ...jobEntry,
+            "metadata.indexedAt": now,
+            "metadata.sourceType": "tekmetric",
+            "metadata.indexedVia": indexedVia,
+            "metadata.lastIndexedVia": indexedVia,
+          },
+          $setOnInsert: {
+            "metadata.firstIndexedVia": indexedVia,
+            "metadata.firstIndexedAt": now,
+          },
+        },
         { upsert: true }
       );
       
@@ -244,6 +282,54 @@ export async function indexTekmetricWorkOrderJobs(
   }
   
   return indexedCount;
+}
+
+/**
+ * Returns a per-shop, per-day breakdown of `job_index` writes grouped by
+ * `metadata.indexedVia`. Powers the soak metric for the trust-the-webhooks
+ * migration: lets us see whether webhooks alone would have covered everything
+ * polling produced. See TEKMETRIC_5K_SCALING_PLAN.md (Step 2).
+ */
+export async function getIndexSourceBreakdown(
+  daysBack: number = 7
+): Promise<Array<{ date: string; shopId: number; indexedVia: string; count: number }>> {
+  const db = await getDb();
+  const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+
+  // Group by `firstIndexedVia` (immutable, set once via $setOnInsert) so the
+  // metric reflects who actually produced each row first — webhook vs poll —
+  // rather than whoever wrote last. Falls back to `indexedVia` for legacy rows
+  // written before the firstIndexedVia field was introduced.
+  const rows = await db.collection("job_index").aggregate([
+    { $match: { "metadata.indexedAt": { $gte: since }, "metadata.sourceType": "tekmetric" } },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$metadata.firstIndexedAt", "$metadata.indexedAt"] } } },
+          shopId: "$shopId",
+          indexedVia: {
+            $ifNull: [
+              "$metadata.firstIndexedVia",
+              { $ifNull: ["$metadata.indexedVia", "poll"] },
+            ],
+          },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        date: "$_id.date",
+        shopId: "$_id.shopId",
+        indexedVia: "$_id.indexedVia",
+        count: 1,
+      },
+    },
+    { $sort: { date: -1, shopId: 1, indexedVia: 1 } },
+  ]).toArray();
+
+  return rows as Array<{ date: string; shopId: number; indexedVia: string; count: number }>;
 }
 
 export async function runTekmetricHistoryBackfill(
@@ -322,7 +408,8 @@ export async function runTekmetricHistoryBackfill(
             engine: vehicle.engine
           },
           ro.completedDate || ro.updatedDate || ro.createdDate || new Date().toISOString(),
-          roMileage
+          roMileage,
+          { indexedVia: "backfill" }
         );
         
         jobsIndexed += indexed;
@@ -500,19 +587,30 @@ export async function reindexFromStoredData(
           partsAmount: partsAmountDollars,
           totalAmount: totalAmountDollars || (laborAmountDollars + partsAmountDollars)
         },
-        metadata: {
-          indexedAt: new Date(),
-          sourceType: "tekmetric"
-        }
       };
-      
+
+      // Same dot-path $set discipline as indexTekmetricWorkOrderJobs above:
+      // never replace `metadata` wholesale or we'd wipe firstIndexedVia.
+      const reindexNow = new Date();
       await jobIndexCollection.updateOne(
         {
           shopId: numericShopId,
           workOrderId: String(wo.workOrderId),
           servicePackageId: String(job.id)
         },
-        { $set: jobEntry },
+        {
+          $set: {
+            ...jobEntry,
+            "metadata.indexedAt": reindexNow,
+            "metadata.sourceType": "tekmetric",
+            "metadata.indexedVia": "reindex" as IndexedVia,
+            "metadata.lastIndexedVia": "reindex" as IndexedVia,
+          },
+          $setOnInsert: {
+            "metadata.firstIndexedVia": "reindex" as IndexedVia,
+            "metadata.firstIndexedAt": reindexNow,
+          },
+        },
         { upsert: true }
       );
       

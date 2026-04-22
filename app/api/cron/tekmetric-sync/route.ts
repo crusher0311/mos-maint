@@ -365,7 +365,8 @@ export async function GET(req: NextRequest) {
                     engine: cached.vehicleEngine
                   },
                   cached.completedDate || new Date().toISOString(),
-                  cached.odometer ?? cached.data?.milesOut ?? cached.data?.milesIn ?? null
+                  cached.odometer ?? cached.data?.milesOut ?? cached.data?.milesIn ?? null,
+                  { indexedVia: "poll" }
                 );
                 
                 if (jobsIndexed > 0) {
