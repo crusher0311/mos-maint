@@ -808,10 +808,11 @@ function triage({
     // Track if this item has never been done (for overdue calculation)
     let neverDone = false;
     if (intervalMiles && intervalMiles > 0) {
-      if (last?.miles != null) {
+      if (last?.miles != null && last.miles > 0) {
         dueAtMiles = last.miles + intervalMiles;
       } else if (currentMiles != null) {
-        // No history: was due at the first interval
+        // No history (or anchor=0, which means odometer wasn't captured on the
+        // historical RO): was due at the first interval.
         dueAtMiles = intervalMiles;
         neverDone = true;
       }
@@ -1469,7 +1470,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
   
   // Extract service history from Tekmetric completed work orders
   for (const wo of tekmetricCompletedWOs) {
-    const mileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn ?? null;
+    const mileage =
+      (typeof wo.odometer === "number" && wo.odometer > 0 ? wo.odometer : null) ??
+      (typeof wo.data?.milesOut === "number" && wo.data.milesOut > 0 ? wo.data.milesOut : null) ??
+      (typeof wo.data?.milesIn === "number" && wo.data.milesIn > 0 ? wo.data.milesIn : null);
     const date = wo.completedDate ? new Date(wo.completedDate) : null;
     
     // Jobs are stored in wo.data.jobs (canonical) or wo.jobs (fallback for legacy documents)

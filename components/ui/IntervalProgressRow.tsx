@@ -86,7 +86,9 @@ export function IntervalProgressRow({
 
   if (task.intervalMiles && task.intervalMiles > 0 && currentMiles != null) {
     let usedMiles: number | null = null;
-    if (task.last?.miles != null) {
+    // Treat last.miles<=0 as unknown (matches lib/vhi-progress.ts). A stored
+    // anchor of 0 almost always means the historical RO had no odometer.
+    if (task.last?.miles != null && task.last.miles > 0) {
       usedMiles = currentMiles - task.last.miles;
     } else if (task.dueAtMiles != null) {
       // Reconstruct anchor from dueAt - interval

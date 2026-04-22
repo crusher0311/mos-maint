@@ -98,7 +98,11 @@ export function computeIntervalProgress(
     const interval = item.intervalMiles;
     let usedRaw: number | null = null;
 
-    if (item.last?.miles != null) {
+    // Treat last.miles === 0 as "unknown" — a stored anchor of 0 almost always
+    // means the historical RO had no odometer captured. Without this guard we
+    // would subtract 0 from the current odometer and report the entire current
+    // mileage as "miles over" (e.g. "171,061 mi over" on an oil change).
+    if (item.last?.miles != null && item.last.miles > 0) {
       usedRaw = currentMiles - item.last.miles;
     } else if (item.dueAtMiles != null) {
       usedRaw = currentMiles - (item.dueAtMiles - interval);

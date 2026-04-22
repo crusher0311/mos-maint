@@ -193,9 +193,17 @@ function getLastPerformedInfo(
       for (const job of jobs) {
         const jobName = job.name || job.description || '';
         if (servicePatterns.some(p => p.test(jobName))) {
-          const woMileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn;
+          // Treat 0 as "missing" — a historical RO with odometer=0 means the
+          // odometer wasn't captured, not that the car had zero miles. Without
+          // this guard, downstream math anchors at 0 and reports the entire
+          // current odometer as "miles over". See vhi-progress.ts.
+          const rawMileage =
+            (typeof wo.odometer === "number" && wo.odometer > 0 ? wo.odometer : null) ??
+            (typeof wo.data?.milesOut === "number" && wo.data.milesOut > 0 ? wo.data.milesOut : null) ??
+            (typeof wo.data?.milesIn === "number" && wo.data.milesIn > 0 ? wo.data.milesIn : null);
+          const woMileage = rawMileage ?? undefined;
           const woId = wo.workOrderId || wo.repairOrderNumber || wo._id;
-          console.log(`[Extension] LastPerformed match: service="${serviceName}" key="${serviceKey}" matched job="${jobName}" on WO#${woId} at ${woMileage}mi, completed=${wo.completedDate}`);
+          console.log(`[Extension] LastPerformed match: service="${serviceName}" key="${serviceKey}" matched job="${jobName}" on WO#${woId} at ${woMileage ?? "(no odo)"}mi, completed=${wo.completedDate}`);
           shopLastDone = {
             date: new Date(wo.completedDate),
             mileage: woMileage
@@ -216,9 +224,12 @@ function getLastPerformedInfo(
       const adminMatch = adminCarfaxName && descLower.includes(adminCarfaxName);
       
       if (regexMatch || adminMatch) {
+        // CARFAX records frequently have a service date but no odometer — keep
+        // mileage undefined in that case so it stays "date known, mileage
+        // unknown" and the time axis drives the headline.
         carfaxLastDone = {
           date: record.date ? new Date(record.date) : undefined,
-          mileage: record.odometer
+          mileage: typeof record.odometer === "number" && record.odometer > 0 ? record.odometer : undefined
         };
         break;
       }

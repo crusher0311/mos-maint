@@ -382,7 +382,7 @@ function triage({
     let neverDone = false;
 
     if (intervalMiles && intervalMiles > 0) {
-      if (last?.miles != null) {
+      if (last?.miles != null && last.miles > 0) {
         dueAtMiles = last.miles + intervalMiles;
       } else if (currentMiles != null) {
         dueAtMiles = intervalMiles;
@@ -510,7 +510,7 @@ function triage({
     let neverDone = false;
 
     if (intervalMiles && intervalMiles > 0) {
-      if (last?.miles != null) {
+      if (last?.miles != null && last.miles > 0) {
         dueAtMiles = last.miles + intervalMiles;
       } else if (currentMiles != null) {
         dueAtMiles = intervalMiles;
@@ -815,7 +815,10 @@ export async function POST(req: NextRequest) {
       const statusCode = String(wo.statusCode || wo.data?.repairOrderStatus?.code || "").toUpperCase();
       const terminalStatus = ["POSTED", "INVOICED", "INVOICE", "COMPLETED", "CLOSED"].includes(statusCode);
       const isCompleted = !!wo.completedDate || terminalStatus;
-      const wMileage = wo.odometer ?? wo.data?.milesOut ?? wo.data?.milesIn ?? null;
+      const wMileage =
+        (typeof wo.odometer === "number" && wo.odometer > 0 ? wo.odometer : null) ??
+        (typeof wo.data?.milesOut === "number" && wo.data.milesOut > 0 ? wo.data.milesOut : null) ??
+        (typeof wo.data?.milesIn === "number" && wo.data.milesIn > 0 ? wo.data.milesIn : null);
       const date = wo.completedDate
         ? new Date(wo.completedDate)
         : (wo.updatedDate ? new Date(wo.updatedDate) : null);
@@ -870,9 +873,9 @@ export async function POST(req: NextRequest) {
         if (date && isNaN(date.getTime())) continue;
 
         const mileage =
-          (typeof ji.mileage === "number" ? ji.mileage : null) ??
-          (typeof ji.odometer === "number" ? ji.odometer : null) ??
-          (typeof ji.vehicle?.mileage === "number" ? ji.vehicle.mileage : null) ??
+          (typeof ji.mileage === "number" && ji.mileage > 0 ? ji.mileage : null) ??
+          (typeof ji.odometer === "number" && ji.odometer > 0 ? ji.odometer : null) ??
+          (typeof ji.vehicle?.mileage === "number" && ji.vehicle.mileage > 0 ? ji.vehicle.mileage : null) ??
           null;
 
         shopServiceHistory.push({ serviceName, mileage, date });
