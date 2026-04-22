@@ -808,11 +808,31 @@ function triage({
     // Track if this item has never been done (for overdue calculation)
     let neverDone = false;
     if (intervalMiles && intervalMiles > 0) {
+      // When shop history captured the date but not the odometer, fall back
+      // to a mileage estimate derived from the recorded date and the
+      // vehicle's average miles/day. Otherwise a recently-completed service
+      // would falsely appear "31,859 mi over" because we'd treat
+      // miles-anchor as the very first interval.
+      let anchorMiles: number | null = null;
       if (last?.miles != null && last.miles > 0) {
-        dueAtMiles = last.miles + intervalMiles;
+        anchorMiles = last.miles;
+      } else if (
+        last?.date &&
+        currentMiles != null &&
+        milesPerDay != null &&
+        milesPerDay > 0
+      ) {
+        const daysSince = Math.max(
+          0,
+          Math.floor((today.getTime() - last.date.getTime()) / 86400000),
+        );
+        anchorMiles = Math.max(0, currentMiles - daysSince * milesPerDay);
+      }
+
+      if (anchorMiles != null) {
+        dueAtMiles = anchorMiles + intervalMiles;
       } else if (currentMiles != null) {
-        // No history (or anchor=0, which means odometer wasn't captured on the
-        // historical RO): was due at the first interval.
+        // No history at all: was due at the first interval.
         dueAtMiles = intervalMiles;
         neverDone = true;
       }

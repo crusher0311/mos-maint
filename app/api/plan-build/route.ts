@@ -46,6 +46,40 @@ function addMonths(d: Date, months: number) {
   return dt;
 }
 
+/**
+ * Returns the best available odometer reading for the last time a service
+ * was performed. Order of preference:
+ *   1. The recorded `last.miles` if present and non-zero.
+ *   2. An estimate derived from `last.date` + the vehicle's average miles/day.
+ *   3. null (no signal — caller should treat as "never done").
+ *
+ * Why this exists: shop history rows from Tekmetric/Protractor frequently
+ * carry a date but no odometer. Without this fallback the planner would
+ * compute the next due as `intervalMiles` (the very first interval) and
+ * report a freshly-completed service as "31,859 mi over".
+ */
+function computeAnchorMiles(
+  last: { miles?: number | null; date?: Date | null } | null | undefined,
+  currentMiles: number | null | undefined,
+  milesPerDay: number | null | undefined,
+  today: Date,
+): number | null {
+  if (last?.miles != null && last.miles > 0) return last.miles;
+  if (
+    last?.date &&
+    currentMiles != null &&
+    milesPerDay != null &&
+    milesPerDay > 0
+  ) {
+    const daysSince = Math.max(
+      0,
+      Math.floor((today.getTime() - last.date.getTime()) / 86400000),
+    );
+    return Math.max(0, currentMiles - daysSince * milesPerDay);
+  }
+  return null;
+}
+
 type CarfaxRecordWithParsed = {
   date: Date | null;
   miles: number | null;
@@ -382,8 +416,14 @@ function triage({
     let neverDone = false;
 
     if (intervalMiles && intervalMiles > 0) {
-      if (last?.miles != null && last.miles > 0) {
-        dueAtMiles = last.miles + intervalMiles;
+      // When shop history captured the date but not the odometer (common with
+      // Tekmetric/Protractor entries that lack milesIn), fall back to a
+      // mileage estimate derived from the recorded date and the vehicle's
+      // average miles/day. Otherwise we'd treat the service as "never done"
+      // for the mileage axis and falsely report it as overdue.
+      const anchorMiles = computeAnchorMiles(last, currentMiles, milesPerDay, today);
+      if (anchorMiles != null) {
+        dueAtMiles = anchorMiles + intervalMiles;
       } else if (currentMiles != null) {
         dueAtMiles = intervalMiles;
         neverDone = true;
@@ -510,8 +550,9 @@ function triage({
     let neverDone = false;
 
     if (intervalMiles && intervalMiles > 0) {
-      if (last?.miles != null && last.miles > 0) {
-        dueAtMiles = last.miles + intervalMiles;
+      const anchorMiles = computeAnchorMiles(last, currentMiles, milesPerDay, today);
+      if (anchorMiles != null) {
+        dueAtMiles = anchorMiles + intervalMiles;
       } else if (currentMiles != null) {
         dueAtMiles = intervalMiles;
         neverDone = true;
