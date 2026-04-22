@@ -900,6 +900,14 @@ export async function POST(req: NextRequest) {
       // collisions in job_index itself, not just WO-loop overlaps.
       const seenAppendedKeys = new Set<string>(seenFromWoDocs);
 
+      // First pass: collect entries; track which still need mileage so we can
+      // batch a single parent-WO lookup instead of N round-trips. This guards
+      // against the historical bug where backfills lost `mileage` on
+      // job_index rows (see IMPROVEMENT_BACKLOG.md item #9).
+      type PendingEntry = { serviceName: string; mileage: number | null; date: Date | null; woId: string };
+      const pendingEntries: PendingEntry[] = [];
+      const woIdsNeedingMileage = new Set<string>();
+
       for (const ji of jobIndexEntries) {
         const woId = String(ji.workOrderId ?? "");
         const svcId = String(ji.servicePackageId ?? "");
@@ -919,8 +927,65 @@ export async function POST(req: NextRequest) {
           (typeof ji.vehicle?.mileage === "number" && ji.vehicle.mileage > 0 ? ji.vehicle.mileage : null) ??
           null;
 
-        shopServiceHistory.push({ serviceName, mileage, date });
+        if (mileage == null && woId) woIdsNeedingMileage.add(woId);
+        pendingEntries.push({ serviceName, mileage, date, woId });
         if (woId && svcId) seenAppendedKeys.add(dedupKey);
+      }
+
+      // Defensive enrichment: for any still-missing mileage, batch-fetch parent
+      // tekmetric_work_orders and use its odometer/milesOut/milesIn. Helps when
+      // ingestion populated the parent WO but lost mileage on job_index.
+      // (Historical rows may also lack it on the parent — those stay null and
+      // computeAnchorMiles() will estimate, or the backfill script can fill them.)
+      if (woIdsNeedingMileage.size > 0) {
+        try {
+          // tekmetric_work_orders stores workOrderId as string and shopId as
+          // either string or number across docs. The {shopId, workOrderId}
+          // compound index covers this query directly.
+          const idArr = Array.from(woIdsNeedingMileage);
+          const numericIds = idArr.map((s) => Number(s)).filter((n) => Number.isFinite(n));
+          const parentDocs = await db.collection("tekmetric_work_orders").find(
+            {
+              shopId: { $in: [Number(shopId), String(shopId)] },
+              workOrderId: { $in: [...idArr, ...numericIds] },
+            },
+            { projection: { workOrderId: 1, odometer: 1, milesIn: 1, milesOut: 1, mileageIn: 1, mileageOut: 1 } },
+          ).toArray();
+
+          const odoByWoId = new Map<string, number>();
+          for (const p of parentDocs) {
+            const odo =
+              (typeof p.milesOut === "number" && p.milesOut > 0 ? p.milesOut : null) ??
+              (typeof p.mileageOut === "number" && p.mileageOut > 0 ? p.mileageOut : null) ??
+              (typeof p.odometer === "number" && p.odometer > 0 ? p.odometer : null) ??
+              (typeof p.milesIn === "number" && p.milesIn > 0 ? p.milesIn : null) ??
+              (typeof p.mileageIn === "number" && p.mileageIn > 0 ? p.mileageIn : null) ??
+              null;
+            if (odo == null) continue;
+            if (p.workOrderId != null) odoByWoId.set(String(p.workOrderId), odo);
+          }
+
+          let enriched = 0;
+          for (const e of pendingEntries) {
+            if (e.mileage != null || !e.woId) continue;
+            const odo = odoByWoId.get(e.woId);
+            if (typeof odo === "number" && odo > 0) {
+              e.mileage = odo;
+              enriched++;
+            }
+          }
+          if (enriched > 0) {
+            console.log(
+              `[PlanBuild] Shop ${shopId} VIN ${vinUpper}: enriched ${enriched}/${woIdsNeedingMileage.size} missing-mileage rows from parent tekmetric_work_orders`
+            );
+          }
+        } catch (enrichErr: any) {
+          console.warn(`[PlanBuild] parent-WO mileage enrichment failed for ${vinUpper}: ${enrichErr.message}`);
+        }
+      }
+
+      for (const e of pendingEntries) {
+        shopServiceHistory.push({ serviceName: e.serviceName, mileage: e.mileage, date: e.date });
       }
 
       if (jobIndexEntries.length > 0) {

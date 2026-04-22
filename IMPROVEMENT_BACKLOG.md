@@ -226,7 +226,22 @@ written go/no-go on retirement.
 
 ---
 
-### [ ] 9. Backfill missing odometer onto historical `job_index` entries from Tekmetric API
+### [x] 9. Backfill missing odometer onto historical `job_index` entries from Tekmetric API
+**Shipped 2026-04-22:** New script `scripts/job-index-mileage-backfill-tekmetric.ts`
+groups missing-mileage rows by `(shopId, workOrderId)`, hits Tekmetric
+`GET /repair-orders/{id}` once per RO, bulk-updates every row sharing that WO,
+throttles to ~5 req/sec, and persists progress in
+`tekmetric_mileage_backfill_progress` (resumable). Also added defensive
+batched parent-WO enrichment in `app/api/plan-build/route.ts` so new
+gaps fall back to `tekmetric_work_orders.{milesOut,milesIn,odometer}`
+without an extra round-trip per row. Run per shop:
+`npx tsx scripts/job-index-mileage-backfill-tekmetric.ts --shop=82`
+(omit `--shop` to process all 29 affected shops; `--dry-run` for a preview).
+Original ticket below.
+
+---
+
+### [archived] 9. Backfill missing odometer onto historical `job_index` entries from Tekmetric API
 **Why now:** During a VHI bug investigation (RO #150297, VIN `1C4PJMDS6HW621198`,
 Heart shop 82), we discovered that **58% of `job_index` rows for Heart-Libertyville
 have no `mileage` field** (20,479 of 35,560). The data was lost during whichever
