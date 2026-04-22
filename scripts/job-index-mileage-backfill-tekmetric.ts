@@ -26,18 +26,73 @@ type Args = {
   limitRos?: number;
   dryRun: boolean;
   reqsPerSec: number;
+  // Off-hours window. Default 20:00–05:00 America/New_York so we don't
+  // hammer Tekmetric during shop business hours. Pass --any-time to disable.
+  windowStartHourET: number;
+  windowEndHourET: number;
+  ignoreWindow: boolean;
 };
 
 function parseArgs(): Args {
   const argv = process.argv.slice(2);
-  const out: Args = { dryRun: false, reqsPerSec: 5 };
+  const out: Args = {
+    dryRun: false,
+    reqsPerSec: 5,
+    windowStartHourET: 20, // 8pm ET
+    windowEndHourET: 5,    // 5am ET (next day)
+    ignoreWindow: false,
+  };
   for (const a of argv) {
     if (a === "--dry-run") out.dryRun = true;
+    else if (a === "--any-time") out.ignoreWindow = true;
     else if (a.startsWith("--shop=")) out.shop = Number(a.slice(7));
     else if (a.startsWith("--limit-ros=")) out.limitRos = Number(a.slice(12));
     else if (a.startsWith("--rate=")) out.reqsPerSec = Number(a.slice(7));
+    else if (a.startsWith("--window-start=")) out.windowStartHourET = Number(a.slice(15));
+    else if (a.startsWith("--window-end=")) out.windowEndHourET = Number(a.slice(13));
   }
   return out;
+}
+
+// Returns the current hour (0-23) in America/New_York, accounting for DST.
+function currentHourET(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const h = parts.find((p) => p.type === "hour")?.value ?? "0";
+  // Some browsers/runtimes emit "24" at midnight — normalize.
+  const n = parseInt(h, 10);
+  return n === 24 ? 0 : n;
+}
+
+function isInsideWindow(args: Args): boolean {
+  if (args.ignoreWindow) return true;
+  const h = currentHourET();
+  const { windowStartHourET: s, windowEndHourET: e } = args;
+  // Wrap-around window (e.g. 20→5)
+  if (s > e) return h >= s || h < e;
+  // Same-day window (e.g. 1→5)
+  return h >= s && h < e;
+}
+
+function msUntilWindowOpens(args: Args): number {
+  // Compute ms until the next ET hour matching args.windowStartHourET.
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parseInt(fmt.find((p) => p.type === t)?.value ?? "0", 10);
+  const h = get("hour") === 24 ? 0 : get("hour");
+  const m = get("minute");
+  const s = get("second");
+  const secondsSinceMidnightET = h * 3600 + m * 60 + s;
+  const targetSecondsET = args.windowStartHourET * 3600;
+  let deltaSec = targetSecondsET - secondsSinceMidnightET;
+  if (deltaSec <= 0) deltaSec += 86400;
+  return deltaSec * 1000;
 }
 
 async function tekmetricFetchRO(roId: number): Promise<{
@@ -142,6 +197,39 @@ async function main() {
     let processedThisShop = 0;
 
     for (let i = 0; i < limit; i++) {
+      // Off-hours gate: pause until the window re-opens. We check before each
+      // RO so a long-running backfill cleanly pauses at 5am ET and resumes
+      // at 8pm ET without any external scheduler. Persists progress before
+      // sleeping so an OS-level kill during the pause doesn't lose state.
+      if (!isInsideWindow(args)) {
+        if (!args.dryRun) {
+          await progressColl.updateOne(
+            { _id: progressId as any },
+            {
+              $set: {
+                shopId,
+                completedWorkOrderIds: Array.from(completed),
+                apiNotFoundWorkOrderIds: Array.from(apiNotFound),
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            { upsert: true },
+          );
+        }
+        const sleepMs = msUntilWindowOpens(args);
+        const wakeAt = new Date(Date.now() + sleepMs).toISOString();
+        console.log(`  [window] Outside ${args.windowStartHourET}:00–${args.windowEndHourET}:00 ET. Sleeping ${(sleepMs/3600000).toFixed(1)}h until ${wakeAt}.`);
+        // Wake every 5 minutes to recheck (handles DST shifts cleanly).
+        const checkIntervalMs = 5 * 60 * 1000;
+        const sleepEnd = Date.now() + sleepMs;
+        while (Date.now() < sleepEnd) {
+          await new Promise((r) => setTimeout(r, Math.min(checkIntervalMs, sleepEnd - Date.now())));
+          if (isInsideWindow(args)) break;
+        }
+        console.log(`  [window] Resuming.`);
+      }
+
       const woId = todo[i];
       const roIdNum = Number(woId);
       if (!Number.isFinite(roIdNum)) {
