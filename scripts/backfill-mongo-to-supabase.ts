@@ -22,9 +22,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { getDb as getMongoDb } from "../lib/mongo";
-import { getDb as getPgDb } from "../lib/db/drizzle";
+import * as pgSchema from "../lib/db/schema";
 import { SupabaseDualWriter } from "../lib/supabase-dual-writer";
+
+// Dedicated Postgres pool for the backfill so we don't contend with the live
+// app's tiny shared pool (max: 2 in lib/db/drizzle.ts).
+function makeDedicatedPgDb() {
+  const url = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
+  if (!url) throw new Error("Missing DATAONE_DATABASE_URL or DATABASE_URL");
+  const client = postgres(url, {
+    max: 20,
+    idle_timeout: 30,
+    connect_timeout: 30,
+    max_lifetime: 60 * 30,
+  });
+  return drizzle(client, { schema: pgSchema });
+}
+const getPgDb = makeDedicatedPgDb;
 import {
   normalizedVehicles,
   normalizedCustomers,
@@ -139,6 +156,28 @@ function parseArgs(): Args {
 
 const CHECKPOINT_DIR = path.join(process.cwd(), ".local");
 const CHECKPOINT_FILE = path.join(CHECKPOINT_DIR, "backfill-checkpoint.json");
+const LOG_FILE = path.join(CHECKPOINT_DIR, "backfill.log");
+
+function ensureLocalDir() {
+  if (!fs.existsSync(CHECKPOINT_DIR)) fs.mkdirSync(CHECKPOINT_DIR, { recursive: true });
+}
+
+function logLine(msg: string) {
+  ensureLocalDir();
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  try { fs.appendFileSync(LOG_FILE, line + "\n"); } catch {}
+  console.log(line);
+}
+
+// Capture uncaught crashes to the log file so we never lose context.
+process.on("uncaughtException", (e) => {
+  logLine(`UNCAUGHT EXCEPTION: ${e?.stack || e?.message || e}`);
+  process.exit(2);
+});
+process.on("unhandledRejection", (e: any) => {
+  logLine(`UNHANDLED REJECTION: ${e?.stack || e?.message || e}`);
+  process.exit(2);
+});
 
 interface Checkpoint {
   [key: string]: {
@@ -177,6 +216,30 @@ function isDuplicateKeyError(err: any): boolean {
   return /duplicate key value violates unique constraint/i.test(msg);
 }
 
+/**
+ * Postgres SQLSTATE 23502 = not_null_violation. Some legacy mongo docs lack
+ * required fields (e.g. work_orders with empty vehicleId from Protractor
+ * internal/non-vehicle invoices). These cannot be migrated as-is and are
+ * counted as data-quality skips rather than transient failures.
+ */
+function isNotNullViolation(err: any): boolean {
+  const code = err?.code ?? err?.cause?.code;
+  if (code === "23502") return true;
+  const msg = String(err?.message ?? "") + " " + String(err?.cause?.message ?? "");
+  return /violates not-null constraint/i.test(msg);
+}
+
+/**
+ * NOTE: SQLSTATE 23503 (foreign_key_violation) is intentionally NOT classified
+ * as a data-quality skip. FK violations may indicate real defects (wrong ID
+ * mapping, wrong shop scoping, parent collection ordered after child, etc.)
+ * and should remain visible as `failed` so they show up in retry + error logs
+ * for operator investigation.
+ */
+function isDataQualitySkip(err: any): boolean {
+  return isDuplicateKeyError(err) || isNotNullViolation(err);
+}
+
 async function processInBatches<T extends { _id: any }>(
   items: T[],
   concurrency: number,
@@ -199,9 +262,12 @@ async function processInBatches<T extends { _id: any }>(
     results.forEach((r, idx) => {
       if (r.status === "fulfilled") {
         ok++;
-      } else if (isDuplicateKeyError(r.reason)) {
-        // Same logical entity already present under a different Mongo _id —
-        // expected drift between Mongo and Postgres, safe to skip.
+      } else if (isDataQualitySkip(r.reason)) {
+        // Either: (a) duplicate-key — same logical entity already in PG under
+        // a different Mongo _id; (b) NOT-NULL violation — legacy mongo doc
+        // missing required FK like vehicle_id (e.g. Protractor non-vehicle
+        // invoices); or (c) FK violation — referenced parent not yet
+        // backfilled. None are recoverable on retry, so count as skipped.
         skipped++;
       } else {
         failed++;
@@ -237,8 +303,13 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
     console.log(`  [${spec.key}] retrying ${cp.failedIds.length} previously-failed doc(s)...`);
     const retryDocs = await mongo
       .collection(spec.mongoName)
-      .find({ _id: { $in: cp.failedIds } })
+      .find({ _id: { $in: cp.failedIds as any } })
       .toArray();
+    if (retryDocs.length !== cp.failedIds.length) {
+      console.warn(
+        `  [${spec.key}] retry expected ${cp.failedIds.length} docs but found ${retryDocs.length} in mongo`,
+      );
+    }
     const writerRetry = new SupabaseDualWriter(pg);
     const r = await processInBatches(retryDocs, args.concurrency, (d) =>
       spec.upsert(writerRetry, d),
@@ -354,6 +425,7 @@ async function verify(spec: CollectionSpec, args: Args): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  logLine(`main() entered, argv=${JSON.stringify(process.argv.slice(2))}`);
   const args = parseArgs();
   const targets = args.collection
     ? COLLECTIONS.filter((c) => c.key === args.collection)
@@ -364,7 +436,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(
+  logLine(
     `Backfill plan: ${targets.map((t) => t.key).join(" → ")}` +
       (args.shop != null ? ` (shop=${args.shop})` : "") +
       (args.dryRun ? " [DRY RUN]" : "") +
