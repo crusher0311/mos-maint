@@ -4,6 +4,10 @@ import { requirePlatformAdmin } from "@/lib/auth";
 
 const STALE_RUN_HOURS = 48;
 const FROZEN_CURSOR_DAYS = 3;
+// A shop that drops at least one RO in this many runs IN A ROW is flagged.
+// One bad chunk happens; the same shop dropping ROs run after run is silent
+// data loss and should page on-call.
+const RECURRING_RO_SKIP_RUNS = 2;
 
 function computeStuckDiagnostics(progressRows: any[]) {
   const now = Date.now();
@@ -28,6 +32,18 @@ function computeStuckDiagnostics(progressRows: any[]) {
       if (hoursSinceRun != null && hoursSinceRun > STALE_RUN_HOURS) reasons.push("stale_run");
       if (daysCursorFrozen != null && daysCursorFrozen > FROZEN_CURSOR_DAYS) reasons.push("frozen_cursor");
       if (p.lastError) reasons.push("last_error");
+      const consecutiveRoSkipRuns = Number(p.consecutiveRoSkipRuns || 0);
+      if (consecutiveRoSkipRuns >= RECURRING_RO_SKIP_RUNS) {
+        reasons.push("recurring_ro_skips");
+      }
+
+      const recentSkippedRos = Array.isArray(p.recentSkippedRos)
+        ? p.recentSkippedRos.slice(0, 10).map((s: any) => ({
+            roId: s.roId,
+            error: s.error || null,
+            at: s.at || null,
+          }))
+        : [];
 
       return {
         shopId: p.shopId,
@@ -45,6 +61,10 @@ function computeStuckDiagnostics(progressRows: any[]) {
         autoClearedErrorAt: p.autoClearedErrorAt || null,
         totalJobsIndexed: p.totalJobsIndexed || 0,
         logicVersion: p.logicVersion || null,
+        lastRoSkipCount: Number(p.lastRoSkipCount || 0),
+        lastRoSkipAt: p.lastRoSkipAt || null,
+        consecutiveRoSkipRuns,
+        recentSkippedRos,
       };
     })
     .sort((a: any, b: any) => {
@@ -146,6 +166,17 @@ export async function GET() {
         .toFixed(1)
     );
 
+    // Aggregate Tekmetric RO-skip stats. Distinct from force-skipped windows:
+    // those are entire date ranges the cron jumped past, while these are
+    // individual repair orders inside an otherwise-processed chunk that threw
+    // and were silently dropped.
+    const tekmetricRoSkipShops = tekmetricDiagnostics.filter(
+      (d: any) => (d.consecutiveRoSkipRuns || 0) > 0,
+    );
+    const tekmetricRecurringRoSkipShops = tekmetricDiagnostics.filter((d: any) =>
+      (d.reasons || []).includes("recurring_ro_skips"),
+    );
+
     const tekmetricStuckCount = tekmetricDiagnostics.filter((d: any) => d.stuck).length;
     const protractorStuckCount = protractorDiagnostics.filter((d: any) => d.stuck).length;
     const shopwareStuckCount = shopwareDiagnostics.filter((d: any) => d.stuck).length;
@@ -175,6 +206,15 @@ export async function GET() {
           forceSkippedWindows: tekmetricForceSkippedWindows,
           forceSkippedShopCount: tekmetricForceSkippedWindows.length,
           forceSkippedTotalSpanDays: tekmetricForceSkippedTotalSpanDays,
+          roSkipShopCount: tekmetricRoSkipShops.length,
+          recurringRoSkipShopCount: tekmetricRecurringRoSkipShops.length,
+          roSkipShops: tekmetricRoSkipShops.map((d: any) => ({
+            shopId: d.shopId,
+            consecutiveRoSkipRuns: d.consecutiveRoSkipRuns,
+            lastRoSkipCount: d.lastRoSkipCount,
+            lastRoSkipAt: d.lastRoSkipAt,
+            recentSkippedRos: d.recentSkippedRos,
+          })),
         },
         protractor: {
           complete: protractorShopsComplete,

@@ -284,6 +284,10 @@ async function backfillShopChunk(
   let chunkHadError = false;
   let hitPageCap = false;
   let perRoExceptions = 0;
+  // Capture the actual RO ids + error messages that threw so on-call can see
+  // WHICH repair orders are throwing without grepping cron logs. These get
+  // persisted on the progress doc and surfaced in the admin sync-health view.
+  const skippedRoSamples: { roId: number; error: string; at: Date }[] = [];
   const seenROIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
@@ -537,8 +541,14 @@ async function backfillShopChunk(
       // let the rest of the page's ROs finish.
       perRoExceptions++;
       chunkHadError = true;
+      const roErrMsg = (roErr?.message || String(roErr)).slice(0, 300);
+      // Cap the per-chunk sample so a runaway chunk doesn't blow up the
+      // progress doc. The aggregate count (perRoExceptions) is always exact.
+      if (skippedRoSamples.length < 50) {
+        skippedRoSamples.push({ roId: ro.id, error: roErrMsg, at: new Date() });
+      }
       console.warn(
-        `[Tekmetric Backfill] Shop ${shopId} RO ${ro.id} threw, skipping: ${roErr?.message || roErr}`,
+        `[Tekmetric Backfill] Shop ${shopId} RO ${ro.id} threw, skipping: ${roErrMsg}`,
       );
       return { indexed: 0, skipped: 0, roData: null };
      }
@@ -619,9 +629,32 @@ async function backfillShopChunk(
   console.log(`[Tekmetric Backfill] Shop ${shopId}: cursor advance ${advanceMode}`);
 
   if (perRoExceptions > 0) {
+    const sampleIds = skippedRoSamples.map(s => s.roId).slice(0, 10).join(",");
     console.warn(
-      `[Tekmetric Backfill] Shop ${shopId}: ${perRoExceptions} RO(s) threw and were skipped this chunk`,
+      `[Tekmetric Backfill] Shop ${shopId}: ${perRoExceptions} RO(s) threw and were skipped this chunk (sample: ${sampleIds})`,
     );
+  }
+
+  // Track consecutive runs that skipped at least one RO. This is what the
+  // sync-health endpoint pages on: a single bad chunk happens, but if the
+  // SAME shop drops ROs run after run, that's silent data loss.
+  const priorConsecutiveRoSkipRuns = (progress?.consecutiveRoSkipRuns as number) || 0;
+  const nextConsecutiveRoSkipRuns = perRoExceptions > 0 ? priorConsecutiveRoSkipRuns + 1 : 0;
+  // Maintain a rolling sample of recently skipped ROs across runs (capped),
+  // newest first, deduped by roId so a chronically-bad RO doesn't push every
+  // other id out of the window.
+  const priorRecent: { roId: number; error: string; at: Date | string }[] =
+    Array.isArray(progress?.recentSkippedRos) ? progress.recentSkippedRos : [];
+  let nextRecentSkippedRos = priorRecent;
+  if (skippedRoSamples.length > 0) {
+    const seenIds = new Set<number>();
+    nextRecentSkippedRos = [];
+    for (const s of [...skippedRoSamples, ...priorRecent]) {
+      if (seenIds.has(s.roId)) continue;
+      seenIds.add(s.roId);
+      nextRecentSkippedRos.push(s);
+      if (nextRecentSkippedRos.length >= 25) break;
+    }
   }
 
   // Emit a structured warning if the prior cursor-move timestamp is older
@@ -650,6 +683,10 @@ async function backfillShopChunk(
           ? { lastCursorMoveAt: now, previousChunkEnd: chunkEnd }
           : {}),
         consecutiveChunkErrors: nextConsecutiveErrors,
+        lastRoSkipCount: perRoExceptions,
+        ...(perRoExceptions > 0 ? { lastRoSkipAt: now } : {}),
+        consecutiveRoSkipRuns: nextConsecutiveRoSkipRuns,
+        recentSkippedRos: nextRecentSkippedRos,
         ...(chunkHadError && !forceSkipBadWindow
           ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow

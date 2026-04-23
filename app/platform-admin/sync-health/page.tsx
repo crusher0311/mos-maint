@@ -13,6 +13,12 @@ import {
   SkipForward,
 } from "lucide-react";
 
+interface SkippedRoSample {
+  roId: number;
+  error: string | null;
+  at: string | null;
+}
+
 interface StuckDiagnostic {
   shopId: number;
   completed: boolean;
@@ -29,6 +35,18 @@ interface StuckDiagnostic {
   autoClearedErrorAt: string | null;
   totalJobsIndexed: number;
   logicVersion: number | null;
+  lastRoSkipCount?: number;
+  lastRoSkipAt?: string | null;
+  consecutiveRoSkipRuns?: number;
+  recentSkippedRos?: SkippedRoSample[];
+}
+
+interface RoSkipShop {
+  shopId: number;
+  consecutiveRoSkipRuns: number;
+  lastRoSkipCount: number;
+  lastRoSkipAt: string | null;
+  recentSkippedRos: SkippedRoSample[];
 }
 
 interface ForceSkippedWindow {
@@ -48,6 +66,9 @@ interface ProviderBackfill {
   forceSkippedWindows?: ForceSkippedWindow[];
   forceSkippedShopCount?: number;
   forceSkippedTotalSpanDays?: number;
+  roSkipShopCount?: number;
+  recurringRoSkipShopCount?: number;
+  roSkipShops?: RoSkipShop[];
 }
 
 interface SyncHealthData {
@@ -73,6 +94,7 @@ const REASON_LABELS: Record<string, { label: string; color: string }> = {
   stale_run: { label: "Stale run (>48h)", color: "bg-yellow-100 text-yellow-800" },
   frozen_cursor: { label: "Frozen cursor (>3d)", color: "bg-orange-100 text-orange-800" },
   last_error: { label: "Last error", color: "bg-red-100 text-red-700" },
+  recurring_ro_skips: { label: "Recurring RO skips", color: "bg-rose-100 text-rose-800" },
 };
 
 function formatDate(value: string | null): string {
@@ -308,6 +330,118 @@ export default function SyncHealthPage() {
     );
   };
 
+  const renderRoSkipSection = (
+    providerLabel: string,
+    shops: RoSkipShop[] | undefined,
+  ) => {
+    const list = shops || [];
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+            <h2 className="font-semibold text-gray-900">
+              Skipped repair orders ({providerLabel})
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-rose-100 text-rose-700 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500">
+            Individual ROs that threw inside an otherwise-processed chunk and
+            were silently dropped. Recurring = skipped 2+ runs in a row.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            No shops dropping repair orders. No silent data loss.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Consecutive runs
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Last run skips
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Last skip at
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Recently skipped RO ids (with error)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => {
+                  const recurring = (s.consecutiveRoSkipRuns || 0) >= 2;
+                  return (
+                    <tr key={s.shopId} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                        {s.shopId}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs ${
+                            recurring
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {s.consecutiveRoSkipRuns}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.lastRoSkipCount}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {formatDateTime(s.lastRoSkipAt)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 max-w-xl">
+                        {s.recentSkippedRos.length === 0 ? (
+                          <span className="text-gray-400">—</span>
+                        ) : (
+                          <ul className="space-y-1">
+                            {s.recentSkippedRos.map((r) => (
+                              <li
+                                key={r.roId}
+                                className="font-mono text-xs text-gray-700"
+                              >
+                                <span className="text-rose-700">{r.roId}</span>
+                                {r.error && (
+                                  <span
+                                    className="text-gray-500 ml-2"
+                                    title={r.error}
+                                  >
+                                    {r.error.length > 80
+                                      ? r.error.slice(0, 80) + "…"
+                                      : r.error}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderForceSkippedSection = (
     providerLabel: string,
     windows: ForceSkippedWindow[] | undefined,
@@ -519,7 +653,24 @@ export default function SyncHealthPage() {
             {tek?.forceSkippedTotalSpanDays ?? 0}d total unrecovered
           </div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-rose-100 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            </div>
+            <span className="text-sm text-gray-600">Skipped ROs (Tek)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {tek?.roSkipShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {tek?.recurringRoSkipShopCount ?? 0} recurring (2+ runs)
+          </div>
+        </div>
       </div>
+
+      {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
 
       {renderForceSkippedSection("Tekmetric", tek?.forceSkippedWindows, tek?.forceSkippedTotalSpanDays)}
 
