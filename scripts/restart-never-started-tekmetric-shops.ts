@@ -8,19 +8,36 @@
 //      orphan sweep would do this on the next run anyway.
 //   2. For each of the other 18 shops: hit the Tekmetric `/repair-orders`
 //      endpoint once with page=0 size=1 to confirm reachability and
-//      surface any auth/credential failure. Then write a `lastRunAt` and
-//      a verbose `lastError` so the row no longer looks "never started" —
-//      it now visibly says "handed off to next cron run". The cron's
-//      `ERROR_AUTO_CLEAR_HOURS=6` will clear this synthetic marker on
-//      the next run so the real chunk processing can take over with the
-//      new error-recording wrapper in place.
+//      surface any auth/credential failure. Record the probe outcome on
+//      DEDICATED `lastProbedAt` / `lastProbeError` / `lastProbeOk` fields
+//      so the cron's fair-queue ordering and 6h auto-clear gate are NOT
+//      perturbed (see regression note below).
+//
+// !!! REGRESSION GUARD — DO NOT REMOVE !!!
+// The original version of this script wrote `lastRunAt = now` and
+// `lastError = "task #23 manual probe..."` on each progress row. That
+// single write had two bad side-effects:
+//   (a) It demoted the 18 shops out of the high-priority "never_started"
+//       bucket (which the cron picks up first) and into the bottom of the
+//       "stalled" bucket (sorted by oldest `lastRunAt` first), so they
+//       wouldn't have been touched by the cron for many cycles.
+//   (b) The synthetic `lastError` blocked auto-clear for a full
+//       `ERROR_AUTO_CLEAR_HOURS` (6h) window, during which the shops
+//       were ineligible to retry.
+// Task #36 had to bypass the cron entirely (see
+// scripts/drive-task-23-restarted-shops.ts) to recover.
+//
+// Future probe / restart helpers MUST keep this separation:
+//   - `lastRunAt` / `lastError` belong to real chunk attempts run by
+//     `backfillShopChunkInner` (or the wrapper `backfillShopChunk`).
+//   - Probes write `lastProbedAt` / `lastProbeError` / `lastProbeOk`
+//     instead, leaving the queue ordering and auto-clear gate untouched.
 //
 // Why not run a full chunk inline? A single chunk for these shops
 // processes ~800 ROs and triggers heavy Tekmetric rate-limiting; running
 // 18 of them sequentially takes longer than this sandbox's process
-// budget. The acceptance criteria just need each shop to have non-null
-// `lastRunAt` and either `totalJobsIndexed > 0` or `lastError` — this
-// script provides the latter, the next cron run delivers the former.
+// budget. With the queue-preserving probe above, the cron's next run
+// will pick them up at the front of the never_started bucket.
 //
 // Usage: npx tsx scripts/restart-never-started-tekmetric-shops.ts
 
@@ -76,6 +93,8 @@ async function main() {
     if (!tekmetricShopId) {
       // Orphan: shop document has no Tekmetric link. Mark complete so it
       // drops out of the active queue and out of `never_started` counts.
+      // Note: orphan completion legitimately uses lastRunAt/lastError
+      // because the row is being retired, not handed back to the cron.
       await db.collection("tekmetric_backfill_progress").updateOne(
         { shopId },
         {
@@ -96,18 +115,24 @@ async function main() {
     }
 
     const probe = await probeShop(Number(tekmetricShopId), shopId);
-    const errMessage = probe.ok
-      ? `task #23 manual probe at ${now.toISOString()}: Tekmetric reachable (${probe.detail}); deferring full chunk to next cron run (auto-clear in 6h)`
-      : `task #23 manual probe at ${now.toISOString()}: Tekmetric NOT reachable: ${probe.detail}`;
+
+    // Probe results go on dedicated fields so the cron's fair-queue
+    // ordering (sorts incomplete shops by `lastRunAt`, with null first)
+    // and the 6h `ERROR_AUTO_CLEAR_HOURS` gate are NOT affected. See the
+    // REGRESSION GUARD comment at the top of this file.
+    const probeMessage = probe.ok
+      ? `Tekmetric reachable (${probe.detail})`
+      : `Tekmetric NOT reachable: ${probe.detail}`;
 
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
       {
         $set: {
           shopId,
-          lastRunAt: now,
-          lastError: errMessage,
-          lastErrorAt: now,
+          lastProbedAt: now,
+          lastProbeOk: probe.ok,
+          lastProbeError: probe.ok ? null : probeMessage,
+          lastProbeNote: `task #23 manual probe at ${now.toISOString()}: ${probeMessage}`,
         },
       },
       { upsert: true }

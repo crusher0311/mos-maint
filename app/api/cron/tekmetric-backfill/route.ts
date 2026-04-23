@@ -210,6 +210,19 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   // The previous implementation sorted un-started shops by *most recent*
   // cursor, which meant freshly-onboarded shops perpetually displaced the
   // long-stalled tail.
+  //
+  // !!! IMPORTANT for probe / restart helpers (see task #46) !!!
+  // `lastRunAt` here is the ordering key. A one-off probe script that
+  // stamps `lastRunAt = now` will silently demote the shop from the
+  // high-priority "never_started" bucket to the bottom of the "stalled"
+  // bucket, where it may wait many cron cycles before being picked up.
+  // Probes MUST record their outcome on `lastProbedAt` / `lastProbeError`
+  // / `lastProbeOk` instead — only real chunk attempts inside
+  // `backfillShopChunkInner` are allowed to write `lastRunAt` /
+  // `lastError`. The original task #23 restart script violated this and
+  // had to be unstuck by bypassing the cron entirely (task #36); the
+  // current `scripts/restart-never-started-tekmetric-shops.ts` carries
+  // the regression-guard comment.
   shopsToBackfill.sort((a, b) => {
     if (!a.lastRunAt && b.lastRunAt) return -1;
     if (a.lastRunAt && !b.lastRunAt) return 1;
