@@ -112,6 +112,40 @@ export async function GET() {
     const protractorDiagnostics = computeStuckDiagnostics(protractorBackfillProgress);
     const shopwareDiagnostics = computeStuckDiagnostics(shopwareBackfillProgress);
 
+    // Force-skipped windows are written by the Tekmetric backfill cron after 3
+    // consecutive failures on the same chunk. They represent unrecovered data
+    // gaps and persist on the progress row even after the shop completes, so
+    // we surface them independently of the stuck-shop diagnostics (which only
+    // consider in-flight rows).
+    const tekmetricForceSkippedWindows = tekmetricBackfillProgress
+      .filter((p: any) => p.lastForceSkippedWindow && p.lastForceSkippedWindow.start && p.lastForceSkippedWindow.end)
+      .map((p: any) => {
+        const w = p.lastForceSkippedWindow;
+        const startMs = new Date(w.start).getTime();
+        const endMs = new Date(w.end).getTime();
+        const spanDays = Number.isFinite(startMs) && Number.isFinite(endMs)
+          ? Math.max(0, (endMs - startMs) / (24 * 60 * 60 * 1000))
+          : null;
+        return {
+          shopId: p.shopId,
+          start: w.start,
+          end: w.end,
+          at: w.at || null,
+          spanDays: spanDays == null ? null : Number(spanDays.toFixed(1)),
+          completed: !!p.completed,
+        };
+      })
+      .sort((a: any, b: any) => {
+        const aAt = a.at ? new Date(a.at).getTime() : 0;
+        const bAt = b.at ? new Date(b.at).getTime() : 0;
+        return bAt - aAt;
+      });
+    const tekmetricForceSkippedTotalSpanDays = Number(
+      tekmetricForceSkippedWindows
+        .reduce((sum: number, w: any) => sum + (w.spanDays || 0), 0)
+        .toFixed(1)
+    );
+
     const tekmetricStuckCount = tekmetricDiagnostics.filter((d: any) => d.stuck).length;
     const protractorStuckCount = protractorDiagnostics.filter((d: any) => d.stuck).length;
     const shopwareStuckCount = shopwareDiagnostics.filter((d: any) => d.stuck).length;
@@ -138,6 +172,9 @@ export async function GET() {
             lastRunAt: p.lastRunAt
           })),
           diagnostics: tekmetricDiagnostics,
+          forceSkippedWindows: tekmetricForceSkippedWindows,
+          forceSkippedShopCount: tekmetricForceSkippedWindows.length,
+          forceSkippedTotalSpanDays: tekmetricForceSkippedTotalSpanDays,
         },
         protractor: {
           complete: protractorShopsComplete,

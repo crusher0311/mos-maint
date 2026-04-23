@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  SkipForward,
 } from "lucide-react";
 
 interface StuckDiagnostic {
@@ -30,11 +31,23 @@ interface StuckDiagnostic {
   logicVersion: number | null;
 }
 
+interface ForceSkippedWindow {
+  shopId: number;
+  start: string;
+  end: string;
+  at: string | null;
+  spanDays: number | null;
+  completed: boolean;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
   stuck: number;
   diagnostics: StuckDiagnostic[];
+  forceSkippedWindows?: ForceSkippedWindow[];
+  forceSkippedShopCount?: number;
+  forceSkippedTotalSpanDays?: number;
 }
 
 interface SyncHealthData {
@@ -61,6 +74,15 @@ const REASON_LABELS: Record<string, { label: string; color: string }> = {
   frozen_cursor: { label: "Frozen cursor (>3d)", color: "bg-orange-100 text-orange-800" },
   last_error: { label: "Last error", color: "bg-red-100 text-red-700" },
 };
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString();
+  } catch {
+    return value;
+  }
+}
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -286,6 +308,104 @@ export default function SyncHealthPage() {
     );
   };
 
+  const renderForceSkippedSection = (
+    providerLabel: string,
+    windows: ForceSkippedWindow[] | undefined,
+    totalSpanDays: number | undefined
+  ) => {
+    const list = windows || [];
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SkipForward className="w-5 h-5 text-amber-600" />
+            <h2 className="font-semibold text-gray-900">
+              Force-skipped {providerLabel} windows
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+            {list.length > 0 && (
+              <span className="px-2 py-0.5 text-xs bg-amber-50 text-amber-700 rounded-full">
+                {totalSpanDays ?? 0}d total span
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Cron force-advanced past a chunk after 3 consecutive failures. The
+            data in these windows was never re-fetched.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            No force-skipped {providerLabel} windows. No unrecovered gaps.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Window start
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Window end
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Span (days)
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Skipped at
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Backfill state
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((w) => (
+                  <tr key={`${w.shopId}-${w.start}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                      {w.shopId}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {formatDate(w.start)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {formatDate(w.end)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-900">
+                      {w.spanDays == null ? "—" : `${w.spanDays}d`}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {formatDateTime(w.at)}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {w.completed ? (
+                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                          Complete
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                          In progress
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -384,7 +504,24 @@ export default function SyncHealthPage() {
           </div>
           <div className="text-xs text-gray-500 mt-1">across all workers</div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <SkipForward className="w-5 h-5 text-amber-600" />
+            </div>
+            <span className="text-sm text-gray-600">Force-skipped windows (Tek)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {tek?.forceSkippedShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {tek?.forceSkippedTotalSpanDays ?? 0}d total unrecovered
+          </div>
+        </div>
       </div>
+
+      {renderForceSkippedSection("Tekmetric", tek?.forceSkippedWindows, tek?.forceSkippedTotalSpanDays)}
 
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
       {renderStuckSection("Protractor", pro?.diagnostics)}
