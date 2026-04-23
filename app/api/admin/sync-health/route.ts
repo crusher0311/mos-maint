@@ -104,13 +104,16 @@ export async function GET() {
     const db = await getDb();
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+    const staleArchiveSince = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
     const [
       tekmetricBackfillProgress,
       protractorBackfillProgress,
       shopwareBackfillProgress,
       unresolvedErrors,
       recentSyncMetrics,
-      normalizedStats
+      normalizedStats,
+      tekmetricStaleArchivedAgg,
     ] = await Promise.all([
       db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db.collection("backfill_progress").find({}).toArray(),
@@ -133,7 +136,28 @@ export async function GET() {
             lastUpdated: { $max: "$updatedAt" }
           }
         }
-      ]).toArray()
+      ]).toArray(),
+      // Aggregate stale-archived entries (auto-archived after 30d without
+      // re-fetch). Surfaces in the admin view as a separate "stale, never
+      // re-fetched" bucket so cold leftovers stop polluting the live skipped
+      // list. Limited to the last 14 days so the bucket stays focused on
+      // recent sweep activity rather than historical buildup.
+      db.collection("tekmetric_skipped_ro_archive").aggregate([
+        { $match: { stale: true, archivedAt: { $gte: staleArchiveSince } } },
+        {
+          $group: {
+            _id: "$shopId",
+            entriesArchived: { $sum: 1 },
+            lastArchivedAt: { $max: "$archivedAt" },
+            oldestSkippedAt: { $min: "$skippedAt" },
+            permanentlyFailedCount: {
+              $sum: { $cond: [{ $eq: ["$permanentlyFailed", true] }, 1, 0] },
+            },
+          },
+        },
+        { $sort: { lastArchivedAt: -1 } },
+        { $limit: 100 },
+      ]).toArray(),
     ]);
 
     const tekmetricShopsComplete = tekmetricBackfillProgress.filter((p: any) => p.completed).length;
@@ -286,6 +310,25 @@ export async function GET() {
           ),
           recoveredRoSkipShops: tekmetricRecoveredRoSkipShops,
           recoveredRoSkipShopCount: tekmetricRecoveredRoSkipShops.length,
+          // Stale-archived entries: ROs auto-archived after 30 days without
+          // a re-fetch. Surfaced separately so on-call can spot cold leftovers
+          // distinct from live actionable skips.
+          staleArchivedSkippedRoShops: (tekmetricStaleArchivedAgg as any[]).map(
+            (g: any) => ({
+              shopId: g._id,
+              entriesArchived: g.entriesArchived,
+              lastArchivedAt: g.lastArchivedAt,
+              oldestSkippedAt: g.oldestSkippedAt,
+              permanentlyFailedCount: g.permanentlyFailedCount,
+            }),
+          ),
+          staleArchivedSkippedRoShopCount: (tekmetricStaleArchivedAgg as any[])
+            .length,
+          staleArchivedSkippedRoTotal: (tekmetricStaleArchivedAgg as any[])
+            .reduce(
+              (sum: number, g: any) => sum + (g.entriesArchived || 0),
+              0,
+            ),
         },
         protractor: {
           complete: protractorShopsComplete,

@@ -25,6 +25,13 @@ const ERROR_AUTO_CLEAR_HOURS = 6;
 // If a shop has a lastRunAt but its cursor hasn't moved in this many days,
 // flag it as stuck in the diagnostics endpoint.
 const STUCK_CURSOR_DAYS = 3;
+// Entries on `recentSkippedRos` whose `at` timestamp is older than this many
+// days get auto-archived to `tekmetric_skipped_ro_archive` with stale=true
+// and dropped from the live rolling window. Without this sweep, an RO that
+// the cursor has advanced past and is never re-fetched again would linger on
+// the admin sync-health view forever, polluting actionable signal with cold
+// data. 30 days lines up with the retry cron's give-up window.
+const STALE_SKIPPED_RO_DAYS = 30;
 // If the same chunk window errors this many cron cycles in a row, force
 // the cursor past it so one persistently bad window can't permanently
 // freeze a shop (e.g. shop 63's "chunk had errors, holding cursor" loop
@@ -242,6 +249,93 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
     tekmetricShopId: s.tekmetricShopId,
     hasLastRunAt: s.lastRunAt != null,
   }));
+}
+
+// Sweep `recentSkippedRos` for entries whose `at` timestamp is older than
+// STALE_SKIPPED_RO_DAYS. The auto-resolve path only clears entries when the
+// cron re-fetches the RO, so if the cursor has advanced past their window
+// they linger indefinitely. Move them into `tekmetric_skipped_ro_archive`
+// with `stale: true` and drop them from the live rolling window so the
+// admin sync-health view stays focused on actionable items.
+async function sweepStaleSkippedRos(
+  db: any,
+): Promise<{ shopsTouched: number; entriesArchived: number }> {
+  const cutoffMs = Date.now() - STALE_SKIPPED_RO_DAYS * 24 * 60 * 60 * 1000;
+  const rows = await db
+    .collection("tekmetric_backfill_progress")
+    .find({ "recentSkippedRos.0": { $exists: true } })
+    .toArray();
+
+  const now = new Date();
+  let shopsTouched = 0;
+  let entriesArchived = 0;
+
+  for (const row of rows) {
+    const entries: any[] = Array.isArray(row.recentSkippedRos)
+      ? row.recentSkippedRos
+      : [];
+    const stale: any[] = [];
+    const fresh: any[] = [];
+    for (const e of entries) {
+      const atMs = e?.at ? new Date(e.at).getTime() : NaN;
+      // Treat entries with a missing/invalid `at` as stale too — they're
+      // ancient leftovers from before the timestamp was recorded and can't
+      // be acted on otherwise.
+      if (!Number.isFinite(atMs) || atMs < cutoffMs) {
+        stale.push(e);
+      } else {
+        fresh.push(e);
+      }
+    }
+    if (stale.length === 0) continue;
+
+    try {
+      const archiveDocs = stale.map((e: any) => ({
+        shopId: row.shopId,
+        roId: e.roId,
+        error: e.error || null,
+        skippedAt: e.at || null,
+        retryAttempts: Number(e.retryAttempts || 0),
+        lastRetryAt: e.lastRetryAt || null,
+        lastRetryError: e.lastRetryError || null,
+        permanentlyFailed: !!e.permanentlyFailed,
+        stale: true,
+        archivedAt: now,
+        archiveReason: `never_re_fetched_in_${STALE_SKIPPED_RO_DAYS}d`,
+      }));
+      await db
+        .collection("tekmetric_skipped_ro_archive")
+        .insertMany(archiveDocs, { ordered: false });
+      // Only drop from the live list AFTER archive write succeeds so a
+      // Mongo blip can't silently destroy the postmortem record.
+      await db.collection("tekmetric_backfill_progress").updateOne(
+        { shopId: row.shopId },
+        {
+          $set: {
+            recentSkippedRos: fresh,
+            lastStaleSkippedRosArchivedAt: now,
+          },
+          $inc: { staleSkippedRosArchivedTotal: stale.length },
+        },
+      );
+      shopsTouched++;
+      entriesArchived += stale.length;
+      console.log(
+        `[Tekmetric Backfill] Stale sweep: archived ${stale.length} stale RO(s) for shop ${row.shopId} (ids: ${stale.map((s: any) => s.roId).join(",")})`,
+      );
+    } catch (err: any) {
+      console.warn(
+        `[Tekmetric Backfill] Stale sweep failed for shop ${row.shopId}; leaving on recentSkippedRos: ${err?.message || err}`,
+      );
+    }
+  }
+
+  if (entriesArchived > 0) {
+    console.log(
+      `[Tekmetric Backfill] Stale sweep complete: archived ${entriesArchived} entries across ${shopsTouched} shop(s)`,
+    );
+  }
+  return { shopsTouched, entriesArchived };
 }
 
 // Exported so one-off scripts can call it directly without going through HTTP
@@ -897,6 +991,18 @@ export async function GET(req: NextRequest) {
   resetTekmetricApiCallCount();
 
   try {
+    // Run the stale-skipped-RO sweep BEFORE shop processing so the same run
+    // both archives cold entries and processes new chunks. Wrapped so a
+    // sweep failure can never block the actual backfill work.
+    let staleSweep = { shopsTouched: 0, entriesArchived: 0 };
+    try {
+      staleSweep = await sweepStaleSkippedRos(db);
+    } catch (sweepErr: any) {
+      console.warn(
+        `[Tekmetric Backfill] Stale sweep threw; continuing with backfill: ${sweepErr?.message || sweepErr}`,
+      );
+    }
+
     const shopsToProcess = await getShopsNeedingBackfill(db);
 
     if (shopsToProcess.length === 0) {
@@ -904,6 +1010,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         message: "All Tekmetric shops have completed backfill",
         shopsRemaining: 0,
+        staleSweep,
         duration: `${Date.now() - startTime}ms`
       });
     }
@@ -997,6 +1104,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       processed: results,
       shopsRemaining: shopsToProcess.length - selectedShops.length,
+      staleSweep,
       duration: `${duration}ms`,
       tekmetricApiCalls: apiCallCount,
     });

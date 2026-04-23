@@ -79,6 +79,14 @@ interface RecoveredRoSkipShop {
   resolvedSkippedRosTotal: number;
 }
 
+interface StaleArchivedRoSkipShop {
+  shopId: number;
+  entriesArchived: number;
+  lastArchivedAt: string | null;
+  oldestSkippedAt: string | null;
+  permanentlyFailedCount: number;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -95,6 +103,9 @@ interface ProviderBackfill {
   roStillFailingTotal?: number;
   recoveredRoSkipShops?: RecoveredRoSkipShop[];
   recoveredRoSkipShopCount?: number;
+  staleArchivedSkippedRoShops?: StaleArchivedRoSkipShop[];
+  staleArchivedSkippedRoShopCount?: number;
+  staleArchivedSkippedRoTotal?: number;
 }
 
 interface SyncHealthData {
@@ -722,6 +733,98 @@ export default function SyncHealthPage() {
     );
   };
 
+  const renderStaleArchivedSection = (
+    providerLabel: string,
+    shops: StaleArchivedRoSkipShop[] | undefined,
+    totalEntries: number | undefined,
+  ) => {
+    const list = shops || [];
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-slate-500" />
+            <h2 className="font-semibold text-gray-900">
+              Stale, never re-fetched RO skips ({providerLabel})
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-slate-100 text-slate-700 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+            {totalEntries != null && totalEntries > 0 && (
+              <span className="px-2 py-0.5 text-xs bg-slate-50 text-slate-600 rounded-full">
+                {totalEntries} entries archived
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Auto-archived after 30 days without a re-fetch. Cursor advanced
+            past their window. Inspect the
+            <code className="mx-1 px-1 bg-gray-100 rounded text-[11px]">tekmetric_skipped_ro_archive</code>
+            collection (filter
+            <code className="mx-1 px-1 bg-gray-100 rounded text-[11px]">stale: true</code>)
+            for full records.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            No stale RO skips archived in the last 14 days.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Entries archived
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Permanently failed
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Oldest skip
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Last archived
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => (
+                  <tr key={s.shopId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                      {s.shopId}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">
+                        {s.entriesArchived}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-rose-100 text-rose-800">
+                        {s.permanentlyFailedCount}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {formatDateTime(s.oldestSkippedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {formatDateTime(s.lastArchivedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderForceSkippedSection = (
     providerLabel: string,
     windows: ForceSkippedWindow[] | undefined,
@@ -985,6 +1088,12 @@ export default function SyncHealthPage() {
       {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
 
       {renderRecoveredRoSkipSection("Tekmetric", tek?.recoveredRoSkipShops)}
+
+      {renderStaleArchivedSection(
+        "Tekmetric",
+        tek?.staleArchivedSkippedRoShops,
+        tek?.staleArchivedSkippedRoTotal,
+      )}
 
       {renderForceSkippedSection("Tekmetric", tek?.forceSkippedWindows, tek?.forceSkippedTotalSpanDays)}
 
