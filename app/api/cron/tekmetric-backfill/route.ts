@@ -139,6 +139,39 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
     { $set: { lastError: null, lastErrorAt: null, autoClearedErrorAt: new Date() } }
   );
 
+  // Orphan sweep: a progress row whose shop has had its Tekmetric link
+  // removed (no `tekmetric.shopId` and no `tekmetricShopId`) will never be
+  // picked up by the queue below — but it still shows up in verification
+  // diagnostics as `never_started`, polluting the signal. Mark such rows
+  // completed with a noted reason so they drop out of the active set.
+  const linkedShopIds = new Set<number>(
+    shops
+      .filter((s: any) => (s.tekmetric?.shopId ?? s.tekmetricShopId) != null)
+      .map((s: any) => Number(s.shopId))
+  );
+  const orphanRows = await db
+    .collection("tekmetric_backfill_progress")
+    .find({ completed: { $ne: true } }, { projection: { shopId: 1 } })
+    .toArray();
+  const orphanIds = orphanRows
+    .map((r: any) => Number(r.shopId))
+    .filter((id: number) => !linkedShopIds.has(id));
+  if (orphanIds.length > 0) {
+    const now = new Date();
+    await db.collection("tekmetric_backfill_progress").updateMany(
+      { shopId: { $in: orphanIds } },
+      {
+        $set: {
+          completed: true,
+          completedAt: now,
+          lastError: "shop has no Tekmetric link; marking complete to drop from queue",
+          lastErrorAt: now,
+        },
+      }
+    );
+    console.log(`[Tekmetric Backfill] Orphan sweep: marked ${orphanIds.length} progress row(s) complete (no Tekmetric link): ${orphanIds.join(",")}`);
+  }
+
   const shopsToBackfill: {
     shopId: number;
     name: string;
@@ -198,9 +231,47 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   }));
 }
 
-async function backfillShopChunk(
-  db: any, 
-  shopId: number, 
+// Exported so one-off scripts can call it directly without going through HTTP
+// (e.g. scripts/restart-never-started-tekmetric-shops.ts). Next.js ignores
+// named exports from a route handler other than HTTP method names.
+export async function backfillShopChunk(
+  db: any,
+  shopId: number,
+  tekmetricShopId: number
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
+  try {
+    return await backfillShopChunkInner(db, shopId, tekmetricShopId);
+  } catch (err: any) {
+    // The inner function may throw between the init-row upsert and the
+    // final progress write. Without recording the failure here, the shop
+    // ends up with a progress row but no `lastRunAt` / `lastError`, which
+    // makes it indistinguishable from a brand-new "never started" shop and
+    // hides the real failure mode. Surface it so diagnostics catch it.
+    const now = new Date();
+    const errMessage = err?.message ? String(err.message).slice(0, 500) : String(err).slice(0, 500);
+    try {
+      await db.collection("tekmetric_backfill_progress").updateOne(
+        { shopId },
+        {
+          $set: {
+            shopId,
+            lastRunAt: now,
+            lastError: `chunk threw: ${errMessage}`,
+            lastErrorAt: now,
+          },
+        },
+        { upsert: true }
+      );
+    } catch (writeErr) {
+      console.error(`[Tekmetric Backfill] Shop ${shopId}: failed to record chunk error to progress row:`, writeErr);
+    }
+    throw err;
+  }
+}
+
+async function backfillShopChunkInner(
+  db: any,
+  shopId: number,
   tekmetricShopId: number
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
