@@ -148,6 +148,37 @@ export async function cacheVehicle(db: any, vehicleId: number, vehicle: Tekmetri
   );
 }
 
+// Jobs cache. Backfill only ever indexes terminal ROs (POSTED/INVOICED/
+// COMPLETED) whose jobs payload doesn't change after the fact, so a long-ish
+// TTL is safe and dramatically cuts the per-RO `/jobs` API fan-out — which
+// is where the 14m43s/chunk wall-clock and the bulk of the 429 backoff time
+// were coming from. A re-run of the same window (verification, post-error
+// retry) now hits Mongo instead of Tekmetric for every RO whose jobs we've
+// already seen.
+const JOBS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function getCachedJobs(db: any, repairOrderId: number): Promise<any[] | null> {
+  const cached = await db.collection("tekmetric_jobs_cache").findOne({
+    repairOrderId,
+    cachedAt: { $gt: new Date(Date.now() - JOBS_CACHE_TTL_MS) }
+  });
+  return Array.isArray(cached?.jobs) ? cached.jobs : null;
+}
+
+export async function cacheJobs(db: any, repairOrderId: number, jobs: any[]): Promise<void> {
+  await db.collection("tekmetric_jobs_cache").updateOne(
+    { repairOrderId },
+    {
+      $set: {
+        repairOrderId,
+        jobs,
+        cachedAt: new Date(),
+      }
+    },
+    { upsert: true }
+  );
+}
+
 export async function getCachedCustomer(db: any, customerId: number): Promise<TekmetricCustomer | null> {
   const cached = await db.collection("tekmetric_customer_cache").findOne({
     customerId,
@@ -547,5 +578,17 @@ export async function ensureCacheIndexes(): Promise<void> {
   await db.collection("tekmetric_customer_cache").createIndex(
     { cachedAt: 1 },
     { expireAfterSeconds: 86400 }
+  );
+
+  // Jobs cache. TTL matches JOBS_CACHE_TTL_MS (30 days) — terminal RO job
+  // payloads don't change, so a long TTL maximizes cache hit rate during
+  // backfill verification reruns and post-error retries.
+  await db.collection("tekmetric_jobs_cache").createIndex(
+    { repairOrderId: 1 },
+    { unique: true }
+  );
+  await db.collection("tekmetric_jobs_cache").createIndex(
+    { cachedAt: 1 },
+    { expireAfterSeconds: 30 * 24 * 60 * 60 }
   );
 }

@@ -4,7 +4,7 @@ import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
-import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
+import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
 
@@ -475,6 +475,9 @@ async function backfillShopChunkInner(
   const reFetchedRoIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
+  // Per-chunk in-memory jobs cache so duplicate ROs across pages (rare, but
+  // happens around chunk boundaries on updatedDate sort) don't re-hit Mongo.
+  const jobsCache = new Map<number, TekmetricJob[]>();
   const limit = pLimit(pace.concurrency);
   const rosForNormalized: any[] = [];
 
@@ -574,18 +577,67 @@ async function backfillShopChunkInner(
         }
       }
 
-      const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
-        `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`,
-        shopId,
-      );
+      // Jobs lookup. The pre-cache fast path is the dominant chunk-time
+      // optimization: a typical 90-day chunk runs 100s of ROs and each one
+      // used to issue an unconditional `/jobs?repairOrderId=…` call, which
+      // is exactly what was eating ~14m of wall-clock and triggering the
+      // 429 storms during verification reruns. We now check, in order:
+      //   1. Per-chunk in-memory map (cheapest)
+      //   2. tekmetric_jobs_cache (Mongo, 30d TTL) — survives across runs
+      //   3. tekmetric_work_orders.data.jobs — the incremental-sync path
+      //      already stores the full jobs payload for terminal ROs, so a
+      //      shop whose webhooks/poller saw an RO first never needs to
+      //      re-fetch its jobs during backfill.
+      //   4. Fall through to the API.
+      let jobs: TekmetricJob[] = [];
+      if (jobsCache.has(ro.id)) {
+        jobs = jobsCache.get(ro.id)!;
+      } else {
+        const cachedJobs = await getCachedJobs(db, ro.id).catch(err => {
+          console.warn(`[Tekmetric Backfill] getCachedJobs failed for RO ${ro.id}: ${err?.message || err}`);
+          return null;
+        });
+        if (cachedJobs) {
+          jobs = cachedJobs as TekmetricJob[];
+          jobsCache.set(ro.id, jobs);
+        } else {
+          // Last cache check before the API: incremental sync already
+          // stores `data.jobs` on tekmetric_work_orders for terminal ROs.
+          const cachedWO = await db.collection("tekmetric_work_orders").findOne(
+            {
+              shopId: { $in: [String(shopId), Number(shopId)] },
+              workOrderId: String(ro.id),
+            },
+            { projection: { "data.jobs": 1 } }
+          ).catch(() => null);
+          const woJobs = cachedWO?.data?.jobs;
+          if (Array.isArray(woJobs) && woJobs.length > 0) {
+            jobs = woJobs as TekmetricJob[];
+            jobsCache.set(ro.id, jobs);
+            // Promote into the dedicated jobs cache so future runs skip
+            // the WO-collection projection cost too.
+            await cacheJobs(db, ro.id, jobs).catch(() => {});
+          } else {
+            const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
+              `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`,
+              shopId,
+            );
 
-      if (!jobsResult.ok) {
-        console.warn(`[Tekmetric Backfill] Failed to fetch jobs for RO ${ro.id}: ${jobsResult.error}`);
-        chunkHadError = true;
-        return { indexed: 0, skipped: 0, roData: null };
+            if (!jobsResult.ok) {
+              console.warn(`[Tekmetric Backfill] Failed to fetch jobs for RO ${ro.id}: ${jobsResult.error}`);
+              chunkHadError = true;
+              return { indexed: 0, skipped: 0, roData: null };
+            }
+
+            jobs = jobsResult.data?.content || [];
+            jobsCache.set(ro.id, jobs);
+            // Cache even empty arrays — an RO with no jobs is a real,
+            // stable state for terminal ROs and the next run shouldn't
+            // pay another API call to re-confirm the empty result.
+            await cacheJobs(db, ro.id, jobs).catch(() => {});
+          }
+        }
       }
-
-      const jobs = jobsResult.data?.content || [];
 
       if (jobs.length === 0) {
         reFetchedRoIds.add(ro.id);

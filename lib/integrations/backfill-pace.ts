@@ -17,7 +17,13 @@ const DEFAULT_TZ = "America/Chicago";
 
 const DAY_PROFILE: Record<BackfillProvider, Omit<PaceConfig, "isOffHours" | "shopHourLocal" | "shopTimezone">> = {
   tekmetric: {
-    concurrency: 2,
+    // Bumped 2→4 after introducing the persistent /jobs cache
+    // (tekmetric_jobs_cache, 30d TTL) in tekmetric-incremental-sync.ts.
+    // The per-RO API fan-out used to be ~3 calls (vehicle+customer+jobs);
+    // with all three now cache-backed, a warm chunk averages well under 1
+    // call per RO so we can double the in-flight work without exceeding
+    // Tekmetric's 600 req/min quota.
+    concurrency: 4,
     chunkDays: 90,
     maxPagesPerChunk: 50,
     maxChunksPerRun: 25,
