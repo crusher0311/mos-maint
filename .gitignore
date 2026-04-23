@@ -83,3 +83,4 @@ node_modules/
 data/db/
 data/mongodb.log
 .cache/
+tsconfig.tsbuildinfo
