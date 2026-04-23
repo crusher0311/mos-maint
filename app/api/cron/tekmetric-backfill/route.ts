@@ -283,6 +283,7 @@ async function backfillShopChunk(
   let totalPages = 1;
   let chunkHadError = false;
   let hitPageCap = false;
+  let perRoExceptions = 0;
   const seenROIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
@@ -320,6 +321,7 @@ async function backfillShopChunk(
     console.log(`[Tekmetric Backfill] Shop ${shopId} page ${page + 1}/${totalPages}: ${ros.length} ROs`);
 
     const roPromises = ros.map(ro => limit(async () => {
+     try {
       if (seenROIds.has(ro.id)) return { indexed: 0, skipped: 0, roData: null };
       seenROIds.add(ro.id);
 
@@ -333,7 +335,16 @@ async function backfillShopChunk(
         if (vehicleCache.has(ro.vehicleId)) {
           vehicle = vehicleCache.get(ro.vehicleId)!;
         } else {
-          const mongoVehicle = await getCachedVehicle(db, ro.vehicleId);
+          // Defensive: a Mongo hiccup on the read used to throw straight
+          // out of Promise.all and crash the entire chunk (the RO loop has
+          // no per-RO try/catch above). Treat a cache miss/error as
+          // "no cached vehicle, fetch from API" so one bad lookup can't
+          // freeze the shop. Matches the `.catch(() => {})` already on
+          // the cacheVehicle write below.
+          const mongoVehicle = await getCachedVehicle(db, ro.vehicleId).catch(err => {
+            console.warn(`[Tekmetric Backfill] getCachedVehicle failed for vehicle ${ro.vehicleId}: ${err?.message || err}`);
+            return null;
+          });
           if (mongoVehicle) {
             vehicle = mongoVehicle as TekmetricVehicle;
             vehicleCache.set(ro.vehicleId, vehicle);
@@ -353,7 +364,11 @@ async function backfillShopChunk(
         if (customerCache.has(ro.customerId)) {
           customer = customerCache.get(ro.customerId)!;
         } else {
-          const mongoCustomer = await getCachedCustomer(db, ro.customerId);
+          // Same defensive treatment as getCachedVehicle above.
+          const mongoCustomer = await getCachedCustomer(db, ro.customerId).catch(err => {
+            console.warn(`[Tekmetric Backfill] getCachedCustomer failed for customer ${ro.customerId}: ${err?.message || err}`);
+            return null;
+          });
           if (mongoCustomer) {
             customer = mongoCustomer as TekmetricCustomer;
             customerCache.set(ro.customerId, customer);
@@ -512,6 +527,21 @@ async function backfillShopChunk(
       };
       
       return { indexed, skipped, roData: roDataForNormalized };
+     } catch (roErr: any) {
+      // Per-RO safety net. Without this, an unexpected throw inside the
+      // RO body (Mongo write failure on job_index, schema-shape surprise,
+      // unwrapped helper, etc.) propagates out of Promise.all and crashes
+      // the whole chunk — which is the exact failure mode that landed
+      // shops in the GET handler's "unhandled chunk exception" branch.
+      // Mark chunkHadError so the cursor holds the window for retry, but
+      // let the rest of the page's ROs finish.
+      perRoExceptions++;
+      chunkHadError = true;
+      console.warn(
+        `[Tekmetric Backfill] Shop ${shopId} RO ${ro.id} threw, skipping: ${roErr?.message || roErr}`,
+      );
+      return { indexed: 0, skipped: 0, roData: null };
+     }
     }));
 
     const results = await Promise.all(roPromises);
@@ -587,6 +617,12 @@ async function backfillShopChunk(
   const now = new Date();
 
   console.log(`[Tekmetric Backfill] Shop ${shopId}: cursor advance ${advanceMode}`);
+
+  if (perRoExceptions > 0) {
+    console.warn(
+      `[Tekmetric Backfill] Shop ${shopId}: ${perRoExceptions} RO(s) threw and were skipped this chunk`,
+    );
+  }
 
   // Emit a structured warning if the prior cursor-move timestamp is older
   // than STUCK_CURSOR_DAYS and we're STILL not moving the cursor this run.
