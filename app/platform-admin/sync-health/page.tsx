@@ -157,6 +157,7 @@ export default function SyncHealthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<number | null>(null);
+  const [runningNow, setRunningNow] = useState<number | null>(null);
   const [retryingRo, setRetryingRo] = useState<number | null>(null);
   const [retryingAllRo, setRetryingAllRo] = useState(false);
 
@@ -199,6 +200,47 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to trigger backfill");
     } finally {
       setTriggering(null);
+    }
+  };
+
+  const runTekmetricNow = async (shopId: number) => {
+    if (
+      !confirm(
+        `Push shop ${shopId} to the front of the Tekmetric backfill queue and run a chunk now?`,
+      )
+    )
+      return;
+    setRunningNow(shopId);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shopId}/tekmetric-run-now`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to run Tekmetric chunk");
+      } else {
+        const r = json.result;
+        const lines: string[] = [
+          json.message || `Shop ${shopId}: chunk run requested`,
+        ];
+        if (r) {
+          lines.push(
+            `chunks: ${r.chunksProcessed} · jobs indexed: ${r.totalJobsIndexed} · ` +
+              `normalized: ${r.totalNormalized} · skipped: ${r.totalSkipped}`,
+          );
+          if (r.complete) lines.push("backfill marked complete");
+        }
+        if (json.duration) lines.push(`duration: ${json.duration}`);
+        if (json.tekmetricApiCalls != null)
+          lines.push(`Tekmetric API calls: ${json.tekmetricApiCalls}`);
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to run Tekmetric chunk");
+    } finally {
+      setRunningNow(null);
     }
   };
 
@@ -416,18 +458,43 @@ export default function SyncHealthPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => triggerBackfill(d.shopId, providerLabel)}
-                        disabled={triggering === d.shopId}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50"
-                      >
-                        {triggering === d.shopId ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5" />
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
+                        {providerLabel === "Tekmetric" && (
+                          <button
+                            onClick={() => runTekmetricNow(d.shopId)}
+                            disabled={
+                              runningNow === d.shopId ||
+                              triggering === d.shopId
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                            title="Push this shop to the front of the Tekmetric backfill queue and run chunks now until it completes or the cron times out (does not reset the cursor)"
+                          >
+                            {runningNow === d.shopId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5" />
+                            )}
+                            Run chunk now
+                          </button>
                         )}
+                        <button
+                          onClick={() =>
+                            triggerBackfill(d.shopId, providerLabel)
+                          }
+                          disabled={
+                            triggering === d.shopId ||
+                            runningNow === d.shopId
+                          }
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {triggering === d.shopId ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
                           Re-trigger backfill
-                      </button>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
