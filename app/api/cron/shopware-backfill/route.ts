@@ -334,6 +334,7 @@ export async function GET(req: NextRequest) {
           inProgress: true,
           startedAt: progress?.startedAt || new Date(),
           lastChunkAt: new Date(),
+          lastRunAt: new Date(),
           logicVersion: 2,
           ...(isFreshOrUpgrading ? { currentChunkEnd: chunkEndCursor, completed: false } : {}),
         },
@@ -380,6 +381,7 @@ export async function GET(req: NextRequest) {
         `[SW Backfill] Shop ${mosShopId}: chunk done — ${result.rosFetched} ROs, ${result.jobsIndexed} jobs, ${result.vehiclesStored} vehicles, ${result.customersStored} customers`
       );
 
+      const previousChunkEnd = cursor;
       cursor = effectiveStart;
 
       await db.collection("shopware_backfill_progress").updateOne(
@@ -388,7 +390,10 @@ export async function GET(req: NextRequest) {
           $set: {
             currentChunkEnd: cursor,
             currentCursor: cursor.toISOString(),
+            previousChunkEnd,
             lastChunkAt: new Date(),
+            lastRunAt: new Date(),
+            lastCursorMoveAt: new Date(),
             lastError: null,
             lastErrorAt: null,
           },
@@ -414,6 +419,7 @@ export async function GET(req: NextRequest) {
           currentChunkEnd: cursor,
           currentCursor: cursor.toISOString(),
           lastChunkAt: new Date(),
+          lastRunAt: new Date(),
           ...(chunkError ? { lastError: chunkError, lastErrorAt: new Date() } : {}),
         },
       }
