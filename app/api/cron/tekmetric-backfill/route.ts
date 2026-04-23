@@ -360,6 +360,11 @@ async function backfillShopChunkInner(
   // persisted on the progress doc and surfaced in the admin sync-health view.
   const skippedRoSamples: { roId: number; error: string; at: Date }[] = [];
   const seenROIds = new Set<number>();
+  // RO ids that were re-fetched without throwing this run. Used to confirm
+  // recovery for entries on the persisted `recentSkippedRos` list so a shop
+  // that had a transient burst and then started succeeding doesn't keep the
+  // stale ids on the admin sync-health view forever.
+  const reFetchedRoIds = new Set<number>();
   const vehicleCache = new Map<number, TekmetricVehicle>();
   const customerCache = new Map<number, TekmetricCustomer>();
   const limit = pLimit(pace.concurrency);
@@ -402,6 +407,9 @@ async function backfillShopChunkInner(
 
       const statusCode = ro.repairOrderStatus?.code?.toUpperCase() || "";
       if (!["POSTED", "INVOICED", "COMPLETED"].includes(statusCode)) {
+        // Status filter still counts as a successful re-fetch — the RO list
+        // call returned the row, we just chose not to index it.
+        reFetchedRoIds.add(ro.id);
         return { indexed: 0, skipped: 0, roData: null };
       }
 
@@ -471,7 +479,10 @@ async function backfillShopChunkInner(
 
       const jobs = jobsResult.data?.content || [];
 
-      if (jobs.length === 0) return { indexed: 0, skipped: 0, roData: null };
+      if (jobs.length === 0) {
+        reFetchedRoIds.add(ro.id);
+        return { indexed: 0, skipped: 0, roData: null };
+      }
 
       let inspections: any[] = [];
       const hasInspectionUrl = !!(ro as any).inspectionUrl;
@@ -488,6 +499,10 @@ async function backfillShopChunkInner(
         }
       }
 
+      // If we got here, the RO was re-fetched (jobs API succeeded). Even if
+      // jobs is empty, that's a confirmed successful read of the RO from
+      // Tekmetric — enough to clear it off the "recently skipped" list if it
+      // was sitting there from a prior burst.
       let indexed = 0;
       let skipped = 0;
       
@@ -601,6 +616,7 @@ async function backfillShopChunkInner(
         rawPayload: { repairOrder: ro, vehicle, customer, jobs, inspections: inspections.length > 0 ? inspections : undefined },
       };
       
+      reFetchedRoIds.add(ro.id);
       return { indexed, skipped, roData: roDataForNormalized };
      } catch (roErr: any) {
       // Per-RO safety net. Without this, an unexpected throw inside the
@@ -716,11 +732,63 @@ async function backfillShopChunkInner(
   // other id out of the window.
   const priorRecent: { roId: number; error: string; at: Date | string }[] =
     Array.isArray(progress?.recentSkippedRos) ? progress.recentSkippedRos : [];
-  let nextRecentSkippedRos = priorRecent;
-  if (skippedRoSamples.length > 0) {
+
+  // Auto-resolve previously-skipped ROs that we successfully re-fetched this
+  // run. We only resolve entries that were NOT freshly skipped this same run
+  // (a fresh skip wins over a same-run resolve — if the RO is bouncing, keep
+  // it visible). Resolved entries are archived into
+  // `tekmetric_skipped_ro_archive` for postmortems and removed from the
+  // rolling window so the admin sync-health view stops showing stale ids
+  // forever after a transient burst recovers.
+  const freshlySkippedIds = new Set<number>(skippedRoSamples.map(s => s.roId));
+  const resolvedEntries: { roId: number; error: string; at: Date | string }[] = [];
+  const remainingPriorRecent: typeof priorRecent = [];
+  for (const entry of priorRecent) {
+    if (reFetchedRoIds.has(entry.roId) && !freshlySkippedIds.has(entry.roId)) {
+      resolvedEntries.push(entry);
+    } else {
+      remainingPriorRecent.push(entry);
+    }
+  }
+
+  // Only clear entries from `recentSkippedRos` AFTER the archive write
+  // succeeds — otherwise a Mongo blip would silently destroy the postmortem
+  // record. On archive failure, leave the entries on the live list so they
+  // can be retried on the next run.
+  let archivedResolvedCount = 0;
+  if (resolvedEntries.length > 0) {
+    try {
+      const archiveDocs = resolvedEntries.map(entry => ({
+        shopId,
+        roId: entry.roId,
+        error: entry.error,
+        skippedAt: entry.at,
+        resolvedAt: now,
+        resolvedInChunk: { start: chunkStart, end: chunkEnd },
+      }));
+      await db.collection("tekmetric_skipped_ro_archive").insertMany(archiveDocs, { ordered: false });
+      archivedResolvedCount = resolvedEntries.length;
+      console.log(
+        `[Tekmetric Backfill] Shop ${shopId}: archived ${resolvedEntries.length} recovered RO(s) (ids: ${resolvedEntries.map(r => r.roId).join(",")})`,
+      );
+    } catch (archiveErr: any) {
+      // Roll back the resolution: put resolved entries back on the rolling
+      // window so the next run will retry archiving. Postmortem fidelity wins
+      // over admin-view tidiness here.
+      remainingPriorRecent.push(...resolvedEntries);
+      console.warn(
+        `[Tekmetric Backfill] Shop ${shopId}: failed to archive ${resolvedEntries.length} resolved RO(s); keeping on recentSkippedRos for retry: ${archiveErr?.message || archiveErr}`,
+      );
+    }
+  }
+
+  // Recompute the rolling window from (fresh skips this run) ∪ (prior entries
+  // not resolved this run), capped at 25 newest-first deduped by roId.
+  let nextRecentSkippedRos = remainingPriorRecent;
+  if (skippedRoSamples.length > 0 || archivedResolvedCount > 0) {
     const seenIds = new Set<number>();
     nextRecentSkippedRos = [];
-    for (const s of [...skippedRoSamples, ...priorRecent]) {
+    for (const s of [...skippedRoSamples, ...remainingPriorRecent]) {
       if (seenIds.has(s.roId)) continue;
       seenIds.add(s.roId);
       nextRecentSkippedRos.push(s);
@@ -758,6 +826,14 @@ async function backfillShopChunkInner(
         ...(perRoExceptions > 0 ? { lastRoSkipAt: now } : {}),
         consecutiveRoSkipRuns: nextConsecutiveRoSkipRuns,
         recentSkippedRos: nextRecentSkippedRos,
+        ...(archivedResolvedCount > 0 ? { lastSkippedRosResolvedAt: now } : {}),
+        // A shop is "fully recovered" the moment consecutiveRoSkipRuns drops
+        // back to 0 AND the rolling window is empty (every prior id has been
+        // confirmed re-fetched). Stamp it so the admin view can label the
+        // shop as recovered rather than just hide it.
+        ...(nextConsecutiveRoSkipRuns === 0 && nextRecentSkippedRos.length === 0 && (priorRecent.length > 0 || (priorConsecutiveRoSkipRuns > 0))
+          ? { roSkipsFullyRecoveredAt: now }
+          : {}),
         ...(chunkHadError && !forceSkipBadWindow
           ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow
@@ -768,7 +844,10 @@ async function backfillShopChunkInner(
             }
           : { lastError: null, lastErrorAt: null }),
       },
-      $inc: { totalJobsIndexed: jobsIndexed }
+      $inc: {
+        totalJobsIndexed: jobsIndexed,
+        ...(archivedResolvedCount > 0 ? { resolvedSkippedRosTotal: archivedResolvedCount } : {}),
+      }
     }
   );
 

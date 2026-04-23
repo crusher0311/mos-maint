@@ -11,6 +11,7 @@ import {
   Clock,
   Database,
   SkipForward,
+  ShieldCheck,
 } from "lucide-react";
 
 interface SkippedRoSample {
@@ -69,6 +70,14 @@ interface ForceSkippedWindow {
   completed: boolean;
 }
 
+interface RecoveredRoSkipShop {
+  shopId: number;
+  completed: boolean;
+  roSkipsFullyRecoveredAt: string | null;
+  lastSkippedRosResolvedAt: string | null;
+  resolvedSkippedRosTotal: number;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -83,6 +92,8 @@ interface ProviderBackfill {
   roRecoveredTotal?: number;
   roPermanentlyFailedTotal?: number;
   roStillFailingTotal?: number;
+  recoveredRoSkipShops?: RecoveredRoSkipShop[];
+  recoveredRoSkipShopCount?: number;
 }
 
 interface SyncHealthData {
@@ -504,6 +515,94 @@ export default function SyncHealthPage() {
     );
   };
 
+  const renderRecoveredRoSkipSection = (
+    providerLabel: string,
+    shops: RecoveredRoSkipShop[] | undefined,
+  ) => {
+    const list = shops || [];
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-semibold text-gray-900">
+              Recently recovered RO skips ({providerLabel})
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500">
+            Shops that previously dropped ROs but have since re-fetched them
+            successfully. Shown for 14 days. Inspect the
+            <code className="mx-1 px-1 bg-gray-100 rounded text-[11px]">tekmetric_skipped_ro_archive</code>
+            collection for postmortems.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            No recently-recovered shops.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Recovered at
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Last resolution
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Total resolved
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Backfill state
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => (
+                  <tr key={s.shopId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                      {s.shopId}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {formatDateTime(s.roSkipsFullyRecoveredAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {formatDateTime(s.lastSkippedRosResolvedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-900">
+                      {s.resolvedSkippedRosTotal.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {s.completed ? (
+                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                          Complete
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                          In progress
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderForceSkippedSection = (
     providerLabel: string,
     windows: ForceSkippedWindow[] | undefined,
@@ -747,9 +846,26 @@ export default function SyncHealthPage() {
             {tek?.roPermanentlyFailedTotal ?? 0} permanently failed
           </div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            </div>
+            <span className="text-sm text-gray-600">Recovered RO skips (Tek)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {tek?.recoveredRoSkipShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            shops cleared in last 14 days
+          </div>
+        </div>
       </div>
 
       {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
+
+      {renderRecoveredRoSkipSection("Tekmetric", tek?.recoveredRoSkipShops)}
 
       {renderForceSkippedSection("Tekmetric", tek?.forceSkippedWindows, tek?.forceSkippedTotalSpanDays)}
 

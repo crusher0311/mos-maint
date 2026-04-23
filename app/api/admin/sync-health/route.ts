@@ -82,6 +82,9 @@ function computeStuckDiagnostics(progressRows: any[]) {
         lastRoRetryRecovered: Number(p.lastRoRetryRecovered || 0),
         lastRoRetryStillFailing: Number(p.lastRoRetryStillFailing || 0),
         lastRoRetryPermanentlyFailed: Number(p.lastRoRetryPermanentlyFailed || 0),
+        lastSkippedRosResolvedAt: p.lastSkippedRosResolvedAt || null,
+        roSkipsFullyRecoveredAt: p.roSkipsFullyRecoveredAt || null,
+        resolvedSkippedRosTotal: Number(p.resolvedSkippedRosTotal || 0),
       };
     })
     .sort((a: any, b: any) => {
@@ -194,6 +197,36 @@ export async function GET() {
       (d.reasons || []).includes("recurring_ro_skips"),
     );
 
+    // Recovered = a shop that previously had silently-dropped ROs but is now
+    // clean (no consecutive skip runs AND the rolling window has been cleared
+    // by confirmed re-fetches). We surface these for ~14 days so on-call can
+    // distinguish "currently dropping" from "historically dropped, now
+    // recovered" instead of stale ids lingering on the live view forever.
+    // Pulled from raw progress rows (not diagnostics) because completed shops
+    // are filtered out of the stuck-diagnostics list but can still be
+    // recently-recovered.
+    const recoveredCutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const tekmetricRecoveredRoSkipShops = tekmetricBackfillProgress
+      .filter((p: any) => {
+        if ((Number(p.consecutiveRoSkipRuns) || 0) > 0) return false;
+        if (Array.isArray(p.recentSkippedRos) && p.recentSkippedRos.length > 0) return false;
+        const recoveredAt = p.roSkipsFullyRecoveredAt || p.lastSkippedRosResolvedAt;
+        if (!recoveredAt) return false;
+        return new Date(recoveredAt).getTime() >= recoveredCutoffMs;
+      })
+      .map((p: any) => ({
+        shopId: p.shopId,
+        completed: !!p.completed,
+        roSkipsFullyRecoveredAt: p.roSkipsFullyRecoveredAt || null,
+        lastSkippedRosResolvedAt: p.lastSkippedRosResolvedAt || null,
+        resolvedSkippedRosTotal: Number(p.resolvedSkippedRosTotal || 0),
+      }))
+      .sort((a: any, b: any) => {
+        const aAt = new Date(a.roSkipsFullyRecoveredAt || a.lastSkippedRosResolvedAt || 0).getTime();
+        const bAt = new Date(b.roSkipsFullyRecoveredAt || b.lastSkippedRosResolvedAt || 0).getTime();
+        return bAt - aAt;
+      });
+
     const tekmetricStuckCount = tekmetricDiagnostics.filter((d: any) => d.stuck).length;
     const protractorStuckCount = protractorDiagnostics.filter((d: any) => d.stuck).length;
     const shopwareStuckCount = shopwareDiagnostics.filter((d: any) => d.stuck).length;
@@ -251,6 +284,8 @@ export async function GET() {
             (sum: number, d: any) => sum + (d.stillFailingRoCount || 0),
             0,
           ),
+          recoveredRoSkipShops: tekmetricRecoveredRoSkipShops,
+          recoveredRoSkipShopCount: tekmetricRecoveredRoSkipShops.length,
         },
         protractor: {
           complete: protractorShopsComplete,
