@@ -12,8 +12,19 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const MAX_SHOPS_PER_RUN = 1;
+// Process multiple shops per run to clear the long tail of stalled shops.
+// Concurrency is capped per shop in `getPaceConfig` so the global API
+// fan-out stays well under the 600 req/min Tekmetric quota.
+const MAX_SHOPS_PER_RUN = 5;
+const SHOP_PARALLELISM = 3;
 const YEARS_TO_BACKFILL = 5;
+// If a shop's lastError was set more than this many hours ago, clear it
+// before the next run so a transient failure can't permanently freeze the
+// cursor without anyone noticing.
+const ERROR_AUTO_CLEAR_HOURS = 6;
+// If a shop has a lastRunAt but its cursor hasn't moved in this many days,
+// flag it as stuck in the diagnostics endpoint.
+const STUCK_CURSOR_DAYS = 3;
 
 type TekmetricRepairOrder = {
   id: number;
@@ -98,34 +109,65 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
     tekmetricBackfillComplete: { $ne: true }
   }).toArray();
 
-  const shopsToBackfill: { shopId: number; name: string; tekmetricShopId: number; progressDate: Date | null }[] = [];
+  // Auto-recover from held cursors: clear lastError on any shop whose error
+  // is older than ERROR_AUTO_CLEAR_HOURS so the next run will retry. Without
+  // this, a single bad chunk can hold the cursor indefinitely while the
+  // shop stays out of sight.
+  const autoClearCutoff = new Date(Date.now() - ERROR_AUTO_CLEAR_HOURS * 60 * 60 * 1000);
+  await db.collection("tekmetric_backfill_progress").updateMany(
+    { lastError: { $ne: null }, lastErrorAt: { $lt: autoClearCutoff } },
+    { $set: { lastError: null, lastErrorAt: null, autoClearedErrorAt: new Date() } }
+  );
+
+  const shopsToBackfill: {
+    shopId: number;
+    name: string;
+    tekmetricShopId: number;
+    progressDate: Date | null;
+    lastRunAt: Date | null;
+  }[] = [];
 
   for (const shop of shops) {
     const shopId = Number(shop.shopId);
     const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
     if (!tekmetricShopId) continue;
-    
+
     const progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
-    
+
     // Include shops that are not completed OR have outdated logic version
     const needsReprocess = !progress?.completed || progress?.logicVersion !== 2;
-    
+
     if (needsReprocess) {
       shopsToBackfill.push({
         shopId,
         name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
         tekmetricShopId: Number(tekmetricShopId),
-        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null
+        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null,
+        lastRunAt: progress?.lastRunAt ? new Date(progress.lastRunAt) : null,
       });
     }
   }
 
-  // Prioritize: shops with no progress first, then by most recent cursor
+  // Fair-queue ordering to prevent starvation:
+  //   1. Shops that have NEVER run (lastRunAt missing) go first.
+  //   2. Then by oldest lastRunAt — the longest-stalled shop is next up.
+  //   3. Tie-break by furthest-from-complete cursor (newer chunkEnd =
+  //      less progress made, so prioritize it over a shop that's almost
+  //      done and only needs a small final push).
+  // The previous implementation sorted un-started shops by *most recent*
+  // cursor, which meant freshly-onboarded shops perpetually displaced the
+  // long-stalled tail.
   shopsToBackfill.sort((a, b) => {
-    if (!a.progressDate && !b.progressDate) return 0;
-    if (!a.progressDate) return -1;
-    if (!b.progressDate) return 1;
-    return b.progressDate.getTime() - a.progressDate.getTime();
+    if (!a.lastRunAt && b.lastRunAt) return -1;
+    if (a.lastRunAt && !b.lastRunAt) return 1;
+    if (a.lastRunAt && b.lastRunAt) {
+      const diff = a.lastRunAt.getTime() - b.lastRunAt.getTime();
+      if (diff !== 0) return diff;
+    }
+    // Tie-break: shop with the newer (further-from-complete) cursor first.
+    const aMs = a.progressDate ? a.progressDate.getTime() : Number.POSITIVE_INFINITY;
+    const bMs = b.progressDate ? b.progressDate.getTime() : Number.POSITIVE_INFINITY;
+    return bMs - aMs;
   });
 
   return shopsToBackfill.map(s => ({ shopId: s.shopId, name: s.name, tekmetricShopId: s.tekmetricShopId }));
@@ -488,19 +530,42 @@ async function backfillShopChunk(
     advanceMode = "FULL";
   }
   const isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate;
+  // Track actual cursor movement so the sync-health endpoint can report a
+  // truthful "frozen for N days" — relying on lastRunAt/lastErrorAt
+  // underreports duration for shops that run every night but never advance
+  // (recurring-error case).
+  const cursorMoved = nextChunkEnd.getTime() !== chunkEnd.getTime();
+  const now = new Date();
 
   console.log(`[Tekmetric Backfill] Shop ${shopId}: cursor advance ${advanceMode}`);
+
+  // Emit a structured warning if the prior cursor-move timestamp is older
+  // than STUCK_CURSOR_DAYS and we're STILL not moving the cursor this run.
+  // This makes recurring-error stalls visible in the cron logs without
+  // requiring anyone to query Mongo.
+  if (!cursorMoved && progress?.lastCursorMoveAt) {
+    const daysSinceMove = (now.getTime() - new Date(progress.lastCursorMoveAt).getTime()) / (24 * 60 * 60 * 1000);
+    if (daysSinceMove > STUCK_CURSOR_DAYS) {
+      console.warn(
+        `[Tekmetric Backfill] STUCK shop=${shopId} cursorFrozenDays=${daysSinceMove.toFixed(1)} ` +
+        `currentChunkEnd=${chunkEnd.toISOString().split("T")[0]} mode=${advanceMode}`
+      );
+    }
+  }
 
   await db.collection("tekmetric_backfill_progress").updateOne(
     { shopId },
     {
       $set: {
         currentChunkEnd: nextChunkEnd,
-        lastRunAt: new Date(),
+        lastRunAt: now,
         completed: isComplete,
-        ...(isComplete ? { completedAt: new Date() } : {}),
+        ...(isComplete ? { completedAt: now } : {}),
+        ...(cursorMoved
+          ? { lastCursorMoveAt: now, previousChunkEnd: chunkEnd }
+          : {}),
         ...(chunkHadError
-          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
+          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: now }
           : { lastError: null, lastErrorAt: null }),
       },
       $inc: { totalJobsIndexed: jobsIndexed }
@@ -552,17 +617,32 @@ export async function GET(req: NextRequest) {
     }
 
     const selectedShops = shopsToProcess.slice(0, MAX_SHOPS_PER_RUN);
-    const results: any[] = [];
-
-    for (const shop of selectedShops) {
-      console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId})`);
-      const result = await backfillShopChunk(db, shop.shopId, shop.tekmetricShopId);
-      results.push({
-        shopId: shop.shopId,
-        name: shop.name,
-        ...result
-      });
-    }
+    // Process shops in parallel up to SHOP_PARALLELISM. Per-shop concurrency
+    // is already throttled by the pace config and the central Tekmetric
+    // client tracks the global API budget.
+    const shopLimit = pLimit(SHOP_PARALLELISM);
+    const results = await Promise.all(
+      selectedShops.map(shop =>
+        shopLimit(async () => {
+          console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId})`);
+          try {
+            const result = await backfillShopChunk(db, shop.shopId, shop.tekmetricShopId);
+            return { shopId: shop.shopId, name: shop.name, ...result };
+          } catch (err: any) {
+            console.error(`[Tekmetric Backfill] Shop ${shop.shopId} chunk failed:`, err);
+            return {
+              shopId: shop.shopId,
+              name: shop.name,
+              jobsIndexed: 0,
+              skipped: 0,
+              complete: false,
+              normalizedCount: 0,
+              message: `error: ${err?.message || String(err)}`,
+            };
+          }
+        })
+      )
+    );
 
     const apiCallCount = resetTekmetricApiCallCount();
     const duration = Date.now() - startTime;
