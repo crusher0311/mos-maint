@@ -25,6 +25,19 @@ const ERROR_AUTO_CLEAR_HOURS = 6;
 // If a shop has a lastRunAt but its cursor hasn't moved in this many days,
 // flag it as stuck in the diagnostics endpoint.
 const STUCK_CURSOR_DAYS = 3;
+// If the same chunk window errors this many cron cycles in a row, force
+// the cursor past it so one persistently bad window can't permanently
+// freeze a shop (e.g. shop 63's "chunk had errors, holding cursor" loop
+// where auto-clear flips the error off but the next attempt re-errors
+// immediately on the same window).
+const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
+// Slot allocation per cron run. Splitting the budget between
+// never-started shops and the longest-stalled shops prevents either
+// bucket from starving the other. With 19 never-started shops and an
+// MAX_SHOPS_PER_RUN of 5, an unsplit budget meant the long-stalled
+// (32, 36, 37, ...) bucket waited 4+ runs to even be eligible.
+const NEVER_STARTED_SLOTS_PER_RUN = 2;
+const STALLED_SLOTS_PER_RUN = 3;
 
 type TekmetricRepairOrder = {
   id: number;
@@ -99,7 +112,14 @@ async function tekmetricRequest<T>(endpoint: string, shopId?: number, _retries =
   }
 }
 
-async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name: string; tekmetricShopId: number }[]> {
+type ShopToBackfill = {
+  shopId: number;
+  name: string;
+  tekmetricShopId: number;
+  hasLastRunAt: boolean;
+};
+
+async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   // Only fetch shops that don't have the completion flag set
   const shops = await db.collection("shops").find({
     $or: [
@@ -170,7 +190,12 @@ async function getShopsNeedingBackfill(db: any): Promise<{ shopId: number; name:
     return bMs - aMs;
   });
 
-  return shopsToBackfill.map(s => ({ shopId: s.shopId, name: s.name, tekmetricShopId: s.tekmetricShopId }));
+  return shopsToBackfill.map(s => ({
+    shopId: s.shopId,
+    name: s.name,
+    tekmetricShopId: s.tekmetricShopId,
+    hasLastRunAt: s.lastRunAt != null,
+  }));
 }
 
 async function backfillShopChunk(
@@ -515,13 +540,33 @@ async function backfillShopChunk(
 
   // Decide cursor advancement strategy:
   //  - On error: do NOT advance; next run retries the same window.
+  //    EXCEPT: if this same chunk window has now errored
+  //    MAX_CONSECUTIVE_CHUNK_ERRORS times in a row, force-skip past it
+  //    so one persistently bad window can't freeze the cursor forever
+  //    (auto-clear of `lastError` was insufficient: it just resets the
+  //    timestamp, the next attempt re-errors, repeat).
   //  - On hitting the page cap: only advance halfway, leaving the older half for the next run.
   //  - Otherwise: advance fully to the chunk start.
+  const priorConsecutiveErrors = (progress?.consecutiveChunkErrors as number) || 0;
+  const cursorIsSameWindow =
+    !!progress?.currentChunkEnd &&
+    new Date(progress.currentChunkEnd).getTime() === chunkEnd.getTime();
+  const nextConsecutiveErrors = chunkHadError
+    ? (cursorIsSameWindow ? priorConsecutiveErrors + 1 : 1)
+    : 0;
+  const forceSkipBadWindow =
+    chunkHadError && nextConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
   let nextChunkEnd: Date;
   let advanceMode: string;
-  if (chunkHadError) {
+  if (chunkHadError && !forceSkipBadWindow) {
     nextChunkEnd = chunkEnd;
-    advanceMode = "HOLD (error in chunk)";
+    advanceMode = `HOLD (error in chunk, ${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
+  } else if (forceSkipBadWindow) {
+    nextChunkEnd = chunkStart;
+    advanceMode = `FORCE_SKIP (chunk errored ${nextConsecutiveErrors}x in a row, skipping window ${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]})`;
+    console.warn(
+      `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} consecutiveErrors=${nextConsecutiveErrors}`,
+    );
   } else if (hitPageCap) {
     nextChunkEnd = midpoint(chunkStart, chunkEnd);
     advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split("T")[0]})`;
@@ -529,7 +574,11 @@ async function backfillShopChunk(
     nextChunkEnd = chunkStart;
     advanceMode = "FULL";
   }
-  const isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate;
+  // A force-skipped chunk DID move the cursor — count that as forward
+  // progress for the purposes of completion (otherwise a bad final
+  // window would leave the shop perpetually one chunk shy of done).
+  const isComplete =
+    (!chunkHadError || forceSkipBadWindow) && !hitPageCap && nextChunkEnd <= oldestDate;
   // Track actual cursor movement so the sync-health endpoint can report a
   // truthful "frozen for N days" — relying on lastRunAt/lastErrorAt
   // underreports duration for shops that run every night but never advance
@@ -564,8 +613,15 @@ async function backfillShopChunk(
         ...(cursorMoved
           ? { lastCursorMoveAt: now, previousChunkEnd: chunkEnd }
           : {}),
-        ...(chunkHadError
-          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: now }
+        consecutiveChunkErrors: nextConsecutiveErrors,
+        ...(chunkHadError && !forceSkipBadWindow
+          ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
+          : forceSkipBadWindow
+          ? {
+              lastError: `force-skipped bad window after ${nextConsecutiveErrors} consecutive failures`,
+              lastErrorAt: now,
+              lastForceSkippedWindow: { start: chunkStart, end: chunkEnd, at: now },
+            }
           : { lastError: null, lastErrorAt: null }),
       },
       $inc: { totalJobsIndexed: jobsIndexed }
@@ -616,7 +672,30 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const selectedShops = shopsToProcess.slice(0, MAX_SHOPS_PER_RUN);
+    // Split slot allocation between never-started shops and stalled
+    // shops with a lastRunAt. Without this split, a backlog of
+    // never-started shops (sorted first by the fair-queue ordering)
+    // monopolizes every slot for many runs and starves the
+    // long-stalled-with-cursor bucket (the 32/36/37/54/57/73/74/75
+    // group). The two buckets are interleaved per run so both make
+    // progress.
+    const neverStartedQueue = shopsToProcess.filter(s => !s.hasLastRunAt);
+    const stalledQueue = shopsToProcess.filter(s => s.hasLastRunAt);
+    const selectedNeverStarted = neverStartedQueue.slice(0, NEVER_STARTED_SLOTS_PER_RUN);
+    const selectedStalled = stalledQueue.slice(0, STALLED_SLOTS_PER_RUN);
+    let selectedShops = [...selectedNeverStarted, ...selectedStalled];
+    // If one bucket is short (e.g. all never-started shops have already
+    // moved into the stalled bucket), give the remaining slots to the
+    // other bucket so we never under-utilize the budget.
+    if (selectedShops.length < MAX_SHOPS_PER_RUN) {
+      const remaining = MAX_SHOPS_PER_RUN - selectedShops.length;
+      const extras = (selectedNeverStarted.length < NEVER_STARTED_SLOTS_PER_RUN
+        ? stalledQueue.slice(STALLED_SLOTS_PER_RUN, STALLED_SLOTS_PER_RUN + remaining)
+        : neverStartedQueue.slice(NEVER_STARTED_SLOTS_PER_RUN, NEVER_STARTED_SLOTS_PER_RUN + remaining));
+      selectedShops = [...selectedShops, ...extras];
+    }
+    selectedShops = selectedShops.slice(0, MAX_SHOPS_PER_RUN);
+
     // Process shops in parallel up to SHOP_PARALLELISM. Per-shop concurrency
     // is already throttled by the pace config and the central Tekmetric
     // client tracks the global API budget.
@@ -630,6 +709,36 @@ export async function GET(req: NextRequest) {
             return { shopId: shop.shopId, name: shop.name, ...result };
           } catch (err: any) {
             console.error(`[Tekmetric Backfill] Shop ${shop.shopId} chunk failed:`, err);
+            // CRITICAL: if backfillShopChunk throws (an unwrapped helper
+            // like getCachedVehicle, getRepairOrderInspectionsWithXAuth,
+            // or normalized ingestion blew up), the inner code never
+            // reached the progress write that bumps lastRunAt. Without
+            // this safety-net write, the shop keeps its old (or null)
+            // lastRunAt and stays at the head of the fair-queue forever
+            // — which is exactly how the 19 never-started shops were
+            // monopolizing every cron slot and starving the long-stalled
+            // bucket (32/36/37/...). Bump lastRunAt and record the error
+            // here so the shop rotates out of the queue head and
+            // ERROR_AUTO_CLEAR_HOURS can later let it retry.
+            const now = new Date();
+            const message = (err?.message || String(err)).slice(0, 500);
+            try {
+              await db.collection("tekmetric_backfill_progress").updateOne(
+                { shopId: shop.shopId },
+                {
+                  $set: {
+                    shopId: shop.shopId,
+                    lastRunAt: now,
+                    lastError: `unhandled chunk exception: ${message}`,
+                    lastErrorAt: now,
+                  },
+                  $setOnInsert: { startedAt: now, completed: false, logicVersion: 2 },
+                },
+                { upsert: true },
+              );
+            } catch (writeErr) {
+              console.error(`[Tekmetric Backfill] Shop ${shop.shopId} failed to record exception lastRunAt:`, writeErr);
+            }
             return {
               shopId: shop.shopId,
               name: shop.name,
@@ -637,7 +746,7 @@ export async function GET(req: NextRequest) {
               skipped: 0,
               complete: false,
               normalizedCount: 0,
-              message: `error: ${err?.message || String(err)}`,
+              message: `error: ${message}`,
             };
           }
         })
@@ -687,7 +796,7 @@ export async function POST(req: NextRequest) {
           if (!shop) return [];
           const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
           if (!tekmetricShopId) return [];
-          return [{ shopId: targetShopId, name: shop.name || `Shop ${targetShopId}`, tekmetricShopId: Number(tekmetricShopId) }];
+          return [{ shopId: targetShopId, name: shop.name || `Shop ${targetShopId}`, tekmetricShopId: Number(tekmetricShopId), hasLastRunAt: false }];
         })()
       : await getShopsNeedingBackfill(db);
 
