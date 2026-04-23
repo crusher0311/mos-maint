@@ -470,7 +470,12 @@ async function sweepTerminalStatuses(
   return removedCount;
 }
 
-const CONCURRENT_SHOPS = 5; // Process 5 shops concurrently to stay under rate limits
+// Reduced from 5→3 concurrent shops after observing widespread 429s in
+// production. Combined with the larger in-batch stagger and inter-batch pause
+// below, this roughly halves the per-second burst into Tekmetric.
+const CONCURRENT_SHOPS = 3;
+const IN_BATCH_STAGGER_MS = 1000;   // was 400
+const BETWEEN_BATCH_PAUSE_MS = 2500; // was 1000
 
 export async function runIncrementalSyncCycle(): Promise<{
   results: IncrementalSyncResult[];
@@ -501,19 +506,19 @@ export async function runIncrementalSyncCycle(): Promise<{
     const batch = shopStates.slice(i, i + CONCURRENT_SHOPS);
     
     const batchPromises = batch.map(async (state, index) => {
-      // Small stagger within batch (0-2 seconds) to avoid burst
+      // Stagger within batch to avoid bursting Tekmetric on each batch start.
       if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, index * 400));
+        await new Promise(resolve => setTimeout(resolve, index * IN_BATCH_STAGGER_MS));
       }
       return syncShopIncremental(state.shopId, state.tekmetricShopId, state, state.xAuthToken);
     });
-    
+
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
-    
-    // Small pause between batches to avoid overwhelming API
+
+    // Pause between batches to give Tekmetric's per-IP rate limit room to recover.
     if (i + CONCURRENT_SHOPS < shopStates.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, BETWEEN_BATCH_PAUSE_MS));
     }
   }
 

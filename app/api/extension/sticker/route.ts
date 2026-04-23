@@ -384,44 +384,62 @@ async function resolveBookingDataServerSide(
     }
   }
 
-  // Strategy 2: Look up vehicle from Tekmetric API by VIN
+  // Strategy 2: Look up vehicle from Tekmetric API by VIN.
+  // Bounded by STRATEGY2_TIMEOUT_MS so a 429-throttled Tekmetric retry storm
+  // (which can otherwise sit ~60s on backoff) cannot stall the caller. If the
+  // timeout fires we fall through to Strategy 3 (extension-provided hints).
+  const STRATEGY2_TIMEOUT_MS = 5000;
   if (tekmetricShopId && vin && (!result.vehicleId || !result.customerName)) {
-    try {
+    const strategy2 = (async () => {
       const { getVehicles, getCustomer } = await import("@/lib/tekmetric");
       const vehicleResult = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
 
-      if (vehicleResult.content && vehicleResult.content.length > 0) {
-        const match = vehicleResult.content.find((v: any) => v.vin?.toUpperCase() === vin.toUpperCase());
-        if (match) {
-          result.vehicleId = String(match.id);
-          result.vehicleYear = match.year;
-          result.vehicleMake = match.make;
-          result.vehicleModel = match.model;
+      if (!vehicleResult.content || vehicleResult.content.length === 0) return false;
+      const match = vehicleResult.content.find((v: any) => v.vin?.toUpperCase() === vin.toUpperCase());
+      if (!match) return false;
 
-          if (match.customerId && !result.customerId) {
-            result.customerId = String(match.customerId);
+      result.vehicleId = String(match.id);
+      result.vehicleYear = match.year;
+      result.vehicleMake = match.make;
+      result.vehicleModel = match.model;
 
-            try {
-              const customerData = await getCustomer(match.customerId, shop?.shopId ? Number(shop.shopId) : undefined);
-              if (customerData) {
-                const firstName = customerData.firstName || "";
-                const lastName = customerData.lastName || "";
-                result.customerName = `${firstName} ${lastName}`.trim() || undefined;
-                if (customerData.phone?.[0]?.number) {
-                  result.customerPhone = customerData.phone[0].number.replace(/[^\d]/g, "");
-                }
-                if (customerData.email) {
-                  result.customerEmail = customerData.email;
-                }
-              }
-            } catch (e: any) {
-              console.log(`[Extension Sticker] Customer API lookup failed: ${e.message}`);
+      if (match.customerId && !result.customerId) {
+        result.customerId = String(match.customerId);
+        try {
+          const customerData = await getCustomer(match.customerId, shop?.shopId ? Number(shop.shopId) : undefined);
+          if (customerData) {
+            const firstName = customerData.firstName || "";
+            const lastName = customerData.lastName || "";
+            result.customerName = `${firstName} ${lastName}`.trim() || undefined;
+            if (customerData.phone?.[0]?.number) {
+              result.customerPhone = customerData.phone[0].number.replace(/[^\d]/g, "");
+            }
+            if (customerData.email) {
+              result.customerEmail = customerData.email;
             }
           }
-
-          console.log(`[Extension Sticker] Resolved booking data from Tekmetric API: ${result.customerName}, ${result.vehicleYear} ${result.vehicleMake} ${result.vehicleModel}`);
-          return result;
+        } catch (e: any) {
+          console.log(`[Extension Sticker] Customer API lookup failed: ${e.message}`);
         }
+      }
+
+      console.log(`[Extension Sticker] Resolved booking data from Tekmetric API: ${result.customerName}, ${result.vehicleYear} ${result.vehicleMake} ${result.vehicleModel}`);
+      return true;
+    })();
+
+    const timeoutSentinel = Symbol("strategy2_timeout");
+    const timed: Promise<typeof timeoutSentinel> = new Promise((resolve) =>
+      setTimeout(() => resolve(timeoutSentinel), STRATEGY2_TIMEOUT_MS),
+    );
+
+    try {
+      const outcome = await Promise.race([strategy2, timed]);
+      if (outcome === timeoutSentinel) {
+        console.log(
+          `[Extension Sticker] Tekmetric lookup exceeded ${STRATEGY2_TIMEOUT_MS}ms (likely 429-throttled); falling through to extension hints`,
+        );
+      } else if (outcome === true) {
+        return result;
       }
     } catch (e: any) {
       console.log(`[Extension Sticker] Tekmetric API lookup failed: ${e.message}`);
@@ -794,25 +812,33 @@ export async function POST(request: NextRequest) {
       unit,
     });
 
-    // Trigger auto booking - resolve customer/vehicle data server-side
-    let bookingResult: { queued: boolean; bookingId?: string; status?: string; error?: string } | null = null;
+    // Trigger auto booking — fire-and-forget so the sticker response is never
+    // blocked by Tekmetric/MongoDB latency. Previously this awaited the
+    // booking lookup synchronously, which could exceed the extension's 30s
+    // client timeout when Tekmetric was 429-throttling.
     if (mosShopId && vin) {
-      const bookingData = await resolveBookingDataServerSide(
-        db, shop, vin, provider,
-        { customerId, customerName, customerPhone, customerEmail, vehicleId, vehicleYear, vehicleMake, vehicleModel, roNumber }
-      );
-      
-      if (bookingData.customerName || bookingData.customerId) {
-        bookingResult = await triggerAutoBookingFromSticker(
-          mosShopId,
-          nextServiceDate,
-          nextServiceMileage,
-          bookingData
-        );
-        console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
-      } else {
-        console.log(`[Extension Sticker] Skipping auto booking - could not resolve customer for VIN ${vin}`);
-      }
+      void (async () => {
+        try {
+          const bookingData = await resolveBookingDataServerSide(
+            db, shop, vin, provider,
+            { customerId, customerName, customerPhone, customerEmail, vehicleId, vehicleYear, vehicleMake, vehicleModel, roNumber }
+          );
+
+          if (bookingData.customerName || bookingData.customerId) {
+            const bookingResult = await triggerAutoBookingFromSticker(
+              mosShopId,
+              nextServiceDate,
+              nextServiceMileage,
+              bookingData,
+            );
+            console.log(`[Extension Sticker] Auto booking result for shop ${mosShopId}:`, bookingResult);
+          } else {
+            console.log(`[Extension Sticker] Skipping auto booking - could not resolve customer for VIN ${vin}`);
+          }
+        } catch (bookingErr: any) {
+          console.error(`[Extension Sticker] Background auto-booking failed for shop ${mosShopId} VIN ${vin}:`, bookingErr?.message || bookingErr);
+        }
+      })();
     }
 
     const base64Image = image.toString("base64");
@@ -831,7 +857,10 @@ export async function POST(request: NextRequest) {
         nextServiceDate,
         unit,
       },
-      booking: bookingResult,
+      // Auto-booking now runs fire-and-forget (see above) so it cannot be
+      // included synchronously in the response. The extension does not read
+      // this field; kept as null for backwards compatibility.
+      booking: null,
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Sticker] Generate error:", error);
