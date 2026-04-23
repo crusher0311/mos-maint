@@ -7,6 +7,7 @@ import {
   resetTekmetricApiCallCount,
   getRepairOrderInspectionsWithXAuth,
 } from "@/lib/integrations/tekmetric/client";
+import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +18,6 @@ const CRON_SECRET = process.env.CRON_SECRET;
 const MAX_SHOPS_PER_RUN = 10;
 const MAX_ROS_PER_SHOP = 10;
 const MAX_TOTAL_ROS = 50;
-const MAX_RETRY_ATTEMPTS = 3;
 const RECOVERED_HISTORY_CAP = 25;
 
 type SkippedSample = {
@@ -252,40 +252,55 @@ async function fetchAndIndexSingleRo(
   return { ok: true, jobsIndexed };
 }
 
-async function processShop(
-  db: any,
-  progressRow: any,
-  budgetRemaining: number,
-): Promise<{
+type PerRoResult = {
+  roId: number;
+  status: "recovered" | "still_failing" | "permanently_failed";
+  attempts: number;
+  jobsIndexed?: number;
+  error?: string;
+};
+
+type ProcessShopResult = {
   attempted: number;
   recovered: number;
   stillFailing: number;
   permanentlyFailed: number;
-}> {
+  perRo: PerRoResult[];
+  reason?: string;
+};
+
+async function processShop(
+  db: any,
+  progressRow: any,
+  budgetRemaining: number,
+  options?: { maxRos?: number },
+): Promise<ProcessShopResult> {
   const shopId = Number(progressRow.shopId);
   const shop = await db.collection("shops").findOne({ shopId });
   if (!shop) {
-    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0 };
+    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0, perRo: [], reason: "shop_not_found" };
   }
   const tekmetricShopId = Number(shop.tekmetric?.shopId || shop.tekmetricShopId);
   if (!tekmetricShopId) {
-    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0 };
+    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0, perRo: [], reason: "no_tekmetric_shop_id" };
   }
 
   const skipped: SkippedSample[] = Array.isArray(progressRow.recentSkippedRos)
     ? progressRow.recentSkippedRos
     : [];
   // Skip rows whose RO is already permanently failed.
+  const maxRos = options?.maxRos ?? MAX_ROS_PER_SHOP;
   const candidates = skipped
     .filter((s) => !s.permanentlyFailed && (s.retryAttempts || 0) < MAX_RETRY_ATTEMPTS)
-    .slice(0, Math.min(MAX_ROS_PER_SHOP, budgetRemaining));
+    .slice(0, Math.min(maxRos, budgetRemaining));
 
   if (candidates.length === 0) {
-    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0 };
+    return { attempted: 0, recovered: 0, stillFailing: 0, permanentlyFailed: 0, perRo: [], reason: "no_eligible_ros" };
   }
 
   const recoveredIds = new Set<number>();
   const failureUpdates = new Map<number, { error: string; attempts: number; permanent: boolean }>();
+  const perRo: PerRoResult[] = [];
   let recovered = 0;
   let stillFailing = 0;
   let permanentlyFailed = 0;
@@ -295,16 +310,29 @@ async function processShop(
     if (result.ok) {
       recoveredIds.add(sample.roId);
       recovered++;
+      perRo.push({
+        roId: sample.roId,
+        status: "recovered",
+        attempts: (sample.retryAttempts || 0) + 1,
+        jobsIndexed: result.jobsIndexed,
+      });
     } else {
       const attempts = (sample.retryAttempts || 0) + 1;
       const permanent = attempts >= MAX_RETRY_ATTEMPTS;
+      const errMsg = (result.error || "").slice(0, 300);
       failureUpdates.set(sample.roId, {
-        error: (result.error || "").slice(0, 300),
+        error: errMsg,
         attempts,
         permanent,
       });
       if (permanent) permanentlyFailed++;
       else stillFailing++;
+      perRo.push({
+        roId: sample.roId,
+        status: permanent ? "permanently_failed" : "still_failing",
+        attempts,
+        error: errMsg,
+      });
     }
     // tiny breather between ROs
     await new Promise((r) => setTimeout(r, 100));
@@ -375,10 +403,35 @@ async function processShop(
     recovered,
     stillFailing,
     permanentlyFailed,
+    perRo,
   };
 }
 
-async function runRetry(db: any) {
+export async function retryShopSkippedRos(
+  db: any,
+  shopId: number,
+  options?: { maxRos?: number },
+): Promise<ProcessShopResult & { shopId: number }> {
+  const progressRow = await db
+    .collection("tekmetric_backfill_progress")
+    .findOne({ shopId });
+  if (!progressRow) {
+    return {
+      shopId,
+      attempted: 0,
+      recovered: 0,
+      stillFailing: 0,
+      permanentlyFailed: 0,
+      perRo: [],
+      reason: "no_progress_row",
+    };
+  }
+  const budget = options?.maxRos ?? MAX_ROS_PER_SHOP;
+  const result = await processShop(db, progressRow, budget, options);
+  return { shopId, ...result };
+}
+
+export async function runRetry(db: any) {
   // Pull progress rows that have any non-permanent skipped ROs to retry.
   const rows = await db
     .collection("tekmetric_backfill_progress")

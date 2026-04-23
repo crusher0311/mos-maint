@@ -13,6 +13,7 @@ import {
   SkipForward,
   ShieldCheck,
 } from "lucide-react";
+import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
 interface SkippedRoSample {
   roId: number;
@@ -145,6 +146,8 @@ export default function SyncHealthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<number | null>(null);
+  const [retryingRo, setRetryingRo] = useState<number | null>(null);
+  const [retryingAllRo, setRetryingAllRo] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -185,6 +188,76 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to trigger backfill");
     } finally {
       setTriggering(null);
+    }
+  };
+
+  const retryShopRos = async (shopId: number) => {
+    if (!confirm(`Retry skipped repair orders for shop ${shopId} now?`)) return;
+    setRetryingRo(shopId);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shopId}/ro-retry`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to retry skipped ROs");
+      } else {
+        const lines: string[] = [
+          `Shop ${shopId}: attempted ${json.attempted}`,
+          `recovered ${json.recovered} · still failing ${json.stillFailing} · gave up ${json.permanentlyFailed}`,
+        ];
+        if (json.reason) lines.push(`(${json.reason})`);
+        if (Array.isArray(json.perRo) && json.perRo.length > 0) {
+          lines.push("");
+          for (const r of json.perRo.slice(0, 20)) {
+            const tag =
+              r.status === "recovered"
+                ? "OK"
+                : r.status === "permanently_failed"
+                  ? "GAVE UP"
+                  : "FAIL";
+            const detail = r.error
+              ? ` — ${r.error.slice(0, 80)}`
+              : r.jobsIndexed != null
+                ? ` (${r.jobsIndexed} jobs)`
+                : "";
+            lines.push(`RO ${r.roId} [${tag}, ${r.attempts} att]${detail}`);
+          }
+        }
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to retry skipped ROs");
+    } finally {
+      setRetryingRo(null);
+    }
+  };
+
+  const retryAllRos = async () => {
+    if (!confirm("Retry skipped repair orders across all eligible shops now?"))
+      return;
+    setRetryingAllRo(true);
+    try {
+      const res = await fetch(`/api/platform-admin/tekmetric-ro-retry`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to retry skipped ROs");
+      } else {
+        alert(
+          `Processed ${json.shopsProcessed}/${json.shopsConsidered} shops\n` +
+            `attempted ${json.totalAttempted} · recovered ${json.totalRecovered} · ` +
+            `still failing ${json.totalStillFailing} · gave up ${json.totalPermanentlyFailed}`,
+        );
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to retry skipped ROs");
+    } finally {
+      setRetryingAllRo(false);
     }
   };
 
@@ -360,9 +433,10 @@ export default function SyncHealthPage() {
     shops: RoSkipShop[] | undefined,
   ) => {
     const list = shops || [];
+    const isTekmetric = providerLabel === "Tekmetric";
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-rose-600" />
             <h2 className="font-semibold text-gray-900">
@@ -372,10 +446,27 @@ export default function SyncHealthPage() {
               {list.length} shop{list.length === 1 ? "" : "s"}
             </span>
           </div>
-          <p className="text-xs text-gray-500">
-            Individual ROs that threw inside an otherwise-processed chunk and
-            were silently dropped. Recurring = skipped 2+ runs in a row.
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-gray-500 hidden md:block">
+              Individual ROs that threw inside an otherwise-processed chunk and
+              were silently dropped. Recurring = skipped 2+ runs in a row.
+            </p>
+            {isTekmetric && list.length > 0 && (
+              <button
+                onClick={retryAllRos}
+                disabled={retryingAllRo || retryingRo !== null}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                title="Run the skipped-RO retry job now across eligible shops"
+              >
+                {retryingAllRo ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                Retry all now
+              </button>
+            )}
+          </div>
         </div>
 
         {list.length === 0 ? (
@@ -408,6 +499,9 @@ export default function SyncHealthPage() {
                   </th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
                     Recently skipped RO ids (attempts · error)
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -460,7 +554,7 @@ export default function SyncHealthPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 max-w-xl">
-                        {s.recentSkippedRos.length === 0 ? (
+                        {(s.recentSkippedRos || []).length === 0 ? (
                           <span className="text-gray-400">—</span>
                         ) : (
                           <ul className="space-y-1">
@@ -502,6 +596,31 @@ export default function SyncHealthPage() {
                               );
                             })}
                           </ul>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isTekmetric && (
+                          <button
+                            onClick={() => retryShopRos(s.shopId)}
+                            disabled={
+                              retryingRo === s.shopId ||
+                              retryingAllRo ||
+                              !(s.recentSkippedRos || []).some(
+                                (r) =>
+                                  !r.permanentlyFailed &&
+                                  (r.retryAttempts ?? 0) < MAX_RETRY_ATTEMPTS,
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                            title="Retry this shop's skipped repair orders now"
+                          >
+                            {retryingRo === s.shopId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                            Retry now
+                          </button>
                         )}
                       </td>
                     </tr>
