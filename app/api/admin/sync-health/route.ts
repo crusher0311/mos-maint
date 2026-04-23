@@ -37,13 +37,23 @@ function computeStuckDiagnostics(progressRows: any[]) {
         reasons.push("recurring_ro_skips");
       }
 
-      const recentSkippedRos = Array.isArray(p.recentSkippedRos)
-        ? p.recentSkippedRos.slice(0, 10).map((s: any) => ({
-            roId: s.roId,
-            error: s.error || null,
-            at: s.at || null,
-          }))
+      const recentSkippedRosFull: any[] = Array.isArray(p.recentSkippedRos)
+        ? p.recentSkippedRos
         : [];
+      const recentSkippedRos = recentSkippedRosFull.slice(0, 10).map((s: any) => ({
+        roId: s.roId,
+        error: s.error || null,
+        at: s.at || null,
+        retryAttempts: Number(s.retryAttempts || 0),
+        lastRetryAt: s.lastRetryAt || null,
+        lastRetryError: s.lastRetryError || null,
+        permanentlyFailed: !!s.permanentlyFailed,
+      }));
+      const stillFailingRoCount = recentSkippedRosFull.filter(
+        (s: any) => !s.permanentlyFailed,
+      ).length;
+      const permanentlyFailedRoCount = Number(p.permanentlyFailedRoCount || 0);
+      const recoveredRoCount = Number(p.recoveredRoCount || 0);
 
       return {
         shopId: p.shopId,
@@ -65,6 +75,13 @@ function computeStuckDiagnostics(progressRows: any[]) {
         lastRoSkipAt: p.lastRoSkipAt || null,
         consecutiveRoSkipRuns,
         recentSkippedRos,
+        stillFailingRoCount,
+        permanentlyFailedRoCount,
+        recoveredRoCount,
+        lastRoRetryAt: p.lastRoRetryAt || null,
+        lastRoRetryRecovered: Number(p.lastRoRetryRecovered || 0),
+        lastRoRetryStillFailing: Number(p.lastRoRetryStillFailing || 0),
+        lastRoRetryPermanentlyFailed: Number(p.lastRoRetryPermanentlyFailed || 0),
       };
     })
     .sort((a: any, b: any) => {
@@ -214,7 +231,26 @@ export async function GET() {
             lastRoSkipCount: d.lastRoSkipCount,
             lastRoSkipAt: d.lastRoSkipAt,
             recentSkippedRos: d.recentSkippedRos,
+            stillFailingRoCount: d.stillFailingRoCount,
+            permanentlyFailedRoCount: d.permanentlyFailedRoCount,
+            recoveredRoCount: d.recoveredRoCount,
+            lastRoRetryAt: d.lastRoRetryAt,
+            lastRoRetryRecovered: d.lastRoRetryRecovered,
+            lastRoRetryStillFailing: d.lastRoRetryStillFailing,
+            lastRoRetryPermanentlyFailed: d.lastRoRetryPermanentlyFailed,
           })),
+          roRecoveredTotal: tekmetricDiagnostics.reduce(
+            (sum: number, d: any) => sum + (d.recoveredRoCount || 0),
+            0,
+          ),
+          roPermanentlyFailedTotal: tekmetricDiagnostics.reduce(
+            (sum: number, d: any) => sum + (d.permanentlyFailedRoCount || 0),
+            0,
+          ),
+          roStillFailingTotal: tekmetricDiagnostics.reduce(
+            (sum: number, d: any) => sum + (d.stillFailingRoCount || 0),
+            0,
+          ),
         },
         protractor: {
           complete: protractorShopsComplete,

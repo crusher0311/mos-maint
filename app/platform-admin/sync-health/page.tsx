@@ -17,6 +17,10 @@ interface SkippedRoSample {
   roId: number;
   error: string | null;
   at: string | null;
+  retryAttempts?: number;
+  lastRetryAt?: string | null;
+  lastRetryError?: string | null;
+  permanentlyFailed?: boolean;
 }
 
 interface StuckDiagnostic {
@@ -47,6 +51,13 @@ interface RoSkipShop {
   lastRoSkipCount: number;
   lastRoSkipAt: string | null;
   recentSkippedRos: SkippedRoSample[];
+  stillFailingRoCount?: number;
+  permanentlyFailedRoCount?: number;
+  recoveredRoCount?: number;
+  lastRoRetryAt?: string | null;
+  lastRoRetryRecovered?: number;
+  lastRoRetryStillFailing?: number;
+  lastRoRetryPermanentlyFailed?: number;
 }
 
 interface ForceSkippedWindow {
@@ -69,6 +80,9 @@ interface ProviderBackfill {
   roSkipShopCount?: number;
   recurringRoSkipShopCount?: number;
   roSkipShops?: RoSkipShop[];
+  roRecoveredTotal?: number;
+  roPermanentlyFailedTotal?: number;
+  roStillFailingTotal?: number;
 }
 
 interface SyncHealthData {
@@ -367,16 +381,22 @@ export default function SyncHealthPage() {
                     Shop ID
                   </th>
                   <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
-                    Consecutive runs
+                    Recovered
                   </th>
                   <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
-                    Last run skips
+                    Still failing
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Permanently failed
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Consecutive runs
                   </th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
-                    Last skip at
+                    Last retry
                   </th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
-                    Recently skipped RO ids (with error)
+                    Recently skipped RO ids (attempts · error)
                   </th>
                 </tr>
               </thead>
@@ -389,6 +409,21 @@ export default function SyncHealthPage() {
                         {s.shopId}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+                          {s.recoveredRoCount ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">
+                          {s.stillFailingRoCount ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-rose-100 text-rose-800">
+                          {s.permanentlyFailedRoCount ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
                         <span
                           className={`px-2 py-0.5 rounded-full text-xs ${
                             recurring
@@ -399,35 +434,62 @@ export default function SyncHealthPage() {
                           {s.consecutiveRoSkipRuns}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-900">
-                        {s.lastRoSkipCount}
-                      </td>
                       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                        {formatDateTime(s.lastRoSkipAt)}
+                        {s.lastRoRetryAt ? (
+                          <div>
+                            <div>{formatDateTime(s.lastRoRetryAt)}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              recovered {s.lastRoRetryRecovered ?? 0} ·
+                              still failing {s.lastRoRetryStillFailing ?? 0} ·
+                              gave up {s.lastRoRetryPermanentlyFailed ?? 0}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">never</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 max-w-xl">
                         {s.recentSkippedRos.length === 0 ? (
                           <span className="text-gray-400">—</span>
                         ) : (
                           <ul className="space-y-1">
-                            {s.recentSkippedRos.map((r) => (
-                              <li
-                                key={r.roId}
-                                className="font-mono text-xs text-gray-700"
-                              >
-                                <span className="text-rose-700">{r.roId}</span>
-                                {r.error && (
+                            {s.recentSkippedRos.map((r) => {
+                              const attempts = r.retryAttempts ?? 0;
+                              const errMsg = r.lastRetryError || r.error;
+                              return (
+                                <li
+                                  key={r.roId}
+                                  className="font-mono text-xs text-gray-700"
+                                >
                                   <span
-                                    className="text-gray-500 ml-2"
-                                    title={r.error}
+                                    className={
+                                      r.permanentlyFailed
+                                        ? "text-rose-800 font-semibold"
+                                        : "text-rose-700"
+                                    }
                                   >
-                                    {r.error.length > 80
-                                      ? r.error.slice(0, 80) + "…"
-                                      : r.error}
+                                    {r.roId}
                                   </span>
-                                )}
-                              </li>
-                            ))}
+                                  <span className="text-gray-400 ml-2">
+                                    {attempts > 0
+                                      ? `[${attempts} retr${attempts === 1 ? "y" : "ies"}${
+                                          r.permanentlyFailed ? " · gave up" : ""
+                                        }]`
+                                      : "[not retried yet]"}
+                                  </span>
+                                  {errMsg && (
+                                    <span
+                                      className="text-gray-500 ml-2"
+                                      title={errMsg}
+                                    >
+                                      {errMsg.length > 80
+                                        ? errMsg.slice(0, 80) + "…"
+                                        : errMsg}
+                                    </span>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                       </td>
@@ -666,6 +728,23 @@ export default function SyncHealthPage() {
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {tek?.recurringRoSkipShopCount ?? 0} recurring (2+ runs)
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+            </div>
+            <span className="text-sm text-gray-600">Recovered ROs (Tek)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {tek?.roRecoveredTotal ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {tek?.roStillFailingTotal ?? 0} still failing ·
+            {" "}
+            {tek?.roPermanentlyFailedTotal ?? 0} permanently failed
           </div>
         </div>
       </div>
