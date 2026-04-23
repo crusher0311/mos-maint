@@ -1,0 +1,50 @@
+2026-04-23T12:58:06Z clientIP="72.198.61.82" requestID="4a3ad1a7-7b0c-4d07" responseTimeMS=862 responseBytes=600 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-23T12:58:06.391892009Z [Tekmetric] 429 on /repair-orders/303414964 (attempt 2/5), backing off 4302ms
+2026-04-23T12:58:06.392295171Z [Tekmetric] 429 on /repair-orders?shop=15807&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T12%3A45%3A45.325Z&sortDirection=DESC (attempt 3/5), backing off 8583ms
+2026-04-23T12:58:06.433039735Z [Tekmetric] 429 on /repair-orders/154797638 (attempt 5/5), backing off 32786ms
+2026-04-23T12:58:06.436591293Z [Tekmetric] 429 on /repair-orders/274265015 (attempt 1/5), backing off 2584ms
+2026-04-23T12:58:06.4898985Z [PlanCache] MISS: No cache entry for 1GYS4DEF1DR277611
+2026-04-23T12:58:06.489916721Z [VHI Rebuild] No cached plan for 1GYS4DEF1DR277611 at shop 101, triggering build...
+2026-04-23T12:58:06.492532715Z [Tekmetric] 429 on /repair-orders?shop=12764&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T10%3A50%3A42.774Z&sortDirection=DESC (attempt 2/5), backing off 4567ms
+2026-04-23T12:58:06.533879039Z [Tekmetric] 429 on /repair-orders/115194148 (attempt 1/5), backing off 2657ms
+2026-04-23T12:58:06.545151017Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 322322685 via stored x-auth-token
+2026-04-23T12:58:06.611827534Z [PlanCache] MISS: No cache entry for 1GYS4DEF1DR277611
+2026-04-23T12:58:06.612226651Z [PlanBuild] Shop 101: Building full plan for 1GYS4DEF1DR277611 at 152125 miles
+2026-04-23T12:58:06.631545003Z [Tekmetric] 429 on /repair-orders?shop=11803&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T11%3A17%3A36.220Z&sortDirection=DESC (attempt 1/5), backing off 2696ms
+2026-04-23T12:58:06.63374877Z [Tekmetric] 429 on /repair-orders/254622106 (attempt 2/5), backing off 4278ms
+2026-04-23T12:58:06.691240541Z [Tekmetric] 429 on /repair-orders/305130624 (attempt 1/5), backing off 2040ms
+2026-04-23T12:58:06.73464358Z [Tekmetric] 429 on /repair-orders/114411321 (attempt 4/5), backing off 16719ms
+2026-04-23T12:58:06.745945447Z [Tekmetric] 429 on /repair-orders/116077935 (attempt 1/5), backing off 2442ms
+2026-04-23T12:58:06.771887108Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-23T12:58:06.776940346Z [Extension Auth Token] Stored x-auth-token for shop 99 (tekmetric 6685) from info@autoworksmn.com
+2026-04-23T12:58:06.789381906Z [InternalAPI] Error fetching vehicles: connection 834 to 89.193.213.168:27017 timed out
+2026-04-23T12:58:06.790275117Z [PlanPrefetch] Shop 25: Failed to get vehicles (500)
+2026-04-23T12:58:06.802641425Z [DataOne Cache] HIT for squish 1GYS4DEFDR, cached at 2026-04-22T14:07:34.709Z
+2026-04-23T12:58:06.803337718Z [AutoFlow Config] Shop 101: domain=, base=, configured=false
+2026-04-23T12:58:06.830551479Z [Tekmetric] 429 on /repair-orders/154388416 (attempt 5/5), backing off 32806ms
+2026-04-23T12:58:06.841791226Z [Tekmetric] 429 on /repair-orders?shop=469&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T12%3A50%3A41.544Z&sortDirection=DESC (attempt 3/5), backing off 8050ms
+2026-04-23T12:58:06.842871873Z [Tekmetric Webhook NIS] shop=101 ro=322765052 → WO 0c/0u/1s, payments=0, inspections=0
+2026-04-23T12:58:06.895066361Z [Tekmetric] 429 on /repair-orders/114719320 (attempt 4/5), backing off 16918ms
+2026-04-23T12:58:06.930456046Z [Tekmetric] 429 on /repair-orders/240746924 (attempt 1/5), backing off 2093ms
+2026-04-23T12:58:06.942835757Z [Tekmetric] 429 on /repair-orders/305131495 (attempt 3/5), backing off 8263ms
+2026-04-23T12:58:07.002724726Z [Tekmetric] 429 on /repair-orders/115752623 (attempt 1/5), backing off 2557ms
+2026-04-23T12:58:07.034350569Z [Tekmetric] 429 on /repair-orders/252513188 (attempt 1/5), backing off 2859ms
+2026-04-23T12:58:07.034893165Z [Tekmetric] 429 on /repair-orders/321224397 (attempt 2/5), backing off 4207ms
+2026-04-23T12:58:07.042292408Z [Tekmetric] 429 on /repair-orders?shop=14956&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T12%3A54%3A30.992Z&sortDirection=DESC (attempt 3/5), backing off 8152ms
+2026-04-23T12:58:07.097028086Z [Tekmetric Incremental] Shop 87: Fetched page 0, got 11 ROs (updated since 2026-04-23T11:05:43.399Z)
+2026-04-23T12:58:07.100470519Z [Tekmetric] 429 on /repair-orders/306710593 (attempt 4/5), backing off 16007ms
+2026-04-23T12:58:07.133875028Z [Tekmetric] 429 on /repair-orders/153730037 (attempt 1/5), backing off 2142ms
+2026-04-23T12:58:07.187470732Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 319048992 via stored x-auth-token
+2026-04-23T12:58:07.202753816Z [Tekmetric] 429 on /repair-orders/253922289 (attempt 5/5), backing off 32514ms
+2026-04-23T12:58:07.225132437Z [PlanBuild] Shop 101 VIN 1GYS4DEF1DR277611: pulled 12 job_index entries as shop-history fallback
+2026-04-23T12:58:07.225429522Z [PlanBuild] Shop 101 VIN 1GYS4DEF1DR277611: 2 unmatched job names: BG Brake System Service | Engine Clean and DYE Leak Test Includes Wash & Recheck for Leaks
+2026-04-23T12:58:07.225449833Z [PlanBuild] Tekmetric DVI: 15 findings from cached inspections on RO 322570582
+2026-04-23T12:58:07.233904606Z [Tekmetric] 429 on /repair-orders/255008315 (attempt 1/5), backing off 2592ms
+2026-04-23T12:58:07.239758873Z [Tekmetric] 429 on /repair-orders/116674173 (attempt 1/5), backing off 2248ms
+2026-04-23T12:58:07.332915755Z [Tekmetric] 429 on /repair-orders?shop=17156&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T09%3A37%3A47.741Z&sortDirection=DESC (attempt 1/5), backing off 2216ms
+2026-04-23T12:58:07.341926363Z [Tekmetric] 429 on /repair-orders?shop=1714&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T11%3A49%3A40.087Z&sortDirection=DESC (attempt 1/5), backing off 2508ms
+2026-04-23T12:58:07.357498593Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 320268667 via stored x-auth-token
+2026-04-23T12:58:07.402110354Z [Tekmetric] 429 on /repair-orders/113837474 (attempt 2/5), backing off 4847ms
+2026-04-23T12:58:07.435080095Z [Tekmetric] 429 on /repair-orders?shop=11207&repairOrderStatusId=1&repairOrderStatusId=2&repairOrderStatusId=3&repairOrderStatusId=4&page=0&size=100&updatedDateStart=2026-04-23T10%3A23%3A44.708Z&sortDirection=DESC (attempt 5/5), backing off 32323ms
+2026-04-23T12:58:07.470360786Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-04-23T12:58:07.471637446Z [PlanPrefetch] Shop 28: Processing 15 vehicles
