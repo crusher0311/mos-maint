@@ -89,6 +89,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
     "/platform-admin/plan-features",
     "/platform-admin/service-mappings",
     "/platform-admin/client-health",
+    "/platform-admin/sync-health",
     "/platform-admin/logs",
   ];
 
@@ -366,6 +367,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
               </CollapsibleSection>
 
               <NavLink href="/platform-admin/client-health" icon={HeartPulse} label="Client Health" />
+              <NavLink href="/platform-admin/sync-health" icon={Activity} label="Sync Health" />
               <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />
               <NavLink href="/platform-admin/partner-keys" icon={KeyRound} label="Partner Keys" />
               <NavLink href="/platform-admin/job-analytics" icon={BarChart3} label="Job Analytics" />
