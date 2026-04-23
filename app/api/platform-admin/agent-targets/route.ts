@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
   getAgentTargets,
@@ -9,6 +10,9 @@ import {
 } from "@/lib/db/repositories/call-center";
 
 export async function GET(request: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { searchParams } = new URL(request.url);
@@ -28,6 +32,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const body = await request.json();
@@ -39,6 +46,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const body = await request.json();
@@ -52,6 +62,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { searchParams } = new URL(request.url);

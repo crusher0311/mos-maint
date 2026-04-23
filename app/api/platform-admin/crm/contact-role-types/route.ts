@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { contactRoleTypeRepo } from "@/lib/db/repositories/crm-contacts";
 
 export async function GET() {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const roleTypes = await contactRoleTypeRepo.list();
@@ -14,6 +18,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const body = await req.json();
@@ -28,6 +35,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const body = await req.json();
@@ -42,6 +52,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const url = new URL(req.url);

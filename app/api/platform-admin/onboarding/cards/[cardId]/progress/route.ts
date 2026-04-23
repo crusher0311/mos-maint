@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin, getSession } from "@/lib/auth";
 import { OnboardingRepository } from "@/lib/repositories/onboarding-repository";
 
 const repo = new OnboardingRepository();
 
 export async function POST(req: NextRequest, { params }: { params: { cardId: string } }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     const session = await requirePlatformAdmin();
     const { cardId } = await params;

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { OnboardingRepository } from "@/lib/repositories/onboarding-repository";
 
 const repo = new OnboardingRepository();
 
 export async function GET() {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const cards = await repo.getCards();
@@ -15,6 +19,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const data = await req.json();

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { dealRepo } from "@/lib/db/repositories/sales-marketing";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { id } = await params;
@@ -16,6 +20,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { id } = await params;

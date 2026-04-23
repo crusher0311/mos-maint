@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { entityNoteRepo } from "@/lib/db/repositories/crm-contacts";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { id } = await params;
@@ -15,6 +19,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     const session = await requirePlatformAdmin();
     const { id } = await params;
@@ -34,6 +41,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const url = new URL(req.url);

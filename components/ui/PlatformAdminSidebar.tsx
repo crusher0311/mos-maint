@@ -61,11 +61,12 @@ interface PlatformAdminSidebarProps {
   userEmail?: string;
   isMobile?: boolean;
   onClose?: () => void;
+  crmEnabled?: boolean;
 }
 
 type SidebarTab = "crm" | "ops";
 
-export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformAdminSidebarProps) {
+export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled = false }: PlatformAdminSidebarProps) {
   const pathname = usePathname();
   const [openTicketCount, setOpenTicketCount] = useState(0);
 
@@ -94,12 +95,15 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
   const isOnOpsPage = opsPaths.some(p => pathname?.startsWith(p));
   const isOverview = pathname === "/platform-admin";
 
-  const [activeTab, setActiveTab] = useState<SidebarTab>(isOnOpsPage ? "ops" : "crm");
+  const [activeTab, setActiveTab] = useState<SidebarTab>(
+    !crmEnabled || isOnOpsPage ? "ops" : "crm"
+  );
 
   useEffect(() => {
-    if (isOnOpsPage) setActiveTab("ops");
+    if (!crmEnabled) setActiveTab("ops");
+    else if (isOnOpsPage) setActiveTab("ops");
     else if (!isOverview) setActiveTab("crm");
-  }, [pathname, isOnOpsPage, isOverview]);
+  }, [pathname, isOnOpsPage, isOverview, crmEnabled]);
 
   const [crmExpanded, setCrmExpanded] = useState(false);
   const [commsExpanded, setCommsExpanded] = useState(false);
@@ -226,37 +230,39 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
       </div>
 
       {/* ─── CRM / OPS Tab Switcher ─── */}
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex bg-slate-800 rounded-lg p-0.5">
-          <button
-            onClick={() => setActiveTab("crm")}
-            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-              activeTab === "crm"
-                ? "bg-[rgba(60,129,195,0.75)] text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            CRM
-          </button>
-          <button
-            onClick={() => setActiveTab("ops")}
-            className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-              activeTab === "ops"
-                ? "bg-[rgba(60,129,195,0.75)] text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            OPS
-          </button>
+      {crmEnabled && (
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex bg-slate-800 rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveTab("crm")}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
+                activeTab === "crm"
+                  ? "bg-[rgba(60,129,195,0.75)] text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              CRM
+            </button>
+            <button
+              onClick={() => setActiveTab("ops")}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
+                activeTab === "ops"
+                  ? "bg-[rgba(60,129,195,0.75)] text-white shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              OPS
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <nav className="flex-1 p-4 pt-2 overflow-y-auto">
         <ul className="space-y-1">
           <NavLink href="/platform-admin" icon={LayoutDashboard} label="Overview" />
 
           {/* ─── CRM Tab ─── */}
-          {activeTab === "crm" && (
+          {crmEnabled && activeTab === "crm" && (
             <>
               <CollapsibleSection label="Account Hierarchy" icon={Store} expanded={crmExpanded} onToggle={() => setCrmExpanded(!crmExpanded)} isSection={!!isCrmHierarchySection}>
                 <NavLink href="/platform-admin/crm/agencies" icon={Building2} label="Agencies" indent />
@@ -275,7 +281,9 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                 <NavLink href="/platform-admin/call-logs" icon={Phone} label="Call Logs" indent />
                 <NavLink href="/platform-admin/rescue-rover" icon={Bot} label="Rescue Rover" indent />
                 <NavLink href="/platform-admin/phone-numbers" icon={Phone} label="Phone Numbers" indent />
-                <NavLink href="/platform-admin/agent-groups" icon={Users} label="Agent Groups" indent />
+                {crmEnabled && (
+                  <NavLink href="/platform-admin/agent-groups" icon={Users} label="Agent Groups" indent />
+                )}
                 <NavLink href="/platform-admin/time-tracking" icon={Clock} label="Time Tracking" indent />
                 <NavLink href="/platform-admin/call-dashboard" icon={Headphones} label="Call Dashboard" indent />
                 <NavLink href="/platform-admin/canned-messages" icon={MessageCircle} label="Canned Messages" indent />
@@ -318,6 +326,21 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           {/* ─── OPS Tab ─── */}
           {activeTab === "ops" && (
             <>
+              {/* When CRM is disabled, surface Communications here so the
+                  comms pages remain reachable from the sidebar. */}
+              {!crmEnabled && (
+                <CollapsibleSection label="Communications" icon={MessageSquare} expanded={commsExpanded} onToggle={() => setCommsExpanded(!commsExpanded)} isSection={isCommsSection}>
+                  <NavLink href="/platform-admin/conversations" icon={MessageSquare} label="Conversations" indent />
+                  <NavLink href="/platform-admin/voicemails" icon={Voicemail} label="Voicemails" indent />
+                  <NavLink href="/platform-admin/call-logs" icon={Phone} label="Call Logs" indent />
+                  <NavLink href="/platform-admin/rescue-rover" icon={Bot} label="Rescue Rover" indent />
+                  <NavLink href="/platform-admin/phone-numbers" icon={Phone} label="Phone Numbers" indent />
+                  <NavLink href="/platform-admin/time-tracking" icon={Clock} label="Time Tracking" indent />
+                  <NavLink href="/platform-admin/call-dashboard" icon={Headphones} label="Call Dashboard" indent />
+                  <NavLink href="/platform-admin/canned-messages" icon={MessageCircle} label="Canned Messages" indent />
+                </CollapsibleSection>
+              )}
+
               <CollapsibleSection label="Enterprises" icon={Shield} expanded={enterprisesExpanded} onToggle={() => setEnterprisesExpanded(!enterprisesExpanded)} isSection={isEnterprisesSection}>
                 <NavLink href="/platform-admin/enterprises" icon={Shield} label="All Enterprises" indent />
                 <li>

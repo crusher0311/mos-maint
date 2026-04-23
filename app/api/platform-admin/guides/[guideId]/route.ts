@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { GuidesRepository } from "@/lib/repositories/onboarding-repository";
 
 const repo = new GuidesRepository();
 
 export async function GET(req: NextRequest, { params }: { params: { guideId: string } }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { guideId } = await params;
@@ -17,6 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: { guideId: str
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { guideId: string } }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { guideId } = await params;
@@ -29,6 +36,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { guideId: s
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { guideId: string } }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { guideId } = await params;

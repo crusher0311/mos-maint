@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
@@ -20,6 +21,9 @@ function generateTempPassword(): string {
 }
 
 export async function POST(req: NextRequest) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   const db = await getDb();
 
   const auth = req.headers.get("authorization");

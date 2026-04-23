@@ -8,11 +8,13 @@ import { Menu } from "lucide-react";
 interface PlatformAdminLayoutClientProps {
   children: ReactNode;
   userEmail?: string;
+  crmEnabled?: boolean;
 }
 
 export function PlatformAdminLayoutClient({ 
   children, 
-  userEmail 
+  userEmail,
+  crmEnabled = false,
 }: PlatformAdminLayoutClientProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -68,12 +70,13 @@ export function PlatformAdminLayoutClient({
           userEmail={userEmail} 
           isMobile={true}
           onClose={() => setIsMobileMenuOpen(false)}
+          crmEnabled={crmEnabled}
         />
       </div>
 
       {/* Desktop Sidebar */}
       <div className="hidden md:block md:w-64 flex-shrink-0">
-        <PlatformAdminSidebar userEmail={userEmail} />
+        <PlatformAdminSidebar userEmail={userEmail} crmEnabled={crmEnabled} />
       </div>
 
       {/* Main Content */}

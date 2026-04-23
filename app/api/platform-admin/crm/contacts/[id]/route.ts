@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { contactRepo } from "@/lib/db/repositories/crm-contacts";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const __gated = crmDisabledResponse();
+  if (__gated) return __gated;
+
   try {
     await requirePlatformAdmin();
     const { id } = await params;
