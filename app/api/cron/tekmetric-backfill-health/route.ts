@@ -39,6 +39,36 @@ const STALE_RUN_HOURS = 48;
 const FROZEN_CURSOR_DAYS = 3;
 const PERSISTENT_ERROR_HOURS = 24;
 
+// Permanently-failed RO alert thresholds. The skipped-RO retry cron marks an
+// RO `permanentlyFailed` after MAX_RETRY_ATTEMPTS unsuccessful retries; that
+// is real, unrecovered data loss. Page on-call when either:
+//   - a shop's permanently-failed count grows by more than N in a rolling
+//     24h window (catches sudden spikes), OR
+//   - the absolute count exceeds ABSOLUTE threshold (catches slow leaks /
+//     shops we just discovered are bad).
+// Re-page only when the count grows beyond what we last alerted on, so the
+// on-call isn't paged daily for the same already-known failures.
+const PERM_FAILED_GROWTH_THRESHOLD = 5;
+const PERM_FAILED_ABSOLUTE_THRESHOLD = 20;
+// Pick the newest snapshot at least this old as the growth baseline.
+// Note: the task brief says "24h window" but on a strictly-daily cron a
+// strict 24h cutoff would miss yesterday's snapshot whenever the run time
+// drifts by even a minute earlier than the prior day. ~18h gives a few
+// hours of jitter tolerance while still being unambiguously "yesterday".
+const PERM_FAILED_BASELINE_MIN_AGE_MS = 18 * 60 * 60 * 1000;
+// We keep a rolling snapshot history per shop so the daily growth check
+// works on a daily cron (a single "anchor" timestamp would always be
+// ~24h old and get reset before growth could be evaluated). Cap at 14
+// entries (~2 weeks at one run/day) to bound storage.
+const PERM_FAILED_HISTORY_CAP = 14;
+// Cap on the dedup list of RO ids we've already paged on. Permanently-failed
+// ROs are bounded per shop (they're a tiny fraction of total ROs), but a
+// pathological shop could in principle accumulate a very long list. Keep
+// only the most recent N so the dedup doc stays small. The retry cron also
+// rotates `recentSkippedRos` so anything older than the recency window
+// can't re-appear in a payload anyway.
+const PERM_FAILED_ALERTED_RO_CAP = 500;
+
 type StuckShop = {
   shopId: number;
   name: string;
@@ -298,10 +328,249 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Permanently-failed RO spike alerts.
+  //
+  // Source of truth: `tekmetric_backfill_progress.permanentlyFailedRoCount`
+  // (incremented by /api/cron/tekmetric-ro-retry whenever an RO crosses the
+  // 3-attempt retry threshold) and `recentSkippedRos[].permanentlyFailed`
+  // for the per-RO ids/errors.
+  //
+  // Dedup: one row per shopId in `tekmetric_permfailed_ro_alerts` storing
+  //   - lastAlertedCount: the perm-failed count at the time of the most
+  //     recent page (so we only re-page when count grows further)
+  //   - alertedRoIds: the perm-failed RO ids we've already paged on (so the
+  //     "new perm-failed RO ids" payload is exactly what's new since last
+  //     page)
+  //   - windowAnchorAt / windowAnchorCount: rolling 24h baseline used to
+  //     compute "growth in last 24h"
+  // -------------------------------------------------------------------------
+  const permFailedAlertsCollection = db.collection("tekmetric_permfailed_ro_alerts");
+  await permFailedAlertsCollection
+    .createIndex({ shopId: 1 }, { unique: true, name: "uniq_shopId" })
+    .catch(() => {});
+
+  type PermFailedAlertPayload = {
+    shopId: number;
+    name: string;
+    currentCount: number;
+    previousAlertedCount: number;
+    growth24h: number;
+    triggerReason: string;
+    newPermFailedRos: Array<{ roId: number; lastError: string | null; lastRetryAt: string | null }>;
+  };
+
+  const permFailedAlerts: PermFailedAlertPayload[] = [];
+  const nowMs = now.getTime();
+
+  for (const p of progress as any[]) {
+    const shopId = Number(p.shopId);
+    const currentCount = Number(p.permanentlyFailedRoCount || 0);
+    const permFailedSamples: any[] = (
+      Array.isArray(p.recentSkippedRos) ? p.recentSkippedRos : []
+    ).filter((s: any) => !!s.permanentlyFailed);
+    const currentRoIds = permFailedSamples.map((s) => Number(s.roId));
+
+    const existing = await permFailedAlertsCollection.findOne({ shopId });
+
+    // Snapshot history: each prior run wrote {at, count}. Pick the newest
+    // snapshot at or before (now - 24h) as the growth baseline. If no such
+    // snapshot exists yet (e.g. first or second run for this shop), we
+    // can't evaluate growth and skip that branch — the absolute threshold
+    // will still catch dangerous shops.
+    type Snapshot = { at: Date; count: number };
+    const rawHistory: any[] = Array.isArray(existing?.countHistory)
+      ? existing!.countHistory
+      : [];
+    const history: Snapshot[] = rawHistory
+      .map((h: any) => ({ at: new Date(h.at), count: Number(h.count || 0) }))
+      .filter((h) => !Number.isNaN(h.at.getTime()))
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    const baselineCutoffMs = nowMs - PERM_FAILED_BASELINE_MIN_AGE_MS;
+    let baselineCount: number | null = null;
+    let baselineAt: Date | null = null;
+    for (const h of history) {
+      if (h.at.getTime() <= baselineCutoffMs) {
+        // Newest qualifying snapshot wins (history is sorted ascending).
+        baselineCount = h.count;
+        baselineAt = h.at;
+      }
+    }
+    const growth24h = baselineCount == null ? null : currentCount - baselineCount;
+
+    const lastAlertedCount = Number(existing?.lastAlertedCount ?? 0);
+    const alertedRoIds: number[] = Array.isArray(existing?.alertedRoIds)
+      ? existing!.alertedRoIds.map((x: any) => Number(x))
+      : [];
+
+    const exceedsGrowth = growth24h != null && growth24h > PERM_FAILED_GROWTH_THRESHOLD;
+    const exceedsAbsolute = currentCount >= PERM_FAILED_ABSOLUTE_THRESHOLD;
+    const grewSinceLastAlert = currentCount > lastAlertedCount;
+
+    // Append the current snapshot, then trim to cap. We always write the new
+    // snapshot so future runs have a fresh baseline regardless of whether
+    // this run alerted.
+    const updatedHistory = [...history, { at: now, count: currentCount }]
+      .slice(-PERM_FAILED_HISTORY_CAP)
+      .map((h) => ({ at: h.at, count: h.count }));
+
+    if ((exceedsGrowth || exceedsAbsolute) && grewSinceLastAlert) {
+      const alertedSet = new Set(alertedRoIds);
+      const newRos = permFailedSamples.filter((s) => !alertedSet.has(Number(s.roId)));
+      const triggerReason = exceedsGrowth
+        ? `growth_24h>${PERM_FAILED_GROWTH_THRESHOLD} (+${growth24h} since ${baselineAt?.toISOString()})`
+        : `absolute>=${PERM_FAILED_ABSOLUTE_THRESHOLD}`;
+
+      permFailedAlerts.push({
+        shopId,
+        name: shopNamesById.get(shopId) || `Shop ${shopId}`,
+        currentCount,
+        previousAlertedCount: lastAlertedCount,
+        growth24h: growth24h ?? 0,
+        triggerReason,
+        newPermFailedRos: newRos.map((s) => ({
+          roId: Number(s.roId),
+          lastError: s.lastRetryError
+            ? String(s.lastRetryError).slice(0, 300)
+            : s.error
+              ? String(s.error).slice(0, 300)
+              : null,
+          lastRetryAt: s.lastRetryAt
+            ? new Date(s.lastRetryAt as any).toISOString()
+            : null,
+        })),
+      });
+
+      // Merge known + currently-seen RO ids so we never re-alert on the same
+      // ones, even if `recentSkippedRos` later rotates them out. Cap the
+      // list (newest entries kept) so the dedup doc stays bounded.
+      const mergedAlertedIds = Array.from(
+        new Set([...alertedRoIds, ...currentRoIds])
+      ).slice(-PERM_FAILED_ALERTED_RO_CAP);
+      await permFailedAlertsCollection.updateOne(
+        { shopId },
+        {
+          $set: {
+            shopId,
+            lastAlertedCount: currentCount,
+            lastAlertedAt: now,
+            alertedRoIds: mergedAlertedIds,
+            countHistory: updatedHistory,
+            lastSeenCount: currentCount,
+            lastSeenAt: now,
+          },
+          $setOnInsert: { firstAlertedAt: now, firstSeenAt: now },
+        },
+        { upsert: true }
+      );
+    } else {
+      // No alert this run — still persist the snapshot history so growth
+      // is computed correctly on subsequent runs.
+      await permFailedAlertsCollection.updateOne(
+        { shopId },
+        {
+          $set: {
+            shopId,
+            countHistory: updatedHistory,
+            lastSeenCount: currentCount,
+            lastSeenAt: now,
+          },
+          $setOnInsert: {
+            lastAlertedCount: 0,
+            alertedRoIds: [],
+            firstSeenAt: now,
+          },
+        },
+        { upsert: true }
+      );
+    }
+  }
+
+  let permFailedEmailed = 0;
+  if (permFailedAlerts.length > 0) {
+    const admins = await db
+      .collection("users")
+      .find(
+        { isPlatformAdmin: true, email: { $exists: true, $ne: null } },
+        { projection: { email: 1 } }
+      )
+      .toArray();
+    if (admins.length === 0) {
+      console.warn("[TekmetricBackfillHealth] No platform admins configured; perm-failed RO alerts logged only");
+    } else {
+      const sections = permFailedAlerts
+        .map((a) => {
+          const newRoRows = a.newPermFailedRos.length
+            ? a.newPermFailedRos
+                .map(
+                  (r) => `
+              <tr>
+                <td style="padding:4px 10px;border:1px solid #ddd">${r.roId}</td>
+                <td style="padding:4px 10px;border:1px solid #ddd">${r.lastRetryAt ?? "—"}</td>
+                <td style="padding:4px 10px;border:1px solid #ddd">${r.lastError ? escapeHtml(r.lastError) : "—"}</td>
+              </tr>`
+                )
+                .join("")
+            : `<tr><td colspan="3" style="padding:4px 10px;border:1px solid #ddd;color:#666">
+                (RO ids rotated out of recentSkippedRos before this alert fired)
+              </td></tr>`;
+          return `
+          <div style="margin:18px 0;padding:12px;border:1px solid #eee;border-radius:6px">
+            <div><strong>${escapeHtml(a.name)}</strong> (MOS shop ${a.shopId})</div>
+            <div>Permanently-failed RO count: <strong>${a.currentCount}</strong>
+              (was ${a.previousAlertedCount} at last alert, +${a.growth24h} in last 24h)</div>
+            <div>Trigger: <code>${escapeHtml(a.triggerReason)}</code></div>
+            <table style="border-collapse:collapse;border:1px solid #ddd;margin-top:8px;font-size:13px">
+              <thead>
+                <tr>
+                  <th style="padding:4px 10px;border:1px solid #ddd;text-align:left">New RO ID</th>
+                  <th style="padding:4px 10px;border:1px solid #ddd;text-align:left">Last Retry At</th>
+                  <th style="padding:4px 10px;border:1px solid #ddd;text-align:left">Last Error</th>
+                </tr>
+              </thead>
+              <tbody>${newRoRows}</tbody>
+            </table>
+          </div>`;
+        })
+        .join("");
+      const html = `
+        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
+          <h2>Tekmetric Permanently-Failed Repair Orders — Spike Alert</h2>
+          <p>${permFailedAlerts.length} shop(s) have crossed a permanently-failed RO threshold.
+            These ROs exhausted ${"3"} retries and represent unrecovered data loss.</p>
+          <p>Thresholds: growth &gt; ${PERM_FAILED_GROWTH_THRESHOLD} in 24h, OR absolute &ge; ${PERM_FAILED_ABSOLUTE_THRESHOLD}.
+            You'll only be re-paged when the count grows beyond what was last alerted.</p>
+          ${sections}
+          <p style="margin-top:16px;color:#666;font-size:13px">
+            Sent by <code>/api/cron/tekmetric-backfill-health</code>. Source counters:
+            <code>/api/cron/tekmetric-ro-retry</code>. View per-shop detail at
+            <code>/api/admin/sync-health</code>.
+          </p>
+        </div>`;
+      for (const admin of admins as Array<{ email: string }>) {
+        try {
+          await sendEmail({
+            to: admin.email,
+            subject: `[MOS] Tekmetric perm-failed RO spike: ${permFailedAlerts.length} shop(s)`,
+            html,
+          });
+          permFailedEmailed++;
+        } catch (err: any) {
+          console.error(
+            `[TekmetricBackfillHealth] Perm-failed RO email send failed for ${admin.email}:`,
+            err?.message
+          );
+        }
+      }
+    }
+  }
+
   console.log(
     `[TekmetricBackfillHealth] progress=${progress.length} stuck=${stuck.length} ` +
       `newAlerts=${newlyStuck.length} reasonsChanged=${reasonsChanged.length} ` +
-      `resolved=${resolvedShopIds.length} emailed=${emailed}`
+      `resolved=${resolvedShopIds.length} emailed=${emailed} ` +
+      `permFailedAlerts=${permFailedAlerts.length} permFailedEmailed=${permFailedEmailed}`
   );
 
   return NextResponse.json({
@@ -313,5 +582,7 @@ export async function GET(req: NextRequest) {
     resolvedAndCleared: resolvedShopIds.length,
     emailed,
     stuckShops: stuck,
+    permFailedAlerts,
+    permFailedEmailed,
   });
 }
