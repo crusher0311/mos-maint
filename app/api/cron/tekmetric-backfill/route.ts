@@ -6,6 +6,7 @@ import { createIngestionService } from "@/lib/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
+import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -865,16 +866,14 @@ async function backfillShopChunkInner(
   let archivedResolvedCount = 0;
   if (resolvedEntries.length > 0) {
     try {
-      const archiveDocs = resolvedEntries.map(entry => ({
+      const archiveResult = await archiveResolvedSkippedRos(
+        db,
         shopId,
-        roId: entry.roId,
-        error: entry.error,
-        skippedAt: entry.at,
-        resolvedAt: now,
-        resolvedInChunk: { start: chunkStart, end: chunkEnd },
-      }));
-      await db.collection("tekmetric_skipped_ro_archive").insertMany(archiveDocs, { ordered: false });
-      archivedResolvedCount = resolvedEntries.length;
+        resolvedEntries,
+        { mode: "auto", resolvedInChunk: { start: chunkStart, end: chunkEnd } },
+        now,
+      );
+      archivedResolvedCount = archiveResult.archivedCount;
       console.log(
         `[Tekmetric Backfill] Shop ${shopId}: archived ${resolvedEntries.length} recovered RO(s) (ids: ${resolvedEntries.map(r => r.roId).join(",")})`,
       );

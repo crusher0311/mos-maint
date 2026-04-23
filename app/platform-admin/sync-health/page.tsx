@@ -160,6 +160,7 @@ export default function SyncHealthPage() {
   const [runningNow, setRunningNow] = useState<number | null>(null);
   const [retryingRo, setRetryingRo] = useState<number | null>(null);
   const [retryingAllRo, setRetryingAllRo] = useState(false);
+  const [resolvingKey, setResolvingKey] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -181,6 +182,35 @@ export default function SyncHealthPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const resolveSkippedRo = async (shopId: number, roId: number) => {
+    if (
+      !confirm(
+        `Mark skipped RO ${roId} (shop ${shopId}) as resolved? This archives it and removes it from the recently-skipped list. Use only after you've confirmed the data is in place (e.g. via a one-off re-fetch).`,
+      )
+    ) {
+      return;
+    }
+    const key = `${shopId}:${roId}`;
+    setResolvingKey(key);
+    try {
+      const res = await fetch("/api/admin/sync-health/skipped-ros/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId, roId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to resolve RO");
+      } else {
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to resolve RO");
+    } finally {
+      setResolvingKey(null);
+    }
+  };
 
   const triggerBackfill = async (shopId: number, providerLabel: string) => {
     if (!confirm(`Re-trigger ${providerLabel} backfill for shop ${shopId}?`)) return;
@@ -639,37 +669,56 @@ export default function SyncHealthPage() {
                             {s.recentSkippedRos.map((r) => {
                               const attempts = r.retryAttempts ?? 0;
                               const errMsg = r.lastRetryError || r.error;
+                              const key = `${s.shopId}:${r.roId}`;
+                              const isResolving = resolvingKey === key;
                               return (
                                 <li
                                   key={r.roId}
-                                  className="font-mono text-xs text-gray-700"
+                                  className="font-mono text-xs text-gray-700 flex items-start gap-2"
                                 >
-                                  <span
-                                    className={
-                                      r.permanentlyFailed
-                                        ? "text-rose-800 font-semibold"
-                                        : "text-rose-700"
-                                    }
-                                  >
-                                    {r.roId}
-                                  </span>
-                                  <span className="text-gray-400 ml-2">
-                                    {attempts > 0
-                                      ? `[${attempts} retr${attempts === 1 ? "y" : "ies"}${
-                                          r.permanentlyFailed ? " · gave up" : ""
-                                        }]`
-                                      : "[not retried yet]"}
-                                  </span>
-                                  {errMsg && (
+                                  <div className="flex-1 min-w-0">
                                     <span
-                                      className="text-gray-500 ml-2"
-                                      title={errMsg}
+                                      className={
+                                        r.permanentlyFailed
+                                          ? "text-rose-800 font-semibold"
+                                          : "text-rose-700"
+                                      }
                                     >
-                                      {errMsg.length > 80
-                                        ? errMsg.slice(0, 80) + "…"
-                                        : errMsg}
+                                      {r.roId}
                                     </span>
-                                  )}
+                                    <span className="text-gray-400 ml-2">
+                                      {attempts > 0
+                                        ? `[${attempts} retr${attempts === 1 ? "y" : "ies"}${
+                                            r.permanentlyFailed ? " · gave up" : ""
+                                          }]`
+                                        : "[not retried yet]"}
+                                    </span>
+                                    {errMsg && (
+                                      <span
+                                        className="text-gray-500 ml-2"
+                                        title={errMsg}
+                                      >
+                                        {errMsg.length > 80
+                                          ? errMsg.slice(0, 80) + "…"
+                                          : errMsg}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      resolveSkippedRo(s.shopId, r.roId)
+                                    }
+                                    disabled={isResolving}
+                                    title="Archive this RO and remove it from the recently-skipped list. Use after a manual re-fetch confirms the data is in place."
+                                    className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-sans bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded disabled:opacity-50"
+                                  >
+                                    {isResolving ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 className="w-3 h-3" />
+                                    )}
+                                    Mark resolved
+                                  </button>
                                 </li>
                               );
                             })}
