@@ -16,6 +16,11 @@ const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 const TEKMETRIC_INTERNAL_BASE_URL = 'https://shop.tekmetric.com/api';
 
 let tekmetricApiCallCounter = 0;
+// Cumulative time spent in `await new Promise(r => setTimeout(r, backoffMs))`
+// after a 429. Surfaced per-chunk in the backfill metrics so a regression in
+// rate-limit health (e.g. cache miss spike re-saturating the per-IP throttle)
+// is visible in the admin sync-health view without grepping cron logs.
+let tekmetric429BackoffMs = 0;
 
 export function getTekmetricApiCallCount(): number {
   return tekmetricApiCallCounter;
@@ -25,6 +30,16 @@ export function resetTekmetricApiCallCount(): number {
   const count = tekmetricApiCallCounter;
   tekmetricApiCallCounter = 0;
   return count;
+}
+
+export function getTekmetric429BackoffMs(): number {
+  return tekmetric429BackoffMs;
+}
+
+export function resetTekmetric429BackoffMs(): number {
+  const ms = tekmetric429BackoffMs;
+  tekmetric429BackoffMs = 0;
+  return ms;
 }
 
 const MAX_429_RETRIES = 5;
@@ -90,6 +105,7 @@ export async function tekmetricRequest<T = any>(
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+        tekmetric429BackoffMs += backoffMs;
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
@@ -254,6 +270,7 @@ export async function getRepairOrderInspectionsWithXAuth(
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on inspection fetch RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+        tekmetric429BackoffMs += backoffMs;
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }

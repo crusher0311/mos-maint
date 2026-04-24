@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, getTekmetric429BackoffMs } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
@@ -46,6 +46,12 @@ const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
 // (32, 36, 37, ...) bucket waited 4+ runs to even be eligible.
 const NEVER_STARTED_SLOTS_PER_RUN = 2;
 const STALLED_SLOTS_PER_RUN = 3;
+// Per-chunk metrics rolling window. Each chunk records wall-clock + cache
+// hit rates + 429 backoff so the admin sync-health view can compute
+// median/p95 chunk duration per shop without grepping cron logs. 25 entries
+// is enough headroom to spot a regression while keeping the progress doc
+// small (each entry is ~200 bytes → ~5KB cap per shop).
+const RECENT_CHUNK_METRICS_LIMIT = 25;
 
 type TekmetricRepairOrder = {
   id: number;
@@ -382,6 +388,18 @@ async function backfillShopChunkInner(
   shopId: number,
   tekmetricShopId: number
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
+  // Per-chunk speed metrics. Captured here and persisted at the end of the
+  // chunk so a regression in /jobs cache hit rate or a 429 backoff spike is
+  // visible in the admin sync-health view without grepping cron logs.
+  const chunkStartedAt = Date.now();
+  const backoffMsAtStart = getTekmetric429BackoffMs();
+  let jobsCacheHits = 0;
+  let jobsCacheMisses = 0;
+  let vehiclesCacheHits = 0;
+  let vehiclesCacheMisses = 0;
+  let customersCacheHits = 0;
+  let customersCacheMisses = 0;
+
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
   
   const shop = await db.collection("shops").findOne({ shopId });
@@ -528,6 +546,7 @@ async function backfillShopChunkInner(
       if (ro.vehicleId) {
         if (vehicleCache.has(ro.vehicleId)) {
           vehicle = vehicleCache.get(ro.vehicleId)!;
+          vehiclesCacheHits++;
         } else {
           // Defensive: a Mongo hiccup on the read used to throw straight
           // out of Promise.all and crash the entire chunk (the RO loop has
@@ -542,7 +561,9 @@ async function backfillShopChunkInner(
           if (mongoVehicle) {
             vehicle = mongoVehicle as TekmetricVehicle;
             vehicleCache.set(ro.vehicleId, vehicle);
+            vehiclesCacheHits++;
           } else {
+            vehiclesCacheMisses++;
             const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`, shopId);
             if (vehResult.ok && vehResult.data) {
               vehicle = vehResult.data;
@@ -557,6 +578,7 @@ async function backfillShopChunkInner(
       if (ro.customerId) {
         if (customerCache.has(ro.customerId)) {
           customer = customerCache.get(ro.customerId)!;
+          customersCacheHits++;
         } else {
           // Same defensive treatment as getCachedVehicle above.
           const mongoCustomer = await getCachedCustomer(db, ro.customerId).catch(err => {
@@ -566,7 +588,9 @@ async function backfillShopChunkInner(
           if (mongoCustomer) {
             customer = mongoCustomer as TekmetricCustomer;
             customerCache.set(ro.customerId, customer);
+            customersCacheHits++;
           } else {
+            customersCacheMisses++;
             const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`, shopId);
             if (custResult.ok && custResult.data) {
               customer = custResult.data;
@@ -592,6 +616,7 @@ async function backfillShopChunkInner(
       let jobs: TekmetricJob[] = [];
       if (jobsCache.has(ro.id)) {
         jobs = jobsCache.get(ro.id)!;
+        jobsCacheHits++;
       } else {
         const cachedJobs = await getCachedJobs(db, ro.id).catch(err => {
           console.warn(`[Tekmetric Backfill] getCachedJobs failed for RO ${ro.id}: ${err?.message || err}`);
@@ -600,6 +625,7 @@ async function backfillShopChunkInner(
         if (cachedJobs) {
           jobs = cachedJobs as TekmetricJob[];
           jobsCache.set(ro.id, jobs);
+          jobsCacheHits++;
         } else {
           // Last cache check before the API: incremental sync already
           // stores `data.jobs` on tekmetric_work_orders for terminal ROs.
@@ -614,10 +640,14 @@ async function backfillShopChunkInner(
           if (Array.isArray(woJobs) && woJobs.length > 0) {
             jobs = woJobs as TekmetricJob[];
             jobsCache.set(ro.id, jobs);
+            // The work-orders projection IS a cache — it spares us the
+            // /jobs API call, which is what the metric is meant to reflect.
+            jobsCacheHits++;
             // Promote into the dedicated jobs cache so future runs skip
             // the WO-collection projection cost too.
             await cacheJobs(db, ro.id, jobs).catch(() => {});
           } else {
+            jobsCacheMisses++;
             const jobsResult = await tekmetricRequest<{ content: TekmetricJob[] }>(
               `/jobs?shop=${tekmetricShopId}&repairOrderId=${ro.id}`,
               shopId,
@@ -968,6 +998,66 @@ async function backfillShopChunkInner(
     }
   }
 
+  // Compute per-chunk speed metrics. The 429 backoff value is a delta against
+  // the process-global counter snapshot taken at chunk start. NOTE: this is
+  // APPROXIMATE under concurrency — if another shop's chunk is running in
+  // parallel inside the same process and pays a 429 backoff, that backoff
+  // also lands in this chunk's delta. It's still useful as a "is this chunk
+  // hitting rate limits at all" signal, but a per-chunk request-context
+  // accumulator would be needed for precise per-chunk attribution.
+  const chunkDurationMs = Date.now() - chunkStartedAt;
+  const chunkBackoffMs = Math.max(0, getTekmetric429BackoffMs() - backoffMsAtStart);
+  const jobsCacheTotal = jobsCacheHits + jobsCacheMisses;
+  const vehiclesCacheTotal = vehiclesCacheHits + vehiclesCacheMisses;
+  const customersCacheTotal = customersCacheHits + customersCacheMisses;
+  const chunkMetrics = {
+    at: now,
+    durationMs: chunkDurationMs,
+    roCount: seenROIds.size,
+    chunkStart,
+    chunkEnd,
+    nextChunkEnd,
+    advanceMode,
+    jobsCacheHits,
+    jobsCacheMisses,
+    jobsCacheHitRate: jobsCacheTotal > 0
+      ? Number((jobsCacheHits / jobsCacheTotal).toFixed(4))
+      : null,
+    vehiclesCacheHits,
+    vehiclesCacheMisses,
+    vehiclesCacheHitRate: vehiclesCacheTotal > 0
+      ? Number((vehiclesCacheHits / vehiclesCacheTotal).toFixed(4))
+      : null,
+    customersCacheHits,
+    customersCacheMisses,
+    customersCacheHitRate: customersCacheTotal > 0
+      ? Number((customersCacheHits / customersCacheTotal).toFixed(4))
+      : null,
+    backoff429Ms: Math.round(chunkBackoffMs),
+    chunkHadError,
+    hitPageCap,
+    perRoExceptions,
+  };
+  // Cap the rolling window newest-first. We DO want to see slow chunks even
+  // when the shop also drops ROs that run, so don't condition writes on
+  // success — the metric is per-chunk health, not per-RO health.
+  const priorChunkMetrics: any[] = Array.isArray(progress?.recentChunkMetrics)
+    ? progress.recentChunkMetrics
+    : [];
+  const nextRecentChunkMetrics = [chunkMetrics, ...priorChunkMetrics].slice(
+    0,
+    RECENT_CHUNK_METRICS_LIMIT,
+  );
+
+  console.log(
+    `[Tekmetric Backfill] Shop ${shopId}: chunk metrics ` +
+      `duration=${chunkDurationMs}ms ros=${seenROIds.size} ` +
+      `jobsCache=${jobsCacheHits}/${jobsCacheTotal} ` +
+      `vehiclesCache=${vehiclesCacheHits}/${vehiclesCacheTotal} ` +
+      `customersCache=${customersCacheHits}/${customersCacheTotal} ` +
+      `429backoff=${Math.round(chunkBackoffMs)}ms`,
+  );
+
   await db.collection("tekmetric_backfill_progress").updateOne(
     { shopId },
     {
@@ -992,6 +1082,8 @@ async function backfillShopChunkInner(
         ...(nextConsecutiveRoSkipRuns === 0 && nextRecentSkippedRos.length === 0 && (priorRecent.length > 0 || (priorConsecutiveRoSkipRuns > 0))
           ? { roSkipsFullyRecoveredAt: now }
           : {}),
+        lastChunkMetrics: chunkMetrics,
+        recentChunkMetrics: nextRecentChunkMetrics,
         ...(chunkHadError && !forceSkipBadWindow
           ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow

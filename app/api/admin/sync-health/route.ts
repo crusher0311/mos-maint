@@ -9,6 +9,82 @@ const FROZEN_CURSOR_DAYS = 3;
 // data loss and should page on-call.
 const RECURRING_RO_SKIP_RUNS = 2;
 
+// Percentile from a sorted ascending number array. Inclusive method
+// (`(p/100) * (n-1)`) — matches what most observability tools display so
+// "p95 chunk duration" here lines up with what on-call sees in Better Stack.
+function percentile(sorted: number[], p: number): number | null {
+  if (!sorted.length) return null;
+  if (sorted.length === 1) return sorted[0];
+  const rank = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sorted[lo];
+  const frac = rank - lo;
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * frac;
+}
+
+// Roll up the per-chunk metrics array on a progress row into a small summary
+// the admin sync-health view can render directly. Returns null when the shop
+// has no recorded chunks yet (pre-existing rows from before instrumentation).
+function summarizeChunkMetrics(recent: any[]) {
+  if (!Array.isArray(recent) || recent.length === 0) return null;
+  const durations: number[] = [];
+  let jobsHits = 0,
+    jobsMisses = 0;
+  let vehHits = 0,
+    vehMisses = 0;
+  let custHits = 0,
+    custMisses = 0;
+  let backoffMsTotal = 0;
+  let backoffSampleCount = 0;
+  let roCountTotal = 0;
+  let lastChunkAt: string | null = null;
+  for (const m of recent) {
+    if (typeof m?.durationMs === "number" && Number.isFinite(m.durationMs)) {
+      durations.push(m.durationMs);
+    }
+    jobsHits += Number(m?.jobsCacheHits || 0);
+    jobsMisses += Number(m?.jobsCacheMisses || 0);
+    vehHits += Number(m?.vehiclesCacheHits || 0);
+    vehMisses += Number(m?.vehiclesCacheMisses || 0);
+    custHits += Number(m?.customersCacheHits || 0);
+    custMisses += Number(m?.customersCacheMisses || 0);
+    if (typeof m?.backoff429Ms === "number") {
+      backoffMsTotal += m.backoff429Ms;
+      backoffSampleCount++;
+    }
+    roCountTotal += Number(m?.roCount || 0);
+    if (m?.at && (!lastChunkAt || new Date(m.at).getTime() > new Date(lastChunkAt).getTime())) {
+      lastChunkAt = m.at;
+    }
+  }
+  durations.sort((a, b) => a - b);
+  const median = percentile(durations, 50);
+  const p95 = percentile(durations, 95);
+  const max = durations.length > 0 ? durations[durations.length - 1] : null;
+  const jobsTotal = jobsHits + jobsMisses;
+  const vehTotal = vehHits + vehMisses;
+  const custTotal = custHits + custMisses;
+  return {
+    chunkSampleCount: recent.length,
+    medianDurationMs: median == null ? null : Math.round(median),
+    p95DurationMs: p95 == null ? null : Math.round(p95),
+    maxDurationMs: max == null ? null : Math.round(max),
+    avgRosPerChunk: recent.length > 0 ? Math.round(roCountTotal / recent.length) : 0,
+    avgBackoff429Ms: backoffSampleCount > 0
+      ? Math.round(backoffMsTotal / backoffSampleCount)
+      : null,
+    totalBackoff429Ms: backoffMsTotal,
+    jobsCacheHitRate: jobsTotal > 0 ? Number((jobsHits / jobsTotal).toFixed(4)) : null,
+    jobsCacheTotal: jobsTotal,
+    vehiclesCacheHitRate: vehTotal > 0 ? Number((vehHits / vehTotal).toFixed(4)) : null,
+    vehiclesCacheTotal: vehTotal,
+    customersCacheHitRate: custTotal > 0 ? Number((custHits / custTotal).toFixed(4)) : null,
+    customersCacheTotal: custTotal,
+    lastChunkAt,
+  };
+}
+
 function computeStuckDiagnostics(progressRows: any[]) {
   const now = Date.now();
   const diagnostics = progressRows
@@ -85,6 +161,8 @@ function computeStuckDiagnostics(progressRows: any[]) {
         lastSkippedRosResolvedAt: p.lastSkippedRosResolvedAt || null,
         roSkipsFullyRecoveredAt: p.roSkipsFullyRecoveredAt || null,
         resolvedSkippedRosTotal: Number(p.resolvedSkippedRosTotal || 0),
+        chunkMetrics: summarizeChunkMetrics(p.recentChunkMetrics),
+        lastChunkMetrics: p.lastChunkMetrics || null,
       };
     })
     .sort((a: any, b: any) => {
@@ -255,6 +333,38 @@ export async function GET() {
     const protractorStuckCount = protractorDiagnostics.filter((d: any) => d.stuck).length;
     const shopwareStuckCount = shopwareDiagnostics.filter((d: any) => d.stuck).length;
 
+    // Per-shop chunk-speed summary. Built from raw progress rows (not the
+    // diagnostics list) so completed shops keep their historical sample for
+    // a few cron cycles after they finish — useful when on-call wants to ask
+    // "did this shop slow down before completing?". Sorted slowest-p95 first
+    // so a regression is visible at the top of the section.
+    // SLOW_P95_THRESHOLD_MS aligns with the 14m43s/chunk that triggered task
+    // #48; anything over this is considered slow enough to flag.
+    const SLOW_P95_THRESHOLD_MS = 10 * 60 * 1000;
+    const tekmetricChunkSpeed = tekmetricBackfillProgress
+      .map((p: any) => ({
+        shopId: p.shopId,
+        completed: !!p.completed,
+        ...(summarizeChunkMetrics(p.recentChunkMetrics) || {}),
+        lastChunkMetrics: p.lastChunkMetrics
+          ? {
+              at: p.lastChunkMetrics.at || null,
+              durationMs: p.lastChunkMetrics.durationMs || null,
+              roCount: p.lastChunkMetrics.roCount || 0,
+              jobsCacheHitRate: p.lastChunkMetrics.jobsCacheHitRate ?? null,
+              vehiclesCacheHitRate: p.lastChunkMetrics.vehiclesCacheHitRate ?? null,
+              customersCacheHitRate: p.lastChunkMetrics.customersCacheHitRate ?? null,
+              backoff429Ms: p.lastChunkMetrics.backoff429Ms || 0,
+              advanceMode: p.lastChunkMetrics.advanceMode || null,
+            }
+          : null,
+      }))
+      .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
+      .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));
+    const tekmetricSlowChunkShopCount = tekmetricChunkSpeed.filter(
+      (s: any) => (s.p95DurationMs || 0) > SLOW_P95_THRESHOLD_MS,
+    ).length;
+
     const syncSuccessRate = recentSyncMetrics.length > 0
       ? (recentSyncMetrics.filter((m: any) => m.success).length / recentSyncMetrics.length * 100).toFixed(1)
       : "N/A";
@@ -329,6 +439,14 @@ export async function GET() {
               (sum: number, g: any) => sum + (g.entriesArchived || 0),
               0,
             ),
+          // Per-chunk speed metrics. Median + p95 chunk duration and cache
+          // hit rates per shop. Built from the rolling
+          // `recentChunkMetrics` window persisted by the backfill cron so a
+          // regression in chunk speed is visible without grepping cron logs.
+          chunkSpeed: tekmetricChunkSpeed,
+          chunkSpeedShopCount: tekmetricChunkSpeed.length,
+          slowChunkShopCount: tekmetricSlowChunkShopCount,
+          slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
         },
         protractor: {
           complete: protractorShopsComplete,

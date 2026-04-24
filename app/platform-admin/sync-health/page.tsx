@@ -12,6 +12,7 @@ import {
   Database,
   SkipForward,
   ShieldCheck,
+  Gauge,
 } from "lucide-react";
 import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
@@ -87,6 +88,35 @@ interface StaleArchivedRoSkipShop {
   permanentlyFailedCount: number;
 }
 
+interface ChunkSpeedShop {
+  shopId: number;
+  completed: boolean;
+  chunkSampleCount?: number;
+  medianDurationMs?: number | null;
+  p95DurationMs?: number | null;
+  maxDurationMs?: number | null;
+  avgRosPerChunk?: number;
+  avgBackoff429Ms?: number | null;
+  totalBackoff429Ms?: number;
+  jobsCacheHitRate?: number | null;
+  jobsCacheTotal?: number;
+  vehiclesCacheHitRate?: number | null;
+  vehiclesCacheTotal?: number;
+  customersCacheHitRate?: number | null;
+  customersCacheTotal?: number;
+  lastChunkAt?: string | null;
+  lastChunkMetrics?: {
+    at: string | null;
+    durationMs: number | null;
+    roCount: number;
+    jobsCacheHitRate: number | null;
+    vehiclesCacheHitRate: number | null;
+    customersCacheHitRate: number | null;
+    backoff429Ms: number;
+    advanceMode: string | null;
+  } | null;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -106,6 +136,10 @@ interface ProviderBackfill {
   staleArchivedSkippedRoShops?: StaleArchivedRoSkipShop[];
   staleArchivedSkippedRoShopCount?: number;
   staleArchivedSkippedRoTotal?: number;
+  chunkSpeed?: ChunkSpeedShop[];
+  chunkSpeedShopCount?: number;
+  slowChunkShopCount?: number;
+  slowChunkP95ThresholdMs?: number;
 }
 
 interface SyncHealthData {
@@ -849,6 +883,186 @@ export default function SyncHealthPage() {
     );
   };
 
+  const formatDurationMs = (ms: number | null | undefined) => {
+    if (ms == null || !Number.isFinite(ms)) return "—";
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remSec = Math.round(seconds - minutes * 60);
+    return `${minutes}m${remSec.toString().padStart(2, "0")}s`;
+  };
+
+  const formatHitRate = (rate: number | null | undefined, total: number | undefined) => {
+    if (rate == null || total === 0) return "—";
+    return `${Math.round(rate * 100)}% (${(total ?? 0).toLocaleString()})`;
+  };
+
+  const renderChunkSpeedSection = (
+    providerLabel: string,
+    shops: ChunkSpeedShop[] | undefined,
+    slowCount: number | undefined,
+    slowThresholdMs: number | undefined,
+  ) => {
+    const list = shops || [];
+    const slow = slowCount ?? 0;
+    const thresholdLabel = formatDurationMs(slowThresholdMs ?? null);
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Gauge className="w-5 h-5 text-indigo-600" />
+            <h2 className="font-semibold text-gray-900">
+              Chunk speed ({providerLabel})
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+            {slow > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full"
+                title={`p95 chunk duration over ${thresholdLabel}`}
+              >
+                {slow} slow
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Median &amp; p95 chunk duration plus cache hit rates from the most
+            recent chunks per shop. Slow = p95 over {thresholdLabel}.
+            <span className="block mt-0.5 text-gray-400">
+              *429 backoff is approximate — concurrent shops can leak backoff
+              into each other&apos;s chunk totals.
+            </span>
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <Clock className="w-5 h-5 text-gray-400" />
+            No recent chunk metrics yet. Wait for the next backfill cron run.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1200px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Chunks
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Median
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    p95
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Max
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    ROs / chunk
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Median jobs cache hit rate (in-mem cache + Mongo jobs cache + work-orders projection)"
+                  >
+                    Jobs cache
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Vehicles cache hit rate"
+                  >
+                    Veh cache
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Customers cache hit rate"
+                  >
+                    Cust cache
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Total milliseconds spent waiting on Tekmetric 429 retries across recent chunks. Approximate when multiple shops run in parallel — a concurrent shop's backoff can leak into another shop's chunk."
+                  >
+                    429 backoff*
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Last chunk
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => {
+                  const isSlow =
+                    slowThresholdMs != null &&
+                    (s.p95DurationMs ?? 0) > slowThresholdMs;
+                  return (
+                    <tr key={s.shopId} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                        {s.shopId}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.chunkSampleCount ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {formatDurationMs(s.medianDurationMs)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right text-sm font-medium ${
+                          isSlow ? "text-red-700" : "text-gray-900"
+                        }`}
+                      >
+                        {formatDurationMs(s.p95DurationMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {formatDurationMs(s.maxDurationMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {(s.avgRosPerChunk ?? 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatHitRate(s.jobsCacheHitRate, s.jobsCacheTotal)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatHitRate(s.vehiclesCacheHitRate, s.vehiclesCacheTotal)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatHitRate(s.customersCacheHitRate, s.customersCacheTotal)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatDurationMs(s.totalBackoff429Ms)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {formatDateTime(s.lastChunkAt ?? null)}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {s.completed ? (
+                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                            Complete
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                            In progress
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderStaleArchivedSection = (
     providerLabel: string,
     shops: StaleArchivedRoSkipShop[] | undefined,
@@ -1212,6 +1426,13 @@ export default function SyncHealthPage() {
       )}
 
       {renderForceSkippedSection("Tekmetric", tek?.forceSkippedWindows, tek?.forceSkippedTotalSpanDays)}
+
+      {renderChunkSpeedSection(
+        "Tekmetric",
+        tek?.chunkSpeed,
+        tek?.slowChunkShopCount,
+        tek?.slowChunkP95ThresholdMs,
+      )}
 
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
       {renderStuckSection("Protractor", pro?.diagnostics)}
