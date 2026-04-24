@@ -15,7 +15,13 @@ export const dynamic = "force-dynamic";
  *   - lastRunAt is missing or older than 48h, OR
  *   - lastError is non-null (with the 24h "persistent" sub-bucket called out
  *     so on-call sees that the cron's own 6h auto-clear never won), OR
- *   - cursor (lastCursorMoveAt) hasn't moved in > 3 days.
+ *   - cursor (lastCursorMoveAt) hasn't moved in > 3 days, OR
+ *   - it's still in-flight and its p95 chunk wall-clock exceeds the same
+ *     10-minute threshold the admin sync-health view flags as "slow"
+ *     (`slow_chunk_p95` reason). Catches shops that are slowly grinding
+ *     toward stuck before they actually stall — previously a regression
+ *     from p95=2m to p95=14m only paged once the chunk fully stopped
+ *     advancing.
  *
  * Dedup strategy (state-based, NOT date-based, so the on-call isn't paged
  * every day for the same already-known stuck shop):
@@ -38,6 +44,17 @@ export const dynamic = "force-dynamic";
 const STALE_RUN_HOURS = 48;
 const FROZEN_CURSOR_DAYS = 3;
 const PERSISTENT_ERROR_HOURS = 24;
+// Slow-chunk threshold: matches the `SLOW_P95_THRESHOLD_MS` the admin
+// sync-health view already uses for its `slowChunkShopCount` badge so the
+// page-on-call rule can never disagree with what the dashboard renders.
+// A shop whose p95 chunk wall-clock crosses this is paged just like a
+// stuck shop — same dedup row, so it auto-clears on recovery.
+const SLOW_CHUNK_P95_THRESHOLD_MS = 10 * 60 * 1000;
+// Avoid paging on a single anomalous chunk: require at least this many
+// samples in the rolling `recentChunkMetrics` window before the p95 check
+// is allowed to fire. The window cap is 25, so 3 is enough to make p95
+// meaningful without blocking detection on shops that are still ramping up.
+const SLOW_CHUNK_MIN_SAMPLES = 3;
 
 // Permanently-failed RO alert thresholds. The skipped-RO retry cron marks an
 // RO `permanentlyFailed` after MAX_RETRY_ATTEMPTS unsuccessful retries; that
@@ -80,7 +97,32 @@ type StuckShop = {
   lastError: string | null;
   lastErrorAt: string | null;
   currentChunkEnd: string | null;
+  p95ChunkDurationMs: number | null;
+  chunkSampleCount: number;
 };
+
+// Inclusive p95 from a sorted-ascending array, matching the percentile
+// implementation in `app/api/admin/sync-health/route.ts` so the alert
+// threshold and the admin "slow shop" badge always agree on which shops
+// are slow.
+function p95DurationMs(metrics: any[]): number | null {
+  if (!Array.isArray(metrics) || metrics.length === 0) return null;
+  const durations: number[] = [];
+  for (const m of metrics) {
+    if (typeof m?.durationMs === "number" && Number.isFinite(m.durationMs)) {
+      durations.push(m.durationMs);
+    }
+  }
+  if (durations.length === 0) return null;
+  durations.sort((a, b) => a - b);
+  if (durations.length === 1) return Math.round(durations[0]);
+  const rank = 0.95 * (durations.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return Math.round(durations[lo]);
+  const frac = rank - lo;
+  return Math.round(durations[lo] + (durations[hi] - durations[lo]) * frac);
+}
 
 function computeStuckShops(progressRows: any[], shopNamesById: Map<number, string>): StuckShop[] {
   const now = Date.now();
@@ -97,6 +139,12 @@ function computeStuckShops(progressRows: any[], shopNamesById: Map<number, strin
     const lastErrorMs = p.lastErrorAt ? new Date(p.lastErrorAt).getTime() : null;
     const hoursSinceError = lastErrorMs == null ? null : (now - lastErrorMs) / (60 * 60 * 1000);
 
+    const recentChunkMetrics: any[] = Array.isArray(p.recentChunkMetrics)
+      ? p.recentChunkMetrics
+      : [];
+    const chunkSampleCount = recentChunkMetrics.length;
+    const p95Duration = p95DurationMs(recentChunkMetrics);
+
     const reasons: string[] = [];
     // Freshness reasons only apply to incomplete shops — a completed shop
     // legitimately stops running.
@@ -104,6 +152,19 @@ function computeStuckShops(progressRows: any[], shopNamesById: Map<number, strin
       if (lastRunMs == null) reasons.push("never_started");
       if (hoursSinceRun != null && hoursSinceRun > STALE_RUN_HOURS) reasons.push("stale_run");
       if (daysCursorFrozen != null && daysCursorFrozen > FROZEN_CURSOR_DAYS) reasons.push("frozen_cursor");
+      // Slow chunks: an in-flight shop whose p95 chunk wall-clock is over
+      // the same threshold the admin sync-health view flags as "slow".
+      // Requires a minimum sample count so a single anomalous chunk on a
+      // freshly-running shop doesn't page on-call. Auto-clears via the
+      // existing reason-based dedup once the shop's p95 drops back below
+      // the threshold (or it completes).
+      if (
+        chunkSampleCount >= SLOW_CHUNK_MIN_SAMPLES &&
+        p95Duration != null &&
+        p95Duration > SLOW_CHUNK_P95_THRESHOLD_MS
+      ) {
+        reasons.push("slow_chunk_p95");
+      }
     }
     // Error reasons apply to every shop regardless of completion state.
     // A completed shop sitting on a persistent lastError still indicates a
@@ -132,6 +193,8 @@ function computeStuckShops(progressRows: any[], shopNamesById: Map<number, strin
       lastError: p.lastError ? String(p.lastError).slice(0, 300) : null,
       lastErrorAt: p.lastErrorAt ? new Date(p.lastErrorAt).toISOString() : null,
       currentChunkEnd: p.currentChunkEnd ? new Date(p.currentChunkEnd).toISOString() : null,
+      p95ChunkDurationMs: p95Duration,
+      chunkSampleCount,
     });
   }
 
@@ -267,6 +330,10 @@ export async function GET(req: NextRequest) {
       const rows = toAlert
         .map((s) => {
           const isNew = newlyStuck.includes(s);
+          const p95Display =
+            s.p95ChunkDurationMs == null
+              ? "—"
+              : `${(s.p95ChunkDurationMs / 60000).toFixed(1)}m (n=${s.chunkSampleCount})`;
           return `
         <tr>
           <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.name)}</td>
@@ -274,6 +341,7 @@ export async function GET(req: NextRequest) {
           <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.reasons.join(", "))}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${s.hoursSinceLastRun ?? "—"}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${s.daysCursorFrozen ?? "—"}</td>
+          <td style="padding:6px 12px;border:1px solid #ddd">${p95Display}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${s.lastError ? escapeHtml(s.lastError) : "—"}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${isNew ? "NEW" : "REASONS CHANGED"}</td>
         </tr>`;
@@ -288,7 +356,8 @@ export async function GET(req: NextRequest) {
             <code>stale_run</code> = lastRunAt &gt; ${STALE_RUN_HOURS}h ago ·
             <code>frozen_cursor</code> = lastCursorMoveAt &gt; ${FROZEN_CURSOR_DAYS}d ago ·
             <code>last_error</code> = lastError still set ·
-            <code>persistent_error</code> = lastError &gt; ${PERSISTENT_ERROR_HOURS}h old (auto-clear failed).
+            <code>persistent_error</code> = lastError &gt; ${PERSISTENT_ERROR_HOURS}h old (auto-clear failed) ·
+            <code>slow_chunk_p95</code> = in-flight shop's p95 chunk wall-clock &gt; ${SLOW_CHUNK_P95_THRESHOLD_MS / 60000}m (min ${SLOW_CHUNK_MIN_SAMPLES} samples).
           </p>
           <table style="border-collapse:collapse;border:1px solid #ddd">
             <thead>
@@ -298,6 +367,7 @@ export async function GET(req: NextRequest) {
                 <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Reasons</th>
                 <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Hrs Since Run</th>
                 <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Days Cursor Frozen</th>
+                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">p95 Chunk</th>
                 <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Last Error</th>
                 <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Status</th>
               </tr>
