@@ -151,7 +151,31 @@ export async function indexTekmetricWorkOrderJobs(
       const jobsResponse = await getJobs(tekmetricShopId, { repairOrderId: workOrderId, size: 100 });
       jobs = (jobsResponse.content || []) as TekmetricJobWithDetails[];
     }
-    
+
+    // Warm the per-RO jobs cache (`tekmetric_jobs_cache`, 30d TTL) for any
+    // terminal RO we touch here, regardless of source (webhook, poll, or
+    // backfill). Terminal RO job payloads don't change after the fact, so
+    // every indexing call is also a free opportunity to warm the cache so
+    // a later backfill verification rerun finds it in Mongo instead of
+    // paying the `/jobs?repairOrderId=…` API cost. Cache empty arrays too:
+    // an indexed RO that genuinely has no jobs is still a stable answer.
+    // Soft-fail: indexing is the primary contract, cache warming is a bonus.
+    try {
+      await db.collection("tekmetric_jobs_cache").updateOne(
+        { repairOrderId: workOrderId },
+        {
+          $set: {
+            repairOrderId: workOrderId,
+            jobs,
+            cachedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    } catch (warmErr: any) {
+      console.warn(`[Tekmetric Job Index] jobs cache warm failed for RO ${workOrderId}: ${warmErr?.message || warmErr}`);
+    }
+
     if (jobs.length === 0) return 0;
     
     const shopDoc = await db.collection("shops").findOne(

@@ -346,6 +346,35 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Opportunistic jobs-cache warming. The indexer above already warms
+        // the cache when it runs, but a terminal webhook for an RO that's
+        // already been indexed won't re-enter that path — yet it's still
+        // a free, fresh `jobs[]` payload from Tekmetric. Writing it here
+        // refreshes the 30d TTL so backfill verification reruns of recently
+        // active shops keep hitting Mongo instead of `/jobs?repairOrderId=…`.
+        // We cache empty arrays too: a terminal RO with no jobs is a stable
+        // answer and the next backfill run shouldn't pay another API call to
+        // re-confirm it. See task #57 + the `tekmetric_jobs_cache` notes in
+        // lib/tekmetric-incremental-sync.ts.
+        if (Array.isArray(repairOrder?.jobs)) {
+          const webhookJobs = repairOrder.jobs;
+          try {
+            await db.collection("tekmetric_jobs_cache").updateOne(
+              { repairOrderId: roId },
+              {
+                $set: {
+                  repairOrderId: roId,
+                  jobs: webhookJobs,
+                  cachedAt: new Date(),
+                },
+              },
+              { upsert: true }
+            );
+          } catch (warmErr: any) {
+            console.warn(`[Tekmetric Webhook] jobs cache warm failed for RO #${roNumber}: ${warmErr?.message || warmErr}`);
+          }
+        }
+
         // Phase B: dual-write into normalized tables. Soft-fail; webhook still 200s.
         await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, cached);
 

@@ -432,6 +432,24 @@ async function upsertWorkOrder(
   // would leave a gap between "WO doc cached" and "job history available".
   const upperStatus = String(statusCode || "").toUpperCase();
   const isTerminal = ["POSTED", "INVOICED", "INVOICE", "COMPLETED", "CLOSED"].includes(upperStatus);
+
+  // Opportunistic jobs-cache warming for already-indexed terminal ROs. The
+  // indexing branch below already warms the cache via `indexTekmetricWorkOrderJobs`
+  // when it runs, but an RO that's already indexed (jobsIndexed=true) skips
+  // that branch — yet the incremental sync just paid to fetch a fresh `ro.jobs`
+  // payload, so we may as well refresh the 30d TTL on `tekmetric_jobs_cache`.
+  // We cache empty arrays too: a terminal RO with no jobs is a stable answer
+  // and the next backfill run shouldn't pay another API call to re-confirm it.
+  // This keeps backfill verification reruns of recently active shops hitting
+  // Mongo instead of `/jobs?repairOrderId=…`. See task #57.
+  if (isTerminal && existing?.jobsIndexed && Array.isArray((ro as any).jobs)) {
+    try {
+      await cacheJobs(db, ro.id, (ro as any).jobs);
+    } catch (warmErr: any) {
+      console.warn(`[Tekmetric Incremental] jobs cache warm failed for RO #${ro.repairOrderNumber}: ${warmErr?.message || warmErr}`);
+    }
+  }
+
   if (isTerminal && !existing?.jobsIndexed) {
     try {
       const { indexTekmetricWorkOrderJobs } = await import("@/lib/tekmetric-job-index");
