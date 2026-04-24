@@ -2,6 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongo';
 import { testConnection, getShop, isConfigured } from '@/lib/integrations/shopware/client';
+import { prewarmShopWareJobsCacheForOnboarding } from '@/lib/shopware-jobs-prewarm';
+
+async function triggerShopWareBackfillCron(shopId: number): Promise<void> {
+  try {
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5000';
+
+    fetch(`${baseUrl}/api/cron/shopware-backfill?shopId=${shopId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${process.env.CRON_SECRET || ''}`,
+      },
+    }).catch((err) => {
+      console.log(`[Shop-Ware Settings] Backfill auto-trigger note: ${err.message}`);
+    });
+    console.log(`[Shop-Ware Settings] Auto-triggered backfill for shop ${shopId}`);
+  } catch {
+    // fire-and-forget; nightly cron will pick the shop up regardless
+  }
+}
 
 async function getUserShopId(): Promise<string | null> {
   const store = await cookies();
@@ -109,11 +130,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Shop-Ware Settings] Connected shop ${userShopId} → tenant ${tenantIdNum} / shop ${swShopIdNum} (${shopName})`);
 
+    // Pre-warm `shopware_repair_orders` (and downstream `job_index`)
+    // for the most recent invoiced ROs, then trigger the backfill cron
+    // so the very first chunk lands at cache-hit speed rather than
+    // re-paginating Shop-Ware for data we just ingested. Mirrors the
+    // Tekmetric onboarding pattern from task #59 — see
+    // lib/shopware-jobs-prewarm.ts for why SW's prewarm also advances
+    // the backfill cursor (SW has no per-RO cache the cron consults).
+    // Fire-and-forget so the settings POST returns promptly; the
+    // prewarm awaits internally so the cron sees the advanced cursor.
+    (async () => {
+      const numericShopId = Number(userShopId);
+      try {
+        await prewarmShopWareJobsCacheForOnboarding(numericShopId, tenantIdNum, swShopIdNum);
+      } catch (warmErr: any) {
+        console.warn(
+          `[Shop-Ware Settings] Cache prewarm failed (non-fatal) for shop ${numericShopId}: ${warmErr?.message || warmErr}`
+        );
+      }
+      await triggerShopWareBackfillCron(numericShopId);
+    })();
+
     return NextResponse.json({
       success: true,
       tenantId: tenantIdNum,
       swShopId: swShopIdNum,
       shopName,
+      jobHistoryBackfill: 'queued',
     });
   } catch (err: any) {
     console.error('[Shop-Ware Settings] POST error:', err.message);

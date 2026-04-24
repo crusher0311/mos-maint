@@ -107,6 +107,23 @@ export async function POST(req: NextRequest) {
     await ensure(protractorTemplateCache, { expiresAt: 1 }, { expireAfterSeconds: 0, name: "protractor_template_cache_ttl" });
     await ensure(protractorTemplateCache, { shopId: 1 }, { name: "protractor_template_cache_shop" });
 
+    // Per-invoice cache that the Protractor backfill consults before
+    // calling `/Invoice/{id}` (mirrors `tekmetric_jobs_cache`). 30-day
+    // TTL matches PROTRACTOR_INVOICE_CACHE_TTL_MS in
+    // lib/integrations/protractor.ts; invoiced work is stable so a long
+    // TTL maximises hit rate for backfill verification reruns.
+    const protractorInvoiceCache = db.collection("protractor_invoice_cache");
+    await ensure(
+      protractorInvoiceCache,
+      { shopId: 1, invoiceId: 1 },
+      { unique: true, name: "protractor_invoice_cache_shop_invoice" }
+    );
+    await ensure(
+      protractorInvoiceCache,
+      { cachedAt: 1 },
+      { expireAfterSeconds: 30 * 24 * 60 * 60, name: "protractor_invoice_cache_ttl" }
+    );
+
     const counterNow = await counters.findOne({ _id: "shopId" });
 
     return NextResponse.json({
@@ -135,6 +152,8 @@ export async function POST(req: NextRequest) {
         "protractor_template_cache.cacheKey (unique)",
         "protractor_template_cache.expiresAt (TTL)",
         "protractor_template_cache.shopId",
+        "protractor_invoice_cache {shopId,invoiceId} (unique)",
+        "protractor_invoice_cache.cachedAt (TTL 30d)",
       ],
       counter: counterNow,
       maxExisting,

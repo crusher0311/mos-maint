@@ -1650,6 +1650,50 @@ export async function fetchInvoiceById(
   return { ok: true, invoice: result.data };
 }
 
+// `protractor_invoice_cache` is the Protractor analogue of Tekmetric's
+// `tekmetric_jobs_cache`. The Protractor backfill's per-invoice fan-out
+// (`fetchInvoiceById` per RO returned by `/Invoice/?startDate=...`) is the
+// dominant API cost on a fresh-shop's first chunk; caching the full
+// invoice payload (which is stable once invoiced) lets the backfill —
+// and any future reader — hit Mongo instead. TTL mirrors
+// `tekmetric_jobs_cache` (30d) for the same reason: invoiced work
+// doesn't change after the fact, so stale risk is low and a long TTL
+// maximises hit rate for verification reruns and post-error retries.
+const PROTRACTOR_INVOICE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function getCachedProtractorInvoice(
+  db: any,
+  shopId: number,
+  invoiceId: string
+): Promise<ProtractorInvoice | null> {
+  const cached = await db.collection("protractor_invoice_cache").findOne({
+    shopId,
+    invoiceId,
+    cachedAt: { $gt: new Date(Date.now() - PROTRACTOR_INVOICE_CACHE_TTL_MS) },
+  });
+  return cached?.invoice || null;
+}
+
+export async function cacheProtractorInvoice(
+  db: any,
+  shopId: number,
+  invoiceId: string,
+  invoice: ProtractorInvoice
+): Promise<void> {
+  await db.collection("protractor_invoice_cache").updateOne(
+    { shopId, invoiceId },
+    {
+      $set: {
+        shopId,
+        invoiceId,
+        invoice,
+        cachedAt: new Date(),
+      },
+    },
+    { upsert: true }
+  );
+}
+
 export async function fetchInvoicesForVehicle(
   shopId: number,
   serviceItemId: string,

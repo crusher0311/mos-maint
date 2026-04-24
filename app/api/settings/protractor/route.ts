@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
 import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/protractor-jobs-prewarm";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -118,12 +119,29 @@ export async function POST(req: NextRequest) {
       db.collection("cached_plans").deleteMany({ shopId }),
     ]);
 
-    // Run job history backfill inline (fire-and-forget, runs in background)
-    runProtractorBackfill(shopId).then(result => {
-      console.log(`[Protractor Settings] Backfill completed for shop ${shopId}:`, result);
-    }).catch(err => {
-      console.error(`[Protractor Settings] Backfill failed for shop ${shopId}:`, err.message);
-    });
+    // Pre-warm `protractor_invoice_cache` for the most recent invoices
+    // before the backfill kicks off, so the very first chunk hits Mongo
+    // for `/Invoice/{id}` instead of paying the full per-invoice API
+    // cost. Mirrors the Tekmetric onboarding pattern from task #59 (see
+    // lib/protractor-jobs-prewarm.ts). The prewarm + backfill chain is
+    // intentionally fire-and-forget so the settings POST returns
+    // promptly; the prewarm awaits internally so the cache is populated
+    // before the first backfill chunk fans out per-invoice fetches.
+    (async () => {
+      try {
+        await prewarmProtractorJobsCacheForOnboarding(shopId);
+      } catch (warmErr: any) {
+        console.warn(
+          `[Protractor Settings] Invoice cache prewarm failed (non-fatal) for shop ${shopId}: ${warmErr?.message || warmErr}`
+        );
+      }
+      try {
+        const result = await runProtractorBackfill(shopId);
+        console.log(`[Protractor Settings] Backfill completed for shop ${shopId}:`, result);
+      } catch (err: any) {
+        console.error(`[Protractor Settings] Backfill failed for shop ${shopId}:`, err.message);
+      }
+    })();
 
     return NextResponse.json({
       ok: true,

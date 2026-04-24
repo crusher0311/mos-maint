@@ -5,6 +5,8 @@ import {
   fetchInvoiceById,
   fetchVehicleById,
   getProtractorBackoffMs,
+  getCachedProtractorInvoice,
+  cacheProtractorInvoice,
 } from "@/lib/integrations/protractor";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/normalized-ingestion";
@@ -368,17 +370,45 @@ async function backfillShopChunk(
   const invoicesForNormalized: any[] = [];
   let invoiceDetailErrors = 0;
 
+  let invoicesFromCache = 0;
   await Promise.all(
     invoices.map((inv: any) =>
       rateLimiter(async () => {
         try {
-          const detailResult = await fetchInvoiceById(shopId, inv.ID);
-          if (!detailResult.ok || !detailResult.invoice) {
-            invoiceDetailErrors++;
-            return;
+          // Check `protractor_invoice_cache` first. The onboarding pre-warm
+          // (lib/protractor-jobs-prewarm.ts) and any previous backfill run
+          // populate this cache, so the very first chunk of a fresh-shop
+          // backfill — and any verification rerun — can hit Mongo instead
+          // of paying the per-invoice `/Invoice/{id}` API cost.
+          let fullInv = await getCachedProtractorInvoice(db, shopId, inv.ID).catch(
+            (cacheErr: any) => {
+              console.warn(
+                `[Backfill] Shop ${shopId}: invoice cache lookup failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
+              );
+              return null;
+            }
+          );
+
+          if (fullInv) {
+            invoicesFromCache++;
+          } else {
+            const detailResult = await fetchInvoiceById(shopId, inv.ID);
+            if (!detailResult.ok || !detailResult.invoice) {
+              invoiceDetailErrors++;
+              return;
+            }
+            fullInv = detailResult.invoice;
+            // Warm the cache for next time. Stable post-invoice payloads
+            // mean this upsert is safe and cheap.
+            await cacheProtractorInvoice(db, shopId, inv.ID, fullInv).catch(
+              (cacheErr: any) => {
+                console.warn(
+                  `[Backfill] Shop ${shopId}: invoice cache write failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
+                );
+              }
+            );
           }
 
-          const fullInv = detailResult.invoice as any;
           invoicesForNormalized.push(fullInv);
 
           if (fullInv.ServiceItemID) {
@@ -404,7 +434,7 @@ async function backfillShopChunk(
     console.warn(`[Backfill] Shop ${shopId}: ${invoiceDetailErrors}/${invoices.length} invoice-detail fetches failed; will hold cursor`);
   }
 
-  console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch`);
+  console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch (invoice cache: ${invoicesFromCache}/${invoices.length} hit)`);
 
   const vehicleCache = new Map<string, any>();
   const vehicleIdsToFetch = Array.from(serviceItemIds).filter(id => {
