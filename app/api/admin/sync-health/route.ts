@@ -365,6 +365,60 @@ export async function GET() {
       (s: any) => (s.p95DurationMs || 0) > SLOW_P95_THRESHOLD_MS,
     ).length;
 
+    // Same chunk-speed roll-up for Protractor + Shop-Ware. They use a
+    // shared metric shape (see `buildProtractorChunkMetrics` /
+    // `buildShopwareChunkMetrics`), so the helper is reused as-is. The
+    // Protractor cron persists vehicle + invoice-detail cache hits, while
+    // Shop-Ware only has vehicle + customer association hits; unused slots
+    // come back as null and the renderer hides them.
+    const protractorChunkSpeed = protractorBackfillProgress
+      .map((p: any) => ({
+        shopId: p.shopId,
+        completed: !!p.completed,
+        ...(summarizeChunkMetrics(p.recentChunkMetrics) || {}),
+        lastChunkMetrics: p.lastChunkMetrics
+          ? {
+              at: p.lastChunkMetrics.at || null,
+              durationMs: p.lastChunkMetrics.durationMs || null,
+              roCount: p.lastChunkMetrics.roCount || 0,
+              jobsCacheHitRate: p.lastChunkMetrics.jobsCacheHitRate ?? null,
+              vehiclesCacheHitRate: p.lastChunkMetrics.vehiclesCacheHitRate ?? null,
+              customersCacheHitRate: p.lastChunkMetrics.customersCacheHitRate ?? null,
+              backoff429Ms: p.lastChunkMetrics.backoff429Ms || 0,
+              advanceMode: p.lastChunkMetrics.advanceMode || null,
+            }
+          : null,
+      }))
+      .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
+      .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));
+    const protractorSlowChunkShopCount = protractorChunkSpeed.filter(
+      (s: any) => (s.p95DurationMs || 0) > SLOW_P95_THRESHOLD_MS,
+    ).length;
+
+    const shopwareChunkSpeed = shopwareBackfillProgress
+      .map((p: any) => ({
+        shopId: p.shopId,
+        completed: !!p.completed,
+        ...(summarizeChunkMetrics(p.recentChunkMetrics) || {}),
+        lastChunkMetrics: p.lastChunkMetrics
+          ? {
+              at: p.lastChunkMetrics.at || null,
+              durationMs: p.lastChunkMetrics.durationMs || null,
+              roCount: p.lastChunkMetrics.roCount || 0,
+              jobsCacheHitRate: p.lastChunkMetrics.jobsCacheHitRate ?? null,
+              vehiclesCacheHitRate: p.lastChunkMetrics.vehiclesCacheHitRate ?? null,
+              customersCacheHitRate: p.lastChunkMetrics.customersCacheHitRate ?? null,
+              backoff429Ms: p.lastChunkMetrics.backoff429Ms || 0,
+              advanceMode: p.lastChunkMetrics.advanceMode || null,
+            }
+          : null,
+      }))
+      .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
+      .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));
+    const shopwareSlowChunkShopCount = shopwareChunkSpeed.filter(
+      (s: any) => (s.p95DurationMs || 0) > SLOW_P95_THRESHOLD_MS,
+    ).length;
+
     const syncSuccessRate = recentSyncMetrics.length > 0
       ? (recentSyncMetrics.filter((m: any) => m.success).length / recentSyncMetrics.length * 100).toFixed(1)
       : "N/A";
@@ -460,6 +514,10 @@ export async function GET() {
             lastRunAt: p.lastRunAt
           })),
           diagnostics: protractorDiagnostics,
+          chunkSpeed: protractorChunkSpeed,
+          chunkSpeedShopCount: protractorChunkSpeed.length,
+          slowChunkShopCount: protractorSlowChunkShopCount,
+          slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
         },
         shopware: {
           complete: shopwareShopsComplete,
@@ -473,6 +531,10 @@ export async function GET() {
             lastRunAt: p.lastRunAt
           })),
           diagnostics: shopwareDiagnostics,
+          chunkSpeed: shopwareChunkSpeed,
+          chunkSpeedShopCount: shopwareChunkSpeed.length,
+          slowChunkShopCount: shopwareSlowChunkShopCount,
+          slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
         }
       },
       sync: {

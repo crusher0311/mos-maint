@@ -18,6 +18,25 @@ function getBaseUrl(): string {
   return process.env.SHOPWARE_API_BASE_URL || (process.env.SHOPWARE_USE_SANDBOX === 'true' ? SW_SANDBOX_BASE : SW_PROD_BASE);
 }
 
+// Cumulative time spent sleeping after a Shop-Ware rate-limit (X-RateLimit
+// -Remaining=0) response. Surfaced per-chunk in the backfill metrics so a
+// regression in rate-limit health is visible in the admin sync-health view
+// without grepping cron logs. Mirrors the Tekmetric `tekmetric429BackoffMs`
+// counter — process-global, so under concurrency another shop's chunk can
+// leak backoff into this chunk's delta. Still useful as a "is this chunk
+// hitting rate limits at all" signal.
+let shopwareBackoffMs = 0;
+
+export function getShopwareBackoffMs(): number {
+  return shopwareBackoffMs;
+}
+
+export function resetShopwareBackoffMs(): number {
+  const ms = shopwareBackoffMs;
+  shopwareBackoffMs = 0;
+  return ms;
+}
+
 function getCredentials(): { partnerApiId: string; apiSecret: string } {
   const partnerApiId = process.env.SHOPWARE_PARTNER_API_ID;
   const apiSecret = process.env.SHOPWARE_API_SECRET;
@@ -65,6 +84,7 @@ export async function shopWareRequest<T = any>(
       const resetMs = Number(reset) * 1000 - Date.now();
       if (resetMs > 0 && resetMs < 60_000) {
         console.warn(`[Shop-Ware] Rate limit hit, sleeping ${resetMs}ms`);
+        shopwareBackoffMs += resetMs;
         await new Promise(r => setTimeout(r, resetMs));
       }
     }

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import {
   getRepairOrders,
   shopWareRequest,
+  getShopwareBackoffMs,
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
@@ -15,6 +16,11 @@ export const maxDuration = 300;
 const CRON_SECRET = process.env.CRON_SECRET;
 const STALE_LOCK_MS = 3 * 60 * 1000; // shrunk from 10min so a crashed run unblocks fast
 const YEARS_TO_BACKFILL = 5;
+// Per-chunk metrics rolling window. Mirrors the Tekmetric/Protractor backfill
+// caps so the admin sync-health view can compute median/p95 chunk duration
+// per shop without grepping cron logs. 25 entries keeps the progress doc
+// small (~5KB) while leaving headroom to spot a regression.
+const RECENT_CHUNK_METRICS_LIMIT = 25;
 
 function isAuthorized(req: NextRequest): boolean {
   if (!CRON_SECRET) return true;
@@ -69,6 +75,16 @@ function extractJobEntries(mosShopId: number, ro: ShopWareRepairOrder, tenantId:
   });
 }
 
+type ShopwareChunkMetrics = {
+  durationMs: number;
+  roCount: number;
+  vehiclesCacheHits: number;
+  vehiclesCacheMisses: number;
+  customersCacheHits: number;
+  customersCacheMisses: number;
+  backoffDeltaMs: number;
+};
+
 async function backfillShopChunk(
   shopId: number,
   tenantId: number,
@@ -82,10 +98,24 @@ async function backfillShopChunk(
   jobsSkipped: number;
   vehiclesStored: number;
   customersStored: number;
+  metrics: ShopwareChunkMetrics;
   error?: string;
 }> {
   const db = await getDb();
   const mosShopId = shopId;
+
+  // Per-chunk speed metrics. Cache-hit semantics: a "hit" = the RO list
+  // response already included the vehicle/customer association (no extra
+  // API call), a "miss" = we had to fall back to a separate
+  // /vehicles/{id} or /customers/{id} fetch. Mirrors the Tekmetric backfill
+  // shape so the admin view's `summarizeChunkMetrics` helper can render
+  // both providers without a per-provider branch.
+  const chunkStartedAt = Date.now();
+  const backoffMsAtStart = getShopwareBackoffMs();
+  let vehiclesCacheHits = 0;
+  let vehiclesCacheMisses = 0;
+  let customersCacheHits = 0;
+  let customersCacheMisses = 0;
 
   let rosFetched = 0;
   let rosStored = 0;
@@ -93,6 +123,16 @@ async function backfillShopChunk(
   let jobsSkipped = 0;
   let vehiclesStored = 0;
   let customersStored = 0;
+
+  const buildMetrics = (): ShopwareChunkMetrics => ({
+    durationMs: Date.now() - chunkStartedAt,
+    roCount: rosFetched,
+    vehiclesCacheHits,
+    vehiclesCacheMisses,
+    customersCacheHits,
+    customersCacheMisses,
+    backoffDeltaMs: Math.max(0, getShopwareBackoffMs() - backoffMsAtStart),
+  });
 
   try {
     const ros = await getRepairOrders(tenantId, mosShopId, {
@@ -112,23 +152,33 @@ async function backfillShopChunk(
       let vehicle = ro.vehicle ?? null;
       let customer = ro.customer ?? null;
 
-      if (!vehicle && ro.vehicle_id) {
-        try {
-          vehicle = await shopWareRequest<ShopWareVehicle>(
-            `/tenants/${tenantId}/vehicles/${ro.vehicle_id}`,
-            {},
-            mosShopId
-          );
-        } catch {}
+      if (ro.vehicle_id) {
+        if (vehicle) {
+          vehiclesCacheHits++;
+        } else {
+          vehiclesCacheMisses++;
+          try {
+            vehicle = await shopWareRequest<ShopWareVehicle>(
+              `/tenants/${tenantId}/vehicles/${ro.vehicle_id}`,
+              {},
+              mosShopId
+            );
+          } catch {}
+        }
       }
-      if (!customer && ro.customer_id) {
-        try {
-          customer = await shopWareRequest<ShopWareCustomer>(
-            `/tenants/${tenantId}/customers/${ro.customer_id}`,
-            {},
-            mosShopId
-          );
-        } catch {}
+      if (ro.customer_id) {
+        if (customer) {
+          customersCacheHits++;
+        } else {
+          customersCacheMisses++;
+          try {
+            customer = await shopWareRequest<ShopWareCustomer>(
+              `/tenants/${tenantId}/customers/${ro.customer_id}`,
+              {},
+              mosShopId
+            );
+          } catch {}
+        }
       }
 
       await db.collection("shopware_repair_orders").updateOne(
@@ -241,11 +291,67 @@ async function backfillShopChunk(
       jobsSkipped,
       vehiclesStored,
       customersStored,
+      metrics: buildMetrics(),
       error: err.message,
     };
   }
 
-  return { rosFetched, rosStored, jobsIndexed, jobsSkipped, vehiclesStored, customersStored };
+  return {
+    rosFetched,
+    rosStored,
+    jobsIndexed,
+    jobsSkipped,
+    vehiclesStored,
+    customersStored,
+    metrics: buildMetrics(),
+  };
+}
+
+// Builds the per-chunk metrics object persisted on
+// `shopware_backfill_progress`. Mirrors the Tekmetric/Protractor backfill
+// shape so the `summarizeChunkMetrics` helper in the admin sync-health
+// route can render all three providers without a per-provider branch. The
+// jobs* slot is unused for Shop-Ware (no per-RO jobs cache exists), the
+// vehicles* and customers* slots track inline-association hit rates.
+function buildShopwareChunkMetrics(input: {
+  now: Date;
+  metrics: ShopwareChunkMetrics;
+  chunkStart: Date;
+  chunkEnd: Date;
+  nextChunkEnd: Date;
+  advanceMode: string;
+  chunkHadError: boolean;
+}) {
+  const vehTotal = input.metrics.vehiclesCacheHits + input.metrics.vehiclesCacheMisses;
+  const custTotal = input.metrics.customersCacheHits + input.metrics.customersCacheMisses;
+  return {
+    at: input.now,
+    durationMs: input.metrics.durationMs,
+    roCount: input.metrics.roCount,
+    chunkStart: input.chunkStart,
+    chunkEnd: input.chunkEnd,
+    nextChunkEnd: input.nextChunkEnd,
+    advanceMode: input.advanceMode,
+    jobsCacheHits: 0,
+    jobsCacheMisses: 0,
+    jobsCacheHitRate: null,
+    vehiclesCacheHits: input.metrics.vehiclesCacheHits,
+    vehiclesCacheMisses: input.metrics.vehiclesCacheMisses,
+    vehiclesCacheHitRate:
+      vehTotal > 0
+        ? Number((input.metrics.vehiclesCacheHits / vehTotal).toFixed(4))
+        : null,
+    customersCacheHits: input.metrics.customersCacheHits,
+    customersCacheMisses: input.metrics.customersCacheMisses,
+    customersCacheHitRate:
+      custTotal > 0
+        ? Number((input.metrics.customersCacheHits / custTotal).toFixed(4))
+        : null,
+    backoff429Ms: Math.round(input.metrics.backoffDeltaMs),
+    chunkHadError: input.chunkHadError,
+    hitPageCap: false,
+    perRoExceptions: 0,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -353,6 +459,11 @@ export async function GET(req: NextRequest) {
     let totalCustomers = 0;
     let chunksProcessed = 0;
     let chunkError: string | undefined;
+    // Mutable copy of recentChunkMetrics so we can persist after every chunk
+    // without re-reading the progress doc each iteration.
+    let recentChunkMetrics: any[] = Array.isArray(progress?.recentChunkMetrics)
+      ? [...progress.recentChunkMetrics]
+      : [];
 
     for (let i = 0; i < pace.maxChunksPerRun && cursor > oldestDate; i++) {
       const chunkStart = new Date(cursor.getTime() - pace.chunkDays * 24 * 60 * 60 * 1000);
@@ -370,10 +481,47 @@ export async function GET(req: NextRequest) {
       totalCustomers += result.customersStored;
       chunksProcessed++;
 
+      // Build the chunk metric record for this iteration. We persist on both
+      // success and error paths so an admin can see chunks that 429'd hard
+      // alongside healthy ones.
+      const chunkMetric = buildShopwareChunkMetrics({
+        now: new Date(),
+        metrics: result.metrics,
+        chunkStart: effectiveStart,
+        chunkEnd: cursor,
+        nextChunkEnd: result.error ? cursor : effectiveStart,
+        advanceMode: result.error ? "HOLD (chunk error)" : "FULL",
+        chunkHadError: !!result.error,
+      });
+      recentChunkMetrics = [chunkMetric, ...recentChunkMetrics].slice(
+        0,
+        RECENT_CHUNK_METRICS_LIMIT,
+      );
+
+      console.log(
+        `[SW Backfill] Shop ${mosShopId}: chunk metrics ` +
+          `duration=${chunkMetric.durationMs}ms ros=${result.metrics.roCount} ` +
+          `vehiclesCache=${result.metrics.vehiclesCacheHits}/${result.metrics.vehiclesCacheHits + result.metrics.vehiclesCacheMisses} ` +
+          `customersCache=${result.metrics.customersCacheHits}/${result.metrics.customersCacheHits + result.metrics.customersCacheMisses} ` +
+          `backoff=${chunkMetric.backoff429Ms}ms`,
+      );
+
       if (result.error) {
         chunkError = result.error;
         console.error(`[SW Backfill] Shop ${mosShopId} chunk error (HOLDING cursor): ${result.error}`);
-        // Do NOT advance cursor on error — next run will retry the same chunk.
+        // Persist metrics even on error so the admin view captures rate-limit
+        // hits, then break (cursor not advanced — next run retries chunk).
+        await db.collection("shopware_backfill_progress").updateOne(
+          { shopId: mosShopId },
+          {
+            $set: {
+              lastChunkAt: new Date(),
+              lastRunAt: new Date(),
+              lastChunkMetrics: chunkMetric,
+              recentChunkMetrics,
+            },
+          },
+        );
         break;
       }
 
@@ -396,6 +544,8 @@ export async function GET(req: NextRequest) {
             lastCursorMoveAt: new Date(),
             lastError: null,
             lastErrorAt: null,
+            lastChunkMetrics: chunkMetric,
+            recentChunkMetrics,
           },
           $inc: {
             totalRosProcessed: result.rosStored,

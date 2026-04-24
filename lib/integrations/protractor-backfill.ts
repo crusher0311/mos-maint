@@ -4,6 +4,7 @@ import {
   protractorFetch,
   fetchInvoiceById,
   fetchVehicleById,
+  getProtractorBackoffMs,
 } from "@/lib/integrations/protractor";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/normalized-ingestion";
@@ -12,6 +13,11 @@ import pLimit from "p-limit";
 
 const YEARS_TO_BACKFILL = 5;
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
+// Per-chunk metrics rolling window. Mirrors the Tekmetric backfill cap so the
+// admin sync-health view can compute median/p95 chunk duration per shop
+// without grepping cron logs. 25 entries is enough headroom to spot a
+// regression while keeping the progress doc small.
+const RECENT_CHUNK_METRICS_LIMIT = 25;
 
 async function fetchInvoicesForDateRange(
   shopId: number,
@@ -76,7 +82,8 @@ async function getOrFetchVehicle(
   db: any,
   shopId: number,
   serviceItemId: string,
-  rateLimiter: ReturnType<typeof pLimit>
+  rateLimiter: ReturnType<typeof pLimit>,
+  cacheCounters?: { hits: number; misses: number }
 ): Promise<{ vin?: string; year?: number; make?: string; model?: string; engine?: string } | null> {
   if (!serviceItemId) return null;
   
@@ -86,6 +93,7 @@ async function getOrFetchVehicle(
   });
   
   if (cached) {
+    if (cacheCounters) cacheCounters.hits++;
     return {
       vin: cached.vin,
       year: cached.year,
@@ -94,7 +102,9 @@ async function getOrFetchVehicle(
       engine: cached.engine,
     };
   }
-  
+
+  if (cacheCounters) cacheCounters.misses++;
+
   const result = await rateLimiter(async () => {
     return fetchVehicleById(shopId, serviceItemId);
   });
@@ -130,11 +140,71 @@ async function getOrFetchVehicle(
   return null;
 }
 
+// Builds the per-chunk metrics object persisted on `backfill_progress`.
+// Mirrors the shape used by the Tekmetric backfill so the
+// `summarizeChunkMetrics` helper in the admin sync-health route can render
+// it without a provider-specific branch. Slot mapping for Protractor:
+// - vehicles* -> `protractor_service_items` cache hits/misses (real cache)
+// - jobs* -> NULL/0 (Protractor has no per-RO jobs cache; invoice details
+//   come back from the list endpoint, no separate fetch). Reporting null
+//   here instead of 0/0 -> 0% prevents the admin view from showing a fake
+//   "0% hit rate" regression for a slot that doesn't exist.
+// - customers* -> NULL/0 (no per-customer fetch in the backfill path).
+function buildProtractorChunkMetrics(input: {
+  now: Date;
+  durationMs: number;
+  roCount: number;
+  chunkStart: Date;
+  chunkEnd: Date;
+  nextChunkEnd: Date;
+  advanceMode: string;
+  vehiclesCacheHits: number;
+  vehiclesCacheMisses: number;
+  backoffDeltaMs: number;
+  chunkHadError: boolean;
+  hitPageCap: boolean;
+}) {
+  const vehTotal = input.vehiclesCacheHits + input.vehiclesCacheMisses;
+  return {
+    at: input.now,
+    durationMs: input.durationMs,
+    roCount: input.roCount,
+    chunkStart: input.chunkStart,
+    chunkEnd: input.chunkEnd,
+    nextChunkEnd: input.nextChunkEnd,
+    advanceMode: input.advanceMode,
+    jobsCacheHits: 0,
+    jobsCacheMisses: 0,
+    jobsCacheHitRate: null,
+    vehiclesCacheHits: input.vehiclesCacheHits,
+    vehiclesCacheMisses: input.vehiclesCacheMisses,
+    vehiclesCacheHitRate:
+      vehTotal > 0
+        ? Number((input.vehiclesCacheHits / vehTotal).toFixed(4))
+        : null,
+    customersCacheHits: 0,
+    customersCacheMisses: 0,
+    customersCacheHitRate: null,
+    backoff429Ms: Math.round(input.backoffDeltaMs),
+    chunkHadError: input.chunkHadError,
+    hitPageCap: input.hitPageCap,
+    perRoExceptions: 0,
+  };
+}
+
 async function backfillShopChunk(
   db: any, 
   shopId: number,
   _rateLimiter: ReturnType<typeof pLimit>
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number }> {
+  // Per-chunk speed metrics. Captured here and persisted at the end of the
+  // chunk so a regression in vehicle cache hit rate or a backoff spike is
+  // visible in the admin sync-health view without grepping cron logs.
+  // Mirrors the Tekmetric backfill instrumentation.
+  const chunkStartedAt = Date.now();
+  const backoffMsAtStart = getProtractorBackoffMs();
+  const vehicleCacheCounters = { hits: 0, misses: 0 };
+
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { jobsIndexed: 0, skipped: 0, complete: false, message: "Not configured", vehiclesFetched: 0, normalizedCount: 0 };
@@ -246,6 +316,27 @@ async function backfillShopChunk(
     // Empty chunk: if it was empty due to error, hold cursor; else advance.
     const nextChunkEnd = chunkHadError ? chunkEnd : chunkStart;
     const isComplete = !chunkHadError && nextChunkEnd <= oldestDate;
+    const emptyChunkMetrics = buildProtractorChunkMetrics({
+      now: new Date(),
+      durationMs: Date.now() - chunkStartedAt,
+      roCount: 0,
+      chunkStart,
+      chunkEnd,
+      nextChunkEnd,
+      advanceMode: chunkHadError ? "HOLD (empty chunk after error)" : "FULL (empty chunk)",
+      vehiclesCacheHits: vehicleCacheCounters.hits,
+      vehiclesCacheMisses: vehicleCacheCounters.misses,
+      backoffDeltaMs: Math.max(0, getProtractorBackoffMs() - backoffMsAtStart),
+      chunkHadError,
+      hitPageCap: false,
+    });
+    const priorEmptyMetrics: any[] = Array.isArray(progress?.recentChunkMetrics)
+      ? progress.recentChunkMetrics
+      : [];
+    const nextEmptyRecent = [emptyChunkMetrics, ...priorEmptyMetrics].slice(
+      0,
+      RECENT_CHUNK_METRICS_LIMIT,
+    );
     await db.collection("backfill_progress").updateOne(
       { shopId },
       {
@@ -258,6 +349,8 @@ async function backfillShopChunk(
           ...(chunkHadError
             ? { lastError: "empty chunk after error", lastErrorAt: new Date() }
             : { lastError: null, lastErrorAt: null }),
+          lastChunkMetrics: emptyChunkMetrics,
+          recentChunkMetrics: nextEmptyRecent,
         }
       }
     );
@@ -325,7 +418,7 @@ async function backfillShopChunk(
     const vehicleResults = await Promise.all(
       vehicleIdsToFetch.map(serviceItemId => 
         rateLimiter(async () => {
-          const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter);
+          const vehicleData = await getOrFetchVehicle(db, shopId, serviceItemId, rateLimiter, vehicleCacheCounters);
           return { serviceItemId, vehicleData };
         })
       )
@@ -422,6 +515,41 @@ async function backfillShopChunk(
 
   console.log(`[Backfill] Shop ${shopId}: ${advanceMode} — currentChunkEnd ${chunkEnd.toISOString().split('T')[0]} -> ${nextChunkEnd.toISOString().split('T')[0]}`);
 
+  // Compute per-chunk speed metrics. The backoff value is a delta against the
+  // process-global counter snapshot taken at chunk start. NOTE: this is
+  // APPROXIMATE under concurrency — if another shop's chunk runs in parallel
+  // inside the same process and pays a backoff, that backoff also lands in
+  // this chunk's delta. Still useful as a "is this chunk hitting rate limits
+  // at all" signal.
+  const chunkMetrics = buildProtractorChunkMetrics({
+    now: new Date(),
+    durationMs: Date.now() - chunkStartedAt,
+    roCount: invoices.length,
+    chunkStart,
+    chunkEnd,
+    nextChunkEnd,
+    advanceMode,
+    vehiclesCacheHits: vehicleCacheCounters.hits,
+    vehiclesCacheMisses: vehicleCacheCounters.misses,
+    backoffDeltaMs: Math.max(0, getProtractorBackoffMs() - backoffMsAtStart),
+    chunkHadError,
+    hitPageCap,
+  });
+  const priorChunkMetrics: any[] = Array.isArray(progress?.recentChunkMetrics)
+    ? progress.recentChunkMetrics
+    : [];
+  const nextRecentChunkMetrics = [chunkMetrics, ...priorChunkMetrics].slice(
+    0,
+    RECENT_CHUNK_METRICS_LIMIT,
+  );
+
+  console.log(
+    `[Backfill] Shop ${shopId}: chunk metrics ` +
+      `duration=${chunkMetrics.durationMs}ms ros=${invoices.length} ` +
+      `vehiclesCache=${vehicleCacheCounters.hits}/${vehicleCacheCounters.hits + vehicleCacheCounters.misses} ` +
+      `backoff=${chunkMetrics.backoff429Ms}ms`,
+  );
+
   await db.collection("backfill_progress").updateOne(
     { shopId },
     {
@@ -434,6 +562,8 @@ async function backfillShopChunk(
         ...(chunkHadError
           ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
           : { lastError: null, lastErrorAt: null }),
+        lastChunkMetrics: chunkMetrics,
+        recentChunkMetrics: nextRecentChunkMetrics,
       },
       $inc: { totalJobsIndexed: jobsIndexed }
     }

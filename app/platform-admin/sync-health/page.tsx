@@ -1434,6 +1434,20 @@ export default function SyncHealthPage() {
         tek?.slowChunkP95ThresholdMs,
       )}
 
+      {renderChunkSpeedSection(
+        "Protractor",
+        pro?.chunkSpeed,
+        pro?.slowChunkShopCount,
+        pro?.slowChunkP95ThresholdMs,
+      )}
+
+      {renderChunkSpeedSection(
+        "Shop-Ware",
+        sw?.chunkSpeed,
+        sw?.slowChunkShopCount,
+        sw?.slowChunkP95ThresholdMs,
+      )}
+
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
       {renderStuckSection("Protractor", pro?.diagnostics)}
       {renderStuckSection("Shop-Ware", sw?.diagnostics)}

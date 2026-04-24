@@ -11,6 +11,25 @@ const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0"
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
 
+// Cumulative time spent in `await new Promise(r => setTimeout(r, waitMs))`
+// after a Protractor 429/5xx retry. Surfaced per-chunk in the backfill
+// metrics so a regression in rate-limit health is visible in the admin
+// sync-health view without grepping cron logs. Mirrors the Tekmetric
+// `tekmetric429BackoffMs` counter — process-global, so under concurrency
+// another shop's chunk can leak backoff into this chunk's delta. Still
+// useful as a "is this chunk hitting rate limits at all" signal.
+let protractorBackoffMs = 0;
+
+export function getProtractorBackoffMs(): number {
+  return protractorBackoffMs;
+}
+
+export function resetProtractorBackoffMs(): number {
+  const ms = protractorBackoffMs;
+  protractorBackoffMs = 0;
+  return ms;
+}
+
 // PRIORITY concurrency limiter: separate pool for user-initiated requests (bypasses background queue)
 const priorityConcurrencyLimit = pLimit(2);
 
@@ -526,6 +545,7 @@ export async function protractorFetch<T>(
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
 
+        protractorBackoffMs += waitMs;
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
       }
