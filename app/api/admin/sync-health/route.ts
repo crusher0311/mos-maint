@@ -192,6 +192,7 @@ export async function GET() {
       recentSyncMetrics,
       normalizedStats,
       tekmetricStaleArchivedAgg,
+      tekmetricShopDocs,
     ] = await Promise.all([
       db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db.collection("backfill_progress").find({}).toArray(),
@@ -236,6 +237,20 @@ export async function GET() {
         { $sort: { lastArchivedAt: -1 } },
         { $limit: 100 },
       ]).toArray(),
+      // Pull just the fields we need for the jobs-cache-prewarm overlay.
+      // Restricted to shops with a Tekmetric integration so the join
+      // isn't paying for shops that will never have a prewarm record.
+      db.collection("shops").find(
+        { "tekmetric.shopId": { $exists: true, $ne: null } },
+        {
+          projection: {
+            shopId: 1,
+            "tekmetric.shopId": 1,
+            "tekmetric.jobsCachePrewarm": 1,
+            _id: 0,
+          },
+        },
+      ).toArray(),
     ]);
 
     const tekmetricShopsComplete = tekmetricBackfillProgress.filter((p: any) => p.completed).length;
@@ -419,6 +434,67 @@ export async function GET() {
       (s: any) => (s.p95DurationMs || 0) > SLOW_P95_THRESHOLD_MS,
     ).length;
 
+    // Per-shop jobs-cache pre-warm overlay. The prewarm record lives on
+    // `shops.tekmetric.jobsCachePrewarm` (stamped by
+    // lib/tekmetric-jobs-prewarm.ts at onboarding). Joining it onto the
+    // backfill-progress universe lets on-call confirm at a glance which
+    // freshly onboarded shops actually got their pre-warm vs which ones
+    // were onboarded before the feature shipped (no record at all) and
+    // would benefit from a one-shot manual warm. We key the join on
+    // String(shopId) since the platform shopId is sometimes stored as a
+    // string and sometimes as a number across collections.
+    const tekmetricPrewarmByShopId = new Map<string, any>();
+    for (const s of tekmetricShopDocs as any[]) {
+      tekmetricPrewarmByShopId.set(String(s.shopId), {
+        tekmetricShopId: s?.tekmetric?.shopId ?? null,
+        record: s?.tekmetric?.jobsCachePrewarm || null,
+      });
+    }
+    const tekmetricJobsCachePrewarm = tekmetricBackfillProgress
+      .map((p: any) => {
+        const entry = tekmetricPrewarmByShopId.get(String(p.shopId));
+        const record = entry?.record || null;
+        return {
+          shopId: p.shopId,
+          tekmetricShopId: entry?.tekmetricShopId ?? null,
+          completed: !!p.completed,
+          // `hasPrewarmRecord: false` is the visual "this shop was
+          // onboarded before pre-warm rolled out" signal — it's the
+          // primary thing on-call should be able to spot in the table.
+          hasPrewarmRecord: !!record,
+          completedAt: record?.completedAt || null,
+          lookbackDays: record?.lookbackDays ?? null,
+          rosScanned: record?.rosScanned ?? null,
+          terminalRosFound: record?.terminalRosFound ?? null,
+          alreadyCached: record?.alreadyCached ?? null,
+          rosCached: record?.rosCached ?? null,
+          jobsCached: record?.jobsCached ?? null,
+          errors: record?.errors ?? null,
+          capped: !!record?.capped,
+          durationMs: record?.durationMs ?? null,
+        };
+      })
+      .sort((a: any, b: any) => {
+        // Surface "no prewarm record" rows first — they're the actionable
+        // ones (legacy shops that never got warmed) — then capped /
+        // errored, then most-recent prewarm.
+        if (a.hasPrewarmRecord !== b.hasPrewarmRecord) {
+          return a.hasPrewarmRecord ? 1 : -1;
+        }
+        const aProblem = (a.capped ? 1 : 0) + ((a.errors || 0) > 0 ? 1 : 0);
+        const bProblem = (b.capped ? 1 : 0) + ((b.errors || 0) > 0 ? 1 : 0);
+        if (aProblem !== bProblem) return bProblem - aProblem;
+        const aAt = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bAt = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bAt - aAt;
+      });
+    const tekmetricJobsCachePrewarmMissingCount = tekmetricJobsCachePrewarm
+      .filter((p: any) => !p.hasPrewarmRecord).length;
+    const tekmetricJobsCachePrewarmCappedCount = tekmetricJobsCachePrewarm
+      .filter((p: any) => p.capped).length;
+    const tekmetricJobsCachePrewarmErrorsCount = tekmetricJobsCachePrewarm
+      .filter((p: any) => (p.errors ?? 0) > 0).length;
+
     const syncSuccessRate = recentSyncMetrics.length > 0
       ? (recentSyncMetrics.filter((m: any) => m.success).length / recentSyncMetrics.length * 100).toFixed(1)
       : "N/A";
@@ -501,6 +577,16 @@ export async function GET() {
           chunkSpeedShopCount: tekmetricChunkSpeed.length,
           slowChunkShopCount: tekmetricSlowChunkShopCount,
           slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
+          // Per-shop jobs-cache pre-warm status (task #59 / task #63).
+          // `jobsCachePrewarmMissingCount` is the headline number on the
+          // dashboard card — a non-zero value means there are legacy
+          // Tekmetric shops onboarded before pre-warm shipped that
+          // could be one-shot warmed manually for a faster first chunk.
+          jobsCachePrewarm: tekmetricJobsCachePrewarm,
+          jobsCachePrewarmShopCount: tekmetricJobsCachePrewarm.length,
+          jobsCachePrewarmMissingCount: tekmetricJobsCachePrewarmMissingCount,
+          jobsCachePrewarmCappedCount: tekmetricJobsCachePrewarmCappedCount,
+          jobsCachePrewarmErrorsCount: tekmetricJobsCachePrewarmErrorsCount,
         },
         protractor: {
           complete: protractorShopsComplete,

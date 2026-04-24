@@ -13,6 +13,7 @@ import {
   SkipForward,
   ShieldCheck,
   Gauge,
+  Flame,
 } from "lucide-react";
 import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
@@ -117,6 +118,23 @@ interface ChunkSpeedShop {
   } | null;
 }
 
+interface JobsCachePrewarmShop {
+  shopId: number;
+  tekmetricShopId: number | null;
+  completed: boolean;
+  hasPrewarmRecord: boolean;
+  completedAt: string | null;
+  lookbackDays: number | null;
+  rosScanned: number | null;
+  terminalRosFound: number | null;
+  alreadyCached: number | null;
+  rosCached: number | null;
+  jobsCached: number | null;
+  errors: number | null;
+  capped: boolean;
+  durationMs: number | null;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -140,6 +158,11 @@ interface ProviderBackfill {
   chunkSpeedShopCount?: number;
   slowChunkShopCount?: number;
   slowChunkP95ThresholdMs?: number;
+  jobsCachePrewarm?: JobsCachePrewarmShop[];
+  jobsCachePrewarmShopCount?: number;
+  jobsCachePrewarmMissingCount?: number;
+  jobsCachePrewarmCappedCount?: number;
+  jobsCachePrewarmErrorsCount?: number;
 }
 
 interface SyncHealthData {
@@ -195,6 +218,7 @@ export default function SyncHealthPage() {
   const [retryingRo, setRetryingRo] = useState<number | null>(null);
   const [retryingAllRo, setRetryingAllRo] = useState(false);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+  const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -349,6 +373,44 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to retry skipped ROs");
     } finally {
       setRetryingRo(null);
+    }
+  };
+
+  const rewarmJobsCache = async (shopId: number, hasRecord: boolean) => {
+    if (
+      !confirm(
+        hasRecord
+          ? `Re-run jobs cache pre-warm for shop ${shopId}? This re-fetches recent terminal RO /jobs payloads. Safe to run anytime; idempotent.`
+          : `Run jobs cache pre-warm for shop ${shopId}? This shop has no pre-warm record (likely onboarded before pre-warm shipped). Will fetch up to 500 recent terminal ROs.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingShopId(shopId);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shopId}/tekmetric-rewarm-jobs-cache`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to re-warm jobs cache");
+      } else {
+        const r = json.result || {};
+        alert(
+          `Shop ${shopId} pre-warm complete\n` +
+            `scanned ${r.rosScanned ?? 0} · terminal ${r.terminalRosFound ?? 0} · ` +
+            `already cached ${r.alreadyCached ?? 0} · cached ${r.rosCached ?? 0}\n` +
+            `jobs cached ${r.jobsCached ?? 0} · errors ${r.errors ?? 0}` +
+            (r.capped ? " · CAPPED" : "") +
+            ` · ${r.durationMs ?? 0}ms`,
+        );
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to re-warm jobs cache");
+    } finally {
+      setRewarmingShopId(null);
     }
   };
 
@@ -898,6 +960,222 @@ export default function SyncHealthPage() {
     return `${Math.round(rate * 100)}% (${(total ?? 0).toLocaleString()})`;
   };
 
+  const renderJobsCachePrewarmSection = (
+    providerLabel: string,
+    shops: JobsCachePrewarmShop[] | undefined,
+    missingCount: number | undefined,
+    cappedCount: number | undefined,
+    errorsCount: number | undefined,
+  ) => {
+    const list = shops || [];
+    const missing = missingCount ?? 0;
+    const capped = cappedCount ?? 0;
+    const errored = errorsCount ?? 0;
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Flame className="w-5 h-5 text-orange-600" />
+            <h2 className="font-semibold text-gray-900">
+              Jobs cache pre-warm ({providerLabel})
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+            {missing > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
+                title="Shops with no pre-warm record at all — likely onboarded before the pre-warm rolled out. Use Re-warm to one-shot them."
+              >
+                {missing} never warmed
+              </span>
+            )}
+            {capped > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
+                title="Pre-warm hit the 500-RO cap. The uncached tail will fill in opportunistically as the backfill walks back through history."
+              >
+                {capped} capped
+              </span>
+            )}
+            {errored > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded-full"
+                title="Pre-warm logged at least one /jobs fetch failure for this shop"
+              >
+                {errored} with errors
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 hidden md:block max-w-md text-right">
+            One-shot warm of <code className="px-1 bg-gray-100 rounded text-[11px]">tekmetric_jobs_cache</code>
+            {" "}at onboarding. Stamped on
+            {" "}<code className="px-1 bg-gray-100 rounded text-[11px]">shops.tekmetric.jobsCachePrewarm</code>.
+            Idempotent — Re-warm is safe anytime.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <Clock className="w-5 h-5 text-gray-400" />
+            No {providerLabel} backfill rows yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Pre-warm status
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Completed at
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Recent terminal repair orders cached during pre-warm"
+                  >
+                    ROs cached
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Total /jobs entries written to tekmetric_jobs_cache"
+                  >
+                    Jobs cached
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Terminal ROs already had a fresh cache row at warm time (skipped)"
+                  >
+                    Already cached
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Errors
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Duration
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => {
+                  const hasErrors = (s.errors ?? 0) > 0;
+                  return (
+                    <tr
+                      key={s.shopId}
+                      className={`align-top ${
+                        s.hasPrewarmRecord
+                          ? "hover:bg-gray-50"
+                          : "bg-amber-50/40 hover:bg-amber-50"
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                        {s.shopId}
+                        {s.completed && (
+                          <div className="text-xs text-gray-400 font-sans mt-0.5">
+                            backfill complete
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {!s.hasPrewarmRecord ? (
+                          <span
+                            className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
+                            title="No jobsCachePrewarm record on this shop. Probably onboarded before the pre-warm rolled out."
+                          >
+                            Never warmed
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                              Warmed
+                            </span>
+                            {s.capped && (
+                              <span
+                                className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
+                                title="Hit the 500-RO cap — uncached tail still warmed by the indexing path as the backfill progresses"
+                              >
+                                Capped
+                              </span>
+                            )}
+                            {hasErrors && (
+                              <span className="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded-full">
+                                Errors
+                              </span>
+                            )}
+                            {s.lookbackDays != null && (
+                              <span
+                                className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full"
+                                title="Lookback window scanned for terminal ROs"
+                              >
+                                {s.lookbackDays}d window
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        {formatDateTime(s.completedAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.rosCached == null
+                          ? "—"
+                          : s.rosCached.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.jobsCached == null
+                          ? "—"
+                          : s.jobsCached.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {s.alreadyCached == null
+                          ? "—"
+                          : s.alreadyCached.toLocaleString()}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right text-sm ${
+                          hasErrors ? "text-rose-700 font-medium" : "text-gray-700"
+                        }`}
+                      >
+                        {s.errors == null ? "—" : s.errors}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatDurationMs(s.durationMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() =>
+                            rewarmJobsCache(s.shopId, s.hasPrewarmRecord)
+                          }
+                          disabled={rewarmingShopId === s.shopId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                          title="Re-run prewarmTekmetricJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped."
+                        >
+                          {rewarmingShopId === s.shopId ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Flame className="w-3.5 h-3.5" />
+                          )}
+                          {s.hasPrewarmRecord ? "Re-warm" : "Warm now"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderChunkSpeedSection = (
     providerLabel: string,
     shops: ChunkSpeedShop[] | undefined,
@@ -1413,6 +1691,26 @@ export default function SyncHealthPage() {
             shops cleared in last 14 days
           </div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Flame className="w-5 h-5 text-orange-600" />
+            </div>
+            <span className="text-sm text-gray-600">Jobs cache pre-warm (Tek)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {(tek?.jobsCachePrewarmShopCount ?? 0) -
+              (tek?.jobsCachePrewarmMissingCount ?? 0)}
+            {" / "}
+            {tek?.jobsCachePrewarmShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            warmed shops · {tek?.jobsCachePrewarmMissingCount ?? 0} never warmed
+            {(tek?.jobsCachePrewarmCappedCount ?? 0) > 0 &&
+              ` · ${tek?.jobsCachePrewarmCappedCount} capped`}
+          </div>
+        </div>
       </div>
 
       {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
@@ -1446,6 +1744,14 @@ export default function SyncHealthPage() {
         sw?.chunkSpeed,
         sw?.slowChunkShopCount,
         sw?.slowChunkP95ThresholdMs,
+      )}
+
+      {renderJobsCachePrewarmSection(
+        "Tekmetric",
+        tek?.jobsCachePrewarm,
+        tek?.jobsCachePrewarmMissingCount,
+        tek?.jobsCachePrewarmCappedCount,
+        tek?.jobsCachePrewarmErrorsCount,
       )}
 
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
