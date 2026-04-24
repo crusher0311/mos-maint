@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/tekmetric";
 import { syncSingleShop } from "@/lib/tekmetric-sync";
+import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/tekmetric-jobs-prewarm";
 
-async function triggerJobHistoryBackfill(shopId: number) {
+async function triggerJobHistoryBackfill(shopId: number, tekmetricShopId: number) {
   try {
     const db = await getDb();
     await db.collection("tekmetric_backfill_progress").updateOne(
@@ -27,6 +28,21 @@ async function triggerJobHistoryBackfill(shopId: number) {
     );
     
     console.log(`[Tekmetric Settings] Queued job history backfill for shop ${shopId}`);
+
+    // Pre-warm `tekmetric_jobs_cache` for the most recent terminal ROs
+    // before we kick the cron. The first backfill chunk is the most
+    // recent ~90 days; warming that window means the cron's very first
+    // chunk hits Mongo for `/jobs` instead of paying the full per-RO API
+    // cost. See lib/tekmetric-jobs-prewarm.ts and task #59. We await
+    // here (the caller already invokes us fire-and-forget) so the cron
+    // POST below races against a warm cache, not an empty one.
+    try {
+      await prewarmTekmetricJobsCacheForOnboarding(shopId, tekmetricShopId);
+    } catch (warmErr: any) {
+      console.warn(
+        `[Tekmetric Settings] Jobs cache prewarm failed (non-fatal) for shop ${shopId}: ${warmErr?.message || warmErr}`
+      );
+    }
 
     try {
       const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -165,8 +181,10 @@ export async function POST(request: NextRequest) {
       syncResult.error = syncErr.message;
     }
 
-    // Queue the 5-year job history backfill (runs via cron)
-    triggerJobHistoryBackfill(Number(userShopId)).catch(() => {});
+    // Queue the 5-year job history backfill (runs via cron). The trigger
+    // also pre-warms `tekmetric_jobs_cache` for recent terminal ROs so
+    // the first backfill chunk lands at cache-hit speed (task #59).
+    triggerJobHistoryBackfill(Number(userShopId), tekmetricShopId).catch(() => {});
 
     return NextResponse.json({
       success: true,
