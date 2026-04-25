@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/tekmetric-incremental-sync";
 import { getDb } from "@/lib/mongo";
-import { resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
+import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +23,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  resetTekmetricApiCallCount();
-
+  // Wrap the whole cycle in an AsyncLocalStorage scope so the API-call
+  // count we report is *this* run's calls only — not leaked from any
+  // other concurrent Tekmetric operation in the same Node process (e.g.
+  // an admin RO retry click). Mirrors the per-chunk 429 tracking pattern.
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
   try {
     await ensureCacheIndexes();
     
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
     const totalPagesQueued = results.reduce((sum, r) => sum + r.pagesQueued, 0);
     const errors = results.filter(r => r.error).length;
     const skipped = results.filter(r => r.skipped).length;
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     
     console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
 
@@ -129,8 +132,9 @@ export async function GET(req: NextRequest) {
       shops: results
     });
   } catch (err: any) {
-    const finalApiCalls = resetTekmetricApiCallCount();
+    const finalApiCalls = apiCallCounter.count;
     console.error(`[Cron] Tekmetric incremental sync error (API calls made: ${finalApiCalls}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  });
 }

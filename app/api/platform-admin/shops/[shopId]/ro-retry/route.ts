@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { retryShopSkippedRos } from "@/app/api/cron/tekmetric-ro-retry/route";
-import { resetTekmetricApiCallCount } from "@/lib/integrations/tekmetric/client";
+import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,45 +36,50 @@ export async function POST(
   }
 
   const startTime = Date.now();
-  resetTekmetricApiCallCount();
 
-  try {
-    console.log(
-      `[Platform Admin] On-demand Tekmetric RO retry for shop ${shopId} by ${session.email}`,
-    );
-    const result = await retryShopSkippedRos(db, shopId);
-    const apiCalls = resetTekmetricApiCallCount();
-    const duration = Date.now() - startTime;
+  // Wrap the on-demand retry in an AsyncLocalStorage scope so the
+  // API-call count we report is *this* admin click's calls only — not
+  // leaked from any concurrent Tekmetric cron or other admin operation
+  // running in the same Node process.
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
+    try {
+      console.log(
+        `[Platform Admin] On-demand Tekmetric RO retry for shop ${shopId} by ${session.email}`,
+      );
+      const result = await retryShopSkippedRos(db, shopId);
+      const apiCalls = apiCallCounter.count;
+      const duration = Date.now() - startTime;
 
-    await db.collection("audit_logs").insertOne({
-      type: "manual_ro_retry_triggered",
-      shopId,
-      shopName: shop.name,
-      adminEmail: session.email,
-      attempted: result.attempted,
-      recovered: result.recovered,
-      stillFailing: result.stillFailing,
-      permanentlyFailed: result.permanentlyFailed,
-      reason: result.reason || null,
-      createdAt: new Date(),
-    });
+      await db.collection("audit_logs").insertOne({
+        type: "manual_ro_retry_triggered",
+        shopId,
+        shopName: shop.name,
+        adminEmail: session.email,
+        attempted: result.attempted,
+        recovered: result.recovered,
+        stillFailing: result.stillFailing,
+        permanentlyFailed: result.permanentlyFailed,
+        reason: result.reason || null,
+        createdAt: new Date(),
+      });
 
-    console.log(
-      `[Platform Admin] RO retry shop ${shopId}: attempted=${result.attempted} recovered=${result.recovered} stillFailing=${result.stillFailing} permanentlyFailed=${result.permanentlyFailed} (API calls: ${apiCalls}, ${duration}ms)`,
-    );
+      console.log(
+        `[Platform Admin] RO retry shop ${shopId}: attempted=${result.attempted} recovered=${result.recovered} stillFailing=${result.stillFailing} permanentlyFailed=${result.permanentlyFailed} (API calls: ${apiCalls}, ${duration}ms)`,
+      );
 
-    return NextResponse.json({
-      ok: true,
-      ...result,
-      tekmetricApiCalls: apiCalls,
-      duration: `${duration}ms`,
-    });
-  } catch (err: any) {
-    const apiCalls = resetTekmetricApiCallCount();
-    console.error(`[Platform Admin] RO retry failed for shop ${shopId}:`, err);
-    return NextResponse.json(
-      { error: err.message || "RO retry failed", tekmetricApiCalls: apiCalls },
-      { status: 500 },
-    );
-  }
+      return NextResponse.json({
+        ok: true,
+        ...result,
+        tekmetricApiCalls: apiCalls,
+        duration: `${duration}ms`,
+      });
+    } catch (err: any) {
+      const apiCalls = apiCallCounter.count;
+      console.error(`[Platform Admin] RO retry failed for shop ${shopId}:`, err);
+      return NextResponse.json(
+        { error: err.message || "RO retry failed", tekmetricApiCalls: apiCalls },
+        { status: 500 },
+      );
+    }
+  });
 }

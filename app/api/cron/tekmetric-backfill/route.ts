@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
@@ -1135,8 +1135,13 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
-  resetTekmetricApiCallCount();
 
+  // Wrap the whole backfill cycle in an AsyncLocalStorage scope so the
+  // API-call count we report is *this* run's calls only — not leaked
+  // from any other concurrent Tekmetric operation in the same Node
+  // process (e.g. an admin-clicked RO retry running in parallel).
+  // Mirrors the per-chunk 429 tracking pattern already in place.
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
   try {
     // Run the stale-skipped-RO sweep BEFORE shop processing so the same run
     // both archives cold entries and processes new chunks. Wrapped so a
@@ -1243,7 +1248,7 @@ export async function GET(req: NextRequest) {
       )
     );
 
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric backfill completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min)`);
 
@@ -1257,10 +1262,11 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (err: any) {
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     console.error(`[Tekmetric Backfill] Error (API calls made: ${apiCallCount}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -1275,8 +1281,11 @@ export async function POST(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
-  resetTekmetricApiCallCount();
 
+  // Wrap the full backfill in an AsyncLocalStorage scope so the
+  // API-call count we report is *this* run's calls only — not leaked
+  // from any concurrent Tekmetric operation in the same Node process.
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
   try {
     const body = await req.json().catch(() => ({}));
     const targetShopId = body.shopId ? Number(body.shopId) : null;
@@ -1338,7 +1347,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric full backfill completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min)`);
 
@@ -1350,8 +1359,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     console.error(`[Tekmetric Backfill] Full backfill error (API calls made: ${apiCallCount}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  });
 }

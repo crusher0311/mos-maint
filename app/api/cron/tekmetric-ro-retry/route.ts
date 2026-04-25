@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
 import {
   tekmetricRequest as centralTekmetricRequest,
-  resetTekmetricApiCallCount,
+  runWithTekmetricApiCallTracking,
   getRepairOrderInspectionsWithXAuth,
 } from "@/lib/integrations/tekmetric/client";
 import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
@@ -494,21 +494,26 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
-  resetTekmetricApiCallCount();
 
-  try {
-    const summary = await runRetry(db);
-    const apiCalls = resetTekmetricApiCallCount();
-    const duration = Date.now() - startTime;
-    console.log(
-      `[Cron] Tekmetric RO retry: ${summary.totalRecovered} recovered, ${summary.totalStillFailing} still failing, ${summary.totalPermanentlyFailed} permanently failed (API calls: ${apiCalls}, ${duration}ms)`,
-    );
-    return NextResponse.json({ ok: true, ...summary, tekmetricApiCalls: apiCalls, duration: `${duration}ms` });
-  } catch (err: any) {
-    const apiCalls = resetTekmetricApiCallCount();
-    console.error("[Tekmetric RO Retry] Error:", err);
-    return NextResponse.json({ error: err.message, tekmetricApiCalls: apiCalls }, { status: 500 });
-  }
+  // Wrap the whole retry cycle in an AsyncLocalStorage scope so the
+  // API-call count we report is *this* run's calls only — not leaked
+  // from any other concurrent Tekmetric operation in the same Node
+  // process (e.g. a backfill cron tick or admin-triggered retry).
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
+    try {
+      const summary = await runRetry(db);
+      const apiCalls = apiCallCounter.count;
+      const duration = Date.now() - startTime;
+      console.log(
+        `[Cron] Tekmetric RO retry: ${summary.totalRecovered} recovered, ${summary.totalStillFailing} still failing, ${summary.totalPermanentlyFailed} permanently failed (API calls: ${apiCalls}, ${duration}ms)`,
+      );
+      return NextResponse.json({ ok: true, ...summary, tekmetricApiCalls: apiCalls, duration: `${duration}ms` });
+    } catch (err: any) {
+      const apiCalls = apiCallCounter.count;
+      console.error("[Tekmetric RO Retry] Error:", err);
+      return NextResponse.json({ error: err.message, tekmetricApiCalls: apiCalls }, { status: 500 });
+    }
+  });
 }
 
 export async function POST(req: NextRequest) {

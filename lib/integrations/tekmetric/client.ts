@@ -16,8 +16,6 @@ import type {
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 const TEKMETRIC_INTERNAL_BASE_URL = 'https://shop.tekmetric.com/api';
 
-let tekmetricApiCallCounter = 0;
-
 // Per-chunk 429 backoff accumulator. Scoped via AsyncLocalStorage so that
 // when two shops' chunks overlap inside the same Node process (or we move
 // to a worker model that processes shops concurrently), each chunk only
@@ -29,15 +27,15 @@ let tekmetricApiCallCounter = 0;
 // per-chunk metric.
 const backoff429Storage = new AsyncLocalStorage<{ ms: number }>();
 
-export function getTekmetricApiCallCount(): number {
-  return tekmetricApiCallCounter;
-}
-
-export function resetTekmetricApiCallCount(): number {
-  const count = tekmetricApiCallCounter;
-  tekmetricApiCallCounter = 0;
-  return count;
-}
+// Per-operation Tekmetric API-call counter. Scoped via AsyncLocalStorage
+// so that when two operations (e.g. a cron run plus an admin-triggered
+// RO retry, or two shops' chunks running concurrently in the same Node
+// process) overlap, each one only sees its own API calls. The previous
+// module-global counter was process-wide and would attribute one shop's
+// (or operation's) calls to whichever caller happened to read it last.
+// Outside a tracking scope the increment is a no-op, which is fine for
+// ad-hoc real-time API calls that don't care about the aggregated metric.
+const apiCallStorage = new AsyncLocalStorage<{ count: number }>();
 
 /**
  * Run `fn` with a fresh, chunk-scoped 429-backoff counter active. Any 429
@@ -53,6 +51,24 @@ export async function runWithTekmetric429Tracking<T>(
 ): Promise<T> {
   const counter = { ms: 0 };
   return backoff429Storage.run(counter, () => fn(counter));
+}
+
+/**
+ * Run `fn` with a fresh, scope-local Tekmetric API-call counter active.
+ * Any Tekmetric API requests issued (transitively) under `fn` are
+ * accumulated into the `counter` passed to `fn` (read `counter.count` at
+ * any point inside the callback to get the running total). Concurrent
+ * callers (e.g. a cron sync running while an admin clicks "retry shop")
+ * get independent counters because each runs under its own
+ * AsyncLocalStorage store, so one operation's API calls cannot leak into
+ * another operation's metric. Mirrors the per-chunk
+ * `runWithTekmetric429Tracking` pattern.
+ */
+export async function runWithTekmetricApiCallTracking<T>(
+  fn: (counter: { readonly count: number }) => Promise<T>,
+): Promise<T> {
+  const counter = { count: 0 };
+  return apiCallStorage.run(counter, () => fn(counter));
 }
 
 const MAX_429_RETRIES = 5;
@@ -86,7 +102,8 @@ export async function tekmetricRequest<T = any>(
     if (!rateSlot.acquired) {
       throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
-    tekmetricApiCallCounter++;
+    const apiCallCounter = apiCallStorage.getStore();
+    if (apiCallCounter) apiCallCounter.count++;
 
     const token = await getValidToken();
     const startTime = Date.now();
@@ -266,7 +283,8 @@ export async function getRepairOrderInspectionsWithXAuth(
         console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
         return [];
       }
-      tekmetricApiCallCounter++;
+      const apiCallCounter = apiCallStorage.getStore();
+      if (apiCallCounter) apiCallCounter.count++;
 
       const startTime = Date.now();
       const response = await fetch(url, {

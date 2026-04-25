@@ -8,7 +8,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from "@/lib/tekmetric";
-import { resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
+import { runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
@@ -214,8 +214,12 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
   const startTime = Date.now();
-  resetTekmetricApiCallCount();
 
+  // Wrap the whole sync cycle in an AsyncLocalStorage scope so the
+  // API-call count we report is *this* run's calls only — not leaked
+  // from any other concurrent Tekmetric operation in the same Node
+  // process. Mirrors the per-chunk 429 tracking pattern.
+  return runWithTekmetricApiCallTracking(async (apiCallCounter) => {
   try {
     const shops = await db.collection("shops").find({
       $or: [
@@ -466,7 +470,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const apiCallCount = resetTekmetricApiCallCount();
+    const apiCallCount = apiCallCounter.count;
     const duration = Date.now() - startTime;
     console.log(`[Cron] Tekmetric sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min):`, results);
 
@@ -539,8 +543,9 @@ export async function GET(req: NextRequest) {
       shops: results
     });
   } catch (err: any) {
-    const finalApiCalls = resetTekmetricApiCallCount();
+    const finalApiCalls = apiCallCounter.count;
     console.error(`[Cron] Tekmetric sync error (API calls made: ${finalApiCalls}):`, err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+  });
 }
