@@ -219,6 +219,7 @@ export default function SyncHealthPage() {
   const [retryingAllRo, setRetryingAllRo] = useState(false);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
+  const [rewarmingAll, setRewarmingAll] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -411,6 +412,59 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to re-warm jobs cache");
     } finally {
       setRewarmingShopId(null);
+    }
+  };
+
+  const rewarmAllNeverWarmed = async (count: number) => {
+    if (count <= 0) {
+      alert("No never-warmed shops to warm.");
+      return;
+    }
+    if (
+      !confirm(
+        `Warm jobs cache for all ${count} never-warmed Tekmetric shop(s)?\n\n` +
+          `This iterates each shop serially (per-shop /jobs concurrency cap=3 ` +
+          `inside the worker) and may take several minutes. If the time budget ` +
+          `is exhausted, remaining shops are deferred — re-click to continue.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingAll(true);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/tekmetric-rewarm-jobs-cache-all`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to bulk-warm jobs cache");
+      } else {
+        const lines: string[] = [
+          `Bulk pre-warm complete (${json.candidateShopCount} candidates)`,
+          `warmed ${json.warmed} · errored ${json.errored} · ` +
+            `skipped ${json.skipped} · deferred ${json.deferred}`,
+          `ROs cached ${json.rosCachedTotal} · jobs cached ${json.jobsCachedTotal} · ` +
+            `already cached ${json.alreadyCachedTotal}`,
+        ];
+        if (json.cappedShopCount > 0) {
+          lines.push(`${json.cappedShopCount} shop(s) hit the 500-RO cap`);
+        }
+        if (json.perShopErrorsTotal > 0) {
+          lines.push(`${json.perShopErrorsTotal} per-shop /jobs error(s) logged`);
+        }
+        if (json.duration) lines.push(`duration: ${json.duration}`);
+        if (json.deferred > 0) {
+          lines.push("");
+          lines.push("Re-click to continue with deferred shops.");
+        }
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to bulk-warm jobs cache");
+    } finally {
+      setRewarmingAll(false);
     }
   };
 
@@ -989,6 +1043,21 @@ export default function SyncHealthPage() {
               >
                 {missing} never warmed
               </span>
+            )}
+            {missing > 0 && (
+              <button
+                onClick={() => rewarmAllNeverWarmed(missing)}
+                disabled={rewarmingAll || rewarmingShopId !== null}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs bg-orange-600 text-white hover:bg-orange-700 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                title="Iterate every shop with no pre-warm record and run prewarmTekmetricJobsCacheForOnboarding for each. Serial across shops; per-shop /jobs concurrency cap (3) preserved."
+              >
+                {rewarmingAll ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Flame className="w-3.5 h-3.5" />
+                )}
+                Warm all never-warmed
+              </button>
             )}
             {capped > 0 && (
               <span
