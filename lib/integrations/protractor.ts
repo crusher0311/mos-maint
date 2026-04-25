@@ -1,4 +1,5 @@
 // Note: "server-only" import removed to allow standalone script usage
+import { AsyncLocalStorage } from "node:async_hooks";
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
@@ -11,23 +12,28 @@ const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0"
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
 
-// Cumulative time spent in `await new Promise(r => setTimeout(r, waitMs))`
-// after a Protractor 429/5xx retry. Surfaced per-chunk in the backfill
-// metrics so a regression in rate-limit health is visible in the admin
-// sync-health view without grepping cron logs. Mirrors the Tekmetric
-// `tekmetric429BackoffMs` counter — process-global, so under concurrency
-// another shop's chunk can leak backoff into this chunk's delta. Still
-// useful as a "is this chunk hitting rate limits at all" signal.
-let protractorBackoffMs = 0;
+// Per-chunk Protractor 429/5xx retry-backoff accumulator. Scoped via
+// AsyncLocalStorage so that two shops backfilling concurrently in the same
+// Node process do not leak each other's retry waits into per-chunk
+// metrics. Outside a tracking scope the increment is a no-op, which is
+// fine for ad-hoc real-time API calls. Mirrors the Tekmetric/Shop-Ware
+// per-chunk pattern.
+const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
 
-export function getProtractorBackoffMs(): number {
-  return protractorBackoffMs;
-}
-
-export function resetProtractorBackoffMs(): number {
-  const ms = protractorBackoffMs;
-  protractorBackoffMs = 0;
-  return ms;
+/**
+ * Run `fn` with a fresh, chunk-scoped Protractor backoff counter active.
+ * Any retry sleep paid by Protractor requests issued (transitively) under
+ * `fn` is accumulated into the `counter` passed to `fn` (read `counter.ms`
+ * at any point inside the callback to get the running total). Concurrent
+ * calls get independent counters via AsyncLocalStorage, so each backfill
+ * chunk only sees its own waits even when other chunks run in parallel
+ * inside the same Node process.
+ */
+export async function runWithProtractorBackoffTracking<T>(
+  fn: (counter: { readonly ms: number }) => Promise<T>,
+): Promise<T> {
+  const counter = { ms: 0 };
+  return backoffStorage.run(counter, () => fn(counter));
 }
 
 // PRIORITY concurrency limiter: separate pool for user-initiated requests (bypasses background queue)
@@ -545,7 +551,8 @@ export async function protractorFetch<T>(
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
 
-        protractorBackoffMs += waitMs;
+        const backoffCounter = backoffStorage.getStore();
+        if (backoffCounter) backoffCounter.ms += waitMs;
         await new Promise(r => setTimeout(r, waitMs));
         return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
       }

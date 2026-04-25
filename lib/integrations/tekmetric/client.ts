@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
 import { getValidToken, refreshToken, clearCachedToken, isConfigured } from "./auth";
@@ -16,11 +17,17 @@ const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com/api/v1';
 const TEKMETRIC_INTERNAL_BASE_URL = 'https://shop.tekmetric.com/api';
 
 let tekmetricApiCallCounter = 0;
-// Cumulative time spent in `await new Promise(r => setTimeout(r, backoffMs))`
-// after a 429. Surfaced per-chunk in the backfill metrics so a regression in
-// rate-limit health (e.g. cache miss spike re-saturating the per-IP throttle)
-// is visible in the admin sync-health view without grepping cron logs.
-let tekmetric429BackoffMs = 0;
+
+// Per-chunk 429 backoff accumulator. Scoped via AsyncLocalStorage so that
+// when two shops' chunks overlap inside the same Node process (or we move
+// to a worker model that processes shops concurrently), each chunk only
+// sees its own rate-limit waits — one shop's backoff cannot leak into
+// another's metric. The previous module-global counter was process-wide
+// and would attribute concurrent backoff to whichever chunk happened to
+// snapshot it last. Outside a tracking scope the increment is a no-op,
+// which is fine for ad-hoc real-time API calls that don't care about the
+// per-chunk metric.
+const backoff429Storage = new AsyncLocalStorage<{ ms: number }>();
 
 export function getTekmetricApiCallCount(): number {
   return tekmetricApiCallCounter;
@@ -32,14 +39,20 @@ export function resetTekmetricApiCallCount(): number {
   return count;
 }
 
-export function getTekmetric429BackoffMs(): number {
-  return tekmetric429BackoffMs;
-}
-
-export function resetTekmetric429BackoffMs(): number {
-  const ms = tekmetric429BackoffMs;
-  tekmetric429BackoffMs = 0;
-  return ms;
+/**
+ * Run `fn` with a fresh, chunk-scoped 429-backoff counter active. Any 429
+ * waits paid by Tekmetric requests issued (transitively) under `fn` are
+ * accumulated into the `counter` passed to `fn` (read `counter.ms` at any
+ * point inside the callback to get the running total). Concurrent calls
+ * (e.g. two shops backfilling in parallel) get independent counters
+ * because each runs under its own AsyncLocalStorage store, so one shop's
+ * backoff cannot leak into another shop's metric.
+ */
+export async function runWithTekmetric429Tracking<T>(
+  fn: (counter: { readonly ms: number }) => Promise<T>,
+): Promise<T> {
+  const counter = { ms: 0 };
+  return backoff429Storage.run(counter, () => fn(counter));
 }
 
 const MAX_429_RETRIES = 5;
@@ -105,7 +118,8 @@ export async function tekmetricRequest<T = any>(
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
-        tekmetric429BackoffMs += backoffMs;
+        const backoffCounter = backoff429Storage.getStore();
+        if (backoffCounter) backoffCounter.ms += backoffMs;
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
@@ -270,7 +284,8 @@ export async function getRepairOrderInspectionsWithXAuth(
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on inspection fetch RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
-        tekmetric429BackoffMs += backoffMs;
+        const backoffCounter = backoff429Storage.getStore();
+        if (backoffCounter) backoffCounter.ms += backoffMs;
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }

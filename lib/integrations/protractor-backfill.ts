@@ -4,7 +4,7 @@ import {
   protractorFetch,
   fetchInvoiceById,
   fetchVehicleById,
-  getProtractorBackoffMs,
+  runWithProtractorBackoffTracking,
   getCachedProtractorInvoice,
   cacheProtractorInvoice,
 } from "@/lib/integrations/protractor";
@@ -202,9 +202,12 @@ async function backfillShopChunk(
   // Per-chunk speed metrics. Captured here and persisted at the end of the
   // chunk so a regression in vehicle cache hit rate or a backoff spike is
   // visible in the admin sync-health view without grepping cron logs.
-  // Mirrors the Tekmetric backfill instrumentation.
+  // Mirrors the Tekmetric backfill instrumentation. The backoff figure is
+  // sourced from a per-chunk AsyncLocalStorage counter (see
+  // `runWithProtractorBackoffTracking` in protractor.ts) so concurrent
+  // chunks don't leak each other's retry waits into this chunk's metric.
+  return runWithProtractorBackoffTracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
-  const backoffMsAtStart = getProtractorBackoffMs();
   const vehicleCacheCounters = { hits: 0, misses: 0 };
 
   const config = await resolveProtractorConfig(shopId);
@@ -328,7 +331,7 @@ async function backfillShopChunk(
       advanceMode: chunkHadError ? "HOLD (empty chunk after error)" : "FULL (empty chunk)",
       vehiclesCacheHits: vehicleCacheCounters.hits,
       vehiclesCacheMisses: vehicleCacheCounters.misses,
-      backoffDeltaMs: Math.max(0, getProtractorBackoffMs() - backoffMsAtStart),
+      backoffDeltaMs: chunkBackoffCounter.ms,
       chunkHadError,
       hitPageCap: false,
     });
@@ -545,12 +548,10 @@ async function backfillShopChunk(
 
   console.log(`[Backfill] Shop ${shopId}: ${advanceMode} — currentChunkEnd ${chunkEnd.toISOString().split('T')[0]} -> ${nextChunkEnd.toISOString().split('T')[0]}`);
 
-  // Compute per-chunk speed metrics. The backoff value is a delta against the
-  // process-global counter snapshot taken at chunk start. NOTE: this is
-  // APPROXIMATE under concurrency — if another shop's chunk runs in parallel
-  // inside the same process and pays a backoff, that backoff also lands in
-  // this chunk's delta. Still useful as a "is this chunk hitting rate limits
-  // at all" signal.
+  // Compute per-chunk speed metrics. The backoff value comes from a
+  // per-chunk AsyncLocalStorage counter so concurrent chunks (same
+  // process, different shop) cannot leak each other's retry waits into
+  // this chunk's metric.
   const chunkMetrics = buildProtractorChunkMetrics({
     now: new Date(),
     durationMs: Date.now() - chunkStartedAt,
@@ -561,7 +562,7 @@ async function backfillShopChunk(
     advanceMode,
     vehiclesCacheHits: vehicleCacheCounters.hits,
     vehiclesCacheMisses: vehicleCacheCounters.misses,
-    backoffDeltaMs: Math.max(0, getProtractorBackoffMs() - backoffMsAtStart),
+    backoffDeltaMs: chunkBackoffCounter.ms,
     chunkHadError,
     hitPageCap,
   });
@@ -615,6 +616,7 @@ async function backfillShopChunk(
     vehiclesFetched,
     normalizedCount
   };
+  });
 }
 
 export async function runProtractorBackfill(shopId: number): Promise<{

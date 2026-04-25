@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, getTekmetric429BackoffMs } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, resetTekmetricApiCallCount, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
@@ -390,9 +390,13 @@ async function backfillShopChunkInner(
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
   // Per-chunk speed metrics. Captured here and persisted at the end of the
   // chunk so a regression in /jobs cache hit rate or a 429 backoff spike is
-  // visible in the admin sync-health view without grepping cron logs.
+  // visible in the admin sync-health view without grepping cron logs. The
+  // 429 backoff is scoped to *this* chunk via AsyncLocalStorage (see
+  // `runWithTekmetric429Tracking` in tekmetric/client.ts) so concurrent
+  // shops backfilling in parallel don't leak each other's 429 waits into
+  // this chunk's metric.
+  return runWithTekmetric429Tracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
-  const backoffMsAtStart = getTekmetric429BackoffMs();
   let jobsCacheHits = 0;
   let jobsCacheMisses = 0;
   let vehiclesCacheHits = 0;
@@ -998,15 +1002,14 @@ async function backfillShopChunkInner(
     }
   }
 
-  // Compute per-chunk speed metrics. The 429 backoff value is a delta against
-  // the process-global counter snapshot taken at chunk start. NOTE: this is
-  // APPROXIMATE under concurrency — if another shop's chunk is running in
-  // parallel inside the same process and pays a 429 backoff, that backoff
-  // also lands in this chunk's delta. It's still useful as a "is this chunk
-  // hitting rate limits at all" signal, but a per-chunk request-context
-  // accumulator would be needed for precise per-chunk attribution.
+  // Compute per-chunk speed metrics. The 429 backoff value is sourced from
+  // a per-chunk AsyncLocalStorage counter (`chunkBackoffCounter.ms`), which
+  // accumulates only the 429 waits paid by this chunk's own Tekmetric
+  // requests — concurrent chunks (same process, different shop) get
+  // independent counters so one shop's rate-limit waits cannot leak into
+  // this chunk's metric.
   const chunkDurationMs = Date.now() - chunkStartedAt;
-  const chunkBackoffMs = Math.max(0, getTekmetric429BackoffMs() - backoffMsAtStart);
+  const chunkBackoffMs = chunkBackoffCounter.ms;
   const jobsCacheTotal = jobsCacheHits + jobsCacheMisses;
   const vehiclesCacheTotal = vehiclesCacheHits + vehiclesCacheMisses;
   const customersCacheTotal = customersCacheHits + customersCacheMisses;
@@ -1117,6 +1120,7 @@ async function backfillShopChunkInner(
     message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged, ${normalizedCount} normalized`,
     normalizedCount
   };
+  });
 }
 
 export async function GET(req: NextRequest) {

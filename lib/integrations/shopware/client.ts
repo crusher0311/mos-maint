@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { trackApiRequest } from '@/lib/api-usage-tracker';
 import type {
   ShopWarePaginatedResponse,
@@ -18,23 +19,27 @@ function getBaseUrl(): string {
   return process.env.SHOPWARE_API_BASE_URL || (process.env.SHOPWARE_USE_SANDBOX === 'true' ? SW_SANDBOX_BASE : SW_PROD_BASE);
 }
 
-// Cumulative time spent sleeping after a Shop-Ware rate-limit (X-RateLimit
-// -Remaining=0) response. Surfaced per-chunk in the backfill metrics so a
-// regression in rate-limit health is visible in the admin sync-health view
-// without grepping cron logs. Mirrors the Tekmetric `tekmetric429BackoffMs`
-// counter — process-global, so under concurrency another shop's chunk can
-// leak backoff into this chunk's delta. Still useful as a "is this chunk
-// hitting rate limits at all" signal.
-let shopwareBackoffMs = 0;
+// Per-chunk Shop-Ware rate-limit (X-RateLimit-Remaining=0) backoff
+// accumulator. Scoped via AsyncLocalStorage so concurrent backfill chunks
+// do not leak rate-limit waits into each other's per-chunk metric. Outside
+// a tracking scope the increment is a no-op, which is fine for ad-hoc
+// real-time API calls. Mirrors the Tekmetric per-chunk pattern.
+const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
 
-export function getShopwareBackoffMs(): number {
-  return shopwareBackoffMs;
-}
-
-export function resetShopwareBackoffMs(): number {
-  const ms = shopwareBackoffMs;
-  shopwareBackoffMs = 0;
-  return ms;
+/**
+ * Run `fn` with a fresh, chunk-scoped Shop-Ware rate-limit backoff counter
+ * active. Any sleep waits paid by Shop-Ware requests issued (transitively)
+ * under `fn` are accumulated into the `counter` passed to `fn` (read
+ * `counter.ms` at any point inside the callback to get the running total).
+ * Concurrent calls get independent counters via AsyncLocalStorage, so each
+ * backfill chunk only sees its own waits even when other chunks run in
+ * parallel inside the same Node process.
+ */
+export async function runWithShopwareBackoffTracking<T>(
+  fn: (counter: { readonly ms: number }) => Promise<T>,
+): Promise<T> {
+  const counter = { ms: 0 };
+  return backoffStorage.run(counter, () => fn(counter));
 }
 
 function getCredentials(): { partnerApiId: string; apiSecret: string } {
@@ -84,7 +89,8 @@ export async function shopWareRequest<T = any>(
       const resetMs = Number(reset) * 1000 - Date.now();
       if (resetMs > 0 && resetMs < 60_000) {
         console.warn(`[Shop-Ware] Rate limit hit, sleeping ${resetMs}ms`);
-        shopwareBackoffMs += resetMs;
+        const backoffCounter = backoffStorage.getStore();
+        if (backoffCounter) backoffCounter.ms += resetMs;
         await new Promise(r => setTimeout(r, resetMs));
       }
     }

@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import {
   getRepairOrders,
   shopWareRequest,
-  getShopwareBackoffMs,
+  runWithShopwareBackoffTracking,
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
@@ -109,9 +109,12 @@ async function backfillShopChunk(
   // API call), a "miss" = we had to fall back to a separate
   // /vehicles/{id} or /customers/{id} fetch. Mirrors the Tekmetric backfill
   // shape so the admin view's `summarizeChunkMetrics` helper can render
-  // both providers without a per-provider branch.
+  // both providers without a per-provider branch. The backoff figure is
+  // sourced from a per-chunk AsyncLocalStorage counter (see
+  // `runWithShopwareBackoffTracking` in shopware/client.ts) so concurrent
+  // chunks don't leak rate-limit waits into each other's metric.
+  return runWithShopwareBackoffTracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
-  const backoffMsAtStart = getShopwareBackoffMs();
   let vehiclesCacheHits = 0;
   let vehiclesCacheMisses = 0;
   let customersCacheHits = 0;
@@ -131,7 +134,7 @@ async function backfillShopChunk(
     vehiclesCacheMisses,
     customersCacheHits,
     customersCacheMisses,
-    backoffDeltaMs: Math.max(0, getShopwareBackoffMs() - backoffMsAtStart),
+    backoffDeltaMs: chunkBackoffCounter.ms,
   });
 
   try {
@@ -305,6 +308,7 @@ async function backfillShopChunk(
     customersStored,
     metrics: buildMetrics(),
   };
+  });
 }
 
 // Builds the per-chunk metrics object persisted on
