@@ -2,6 +2,7 @@ import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { getRepairOrders, getJobs } from "@/lib/tekmetric";
 import { cacheJobs } from "@/lib/tekmetric-incremental-sync";
+import { maybeAlertOnPrewarmAnomalies } from "@/lib/tekmetric-jobs-prewarm-alerter";
 
 // Terminal RO statuses whose `/jobs` payloads are stable after the fact —
 // the same set the backfill consumer treats as cacheable. Anything else
@@ -157,6 +158,11 @@ export async function prewarmTekmetricJobsCacheForOnboarding(
       `[Tekmetric Prewarm] Shop ${shopId}: no terminal ROs in last ${lookbackDays}d (${result.rosScanned} ROs scanned across ${listingPagesFetched} page(s)); nothing to warm`
     );
     await stampShopPrewarmStatus(db, shopId, result);
+    // Even on the empty-ROs path the listing call itself can have errored
+    // (we count list-page failures into result.errors); page on-call so a
+    // freshly onboarded shop whose first listing page failed isn't left
+    // looking like a clean warm.
+    await tryEmitPrewarmAlert(db, shopId, tekmetricShopId, result);
     return result;
   }
 
@@ -223,7 +229,41 @@ export async function prewarmTekmetricJobsCacheForOnboarding(
   );
 
   await stampShopPrewarmStatus(db, shopId, result);
+  await tryEmitPrewarmAlert(db, shopId, tekmetricShopId, result);
   return result;
+}
+
+/**
+ * Fire-and-forget wrapper around the alerter. The alerter handles its own
+ * dedup and admin-lookup, but we still wrap it in try/catch so an alert
+ * pipeline failure (Resend down, Mongo hiccup) can never break the
+ * onboarding flow that called us.
+ */
+async function tryEmitPrewarmAlert(
+  db: any,
+  shopId: number,
+  tekmetricShopId: number,
+  result: PrewarmJobsCacheResult
+): Promise<void> {
+  // Capture the actual completion timestamp here so the alert email and
+  // the persisted `shops.tekmetric.jobsCachePrewarm.completedAt` stamp
+  // agree to the millisecond. The alerter would otherwise fall back to
+  // `new Date()` at email render time, which can drift by the dedup
+  // lookup + admin lookup + Resend round-trip.
+  const completedAt = new Date();
+  try {
+    await maybeAlertOnPrewarmAnomalies(
+      db,
+      shopId,
+      tekmetricShopId,
+      result,
+      completedAt
+    );
+  } catch (err: any) {
+    console.warn(
+      `[Tekmetric Prewarm] Shop ${shopId}: alert emit failed (non-fatal): ${err?.message || err}`
+    );
+  }
 }
 
 async function stampShopPrewarmStatus(
