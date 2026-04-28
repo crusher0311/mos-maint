@@ -19,6 +19,19 @@ export async function GET() {
   const billing = shop?.billing || {};
   const isPaid = billing.plan === "professional" || billing.plan === "enterprise";
 
+  const rawPendingPlanChange = billing.pendingPlanChange ?? shop?.pendingPlanChange;
+  const pendingPlanChange = rawPendingPlanChange?.planId && rawPendingPlanChange?.effectiveDate
+    ? {
+        planId: rawPendingPlanChange.planId,
+        effectiveDate: rawPendingPlanChange.effectiveDate instanceof Date
+          ? rawPendingPlanChange.effectiveDate.toISOString()
+          : rawPendingPlanChange.effectiveDate,
+      }
+    : undefined;
+
+  const periodEnd = billing.periodEnd ?? billing.nextBillingDate;
+  const periodStart = billing.periodStart;
+
   if (isPaid) {
     const vehicleCount = await db.collection("vehicles").countDocuments({ 
       shopId: String(sess.shopId),
@@ -31,11 +44,15 @@ export async function GET() {
 
     return NextResponse.json({
       plan: billing.plan || "Professional",
+      planSlug: billing.plan,
       status: billing.status || "active",
       vehicleCount,
       vehicleLimit: null,
       nextBillingDate: billing.nextBillingDate,
+      periodStart,
+      periodEnd,
       monthlyAmount,
+      pendingPlanChange,
     });
   }
 
@@ -47,9 +64,13 @@ export async function GET() {
 
   return NextResponse.json({
     plan: "Free Trial",
+    planSlug: billing.plan,
     status: "trial",
     vehicleCount: viewedVinCount,
     vehicleLimit: shopLimit,
     nextBillingDate: null,
+    periodStart,
+    periodEnd,
+    pendingPlanChange,
   });
 }
