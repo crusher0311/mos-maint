@@ -374,8 +374,15 @@ export default function SyncHealthPage() {
     null,
   );
   const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
+  const [rewarmingShopWareShopId, setRewarmingShopWareShopId] = useState<
+    number | null
+  >(null);
+  const [rewarmingProtractorShopId, setRewarmingProtractorShopId] = useState<
+    number | null
+  >(null);
   const [rewarmingAll, setRewarmingAll] = useState(false);
   const [rewarmingAllShopWare, setRewarmingAllShopWare] = useState(false);
+  const [rewarmingAllProtractor, setRewarmingAllProtractor] = useState(false);
   // Re-render tick so the inline run-now panel's elapsed time keeps moving
   // between chunk events (which can be 60s+ apart for slow shops).
   const [, setNowTick] = useState(0);
@@ -915,6 +922,90 @@ export default function SyncHealthPage() {
     }
   };
 
+  const rewarmShopWareJobsCache = async (
+    shopId: number,
+    hasRecord: boolean,
+  ) => {
+    if (
+      !confirm(
+        hasRecord
+          ? `Re-run Shop-Ware jobs cache pre-warm for shop ${shopId}? This re-fetches the recent ROs window. Safe to run anytime; idempotent (matching contentHash rows are skipped).`
+          : `Run Shop-Ware jobs cache pre-warm for shop ${shopId}? This shop has no pre-warm record (likely onboarded before pre-warm shipped). Will fetch up to 1000 recent ROs.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingShopWareShopId(shopId);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shopId}/shopware-rewarm-jobs-cache`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to re-warm Shop-Ware jobs cache");
+      } else {
+        const r = json.result || {};
+        alert(
+          `Shop ${shopId} Shop-Ware pre-warm complete\n` +
+            `ROs fetched ${r.rosFetched ?? 0} · stored ${r.rosStored ?? 0} · ` +
+            `jobs indexed ${r.jobsIndexed ?? 0} · skipped ${r.jobsSkipped ?? 0}\n` +
+            `vehicles ${r.vehiclesStored ?? 0} · customers ${r.customersStored ?? 0}` +
+            (r.cursorAdvanced ? ` · cursor → ${r.cursorAdvancedTo ?? "(advanced)"}` : "") +
+            `\nerrors ${r.errors ?? 0}` +
+            (r.capped ? " · CAPPED" : "") +
+            ` · ${r.durationMs ?? 0}ms`,
+        );
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to re-warm Shop-Ware jobs cache");
+    } finally {
+      setRewarmingShopWareShopId(null);
+    }
+  };
+
+  const rewarmProtractorInvoiceCache = async (
+    shopId: number,
+    hasRecord: boolean,
+  ) => {
+    if (
+      !confirm(
+        hasRecord
+          ? `Re-run Protractor invoice cache pre-warm for shop ${shopId}? This re-fetches recent /Invoice/{id} payloads. Safe to run anytime; idempotent (fresh cache rows are skipped).`
+          : `Run Protractor invoice cache pre-warm for shop ${shopId}? This shop has no pre-warm record. Will fetch up to 500 recent invoices.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingProtractorShopId(shopId);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shopId}/protractor-rewarm-jobs-cache`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to re-warm Protractor invoice cache");
+      } else {
+        const r = json.result || {};
+        alert(
+          `Shop ${shopId} Protractor pre-warm complete\n` +
+            `invoices scanned ${r.invoicesScanned ?? 0} · ` +
+            `already cached ${r.alreadyCached ?? 0} · cached ${r.invoicesCached ?? 0}\n` +
+            `errors ${r.errors ?? 0}` +
+            (r.capped ? " · CAPPED" : "") +
+            ` · ${r.durationMs ?? 0}ms`,
+        );
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to re-warm Protractor invoice cache");
+    } finally {
+      setRewarmingProtractorShopId(null);
+    }
+  };
+
   const rewarmAllNeverWarmed = async (count: number) => {
     if (count <= 0) {
       alert("No never-warmed shops to warm.");
@@ -1021,6 +1112,61 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to bulk-warm Shop-Ware jobs cache");
     } finally {
       setRewarmingAllShopWare(false);
+    }
+  };
+
+  const rewarmAllNeverWarmedProtractor = async (count: number) => {
+    if (count <= 0) {
+      alert("No never-warmed shops to warm.");
+      return;
+    }
+    if (
+      !confirm(
+        `Warm invoice cache for all ${count} never-warmed Protractor shop(s)?\n\n` +
+          `This iterates each shop serially (per-shop /Invoice/{id} concurrency ` +
+          `cap=3 inside the worker) and may take several minutes. If the time ` +
+          `budget is exhausted, remaining shops are deferred — re-click to continue.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingAllProtractor(true);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/protractor-rewarm-jobs-cache-all`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to bulk-warm Protractor invoice cache");
+      } else {
+        const lines: string[] = [
+          `Bulk Protractor pre-warm complete (${json.candidateShopCount} candidates)`,
+          `warmed ${json.warmed} · errored ${json.errored} · ` +
+            `skipped ${json.skipped} · deferred ${json.deferred}`,
+          `invoices scanned ${json.invoicesScannedTotal} · cached ${json.invoicesCachedTotal} · ` +
+            `already cached ${json.alreadyCachedTotal}`,
+        ];
+        if (json.cappedShopCount > 0) {
+          lines.push(`${json.cappedShopCount} shop(s) hit the 500-invoice cap`);
+        }
+        if (json.perShopErrorsTotal > 0) {
+          lines.push(
+            `${json.perShopErrorsTotal} per-shop /Invoice fetch error(s) logged`,
+          );
+        }
+        if (json.duration) lines.push(`duration: ${json.duration}`);
+        if (json.deferred > 0) {
+          lines.push("");
+          lines.push("Re-click to continue with deferred shops.");
+        }
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to bulk-warm Protractor invoice cache");
+    } finally {
+      setRewarmingAllProtractor(false);
     }
   };
 
@@ -1850,10 +1996,17 @@ export default function SyncHealthPage() {
       bulkCapLabel?: string; // e.g. "500-RO cap" / "1000-RO cap"
       cacheCollectionLabel?: string; // e.g. "tekmetric_jobs_cache"
       stampFieldLabel?: string; // e.g. "shops.tekmetric.jobsCachePrewarm"
-      // Whether per-row Re-warm buttons should be shown. Off for
-      // Shop-Ware (no per-shop endpoint exists yet) so the bulk
-      // header is the only entry point there.
+      // Whether per-row Re-warm buttons should be shown.
       perRowRewarm?: boolean;
+      // Provider-aware per-row Re-warm callback. Defaults to the
+      // Tekmetric handler so existing callers keep working unchanged.
+      onRewarmShop?: (shopId: number, hasRecord: boolean) => void;
+      // The shopId currently being re-warmed for this provider, used
+      // to disable the row's button while the request is in flight.
+      // Defaults to the Tekmetric `rewarmingShopId` state.
+      rewarmingShopIdForProvider?: number | null;
+      // Tooltip + endpoint label shown on the per-row Re-warm button.
+      perRowRewarmTitle?: string;
     },
   ) => {
     const list = shops || [];
@@ -1868,6 +2021,12 @@ export default function SyncHealthPage() {
     const stampFieldLabel =
       opts?.stampFieldLabel ?? "shops.tekmetric.jobsCachePrewarm";
     const perRowRewarm = opts?.perRowRewarm ?? true;
+    const onRewarmShop = opts?.onRewarmShop ?? rewarmJobsCache;
+    const rewarmingShopIdForProvider =
+      opts?.rewarmingShopIdForProvider ?? rewarmingShopId;
+    const perRowRewarmTitle =
+      opts?.perRowRewarmTitle ??
+      "Re-run prewarmTekmetricJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped.";
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -2078,13 +2237,13 @@ export default function SyncHealthPage() {
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() =>
-                              rewarmJobsCache(s.shopId, s.hasPrewarmRecord)
+                              onRewarmShop(s.shopId, s.hasPrewarmRecord)
                             }
-                            disabled={rewarmingShopId === s.shopId}
+                            disabled={rewarmingShopIdForProvider === s.shopId}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
-                            title="Re-run prewarmTekmetricJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped."
+                            title={perRowRewarmTitle}
                           >
-                            {rewarmingShopId === s.shopId ? (
+                            {rewarmingShopIdForProvider === s.shopId ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
                               <Flame className="w-3.5 h-3.5" />
@@ -2104,14 +2263,20 @@ export default function SyncHealthPage() {
     );
   };
 
-  // Read-only render of the Protractor invoice-cache pre-warm overlay.
-  // Mirrors the Tekmetric one above, minus the rewarm/Warm-all buttons:
-  // the Protractor backfill warms uncached invoices opportunistically as
-  // it walks back through history (see `invoicesFromCache` accounting in
-  // lib/integrations/protractor-backfill.ts) so a one-shot rewarm
-  // endpoint hasn't been built. The table shape matches Protractor's
-  // PrewarmProtractorJobsCacheResult: invoicesScanned / alreadyCached /
-  // invoicesCached / errors / capped / durationMs.
+  // Render of the Protractor invoice-cache pre-warm overlay. Mirrors
+  // the Tekmetric/Shop-Ware one above, with column shape matching
+  // Protractor's PrewarmProtractorJobsCacheResult: invoicesScanned /
+  // alreadyCached / invoicesCached / errors / capped / durationMs. The
+  // bulk "Warm all never-warmed" header button calls
+  // `/api/platform-admin/protractor-rewarm-jobs-cache-all`; the per-row
+  // Re-warm button calls
+  // `/api/platform-admin/shops/[shopId]/protractor-rewarm-jobs-cache`
+  // (task #110). The Protractor backfill also warms uncached invoices
+  // opportunistically as it walks back through history (see
+  // `invoicesFromCache` accounting in
+  // lib/integrations/protractor-backfill.ts), so a re-warm here is a
+  // self-service knob for on-call rather than the only path to a hot
+  // cache.
   const renderProtractorInvoiceCachePrewarmSection = (
     shops: ProtractorInvoiceCachePrewarmShop[] | undefined,
     missingCount: number | undefined,
@@ -2122,6 +2287,7 @@ export default function SyncHealthPage() {
     const missing = missingCount ?? 0;
     const capped = cappedCount ?? 0;
     const errored = errorsCount ?? 0;
+    const bulkBusy = rewarmingAllProtractor;
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -2140,6 +2306,21 @@ export default function SyncHealthPage() {
               >
                 {missing} never warmed
               </span>
+            )}
+            {missing > 0 && (
+              <button
+                onClick={() => rewarmAllNeverWarmedProtractor(missing)}
+                disabled={bulkBusy || rewarmingProtractorShopId !== null}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs bg-orange-600 text-white hover:bg-orange-700 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                title="Iterate every Protractor shop with no pre-warm record and run the per-shop pre-warm worker for each. Serial across shops; per-shop /Invoice/{id} concurrency cap=3 inside the worker."
+              >
+                {bulkBusy ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Flame className="w-3.5 h-3.5" />
+                )}
+                Warm all never-warmed
+              </button>
             )}
             {capped > 0 && (
               <span
@@ -2208,6 +2389,9 @@ export default function SyncHealthPage() {
                   </th>
                   <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
                     Duration
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -2295,6 +2479,26 @@ export default function SyncHealthPage() {
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
                         {formatDurationMs(s.durationMs)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() =>
+                            rewarmProtractorInvoiceCache(
+                              s.shopId,
+                              s.hasPrewarmRecord,
+                            )
+                          }
+                          disabled={rewarmingProtractorShopId === s.shopId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                          title="Re-run prewarmProtractorJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped."
+                        >
+                          {rewarmingProtractorShopId === s.shopId ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Flame className="w-3.5 h-3.5" />
+                          )}
+                          {s.hasPrewarmRecord ? "Re-warm" : "Warm now"}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -2973,10 +3177,13 @@ export default function SyncHealthPage() {
           bulkCapLabel: "1000-RO cap",
           cacheCollectionLabel: "shopware_repair_orders + job_index",
           stampFieldLabel: "shops.shopware.jobsCachePrewarm",
-          // No per-shop Shop-Ware rewarm endpoint exists yet — bulk
-          // header is the only entry point. Per-row rewarm can be added
-          // as a follow-up if/when we ship the per-shop SW endpoint.
-          perRowRewarm: false,
+          // Per-shop Shop-Ware rewarm endpoint shipped with task #110:
+          // POST /api/platform-admin/shops/[shopId]/shopware-rewarm-jobs-cache
+          perRowRewarm: true,
+          onRewarmShop: rewarmShopWareJobsCache,
+          rewarmingShopIdForProvider: rewarmingShopWareShopId,
+          perRowRewarmTitle:
+            "Re-run prewarmShopWareJobsCacheForOnboarding for this shop. Idempotent — matching contentHash rows are skipped.",
         },
       )}
 
