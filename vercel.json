@@ -9,6 +9,9 @@
     },
     "app/api/cron/data-quality/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/invoice-cache-refresh/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -19,6 +22,10 @@
     {
       "path": "/api/cron/dashboard-refresh",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/invoice-cache-refresh",
+      "schedule": "0 4 * * *"
     }
   ],
   "env": {

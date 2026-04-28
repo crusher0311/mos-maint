@@ -39,6 +39,16 @@ const PREWARM_MAX_ROS = 1000;
 export interface PrewarmShopWareJobsCacheOptions {
   lookbackDays?: number;
   maxRos?: number;
+  // When false, the prewarm runs as a pure cache top-up: it still
+  // upserts ROs / vehicles / customers / job_index rows so the recent
+  // window stays warm against the 30d TTL on `protractor_invoice_cache`
+  // and the contentHash short-circuits in `job_index`, but it leaves
+  // `shopware_backfill_progress` untouched. Used by the daily refresh
+  // cron (task #71) on shops whose backfill has already caught up to
+  // the present — those shops have no cursor to advance, and even on
+  // an in-progress backfill we don't want a 7d top-up to retroactively
+  // skip a window the cron is still walking back through.
+  advanceCursor?: boolean;
 }
 
 export interface PrewarmShopWareJobsCacheResult {
@@ -92,6 +102,7 @@ export async function prewarmShopWareJobsCacheForOnboarding(
 ): Promise<PrewarmShopWareJobsCacheResult> {
   const lookbackDays = options.lookbackDays ?? PREWARM_LOOKBACK_DAYS;
   const maxRos = options.maxRos ?? PREWARM_MAX_ROS;
+  const advanceCursor = options.advanceCursor ?? true;
   const start = Date.now();
   const db = await getDb();
 
@@ -310,7 +321,10 @@ export async function prewarmShopWareJobsCacheForOnboarding(
   // entries will short-circuit via `contentHash` checks anyway, so
   // this is just belt-and-braces for completeness.
   const cursorSafeToAdvance =
-    !result.capped && result.errors === 0 && result.rosStored === filteredRos.length;
+    advanceCursor &&
+    !result.capped &&
+    result.errors === 0 &&
+    result.rosStored === filteredRos.length;
 
   if (cursorSafeToAdvance) {
     try {
