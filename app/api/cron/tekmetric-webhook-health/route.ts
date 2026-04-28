@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
 
+/**
+ * Test seam: the route handler dereferences `__deps.getDb` /
+ * `__deps.sendEmail` at call time so the route-level smoke test can swap in
+ * fakes without spinning up Mongo or Resend. Production callers should
+ * never touch this object — it defaults to the real implementations and is
+ * only mutated by `tests/tekmetric-webhook-health.route.smoke.ts`.
+ */
+export const __deps = {
+  getDb,
+  sendEmail,
+};
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -30,7 +42,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
+  const db = await __deps.getDb();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 
@@ -154,7 +166,7 @@ export async function GET(req: NextRequest) {
         </div>`;
       for (const admin of admins as Array<{ email: string }>) {
         try {
-          await sendEmail({
+          await __deps.sendEmail({
             to: admin.email,
             subject: `[MOS] Tekmetric webhook silence: ${toAlert.length} shop(s) flagged`,
             html,
