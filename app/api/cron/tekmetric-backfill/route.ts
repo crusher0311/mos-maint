@@ -235,8 +235,10 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   // `backfillShopChunkInner` are allowed to write `lastRunAt` /
   // `lastError`. The original task #23 restart script violated this and
   // had to be unstuck by bypassing the cron entirely (task #36); the
-  // current `scripts/restart-never-started-tekmetric-shops.ts` carries
-  // the regression-guard comment.
+  // safe pattern now lives in `lib/integrations/tekmetric/probe.ts`
+  // (`probeTekmetricShop` + `recordProbeResult`), exposed on-call via
+  // `scripts/probe-tekmetric-shop.ts`. Both carry the regression-guard
+  // comment.
   shopsToBackfill.sort((a, b) => {
     if (!a.lastRunAt && b.lastRunAt) return -1;
     if (a.lastRunAt && !b.lastRunAt) return 1;
@@ -346,8 +348,9 @@ async function sweepStaleSkippedRos(
 }
 
 // Exported so one-off scripts can call it directly without going through HTTP
-// (e.g. scripts/restart-never-started-tekmetric-shops.ts). Next.js ignores
-// named exports from a route handler other than HTTP method names.
+// (e.g. scripts/drive-task-23-restarted-shops.ts, scripts/drive-one-shop.ts).
+// Next.js ignores named exports from a route handler other than HTTP method
+// names.
 export async function backfillShopChunk(
   db: any,
   shopId: number,
