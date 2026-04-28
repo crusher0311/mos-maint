@@ -36,6 +36,12 @@ import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
 import PlanLoading from "./loading";
 import { getOELogoUrl } from "@/lib/oe-logos";
+import {
+  LIFETIME_FLUID_DEFAULT_MILES,
+  isLifetimeFluidItem,
+  parseServiceAction,
+  type ServiceAction,
+} from "@/lib/service-keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -306,6 +312,7 @@ type OEMItem = {
   notes?: string | null;
   miles?: number | null;
   months?: number | null;
+  intervals?: Array<{ units?: string | null; value?: number | null }>;
 };
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
@@ -559,6 +566,14 @@ type TriagedItem = {
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred; // OEM item has matching deferred work
   carfaxMatch?: CarfaxMatch; // Possible CARFAX record that may have addressed this deferred work
+  /** Verb extracted from the source row ("inspect", "replace", ...). */
+  action?: ServiceAction | null;
+  /** Free-text note carried from DataOne (e.g. "If equipped with dipstick"). */
+  notes?: string | null;
+  /** True when interval was synthesized from the lifetime-fluid default. */
+  recommendedDefault?: boolean;
+  /** Human-readable rationale shown when recommendedDefault is true. */
+  recommendedReason?: string | null;
 };
 
 type ShopIntervalOverride = {
@@ -764,18 +779,53 @@ function triage({
     if (shopOverride?.excluded) {
       continue;
     }
+
+    const action = parseServiceAction(o.name);
     
     // Check for shop interval override - only use shop intervals if:
     // 1. Shop has configured custom intervals for this service (useShop === true)
     // 2. Service was last performed at shop (last?.source === 'shop')
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
-    const intervalMiles = usingShopInterval && shopOverride.miles != null 
-      ? shopOverride.miles 
+    let intervalMiles = usingShopInterval && shopOverride.miles != null
+      ? shopOverride.miles
       : (o.miles ?? null);
-    const intervalMonths = usingShopInterval && shopOverride.months != null 
-      ? shopOverride.months 
+    let intervalMonths = usingShopInterval && shopOverride.months != null
+      ? shopOverride.months
       : (o.months ?? null);
+
+    // Lifetime-fluid handling: when the OE source has no actionable
+    // interval but lists this fluid as "lifetime" / "fill for life", surface a
+    // recommended-default interval (LIFETIME_FLUID_DEFAULT_MILES) so it shows
+    // up on the customer plan as a shop recommendation rather than
+    // disappearing silently. Mirrors the same logic in
+    // app/api/plan-build/route.ts so cached & freshly-built plans agree.
+    let recommendedDefault = false;
+    let recommendedReason: string | null = null;
+    const isReplacementRow =
+      action === null ||
+      action === "replace" ||
+      action === "flush" ||
+      action === "service" ||
+      action === "drain";
+    if (
+      !usingShopInterval &&
+      isReplacementRow &&
+      !serviceKey.startsWith("misc_") &&
+      isLifetimeFluidItem({
+        serviceKey,
+        name: o.name,
+        notes: o.notes,
+        miles: o.miles ?? null,
+        months: o.months ?? null,
+        intervals: o.intervals ?? [],
+      })
+    ) {
+      intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
+      intervalMonths = null;
+      recommendedDefault = true;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Recommended at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+    }
 
     // Track that we've used this DVI key
     if (dviMap.has(serviceKey)) usedDviKeys.add(serviceKey);
@@ -848,6 +898,7 @@ function triage({
     // Replace / Flush / Rotate / ...) is preserved end-to-end. Fall back to
     // the canonical display label only when the source row has no name.
     const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
+
     triaged.push({
       key: uniqueKey,
       serviceKey,
@@ -866,6 +917,13 @@ function triage({
       declined: declinedInfo,
       usingShopInterval,
       matchedDeferred, // Attach matching deferred work for "+ deferred" button
+      action: action ?? null,
+      notes: o.notes ?? null,
+      // The recommended-default rationale is surfaced via a dedicated badge
+      // in the renderer, so we deliberately do not duplicate it into `reason`
+      // (which would render again as the gray italic pill).
+      recommendedDefault: recommendedDefault || undefined,
+      recommendedReason: recommendedReason ?? undefined,
     });
   }
 
@@ -1675,6 +1733,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
     notes: x.maintenance_notes || x.notes,
     miles: x.miles ?? null,
     months: x.months ?? null,
+    intervals: Array.isArray(x.intervals)
+      ? x.intervals.map((iv: any) => ({ units: iv?.units ?? null, value: iv?.value ?? null }))
+      : [],
   }));
 
   // Debug: Log what data we have
@@ -1862,6 +1923,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
       usingShopInterval: item.usingShopInterval,
       protractorDeferredId: item.protractorDeferredId,
       matchedDeferred: item.matchedDeferred,
+      action: item.action ?? null,
+      notes: item.notes ?? null,
+      recommendedDefault: item.recommendedDefault,
+      recommendedReason: item.recommendedReason ?? null,
     });
     
     const planData: CachedPlanData = {
@@ -2134,10 +2199,21 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium">{t.title}</div>
+                      {t.notes && t.notes.trim() && (
+                        <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-red-600 text-white px-2 py-0.5">OVERDUE</span>
-                        {t.reason && !t.last?.miles && (
+                        {t.recommendedDefault && (
+                          <span
+                            className="rounded-full bg-blue-600 text-white px-2 py-0.5"
+                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                          >
+                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
+                        {t.reason && !t.last?.miles && !t.recommendedDefault && (
                           <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                         )}
                         {(t.intervalMiles || t.intervalMonths) && (
@@ -2341,12 +2417,23 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium">{t.title}</div>
+                      {t.notes && t.notes.trim() && (
+                        <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 border border-blue-300 px-2 py-0.5">
                           <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
                           <span className="text-blue-700">Deferred</span>
                         </span>
+                        {t.recommendedDefault && (
+                          <span
+                            className="rounded-full bg-blue-600 text-white px-2 py-0.5"
+                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                          >
+                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
                         {t.carfaxMatch && (
                           <CarfaxMatchBadge
                             match={t.carfaxMatch}
@@ -2410,10 +2497,21 @@ async function PlanContent({ params, searchParams }: PageProps) {
               {dueSoonFiltered.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
                   <div className="font-medium">{t.title}</div>
+                  {t.notes && t.notes.trim() && (
+                    <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                  )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                     <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DUE SOON</span>
-                    {t.reason && !t.last?.miles && (
+                    {t.recommendedDefault && (
+                      <span
+                        className="rounded-full bg-blue-600 text-white px-2 py-0.5"
+                        title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                      >
+                        Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                      </span>
+                    )}
+                    {t.reason && !t.last?.miles && !t.recommendedDefault && (
                       <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                     )}
                     {(t.intervalMiles || t.intervalMonths) && (
@@ -2573,10 +2671,21 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium">{t.title}</div>
+                      {t.notes && t.notes.trim() && (
+                        <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-blue-500 text-white px-2 py-0.5">COMPLIMENTARY</span>
-                        {t.reason && !t.last?.miles && (
+                        {t.recommendedDefault && (
+                          <span
+                            className="rounded-full bg-blue-600 text-white px-2 py-0.5"
+                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                          >
+                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
+                        {t.reason && !t.last?.miles && !t.recommendedDefault && (
                           <span className="rounded-full bg-neutral-200 text-neutral-600 px-2 py-0.5 italic">{t.reason}</span>
                         )}
                         {(t.intervalMiles || t.intervalMonths) && (
@@ -2632,9 +2741,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
               {buckets.upcoming.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
                   <div className="font-medium">{t.title}</div>
+                  {t.notes && t.notes.trim() && (
+                    <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                  )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                     <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5">UPCOMING</span>
+                    {t.recommendedDefault && (
+                      <span
+                        className="rounded-full bg-blue-600 text-white px-2 py-0.5"
+                        title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                      >
+                        Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                      </span>
+                    )}
                     {(t.intervalMiles || t.intervalMonths) && (
                       <span className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${t.usingShopInterval ? "bg-green-50 border-green-300" : ""}`}>
                         {t.usingShopInterval && shopLogo ? (
