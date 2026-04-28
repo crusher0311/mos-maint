@@ -73,7 +73,13 @@ async function fireChunk(shopId) {
   // prod within BOOTSTRAP_TIMEOUT, we trust the handler is running.
   const url = `${PROD_BASE_URL}/api/cron/tekmetric-backfill`;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort("client-bootstrap-only"), BOOTSTRAP_TIMEOUT);
+  // Use an explicit boolean to detect OUR abort, since the resulting error
+  // shape varies wildly across Node/undici versions (e.message can be empty,
+  // e.name may be DOMException, the error may surface from r.text() instead
+  // of fetch(), etc). If `bootstrapAborted` is true and we got an error,
+  // it's our timer — the chunk is running on prod.
+  let bootstrapAborted = false;
+  const timer = setTimeout(() => { bootstrapAborted = true; ctrl.abort(); }, BOOTSTRAP_TIMEOUT);
   const t0 = Date.now();
   try {
     const r = await fetch(url, {
@@ -82,17 +88,28 @@ async function fireChunk(shopId) {
       body: JSON.stringify({ shopId }),
       signal: ctrl.signal,
     });
-    // If we got a response within BOOTSTRAP_TIMEOUT, the chunk likely already
-    // finished (small/quick chunk). Try to read the body for nicer logging.
-    const body = await r.text().catch(() => "");
+    // We got headers within BOOTSTRAP_TIMEOUT. Read the body separately —
+    // if our timer then fires mid-stream, we still have the status code.
+    let body = "";
+    try { body = await r.text(); }
+    catch {
+      // Body stream aborted (likely by our timer). Status is still valid,
+      // but the chunk is most likely still running on prod, not "finishedFast".
+      return { status: r.status, ms: Date.now()-t0, body: "", finishedFast: false };
+    }
     return { status: r.status, ms: Date.now()-t0, body, finishedFast: true };
   } catch (e) {
-    // Aborted by our timer == expected for slow shops. The chunk is still
-    // running on prod. Anything else == network error before request was sent.
-    if (e?.name === "AbortError" || /aborted/i.test(String(e?.message))) {
+    // OUR timer fired → chunk is running on prod (expected for slow shops)
+    if (bootstrapAborted || ctrl.signal.aborted) {
       return { status: 0, ms: Date.now()-t0, body: "", finishedFast: false };
     }
-    throw e;
+    // Real network error (DNS, TLS, connection refused, etc) before our timer
+    // — surface it. Include cause for nicer diagnostics since e.message is
+    // often empty for fetch errors.
+    const detail = e?.message || e?.cause?.message || e?.code || e?.cause?.code || String(e);
+    const wrapped = new Error(`fetch failed: ${detail}`);
+    wrapped.cause = e;
+    throw wrapped;
   } finally {
     clearTimeout(timer);
   }
