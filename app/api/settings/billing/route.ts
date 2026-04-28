@@ -25,12 +25,17 @@ export async function GET() {
       "status.active": true,
     });
 
+    const monthlyAmount =
+      (typeof shop?.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
+      ?? (typeof billing.stripeSubscriptionAmount === "number" ? billing.stripeSubscriptionAmount : null);
+
     return NextResponse.json({
       plan: billing.plan || "Professional",
       status: billing.status || "active",
       vehicleCount,
       vehicleLimit: null,
       nextBillingDate: billing.nextBillingDate,
+      monthlyAmount,
     });
   }
 

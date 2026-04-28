@@ -539,7 +539,7 @@ function BillingSettingsContent() {
                   <div>
                     <p className="text-xs text-gray-500">Monthly Amount</p>
                     <p className="font-semibold text-gray-900">
-                      {billing?.monthlyAmount ? `$${(billing.monthlyAmount / 100).toFixed(2)}` : "Free"}
+                      {billing?.monthlyAmount ? `$${(billing.monthlyAmount / 100).toFixed(2)}/mo` : "Free"}
                     </p>
                   </div>
                 </div>
