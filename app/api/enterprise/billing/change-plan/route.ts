@@ -112,12 +112,13 @@ export async function POST(request: NextRequest) {
         { id: shopId },
         {
           $set: {
-            pendingPlanChange: {
+            "billing.pendingPlanChange": {
               priceId,
               planId: planSlug,
               effectiveDate: new Date(periodEnd * 1000),
               currentSubscriptionId: targetShop.stripeSubscriptionId,
             },
+            "billing.updatedAt": new Date(),
             updatedAt: new Date()
           }
         }
@@ -139,10 +140,14 @@ export async function POST(request: NextRequest) {
         {
           $set: {
             "billing.plan": planSlug,
+            "billing.updatedAt": new Date(),
             plan: planSlug,
             updatedAt: new Date()
           },
-          $unset: { pendingPlanChange: "" }
+          $unset: {
+            "billing.pendingPlanChange": "",
+            pendingPlanChange: ""
+          }
         }
       );
 

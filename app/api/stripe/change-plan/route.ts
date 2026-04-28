@@ -17,17 +17,21 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ id: session.shopId });
-    
-    if (!shop?.stripeCustomerId || !shop?.stripeSubscriptionId) {
+    const shopId = Number(session.shopId);
+    const shop = await db.collection("shops").findOne({ shopId });
+
+    const stripeCustomerId = shop?.billing?.stripeCustomerId;
+    const stripeSubscriptionId = shop?.billing?.stripeSubscriptionId;
+
+    if (!stripeCustomerId || !stripeSubscriptionId) {
       return NextResponse.json({ error: "No active subscription found" }, { status: 400 });
     }
 
     const stripe = getStripe();
 
-    const subscriptionData = await stripe.subscriptions.retrieve(shop.stripeSubscriptionId);
+    const subscriptionData = await stripe.subscriptions.retrieve(stripeSubscriptionId);
     const subscription = subscriptionData as any;
-    
+
     if (!subscription || subscription.status === "canceled") {
       return NextResponse.json({ error: "No active subscription found" }, { status: 400 });
     }
@@ -41,17 +45,18 @@ export async function POST(request: NextRequest) {
 
     if (isDowngrade) {
       await db.collection("shops").updateOne(
-        { id: shop.id },
-        { 
-          $set: { 
-            pendingPlanChange: {
+        { shopId },
+        {
+          $set: {
+            "billing.pendingPlanChange": {
               priceId,
               planId,
               effectiveDate: new Date(periodEnd * 1000),
-              currentSubscriptionId: shop.stripeSubscriptionId,
+              currentSubscriptionId: stripeSubscriptionId,
             },
-            updatedAt: new Date()
-          }
+            "billing.updatedAt": new Date(),
+            updatedAt: new Date(),
+          },
         }
       );
 
@@ -61,7 +66,7 @@ export async function POST(request: NextRequest) {
         effectiveDate: new Date(periodEnd * 1000).toISOString(),
       });
     } else {
-      await stripe.subscriptions.update(shop.stripeSubscriptionId, {
+      await stripe.subscriptions.update(stripeSubscriptionId, {
         items: [
           {
             id: currentItemId,
@@ -72,13 +77,18 @@ export async function POST(request: NextRequest) {
       });
 
       await db.collection("shops").updateOne(
-        { id: shop.id },
-        { 
-          $set: { 
+        { shopId },
+        {
+          $set: {
+            "billing.plan": planId,
+            "billing.updatedAt": new Date(),
             plan: planId,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           },
-          $unset: { pendingPlanChange: "" }
+          $unset: {
+            "billing.pendingPlanChange": "",
+            pendingPlanChange: "",
+          },
         }
       );
 
@@ -89,8 +99,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error: any) {
     console.error("Error changing plan:", error);
-    return NextResponse.json({ 
-      error: error.message || "Failed to change plan" 
+    return NextResponse.json({
+      error: error.message || "Failed to change plan"
     }, { status: 500 });
   }
 }
