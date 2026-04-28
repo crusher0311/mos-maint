@@ -36,6 +36,22 @@ const CA_PROVINCES = [
   "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
 ];
 
+const UNSUPPORTED_PLATE_REGIONS: Record<string, string> = {
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Quebec",
+  SK: "Saskatchewan",
+  YT: "Yukon",
+};
+
 const STATE_NAME_TO_ABBR: Record<string, string> = {
   ALABAMA:"AL",ALASKA:"AK",ARIZONA:"AZ",ARKANSAS:"AR",CALIFORNIA:"CA",COLORADO:"CO",CONNECTICUT:"CT",
   DELAWARE:"DE",FLORIDA:"FL",GEORGIA:"GA",HAWAII:"HI",IDAHO:"ID",ILLINOIS:"IL",INDIANA:"IN",IOWA:"IA",
@@ -488,6 +504,12 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     const state = newVehicle.plateState || "";
     if (!plate || !state) {
       setVehicleError("Enter both license plate and state to look up VIN");
+      return;
+    }
+    if (UNSUPPORTED_PLATE_REGIONS[state]) {
+      setVehicleError(
+        `Plate lookup isn't available for ${UNSUPPORTED_PLATE_REGIONS[state]} yet — our plate-to-VIN provider only covers US states. Please enter the VIN manually.`,
+      );
       return;
     }
     setPlateLooking(true);
@@ -1143,7 +1165,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                                 <option key={s} value={s}>{s}</option>
                               ))}
                             </optgroup>
-                            <optgroup label="Canadian Provinces">
+                            <optgroup label="Canadian Provinces (plate lookup not supported)">
                               {CA_PROVINCES.map(s => (
                                 <option key={s} value={s}>{s}</option>
                               ))}

@@ -3,6 +3,22 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { decodeVinLocal } from "@/lib/integrations/dataone-local";
 
+const UNSUPPORTED_PLATE_REGIONS: Record<string, string> = {
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Quebec",
+  SK: "Saskatchewan",
+  YT: "Yukon",
+};
+
 export async function POST(request: NextRequest) {
   try {
     const store = await cookies();
@@ -26,6 +42,16 @@ export async function POST(request: NextRequest) {
     }
     if (!state || state.length !== 2) {
       return NextResponse.json({ error: "Two-letter state code is required" }, { status: 400 });
+    }
+
+    if (UNSUPPORTED_PLATE_REGIONS[state]) {
+      const province = UNSUPPORTED_PLATE_REGIONS[state];
+      return NextResponse.json({
+        success: false,
+        unsupportedRegion: true,
+        region: state,
+        error: `Plate lookup isn't available for ${province} yet — our plate-to-VIN provider only covers US states. Please enter the VIN manually.`,
+      });
     }
 
     const apiKey = process.env.PLATE_TO_VIN_API_KEY;
