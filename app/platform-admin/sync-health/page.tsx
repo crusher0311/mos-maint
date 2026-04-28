@@ -272,6 +272,9 @@ export default function SyncHealthPage() {
   const [retryingRo, setRetryingRo] = useState<number | null>(null);
   const [retryingAllRo, setRetryingAllRo] = useState(false);
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+  const [bulkResolvingShopId, setBulkResolvingShopId] = useState<number | null>(
+    null,
+  );
   const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
   const [rewarmingAll, setRewarmingAll] = useState(false);
   const [rewarmingAllShopWare, setRewarmingAllShopWare] = useState(false);
@@ -323,6 +326,56 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to resolve RO");
     } finally {
       setResolvingKey(null);
+    }
+  };
+
+  const resolveAllSkippedRos = async (shopId: number, roIds: number[]) => {
+    if (roIds.length === 0) {
+      alert("No skipped ROs to resolve for this shop.");
+      return;
+    }
+    if (
+      !confirm(
+        `Mark ALL ${roIds.length} skipped RO${roIds.length === 1 ? "" : "s"} for shop ${shopId} as resolved?\n\n` +
+          `This archives every entry in the recently-skipped list and removes it from the rolling window. ` +
+          `Use only after you've confirmed the data is in place (e.g. via a one-off re-fetch script that cleared the whole batch).`,
+      )
+    ) {
+      return;
+    }
+    setBulkResolvingShopId(shopId);
+    try {
+      const res = await fetch("/api/admin/sync-health/skipped-ros/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId, roIds }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to bulk-resolve skipped ROs");
+      } else {
+        const lines: string[] = [
+          `Shop ${shopId}: archived ${json.archivedCount}/${roIds.length} skipped RO${roIds.length === 1 ? "" : "s"}`,
+        ];
+        if (json.fullyRecovered) {
+          lines.push("Rolling window now empty — shop fully recovered.");
+        } else if (typeof json.remaining === "number") {
+          lines.push(`${json.remaining} entr${json.remaining === 1 ? "y" : "ies"} still on the list.`);
+        }
+        if (Array.isArray(json.failures) && json.failures.length > 0) {
+          lines.push("");
+          lines.push(`${json.failures.length} failed:`);
+          for (const f of json.failures.slice(0, 10)) {
+            lines.push(`RO ${f.roId} — ${f.error}`);
+          }
+        }
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to bulk-resolve skipped ROs");
+    } finally {
+      setBulkResolvingShopId(null);
     }
   };
 
@@ -1026,7 +1079,10 @@ export default function SyncHealthPage() {
                                     onClick={() =>
                                       resolveSkippedRo(s.shopId, r.roId)
                                     }
-                                    disabled={isResolving}
+                                    disabled={
+                                      isResolving ||
+                                      bulkResolvingShopId === s.shopId
+                                    }
                                     title="Archive this RO and remove it from the recently-skipped list. Use after a manual re-fetch confirms the data is in place."
                                     className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-sans bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded disabled:opacity-50"
                                   >
@@ -1044,29 +1100,54 @@ export default function SyncHealthPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {isTekmetric && (
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {isTekmetric && (
+                            <button
+                              onClick={() => retryShopRos(s.shopId)}
+                              disabled={
+                                retryingRo === s.shopId ||
+                                retryingAllRo ||
+                                bulkResolvingShopId === s.shopId ||
+                                !(s.recentSkippedRos || []).some(
+                                  (r) =>
+                                    !r.permanentlyFailed &&
+                                    (r.retryAttempts ?? 0) < MAX_RETRY_ATTEMPTS,
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                              title="Retry this shop's skipped repair orders now"
+                            >
+                              {retryingRo === s.shopId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              )}
+                              Retry now
+                            </button>
+                          )}
                           <button
-                            onClick={() => retryShopRos(s.shopId)}
-                            disabled={
-                              retryingRo === s.shopId ||
-                              retryingAllRo ||
-                              !(s.recentSkippedRos || []).some(
-                                (r) =>
-                                  !r.permanentlyFailed &&
-                                  (r.retryAttempts ?? 0) < MAX_RETRY_ATTEMPTS,
+                            onClick={() =>
+                              resolveAllSkippedRos(
+                                s.shopId,
+                                (s.recentSkippedRos || []).map((r) => r.roId),
                               )
                             }
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
-                            title="Retry this shop's skipped repair orders now"
+                            disabled={
+                              bulkResolvingShopId === s.shopId ||
+                              resolvingKey?.startsWith(`${s.shopId}:`) === true ||
+                              (s.recentSkippedRos || []).length === 0
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                            title="Archive every recently-skipped RO for this shop in one go. Use after a one-off re-fetch script has cleared the whole rolling window."
                           >
-                            {retryingRo === s.shopId ? (
+                            {bulkResolvingShopId === s.shopId ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <RefreshCw className="w-3.5 h-3.5" />
+                              <CheckCircle2 className="w-3.5 h-3.5" />
                             )}
-                            Retry now
+                            Mark all resolved
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );
