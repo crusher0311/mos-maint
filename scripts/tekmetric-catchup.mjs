@@ -32,10 +32,13 @@ const CRON_SECRET         = process.env.CRON_SECRET         || "";
 const DRY_RUN             = process.env.DRY_RUN             === "true";
 const MAX_CHUNKS          = Number(process.env.MAX_CHUNKS_PER_SHOP || 30);
 const POLL_INTERVAL_MS    = Number(process.env.POLL_INTERVAL_MS    || 20_000);
-// 45 min default: shop 99's last successful chunk took 35 min total
-// (fetch ~10 min, bulk-write ~25 min). 25 min was too tight and gave false
-// "stuck" alarms for healthy slow shops.
-const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 45 * 60 * 1000);
+// 60 min default. Empirical evidence from shop 99 catch-up on 2026-04-28:
+// chunk 1 took 43.7 min wall-clock end-to-end (durationMs=2,623,028 for
+// 2,187 ROs, normalize phase made ~280 fresh /jobs API calls when cache
+// missed → 57s of 429 backoff). 45 min was borderline (1.3 min margin);
+// 60 min gives real headroom for shops that have heavier normalize work
+// or hit a 429 storm during bulk-write.
+const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 60 * 60 * 1000);
 const BOOTSTRAP_TIMEOUT   = Number(process.env.BOOTSTRAP_TIMEOUT_MS || 45_000);
 const INTER_SHOP_DELAY    = Number(process.env.INTER_SHOP_DELAY_MS  || 5_000);
 const ONLY_SHOPS = (process.env.ONLY_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
