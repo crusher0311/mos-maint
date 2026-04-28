@@ -1,0 +1,76 @@
+2026-04-28T17:24:35Z clientIP="72.198.61.82" requestID="149cb500-e8c4-4b57" responseTimeMS=178 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:35Z clientIP="72.198.61.82" requestID="bbab1dca-e813-4122" responseTimeMS=172 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:35.955489969Z     "repairOrderStatus": {
+2026-04-28T17:24:35.955492719Z       "id": 2,
+2026-04-28T17:24:35.955495559Z       "code": "WORKINPROGRESS",
+2026-04-28T17:24:35.955498729Z       "name": "Work-In-Progress",
+2026-04-28T17:24:35.955501599Z       "postedOrAccrecv": false
+2026-04-28T17:24:35.955504409Z     },
+2026-04-28T17:24:35.95550743Z     "repairOrderLabel": {
+2026-04-28T17:24:35.95551043Z       "id": 5,
+2026-04-28T17:24:35.95551334Z       "code": "WORKINPROGRESS",
+2026-04-28T17:24:35.95551649Z       "name": "In-Progress",
+2026-04-28T17:24:35.95551925Z       "status": {
+2026-04-28T17:24:35.95552198Z         "id": 2,
+2026-04-28T17:24:35.9555247Z         "code": "WORKINPROGRESS",
+2026-04-28T17:24:35.955527531Z         "name": "Work-In-Progress",
+2026-04-28T17:24:35.955530301Z         "postedOrAccrecv": false
+2026-04-28T17:24:35.955533231Z       }
+2026-04-28T17:24:35.955536231Z     },
+2026-04-28T17:24:35.955539021Z     "color": "#158d99",
+2026-04-28T17:24:35.955541911Z     "repairOrderCustomLabel": {
+2026-04-28T17:24:35.955544871Z       "name": "PARTS ARRIVED"
+2026-04-28T17:24:35.955547721Z     },
+2026-04-28T17:24:35.955550641Z     "customerId": 17038876,
+2026-04-28T17:24:35.955553532Z     "technicianId": null,
+2026-04-28T17:24:35.955556482Z     "serviceWriterId": 289989,
+2026-04-28T17:24:35.955559322Z     "vehicleId": 24889059,
+2026-04-28T17:24:35.955561952Z     "milesIn": 211040,
+2026-04-28T17:24:35.955564952Z     "milesOut": 211050,
+2026-04-28T17:24:35.955568062Z     "keytag": null,
+2026-04-28T17:24:35.955571193Z     "completedDate": null,
+2026-04-28T17:24:35.955574313Z     "postedDate": null,
+2026-04-28T17:24:35.955576703Z     "laborSales": 62460,
+2026-04-28T17:24:35.955579093Z     "partsSales": 43036,
+2026-04-28T17:24:35.955582173Z     "subletSales": 0,
+2026-04-28T17:24:35.955586033Z     "discountTotal": 0,
+2026-04-28T17:24:35.955589394Z     "feeTotal": 6000,
+2026-04-28T17:24:35.955592683Z     "taxes": 14494,
+2026-04-28T17:24:35.955595534Z     "amountPaid": 0,
+2026-04-28T17:24:35.955598464Z     "totalSales": 125990,
+2026-04-28T17:24:35.955601644Z     
+2026-04-28T17:24:35.955605354Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #11775 status updated by ALECACCESSAUTO@GMAIL.COM", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-04-28T17:24:35.955608234Z [Tekmetric Webhook] RO Update: #11775 (ID: 323648123), Status: Work-In-Progress (WORKINPROGRESS)
+2026-04-28T17:24:36Z clientIP="72.198.61.82" requestID="44c1a6a7-6ea2-4ea7" responseTimeMS=174 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:36Z clientIP="162.212.202.163" requestID="0f3baaa6-7ea4-43ec" responseTimeMS=5 responseBytes=237 userAgent=""
+2026-04-28T17:24:36Z clientIP="72.198.61.82" requestID="09cd40c8-7e0a-4e4c" responseTimeMS=179 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:36.29461136Z [Tekmetric Webhook] Upserted RO #11775: UPDATE status=Work-In-Progress, label=PARTS ARRIVED, odometer=211040, customer=unchanged, shop=86
+2026-04-28T17:24:36.35334898Z [PlanCache] HIT: 1G1ZD5EUXBF171299 cached 112m ago, 211040 miles
+2026-04-28T17:24:36.353367Z [VHI Trigger] Plan already cached for 1G1ZD5EUXBF171299 at shop 86, skipping create-build
+2026-04-28T17:24:37.195266328Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:21:55.029Z)
+2026-04-28T17:24:37.387752408Z [Tekmetric Webhook NIS] shop=86 ro=323648123 → WO 0c/0u/1s, payments=0, inspections=0
+2026-04-28T17:24:37Z clientIP="162.212.202.163" requestID="f35e894e-68e4-4044" responseTimeMS=3 responseBytes=237 userAgent=""
+2026-04-28T17:24:37.706706734Z [Tekmetric Incremental] Shop 73: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:22:02.244Z)
+2026-04-28T17:24:37Z clientIP="54.162.195.222" requestID="5b7fe229-7fa8-4b6d" responseTimeMS=1730 responseBytes=268 userAgent=""
+2026-04-28T17:24:38.596413884Z [Tekmetric Incremental] Shop 74: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:22:04.862Z)
+2026-04-28T17:24:38Z clientIP="162.212.202.163" requestID="4284142a-2b1a-4ade" responseTimeMS=4 responseBytes=237 userAgent=""
+2026-04-28T17:24:38Z clientIP="162.212.202.163" requestID="4e76b8a9-0cf7-4007" responseTimeMS=4 responseBytes=237 userAgent=""
+2026-04-28T17:24:38Z clientIP="162.212.202.163" requestID="39d4e4f0-49a8-4a12" responseTimeMS=3 responseBytes=237 userAgent=""
+2026-04-28T17:24:41.417536819Z [Tekmetric Incremental] Shop 75: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:22:10.232Z)
+2026-04-28T17:24:42.115327126Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-28T17:24:42.117125491Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-28T17:24:40Z clientIP="162.212.202.163" requestID="09e5ae4b-b162-4d34" responseTimeMS=22 responseBytes=237 userAgent=""
+2026-04-28T17:24:41Z clientIP="162.212.202.163" requestID="d0d26beb-2ff7-44da" responseTimeMS=5 responseBytes=237 userAgent=""
+2026-04-28T17:24:42Z clientIP="73.112.133.127" requestID="1e15322c-243f-4230" responseTimeMS=64 responseBytes=483 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="73.112.133.127" requestID="7e454931-8984-41dc" responseTimeMS=66 responseBytes=483 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42.420479179Z [Tekmetric Incremental] Shop 78: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:22:22.718Z)
+2026-04-28T17:24:42.543146915Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-04-28T17:24:43Z clientIP="72.198.61.82" requestID="e00223bb-7e9d-4211" responseTimeMS=182 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="100.14.92.241" requestID="3a89103d-46c5-458b" responseTimeMS=64 responseBytes=483 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="72.198.61.82" requestID="7bd9ba16-636a-4f0f" responseTimeMS=181 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="72.198.61.82" requestID="deb8d33f-0630-4c90" responseTimeMS=182 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="72.198.61.82" requestID="b4938e01-cee1-4d40" responseTimeMS=204 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:43Z clientIP="72.198.61.82" requestID="599ea377-f216-4f2e" responseTimeMS=192 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-04-28T17:24:42Z clientIP="162.212.202.163" requestID="b170f0c2-9e0a-4475" responseTimeMS=20 responseBytes=237 userAgent=""
+2026-04-28T17:24:43.546987507Z [Tekmetric Incremental] Shop 82: Fetched page 0, got 0 ROs (updated since 2026-04-28T17:22:27.314Z)
+2026-04-28T17:24:43Z clientIP="72.198.61.82" requestID="1730c99d-25f6-4fb0" responseTimeMS=213 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
