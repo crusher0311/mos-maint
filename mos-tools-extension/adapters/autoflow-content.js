@@ -1,4 +1,5 @@
 console.log("[MOS Tools] AutoFlow content script loaded");
+console.log("[Autoflow] content script loaded");
 
 let lastContext = null;
 let contextCheckInterval = null;
@@ -276,7 +277,7 @@ function sendContextUpdate(context) {
 
   chrome.runtime.sendMessage(
     {
-      type: "SMS_CONTEXT_UPDATE",
+      action: "SET_SMS_CONTEXT",
       context: context
     },
     (response) => {

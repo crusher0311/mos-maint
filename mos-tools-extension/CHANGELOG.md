@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.26.6 — 2026-04-28
+
+### Fixed
+- **Autoflow side panel stuck on "Loading VHI…".** The Autoflow
+  content script was posting context updates as
+  `{ type: "SMS_CONTEXT_UPDATE" }`, but the background worker only
+  listens for `{ action: "SET_SMS_CONTEXT" }` (the protocol Tekmetric
+  and Shop-Ware already use). The message was silently dropped, so the
+  side panel never received a shop / RO / VIN and never loaded a plan.
+  Aligned the Autoflow adapter with the rest of the codebase.
+- Added an `[Autoflow]` content-script load log so it's obvious in the
+  browser console whether the adapter is running on
+  `*.autotext.me` / `*.autoflow.com` pages.
+
 ## 1.26.5 — 2026-04-21
 
 ### Added
