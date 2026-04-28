@@ -35,6 +35,7 @@ import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
 import PlanLoading from "./loading";
+import { getOELogoUrl } from "@/lib/oe-logos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,28 +84,6 @@ function parseCarfaxDate(d?: string | null): Date | null {
 function toSquish(vin: string) {
   const v = String(vin).toUpperCase().trim();
   return v.slice(0, 8) + v.slice(9, 11);
-}
-
-const OE_LOGO_MAP: Record<string, string> = {
-  "AUDI": "/logos/makes/audi.png",
-  "CADILLAC": "/logos/makes/cadillac.png",
-  "CHEVROLET": "/logos/makes/chevrolet.png",
-  "CHRYSLER": "/logos/makes/chrysler.png",
-  "FORD": "/logos/makes/ford.png",
-  "HONDA": "/logos/makes/honda.png",
-  "JAGUAR": "/logos/makes/jaguar.png",
-  "LEXUS": "/logos/makes/lexus.png",
-  "LINCOLN": "/logos/makes/lincoln.png",
-  "MAZDA": "/logos/makes/mazda.png",
-  "MERCEDES-BENZ": "/logos/makes/mercedes-benz.png",
-  "SUBARU": "/logos/makes/subaru.png",
-  "TOYOTA": "/logos/makes/toyota.png",
-};
-
-function getOELogoUrl(make: string | null | undefined): string | null {
-  if (!make) return null;
-  const normalized = make.toUpperCase().trim();
-  return OE_LOGO_MAP[normalized] || null;
 }
 
 function formatOverdueDate(date: Date | null | undefined): { text: string; isVeryOverdue: boolean; yearsOverdue: number } {
