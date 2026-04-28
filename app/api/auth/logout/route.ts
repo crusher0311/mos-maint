@@ -22,6 +22,14 @@ export async function POST() {
     path: "/",
     maxAge: 0,
   });
+  // Also clear the must-change-password gating cookie so a stale value
+  // doesn't keep redirecting the next person to log in on this device.
+  store.set({
+    name: "mcp_flag",
+    value: "",
+    path: "/",
+    maxAge: 0,
+  });
 
   return NextResponse.json({ ok: true });
 }

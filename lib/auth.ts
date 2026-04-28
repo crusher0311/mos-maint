@@ -2,6 +2,7 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getTestAuthFromHeaders, isTestAuthEnabled } from "@/lib/test-auth";
 
@@ -16,7 +17,29 @@ export type SessionInfo = {
   isTestAuth?: boolean;
   isImpersonation?: boolean;
   impersonatedBy?: string;
+  mustChangePassword?: boolean;
 };
+
+// Paths a user with `mustChangePassword: true` is allowed to reach before
+// they have set a new password. Mirrors the allowlist in middleware.ts so
+// pages/server actions enforce the gate even if the middleware is bypassed
+// (e.g. user manually deletes the `mcp_flag` cookie in devtools).
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set<string>([
+  "/change-password",
+  "/api/auth/change-password",
+  "/api/auth/me",
+  "/api/auth/logout",
+  "/dashboard/setup-shop",
+  "/api/auth/setup-shop",
+  "/api/shop/features",
+]);
+
+function isPasswordChangeAllowedPath(pathname: string): boolean {
+  if (PASSWORD_CHANGE_ALLOWED_PATHS.has(pathname)) return true;
+  if (pathname.startsWith("/_next/")) return true;
+  if (pathname === "/favicon.ico" || pathname === "/icon.png") return true;
+  return false;
+}
 
 export async function getSession(): Promise<SessionInfo | null> {
   // E2E Test Auth Bypass - check header first
@@ -125,34 +148,139 @@ export async function getSession(): Promise<SessionInfo | null> {
 
   const user = await db.collection("users").findOne(
     { _id: sess.userId },
-    { projection: { email: 1, role: 1, isPlatformAdmin: 1 } }
+    {
+      projection: {
+        email: 1,
+        role: 1,
+        isPlatformAdmin: 1,
+        mustChangePassword: 1,
+      },
+    }
   );
   if (!user) {
     return devAutoLoginEnabled ? devSession : null;
   }
 
-  return {
+  // Either the session OR the user document carrying `mustChangePassword`
+  // is enough to consider the user gated. The session copy keeps post-reset
+  // logins gated even if the user record races; the user copy keeps the
+  // gate in effect across new sessions until the user actually changes
+  // their password.
+  const mustChangePassword =
+    Boolean(sess.mustChangePassword) || Boolean(user.mustChangePassword);
+
+  const session: SessionInfo = {
     token,
     shopId: Number(sess.shopId),
     email: String(user.email),
     role: String(user.role ?? "owner"),
     isPlatformAdmin: Boolean(user.isPlatformAdmin),
     isImpersonation: Boolean(sess.isImpersonation),
-    impersonatedBy: sess.impersonatedBy ? String(sess.impersonatedBy) : undefined,
+    impersonatedBy: sess.impersonatedBy
+      ? String(sess.impersonatedBy)
+      : undefined,
+    mustChangePassword,
   };
+
+  // Authoritative server-side enforcement of the post-force-reset gate.
+  // We do this at the bottom of `getSession()` so that ANY page or API that
+  // resolves a session has the gate applied — not just the small subset
+  // that explicitly call `requireSession()`. UI requests get redirected to
+  // /change-password; API requests are left to either the middleware
+  // (cookie-based fast path → 403) or their own handler logic, because
+  // `redirect()` from a route handler in Next 14 manifests as a 500 and
+  // would degrade response semantics.
+  await enforcePasswordChangeGate(session);
+
+  return session;
+}
+
+// Read the current request path from headers (server components/route
+// handlers don't get it on the session itself). Falls back to "" if we
+// can't determine it, which means we won't accidentally redirect.
+async function currentPathname(): Promise<string> {
+  try {
+    const h = await headers();
+    return (
+      h.get("x-invoke-path") ||
+      h.get("next-url") ||
+      h.get("x-pathname") ||
+      h.get("x-matched-path") ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Thrown by `getSession()` when an authenticated user with
+ * `mustChangePassword: true` tries to call any non-allowlisted API
+ * route. This is the authoritative server-side enforcement of the
+ * post-force-reset gate for API requests — middleware's cookie check
+ * is only a fast-path optimization in front of it.
+ *
+ * Route handlers may catch this and respond with a clean 403 via
+ * `passwordChangeRequiredResponse()`. If a handler does NOT catch it,
+ * Next.js will return a 500 — also a denial — so the security
+ * property ("user cannot use the app until they change their password")
+ * holds regardless.
+ */
+export class PasswordChangeRequiredError extends Error {
+  readonly status = 403 as const;
+  constructor() {
+    super("Password change required");
+    this.name = "PasswordChangeRequiredError";
+  }
+}
+
+export function isPasswordChangeRequiredError(
+  err: unknown
+): err is PasswordChangeRequiredError {
+  return err instanceof PasswordChangeRequiredError;
+}
+
+export function passwordChangeRequiredResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "Password change required",
+      mustChangePassword: true,
+      redirect: "/change-password",
+    },
+    { status: 403 }
+  );
+}
+
+async function enforcePasswordChangeGate(s: SessionInfo): Promise<void> {
+  if (!s.mustChangePassword) return;
+  const pathname = await currentPathname();
+  // If we don't know the path (some runtimes), err on the side of NOT
+  // gating — the dedicated change-password page will still get the
+  // user to the right place via /api/auth/me on mount.
+  if (!pathname) return;
+  if (isPasswordChangeAllowedPath(pathname)) return;
+  if (pathname.startsWith("/api/")) {
+    // Authoritative enforcement for API routes: throw a typed error.
+    // Route handlers may catch it for a clean 403; uncaught throws
+    // surface as 500 — both are denials, neither is a bypass.
+    throw new PasswordChangeRequiredError();
+  }
+  // For UI pages, redirect to /change-password (route handlers can't use
+  // redirect() — it manifests as a 500 in Next 14).
+  redirect("/change-password");
 }
 
 export async function requirePlatformAdmin(): Promise<SessionInfo> {
   const s = await getSession();
   if (!s) redirect("/admin-login");
   if (!s.isPlatformAdmin) redirect("/dashboard");
-  return s!; // Non-null assertion since redirect throws
+  return s; // Non-null since redirect throws
 }
 
 export async function requireSession(): Promise<SessionInfo> {
   const s = await getSession();
   if (!s) redirect("/login");
-  return s!; // Non-null assertion since redirect throws
+  return s; // Non-null since redirect throws
 }
 
 export function sessionCookieOptions(maxAgeSeconds = 60 * 60 * 24 * 30) {

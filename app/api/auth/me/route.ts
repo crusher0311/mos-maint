@@ -36,6 +36,8 @@ export async function GET() {
     !shop?.setupCompleted
   );
 
+  const mustChangePassword = !!user?.mustChangePassword;
+
   return NextResponse.json({
     ok: true,
     authenticated: true,
@@ -49,5 +51,6 @@ export async function GET() {
     enterpriseId: shop?.enterpriseId || null,
     hasEnterpriseBilling,
     needsSetup,
+    mustChangePassword,
   });
 }

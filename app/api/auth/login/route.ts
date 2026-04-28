@@ -5,6 +5,11 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/mongo";
 import { sessionCookieOptions } from "@/lib/auth";
+import {
+  MUST_CHANGE_PASSWORD_COOKIE,
+  mustChangePasswordCookieOptions,
+  signMustChangePasswordToken,
+} from "@/lib/must-change-password-cookie";
 
 export const runtime = "nodejs";
 
@@ -53,7 +58,7 @@ export async function POST(req: Request) {
     const candidates = await db
       .collection("users")
       .find(query.shopId ? query : { email: query.email })
-      .project({ _id: 1, email: 1, role: 1, passwordHash: 1, password: 1, shopId: 1 })
+      .project({ _id: 1, email: 1, role: 1, passwordHash: 1, password: 1, shopId: 1, mustChangePassword: 1 })
       .toArray();
 
     if (candidates.length === 0) {
@@ -102,12 +107,16 @@ export async function POST(req: Request) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30); // 30 days
 
+    const mustChangePassword = !!user.mustChangePassword;
+    const sessionShopId = Number(user.shopId ?? shopId ?? 0);
+
     await db.collection("sessions").insertOne({
       token,
       userId: user._id,
-      shopId: Number(user.shopId ?? shopId ?? 0),
+      shopId: sessionShopId,
       createdAt: new Date(),
       expiresAt,
+      mustChangePassword,
     });
 
     // ✅ Next.js 15: await cookies() before using it
@@ -117,6 +126,41 @@ export async function POST(req: Request) {
       token,
       sessionCookieOptions(60 * 60 * 24 * 30) // maxAge in seconds
     );
+
+    if (mustChangePassword) {
+      // Set the signed cookie that middleware uses to gate every other path
+      // until the user changes their password. Bound to this exact session
+      // token (HMAC of the token), so it's invalidated automatically the
+      // moment the session changes.
+      store.set(
+        MUST_CHANGE_PASSWORD_COOKIE,
+        signMustChangePasswordToken(token),
+        mustChangePasswordCookieOptions(60 * 60 * 24 * 30),
+      );
+
+      // If this is a freshly-provisioned shop that hasn't completed first-run
+      // setup, prefer the existing onboarding flow (which collects shop name
+      // and a new password in one step). Otherwise, send them to the
+      // dedicated change-password screen.
+      let redirect = "/change-password";
+      try {
+        const shop = await db.collection("shops").findOne(
+          { shopId: sessionShopId },
+          { projection: { provisionedVia: 1, setupCompleted: 1 } }
+        );
+        if (shop?.provisionedVia && !shop?.setupCompleted) {
+          redirect = "/dashboard/setup-shop";
+        }
+      } catch {
+        // Fall through with the default redirect.
+      }
+
+      return NextResponse.json({
+        ok: true,
+        mustChangePassword: true,
+        redirect,
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

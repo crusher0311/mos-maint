@@ -99,6 +99,7 @@ export async function POST(
           updatedAt: now,
           passwordResetByAdminAt: now,
           passwordResetByAdminEmail: session.email,
+          mustChangePassword: true,
         },
         $unset: { password: "" },
       }

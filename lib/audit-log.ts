@@ -6,6 +6,7 @@ export type AuditAction =
   | "shop_unlock"
   | "shop_lock"
   | "user_password_reset"
+  | "user_password_changed_after_force_reset"
   | "billing_override"
   | "feature_toggle"
   | "shop_settings_change"
