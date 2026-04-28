@@ -228,6 +228,54 @@ export default function BillingSettingsForm({
               </div>
             </div>
 
+            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-medium text-gray-900">Detect Dog - Founder - ${settings.detectDogFounderPrice}/month</span>
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Founder</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
+                  <input
+                    type="text"
+                    value={settings.detectDogFounderProductId}
+                    onChange={(e) => setSettings({ ...settings, detectDogFounderProductId: e.target.value })}
+                    placeholder="prod_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
+                  <input
+                    type="text"
+                    value={settings.detectDogFounderPriceId}
+                    onChange={(e) => setSettings({ ...settings, detectDogFounderPriceId: e.target.value })}
+                    placeholder="price_..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={settings.detectDogFounderPrice}
+                    onChange={(e) => setSettings({ ...settings, detectDogFounderPrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Included VINs</label>
+                  <input
+                    type="number"
+                    value={settings.detectDogFounderIncludedVins}
+                    onChange={(e) => setSettings({ ...settings, detectDogFounderIncludedVins: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="bg-blue-50 rounded-lg p-4 border border-mos-blue/30">
               <div className="flex items-center justify-between mb-3">
                 <span className="font-medium text-gray-900">Elite Easy Button - ${settings.elitePrice}/month</span>

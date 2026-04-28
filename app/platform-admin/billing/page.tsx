@@ -61,6 +61,7 @@ const planColors: Record<string, string> = {
   starter: "bg-blue-100 text-blue-700",
   professional: "bg-[rgba(60,129,195,0.15)] text-[#3c81c3]",
   enterprise: "bg-green-100 text-green-700",
+  detect_dog_founder: "bg-amber-100 text-amber-700",
   oil_sticker_legacy: "bg-purple-100 text-purple-700",
   demo: "bg-yellow-100 text-yellow-700",
   churned: "bg-red-100 text-red-700",
@@ -71,6 +72,7 @@ const planLabels: Record<string, string> = {
   starter: "Starter",
   professional: "Professional",
   enterprise: "Enterprise",
+  detect_dog_founder: "Detect Dog - Founder",
   oil_sticker_legacy: "Oil Sticker - Legacy",
   demo: "Demo",
   churned: "Churned",
@@ -370,6 +372,7 @@ export default function PlatformBillingPage() {
                 <option value="starter">Starter</option>
                 <option value="professional">Professional</option>
                 <option value="enterprise">Enterprise</option>
+                <option value="detect_dog_founder">Detect Dog - Founder</option>
                 <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
                 <option value="demo">Demo</option>
                 <option value="churned">Churned</option>

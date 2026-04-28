@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, getBillingSettings } from "@/lib/stripe";
+import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export async function GET() {
       starter: billingSettings?.starterPrice ?? 49,
       professional: billingSettings?.mosProPrice ?? 99,
       enterprise: billingSettings?.enterprisePrice ?? 199,
+      detect_dog_founder: billingSettings?.detectDogFounderPrice ?? 229.95,
     };
 
     const planCounts: Record<string, number> = {
@@ -51,6 +53,7 @@ export async function GET() {
       starter: 0,
       professional: 0,
       enterprise: 0,
+      detect_dog_founder: 0,
       oil_sticker_legacy: 0,
       demo: 0,
       churned: 0,
@@ -108,7 +111,7 @@ export async function GET() {
     });
 
     shopBillingData.sort((a, b) => {
-      const order = ["enterprise", "professional", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
+      const order = ["enterprise", "professional", "detect_dog_founder", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
       return order.indexOf(a.plan) - order.indexOf(b.plan);
     });
 
@@ -141,7 +144,7 @@ export async function GET() {
   }
 }
 
-const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "demo", "churned", "oil_sticker_legacy"];
+const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "detect_dog_founder", "demo", "churned", "oil_sticker_legacy"];
 const VALID_STATUSES = ["trial", "active", "past_due", "canceled", "paused"];
 
 export async function PATCH(req: NextRequest) {
@@ -235,10 +238,15 @@ export async function PATCH(req: NextRequest) {
                     scheduledStart: latestPhase.start_date ? new Date((latestPhase.start_date as number) * 1000) : null,
                   };
 
-                  const product = price.product;
-                  if (product && typeof product === "object" && "name" in product) {
-                    stripeSubData.productName = (product as any).name;
-                    updateFields["billing.stripeProductName"] = (product as any).name;
+                  const product: Stripe.Product | Stripe.DeletedProduct | string = price.product;
+                  if (typeof product === "string") {
+                    stripeSubData.productId = product;
+                  } else {
+                    stripeSubData.productId = product.id;
+                    if (!product.deleted) {
+                      stripeSubData.productName = product.name;
+                      updateFields["billing.stripeProductName"] = product.name;
+                    }
                   }
 
                   updateFields["billing.isPaid"] = true;
@@ -280,10 +288,15 @@ export async function PATCH(req: NextRequest) {
             stripeSubData.intervalCount = firstItem.price.recurring?.interval_count || null;
             stripeSubData.priceId = firstItem.price.id;
 
-            const product = firstItem.price.product;
-            if (product && typeof product === "object" && "name" in product) {
-              stripeSubData.productName = product.name;
-              updateFields["billing.stripeProductName"] = product.name;
+            const product: Stripe.Product | Stripe.DeletedProduct | string = firstItem.price.product;
+            if (typeof product === "string") {
+              stripeSubData.productId = product;
+            } else {
+              stripeSubData.productId = product.id;
+              if (!product.deleted) {
+                stripeSubData.productName = product.name;
+                updateFields["billing.stripeProductName"] = product.name;
+              }
             }
           }
 
@@ -313,10 +326,17 @@ export async function PATCH(req: NextRequest) {
 
     if (hasSubscriptionData) {
       const productName = stripeSubData.productName || "";
+      const productId = stripeSubData.productId || "";
       const isBrandPro = /brandpro/i.test(productName);
+      const billingSettingsForMatch = await getBillingSettings();
+      const isDetectDogFounder = !!productId && productId === billingSettingsForMatch.detectDogFounderProductId;
       const currentPlan = plan || shop.billing?.plan || "trial";
 
-      if (isBrandPro) {
+      if (isDetectDogFounder) {
+        updateFields["billing.plan"] = "detect_dog_founder";
+        updateFields["billing.isPaid"] = true;
+        console.log(`[Billing PATCH] Detect Dog - Founder product detected — setting plan to detect_dog_founder (was: ${currentPlan}, product: ${productName}, id: ${productId})`);
+      } else if (isBrandPro) {
         updateFields["billing.plan"] = "oil_sticker_legacy";
         updateFields["billing.isPaid"] = true;
         updateFields["enabledFeatures.maintenance"] = false;

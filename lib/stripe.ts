@@ -60,6 +60,10 @@ export type BillingSettings = {
   elitePriceId: string;
   elitePrice: number;
   eliteIncludedVins: number;
+  detectDogFounderProductId: string;
+  detectDogFounderPriceId: string;
+  detectDogFounderPrice: number;
+  detectDogFounderIncludedVins: number;
   // Legacy mosPro fields (for backward compatibility)
   mosProProductId: string;
   mosProPriceId: string;
@@ -101,6 +105,10 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   elitePriceId: "",
   elitePrice: 279.95,
   eliteIncludedVins: 300,
+  detectDogFounderProductId: "prod_UPkRVM5SeF3RiT",
+  detectDogFounderPriceId: "",
+  detectDogFounderPrice: 229.95,
+  detectDogFounderIncludedVins: 300,
   // Legacy mosPro fields
   mosProProductId: "",
   mosProPriceId: "",
@@ -151,6 +159,10 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       elitePriceId: settings.elitePriceId || "",
       elitePrice: settings.elitePrice ?? 279.95,
       eliteIncludedVins: settings.eliteIncludedVins ?? 300,
+      detectDogFounderProductId: settings.detectDogFounderProductId || "prod_UPkRVM5SeF3RiT",
+      detectDogFounderPriceId: settings.detectDogFounderPriceId || "",
+      detectDogFounderPrice: settings.detectDogFounderPrice ?? 229.95,
+      detectDogFounderIncludedVins: settings.detectDogFounderIncludedVins ?? 300,
       // Legacy mosPro fields
       mosProProductId: settings.mosProProductId || "",
       mosProPriceId: settings.mosProPriceId || "",

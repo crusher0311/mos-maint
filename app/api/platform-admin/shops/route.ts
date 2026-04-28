@@ -24,7 +24,7 @@ export async function GET() {
     const [shops, platformSettings, enterprises] = await Promise.all([
       db.collection("shops").find().toArray(),
       db.collection("platform_settings").findOne({ key: "trial" }),
-      db.collection("enterprise_accounts").find().toArray()
+      db.collection("enterprise_accounts").find().toArray(),
     ]);
     
     // Build enterprise lookup map
@@ -117,7 +117,7 @@ export async function GET() {
       if (shop.autovitals?.apiKey || shop.autovitals?.configured || shop.autovitalsApiKey) integrations.push("AutoVitals");
       if (shop.shopware?.tenantId) integrations.push("Shop-Ware");
       
-      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo";
+      const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo" || shop.billing?.plan === "detect_dog_founder";
       const vinLimit = shop.billing?.vinLimit ?? shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
@@ -153,6 +153,9 @@ export async function GET() {
           isPaid,
           vinLimit,
           vinViewCount,
+          stripeSubscriptionAmount: (typeof shop.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
+            ?? (typeof shop.billing?.stripeSubscriptionAmount === "number" ? shop.billing.stripeSubscriptionAmount : null),
+          stripeProductName: shop.billing?.stripeProductName || null,
         },
         stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,

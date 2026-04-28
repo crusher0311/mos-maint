@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
       elitePriceId: body.elitePriceId || "",
       elitePrice: body.elitePrice ?? 279.95,
       eliteIncludedVins: body.eliteIncludedVins ?? 300,
+      // Detect Dog - Founder
+      detectDogFounderProductId: body.detectDogFounderProductId || "prod_UPkRVM5SeF3RiT",
+      detectDogFounderPriceId: body.detectDogFounderPriceId || "",
+      detectDogFounderPrice: body.detectDogFounderPrice ?? 229.95,
+      detectDogFounderIncludedVins: body.detectDogFounderIncludedVins ?? 300,
       // Legacy mosPro fields
       mosProProductId: body.mosProProductId || "",
       mosProPriceId: body.mosProPriceId || "",

@@ -9,7 +9,31 @@ interface ShopBilling {
   vinLimit: number;
   vinViewCount: number;
   status?: string;
+  stripeSubscriptionAmount?: number | null;
+  stripeProductName?: string | null;
 }
+
+const planLabels: Record<string, string> = {
+  trial: "Trial",
+  starter: "Starter",
+  professional: "Pro",
+  enterprise: "Enterprise",
+  detect_dog_founder: "Detect Dog - Founder",
+  oil_sticker_legacy: "Oil Sticker - Legacy",
+  demo: "Demo",
+  churned: "Churned",
+};
+
+const planColors: Record<string, string> = {
+  trial: "bg-gray-100 text-gray-600",
+  starter: "bg-blue-100 text-blue-700",
+  professional: "bg-green-100 text-green-700",
+  enterprise: "bg-indigo-100 text-indigo-700",
+  detect_dog_founder: "bg-amber-100 text-amber-700",
+  oil_sticker_legacy: "bg-purple-100 text-purple-700",
+  demo: "bg-[rgba(60,129,195,0.15)] text-[#3c81c3]",
+  churned: "bg-red-100 text-red-700",
+};
 
 interface ShopFeatures {
   maintenance?: boolean;
@@ -518,16 +542,13 @@ export default function PlatformShopsPage() {
                           {shop.isLocked && (
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
-                          {shop.billing.plan === "demo" ? (
-                            <span className="px-1.5 py-0.5 bg-[rgba(60,129,195,0.15)] text-[#3c81c3] text-xs rounded">Demo</span>
-                          ) : shop.billing.plan === "enterprise" ? (
-                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
-                          ) : shop.billing.plan === "professional" ? (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
-                          ) : shop.billing.plan === "starter" ? (
-                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${planColors[shop.billing.plan] || planColors.trial}`}>
+                            {planLabels[shop.billing.plan] || shop.billing.plan}
+                          </span>
+                          {typeof shop.billing.stripeSubscriptionAmount === "number" && shop.billing.stripeSubscriptionAmount > 0 && (
+                            <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
+                              ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
+                            </span>
                           )}
                         </div>
                         {shop.enterpriseName && !groupByEnterprise && (
@@ -818,16 +839,13 @@ export default function PlatformShopsPage() {
                           {shop.isLocked && (
                             <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
                           )}
-                          {shop.billing.plan === "demo" ? (
-                            <span className="px-1.5 py-0.5 bg-[rgba(60,129,195,0.15)] text-[#3c81c3] text-xs rounded">Demo</span>
-                          ) : shop.billing.plan === "enterprise" ? (
-                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded">Enterprise</span>
-                          ) : shop.billing.plan === "professional" ? (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">Pro</span>
-                          ) : shop.billing.plan === "starter" ? (
-                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">Starter</span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Trial</span>
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${planColors[shop.billing.plan] || planColors.trial}`}>
+                            {planLabels[shop.billing.plan] || shop.billing.plan}
+                          </span>
+                          {typeof shop.billing.stripeSubscriptionAmount === "number" && shop.billing.stripeSubscriptionAmount > 0 && (
+                            <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
+                              ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
+                            </span>
                           )}
                         </div>
                         {shop.enterpriseName && (
@@ -1136,6 +1154,7 @@ export default function PlatformShopsPage() {
                       <option value="starter">Starter</option>
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
+                      <option value="detect_dog_founder">Detect Dog - Founder</option>
                       <option value="demo">Demo</option>
                     </select>
                   </div>
@@ -1305,6 +1324,7 @@ export default function PlatformShopsPage() {
                     <option value="starter">Starter</option>
                     <option value="professional">Professional</option>
                     <option value="enterprise">Enterprise</option>
+                    <option value="detect_dog_founder">Detect Dog - Founder</option>
                     <option value="demo">Demo</option>
                   </select>
                 </div>
