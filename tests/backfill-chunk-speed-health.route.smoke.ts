@@ -26,6 +26,7 @@ import {
   GET,
   __deps,
 } from "../app/api/cron/backfill-chunk-speed-health/route";
+import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;
 
@@ -36,125 +37,6 @@ function ok(name: string, cond: boolean, detail?: string) {
     failed += 1;
     console.error(`  ✗ ${name}${detail ? ` — ${detail}` : ""}`);
   }
-}
-
-// ------------------------------------------------------------------
-// Tiny in-memory Mongo stand-in
-// ------------------------------------------------------------------
-
-type Doc = Record<string, any>;
-type Op =
-  | { op: "find"; collection: string; filter: any; opts?: any }
-  | { op: "createIndex"; collection: string; spec: any; opts?: any }
-  | { op: "updateOne"; collection: string; filter: any; update: any; opts?: any }
-  | { op: "deleteMany"; collection: string; filter: any }
-  | { op: "bulkWrite"; collection: string; ops: any[] };
-
-function matchesFilter(doc: Doc, filter: any): boolean {
-  for (const [k, v] of Object.entries(filter || {})) {
-    if (k === "$or" && Array.isArray(v)) {
-      if (!v.some((f) => matchesFilter(doc, f))) return false;
-      continue;
-    }
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      const opKeys = Object.keys(v);
-      const isOpExpr = opKeys.length > 0 && opKeys.every((kk) => kk.startsWith("$"));
-      if (isOpExpr) {
-        if ("$in" in v) {
-          if (!(v as any).$in.includes(doc[k])) return false;
-        }
-        if ("$exists" in v) {
-          const exists = doc[k] !== undefined && doc[k] !== null;
-          if (exists !== (v as any).$exists) return false;
-        }
-        if ("$ne" in v) {
-          if (doc[k] === (v as any).$ne) return false;
-        }
-        continue;
-      }
-    }
-    if (doc[k] !== v) return false;
-  }
-  return true;
-}
-
-function makeFakeDb(seed: Record<string, Doc[]>) {
-  // Defensive deep-ish copy so tests can keep their seed arrays clean.
-  const collections: Record<string, Doc[]> = {};
-  for (const [name, docs] of Object.entries(seed)) {
-    collections[name] = docs.map((d) => ({ ...d }));
-  }
-  const ops: Op[] = [];
-  return {
-    ops,
-    collections,
-    db: {
-      collection(name: string) {
-        if (!collections[name]) collections[name] = [];
-        const data = collections[name];
-        return {
-          find(filter: any = {}, opts?: any) {
-            ops.push({ op: "find", collection: name, filter, opts });
-            const matched = data.filter((d) => matchesFilter(d, filter));
-            return {
-              toArray: async () => matched.map((d) => ({ ...d })),
-            };
-          },
-          async createIndex(spec: any, opts?: any) {
-            ops.push({ op: "createIndex", collection: name, spec, opts });
-            return "uniq_provider_shopId";
-          },
-          async updateOne(filter: any, update: any, opts?: any) {
-            ops.push({ op: "updateOne", collection: name, filter, update, opts });
-            const idx = data.findIndex((d) => matchesFilter(d, filter));
-            if (idx >= 0) {
-              Object.assign(data[idx], update.$set || {});
-              return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
-            }
-            if (opts?.upsert) {
-              data.push({ ...filter, ...(update.$set || {}) });
-              return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
-            }
-            return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
-          },
-          async deleteMany(filter: any) {
-            ops.push({ op: "deleteMany", collection: name, filter });
-            let deleted = 0;
-            for (let i = data.length - 1; i >= 0; i--) {
-              if (matchesFilter(data[i], filter)) {
-                data.splice(i, 1);
-                deleted++;
-              }
-            }
-            return { deletedCount: deleted };
-          },
-          async bulkWrite(bulkOps: any[]) {
-            ops.push({ op: "bulkWrite", collection: name, ops: bulkOps });
-            let upserted = 0;
-            let modified = 0;
-            for (const b of bulkOps) {
-              if (b.updateOne) {
-                const { filter, update, upsert } = b.updateOne;
-                const idx = data.findIndex((d) => matchesFilter(d, filter));
-                if (idx >= 0) {
-                  Object.assign(data[idx], update.$set || {});
-                  modified++;
-                } else if (upsert) {
-                  data.push({ ...filter, ...(update.$set || {}) });
-                  upserted++;
-                }
-              }
-            }
-            return {
-              matchedCount: modified,
-              modifiedCount: modified,
-              upsertedCount: upserted,
-            };
-          },
-        };
-      },
-    },
-  };
 }
 
 // ------------------------------------------------------------------

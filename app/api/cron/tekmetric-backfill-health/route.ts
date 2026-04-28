@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
 
+/**
+ * Test seam: the route handler dereferences `__deps.getDb` /
+ * `__deps.sendEmail` at call time so the route-level smoke test can swap in
+ * fakes without spinning up Mongo or Resend. Production callers should
+ * never touch this object — it defaults to the real implementations and is
+ * only mutated by `tests/tekmetric-backfill-health.route.smoke.ts`.
+ */
+export const __deps = {
+  getDb,
+  sendEmail,
+};
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -177,7 +189,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
+  const db = await __deps.getDb();
   const progress = await db.collection("tekmetric_backfill_progress").find({}).toArray();
 
   // Resolve shop names for human-readable alerts. Include completed shops
@@ -337,7 +349,7 @@ export async function GET(req: NextRequest) {
         </div>`;
       for (const admin of admins as Array<{ email: string }>) {
         try {
-          await sendEmail({
+          await __deps.sendEmail({
             to: admin.email,
             subject: `[MOS] Tekmetric backfill stuck: ${toAlert.length} shop(s) (${stuck.length} total)`,
             html,
@@ -575,7 +587,7 @@ export async function GET(req: NextRequest) {
         </div>`;
       for (const admin of admins as Array<{ email: string }>) {
         try {
-          await sendEmail({
+          await __deps.sendEmail({
             to: admin.email,
             subject: `[MOS] Tekmetric perm-failed RO spike: ${permFailedAlerts.length} shop(s)`,
             html,
