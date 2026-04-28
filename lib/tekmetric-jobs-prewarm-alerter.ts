@@ -94,14 +94,27 @@ export async function maybeAlertOnPrewarmAnomalies(
   completedAt?: Date
 ): Promise<MaybeAlertResult> {
   const alertedKey = buildAlertedKey(result);
-  if (!alertedKey) {
-    return { alerted: false, suppressed: false, alertedKey: null, emailed: 0 };
-  }
 
   const collection = db.collection(COLLECTION_NAME);
   await collection
     .createIndex({ shopId: 1 }, { unique: true, name: "uniq_shopId" })
     .catch(() => {});
+
+  // Auto-clear: a clean re-warm (no errors, not capped) drops any existing
+  // dedup row for this shop so a future regression to the same anomaly state
+  // re-pages instead of being silently suppressed. Mirrors the stuck-shop
+  // alerter in `app/api/cron/tekmetric-backfill-health/route.ts`, which
+  // deletes `tekmetric_backfill_health_alerts` rows for shops that are no
+  // longer stuck (see the `resolvedShopIds` block).
+  if (!alertedKey) {
+    const cleared = await collection.deleteOne({ shopId });
+    if (cleared.deletedCount && cleared.deletedCount > 0) {
+      console.log(
+        `[TekmetricJobsPrewarmAlert] Shop ${shopId} (tek ${tekmetricShopId}): clean re-warm cleared dedup row`
+      );
+    }
+    return { alerted: false, suppressed: false, alertedKey: null, emailed: 0 };
+  }
 
   const now = new Date();
   const completionTs = completedAt ?? now;
