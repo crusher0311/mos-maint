@@ -90,13 +90,28 @@ export default async function AdminAuditLogsPage({ searchParams }: PageProps) {
 
   const passwordResetCount = logs.filter((l) => l.action === "user_password_reset").length;
 
+  const exportParams = new URLSearchParams();
+  if (action) exportParams.set("action", action);
+  exportParams.set("days", String(days));
+  if (adminEmail) exportParams.set("adminEmail", adminEmail);
+  const exportHref = `/api/admin/audit-logs/export?${exportParams.toString()}`;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Admin Audit Log</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Review platform-admin actions including impersonation, password resets, and shop changes.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Admin Audit Log</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Review platform-admin actions including impersonation, password resets, and shop changes.
+          </p>
+        </div>
+        <a
+          href={exportHref}
+          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-mos-blue"
+          title="Download a CSV of the audit log entries that match the current filters"
+        >
+          Export CSV
+        </a>
       </div>
 
       <form

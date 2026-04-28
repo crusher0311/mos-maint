@@ -1,3 +1,4 @@
+import type { Filter, FindCursor, WithId } from "mongodb";
 import { getDb } from "./mongo";
 
 export type AuditAction = 
@@ -64,4 +65,26 @@ export async function getAuditLogs(options: {
     console.error("[Audit] Failed to get audit logs:", err);
     return [];
   }
+}
+
+export async function getAuditLogsCursor(options: {
+  adminEmail?: string;
+  action?: AuditAction;
+  targetShopId?: number | string;
+  since?: Date;
+  batchSize?: number;
+}): Promise<FindCursor<WithId<AuditLogEntry>>> {
+  const db = await getDb();
+  const query: Filter<AuditLogEntry> = {};
+
+  if (options.adminEmail) query.adminEmail = options.adminEmail;
+  if (options.action) query.action = options.action;
+  if (options.targetShopId !== undefined) query.targetShopId = options.targetShopId;
+  if (options.since) query.createdAt = { $gte: options.since };
+
+  return db
+    .collection<AuditLogEntry>("admin_audit_logs")
+    .find(query)
+    .sort({ createdAt: -1 })
+    .batchSize(options.batchSize ?? 200);
 }
