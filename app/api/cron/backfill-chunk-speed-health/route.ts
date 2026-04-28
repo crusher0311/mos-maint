@@ -161,14 +161,87 @@ export async function GET(req: NextRequest) {
     existingByKey.set(`${d.provider}:${Number(d.shopId)}`, d);
   }
 
+  const now = new Date();
+
+  // Defensive Mongo Date parsing: rows written by older cron versions or
+  // direct Mongo edits may contain non-Date values; reject anything that
+  // can't be coerced to a finite epoch so the recovery email's
+  // .toISOString() never crashes the cron.
+  const parseDateSafe = (v: any): Date | null => {
+    if (!v) return null;
+    const d = v instanceof Date ? v : new Date(v as any);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const parseFiniteNumber = (v: any): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+
+  // Tekmetric-only recovery emails. Two transitions count as recovery:
+  //   (a) Full auto-clear — the row is in `resolved` and its prior reasons
+  //       included `slow_p95` (shop dropped under the p95 threshold OR
+  //       completed its backfill).
+  //   (b) Partial recovery — the row is in `reasonsChanged` and its prior
+  //       reasons included `slow_p95` but the new reasons don't (shop
+  //       still has another non-slow reason like `high_backoff`, but the
+  //       p95 regression itself cleared).
+  // The brief calls out both: "transitions back to no reasons (or no slow
+  // reason at all)". Captured BEFORE deleteMany so the prior reasonsKey
+  // and last-seen p95 are still available; the `reasonsChanged` updates
+  // overwrite those fields below.
+  type TekmetricRecovery = {
+    shopId: number;
+    previousReasons: string[];
+    lastSeenP95Ms: number | null;
+    lastSeenAt: Date | null;
+    transition: "auto_clear" | "reasons_changed";
+  };
+  const tekmetricRecoveries: TekmetricRecovery[] = [];
+
+  for (const k of resolved) {
+    if (k.provider !== "tekmetric") continue;
+    const existing = existingByKey.get(`tekmetric:${k.shopId}`);
+    const reasonsKey = String(existing?.reasonsKey || "");
+    const previousReasons = reasonsKey ? reasonsKey.split(",") : [];
+    if (!previousReasons.includes("slow_p95")) continue;
+    tekmetricRecoveries.push({
+      shopId: k.shopId,
+      previousReasons,
+      lastSeenP95Ms: parseFiniteNumber(existing?.lastSeenP95Ms),
+      lastSeenAt:
+        parseDateSafe(existing?.lastSeenAt) ??
+        parseDateSafe(existing?.lastAlertedAt),
+      transition: "auto_clear",
+    });
+  }
+
+  for (const s of reasonsChanged) {
+    if (s.provider !== "tekmetric") continue;
+    const existing = existingByKey.get(`tekmetric:${s.shopId}`);
+    const priorKey = String(existing?.reasonsKey || "");
+    const priorReasons = priorKey ? priorKey.split(",") : [];
+    const hadSlow = priorReasons.includes("slow_p95");
+    const stillSlow = s.reasons.includes("slow_p95");
+    if (!hadSlow || stillSlow) continue;
+    tekmetricRecoveries.push({
+      shopId: s.shopId,
+      previousReasons: priorReasons,
+      lastSeenP95Ms: parseFiniteNumber(existing?.lastSeenP95Ms),
+      lastSeenAt:
+        parseDateSafe(existing?.lastSeenAt) ??
+        parseDateSafe(existing?.lastAlertedAt),
+      transition: "reasons_changed",
+    });
+  }
+
   // Auto-clear: drop dedup rows for shops that are no longer breaching.
+  // Deleting after capturing recoveries above means a re-pageable shop
+  // starts from a clean slate — if it slows down again, it inserts a new
+  // row (newlySlow) and pages, then resolving again will fire another
+  // recovery email. That gives "at most once per recovery" naturally.
   if (resolved.length > 0) {
     await alertsCollection.deleteMany({
       $or: resolved.map((k) => ({ provider: k.provider, shopId: k.shopId })),
     });
   }
-
-  const now = new Date();
 
   for (const s of newlySlow) {
     await alertsCollection.updateOne(
@@ -181,6 +254,8 @@ export async function GET(req: NextRequest) {
           reasons: s.reasons,
           firstAlertedAt: now,
           lastAlertedAt: now,
+          lastSeenAt: now,
+          lastSeenP95Ms: s.rollup.p95DurationMs,
         },
       },
       { upsert: true },
@@ -195,16 +270,20 @@ export async function GET(req: NextRequest) {
           reasonsKey: s.reasonsKey,
           reasons: s.reasons,
           lastAlertedAt: now,
+          lastSeenAt: now,
+          lastSeenP95Ms: s.rollup.p95DurationMs,
           previousReasonsKey: existing?.reasonsKey,
         },
       },
     );
   }
   for (const s of unchanged) {
-    // Same reasons as last alert — touch lastSeenAt only, don't email.
+    // Same reasons as last alert — don't email, but still keep lastSeenAt
+    // and lastSeenP95Ms fresh so the recovery email (if/when this row
+    // auto-clears) reports the most recent slow p95 we observed.
     await alertsCollection.updateOne(
       { provider: s.provider, shopId: s.shopId },
-      { $set: { lastSeenAt: now } },
+      { $set: { lastSeenAt: now, lastSeenP95Ms: s.rollup.p95DurationMs } },
     );
   }
 
@@ -299,11 +378,108 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Resolve names for any recovered Tekmetric shops not already in
+  // shopNamesById (e.g. a shop that completed its backfill while it had a
+  // slow_p95 alert is excluded from the in-flight name lookup above).
+  let recoveryEmailed = 0;
+  if (tekmetricRecoveries.length > 0) {
+    const missingNameIds = tekmetricRecoveries
+      .filter((r) => !shopNamesById.has(r.shopId))
+      .map((r) => r.shopId);
+    if (missingNameIds.length > 0) {
+      const extra = await db
+        .collection("shops")
+        .find(
+          { shopId: { $in: missingNameIds } },
+          { projection: { shopId: 1, name: 1, locationIdentifier: 1 } },
+        )
+        .toArray();
+      for (const s of extra as any[]) {
+        const display = s.locationIdentifier
+          ? `${s.name || "(unnamed)"} — ${s.locationIdentifier}`
+          : s.name || "(unnamed)";
+        shopNamesById.set(Number(s.shopId), display);
+      }
+    }
+
+    const admins = await db
+      .collection("users")
+      .find(
+        { isPlatformAdmin: true, email: { $exists: true, $ne: null } },
+        { projection: { email: 1 } },
+      )
+      .toArray();
+    if (admins.length === 0) {
+      console.warn(
+        "[BackfillChunkSpeedHealth] No platform admins configured; recovery emails logged only",
+      );
+    } else {
+      const linkBase = syncHealthUrl();
+      for (const r of tekmetricRecoveries) {
+        const name = shopNamesById.get(r.shopId) || `Shop ${r.shopId}`;
+        const lastP95 = formatMs(r.lastSeenP95Ms);
+        const lastSeen = r.lastSeenAt ? r.lastSeenAt.toISOString() : "—";
+        const otherReasons = r.previousReasons.filter((x) => x !== "slow_p95");
+        const isFullClear = r.transition === "auto_clear";
+        // For partial recovery the dedup row stays alive (the row was just
+        // updated to the new reasons in `reasonsChanged`); for full clear
+        // the row was deleted just above. Wording matches each case so
+        // on-call understands whether anything still needs attention.
+        const stateNote = isFullClear
+          ? `<p>The dedup row has been cleared, so the shop can re-page if it
+              slows down again.</p>`
+          : `<p>Other reasons still active: <code>${escapeHtml(
+              otherReasons.length > 0 ? otherReasons.join(", ") : "(none)",
+            )}</code>. The dedup row remains so those won't re-page; a fresh
+              <code>slow_p95</code> regression will trigger another alert.</p>`;
+        const otherReasonsBlock =
+          isFullClear && otherReasons.length > 0
+            ? `<p>Previous reasons also included:
+                <code>${escapeHtml(otherReasons.join(", "))}</code>.
+                Those cleared too in this auto-clear.</p>`
+            : "";
+        const html = `
+          <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
+            <h2>Tekmetric Slow-Chunk Recovery</h2>
+            <p><strong>${escapeHtml(name)}</strong> (MOS shop ${r.shopId})
+              has dropped back under the
+              ${SLOW_P95_THRESHOLD_MS / 60000}-minute p95 chunk threshold.</p>
+            <p>Last-seen p95 before recovery: <strong>${lastP95}</strong>
+              (observed at ${escapeHtml(lastSeen)}).</p>
+            ${otherReasonsBlock}
+            ${stateNote}
+            <p><a href="${linkBase}">${linkBase}</a></p>
+            <p style="margin-top:16px;color:#666;font-size:13px">
+              Sent by <code>/api/cron/backfill-chunk-speed-health</code>
+              on ${isFullClear ? "auto-clear of" : "slow_p95 drop in"}
+              <code>backfill_chunk_speed_alerts</code>.
+            </p>
+          </div>`;
+        for (const admin of admins as Array<{ email: string }>) {
+          try {
+            await sendEmail({
+              to: admin.email,
+              subject: `[MOS] Tekmetric slow-chunk recovered: ${name}`,
+              html,
+            });
+            recoveryEmailed++;
+          } catch (err: any) {
+            console.error(
+              `[BackfillChunkSpeedHealth] Recovery email send failed for ${admin.email}:`,
+              err?.message,
+            );
+          }
+        }
+      }
+    }
+  }
+
   console.log(
     `[BackfillChunkSpeedHealth] tekmetric=${tekmetricRows.length} protractor=${protractorRows.length} ` +
       `shopware=${shopwareRows.length} breaching=${slow.length} ` +
       `newAlerts=${newlySlow.length} reasonsChanged=${reasonsChanged.length} ` +
-      `resolved=${resolved.length} emailed=${emailed}`,
+      `resolved=${resolved.length} emailed=${emailed} ` +
+      `tekmetricRecoveries=${tekmetricRecoveries.length} recoveryEmailed=${recoveryEmailed}`,
   );
 
   return NextResponse.json({
@@ -317,6 +493,14 @@ export async function GET(req: NextRequest) {
     reasonsChangedAlerts: reasonsChanged.length,
     resolvedAndCleared: resolved.length,
     emailed,
+    tekmetricRecoveries: tekmetricRecoveries.map((r) => ({
+      shopId: r.shopId,
+      name: shopNamesById.get(r.shopId) || `Shop ${r.shopId}`,
+      lastSeenP95Ms: r.lastSeenP95Ms,
+      previousReasons: r.previousReasons,
+      transition: r.transition,
+    })),
+    recoveryEmailed,
     breachingShops: slow.map((s) => ({
       provider: s.provider,
       shopId: s.shopId,
