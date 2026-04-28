@@ -134,6 +134,13 @@ export async function PATCH(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     
+    if (body.password !== undefined || body.passwordHash !== undefined || body.newPassword !== undefined) {
+      return NextResponse.json(
+        { error: "Password changes must use the dedicated /reset-password endpoint" },
+        { status: 400 }
+      );
+    }
+    
     const updateFields: Record<string, any> = {};
     
     if (body.role !== undefined) {

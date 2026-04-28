@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Users, Search, RefreshCw, X, Loader2, Building, Shield, MapPin, Trash2, ChevronDown, ChevronRight, Plus, KeyRound, Copy, Check, AlertTriangle } from "lucide-react";
 
 interface ShopInfo {
   shopId: number | string;
@@ -61,6 +61,121 @@ export default function PlatformUsersPage() {
   const [editedIsPlatformAdmin, setEditedIsPlatformAdmin] = useState(false);
   const [showOtherLocations, setShowOtherLocations] = useState(false);
   const [locationSearch, setLocationSearch] = useState("");
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<{ id: string; email: string } | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null);
+  const [resetPasswordSubmitting, setResetPasswordSubmitting] = useState(false);
+  const [resetPasswordResult, setResetPasswordResult] = useState<{ password: string; sessionsRevoked: number } | null>(null);
+  const [resetPasswordCopied, setResetPasswordCopied] = useState(false);
+
+  function generateStrongPassword(length = 18) {
+    const lowers = "abcdefghijkmnopqrstuvwxyz";
+    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const digits = "23456789";
+    const symbols = "!@#$%^&*()-_=+[]{};:,.?";
+    const all = lowers + uppers + digits + symbols;
+    const cryptoObj = (typeof window !== "undefined" && window.crypto) ? window.crypto : null;
+    const pickFrom = (chars: string) => {
+      if (cryptoObj && cryptoObj.getRandomValues) {
+        const arr = new Uint32Array(1);
+        cryptoObj.getRandomValues(arr);
+        return chars[arr[0] % chars.length];
+      }
+      return chars[Math.floor(Math.random() * chars.length)];
+    };
+    const required = [pickFrom(lowers), pickFrom(uppers), pickFrom(digits), pickFrom(symbols)];
+    const rest: string[] = [];
+    for (let i = 0; i < length - required.length; i++) {
+      rest.push(pickFrom(all));
+    }
+    const combined = [...required, ...rest];
+    for (let i = combined.length - 1; i > 0; i--) {
+      let j: number;
+      if (cryptoObj && cryptoObj.getRandomValues) {
+        const arr = new Uint32Array(1);
+        cryptoObj.getRandomValues(arr);
+        j = arr[0] % (i + 1);
+      } else {
+        j = Math.floor(Math.random() * (i + 1));
+      }
+      [combined[i], combined[j]] = [combined[j], combined[i]];
+    }
+    return combined.join("");
+  }
+
+  function openResetPasswordDialog(userId: string, email: string) {
+    setResetPasswordTarget({ id: userId, email });
+    setResetPasswordValue("");
+    setResetPasswordError(null);
+    setResetPasswordResult(null);
+    setResetPasswordSubmitting(false);
+    setResetPasswordCopied(false);
+  }
+
+  function closeResetPasswordDialog() {
+    setResetPasswordTarget(null);
+    setResetPasswordValue("");
+    setResetPasswordError(null);
+    setResetPasswordResult(null);
+    setResetPasswordSubmitting(false);
+    setResetPasswordCopied(false);
+  }
+
+  async function handleConfirmResetPassword() {
+    if (!resetPasswordTarget) return;
+    const newPassword = resetPasswordValue;
+    if (!newPassword || newPassword.length < 12) {
+      setResetPasswordError("Password must be at least 12 characters long.");
+      return;
+    }
+    setResetPasswordSubmitting(true);
+    setResetPasswordError(null);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/users/${resetPasswordTarget.id}/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newPassword }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResetPasswordError(data?.error || "Failed to reset password");
+        return;
+      }
+      setResetPasswordResult({
+        password: newPassword,
+        sessionsRevoked: data.sessionsRevoked ?? 0,
+      });
+      setResetPasswordValue("");
+    } catch (err: any) {
+      setResetPasswordError(err?.message || "Failed to reset password");
+    } finally {
+      setResetPasswordSubmitting(false);
+    }
+  }
+
+  async function copyResetPasswordToClipboard(value: string) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setResetPasswordCopied(true);
+      setTimeout(() => setResetPasswordCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
+  }
 
   useEffect(() => {
     loadUsers();
@@ -245,12 +360,13 @@ export default function PlatformUsersPage() {
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Shops</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Role</th>
               <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
+              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                   {search || roleFilter !== "all" ? "No users match your filters" : "No users yet"}
                 </td>
               </tr>
@@ -301,6 +417,19 @@ export default function PlatformUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-sm">
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openResetPasswordDialog(user._id, user.email);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-[#3c81c3] hover:bg-[rgba(60,129,195,0.1)] rounded-lg transition-colors"
+                      title="Force-reset this user's password"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      Reset password
+                    </button>
                   </td>
                 </tr>
               ))
@@ -584,6 +713,142 @@ export default function PlatformUsersPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {resetPasswordTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <KeyRound className="w-5 h-5 text-[#3c81c3]" />
+                  {resetPasswordResult ? "Password reset" : "Reset password"}
+                </h2>
+                <p className="text-sm text-gray-500 break-all">{resetPasswordTarget.email}</p>
+              </div>
+              <button
+                onClick={closeResetPasswordDialog}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {!resetPasswordResult ? (
+                <>
+                  <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-900">
+                      This will immediately replace the user's password and sign them out of all sessions everywhere.
+                      Make sure you can deliver the new password to the user out-of-band.
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      New password
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={resetPasswordValue}
+                        onChange={(e) => setResetPasswordValue(e.target.value)}
+                        placeholder="Type a new password or generate one"
+                        autoComplete="off"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetPasswordValue(generateStrongPassword(18));
+                          setResetPasswordError(null);
+                        }}
+                        className="px-3 py-2 text-sm font-medium text-[#3c81c3] border border-[#3c81c3] rounded-lg hover:bg-[rgba(60,129,195,0.1)] transition-colors whitespace-nowrap"
+                      >
+                        Generate
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be at least 12 characters with a mix of upper/lower case, digits, and symbols.
+                    </p>
+                  </div>
+
+                  {resetPasswordError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                      {resetPasswordError}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-green-900">
+                      Password updated. {resetPasswordResult.sessionsRevoked > 0
+                        ? `${resetPasswordResult.sessionsRevoked} active session${resetPasswordResult.sessionsRevoked === 1 ? "" : "s"} signed out.`
+                        : "No active sessions to revoke."}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      New password (shown once)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={resetPasswordResult.password}
+                        className="flex-1 px-3 py-2 border border-gray-300 bg-gray-50 rounded-lg font-mono text-sm select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copyResetPasswordToClipboard(resetPasswordResult.password)}
+                        className="px-3 py-2 text-sm font-medium text-white bg-[#3c81c3] rounded-lg hover:bg-[rgba(60,129,195,0.85)] transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        {resetPasswordCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {resetPasswordCopied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-amber-700 mt-2 font-medium">
+                      This password will not be shown again. Copy it now and deliver it to the user securely.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              {!resetPasswordResult ? (
+                <>
+                  <button
+                    onClick={closeResetPasswordDialog}
+                    disabled={resetPasswordSubmitting}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmResetPassword}
+                    disabled={resetPasswordSubmitting || !resetPasswordValue}
+                    className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {resetPasswordSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Reset password
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={closeResetPasswordDialog}
+                  className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors"
+                >
+                  Done
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
