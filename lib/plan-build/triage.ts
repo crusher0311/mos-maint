@@ -195,38 +195,14 @@ export function isMatchingHistory(
   return milesDiff <= MILEAGE_TOLERANCE && daysDiff <= DATE_TOLERANCE_DAYS;
 }
 
-export interface OEMItem {
-  maintenance_id?: string | number;
-  name?: string;
-  category?: string;
-  miles?: number | null;
-  months?: number | null;
-  notes?: string | null;
-  intervals?: Array<{ units?: string | null; value?: number | null }>;
-}
-
-/**
- * Maps a raw maintenance row (either DataOne's `MaintenanceItem` shape with
- * `maintenance_*` fields, or an already-flattened `{ name, category, ... }`
- * shape) into the `OEMItem` shape that `triage()` consumes.
- *
- * Centralizing this here keeps `app/api/plan-build/route.ts` and the smoke
- * tests in tests/plan-build-task-165.smoke.ts in lockstep — a silent change
- * to the mapping (e.g. dropping `maintenance_notes`) will trip the test.
- */
-export function toOEMItem(item: any): OEMItem {
-  return {
-    maintenance_id: item?.maintenance_id,
-    name: item?.maintenance_name ?? item?.name,
-    category: item?.maintenance_category ?? item?.category,
-    miles: item?.miles ?? null,
-    months: item?.months ?? null,
-    notes: item?.maintenance_notes ?? item?.notes ?? null,
-    intervals: Array.isArray(item?.intervals)
-      ? item.intervals.map((iv: any) => ({ units: iv?.units ?? null, value: iv?.value ?? null }))
-      : [],
-  };
-}
+// The OEMItem mapper lives in its own module so it can be exercised from
+// focused smoke tests (see tests/plan-build-oem-mapper.smoke.ts) without
+// pulling in the rest of the triage module. Re-imported and re-exported
+// here so existing callers can keep importing `toOEMItem` / `OEMItem`
+// from triage.ts.
+import { toOEMItem as _toOEMItem, type OEMItem as _OEMItem } from "./oem-item";
+export const toOEMItem = _toOEMItem;
+export type OEMItem = _OEMItem;
 
 export type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
