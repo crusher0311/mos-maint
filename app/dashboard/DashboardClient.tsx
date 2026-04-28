@@ -11,6 +11,22 @@ import ConcernAssistantModal from "@/components/ConcernAssistantModal";
 import NewWorkOrderModal from "@/components/NewWorkOrderModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
+import { getOELogoUrl } from "@/lib/oe-logos";
+
+function getRowMake(r: any): string | undefined {
+  const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
+  if (direct) return String(direct);
+  const display = r?.displayVehicle;
+  if (!display) return undefined;
+  const yearMatch = String(display).match(/^(\d{4})/);
+  const afterYear = yearMatch ? String(display).slice(4).trim() : String(display);
+  const parts = afterYear.split(" ").filter(Boolean);
+  if (parts.length >= 2) {
+    const twoWord = `${parts[0]} ${parts[1]}`;
+    if (getOELogoUrl(twoWord)) return twoWord;
+  }
+  return parts[0] || undefined;
+}
 
 type SortColumn = 'customer' | 'vehicle' | 'vin' | 'ro' | 'status' | 'dvi' | 'mileage';
 type SortDirection = 'asc' | 'desc';
@@ -1084,7 +1100,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                         </Link>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 text-gray-600 text-sm">
-                        {r.displayVehicle && r.displayVehicle.trim() !== "" ? r.displayVehicle : "—"}
+                        {r.displayVehicle && r.displayVehicle.trim() !== "" ? (
+                          (() => {
+                            const make = getRowMake(r);
+                            const logoUrl = getOELogoUrl(make);
+                            return (
+                              <div className="flex items-center gap-2 min-w-0">
+                                {logoUrl && (
+                                  <img
+                                    src={logoUrl}
+                                    alt={make || ""}
+                                    className="h-6 sm:h-7 w-auto object-contain flex-shrink-0"
+                                  />
+                                )}
+                                <span className="truncate">{r.displayVehicle}</span>
+                              </div>
+                            );
+                          })()
+                        ) : "—"}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <VinSpecsTooltip vin={vin} specs={data.quickSpecs?.[vin]} />
