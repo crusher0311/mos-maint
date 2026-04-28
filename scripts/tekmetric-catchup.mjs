@@ -111,6 +111,33 @@ async function processShop(shopId) {
 
     log(`   chunk ${chunk}/${MAX_CHUNKS}  before:  cursor=${beforeCursor?.slice(0,19)}  jobs=${beforeJobs}`);
 
+    // Safety: don't stack a duplicate chunk if prod looks busy on this shop.
+    // Heuristic: if inProgress=true, OR a chunk run started within the last
+    // 15 min and hasn't completed (no metrics update since then), assume
+    // something else (zombie from an old script run, or the daily cron) is
+    // already working on it. Wait until it drains before firing.
+    const looksBusy = before?.inProgress === true ||
+      (beforeRunAt > Date.now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt);
+    if (looksBusy) {
+      log(`   ⚠ Prod looks busy on shop ${shopId} (lastRunAt=${new Date(beforeRunAt).toISOString()} inProgress=${before?.inProgress}). Waiting for it to drain before firing...`);
+      const drainDeadline = Date.now() + STUCK_THRESHOLD_MS;
+      while (Date.now() < drainDeadline) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        const now = await getProgress(shopId);
+        const nowMetrics = now?.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
+        const nowCursor  = isoOrNull(now?.currentChunkEnd);
+        process.stdout.write(`${ts()}    drain-poll: cursor=${nowCursor?.slice(0,10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${now?.inProgress} complete=${now?.complete}\n`);
+        if (now?.complete) { log(`   ✓ Shop ${shopId} COMPLETE during drain wait`); return true; }
+        if (nowCursor !== beforeCursor || nowMetrics > beforeMetrics) {
+          log(`   ✓ Drain wait satisfied — cursor advanced or metrics updated. Loop continues with fresh snapshot.`);
+          chunk--; // re-snapshot at top of loop
+          break;
+        }
+      }
+      if (Date.now() >= drainDeadline) { log(`   ✗ Drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min — moving on`); return false; }
+      continue;
+    }
+
     if (DRY_RUN) { log(`   [DRY_RUN] would POST shopId=${shopId}`); break; }
 
     let fired;
