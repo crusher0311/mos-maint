@@ -1,0 +1,32 @@
+~/workspace$ nohup node scripts/tekmetric-catchup.mjs > tekmetric-catchup-$(date +%Y%m%d-%H%M%S).log 2>&1 &
+echo "PID: $!"
+[2] 34380
+PID: 34380
+~/workspace$ tail -f tekmetric-catchup-*.log
+==> tekmetric-catchup-20260428-212003.log <==
+[2026-04-28 21:20:04.615]    POST returned 200 in 610ms (small chunk or no work)
+[2026-04-28 21:20:24.645]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:20:44.673]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:21:04.702]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:21:24.730]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:21:44.758]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:22:04.787]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:22:24.817]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:22:44.846]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:23:04.875]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+
+==> tekmetric-catchup-20260428-212255.log <==
+[2026-04-28 21:22:56.512]     shop=104  cursor=2024-05-02  jobs=32  lastErr=N
+[2026-04-28 21:22:56.512]     shop=105  cursor=2025-10-24  jobs=8  lastErr=N
+[2026-04-28 21:22:56.513]     shop=106  cursor=2026-01-22  jobs=348  lastErr=N
+[2026-04-28 21:22:56.513]     shop=107  cursor=2026-01-22  jobs=1438  lastErr=N
+[2026-04-28 21:22:56.513]     shop=108  cursor=2025-10-30  jobs=4654  lastErr=N
+[2026-04-28 21:22:56.513] 
+>>> 1/40: shop 1
+[2026-04-28 21:22:56.513] === SHOP 1 START ===
+[2026-04-28 21:22:56.542]    chunk 1/30  before:  cursor=2021-01-02T00:00:00  jobs=1218
+[2026-04-28 21:22:56.542]    ⚠ Prod looks busy on shop 1 (prior script run fired chunk at 2026-04-28T21:20:03.974Z not yet reflected in metrics). Waiting for it to drain before firing...
+[2026-04-28 21:23:16.572]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+
+==> tekmetric-catchup-20260428-212003.log <==
+[2026-04-28 21:23:24.903]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
