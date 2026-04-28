@@ -158,6 +158,27 @@ interface JobsCachePrewarmShop {
   durationMs: number | null;
 }
 
+// Per-shop Protractor invoice-cache pre-warm status (stamped at
+// onboarding by lib/protractor-jobs-prewarm.ts under
+// `shops.protractor.invoiceCachePrewarm`). Surfaced read-only — the
+// Protractor backfill warms the rest of the cache opportunistically as
+// it walks back through history, so there's no manual rewarm action
+// surfaced from this view (yet).
+interface ProtractorInvoiceCachePrewarmShop {
+  shopId: number;
+  connectionId: string | null;
+  completed: boolean;
+  hasPrewarmRecord: boolean;
+  completedAt: string | null;
+  lookbackDays: number | null;
+  invoicesScanned: number | null;
+  alreadyCached: number | null;
+  invoicesCached: number | null;
+  errors: number | null;
+  capped: boolean;
+  durationMs: number | null;
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -181,11 +202,21 @@ interface ProviderBackfill {
   chunkSpeedShopCount?: number;
   slowChunkShopCount?: number;
   slowChunkP95ThresholdMs?: number;
+  // Tekmetric and Shop-Ware both ship `JobsCachePrewarmShop` rows here
+  // — Shop-Ware's record is mapped onto the same view-model server-side
+  // (see `app/api/admin/sync-health/route.ts`) so the renderer doesn't
+  // need to fork.
   jobsCachePrewarm?: JobsCachePrewarmShop[];
   jobsCachePrewarmShopCount?: number;
   jobsCachePrewarmMissingCount?: number;
   jobsCachePrewarmCappedCount?: number;
   jobsCachePrewarmErrorsCount?: number;
+  // Protractor-only: per-shop invoice-cache pre-warm overlay.
+  invoiceCachePrewarm?: ProtractorInvoiceCachePrewarmShop[];
+  invoiceCachePrewarmShopCount?: number;
+  invoiceCachePrewarmMissingCount?: number;
+  invoiceCachePrewarmCappedCount?: number;
+  invoiceCachePrewarmErrorsCount?: number;
 }
 
 interface SyncHealthData {
@@ -1419,6 +1450,210 @@ export default function SyncHealthPage() {
     );
   };
 
+  // Read-only render of the Protractor invoice-cache pre-warm overlay.
+  // Mirrors the Tekmetric one above, minus the rewarm/Warm-all buttons:
+  // the Protractor backfill warms uncached invoices opportunistically as
+  // it walks back through history (see `invoicesFromCache` accounting in
+  // lib/integrations/protractor-backfill.ts) so a one-shot rewarm
+  // endpoint hasn't been built. The table shape matches Protractor's
+  // PrewarmProtractorJobsCacheResult: invoicesScanned / alreadyCached /
+  // invoicesCached / errors / capped / durationMs.
+  const renderProtractorInvoiceCachePrewarmSection = (
+    shops: ProtractorInvoiceCachePrewarmShop[] | undefined,
+    missingCount: number | undefined,
+    cappedCount: number | undefined,
+    errorsCount: number | undefined,
+  ) => {
+    const list = shops || [];
+    const missing = missingCount ?? 0;
+    const capped = cappedCount ?? 0;
+    const errored = errorsCount ?? 0;
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Flame className="w-5 h-5 text-orange-600" />
+            <h2 className="font-semibold text-gray-900">
+              Invoice cache pre-warm (Protractor)
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full">
+              {list.length} shop{list.length === 1 ? "" : "s"}
+            </span>
+            {missing > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
+                title="Shops with no pre-warm record at all — likely onboarded before the Protractor invoice-cache pre-warm rolled out. The backfill will still warm them opportunistically."
+              >
+                {missing} never warmed
+              </span>
+            )}
+            {capped > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
+                title="Pre-warm hit the per-shop invoice cap. The uncached tail still fills in as the Protractor backfill walks back through history."
+              >
+                {capped} capped
+              </span>
+            )}
+            {errored > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded-full"
+                title="Pre-warm logged at least one Protractor /invoice fetch failure for this shop"
+              >
+                {errored} with errors
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 hidden md:block max-w-md text-right">
+            One-shot warm of <code className="px-1 bg-gray-100 rounded text-[11px]">protractor_invoice_cache</code>
+            {" "}at onboarding. Stamped on
+            {" "}<code className="px-1 bg-gray-100 rounded text-[11px]">shops.protractor.invoiceCachePrewarm</code>.
+            Per-chunk hit-rate visible in the chunk-speed table&apos;s &quot;Jobs cache&quot; column.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <Clock className="w-5 h-5 text-gray-400" />
+            No Protractor backfill rows yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Shop ID
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Pre-warm status
+                  </th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
+                    Completed at
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Total invoices the pre-warm fetched and inspected within the lookback window"
+                  >
+                    Invoices scanned
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="New invoice payloads written to protractor_invoice_cache"
+                  >
+                    Invoices cached
+                  </th>
+                  <th
+                    className="text-right px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Invoices already had a fresh cache row at warm time (skipped)"
+                  >
+                    Already cached
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Errors
+                  </th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                    Duration
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => {
+                  const hasErrors = (s.errors ?? 0) > 0;
+                  return (
+                    <tr
+                      key={s.shopId}
+                      className={`align-top ${
+                        s.hasPrewarmRecord
+                          ? "hover:bg-gray-50"
+                          : "bg-amber-50/40 hover:bg-amber-50"
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-mono text-sm text-gray-900">
+                        {s.shopId}
+                        {s.completed && (
+                          <div className="text-xs text-gray-400 font-sans mt-0.5">
+                            backfill complete
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {!s.hasPrewarmRecord ? (
+                          <span
+                            className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
+                            title="No invoiceCachePrewarm record on this shop. Probably onboarded before the pre-warm rolled out."
+                          >
+                            Never warmed
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                              Warmed
+                            </span>
+                            {s.capped && (
+                              <span
+                                className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
+                                title="Hit the per-shop invoice cap — uncached tail still warmed by the indexing path as the backfill progresses"
+                              >
+                                Capped
+                              </span>
+                            )}
+                            {hasErrors && (
+                              <span className="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded-full">
+                                Errors
+                              </span>
+                            )}
+                            {s.lookbackDays != null && (
+                              <span
+                                className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full"
+                                title="Lookback window scanned for invoices"
+                              >
+                                {s.lookbackDays}d window
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        {formatDateTime(s.completedAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.invoicesScanned == null
+                          ? "—"
+                          : s.invoicesScanned.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {s.invoicesCached == null
+                          ? "—"
+                          : s.invoicesCached.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700">
+                        {s.alreadyCached == null
+                          ? "—"
+                          : s.alreadyCached.toLocaleString()}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right text-sm ${
+                          hasErrors ? "text-rose-700 font-medium" : "text-gray-700"
+                        }`}
+                      >
+                        {s.errors == null ? "—" : s.errors}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
+                        {formatDurationMs(s.durationMs)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
   const renderChunkSpeedSection = (
     providerLabel: string,
     shops: ChunkSpeedShop[] | undefined,
@@ -1982,6 +2217,46 @@ export default function SyncHealthPage() {
               ` · ${tek?.jobsCachePrewarmCappedCount} capped`}
           </div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Flame className="w-5 h-5 text-orange-600" />
+            </div>
+            <span className="text-sm text-gray-600">Invoice cache pre-warm (Pro)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {(pro?.invoiceCachePrewarmShopCount ?? 0) -
+              (pro?.invoiceCachePrewarmMissingCount ?? 0)}
+            {" / "}
+            {pro?.invoiceCachePrewarmShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            warmed shops · {pro?.invoiceCachePrewarmMissingCount ?? 0} never warmed
+            {(pro?.invoiceCachePrewarmCappedCount ?? 0) > 0 &&
+              ` · ${pro?.invoiceCachePrewarmCappedCount} capped`}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Flame className="w-5 h-5 text-orange-600" />
+            </div>
+            <span className="text-sm text-gray-600">Jobs cache pre-warm (SW)</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {(sw?.jobsCachePrewarmShopCount ?? 0) -
+              (sw?.jobsCachePrewarmMissingCount ?? 0)}
+            {" / "}
+            {sw?.jobsCachePrewarmShopCount ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            warmed shops · {sw?.jobsCachePrewarmMissingCount ?? 0} never warmed
+            {(sw?.jobsCachePrewarmCappedCount ?? 0) > 0 &&
+              ` · ${sw?.jobsCachePrewarmCappedCount} capped`}
+          </div>
+        </div>
       </div>
 
       {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
@@ -2023,6 +2298,13 @@ export default function SyncHealthPage() {
         tek?.jobsCachePrewarmMissingCount,
         tek?.jobsCachePrewarmCappedCount,
         tek?.jobsCachePrewarmErrorsCount,
+      )}
+
+      {renderProtractorInvoiceCachePrewarmSection(
+        pro?.invoiceCachePrewarm,
+        pro?.invoiceCachePrewarmMissingCount,
+        pro?.invoiceCachePrewarmCappedCount,
+        pro?.invoiceCachePrewarmErrorsCount,
       )}
 
       {renderJobsCachePrewarmSection(

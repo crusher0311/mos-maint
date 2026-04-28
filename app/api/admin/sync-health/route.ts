@@ -216,6 +216,7 @@ export async function GET() {
       normalizedStats,
       tekmetricStaleArchivedAgg,
       tekmetricShopDocs,
+      protractorShopDocs,
       shopwareShopDocs,
       chunkSpeedAlertDocs,
     ] = await Promise.all([
@@ -272,6 +273,22 @@ export async function GET() {
             shopId: 1,
             "tekmetric.shopId": 1,
             "tekmetric.jobsCachePrewarm": 1,
+            _id: 0,
+          },
+        },
+      ).toArray(),
+      // Per-shop Protractor invoice-cache pre-warm overlay. Stamped by
+      // lib/protractor-jobs-prewarm.ts at onboarding under
+      // `shops.protractor.invoiceCachePrewarm`. Restricted to shops with
+      // a configured Protractor connection so we don't join against the
+      // entire shops collection.
+      db.collection("shops").find(
+        { "protractor.configured": true },
+        {
+          projection: {
+            shopId: 1,
+            "protractor.connectionId": 1,
+            "protractor.invoiceCachePrewarm": 1,
             _id: 0,
           },
         },
@@ -570,6 +587,59 @@ export async function GET() {
     const tekmetricJobsCachePrewarmErrorsCount = tekmetricJobsCachePrewarm
       .filter((p: any) => (p.errors ?? 0) > 0).length;
 
+    // Per-shop Protractor invoice-cache prewarm overlay. Same join-by-shopId
+    // logic as the Tekmetric overlay above. The prewarm record's shape is
+    // defined by `PrewarmProtractorJobsCacheResult` in
+    // lib/protractor-jobs-prewarm.ts (`invoicesScanned`, `invoicesCached`,
+    // `alreadyCached`, `errors`, `capped`, etc.).
+    const protractorPrewarmByShopId = new Map<string, any>();
+    for (const s of protractorShopDocs as any[]) {
+      protractorPrewarmByShopId.set(String(s.shopId), {
+        connectionId: s?.protractor?.connectionId ?? null,
+        record: s?.protractor?.invoiceCachePrewarm || null,
+      });
+    }
+    const protractorInvoiceCachePrewarm = protractorBackfillProgress
+      .map((p: any) => {
+        const entry = protractorPrewarmByShopId.get(String(p.shopId));
+        const record = entry?.record || null;
+        return {
+          shopId: p.shopId,
+          connectionId: entry?.connectionId ?? null,
+          completed: !!p.completed,
+          // `hasPrewarmRecord: false` is the actionable "this shop was
+          // onboarded before the Protractor prewarm rolled out" signal.
+          hasPrewarmRecord: !!record,
+          completedAt: record?.completedAt || null,
+          lookbackDays: record?.lookbackDays ?? null,
+          invoicesScanned: record?.invoicesScanned ?? null,
+          alreadyCached: record?.alreadyCached ?? null,
+          invoicesCached: record?.invoicesCached ?? null,
+          errors: record?.errors ?? null,
+          capped: !!record?.capped,
+          durationMs: record?.durationMs ?? null,
+        };
+      })
+      // Same sort priority as the Tekmetric overlay: never-warmed first,
+      // then capped/errored, then most-recent prewarm.
+      .sort((a: any, b: any) => {
+        if (a.hasPrewarmRecord !== b.hasPrewarmRecord) {
+          return a.hasPrewarmRecord ? 1 : -1;
+        }
+        const aProblem = (a.capped ? 1 : 0) + ((a.errors || 0) > 0 ? 1 : 0);
+        const bProblem = (b.capped ? 1 : 0) + ((b.errors || 0) > 0 ? 1 : 0);
+        if (aProblem !== bProblem) return bProblem - aProblem;
+        const aAt = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bAt = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bAt - aAt;
+      });
+    const protractorInvoiceCachePrewarmMissingCount = protractorInvoiceCachePrewarm
+      .filter((p: any) => !p.hasPrewarmRecord).length;
+    const protractorInvoiceCachePrewarmCappedCount = protractorInvoiceCachePrewarm
+      .filter((p: any) => p.capped).length;
+    const protractorInvoiceCachePrewarmErrorsCount = protractorInvoiceCachePrewarm
+      .filter((p: any) => (p.errors ?? 0) > 0).length;
+
     // Same overlay for Shop-Ware (task #72). The SW prewarm result has a
     // different shape than Tekmetric's (no terminal-RO breakdown, but has
     // jobs-indexed/jobs-skipped + cursor-advanced status), so we map it
@@ -740,6 +810,20 @@ export async function GET() {
           chunkSpeedShopCount: protractorChunkSpeed.length,
           slowChunkShopCount: protractorSlowChunkShopCount,
           slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
+          // Per-shop Protractor invoice-cache pre-warm status
+          // (lib/protractor-jobs-prewarm.ts). The "Jobs cache" column on
+          // the Protractor chunk-speed table now also reflects this
+          // cache's rolling per-chunk hit rate (see
+          // `buildProtractorChunkMetrics`); this overlay lets on-call
+          // see at a glance which shops were warmed at onboarding.
+          invoiceCachePrewarm: protractorInvoiceCachePrewarm,
+          invoiceCachePrewarmShopCount: protractorInvoiceCachePrewarm.length,
+          invoiceCachePrewarmMissingCount:
+            protractorInvoiceCachePrewarmMissingCount,
+          invoiceCachePrewarmCappedCount:
+            protractorInvoiceCachePrewarmCappedCount,
+          invoiceCachePrewarmErrorsCount:
+            protractorInvoiceCachePrewarmErrorsCount,
         },
         shopware: {
           complete: shopwareShopsComplete,

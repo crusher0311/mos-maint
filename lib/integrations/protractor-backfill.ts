@@ -147,10 +147,15 @@ async function getOrFetchVehicle(
 // `summarizeChunkMetrics` helper in the admin sync-health route can render
 // it without a provider-specific branch. Slot mapping for Protractor:
 // - vehicles* -> `protractor_service_items` cache hits/misses (real cache)
-// - jobs* -> NULL/0 (Protractor has no per-RO jobs cache; invoice details
-//   come back from the list endpoint, no separate fetch). Reporting null
-//   here instead of 0/0 -> 0% prevents the admin view from showing a fake
-//   "0% hit rate" regression for a slot that doesn't exist.
+// - jobs* -> `protractor_invoice_cache` hits/misses (the per-RO cache the
+//   onboarding pre-warm in lib/protractor-jobs-prewarm.ts populates and
+//   that backfillShopChunk consults before each `/Invoice/{id}` fetch).
+//   Reused as the `jobsCache*` slot so the existing chunk-speed roll-up
+//   in the admin sync-health view (`summarizeChunkMetrics`) and the
+//   "Jobs cache" column in the chunk-speed table light up automatically
+//   for Protractor — no provider-specific branch needed. When the chunk
+//   processed zero ROs we report 0/0 -> null so an empty chunk doesn't
+//   show a fake "0% hit rate" regression.
 // - customers* -> NULL/0 (no per-customer fetch in the backfill path).
 function buildProtractorChunkMetrics(input: {
   now: Date;
@@ -160,6 +165,8 @@ function buildProtractorChunkMetrics(input: {
   chunkEnd: Date;
   nextChunkEnd: Date;
   advanceMode: string;
+  invoiceCacheHits: number;
+  invoiceCacheMisses: number;
   vehiclesCacheHits: number;
   vehiclesCacheMisses: number;
   backoffDeltaMs: number;
@@ -167,6 +174,7 @@ function buildProtractorChunkMetrics(input: {
   hitPageCap: boolean;
 }) {
   const vehTotal = input.vehiclesCacheHits + input.vehiclesCacheMisses;
+  const invTotal = input.invoiceCacheHits + input.invoiceCacheMisses;
   return {
     at: input.now,
     durationMs: input.durationMs,
@@ -175,9 +183,12 @@ function buildProtractorChunkMetrics(input: {
     chunkEnd: input.chunkEnd,
     nextChunkEnd: input.nextChunkEnd,
     advanceMode: input.advanceMode,
-    jobsCacheHits: 0,
-    jobsCacheMisses: 0,
-    jobsCacheHitRate: null,
+    jobsCacheHits: input.invoiceCacheHits,
+    jobsCacheMisses: input.invoiceCacheMisses,
+    jobsCacheHitRate:
+      invTotal > 0
+        ? Number((input.invoiceCacheHits / invTotal).toFixed(4))
+        : null,
     vehiclesCacheHits: input.vehiclesCacheHits,
     vehiclesCacheMisses: input.vehiclesCacheMisses,
     vehiclesCacheHitRate:
@@ -329,6 +340,10 @@ async function backfillShopChunk(
       chunkEnd,
       nextChunkEnd,
       advanceMode: chunkHadError ? "HOLD (empty chunk after error)" : "FULL (empty chunk)",
+      // Empty chunk: nothing to look up in the invoice cache. 0/0 -> null
+      // hit rate so an empty chunk doesn't drag down the rolling average.
+      invoiceCacheHits: 0,
+      invoiceCacheMisses: 0,
       vehiclesCacheHits: vehicleCacheCounters.hits,
       vehiclesCacheMisses: vehicleCacheCounters.misses,
       backoffDeltaMs: chunkBackoffCounter.ms,
@@ -552,6 +567,15 @@ async function backfillShopChunk(
   // per-chunk AsyncLocalStorage counter so concurrent chunks (same
   // process, different shop) cannot leak each other's retry waits into
   // this chunk's metric.
+  // Per-RO `protractor_invoice_cache` hit/miss counts for this chunk. A
+  // miss is any invoice that fell through to `fetchInvoiceById` because
+  // the cache lookup either returned nothing OR threw (the catch above
+  // resolves to null, and that invoice subsequently goes through the
+  // API path); we count it as a miss either way since the cron paid the
+  // API cost. invoiceDetailErrors aren't subtracted: an invoice that
+  // errored during the API fetch still missed the cache.
+  const invoiceCacheHits = invoicesFromCache;
+  const invoiceCacheMisses = Math.max(0, invoices.length - invoicesFromCache);
   const chunkMetrics = buildProtractorChunkMetrics({
     now: new Date(),
     durationMs: Date.now() - chunkStartedAt,
@@ -560,6 +584,8 @@ async function backfillShopChunk(
     chunkEnd,
     nextChunkEnd,
     advanceMode,
+    invoiceCacheHits,
+    invoiceCacheMisses,
     vehiclesCacheHits: vehicleCacheCounters.hits,
     vehiclesCacheMisses: vehicleCacheCounters.misses,
     backoffDeltaMs: chunkBackoffCounter.ms,
@@ -577,6 +603,7 @@ async function backfillShopChunk(
   console.log(
     `[Backfill] Shop ${shopId}: chunk metrics ` +
       `duration=${chunkMetrics.durationMs}ms ros=${invoices.length} ` +
+      `invoiceCache=${invoiceCacheHits}/${invoiceCacheHits + invoiceCacheMisses} ` +
       `vehiclesCache=${vehicleCacheCounters.hits}/${vehicleCacheCounters.hits + vehicleCacheCounters.misses} ` +
       `backoff=${chunkMetrics.backoff429Ms}ms`,
   );
