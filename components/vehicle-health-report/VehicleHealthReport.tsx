@@ -220,9 +220,37 @@ const OE_LOGO_MAP: Record<string, string> = {
   "VOLVO": "/logos/makes/volvo.png",
 };
 
+const OE_LOGO_ALIASES: Record<string, string> = {
+  "MERCEDES": "MERCEDES-BENZ",
+  "MERCEDES BENZ": "MERCEDES-BENZ",
+  "MERCEDES-BENZ AG": "MERCEDES-BENZ",
+  "MB": "MERCEDES-BENZ",
+  "RANGE ROVER": "LAND ROVER",
+  "RANGE-ROVER": "LAND ROVER",
+  "RANGEROVER": "LAND ROVER",
+  "LAND-ROVER": "LAND ROVER",
+  "LANDROVER": "LAND ROVER",
+  "VW": "VOLKSWAGEN",
+  "VOLKS WAGEN": "VOLKSWAGEN",
+  "MITSUBISHI MOTORS": "MITSUBISHI",
+  "ALFA-ROMEO": "ALFA ROMEO",
+  "ALFAROMEO": "ALFA ROMEO",
+  "MINI COOPER": "MINI",
+  "MINI-COOPER": "MINI",
+  "CHEVY": "CHEVROLET",
+  "MERC": "MERCEDES-BENZ",
+};
+
+function normalizeMakeKey(make: string): string {
+  const upper = make.toUpperCase().trim().replace(/\s+/g, " ");
+  if (OE_LOGO_MAP[upper]) return upper;
+  if (OE_LOGO_ALIASES[upper]) return OE_LOGO_ALIASES[upper];
+  return upper;
+}
+
 function getOELogoUrl(make: string | null | undefined): string | null {
   if (!make) return null;
-  return OE_LOGO_MAP[make.toUpperCase().trim()] || null;
+  return OE_LOGO_MAP[normalizeMakeKey(make)] || null;
 }
 
 function getBucketDot(bucket: "overdue" | "dueSoon" | "upcoming"): string {
