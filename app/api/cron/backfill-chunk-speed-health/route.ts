@@ -22,6 +22,18 @@ import {
   summarize,
 } from "./lib";
 
+/**
+ * Test seam: the route handler dereferences `__deps.getDb` /
+ * `__deps.sendEmail` at call time so the route-level smoke test can swap in
+ * fakes without spinning up Mongo or Resend. Production callers should
+ * never touch this object — it defaults to the real implementations and is
+ * only mutated by `tests/backfill-chunk-speed-health.route.smoke.ts`.
+ */
+export const __deps = {
+  getDb,
+  sendEmail,
+};
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -113,7 +125,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   // Pull progress rows for all three providers in parallel.
   const [tekmetricRows, protractorRows, shopwareRows] = await Promise.all([
@@ -263,8 +275,6 @@ export async function GET(req: NextRequest) {
   for (const d of existingDocs as any[]) {
     existingByKey.set(`${d.provider}:${Number(d.shopId)}`, d);
   }
-
-  const now = new Date();
 
   // Defensive Mongo Date parsing: rows written by older cron versions or
   // direct Mongo edits may contain non-Date values; reject anything that
@@ -478,7 +488,7 @@ export async function GET(req: NextRequest) {
         </div>`;
       for (const admin of admins as Array<{ email: string }>) {
         try {
-          await sendEmail({
+          await __deps.sendEmail({
             to: admin.email,
             subject: `[MOS] Backfill chunk-speed: ${toAlert.length} shop(s) breaching (${slow.length} total)`,
             html,
@@ -573,7 +583,7 @@ export async function GET(req: NextRequest) {
           </div>`;
         for (const admin of admins as Array<{ email: string }>) {
           try {
-            await sendEmail({
+            await __deps.sendEmail({
               to: admin.email,
               subject: `[MOS] Tekmetric slow-chunk recovered: ${name}`,
               html,
