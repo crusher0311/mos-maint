@@ -32,6 +32,10 @@ const US_STATES = [
   "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
 ];
 
+const CA_PROVINCES = [
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+];
+
 const STATE_NAME_TO_ABBR: Record<string, string> = {
   ALABAMA:"AL",ALASKA:"AK",ARIZONA:"AZ",ARKANSAS:"AR",CALIFORNIA:"CA",COLORADO:"CO",CONNECTICUT:"CT",
   DELAWARE:"DE",FLORIDA:"FL",GEORGIA:"GA",HAWAII:"HI",IDAHO:"ID",ILLINOIS:"IL",INDIANA:"IN",IOWA:"IA",
@@ -42,12 +46,16 @@ const STATE_NAME_TO_ABBR: Record<string, string> = {
   "SOUTH CAROLINA":"SC","SOUTH DAKOTA":"SD",TENNESSEE:"TN",TEXAS:"TX",UTAH:"UT",VERMONT:"VT",
   VIRGINIA:"VA",WASHINGTON:"WA","WEST VIRGINIA":"WV",WISCONSIN:"WI",WYOMING:"WY",
   "DISTRICT OF COLUMBIA":"DC","WASHINGTON DC":"DC","WASHINGTON D.C.":"DC",
+  ALBERTA:"AB","BRITISH COLUMBIA":"BC",MANITOBA:"MB","NEW BRUNSWICK":"NB",
+  "NEWFOUNDLAND":"NL","NEWFOUNDLAND AND LABRADOR":"NL","NOVA SCOTIA":"NS",
+  "NORTHWEST TERRITORIES":"NT",NUNAVUT:"NU",ONTARIO:"ON",
+  "PRINCE EDWARD ISLAND":"PE",QUEBEC:"QC","QUÉBEC":"QC",SASKATCHEWAN:"SK",YUKON:"YT",
 };
 
 function resolveStateAbbr(state: string | null | undefined): string {
   if (!state) return "";
   const upper = state.toUpperCase().trim();
-  if (upper.length === 2 && US_STATES.includes(upper)) return upper;
+  if (upper.length === 2 && (US_STATES.includes(upper) || CA_PROVINCES.includes(upper))) return upper;
   return STATE_NAME_TO_ABBR[upper] || "";
 }
 
@@ -1130,9 +1138,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                             className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                           >
                             <option value="">State</option>
-                            {US_STATES.map(s => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
+                            <optgroup label="US States">
+                              {US_STATES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Canadian Provinces">
+                              {CA_PROVINCES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </optgroup>
                           </select>
                           <button
                             onClick={handlePlateLookup}
