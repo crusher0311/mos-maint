@@ -646,12 +646,23 @@ async function backfillShopChunk(
   });
 }
 
-export async function runProtractorBackfill(shopId: number): Promise<{
+export async function runProtractorBackfill(
+  shopId: number,
+  options: { singlePass?: boolean } = {},
+): Promise<{
   chunksProcessed: number;
   totalJobsIndexed: number;
   complete: boolean;
   error?: string;
 }> {
+  // `singlePass` runs at most one batch (`maxChunksPerRun` chunks) and
+  // returns immediately, skipping the self-recursion at the end of this
+  // function and the auto-retry chain in the catch path. The platform-admin
+  // "Run chunk now" endpoint sets this so a single HTTP request fits inside
+  // the route's `maxDuration` budget and always returns chunk metrics
+  // inline. Scheduled cron callers (which want full "run until complete")
+  // leave the option unset and keep the existing behaviour.
+  const singlePass = options.singlePass === true;
   const startTime = Date.now();
   const db = await getDb();
   const rateLimiter = pLimit(5);
@@ -723,12 +734,16 @@ export async function runProtractorBackfill(shopId: number): Promise<{
     );
     
     if (!complete) {
-      console.log(`[Backfill] Shop ${shopId}: Not complete, starting next run immediately`);
-      try {
-        const nextResult = await runProtractorBackfill(shopId);
-        console.log(`[Backfill] Shop ${shopId}: Next run result:`, nextResult.complete ? 'COMPLETE' : `${nextResult.chunksProcessed} more chunks`);
-      } catch (err: any) {
-        console.error(`[Backfill] Shop ${shopId}: Next run failed:`, err.message);
+      if (singlePass) {
+        console.log(`[Backfill] Shop ${shopId}: Single-pass mode — returning without chaining the next run`);
+      } else {
+        console.log(`[Backfill] Shop ${shopId}: Not complete, starting next run immediately`);
+        try {
+          const nextResult = await runProtractorBackfill(shopId);
+          console.log(`[Backfill] Shop ${shopId}: Next run result:`, nextResult.complete ? 'COMPLETE' : `${nextResult.chunksProcessed} more chunks`);
+        } catch (err: any) {
+          console.error(`[Backfill] Shop ${shopId}: Next run failed:`, err.message);
+        }
       }
     } else {
       console.log(`[Backfill] Shop ${shopId}: FULLY COMPLETE!`);
@@ -754,7 +769,13 @@ export async function runProtractorBackfill(shopId: number): Promise<{
       }
     );
     
-    if (retryCount <= MAX_RETRIES) {
+    if (singlePass) {
+      // Skip the auto-retry chain in single-pass mode — the run-now endpoint
+      // surfaces the error inline so on-call decides whether to retry, and
+      // we don't want to leave background timers running past the HTTP
+      // response.
+      console.log(`[Backfill] Shop ${shopId}: Single-pass mode — skipping auto-retry`);
+    } else if (retryCount <= MAX_RETRIES) {
       const backoffMs = Math.min(30000, 5000 * retryCount);
       console.log(`[Backfill] Shop ${shopId}: Auto-retry ${retryCount}/${MAX_RETRIES} in ${backoffMs/1000}s...`);
       setTimeout(() => {

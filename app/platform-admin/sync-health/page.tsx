@@ -400,33 +400,82 @@ export default function SyncHealthPage() {
     }
   };
 
-  const runTekmetricNow = async (shopId: number) => {
+  // Per-provider mapping for the "Run chunk now" stuck-shop button. Each
+  // entry points at the platform-admin endpoint that fronts that provider's
+  // backfill cron (Tekmetric/Protractor/Shop-Ware all expose a sync code
+  // path we can invoke without waiting for the next scheduled tick).
+  const RUN_NOW_PROVIDERS: Record<
+    string,
+    { endpoint: string; queueLabel: string; tooltip: string }
+  > = {
+    Tekmetric: {
+      endpoint: "tekmetric-run-now",
+      queueLabel: "Tekmetric backfill queue",
+      tooltip:
+        "Push this shop to the front of the Tekmetric backfill queue and run chunks now until it completes or the cron times out (does not reset the cursor)",
+    },
+    Protractor: {
+      endpoint: "protractor-run-now",
+      queueLabel: "Protractor backfill queue",
+      tooltip:
+        "Run a single Protractor backfill pass for this shop right now (one batch of chunks, no auto-retry). Re-click to advance further if not yet complete (does not reset the cursor).",
+    },
+    "Shop-Ware": {
+      endpoint: "shopware-run-now",
+      queueLabel: "Shop-Ware backfill queue",
+      tooltip:
+        "Push this shop to the front of the Shop-Ware backfill queue and run chunks now until it completes or the cron times out (does not reset the cursor)",
+    },
+  };
+
+  const runChunkNow = async (shopId: number, providerLabel: string) => {
+    const cfg = RUN_NOW_PROVIDERS[providerLabel];
+    if (!cfg) return;
     if (
       !confirm(
-        `Push shop ${shopId} to the front of the Tekmetric backfill queue and run a chunk now?`,
+        `Push shop ${shopId} to the front of the ${cfg.queueLabel} and run a chunk now?`,
       )
     )
       return;
     setRunningNow(shopId);
     try {
       const res = await fetch(
-        `/api/platform-admin/shops/${shopId}/tekmetric-run-now`,
+        `/api/platform-admin/shops/${shopId}/${cfg.endpoint}`,
         { method: "POST" },
       );
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        alert(json.error || "Failed to run Tekmetric chunk");
+        alert(json.error || `Failed to run ${providerLabel} chunk`);
       } else {
         const r = json.result;
         const lines: string[] = [
           json.message || `Shop ${shopId}: chunk run requested`,
         ];
         if (r) {
-          lines.push(
-            `chunks: ${r.chunksProcessed} · jobs indexed: ${r.totalJobsIndexed} · ` +
-              `normalized: ${r.totalNormalized} · skipped: ${r.totalSkipped}`,
-          );
-          if (r.complete) lines.push("backfill marked complete");
+          // The three providers don't share a chunk-result schema, so we
+          // pick the fields that are actually present per provider rather
+          // than assuming a uniform shape.
+          if (providerLabel === "Tekmetric") {
+            lines.push(
+              `chunks: ${r.chunksProcessed} · jobs indexed: ${r.totalJobsIndexed} · ` +
+                `normalized: ${r.totalNormalized} · skipped: ${r.totalSkipped}`,
+            );
+            if (r.complete) lines.push("backfill marked complete");
+          } else if (providerLabel === "Protractor") {
+            lines.push(
+              `chunks: ${r.chunksProcessed ?? 0} · jobs indexed: ${r.totalJobsIndexed ?? 0}`,
+            );
+            if (r.complete) lines.push("backfill marked complete");
+            if (r.error) lines.push(`error: ${r.error}`);
+          } else if (providerLabel === "Shop-Ware") {
+            const status = r.status ? ` (${r.status})` : "";
+            lines.push(
+              `chunks: ${r.chunksProcessed ?? 0} · ROs: ${r.totalRos ?? 0} · ` +
+                `jobs: ${r.totalJobs ?? 0} · vehicles: ${r.totalVehicles ?? 0} · ` +
+                `customers: ${r.totalCustomers ?? 0}${status}`,
+            );
+            if (r.error) lines.push(`error: ${r.error}`);
+          }
         }
         if (json.duration) lines.push(`duration: ${json.duration}`);
         if (json.tekmetricApiCalls != null)
@@ -435,7 +484,7 @@ export default function SyncHealthPage() {
         load();
       }
     } catch (err: any) {
-      alert(err.message || "Failed to run Tekmetric chunk");
+      alert(err.message || `Failed to run ${providerLabel} chunk`);
     } finally {
       setRunningNow(null);
     }
@@ -860,15 +909,15 @@ export default function SyncHealthPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2 flex-wrap">
-                        {providerLabel === "Tekmetric" && (
+                        {RUN_NOW_PROVIDERS[providerLabel] && (
                           <button
-                            onClick={() => runTekmetricNow(d.shopId)}
+                            onClick={() => runChunkNow(d.shopId, providerLabel)}
                             disabled={
                               runningNow === d.shopId ||
                               triggering === d.shopId
                             }
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
-                            title="Push this shop to the front of the Tekmetric backfill queue and run chunks now until it completes or the cron times out (does not reset the cursor)"
+                            title={RUN_NOW_PROVIDERS[providerLabel].tooltip}
                           >
                             {runningNow === d.shopId ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
