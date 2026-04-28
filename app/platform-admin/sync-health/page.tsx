@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Gauge,
   Flame,
+  X,
 } from "lucide-react";
 import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
@@ -263,11 +264,108 @@ function formatDateTime(value: string | null): string {
   }
 }
 
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
+interface RunNowChunkEvent {
+  index: number;
+  jobsIndexed: number;
+  skipped: number;
+  normalizedCount: number;
+  complete: boolean;
+  message: string;
+  chunkDurationMs: number;
+  cursor: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  consecutiveChunkErrors: number;
+  lastRoSkipCount: number;
+  cumulativeJobsIndexed: number | null;
+  totals: {
+    chunksProcessed: number;
+    totalJobsIndexed: number;
+    totalSkipped: number;
+    totalNormalized: number;
+  };
+  tekmetricApiCalls: number;
+  elapsedMs: number;
+}
+
+type RunNowStatus = "running" | "complete" | "aborted" | "error";
+
+interface RunNowState {
+  shopId: number;
+  shopName: string;
+  status: RunNowStatus;
+  startedAt: number;
+  endedAt: number | null;
+  chunks: RunNowChunkEvent[];
+  totals: {
+    chunksProcessed: number;
+    totalJobsIndexed: number;
+    totalSkipped: number;
+    totalNormalized: number;
+  };
+  cursor: string | null;
+  lastError: string | null;
+  errorMessage: string | null;
+  tekmetricApiCalls: number;
+  elapsedMs: number;
+  completedFlag: boolean;
+  timedOut: boolean;
+  abortController: AbortController | null;
+  maxChunks: number | null;
+  reachedClientReader: boolean;
+}
+
+function makeInitialRunNowState(
+  shopId: number,
+  shopName: string,
+  abortController: AbortController,
+): RunNowState {
+  return {
+    shopId,
+    shopName,
+    status: "running",
+    startedAt: Date.now(),
+    endedAt: null,
+    chunks: [],
+    totals: {
+      chunksProcessed: 0,
+      totalJobsIndexed: 0,
+      totalSkipped: 0,
+      totalNormalized: 0,
+    },
+    cursor: null,
+    lastError: null,
+    errorMessage: null,
+    tekmetricApiCalls: 0,
+    elapsedMs: 0,
+    completedFlag: false,
+    timedOut: false,
+    abortController,
+    maxChunks: null,
+    reachedClientReader: false,
+  };
+}
+
 export default function SyncHealthPage() {
   const [data, setData] = useState<SyncHealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<number | null>(null);
+  const [runNowByShop, setRunNowByShop] = useState<
+    Record<number, RunNowState>
+  >({});
+  // `runningNow` tracks the alert-based run-chunk-now flow used by
+  // Protractor and Shop-Ware. Tekmetric runs go through `runNowByShop`
+  // because they stream chunk-by-chunk progress.
   const [runningNow, setRunningNow] = useState<number | null>(null);
   const [retryingRo, setRetryingRo] = useState<number | null>(null);
   const [retryingAllRo, setRetryingAllRo] = useState(false);
@@ -278,6 +376,17 @@ export default function SyncHealthPage() {
   const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
   const [rewarmingAll, setRewarmingAll] = useState(false);
   const [rewarmingAllShopWare, setRewarmingAllShopWare] = useState(false);
+  // Re-render tick so the inline run-now panel's elapsed time keeps moving
+  // between chunk events (which can be 60s+ apart for slow shops).
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const anyRunning = Object.values(runNowByShop).some(
+      (r) => r.status === "running",
+    );
+    if (!anyRunning) return;
+    const id = setInterval(() => setNowTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [runNowByShop]);
 
   const load = async () => {
     setLoading(true);
@@ -404,6 +513,8 @@ export default function SyncHealthPage() {
   // entry points at the platform-admin endpoint that fronts that provider's
   // backfill cron (Tekmetric/Protractor/Shop-Ware all expose a sync code
   // path we can invoke without waiting for the next scheduled tick).
+  // Tekmetric is special-cased: it streams chunk-by-chunk progress through
+  // `runTekmetricNow` instead of going through the alert-based `runChunkNow`.
   const RUN_NOW_PROVIDERS: Record<
     string,
     { endpoint: string; queueLabel: string; tooltip: string }
@@ -412,7 +523,7 @@ export default function SyncHealthPage() {
       endpoint: "tekmetric-run-now",
       queueLabel: "Tekmetric backfill queue",
       tooltip:
-        "Push this shop to the front of the Tekmetric backfill queue and run chunks now until it completes or the cron times out (does not reset the cursor)",
+        "Stream chunk-by-chunk progress while pushing this shop to the front of the Tekmetric backfill queue (does not reset the cursor)",
     },
     Protractor: {
       endpoint: "protractor-run-now",
@@ -428,6 +539,8 @@ export default function SyncHealthPage() {
     },
   };
 
+  // Alert-based run-now flow for Protractor and Shop-Ware. Tekmetric uses
+  // `runTekmetricNow` below, which streams progress over SSE.
   const runChunkNow = async (shopId: number, providerLabel: string) => {
     const cfg = RUN_NOW_PROVIDERS[providerLabel];
     if (!cfg) return;
@@ -488,6 +601,236 @@ export default function SyncHealthPage() {
     } finally {
       setRunningNow(null);
     }
+  };
+
+  const updateRunNow = (
+    shopId: number,
+    updater: (prev: RunNowState) => RunNowState,
+  ) => {
+    setRunNowByShop((prev) => {
+      const cur = prev[shopId];
+      if (!cur) return prev;
+      return { ...prev, [shopId]: updater(cur) };
+    });
+  };
+
+  const runTekmetricNow = async (shopId: number, shopName: string) => {
+    const existing = runNowByShop[shopId];
+    if (existing && existing.status === "running") {
+      // Already streaming — surface the live row instead of starting a 2nd
+      // request that would just queue behind this one in Tekmetric anyway.
+      return;
+    }
+    if (
+      !confirm(
+        `Push shop ${shopId} to the front of the Tekmetric backfill queue and stream chunk-by-chunk progress?`,
+      )
+    )
+      return;
+
+    const abortController = new AbortController();
+    setRunNowByShop((prev) => ({
+      ...prev,
+      [shopId]: makeInitialRunNowState(shopId, shopName, abortController),
+    }));
+
+    let res: Response;
+    try {
+      res = await fetch(
+        `/api/platform-admin/shops/${shopId}/tekmetric-run-now`,
+        { method: "POST", signal: abortController.signal },
+      );
+    } catch (err: any) {
+      const aborted = err?.name === "AbortError";
+      updateRunNow(shopId, (prev) => ({
+        ...prev,
+        status: aborted ? "aborted" : "error",
+        endedAt: Date.now(),
+        elapsedMs: Date.now() - prev.startedAt,
+        errorMessage: aborted ? null : err?.message || String(err),
+        abortController: null,
+      }));
+      return;
+    }
+
+    if (!res.ok || !res.body) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        if (j?.error) message = j.error;
+      } catch {
+        /* not JSON, keep status */
+      }
+      updateRunNow(shopId, (prev) => ({
+        ...prev,
+        status: "error",
+        endedAt: Date.now(),
+        elapsedMs: Date.now() - prev.startedAt,
+        errorMessage: message,
+        abortController: null,
+      }));
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const handleEvent = (event: string, payload: any) => {
+      if (event === "start") {
+        updateRunNow(shopId, (prev) => ({
+          ...prev,
+          maxChunks:
+            typeof payload?.maxChunks === "number" ? payload.maxChunks : null,
+          reachedClientReader: true,
+        }));
+        return;
+      }
+      if (event === "chunk") {
+        const chunkEvent = payload as RunNowChunkEvent;
+        updateRunNow(shopId, (prev) => ({
+          ...prev,
+          // Keep most recent ~12 chunks so the log doesn't grow unbounded
+          // for a 25-chunk run that the engineer leaves on screen. The
+          // top-level totals row carries the full picture.
+          chunks: [...prev.chunks, chunkEvent].slice(-12),
+          totals: chunkEvent.totals,
+          cursor: chunkEvent.cursor,
+          lastError: chunkEvent.lastError,
+          tekmetricApiCalls: chunkEvent.tekmetricApiCalls,
+          elapsedMs: chunkEvent.elapsedMs,
+        }));
+        return;
+      }
+      if (event === "chunk_error") {
+        updateRunNow(shopId, (prev) => ({
+          ...prev,
+          lastError: payload?.message || "chunk threw",
+          tekmetricApiCalls:
+            typeof payload?.tekmetricApiCalls === "number"
+              ? payload.tekmetricApiCalls
+              : prev.tekmetricApiCalls,
+          elapsedMs:
+            typeof payload?.elapsedMs === "number"
+              ? payload.elapsedMs
+              : prev.elapsedMs,
+        }));
+        return;
+      }
+      if (event === "complete") {
+        updateRunNow(shopId, (prev) => ({
+          ...prev,
+          status: payload?.aborted ? "aborted" : "complete",
+          completedFlag: !!payload?.completed,
+          timedOut: !!payload?.timedOut,
+          endedAt: Date.now(),
+          totals: {
+            chunksProcessed:
+              payload?.chunksProcessed ?? prev.totals.chunksProcessed,
+            totalJobsIndexed:
+              payload?.totalJobsIndexed ?? prev.totals.totalJobsIndexed,
+            totalSkipped: payload?.totalSkipped ?? prev.totals.totalSkipped,
+            totalNormalized:
+              payload?.totalNormalized ?? prev.totals.totalNormalized,
+          },
+          tekmetricApiCalls:
+            payload?.tekmetricApiCalls ?? prev.tekmetricApiCalls,
+          elapsedMs: payload?.durationMs ?? prev.elapsedMs,
+          abortController: null,
+        }));
+        return;
+      }
+      if (event === "error") {
+        updateRunNow(shopId, (prev) => ({
+          ...prev,
+          status: "error",
+          endedAt: Date.now(),
+          errorMessage: payload?.message || "stream error",
+          elapsedMs:
+            typeof payload?.elapsedMs === "number"
+              ? payload.elapsedMs
+              : Date.now() - prev.startedAt,
+          abortController: null,
+        }));
+        return;
+      }
+    };
+
+    const flushFrame = (frame: string) => {
+      if (!frame.trim() || frame.startsWith(":")) return;
+      let event = "message";
+      const dataParts: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataParts.push(line.slice(5).trim());
+      }
+      if (dataParts.length === 0) return;
+      try {
+        const payload = JSON.parse(dataParts.join("\n"));
+        handleEvent(event, payload);
+      } catch {
+        /* malformed frame; skip */
+      }
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          flushFrame(frame);
+        }
+      }
+      // Drain any tail
+      if (buffer.trim()) flushFrame(buffer);
+    } catch (err: any) {
+      const aborted = err?.name === "AbortError";
+      updateRunNow(shopId, (prev) => {
+        if (prev.status !== "running") return prev;
+        return {
+          ...prev,
+          status: aborted ? "aborted" : "error",
+          endedAt: Date.now(),
+          elapsedMs: Date.now() - prev.startedAt,
+          errorMessage: aborted ? null : err?.message || String(err),
+          abortController: null,
+        };
+      });
+    } finally {
+      // If the stream ended without an explicit complete frame, mark it done
+      // so the UI doesn't sit on a spinner forever.
+      updateRunNow(shopId, (prev) => {
+        if (prev.status !== "running") return prev;
+        return {
+          ...prev,
+          status: "complete",
+          endedAt: Date.now(),
+          elapsedMs: Date.now() - prev.startedAt,
+          abortController: null,
+        };
+      });
+      // Refresh diagnostics once the run is done so reasons / lastRunAt /
+      // totalJobsIndexed reflect what the chunks just wrote.
+      load();
+    }
+  };
+
+  const cancelRunTekmetricNow = (shopId: number) => {
+    const cur = runNowByShop[shopId];
+    if (!cur || cur.status !== "running" || !cur.abortController) return;
+    cur.abortController.abort();
+  };
+
+  const dismissRunTekmetricNow = (shopId: number) => {
+    setRunNowByShop((prev) => {
+      const next = { ...prev };
+      delete next[shopId];
+      return next;
+    });
   };
 
   const retryShopRos = async (shopId: number) => {
@@ -735,6 +1078,163 @@ export default function SyncHealthPage() {
   const totalStuck =
     (tek?.stuck ?? 0) + (pro?.stuck ?? 0) + (sw?.stuck ?? 0);
 
+  const renderRunNowProgress = (rn: RunNowState) => {
+    const statusMeta: Record<
+      RunNowStatus,
+      { label: string; color: string; icon: JSX.Element }
+    > = {
+      running: {
+        label: "Streaming",
+        color: "bg-blue-100 text-blue-800 border-blue-200",
+        icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />,
+      },
+      complete: {
+        label: rn.completedFlag
+          ? "Backfill complete"
+          : rn.timedOut
+            ? "Stopped at timeout"
+            : "Done",
+        color: "bg-green-100 text-green-800 border-green-200",
+        icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+      },
+      aborted: {
+        label: "Aborted",
+        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        icon: <X className="w-3.5 h-3.5" />,
+      },
+      error: {
+        label: "Error",
+        color: "bg-red-100 text-red-800 border-red-200",
+        icon: <AlertTriangle className="w-3.5 h-3.5" />,
+      },
+    };
+    const meta = statusMeta[rn.status];
+    const elapsed =
+      rn.status === "running"
+        ? Date.now() - rn.startedAt
+        : rn.elapsedMs || (rn.endedAt ?? Date.now()) - rn.startedAt;
+    return (
+      <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${meta.color}`}
+            >
+              {meta.icon}
+              {meta.label}
+            </span>
+            <span className="text-gray-600">
+              chunk {rn.totals.chunksProcessed}
+              {rn.maxChunks ? ` / ${rn.maxChunks}` : ""}
+            </span>
+            <span className="text-gray-600">·</span>
+            <span className="text-gray-600">
+              elapsed {formatDuration(elapsed)}
+            </span>
+            {rn.tekmetricApiCalls > 0 && (
+              <>
+                <span className="text-gray-600">·</span>
+                <span className="text-gray-600">
+                  {rn.tekmetricApiCalls} API calls
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {rn.status === "running" ? (
+              <button
+                onClick={() => cancelRunTekmetricNow(rn.shopId)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                title="Stop after the current in-flight chunk"
+              >
+                <X className="w-3 h-3" />
+                Abort
+              </button>
+            ) : (
+              <button
+                onClick={() => dismissRunTekmetricNow(rn.shopId)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                <X className="w-3 h-3" />
+                Dismiss
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="bg-gray-50 rounded px-2 py-1.5">
+            <div className="text-gray-500">Jobs indexed</div>
+            <div className="font-semibold text-gray-900">
+              {rn.totals.totalJobsIndexed.toLocaleString()}
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded px-2 py-1.5">
+            <div className="text-gray-500">Normalized</div>
+            <div className="font-semibold text-gray-900">
+              {rn.totals.totalNormalized.toLocaleString()}
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded px-2 py-1.5">
+            <div className="text-gray-500">Unchanged</div>
+            <div className="font-semibold text-gray-900">
+              {rn.totals.totalSkipped.toLocaleString()}
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded px-2 py-1.5">
+            <div className="text-gray-500">Cursor</div>
+            <div className="font-mono text-[11px] text-gray-900 truncate">
+              {rn.cursor ? rn.cursor.split("T")[0] : "—"}
+            </div>
+          </div>
+        </div>
+
+        {rn.errorMessage && (
+          <div className="rounded bg-red-50 border border-red-200 px-2 py-1.5 text-red-700">
+            {rn.errorMessage}
+          </div>
+        )}
+        {rn.lastError && rn.status !== "error" && (
+          <div className="rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-amber-800">
+            chunk warning: {rn.lastError}
+          </div>
+        )}
+
+        {rn.chunks.length > 0 && (
+          <div className="border border-gray-100 rounded">
+            <div className="px-2 py-1 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+              Recent chunks
+            </div>
+            <ul className="divide-y divide-gray-100 max-h-44 overflow-y-auto">
+              {rn.chunks
+                .slice()
+                .reverse()
+                .map((c) => (
+                  <li
+                    key={c.index}
+                    className="px-2 py-1 flex items-center justify-between gap-2"
+                  >
+                    <span className="text-gray-700 truncate">
+                      <span className="font-mono text-gray-500">
+                        #{c.index}
+                      </span>{" "}
+                      {c.message}
+                    </span>
+                    <span className="flex items-center gap-2 text-gray-500 whitespace-nowrap">
+                      <span>{formatDuration(c.chunkDurationMs)}</span>
+                      {c.complete && (
+                        <span className="text-green-700">complete</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderStuckSection = (
     providerLabel: string,
     diagnostics: StuckDiagnostic[] | undefined
@@ -798,8 +1298,12 @@ export default function SyncHealthPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {stuckShops.map((d) => (
-                  <tr key={d.shopId} className="hover:bg-gray-50 align-top">
+                {stuckShops.map((d) => {
+                  const runNow = runNowByShop[d.shopId];
+                  const isRunningNow = runNow?.status === "running";
+                  return (
+                  <Fragment key={d.shopId}>
+                  <tr className="hover:bg-gray-50 align-top">
                     <td className="px-4 py-3 font-mono text-sm text-gray-900">
                       {d.shopId}
                       <div className="text-xs text-gray-500 font-sans mt-0.5">
@@ -911,20 +1415,32 @@ export default function SyncHealthPage() {
                       <div className="flex items-center justify-end gap-2 flex-wrap">
                         {RUN_NOW_PROVIDERS[providerLabel] && (
                           <button
-                            onClick={() => runChunkNow(d.shopId, providerLabel)}
+                            onClick={() => {
+                              if (providerLabel === "Tekmetric") {
+                                runTekmetricNow(
+                                  d.shopId,
+                                  `Shop ${d.shopId}`,
+                                );
+                              } else {
+                                runChunkNow(d.shopId, providerLabel);
+                              }
+                            }}
                             disabled={
+                              isRunningNow ||
                               runningNow === d.shopId ||
                               triggering === d.shopId
                             }
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
                             title={RUN_NOW_PROVIDERS[providerLabel].tooltip}
                           >
-                            {runningNow === d.shopId ? (
+                            {isRunningNow || runningNow === d.shopId ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
                               <Play className="w-3.5 h-3.5" />
                             )}
-                            Run chunk now
+                            {providerLabel === "Tekmetric" && isRunningNow
+                              ? "Streaming…"
+                              : "Run chunk now"}
                           </button>
                         )}
                         <button
@@ -932,8 +1448,7 @@ export default function SyncHealthPage() {
                             triggerBackfill(d.shopId, providerLabel)
                           }
                           disabled={
-                            triggering === d.shopId ||
-                            runningNow === d.shopId
+                            triggering === d.shopId || isRunningNow
                           }
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
                         >
@@ -947,7 +1462,16 @@ export default function SyncHealthPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  {runNow && (
+                    <tr className="bg-blue-50/40">
+                      <td colSpan={7} className="px-4 py-3">
+                        {renderRunNowProgress(runNow)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
