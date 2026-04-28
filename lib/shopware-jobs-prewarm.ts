@@ -4,6 +4,7 @@ import {
   shopWareRequest,
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
+import { maybeAlertOnPrewarmAnomalies } from "@/lib/jobs-prewarm-alerter";
 import type {
   ShopWareRepairOrder,
   ShopWareVehicle,
@@ -134,6 +135,7 @@ export async function prewarmShopWareJobsCacheForOnboarding(
       `[Shop-Ware Prewarm] Shop ${shopId}: list-ROs failed: ${result.error}`
     );
     await stampShopPrewarmStatus(db, shopId, result);
+    await tryEmitPrewarmAlert(db, result);
     return result;
   }
 
@@ -355,7 +357,70 @@ export async function prewarmShopWareJobsCacheForOnboarding(
   );
 
   await stampShopPrewarmStatus(db, shopId, result);
+  await tryEmitPrewarmAlert(db, result);
   return result;
+}
+
+/**
+ * Fire-and-forget wrapper around the alerter. Mirrors the Tekmetric
+ * pre-warm's `tryEmitPrewarmAlert` (lib/tekmetric-jobs-prewarm.ts):
+ * the alerter handles its own dedup and admin lookup, but we still
+ * wrap it in try/catch so an alert pipeline failure (Resend down,
+ * Mongo hiccup) can never break the onboarding flow that called us.
+ *
+ * Shop-Ware identifies a shop by `(tenantId, swShopId)`. We pass
+ * `swShopId` as the provider-side identifier because that's what
+ * on-call uses to navigate to the shop in the Shop-Ware admin UI;
+ * the tenant scope is already implied by the MOS shop.
+ */
+async function tryEmitPrewarmAlert(
+  db: any,
+  result: PrewarmShopWareJobsCacheResult
+): Promise<void> {
+  // Capture completion timestamp here so the alert email and the
+  // persisted shop record agree to the millisecond.
+  const completedAt = new Date();
+  try {
+    await maybeAlertOnPrewarmAnomalies({
+      db,
+      provider: "shopware",
+      shopId: result.shopId,
+      providerShopId: result.swShopId,
+      providerShopIdLabel: "Shop-Ware shop ID",
+      result: {
+        errors: result.errors,
+        capped: result.capped,
+        lookbackDays: result.lookbackDays,
+      },
+      metrics: [
+        { label: "Tenant ID", value: result.tenantId },
+        { label: "ROs fetched", value: result.rosFetched },
+        { label: "ROs stored", value: result.rosStored },
+        { label: "Jobs indexed", value: result.jobsIndexed },
+        { label: "Jobs skipped (unchanged)", value: result.jobsSkipped },
+        { label: "Vehicles stored", value: result.vehiclesStored },
+        { label: "Customers stored", value: result.customersStored },
+        {
+          label: "Backfill cursor advanced",
+          value: result.cursorAdvanced ? "yes" : "no",
+        },
+        ...(result.error ? [{ label: "Error", value: result.error }] : []),
+      ],
+      snapshot: {
+        errors: result.errors,
+        capped: result.capped,
+        rosFetched: result.rosFetched,
+        rosStored: result.rosStored,
+        jobsIndexed: result.jobsIndexed,
+        cursorAdvanced: result.cursorAdvanced,
+      },
+      completedAt,
+    });
+  } catch (err: any) {
+    console.warn(
+      `[Shop-Ware Prewarm] Shop ${result.shopId}: alert emit failed (non-fatal): ${err?.message || err}`
+    );
+  }
 }
 
 // Inlined here rather than imported from app/api/cron/shopware-backfill/route.ts

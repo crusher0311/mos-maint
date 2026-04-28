@@ -6,6 +6,7 @@ import {
   fetchInvoiceById,
   cacheProtractorInvoice,
 } from "@/lib/integrations/protractor";
+import { maybeAlertOnPrewarmAnomalies } from "@/lib/jobs-prewarm-alerter";
 
 // Onboarding pre-warm scope. The first Protractor backfill chunk is the
 // most recent `chunkDays` window (60 day-time / 120 night per
@@ -169,6 +170,7 @@ export async function prewarmProtractorJobsCacheForOnboarding(
       `[Protractor Prewarm] Shop ${shopId}: no invoices in last ${lookbackDays}d${listingHadError ? " (listing had error)" : ""}; nothing to warm`
     );
     await stampShopPrewarmStatus(db, shopId, result);
+    await tryEmitPrewarmAlert(db, shopId, result);
     return result;
   }
 
@@ -231,7 +233,69 @@ export async function prewarmProtractorJobsCacheForOnboarding(
   );
 
   await stampShopPrewarmStatus(db, shopId, result);
+  await tryEmitPrewarmAlert(db, shopId, result);
   return result;
+}
+
+/**
+ * Fire-and-forget wrapper around the alerter. Mirrors the Tekmetric
+ * pre-warm's `tryEmitPrewarmAlert` (lib/tekmetric-jobs-prewarm.ts):
+ * the alerter handles its own dedup and admin lookup, but we still
+ * wrap it in try/catch so an alert pipeline failure (Resend down,
+ * Mongo hiccup) can never break the onboarding flow that called us.
+ *
+ * Protractor's resolved config carries a `connectionId` rather than a
+ * numeric provider shop ID, so we pass that as the provider-side
+ * identifier shown to on-call. We re-resolve it here (cheap; it's a
+ * single Mongo lookup) instead of threading it through the prewarm
+ * result so the alert path stays decoupled from the data shape the
+ * sync-health UI consumes.
+ */
+async function tryEmitPrewarmAlert(
+  db: any,
+  shopId: number,
+  result: PrewarmProtractorJobsCacheResult
+): Promise<void> {
+  // Capture completion timestamp here so the alert email and the
+  // persisted shop record agree to the millisecond.
+  const completedAt = new Date();
+  try {
+    let connectionId: string | null = null;
+    try {
+      const config = await resolveProtractorConfig(shopId);
+      connectionId = config.connectionId ?? null;
+    } catch {
+      // Non-fatal: the alert is still useful without it.
+    }
+    await maybeAlertOnPrewarmAnomalies({
+      db,
+      provider: "protractor",
+      shopId,
+      providerShopId: connectionId,
+      providerShopIdLabel: "Protractor connection ID",
+      result: {
+        errors: result.errors,
+        capped: result.capped,
+        lookbackDays: result.lookbackDays,
+      },
+      metrics: [
+        { label: "Invoices scanned", value: result.invoicesScanned },
+        { label: "Already cached", value: result.alreadyCached },
+        { label: "Invoices newly cached", value: result.invoicesCached },
+      ],
+      snapshot: {
+        errors: result.errors,
+        capped: result.capped,
+        invoicesScanned: result.invoicesScanned,
+        invoicesCached: result.invoicesCached,
+      },
+      completedAt,
+    });
+  } catch (err: any) {
+    console.warn(
+      `[Protractor Prewarm] Shop ${shopId}: alert emit failed (non-fatal): ${err?.message || err}`
+    );
+  }
 }
 
 async function stampShopPrewarmStatus(
