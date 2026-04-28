@@ -177,6 +177,7 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
       { shopId: { $in: orphanIds } },
       {
         $set: {
+          complete: true,
           completed: true,
           completedAt: now,
           lastError: "shop has no Tekmetric link; marking complete to drop from queue",
@@ -472,7 +473,7 @@ async function backfillShopChunkInner(
   if (chunkEnd <= oldestDate) {
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
-      { $set: { completed: true, completedAt: new Date() } }
+      { $set: { complete: true, completed: true, completedAt: new Date() } }
     );
     return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
   }
