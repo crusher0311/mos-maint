@@ -32,7 +32,10 @@ const CRON_SECRET         = process.env.CRON_SECRET         || "";
 const DRY_RUN             = process.env.DRY_RUN             === "true";
 const MAX_CHUNKS          = Number(process.env.MAX_CHUNKS_PER_SHOP || 30);
 const POLL_INTERVAL_MS    = Number(process.env.POLL_INTERVAL_MS    || 20_000);
-const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 25 * 60 * 1000);
+// 45 min default: shop 99's last successful chunk took 35 min total
+// (fetch ~10 min, bulk-write ~25 min). 25 min was too tight and gave false
+// "stuck" alarms for healthy slow shops.
+const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 45 * 60 * 1000);
 const BOOTSTRAP_TIMEOUT   = Number(process.env.BOOTSTRAP_TIMEOUT_MS || 45_000);
 const INTER_SHOP_DELAY    = Number(process.env.INTER_SHOP_DELAY_MS  || 5_000);
 const ONLY_SHOPS = (process.env.ONLY_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
@@ -71,6 +74,18 @@ async function fireChunk(shopId) {
   // POST to enqueue. We DON'T need the response body — we'll detect completion
   // via Mongo. We use a short timeout: if the request is at least accepted by
   // prod within BOOTSTRAP_TIMEOUT, we trust the handler is running.
+  //
+  // BEFORE posting, stamp `scriptFiredAt` on the progress doc. The prod cron
+  // does NOT set any "I'm running" marker on chunk start — only on chunk
+  // end (lastRunAt) — so without our own marker, a Ctrl-C + re-run can't
+  // tell that a chunk is in flight and would fire a duplicate. The stamp
+  // also lets the same script invocation's looksBusy check survive across
+  // chunks.
+  await db.collection("tekmetric_backfill_progress").updateOne(
+    { shopId },
+    { $set: { scriptFiredAt: new Date() } },
+  );
+
   const url = `${PROD_BASE_URL}/api/cron/tekmetric-backfill`;
   const ctrl = new AbortController();
   // Use an explicit boolean to detect OUR abort, since the resulting error
@@ -129,14 +144,27 @@ async function processShop(shopId) {
     log(`   chunk ${chunk}/${MAX_CHUNKS}  before:  cursor=${beforeCursor?.slice(0,19)}  jobs=${beforeJobs}`);
 
     // Safety: don't stack a duplicate chunk if prod looks busy on this shop.
-    // Heuristic: if inProgress=true, OR a chunk run started within the last
-    // 15 min and hasn't completed (no metrics update since then), assume
-    // something else (zombie from an old script run, or the daily cron) is
-    // already working on it. Wait until it drains before firing.
+    // Three independent signals indicate a chunk is already running:
+    //   1. inProgress=true (legacy field, rarely set by cron)
+    //   2. A chunk run completed in the last 15 min and the metrics doc was
+    //      updated AT THE SAME TIME (i.e. the daily cron just finished a
+    //      chunk and a fresh one might still be processing the next date
+    //      window)
+    //   3. scriptFiredAt was set by a previous run of THIS script within
+    //      STUCK_THRESHOLD_MS and lastChunkMetrics.at hasn't advanced past
+    //      it (chunk we kicked off is still mid-bulk-write). This is the
+    //      Ctrl-C + re-run safety net.
+    const beforeFired = before?.scriptFiredAt ? new Date(before.scriptFiredAt).getTime() : 0;
+    const firedRecently = beforeFired > Date.now() - STUCK_THRESHOLD_MS;
+    const firedChunkUnfinished = firedRecently && beforeMetrics < beforeFired;
     const looksBusy = before?.inProgress === true ||
-      (beforeRunAt > Date.now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt);
+      (beforeRunAt > Date.now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt) ||
+      firedChunkUnfinished;
     if (looksBusy) {
-      log(`   ⚠ Prod looks busy on shop ${shopId} (lastRunAt=${new Date(beforeRunAt).toISOString()} inProgress=${before?.inProgress}). Waiting for it to drain before firing...`);
+      const reason = firedChunkUnfinished
+        ? `prior script run fired chunk at ${new Date(beforeFired).toISOString()} not yet reflected in metrics`
+        : `lastRunAt=${new Date(beforeRunAt).toISOString()} inProgress=${before?.inProgress}`;
+      log(`   ⚠ Prod looks busy on shop ${shopId} (${reason}). Waiting for it to drain before firing...`);
       const drainDeadline = Date.now() + STUCK_THRESHOLD_MS;
       while (Date.now() < drainDeadline) {
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));

@@ -1,0 +1,44 @@
+~/workspace$ ONLY_SHOPS=99 node scripts/tekmetric-catchup.mjs
+[2026-04-28 20:15:14.500] Tekmetric catch-up starting
+[2026-04-28 20:15:14.501] PROD_BASE_URL=https://mos.tools  DRY_RUN=false  MAX_CHUNKS_PER_SHOP=30  POLL=20s  STUCK_AFTER=25min
+[2026-04-28 20:15:14.501] ONLY_SHOPS filter: 99
+[2026-04-28 20:15:14.533] 1 incomplete shop(s) to process:
+[2026-04-28 20:15:14.534]     shop=99  cursor=2026-01-22  jobs=6261  lastErr=N
+[2026-04-28 20:15:14.534] 
+>>> 1/1: shop 99
+[2026-04-28 20:15:14.534] === SHOP 99 START ===
+[2026-04-28 20:15:14.563]    chunk 1/30  before:  cursor=2026-01-22T23:59:59  jobs=6261
+[2026-04-28 20:15:59.566]    POST sent (chunk running on prod) — polling Mongo every 20s for cursor movement...
+[2026-04-28 20:16:19.595]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:16:39.625]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:16:59.653]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:17:19.682]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:17:39.711]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:17:59.739]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:18:19.769]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:18:39.797]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:18:59.825]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:19:19.854]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:19:39.881]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:19:59.910]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:20:19.939]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:20:39.967]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:20:59.995]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:21:20.024]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:21:40.052]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:22:00.081]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:22:20.110]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:22:40.139]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:23:00.167]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:23:20.195]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:23:40.223]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:24:00.251]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:24:20.279]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:24:40.308]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:25:00.336]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:25:20.364]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:25:40.392]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:26:00.420]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:26:20.448]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:26:40.476]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
+[2026-04-28 20:27:00.504]    poll: cursor=2026-01-22 jobs=6261 metrics@=old complete=false
