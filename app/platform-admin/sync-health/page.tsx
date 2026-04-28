@@ -41,6 +41,15 @@ interface StuckDiagnostic {
   lastError: string | null;
   lastErrorAt: string | null;
   autoClearedErrorAt: string | null;
+  // Probe fields written by operational helpers (e.g.
+  // scripts/restart-never-started-tekmetric-shops.ts) on dedicated
+  // columns so the cron's fair-queue ordering and 6h auto-clear gate
+  // are not perturbed. Surfaced so on-call can see whether a probe
+  // ran and whether it succeeded without querying Mongo.
+  lastProbedAt?: string | null;
+  lastProbeOk?: boolean | null;
+  lastProbeError?: string | null;
+  lastProbeNote?: string | null;
   totalJobsIndexed: number;
   logicVersion: number | null;
   lastRoSkipCount?: number;
@@ -582,6 +591,12 @@ export default function SyncHealthPage() {
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
                     Last error
                   </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Out-of-band probe written by on-call helper scripts (e.g. restart-never-started-tekmetric-shops). Lives on dedicated lastProbedAt/lastProbeOk/lastProbeError/lastProbeNote columns so the cron's queue ordering isn't perturbed."
+                  >
+                    Last probe
+                  </th>
                   <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
                     Actions
                   </th>
@@ -639,6 +654,57 @@ export default function SyncHealthPage() {
                           {d.lastErrorAt && (
                             <div className="text-xs text-gray-500 mt-0.5">
                               {formatDateTime(d.lastErrorAt)}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 max-w-md">
+                      {d.lastProbedAt ? (
+                        <div>
+                          <div className="flex items-center gap-2">
+                            {d.lastProbeOk === false ? (
+                              <span
+                                className="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 font-medium"
+                                title="Out-of-band probe failed — visually distinct from lastError, which only reflects cron-driven chunk attempts."
+                              >
+                                Probe FAIL
+                              </span>
+                            ) : d.lastProbeOk === true ? (
+                              <span
+                                className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium"
+                                title="Out-of-band probe succeeded (e.g. Tekmetric reachable). Independent of lastError."
+                              >
+                                Probe OK
+                              </span>
+                            ) : (
+                              <span
+                                className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700"
+                                title="Probe ran but ok/fail status not recorded"
+                              >
+                                Probed
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-500 whitespace-nowrap">
+                              {formatDateTime(d.lastProbedAt)}
+                            </span>
+                          </div>
+                          {d.lastProbeOk === false && d.lastProbeError && (
+                            <div
+                              className="text-xs text-red-700 mt-1 truncate"
+                              title={d.lastProbeError}
+                            >
+                              {d.lastProbeError}
+                            </div>
+                          )}
+                          {d.lastProbeNote && (
+                            <div
+                              className="text-xs text-gray-500 mt-0.5 truncate"
+                              title={d.lastProbeNote}
+                            >
+                              {d.lastProbeNote}
                             </div>
                           )}
                         </div>

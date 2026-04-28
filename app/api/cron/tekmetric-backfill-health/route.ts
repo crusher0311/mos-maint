@@ -86,6 +86,16 @@ type StuckShop = {
   lastError: string | null;
   lastErrorAt: string | null;
   currentChunkEnd: string | null;
+  // Probe fields (task #51): surfaced on the per-shop payload so on-call
+  // can see, in the same response, whether an out-of-band probe was run
+  // against this shop and whether it succeeded — without having to query
+  // Mongo. Written by operational helpers (e.g.
+  // scripts/restart-never-started-tekmetric-shops.ts) on dedicated
+  // columns to avoid corrupting the cron's fair-queue ordering.
+  lastProbedAt: string | null;
+  lastProbeOk: boolean | null;
+  lastProbeError: string | null;
+  lastProbeNote: string | null;
 };
 
 function computeStuckShops(progressRows: any[], shopNamesById: Map<number, string>): StuckShop[] {
@@ -139,6 +149,10 @@ function computeStuckShops(progressRows: any[], shopNamesById: Map<number, strin
       lastError: p.lastError ? String(p.lastError).slice(0, 300) : null,
       lastErrorAt: p.lastErrorAt ? new Date(p.lastErrorAt).toISOString() : null,
       currentChunkEnd: p.currentChunkEnd ? new Date(p.currentChunkEnd).toISOString() : null,
+      lastProbedAt: p.lastProbedAt ? new Date(p.lastProbedAt).toISOString() : null,
+      lastProbeOk: typeof p.lastProbeOk === "boolean" ? p.lastProbeOk : null,
+      lastProbeError: p.lastProbeError ? String(p.lastProbeError).slice(0, 500) : null,
+      lastProbeNote: p.lastProbeNote ? String(p.lastProbeNote).slice(0, 500) : null,
     });
   }
 

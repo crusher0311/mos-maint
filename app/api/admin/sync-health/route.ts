@@ -131,6 +131,25 @@ function computeStuckDiagnostics(progressRows: any[]) {
       const permanentlyFailedRoCount = Number(p.permanentlyFailedRoCount || 0);
       const recoveredRoCount = Number(p.recoveredRoCount || 0);
 
+      // Probe fields are written by operational helpers (e.g.
+      // scripts/restart-never-started-tekmetric-shops.ts) on dedicated
+      // columns to avoid corrupting the cron's fair-queue ordering — see
+      // the REGRESSION GUARD in that script. Surfaced here so on-call can
+      // see whether a probe ran and whether it succeeded without having
+      // to query Mongo. A failed probe is visually distinguishable from a
+      // successful one even when `lastError` is null on the row.
+      const lastProbedAt = p.lastProbedAt
+        ? new Date(p.lastProbedAt).toISOString()
+        : null;
+      const lastProbeOk =
+        typeof p.lastProbeOk === "boolean" ? p.lastProbeOk : null;
+      const lastProbeError = p.lastProbeError
+        ? String(p.lastProbeError).slice(0, 500)
+        : null;
+      const lastProbeNote = p.lastProbeNote
+        ? String(p.lastProbeNote).slice(0, 500)
+        : null;
+
       return {
         shopId: p.shopId,
         completed: !!p.completed,
@@ -145,6 +164,10 @@ function computeStuckDiagnostics(progressRows: any[]) {
         lastError: p.lastError || null,
         lastErrorAt: p.lastErrorAt || null,
         autoClearedErrorAt: p.autoClearedErrorAt || null,
+        lastProbedAt,
+        lastProbeOk,
+        lastProbeError,
+        lastProbeNote,
         totalJobsIndexed: p.totalJobsIndexed || 0,
         logicVersion: p.logicVersion || null,
         lastRoSkipCount: Number(p.lastRoSkipCount || 0),
