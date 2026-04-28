@@ -1,0 +1,81 @@
+~/workspace$ PROD_BASE_URL=https://your-prod-url \
+SESSION_COOKIE=95843116055fadfc536d269bc7159c1b3f3ca83d60e8a3c3e43f57e65453f809 \
+node scripts/tekmetric-catchup.mjs
+[2026-04-28 18:47:35.258] Tekmetric catch-up starting
+[2026-04-28 18:47:35.261] PROD_BASE_URL=https://your-prod-url  DRY_RUN=false  MAX_RETRIES=5
+[2026-04-28 18:47:35.670] 40 incomplete shop(s) to process:
+    shop=99  cursor=2026-01-22  jobs=6261  lastErr=N
+    shop=101  cursor=2026-01-22  jobs=5003  lastErr=N
+    shop=102  cursor=2026-01-22  jobs=754  lastErr=N
+    shop=106  cursor=2026-01-22  jobs=348  lastErr=N
+    shop=107  cursor=2026-01-22  jobs=1438  lastErr=N
+    shop=108  cursor=2025-10-30  jobs=4654  lastErr=N
+    shop=73  cursor=2025-10-24  jobs=38543  lastErr=N
+    shop=82  cursor=2025-10-24  jobs=19962  lastErr=N
+    shop=83  cursor=2025-10-24  jobs=3487  lastErr=N
+    shop=85  cursor=2025-10-24  jobs=21240  lastErr=N
+    shop=86  cursor=2025-10-24  jobs=4332  lastErr=N
+    shop=87  cursor=2025-10-24  jobs=3002  lastErr=N
+    shop=88  cursor=2025-10-24  jobs=1169  lastErr=N
+    shop=89  cursor=2025-10-24  jobs=106  lastErr=N
+    shop=90  cursor=2025-10-24  jobs=695  lastErr=N
+    shop=91  cursor=2025-10-24  jobs=52  lastErr=N
+    shop=105  cursor=2025-10-24  jobs=8  lastErr=N
+    shop=100  cursor=2025-10-24  jobs=2653  lastErr=N
+    shop=28  cursor=2025-07-26  jobs=2545  lastErr=N
+    shop=32  cursor=2025-07-26  jobs=410340  lastErr=N
+    shop=36  cursor=2025-07-26  jobs=232462  lastErr=N
+    shop=37  cursor=2025-07-26  jobs=335490  lastErr=N
+    shop=54  cursor=2025-07-26  jobs=70264  lastErr=N
+    shop=57  cursor=2025-07-26  jobs=10053  lastErr=N
+    shop=74  cursor=2025-07-26  jobs=27057  lastErr=N
+    shop=75  cursor=2025-07-26  jobs=16089  lastErr=N
+    shop=84  cursor=2025-07-26  jobs=5414  lastErr=N
+    shop=92  cursor=2025-07-26  jobs=3610  lastErr=N
+    shop=93  cursor=2025-07-26  jobs=4572  lastErr=N
+    shop=94  cursor=2025-07-26  jobs=2177  lastErr=N
+    shop=95  cursor=2025-07-26  jobs=843  lastErr=N
+    shop=96  cursor=2025-07-26  jobs=198  lastErr=N
+    shop=97  cursor=2025-07-26  jobs=1655  lastErr=N
+    shop=103  cursor=2025-07-26  jobs=461  lastErr=N
+    shop=98  cursor=2025-07-26  jobs=415  lastErr=N
+    shop=63  cursor=2025-07-26  jobs=21  lastErr=N
+    shop=78  cursor=2025-06-14  jobs=1383  lastErr=N
+    shop=104  cursor=2024-05-02  jobs=32  lastErr=N
+    shop=1  cursor=2021-01-02  jobs=1218  lastErr=N
+    shop=16  cursor=(null)  jobs=0  lastErr=N
+
+[2026-04-28 18:47:35.671] >>> 1/40: shop 99
+
+=== [2026-04-28 18:47:35.672] SHOP 99 ===
+  [2026-04-28 18:47:36.003] attempt 1/5 — cursor=2026-01-22T23:59:59.999Z jobsIndexed=6261
+  [2026-04-28 18:47:36.025] call failed: fetch failed
+[2026-04-28 18:47:36.025] sleeping 5000ms before next shop...
+
+[2026-04-28 18:47:41.030] >>> 2/40: shop 101
+
+=== [2026-04-28 18:47:41.031] SHOP 101 ===
+  [2026-04-28 18:47:41.341] attempt 1/5 — cursor=2026-01-22T23:59:59.999Z jobsIndexed=5003
+  [2026-04-28 18:47:41.344] call failed: fetch failed
+[2026-04-28 18:47:41.344] sleeping 5000ms before next shop...
+
+[2026-04-28 18:47:46.345] >>> 3/40: shop 102
+
+=== [2026-04-28 18:47:46.346] SHOP 102 ===
+  [2026-04-28 18:47:46.668] attempt 1/5 — cursor=2026-01-22T23:59:59.999Z jobsIndexed=754
+  [2026-04-28 18:47:46.671] call failed: fetch failed
+[2026-04-28 18:47:46.671] sleeping 5000ms before next shop...
+
+[2026-04-28 18:47:51.672] >>> 4/40: shop 106
+
+=== [2026-04-28 18:47:51.672] SHOP 106 ===
+  [2026-04-28 18:47:51.992] attempt 1/5 — cursor=2026-01-22T23:59:59.999Z jobsIndexed=348
+  [2026-04-28 18:47:51.994] call failed: fetch failed
+[2026-04-28 18:47:51.994] sleeping 5000ms before next shop...
+
+[2026-04-28 18:47:56.998] >>> 5/40: shop 107
+
+=== [2026-04-28 18:47:56.998] SHOP 107 ===
+  [2026-04-28 18:47:57.319] attempt 1/5 — cursor=2026-01-22T23:59:59.999Z jobsIndexed=1438
+  [2026-04-28 18:47:57.321] call failed: fetch failed
+[2026-04-28 18:47:57.321] sleeping 5000ms before next shop...
