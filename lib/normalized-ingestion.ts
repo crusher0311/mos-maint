@@ -1340,8 +1340,23 @@ export class NormalizedIngestionService {
     try {
       await upsertFn();
     } catch (err) {
+      const e = err as any;
+      const cause = e?.cause as any;
+      const pgCode = e?.code ?? cause?.code ?? null;
+      const pgDetail = e?.detail ?? cause?.detail ?? null;
+      const pgConstraint = e?.constraint ?? cause?.constraint ?? null;
+      const pgColumn = e?.column ?? cause?.column ?? null;
+      const pgTable = e?.table ?? cause?.table ?? null;
+      const pgHint = e?.hint ?? cause?.hint ?? null;
+      const causeMessage = cause?.message ?? null;
+      const baseMessage = err instanceof Error ? err.message : String(err);
       console.error(
-        `[DualWrite] Supabase write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, error: ${err instanceof Error ? err.message : String(err)}`
+        `[DualWrite] Supabase write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, ` +
+        `pgCode: ${pgCode}, pgConstraint: ${pgConstraint}, pgColumn: ${pgColumn}, pgTable: ${pgTable}, ` +
+        `pgDetail: ${pgDetail ? String(pgDetail).slice(0, 500) : null}, ` +
+        `pgHint: ${pgHint ? String(pgHint).slice(0, 200) : null}, ` +
+        `causeMessage: ${causeMessage ? String(causeMessage).slice(0, 300) : null}, ` +
+        `error: ${baseMessage}`
       );
     }
   }
