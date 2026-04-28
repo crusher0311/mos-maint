@@ -2,7 +2,16 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
-import { SERVICE_KEYS, SERVICE_KEY_DISPLAY_NAMES, toKeyFromName, toKeyFromFreeText } from "@/lib/service-keys";
+import {
+  SERVICE_KEYS,
+  SERVICE_KEY_DISPLAY_NAMES,
+  toKeyFromName,
+  toKeyFromFreeText,
+  parseServiceAction,
+  isLifetimeFluidItem,
+  LIFETIME_FLUID_DEFAULT_MILES,
+  type ServiceAction,
+} from "@/lib/service-keys";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
@@ -202,6 +211,8 @@ interface OEMItem {
   category?: string;
   miles?: number | null;
   months?: number | null;
+  notes?: string | null;
+  intervals?: Array<{ units?: string | null; value?: number | null }>;
 }
 
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
@@ -249,6 +260,14 @@ interface TriagedItem {
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred;
+  /** Verb extracted from the source row ("inspect", "replace", ...). */
+  action?: ServiceAction | null;
+  /** Free-text note carried from DataOne (e.g. "If equipped with dipstick"). */
+  notes?: string | null;
+  /** True when interval was synthesized from the lifetime-fluid default. */
+  recommendedDefault?: boolean;
+  /** Human-readable rationale shown when recommendedDefault is true. */
+  recommendedReason?: string | null;
 }
 
 interface Buckets {
@@ -364,7 +383,14 @@ function triage({
 
   const triaged: TriagedItem[] = [];
   const usedDviKeys = new Set<string>();
+  // Tracks plain serviceKeys consumed by *any* source (OEM, DVI, …). Used
+  // for cross-source suppression (e.g. don't re-add a generic "battery"
+  // common item if the OEM list already covers it).
   const usedServiceKeys = new Set<string>();
+  // Tracks `${serviceKey}::${action}` so an OEM "Inspect …" row and the
+  // matching "Replace …" row can coexist, while still de-duplicating two
+  // rows with the same verb on the same service key.
+  const usedOemServiceActionKeys = new Set<string>();
   
   const deferredByServiceKey = new Map<string, MatchedDeferred>();
   const seenDeferredTitles = new Set<string>();
@@ -386,7 +412,9 @@ function triage({
   const isManual = resolvedTransType ? resolvedTransType.includes("manual") : null;
 
   for (const o of oemItems) {
-    const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
+    const mappedKey = toKeyFromName(o.name || "");
+    const serviceKey = mappedKey || `misc_${o.maintenance_id}`;
+    const action = parseServiceAction(o.name || "");
 
     if (isAutomatic !== null) {
       if (serviceKey === "trans_manual" && isAutomatic) continue;
@@ -395,20 +423,58 @@ function triage({
 
     const matchedDeferred = deferredByServiceKey.get(serviceKey);
     if (matchedDeferred) deferredServiceKeysUsedByOem.add(serviceKey);
-    if (usedServiceKeys.has(serviceKey) && !serviceKey.startsWith("misc_")) continue;
+    // We can have both an "Inspect …" row AND a "Replace …" row that map to
+    // the same service key (e.g. trans_auto). Allow them to coexist instead
+    // of dropping the second one — they are presented to the customer as
+    // distinct line items. Use a separate action-qualified set for this
+    // intra-OEM dedupe so the cross-source `usedServiceKeys` set still
+    // suppresses generic common-maintenance items further down.
+    const dedupeKey = `${serviceKey}::${action ?? "any"}`;
+    if (usedOemServiceActionKeys.has(dedupeKey) && !serviceKey.startsWith("misc_")) continue;
+    usedOemServiceActionKeys.add(dedupeKey);
     usedServiceKeys.add(serviceKey);
-    
-    const uniqueKey = `${serviceKey}_${o.maintenance_id}`;
+
+    const uniqueKey = `${serviceKey}_${action ?? "any"}_${o.maintenance_id}`;
     const last = lastMap.get(serviceKey) ?? null;
-    
+
     const shopOverride = shopIntervals[serviceKey];
     if (shopOverride?.excluded) {
       continue;
     }
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
-    const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : (o.miles ?? null);
-    const intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : (o.months ?? null);
+    let intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : (o.miles ?? null);
+    let intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : (o.months ?? null);
+
+    // Lifetime-fluid handling: when the OE source has no actionable
+    // interval but lists this fluid as "lifetime" / "fill for life" /
+    // "no scheduled service" (or just omits the interval entirely on a
+    // fluid we know about), surface a recommended-default interval
+    // (LIFETIME_FLUID_DEFAULT_MILES) so it shows up on the plan as a
+    // shop recommendation rather than disappearing silently. Only do this
+    // for "Replace"/"Flush" rows — we do not want to fabricate a service
+    // out of an "Inspect transmission fluid" row.
+    let recommendedDefault = false;
+    let recommendedReason: string | null = null;
+    const isReplacementRow = action === null || action === "replace" || action === "flush" || action === "service" || action === "drain";
+    if (
+      !usingShopInterval &&
+      isReplacementRow &&
+      mappedKey &&
+      isLifetimeFluidItem({
+        serviceKey: mappedKey,
+        name: o.name,
+        notes: o.notes,
+        miles: o.miles ?? null,
+        months: o.months ?? null,
+        intervals: o.intervals ?? [],
+      })
+    ) {
+      intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
+      intervalMonths = null;
+      recommendedDefault = true;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Recommended at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+    }
 
     if (dviMap.has(serviceKey)) usedDviKeys.add(serviceKey);
 
@@ -452,8 +518,19 @@ function triage({
 
     const dviInfo = dviMap.get(serviceKey);
     const declinedInfo = declinedMap.get(serviceKey) || null;
+    // Always prefer the original DataOne row as the title so the verb
+    // (Inspect / Replace / Flush / Rotate / ...) is preserved end-to-end.
+    // Fall back to the canonical display name only when the source row had
+    // no usable name at all (e.g. miscellaneous items).
     const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
-    
+
+    let combinedReason: string | undefined;
+    if (recommendedDefault) {
+      combinedReason = recommendedReason ?? undefined;
+    } else if (neverDone) {
+      combinedReason = "No record of this service being performed.";
+    }
+
     triaged.push({
       key: uniqueKey,
       serviceKey,
@@ -468,11 +545,15 @@ function triage({
       daysToGo,
       bump: dviInfo?.status ?? null,
       source: "oem",
-      reason: neverDone ? "No record of this service being performed." : undefined,
+      reason: combinedReason,
       dviSource: dviInfo?.dviSource,
       declined: declinedInfo,
       usingShopInterval,
       matchedDeferred,
+      action: action ?? null,
+      notes: o.notes ?? null,
+      recommendedDefault: recommendedDefault || undefined,
+      recommendedReason: recommendedReason ?? undefined,
     });
   }
 
@@ -715,6 +796,10 @@ function convertToCache(item: TriagedItem): TriagedItemCache {
     protractorDeferredId: item.protractorDeferredId,
     matchedDeferred: item.matchedDeferred,
     declined: item.declined,
+    action: item.action ?? null,
+    notes: item.notes ?? null,
+    recommendedDefault: item.recommendedDefault ?? false,
+    recommendedReason: item.recommendedReason ?? null,
   };
 }
 
@@ -1299,6 +1384,10 @@ export async function POST(req: NextRequest) {
       category: item.maintenance_category || item.category,
       miles: item.miles,
       months: item.months,
+      notes: item.maintenance_notes ?? item.notes ?? null,
+      intervals: Array.isArray(item.intervals)
+        ? item.intervals.map((iv: any) => ({ units: iv.units ?? null, value: iv.value ?? null }))
+        : [],
     }));
 
     const declinedServices: DeclinedServiceEntry[] = (vehicleDoc?.declinedServices || []).map((d: any) => ({
@@ -1391,7 +1480,10 @@ export async function POST(req: NextRequest) {
     });
 
     const isInspectItem = (item: TriagedItem) => {
-      const title = item.title.toLowerCase();
+      // Prefer the parsed action verb so the filter cannot be fooled by a
+      // canonical display label that hides the original "Inspect …" wording.
+      if (item.action === "inspect") return true;
+      const title = (item.title || "").toLowerCase();
       return title.includes("inspect") || title.startsWith("check ");
     };
     

@@ -844,8 +844,10 @@ function triage({
 
     const dviInfo = dviMap.get(serviceKey);
     const declinedInfo = declinedMap.get(serviceKey) || null;
-    // Use normalized display name if available, otherwise keep original OEM name
-    const displayTitle = SERVICE_KEY_DISPLAY_NAMES[serviceKey] || o.name;
+    // Always prefer the original DataOne row name so the verb (Inspect /
+    // Replace / Flush / Rotate / ...) is preserved end-to-end. Fall back to
+    // the canonical display label only when the source row has no name.
+    const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
     triaged.push({
       key: uniqueKey,
       serviceKey,

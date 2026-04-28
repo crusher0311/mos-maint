@@ -201,6 +201,149 @@ export const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   coolant_hoses: "Coolant Hoses",
 };
 
+/**
+ * Default mileage used when an OE schedule lists a fluid as "lifetime",
+ * "fill for life", or has no scheduled-replacement interval. Centralized so
+ * shops/operators can tune it in one place. Roughly aligned with most fleet
+ * recommendations of servicing sealed transmissions / coolants by ~120k mi.
+ */
+export const LIFETIME_FLUID_DEFAULT_MILES = 120000;
+
+/**
+ * Service keys we are willing to surface as "Recommended at 120k mi" when
+ * the OE source treats the fluid as lifetime. Limited to fluids — we do not
+ * fabricate intervals for parts the OE never schedules (e.g. timing belts).
+ */
+export const LIFETIME_FLUID_SERVICE_KEYS = new Set<string>([
+  "trans_auto",
+  "trans_manual",
+  "transfer_case",
+  "front_differential",
+  "rear_differential",
+  "coolant",
+  "brake_fluid",
+  "power_steering",
+]);
+
+const LIFETIME_TEXT_PATTERNS: RegExp[] = [
+  /\blife\s*time\b/i,
+  /\blifetime\b/i,
+  /fill\s*for\s*life/i,
+  /filled\s*for\s*life/i,
+  /no\s+scheduled\s+(?:maintenance|service|replacement)/i,
+  /not\s+required/i,
+  /sealed\s+for\s+life/i,
+];
+
+const LIFETIME_INTERVAL_UNITS = new Set([
+  "lifetime",
+  "lifetime_of_vehicle",
+  "life",
+  "other",
+]);
+
+/** True if a free-text string (name or notes) suggests a lifetime fluid. */
+export function hasLifetimeText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return LIFETIME_TEXT_PATTERNS.some((p) => p.test(text));
+}
+
+/** True if a single DataOne interval row is a lifetime indicator. */
+export function isLifetimeIntervalRow(row: { units?: string | null; value?: number | null }): boolean {
+  const units = (row.units || "").toString().trim().toLowerCase();
+  if (LIFETIME_INTERVAL_UNITS.has(units)) return true;
+  // "Other" units with a 0 value or empty value sometimes indicate
+  // "no scheduled service".
+  if (units === "" && (row.value == null || row.value === 0)) return true;
+  return false;
+}
+
+/**
+ * Decide whether an OEM maintenance item should be treated as a lifetime
+ * fluid that needs a recommended-default interval. Returns true when:
+ *   - any interval row carries a lifetime unit, OR
+ *   - the maintenance name / notes mention lifetime/fill-for-life, OR
+ *   - the only intervals present have value <= 0 / empty units AND the
+ *     service key is in the LIFETIME_FLUID_SERVICE_KEYS set (i.e. it's a
+ *     fluid we're confident enough to recommend a default for).
+ */
+export function isLifetimeFluidItem(opts: {
+  serviceKey: string | null;
+  name?: string | null;
+  notes?: string | null;
+  miles?: number | null;
+  months?: number | null;
+  intervals?: Array<{ units?: string | null; value?: number | null }>;
+}): boolean {
+  const { serviceKey, name, notes, miles, months, intervals } = opts;
+  if (hasLifetimeText(name) || hasLifetimeText(notes)) {
+    return !!serviceKey && LIFETIME_FLUID_SERVICE_KEYS.has(serviceKey);
+  }
+  if (intervals && intervals.length > 0 && intervals.some(isLifetimeIntervalRow)) {
+    return !!serviceKey && LIFETIME_FLUID_SERVICE_KEYS.has(serviceKey);
+  }
+  // Some sources omit intervals entirely for lifetime fluids — only treat
+  // that as lifetime when the canonical service is in our fluid set AND we
+  // have *some* indicator (intervals array empty AND no usable miles/months).
+  if (
+    !!serviceKey &&
+    LIFETIME_FLUID_SERVICE_KEYS.has(serviceKey) &&
+    (!miles || miles <= 0) &&
+    (!months || months <= 0) &&
+    (!intervals || intervals.length === 0)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export type ServiceAction =
+  | "inspect"
+  | "replace"
+  | "flush"
+  | "rotate"
+  | "adjust"
+  | "reset"
+  | "drain"
+  | "lubricate"
+  | "tighten"
+  | "service";
+
+/**
+ * Extract the verb / action from a maintenance item name. We need this so
+ * an "Inspect …" row never gets rendered with the same display label as
+ * the matching "Replace …" service. Returns null when no verb is detected.
+ */
+export function parseServiceAction(name: string | null | undefined): ServiceAction | null {
+  if (!name) return null;
+  const n = name.toLowerCase().trim();
+  // Order matters — check the more specific verbs first.
+  if (/^\s*(?:inspect|check|examine|visual\s*check)\b/.test(n) || /\binspection\b/.test(n)) {
+    return "inspect";
+  }
+  if (/^\s*(?:replace|change|install|renew)\b/.test(n) || /\breplacement\b/.test(n)) {
+    return "replace";
+  }
+  if (/^\s*(?:flush|exchange|drain\s+and\s+(?:fill|refill))\b/.test(n)) return "flush";
+  if (/^\s*(?:rotate|rotation)\b/.test(n)) return "rotate";
+  if (/^\s*(?:adjust|adjustment|align)\b/.test(n)) return "adjust";
+  if (/^\s*(?:reset|relearn)\b/.test(n)) return "reset";
+  if (/^\s*(?:drain)\b/.test(n)) return "drain";
+  if (/^\s*(?:lubricate|grease|oil)\b/.test(n)) return "lubricate";
+  if (/^\s*(?:tighten|torque|re-?torque)\b/.test(n)) return "tighten";
+  if (/\bservice\b/.test(n)) return "service";
+  return null;
+}
+
+/**
+ * Whether a maintenance item is an inspection (or similar non-service
+ * action) based on its source name. Preferred over title sniffing because
+ * the title is sometimes rewritten to a canonical service label.
+ */
+export function isInspectionAction(action: ServiceAction | null | undefined): boolean {
+  return action === "inspect";
+}
+
 export function toKeyFromName(name: string): string | null {
   const n = name.toLowerCase();
   const DVI_SKIP = ["oil change sticker", "walk around video", "walk around", "other"];

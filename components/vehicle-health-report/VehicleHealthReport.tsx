@@ -34,6 +34,10 @@ interface PlanItem {
   declined: boolean;
   matchedDeferred: any;
   protractorDeferredId: string | null;
+  action?: string | null;
+  notes?: string | null;
+  recommendedDefault?: boolean;
+  recommendedReason?: string | null;
 }
 
 interface VehicleInfo {
@@ -141,23 +145,42 @@ function getStatusLabel(item: PlanItem, bucket: "overdue" | "dueSoon"): { text: 
   if (item.source === "dvi" || item.category === "DVI Finding") {
     return { text: "REPAIR", color: "#dc2626" };
   }
+  // Lifetime / fill-for-life fluids surface as a shop recommendation rather
+  // than an OEM-mandated overdue / due-soon item.
+  if (item.recommendedDefault) {
+    return { text: "RECOMMENDED", color: "#2563eb" };
+  }
   if (bucket === "overdue") {
     return { text: "OVERDUE", color: "#dc2626" };
   }
   return { text: "DUE SOON", color: "#f59e0b" };
 }
 
+function appendNotes(base: string, item: PlanItem): string {
+  const extras: string[] = [];
+  if (item.recommendedDefault && item.recommendedReason) {
+    extras.push(item.recommendedReason);
+  }
+  if (item.notes && item.notes.trim()) {
+    extras.push(`Note: ${item.notes.trim()}`);
+  }
+  if (extras.length === 0) return base;
+  const trimmedBase = base.trim();
+  return `${trimmedBase}${trimmedBase && !trimmedBase.endsWith(".") ? "." : ""} ${extras.join(" ")}`.trim();
+}
+
 function getItemDescription(item: PlanItem): string {
   if (item.category === "DVI Finding") {
-    return "Identified during vehicle inspection. Repair recommended.";
+    return appendNotes("Identified during vehicle inspection. Repair recommended.", item);
   }
   if (!item.last) {
-    return `No record of this service being performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} miles.` : ""}`;
+    const base = `No record of this service being performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} miles.` : ""}`;
+    return appendNotes(base, item);
   }
   const lastDate = item.last.date ? new Date(item.last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null;
   const lastMiles = item.last.miles?.toLocaleString();
   if (item.milesToGo !== null && item.milesToGo < 0) {
-    return `Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` Last serviced ${lastDate}.` : ""}`;
+    return appendNotes(`Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` Last serviced ${lastDate}.` : ""}`, item);
   }
   if (item.milesToGo !== null && item.milesToGo > 0) {
     let dateEst = "";
@@ -165,12 +188,12 @@ function getItemDescription(item: PlanItem): string {
       const estDate = new Date(Date.now() + item.daysToGo * 86400000);
       dateEst = ` Estimated around ${estDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
     }
-    return `Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` Last serviced ${lastDate}.` : ""}`;
+    return appendNotes(`Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` Last serviced ${lastDate}.` : ""}`, item);
   }
   if (lastDate) {
-    return `Last serviced ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`;
+    return appendNotes(`Last serviced ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`, item);
   }
-  return "Service recommended based on manufacturer schedule.";
+  return appendNotes("Service recommended based on manufacturer schedule.", item);
 }
 
 function formatDate(dateStr: string | null): string {

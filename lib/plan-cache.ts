@@ -3,6 +3,14 @@ import { Db } from "mongodb";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
 const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
 
+/**
+ * Bump this whenever the cached plan shape changes incompatibly so old
+ * cache entries are skipped on read instead of being served with missing
+ * fields. v2 (Apr 2026, task 163): adds `notes`, `action`,
+ * `recommendedDefault`, `recommendedReason`.
+ */
+export const PLAN_CACHE_SCHEMA_VERSION = 2;
+
 export interface DeclinedServiceCache {
   serviceKey: string;
   serviceName: string;
@@ -25,12 +33,23 @@ export interface TriagedItemCache {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor" | "common";
-  dviSource?: "autoflow" | "autovitals";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
   matchedDeferred?: { id: string; title: string };
   declined?: DeclinedServiceCache | null;
+  /** Verb extracted from the source name ("inspect", "replace", ...). */
+  action?: string | null;
+  /** Free-text note carried from the OE row (e.g. "If equipped with dipstick"). */
+  notes?: string | null;
+  /**
+   * True when this item is a shop / aiVHI default we generated because the
+   * OE source had no actionable interval (e.g. "lifetime fluid").
+   */
+  recommendedDefault?: boolean;
+  /** Human-readable rationale for the recommended-default override. */
+  recommendedReason?: string | null;
 }
 
 export interface CachedDeferredWork {
@@ -70,6 +89,7 @@ export interface CachedPlan {
   plan: CachedPlanData;
   createdAt: Date;
   expiresAt: Date;
+  schemaVersion?: number;
 }
 
 export async function getCachedPlan(
@@ -95,6 +115,14 @@ export async function getCachedPlan(
     if (entry.expiresAt <= new Date()) {
       const ageMinutes = Math.round((Date.now() - entry.expiresAt.getTime()) / 60000);
       console.log(`[PlanCache] SKIP: Expired ${ageMinutes}m ago for ${vin} (shopId=${entry.shopId})`);
+      continue;
+    }
+
+    // Skip cache entries written under an older plan shape so the new fields
+    // (notes, action, recommendedDefault, ...) reach the UI without waiting
+    // for natural cache expiry.
+    if ((entry.schemaVersion ?? 1) < PLAN_CACHE_SCHEMA_VERSION) {
+      console.log(`[PlanCache] SKIP: stale schema v${entry.schemaVersion ?? 1} (current v${PLAN_CACHE_SCHEMA_VERSION}) for ${vin}`);
       continue;
     }
 
@@ -142,6 +170,7 @@ export async function setCachedPlan(
     plan,
     createdAt: now,
     expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
+    schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
   });
   console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
 }

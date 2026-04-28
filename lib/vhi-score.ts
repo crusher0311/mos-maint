@@ -140,6 +140,10 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
     source: item.source ?? null,
     dviSource: item.dviSource ?? null,
     declined: !!item.declined,
+    action: item.action ?? null,
+    notes: item.notes ?? null,
+    recommendedDefault: !!item.recommendedDefault,
+    recommendedReason: item.recommendedReason ?? null,
     progress,
     iconStatus,
     iconSvg: includeIconSvg ? getStatusIconSvg(iconStatus) : null,
@@ -259,5 +263,9 @@ function convertRecToTriaged(rec: any): TriagedItemCache {
     bump: rec.bump || null,
     source: rec.source === "shop" ? "oem" : rec.source === "oe" ? "oem" : rec.source === "dvi" ? "dvi" : "oem",
     dviSource: rec.dviSource || undefined,
+    action: rec.action ?? null,
+    notes: rec.notes ?? null,
+    recommendedDefault: !!rec.recommendedDefault,
+    recommendedReason: rec.recommendedReason ?? null,
   };
 }
