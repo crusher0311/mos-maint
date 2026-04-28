@@ -5,11 +5,21 @@ import {
   HIGH_BACKOFF_AVG_MS,
   LOW_CACHE_HIT_RATE,
   LOW_CACHE_MIN_LOOKUPS,
+  MIN_CHUNK_SAMPLES,
+  P95_BASELINE_LOOKBACK,
+  P95_BASELINE_MIN_SAMPLES,
+  P95_HISTORY_CAP,
+  P95_REGRESSION_MULTIPLIER,
+  P95_REGRESSION_NOISE_FLOOR_MS,
+  P95Snapshot,
   PROVIDERS,
+  ProviderKey,
   SLOW_P95_THRESHOLD_MS,
   SlowShop,
+  appendP95Snapshot,
   classifyDedup,
   evaluateShop,
+  summarize,
 } from "./lib";
 
 export const runtime = "nodejs";
@@ -22,9 +32,21 @@ export const dynamic = "force-dynamic";
  * (`recentChunkMetrics` on each provider's progress row) and pages on-call
  * when a shop's chunk metrics breach a threshold:
  *   - slow_p95         — p95 chunk wall-clock > SLOW_P95_THRESHOLD_MS
+ *   - regressed_p95    — current p95 > P95_REGRESSION_MULTIPLIER × the
+ *                        shop's own rolling baseline (median of the prior
+ *                        daily p95 snapshots) AND current p95 above the
+ *                        noise floor. Catches "1m → 8m" regressions that
+ *                        the absolute slow_p95 threshold would miss.
  *   - high_backoff     — average per-chunk 429 backoff > HIGH_BACKOFF_AVG_MS
  *   - low_cache_hit    — any cache (jobs/vehicles/customers) hit rate
  *                        is below LOW_CACHE_HIT_RATE on a meaningful sample
+ *
+ * The relative regression rule needs day-over-day history. Each cron run
+ * snapshots every in-flight shop's current p95 into the
+ * `backfill_chunk_p95_history` Mongo collection (one row per
+ * provider+shop, capped at P95_HISTORY_CAP entries). The history is kept
+ * in a *separate* collection from the alert dedup rows because the alert
+ * rows auto-delete on recovery — the baseline must survive that.
  *
  * Covers all three providers (Tekmetric, Protractor, Shop-Ware). The
  * `tekmetric-backfill-health` cron previously inlined a slow_chunk_p95 reason
@@ -131,13 +153,94 @@ export async function GET(req: NextRequest) {
     shopNamesById.set(Number(s.shopId), display);
   }
 
-  // Evaluate every (provider, shop) pair.
+  // Load the per-shop p95 snapshot history that powers the relative
+  // `regressed_p95` rule. Lives in a *separate* collection because the
+  // alerts collection below auto-deletes rows on recovery — we must not
+  // lose the rolling baseline when a shop briefly clears its alert.
+  const p95HistoryCollection = db.collection("backfill_chunk_p95_history");
+  await p95HistoryCollection
+    .createIndex(
+      { provider: 1, shopId: 1 },
+      { unique: true, name: "uniq_provider_shopId" },
+    )
+    .catch(() => {});
+  const historyDocs = await p95HistoryCollection.find({}).toArray();
+  const historyByKey = new Map<string, P95Snapshot[]>();
+  for (const d of historyDocs as any[]) {
+    const raw: any[] = Array.isArray(d.history) ? d.history : [];
+    const parsed: P95Snapshot[] = raw
+      .map((h) => ({
+        at: new Date(h.at),
+        p95Ms: Number(h.p95Ms),
+        sampleCount: Number(h.sampleCount || 0),
+      }))
+      .filter((h) => !Number.isNaN(h.at.getTime()) && Number.isFinite(h.p95Ms))
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+    historyByKey.set(`${d.provider}:${Number(d.shopId)}`, parsed);
+  }
+
+  const now = new Date();
+
+  // Evaluate every (provider, shop) pair, and along the way collect the
+  // updated p95 history we'll persist back. We snapshot *every* in-flight
+  // shop with a usable p95 (not just breaching ones) so the baseline is
+  // continuously refreshed, mirroring the perm-failed RO countHistory
+  // pattern.
   const slow: SlowShop[] = [];
+  const historyUpdates: Array<{
+    provider: ProviderKey;
+    shopId: number;
+    history: P95Snapshot[];
+  }> = [];
   for (const { provider, rows } of providerRows) {
     for (const row of rows as any[]) {
-      const result = evaluateShop(provider, row, shopNamesById);
+      const shopId = Number(row.shopId);
+      const key = `${provider.key}:${shopId}`;
+      const priorHistory = historyByKey.get(key) ?? [];
+
+      const result = evaluateShop(provider, row, shopNamesById, priorHistory);
       if (result) slow.push(result);
+
+      // Independently compute the rollup so we can snapshot p95 even for
+      // shops that aren't currently breaching. evaluateShop short-circuits
+      // on completed shops, so we mirror that here.
+      if (row.completed) continue;
+      const rollup = summarize(row.recentChunkMetrics);
+      if (
+        rollup &&
+        rollup.chunkSampleCount >= MIN_CHUNK_SAMPLES &&
+        rollup.p95DurationMs != null &&
+        Number.isFinite(rollup.p95DurationMs)
+      ) {
+        const updated = appendP95Snapshot(priorHistory, {
+          at: now,
+          p95Ms: rollup.p95DurationMs,
+          sampleCount: rollup.chunkSampleCount,
+        });
+        historyUpdates.push({ provider: provider.key, shopId, history: updated });
+      }
     }
+  }
+
+  // Persist updated p95 history. Bulk-write keeps Mongo round-trips bounded
+  // even when hundreds of shops produce snapshots.
+  if (historyUpdates.length > 0) {
+    await p95HistoryCollection.bulkWrite(
+      historyUpdates.map((u) => ({
+        updateOne: {
+          filter: { provider: u.provider, shopId: u.shopId },
+          update: {
+            $set: {
+              provider: u.provider,
+              shopId: u.shopId,
+              history: u.history,
+              lastSnapshotAt: now,
+            },
+          },
+          upsert: true,
+        },
+      })),
+    );
   }
 
   // State-based dedup, keyed on (provider, shopId). Re-alert only on first
@@ -308,13 +411,23 @@ export async function GET(req: NextRequest) {
       const rows = toAlert
         .map((s) => {
           const isNew = newlySlow.includes(s);
+          // For shops that tripped the relative regression rule, show the
+          // baseline and the multiplier inline with the p95 cell so on-call
+          // can see at a glance how far the shop has degraded — the whole
+          // point of the rule is that the absolute number alone might not
+          // look alarming yet.
+          const p95Cell =
+            s.p95Baseline != null && s.rollup.p95DurationMs != null
+              ? `${formatMs(s.rollup.p95DurationMs)} (n=${s.rollup.chunkSampleCount}, ` +
+                `${(s.rollup.p95DurationMs / s.p95Baseline).toFixed(1)}× baseline ${formatMs(s.p95Baseline)})`
+              : `${formatMs(s.rollup.p95DurationMs)} (n=${s.rollup.chunkSampleCount})`;
           return `
         <tr>
           <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.providerLabel)}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.name)}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${s.shopId}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.reasons.join(", "))}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${formatMs(s.rollup.p95DurationMs)} (n=${s.rollup.chunkSampleCount})</td>
+          <td style="padding:6px 12px;border:1px solid #ddd">${p95Cell}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${formatMs(s.rollup.avgBackoff429Ms)}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${formatRate(s.rollup.jobsCacheHitRate, s.rollup.jobsCacheTotal)}</td>
           <td style="padding:6px 12px;border:1px solid #ddd">${formatRate(s.rollup.vehiclesCacheHitRate, s.rollup.vehiclesCacheTotal)}</td>
@@ -329,6 +442,9 @@ export async function GET(req: NextRequest) {
           <p>${toAlert.length} shop(s) breached a chunk-speed threshold. Total currently breaching: <strong>${slow.length}</strong>.</p>
           <p>Reasons:
             <code>slow_p95</code> = p95 chunk wall-clock &gt; ${SLOW_P95_THRESHOLD_MS / 60000}m ·
+            <code>regressed_p95</code> = p95 &gt; ${P95_REGRESSION_MULTIPLIER}× rolling baseline
+            (median of the last ${P95_BASELINE_LOOKBACK} daily snapshots, min ${P95_BASELINE_MIN_SAMPLES}),
+            with current p95 also &gt; ${P95_REGRESSION_NOISE_FLOOR_MS / 60000}m ·
             <code>high_backoff</code> = avg per-chunk 429 backoff &gt; ${HIGH_BACKOFF_AVG_MS / 1000}s ·
             <code>low_jobs_cache</code> / <code>low_vehicles_cache</code> / <code>low_customers_cache</code>
             = cache hit rate &lt; ${(LOW_CACHE_HIT_RATE * 100).toFixed(0)}%
@@ -479,7 +595,8 @@ export async function GET(req: NextRequest) {
       `shopware=${shopwareRows.length} breaching=${slow.length} ` +
       `newAlerts=${newlySlow.length} reasonsChanged=${reasonsChanged.length} ` +
       `resolved=${resolved.length} emailed=${emailed} ` +
-      `tekmetricRecoveries=${tekmetricRecoveries.length} recoveryEmailed=${recoveryEmailed}`,
+      `tekmetricRecoveries=${tekmetricRecoveries.length} recoveryEmailed=${recoveryEmailed} ` +
+      `p95Snapshots=${historyUpdates.length} historyCap=${P95_HISTORY_CAP}`,
   );
 
   return NextResponse.json({
@@ -501,12 +618,14 @@ export async function GET(req: NextRequest) {
       transition: r.transition,
     })),
     recoveryEmailed,
+    p95Snapshots: historyUpdates.length,
     breachingShops: slow.map((s) => ({
       provider: s.provider,
       shopId: s.shopId,
       name: s.name,
       reasons: s.reasons,
       p95DurationMs: s.rollup.p95DurationMs,
+      p95BaselineMs: s.p95Baseline,
       avgBackoff429Ms: s.rollup.avgBackoff429Ms,
       chunkSampleCount: s.rollup.chunkSampleCount,
       jobsCacheHitRate: s.rollup.jobsCacheHitRate,

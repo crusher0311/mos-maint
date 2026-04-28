@@ -40,6 +40,36 @@ export const LOW_CACHE_MIN_LOOKUPS = 50;
 // meaningful without blocking detection on shops that are still ramping up.
 export const MIN_CHUNK_SAMPLES = 3;
 
+// --- Relative p95 regression detection ----------------------------------
+// The absolute `slow_p95` rule above only fires once a shop's p95 crosses
+// 10 minutes. A shop that climbs from 1m to 8m has degraded 8× but stays
+// silent — yet that's a real regression worth catching before it crosses
+// 10m and starts losing the race with the daily cron cadence.
+//
+// The relative rule pages when a shop's current p95 is at least
+// `P95_REGRESSION_MULTIPLIER` times its own rolling baseline (median of the
+// prior runs' p95 snapshots). It only fires once the current p95 is also
+// meaningfully above background noise (`P95_REGRESSION_NOISE_FLOOR_MS`),
+// otherwise a shop whose baseline is 5s would page on a 20s blip.
+//
+// Snapshot history is persisted day-over-day in a separate Mongo collection
+// (`backfill_chunk_p95_history`) so it survives the alert collection's
+// auto-clear-on-resolve behaviour. The pattern mirrors `countHistory` on
+// the perm-failed RO alerts.
+export const P95_REGRESSION_MULTIPLIER = 3;
+export const P95_REGRESSION_NOISE_FLOOR_MS = 2 * 60 * 1000;
+// History cap (~2 weeks at one run/day). Bounded storage; older snapshots
+// stop influencing the median anyway because of the lookback window.
+export const P95_HISTORY_CAP = 14;
+// Baseline = median of up to the last N prior snapshots. One week of
+// recent runs gives the median enough signal to be stable while still
+// reflecting the shop's "current normal" rather than ancient history.
+export const P95_BASELINE_LOOKBACK = 7;
+// Need at least this many prior snapshots before we trust the median.
+// With 1–2 prior runs the "median" would be unstable and could fire on
+// random noise. Three matches the chunk-sample floor used elsewhere.
+export const P95_BASELINE_MIN_SAMPLES = 3;
+
 export type ProviderKey = "tekmetric" | "protractor" | "shopware";
 
 export type ProviderConfig = {
@@ -74,6 +104,22 @@ export type SlowShop = {
   reasons: string[];
   reasonsKey: string;
   rollup: ChunkRollup;
+  // Set only when the `regressed_p95` reason fires. Carries the shop's own
+  // rolling baseline (median of prior p95 snapshots) so the alert payload
+  // can show "current p95 = 8m, baseline = 1.5m, 5.3× regression".
+  p95Baseline: number | null;
+};
+
+/**
+ * Per-shop p95 snapshot persisted day-over-day in
+ * `backfill_chunk_p95_history`. One entry per cron run, capped at
+ * P95_HISTORY_CAP. Used to compute the rolling baseline that powers the
+ * relative `regressed_p95` rule.
+ */
+export type P95Snapshot = {
+  at: Date;
+  p95Ms: number;
+  sampleCount: number;
 };
 
 // Inclusive percentile from a sorted-ascending array. Matches the
@@ -136,10 +182,50 @@ export function summarize(recent: any[]): ChunkRollup | null {
   };
 }
 
+/**
+ * Compute the shop's rolling baseline p95 from prior snapshots.
+ *
+ * Returns the median of the last `P95_BASELINE_LOOKBACK` snapshots so
+ * recent runs dominate (a shop's "current normal" can shift over time
+ * as load patterns and cache warmth evolve). Returns `null` when there
+ * aren't enough samples — the regression rule must not fire on a thin
+ * baseline because the median would be unstable.
+ *
+ * History is expected sorted ascending by `at`; callers that read from
+ * Mongo should sort first to be safe. Snapshots with non-finite p95Ms
+ * are dropped defensively.
+ */
+export function computeP95Baseline(history: P95Snapshot[]): number | null {
+  const window = history
+    .slice(-P95_BASELINE_LOOKBACK)
+    .map((h) => h.p95Ms)
+    .filter((v) => Number.isFinite(v));
+  if (window.length < P95_BASELINE_MIN_SAMPLES) return null;
+  const sorted = [...window].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
+/**
+ * Append the latest p95 snapshot to the shop's history and trim to the
+ * cap. Snapshots are immutable; older entries are dropped from the front
+ * once the cap is reached. Returns a new array (never mutates input).
+ */
+export function appendP95Snapshot(
+  history: P95Snapshot[],
+  snapshot: P95Snapshot,
+): P95Snapshot[] {
+  return [...history, snapshot].slice(-P95_HISTORY_CAP);
+}
+
 export function evaluateShop(
   provider: ProviderConfig,
   progressRow: any,
   shopNamesById: Map<number, string>,
+  priorP95History: P95Snapshot[] = [],
 ): SlowShop | null {
   // Only evaluate in-flight shops. A completed shop legitimately stops
   // running and its stale roll-up isn't actionable.
@@ -156,6 +242,30 @@ export function evaluateShop(
     rollup.p95DurationMs > SLOW_P95_THRESHOLD_MS
   ) {
     reasons.push("slow_p95");
+  }
+
+  // Relative regression check: page when p95 has degraded sharply against
+  // the shop's own rolling baseline. Gated by the same chunk-sample floor
+  // as slow_p95 (so a thin window of measurements can't mis-fire) and by
+  // a noise floor so a baseline of seconds doesn't trigger on the next
+  // run's seconds-ish blip. Carries `p95Baseline` on the result so the
+  // alert payload can show both the current p95 and the baseline it
+  // regressed from.
+  let p95Baseline: number | null = null;
+  if (
+    rollup.chunkSampleCount >= MIN_CHUNK_SAMPLES &&
+    rollup.p95DurationMs != null &&
+    rollup.p95DurationMs > P95_REGRESSION_NOISE_FLOOR_MS
+  ) {
+    const baseline = computeP95Baseline(priorP95History);
+    if (
+      baseline != null &&
+      baseline > 0 &&
+      rollup.p95DurationMs > P95_REGRESSION_MULTIPLIER * baseline
+    ) {
+      reasons.push("regressed_p95");
+      p95Baseline = baseline;
+    }
   }
 
   if (
@@ -203,6 +313,7 @@ export function evaluateShop(
     reasons,
     reasonsKey: [...reasons].sort().join(","),
     rollup,
+    p95Baseline,
   };
 }
 

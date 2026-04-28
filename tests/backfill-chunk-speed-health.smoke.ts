@@ -23,11 +23,19 @@ import {
   LOW_CACHE_HIT_RATE,
   LOW_CACHE_MIN_LOOKUPS,
   MIN_CHUNK_SAMPLES,
+  P95_BASELINE_LOOKBACK,
+  P95_BASELINE_MIN_SAMPLES,
+  P95_HISTORY_CAP,
+  P95_REGRESSION_MULTIPLIER,
+  P95_REGRESSION_NOISE_FLOOR_MS,
+  P95Snapshot,
   PROVIDERS,
   ProviderConfig,
   SLOW_P95_THRESHOLD_MS,
   SlowShop,
+  appendP95Snapshot,
   classifyDedup,
+  computeP95Baseline,
   evaluateShop,
 } from "../app/api/cron/backfill-chunk-speed-health/lib";
 
@@ -309,6 +317,7 @@ async function run() {
         customersCacheHitRate: 1,
         customersCacheTotal: 100,
       },
+      p95Baseline: null,
     };
   }
 
@@ -419,6 +428,189 @@ async function run() {
     ok(
       "existing shopId stored as string still matches",
       c.unchanged.length === 1 && c.newlySlow.length === 0 && c.resolved.length === 0,
+    );
+  }
+
+  // ---- p95 regression rule -----------------------------------------
+
+  function snapshots(p95Values: number[]): P95Snapshot[] {
+    // Stable ascending timestamps so the helper's sort is a no-op.
+    return p95Values.map((p95Ms, i) => ({
+      at: new Date(2026, 0, 1 + i),
+      p95Ms,
+      sampleCount: 5,
+    }));
+  }
+
+  // (16) computeP95Baseline: too few snapshots returns null
+  {
+    ok(
+      "baseline null when below MIN_SAMPLES",
+      computeP95Baseline(snapshots(Array(P95_BASELINE_MIN_SAMPLES - 1).fill(60_000))) === null,
+    );
+  }
+
+  // (17) computeP95Baseline: exact median for odd count
+  {
+    const baseline = computeP95Baseline(snapshots([10, 20, 30]));
+    ok("baseline = median (odd count)", baseline === 20);
+  }
+
+  // (18) computeP95Baseline: average of two middles for even count
+  {
+    const baseline = computeP95Baseline(snapshots([10, 20, 30, 40]));
+    ok("baseline = avg of middles (even count)", baseline === 25);
+  }
+
+  // (19) computeP95Baseline: only the most recent LOOKBACK snapshots count
+  {
+    // 1 ancient huge snapshot followed by LOOKBACK low ones — the ancient
+    // value must be excluded from the median window.
+    const hist = snapshots([
+      9_999_999,
+      ...Array(P95_BASELINE_LOOKBACK).fill(60_000),
+    ]);
+    ok(
+      "baseline ignores entries beyond LOOKBACK window",
+      computeP95Baseline(hist) === 60_000,
+    );
+  }
+
+  // (20) appendP95Snapshot: trims to cap (oldest dropped)
+  {
+    const seed = snapshots(Array.from({ length: P95_HISTORY_CAP }, (_, i) => i));
+    const updated = appendP95Snapshot(seed, {
+      at: new Date(2030, 0, 1),
+      p95Ms: 9999,
+      sampleCount: 5,
+    });
+    ok("appendP95Snapshot caps length at P95_HISTORY_CAP", updated.length === P95_HISTORY_CAP);
+    ok("appendP95Snapshot keeps newest entry", updated[updated.length - 1].p95Ms === 9999);
+    ok(
+      "appendP95Snapshot drops oldest entry when capped",
+      updated[0].p95Ms === 1,
+    );
+  }
+
+  // (21) regressed_p95 fires when current p95 > MULTIPLIER × baseline AND
+  //      above noise floor, even when well below the absolute slow_p95 limit.
+  {
+    // Baseline median = 1m. Current = 5m → 5×, above the 2m noise floor,
+    // and below the 10m absolute slow_p95 limit (so this is the case the
+    // task brief explicitly targets).
+    const baseMs = 60_000;
+    const currentMs = 5 * 60_000;
+    const hist = snapshots(Array(P95_BASELINE_MIN_SAMPLES).fill(baseMs));
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: currentMs })),
+      NAMES,
+      hist,
+    );
+    ok(
+      "regressed_p95 fires when p95 climbs sharply against own baseline",
+      r?.reasons.includes("regressed_p95") === true,
+    );
+    ok(
+      "regressed_p95 alone does NOT also trigger slow_p95 below absolute limit",
+      r?.reasonsKey === "regressed_p95",
+    );
+    ok(
+      "regressed_p95 carries the baseline value used",
+      r?.p95Baseline === baseMs,
+    );
+    ok(
+      "evaluateShop carries current p95 in rollup",
+      r?.rollup.p95DurationMs === currentMs,
+    );
+  }
+
+  // (22) regressed_p95 does NOT fire when current p95 is below the noise floor
+  {
+    const baseMs = 1_000;
+    const currentMs = P95_REGRESSION_NOISE_FLOOR_MS - 1;
+    const hist = snapshots(Array(P95_BASELINE_MIN_SAMPLES).fill(baseMs));
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: currentMs })),
+      NAMES,
+      hist,
+    );
+    ok(
+      "regressed_p95 gated by noise floor (no fire near zero baseline)",
+      r === null,
+    );
+  }
+
+  // (23) regressed_p95 does NOT fire without enough history
+  {
+    const baseMs = 60_000;
+    const currentMs = 10 * 60_000; // 10× baseline, way over noise floor
+    const hist = snapshots(Array(P95_BASELINE_MIN_SAMPLES - 1).fill(baseMs));
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: currentMs })),
+      NAMES,
+      hist,
+    );
+    ok(
+      "regressed_p95 not fired when history is too thin",
+      r?.reasons.includes("regressed_p95") !== true,
+    );
+  }
+
+  // (24) regressed_p95 does NOT fire when current p95 is exactly MULTIPLIER × baseline
+  {
+    const baseMs = P95_REGRESSION_NOISE_FLOOR_MS; // 2m baseline so noise floor passes
+    const currentMs = baseMs * P95_REGRESSION_MULTIPLIER; // exactly 3×
+    const hist = snapshots(Array(P95_BASELINE_MIN_SAMPLES).fill(baseMs));
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: currentMs })),
+      NAMES,
+      hist,
+    );
+    // Strict greater-than: equal-to should not fire (matches slow_p95 behaviour).
+    ok(
+      "regressed_p95 strict > MULTIPLIER × baseline (equality does not fire)",
+      r?.reasons.includes("regressed_p95") !== true,
+    );
+  }
+
+  // (25) regressed_p95 + slow_p95 fire together when current crosses both
+  //      (sorted reasonsKey lets the dedup row track the combined state).
+  {
+    const baseMs = 60_000;
+    const currentMs = SLOW_P95_THRESHOLD_MS + 1; // above absolute and >> 3× baseline
+    const hist = snapshots(Array(P95_BASELINE_MIN_SAMPLES).fill(baseMs));
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: currentMs })),
+      NAMES,
+      hist,
+    );
+    ok(
+      "regressed_p95 and slow_p95 co-fire when both rules trip",
+      r?.reasonsKey === "regressed_p95,slow_p95",
+    );
+    ok(
+      "p95Baseline still populated when both rules fire",
+      r?.p95Baseline === baseMs,
+    );
+  }
+
+  // (26) When evaluateShop is called with no history (legacy callers /
+  //      brand-new shops) it must not crash and must skip regressed_p95.
+  {
+    const r = evaluateShop(
+      TEKMETRIC,
+      row(1, chunks(MIN_CHUNK_SAMPLES, { durationMs: SLOW_P95_THRESHOLD_MS + 1 })),
+      NAMES,
+      // no history arg → defaults to []
+    );
+    ok(
+      "no history → regressed_p95 does not fire, slow_p95 still does",
+      r?.reasonsKey === "slow_p95" && r?.p95Baseline === null,
     );
   }
 
