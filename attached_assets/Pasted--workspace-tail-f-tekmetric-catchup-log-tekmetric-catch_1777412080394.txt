@@ -1,0 +1,47 @@
+~/workspace$ tail -f tekmetric-catchup-*.log
+==> tekmetric-catchup-20260428-212003.log <==
+[2026-04-28 21:27:25.242]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:27:45.270]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:28:05.298]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:28:25.330]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:28:45.358]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:29:05.386]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:29:25.414]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:29:45.443]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:30:05.472]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+[2026-04-28 21:30:25.500]    poll: cursor=2021-01-02 jobs=1218 metrics@=old complete=false
+
+==> tekmetric-catchup-20260428-212255.log <==
+>>> 1/40: shop 1
+[2026-04-28 21:22:56.513] === SHOP 1 START ===
+[2026-04-28 21:22:56.542]    chunk 1/30  before:  cursor=2021-01-02T00:00:00  jobs=1218
+[2026-04-28 21:22:56.542]    ⚠ Prod looks busy on shop 1 (prior script run fired chunk at 2026-04-28T21:20:03.974Z not yet reflected in metrics). Waiting for it to drain before firing...
+[2026-04-28 21:23:16.572]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+[2026-04-28 21:23:36.600]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+[2026-04-28 21:23:56.629]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+[2026-04-28 21:24:16.657]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+[2026-04-28 21:24:36.685]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+[2026-04-28 21:24:56.713]    drain-poll: cursor=2021-01-02 metrics@=old inProgress=undefined complete=false
+
+==> tekmetric-catchup-20260428-213137.log <==
+[2026-04-28 21:31:37.557]     shop=103  cursor=2025-07-26  jobs=461  lastErr=N
+[2026-04-28 21:31:37.557]     shop=104  cursor=2024-05-02  jobs=32  lastErr=N
+[2026-04-28 21:31:37.557]     shop=105  cursor=2025-10-24  jobs=8  lastErr=N
+[2026-04-28 21:31:37.557]     shop=106  cursor=2026-01-22  jobs=348  lastErr=N
+[2026-04-28 21:31:37.557]     shop=107  cursor=2026-01-22  jobs=1438  lastErr=N
+[2026-04-28 21:31:37.557]     shop=108  cursor=2025-10-30  jobs=4654  lastErr=N
+[2026-04-28 21:31:37.557] 
+>>> 1/38: shop 28
+[2026-04-28 21:31:37.558] === SHOP 28 START ===
+[2026-04-28 21:31:37.587]    chunk 1/30  before:  cursor=2025-07-26T23:59:59  jobs=2545
+[2026-04-28 21:31:59.313]    POST returned 200 in 21694ms (small chunk or no work)
+[2026-04-28 21:32:19.344]    poll: cursor=2021-04-28 jobs=2545 metrics@=NEW complete=false
+[2026-04-28 21:32:19.374]    chunk 1 result: advanced=true completed=false stuck=false  cursor: 2025-07-26 → 2021-04-28  jobs: 2545 → 2545  err=null
+[2026-04-28 21:32:19.404]    chunk 2/30  before:  cursor=2021-04-28T00:00:00  jobs=2545
+[2026-04-28 21:32:19.915]    POST returned 200 in 480ms (small chunk or no work)
+[2026-04-28 21:32:39.945]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false
+[2026-04-28 21:32:59.977]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false
+[2026-04-28 21:33:20.017]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false
+[2026-04-28 21:33:40.048]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false
+[2026-04-28 21:34:00.078]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false
+[2026-04-28 21:34:20.108]    poll: cursor=2021-04-28 jobs=2545 metrics@=old complete=false

@@ -59,7 +59,11 @@ const isoOrNull = (d) => (d instanceof Date ? d.toISOString() : (typeof d === "s
 
 async function listIncomplete() {
   const docs = await db.collection("tekmetric_backfill_progress")
-    .find({ complete: { $ne: true } })
+    // The cron writes legacy `completed: true` (with -ed) at app/api/cron/tekmetric-backfill/route.ts:475
+    // when a shop reaches the oldest date or has no Tekmetric link, but never
+    // sets the newer `complete: true` field that the rest of this script reads.
+    // Treat either as "done" so we don't pick up already-finished shops.
+    .find({ complete: { $ne: true }, completed: { $ne: true } })
     .project({ shopId:1, currentChunkEnd:1, totalJobsIndexed:1, lastError:1, lastRunAt:1, _id:0 })
     .toArray();
   let f = docs;
@@ -138,7 +142,7 @@ async function processShop(shopId) {
 
   for (let chunk = 1; chunk <= MAX_CHUNKS; chunk++) {
     const before = await getProgress(shopId);
-    if (before?.complete) { log(`   ✓ Shop ${shopId} already complete`); return true; }
+    if (before?.complete || before?.completed) { log(`   ✓ Shop ${shopId} already complete`); return true; }
     const beforeCursor  = isoOrNull(before?.currentChunkEnd);
     const beforeRunAt   = before?.lastRunAt ? new Date(before.lastRunAt).getTime() : 0;
     const beforeMetrics = before?.lastChunkMetrics?.at ? new Date(before.lastChunkMetrics.at).getTime() : 0;
@@ -174,8 +178,8 @@ async function processShop(shopId) {
         const now = await getProgress(shopId);
         const nowMetrics = now?.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
         const nowCursor  = isoOrNull(now?.currentChunkEnd);
-        process.stdout.write(`${ts()}    drain-poll: cursor=${nowCursor?.slice(0,10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${now?.inProgress} complete=${now?.complete}\n`);
-        if (now?.complete) { log(`   ✓ Shop ${shopId} COMPLETE during drain wait`); return true; }
+        process.stdout.write(`${ts()}    drain-poll: cursor=${nowCursor?.slice(0,10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${now?.inProgress} complete=${now?.complete || now?.completed}\n`);
+        if (now?.complete || now?.completed) { log(`   ✓ Shop ${shopId} COMPLETE during drain wait`); return true; }
         if (nowCursor !== beforeCursor || nowMetrics > beforeMetrics) {
           log(`   ✓ Drain wait satisfied — cursor advanced or metrics updated. Loop continues with fresh snapshot.`);
           chunk--; // re-snapshot at top of loop
@@ -215,7 +219,7 @@ async function processShop(shopId) {
       const nowCursor    = isoOrNull(now.currentChunkEnd);
       const nowMetricsAt = now.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
       const nowJobs      = now.totalJobsIndexed || 0;
-      const nowComplete  = !!now.complete;
+      const nowComplete  = !!(now.complete || now.completed);
 
       // Heartbeat-ish line every poll
       const elapsedSec = Math.round((Date.now() - (beforeRunAt > 0 ? beforeRunAt : Date.now())) / 1000);
