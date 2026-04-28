@@ -2,25 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
 import {
-  HIGH_BACKOFF_AVG_MS,
-  LOW_CACHE_HIT_RATE,
-  LOW_CACHE_MIN_LOOKUPS,
   MIN_CHUNK_SAMPLES,
-  P95_BASELINE_LOOKBACK,
-  P95_BASELINE_MIN_SAMPLES,
   P95_HISTORY_CAP,
-  P95_REGRESSION_MULTIPLIER,
-  P95_REGRESSION_NOISE_FLOOR_MS,
   P95Snapshot,
   PROVIDERS,
   ProviderKey,
-  SLOW_P95_THRESHOLD_MS,
   SlowShop,
   appendP95Snapshot,
   classifyDedup,
   evaluateShop,
   summarize,
 } from "./lib";
+import {
+  buildAlertEmailHtml,
+  buildAlertEmailSubject,
+  buildRecoveryEmailHtml,
+  buildRecoveryEmailSubject,
+} from "./email-html";
 
 /**
  * Test seam: the route handler dereferences `__deps.getDb` /
@@ -88,27 +86,6 @@ export const dynamic = "force-dynamic";
  * Threshold evaluation and dedup classification live in `./lib` so they can
  * be unit-tested without spinning up Mongo or Next.js.
  */
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatMs(ms: number | null): string {
-  if (ms == null) return "—";
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
-
-function formatRate(rate: number | null, total: number): string {
-  if (rate == null || total === 0) return "—";
-  return `${(rate * 100).toFixed(0)}% (n=${total})`;
-}
 
 function syncHealthUrl(): string {
   const base =
@@ -418,79 +395,18 @@ export async function GET(req: NextRequest) {
       );
     } else {
       const linkBase = syncHealthUrl();
-      const rows = toAlert
-        .map((s) => {
-          const isNew = newlySlow.includes(s);
-          // For shops that tripped the relative regression rule, show the
-          // baseline and the multiplier inline with the p95 cell so on-call
-          // can see at a glance how far the shop has degraded — the whole
-          // point of the rule is that the absolute number alone might not
-          // look alarming yet.
-          const p95Cell =
-            s.p95Baseline != null && s.rollup.p95DurationMs != null
-              ? `${formatMs(s.rollup.p95DurationMs)} (n=${s.rollup.chunkSampleCount}, ` +
-                `${(s.rollup.p95DurationMs / s.p95Baseline).toFixed(1)}× baseline ${formatMs(s.p95Baseline)})`
-              : `${formatMs(s.rollup.p95DurationMs)} (n=${s.rollup.chunkSampleCount})`;
-          return `
-        <tr>
-          <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.providerLabel)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.name)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${s.shopId}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${escapeHtml(s.reasons.join(", "))}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${p95Cell}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${formatMs(s.rollup.avgBackoff429Ms)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${formatRate(s.rollup.jobsCacheHitRate, s.rollup.jobsCacheTotal)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${formatRate(s.rollup.vehiclesCacheHitRate, s.rollup.vehiclesCacheTotal)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${formatRate(s.rollup.customersCacheHitRate, s.rollup.customersCacheTotal)}</td>
-          <td style="padding:6px 12px;border:1px solid #ddd">${isNew ? "NEW" : "REASONS CHANGED"}</td>
-        </tr>`;
-        })
-        .join("");
-      const html = `
-        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
-          <h2>Backfill Chunk-Speed Alert</h2>
-          <p>${toAlert.length} shop(s) breached a chunk-speed threshold. Total currently breaching: <strong>${slow.length}</strong>.</p>
-          <p>Reasons:
-            <code>slow_p95</code> = p95 chunk wall-clock &gt; ${SLOW_P95_THRESHOLD_MS / 60000}m ·
-            <code>regressed_p95</code> = p95 &gt; ${P95_REGRESSION_MULTIPLIER}× rolling baseline
-            (median of the last ${P95_BASELINE_LOOKBACK} daily snapshots, min ${P95_BASELINE_MIN_SAMPLES}),
-            with current p95 also &gt; ${P95_REGRESSION_NOISE_FLOOR_MS / 60000}m ·
-            <code>high_backoff</code> = avg per-chunk 429 backoff &gt; ${HIGH_BACKOFF_AVG_MS / 1000}s ·
-            <code>low_jobs_cache</code> / <code>low_vehicles_cache</code> / <code>low_customers_cache</code>
-            = cache hit rate &lt; ${(LOW_CACHE_HIT_RATE * 100).toFixed(0)}%
-            (with at least ${LOW_CACHE_MIN_LOOKUPS} lookups in the rolling window).
-          </p>
-          <p>Open the chunk-speed tables for the affected providers:
-            <a href="${linkBase}">${linkBase}</a>
-          </p>
-          <table style="border-collapse:collapse;border:1px solid #ddd">
-            <thead>
-              <tr>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Provider</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Shop</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">MOS ID</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Reasons</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">p95 chunk</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Avg backoff</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Jobs cache</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Veh cache</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Cust cache</th>
-                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Status</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <p style="margin-top:16px;color:#666;font-size:13px">
-            Sent by <code>/api/cron/backfill-chunk-speed-health</code>. Roll-up source:
-            <code>/api/admin/sync-health</code>. Already-breaching shops with unchanged reasons
-            are deduped — you'll only be re-paged when something new breaks or reasons change.
-          </p>
-        </div>`;
+      const newlySlowSet = new Set(newlySlow);
+      const html = buildAlertEmailHtml({
+        rows: toAlert.map((s) => ({ shop: s, isNew: newlySlowSet.has(s) })),
+        breachingTotal: slow.length,
+        syncHealthUrl: linkBase,
+      });
+      const subject = buildAlertEmailSubject(toAlert.length, slow.length);
       for (const admin of admins as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,
-            subject: `[MOS] Backfill chunk-speed: ${toAlert.length} shop(s) breaching (${slow.length} total)`,
+            subject,
             html,
           });
           emailed++;
@@ -543,49 +459,21 @@ export async function GET(req: NextRequest) {
       const linkBase = syncHealthUrl();
       for (const r of tekmetricRecoveries) {
         const name = shopNamesById.get(r.shopId) || `Shop ${r.shopId}`;
-        const lastP95 = formatMs(r.lastSeenP95Ms);
-        const lastSeen = r.lastSeenAt ? r.lastSeenAt.toISOString() : "—";
-        const otherReasons = r.previousReasons.filter((x) => x !== "slow_p95");
-        const isFullClear = r.transition === "auto_clear";
-        // For partial recovery the dedup row stays alive (the row was just
-        // updated to the new reasons in `reasonsChanged`); for full clear
-        // the row was deleted just above. Wording matches each case so
-        // on-call understands whether anything still needs attention.
-        const stateNote = isFullClear
-          ? `<p>The dedup row has been cleared, so the shop can re-page if it
-              slows down again.</p>`
-          : `<p>Other reasons still active: <code>${escapeHtml(
-              otherReasons.length > 0 ? otherReasons.join(", ") : "(none)",
-            )}</code>. The dedup row remains so those won't re-page; a fresh
-              <code>slow_p95</code> regression will trigger another alert.</p>`;
-        const otherReasonsBlock =
-          isFullClear && otherReasons.length > 0
-            ? `<p>Previous reasons also included:
-                <code>${escapeHtml(otherReasons.join(", "))}</code>.
-                Those cleared too in this auto-clear.</p>`
-            : "";
-        const html = `
-          <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
-            <h2>Tekmetric Slow-Chunk Recovery</h2>
-            <p><strong>${escapeHtml(name)}</strong> (MOS shop ${r.shopId})
-              has dropped back under the
-              ${SLOW_P95_THRESHOLD_MS / 60000}-minute p95 chunk threshold.</p>
-            <p>Last-seen p95 before recovery: <strong>${lastP95}</strong>
-              (observed at ${escapeHtml(lastSeen)}).</p>
-            ${otherReasonsBlock}
-            ${stateNote}
-            <p><a href="${linkBase}">${linkBase}</a></p>
-            <p style="margin-top:16px;color:#666;font-size:13px">
-              Sent by <code>/api/cron/backfill-chunk-speed-health</code>
-              on ${isFullClear ? "auto-clear of" : "slow_p95 drop in"}
-              <code>backfill_chunk_speed_alerts</code>.
-            </p>
-          </div>`;
+        const html = buildRecoveryEmailHtml({
+          shopId: r.shopId,
+          name,
+          lastSeenP95Ms: r.lastSeenP95Ms,
+          lastSeenAt: r.lastSeenAt,
+          previousReasons: r.previousReasons,
+          transition: r.transition,
+          syncHealthUrl: linkBase,
+        });
+        const subject = buildRecoveryEmailSubject(name);
         for (const admin of admins as Array<{ email: string }>) {
           try {
             await __deps.sendEmail({
               to: admin.email,
-              subject: `[MOS] Tekmetric slow-chunk recovered: ${name}`,
+              subject,
               html,
             });
             recoveryEmailed++;

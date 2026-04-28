@@ -16,6 +16,8 @@
     "test:backfill-chunk-speed-health:route": "tsx tests/backfill-chunk-speed-health.route.smoke.ts",
     "test:tekmetric-backfill-health:route": "tsx tests/tekmetric-backfill-health.route.smoke.ts",
     "test:tekmetric-webhook-health:route": "tsx tests/tekmetric-webhook-health.route.smoke.ts",
+    "test:chunk-speed-email-html": "tsx tests/chunk-speed-email-html.smoke.ts",
+    "preview:chunk-speed-alert-email": "tsx scripts/preview-chunk-speed-alert-email.ts",
     "lint:extension-gates": "node scripts/check-extension-gates.cjs",
     "test:e2e:full": "tsx tests/e2e/full-suite.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
