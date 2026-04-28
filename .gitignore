@@ -22,6 +22,7 @@ Thumbs.db
 coverage/
 .tmp/
 temp/
+tmp/
 .cache/
 
 # Env files (keep example only)
