@@ -7,6 +7,7 @@ import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTra
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
+import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/tekmetric-bulk-jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -505,6 +506,81 @@ async function backfillShopChunkInner(
   const jobsCache = new Map<number, TekmetricJob[]>();
   const limit = pLimit(pace.concurrency);
   const rosForNormalized: any[] = [];
+
+  // Bulk shop-level /jobs pre-pass (task #146). Pulls the entire chunk
+  // window's /jobs in shop-level pages of 100 (typically <50 pages for a
+  // 90d window) BEFORE the per-RO loop runs, then seeds the per-chunk
+  // in-memory `jobsCache` and the persistent `tekmetric_jobs_cache` Mongo
+  // collection. The per-RO `/jobs?repairOrderId=…` call below stays in
+  // place as a safety-net fallback for any RO whose jobs fell outside
+  // the bulk pull's updatedDate window.
+  //
+  // Per-shop gated: `tekmetric.bulkJobsPrewarm.enabled` is stamped on
+  // the shop doc by the prewarm at first-time onboarding, so by design
+  // this only runs for shops onboarded after this code shipped. Existing
+  // shops keep using the legacy per-RO path until explicitly opted in
+  // (set the field to true on the shop doc). The
+  // `TEKMETRIC_BULK_JOBS_PREWARM_ENABLED=false` env flag is a separate
+  // global kill-switch that overrides every shop to off.
+  let bulkJobsPagesFetched = 0;
+  let bulkJobsRosSeeded = 0;
+  let bulkJobsTotal = 0;
+  let bulkJobsApiCallsSaved = 0;
+  let bulkJobsCapped = false;
+  let bulkJobsErrored = false;
+  let bulkJobsEnabledForShop = false;
+  // Cheap field-projected read so we don't pay for the full shop doc on
+  // every chunk. The flag is the only thing this block needs.
+  const shopFlagDoc = await db.collection("shops").findOne(
+    { shopId: { $in: [shopId, String(shopId)] } },
+    { projection: { "tekmetric.bulkJobsPrewarm": 1 } },
+  );
+  bulkJobsEnabledForShop = isBulkJobsPrewarmEnabledForShop(shopFlagDoc);
+  if (bulkJobsEnabledForShop) {
+    try {
+      const bulk = await bulkFetchJobsByShopWindow(tekmetricShopId, {
+        updatedDateStart: startStr,
+        updatedDateEnd: endStr,
+      });
+      bulkJobsPagesFetched = bulk.pagesFetched;
+      bulkJobsTotal = bulk.totalJobs;
+      bulkJobsCapped = bulk.capped;
+      const cacheEntries: Array<{ repairOrderId: number; jobs: TekmetricJob[] }> = [];
+      for (const [roId, jobs] of bulk.jobsByRoId.entries()) {
+        const jobsArr = jobs as TekmetricJob[];
+        jobsCache.set(roId, jobsArr);
+        cacheEntries.push({ repairOrderId: roId, jobs: jobsArr });
+      }
+      bulkJobsRosSeeded = cacheEntries.length;
+      if (cacheEntries.length > 0) {
+        await bulkCacheJobs(db, cacheEntries).catch((writeErr: any) => {
+          // Mongo write hiccup shouldn't break the chunk — the in-memory
+          // cache is already seeded, so the per-RO loop still benefits.
+          // The next run will reseed Mongo via the same bulk pre-pass.
+          console.warn(
+            `[Tekmetric Backfill] Shop ${shopId}: bulk jobs cache write failed (in-memory still seeded): ${writeErr?.message || writeErr}`,
+          );
+        });
+      }
+      // API calls saved this chunk vs. the legacy per-RO shape: each
+      // bulk-seeded RO would have cost one /jobs call; the bulk path
+      // replaced that with `bulk.pagesFetched` paged shop-level calls.
+      bulkJobsApiCallsSaved = Math.max(0, bulkJobsRosSeeded - bulk.pagesFetched);
+      console.log(
+        `[Tekmetric Backfill] Shop ${shopId}: bulk jobs pre-pass — pages=${bulk.pagesFetched} ros=${bulkJobsRosSeeded} jobs=${bulk.totalJobs} ~apiCallsSaved=${bulkJobsApiCallsSaved}${bulk.capped ? " capped=true" : ""}`,
+      );
+    } catch (err: any) {
+      // Bulk pre-pass threw — the per-RO loop below will fall through to
+      // the legacy per-RO `/jobs?repairOrderId=…` calls for every RO, so
+      // the chunk still completes (just at the slower API cost). Don't
+      // mark `chunkHadError` for this — it would hold the cursor on a
+      // window that the per-RO path can still process successfully.
+      bulkJobsErrored = true;
+      console.warn(
+        `[Tekmetric Backfill] Shop ${shopId}: bulk jobs pre-pass failed; per-RO fallback will be used for this chunk: ${err?.message || err}`,
+      );
+    }
+  }
 
   while (page < totalPages && page < pace.maxPagesPerChunk) {
     const queryParams = new URLSearchParams({
@@ -1043,6 +1119,22 @@ async function backfillShopChunkInner(
     chunkHadError,
     hitPageCap,
     perRoExceptions,
+    // Bulk shop-level /jobs pre-pass metrics (task #146). Recorded
+    // per-chunk so on-call can confirm in the admin sync-health view
+    // that the bulk path is actually running and saving API calls
+    // (vs. silently falling back to per-RO calls). `bulkJobsErrored`
+    // surfaces a bulk fetch that threw — the chunk still completed
+    // via the per-RO fallback, but the metric is the signal.
+    // `bulkJobsEnabledForShop` distinguishes "bulk turned off because
+    // this is a legacy shop without the per-shop opt-in" from "bulk
+    // tried and failed".
+    bulkJobsEnabledForShop,
+    bulkJobsPagesFetched,
+    bulkJobsRosSeeded,
+    bulkJobsTotal,
+    bulkJobsApiCallsSaved,
+    bulkJobsCapped,
+    bulkJobsErrored,
   };
   // Cap the rolling window newest-first. We DO want to see slow chunks even
   // when the shop also drops ROs that run, so don't condition writes on

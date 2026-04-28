@@ -1,8 +1,13 @@
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders, getJobs } from "@/lib/tekmetric";
+import { getRepairOrders, getJobs, type TekmetricJob } from "@/lib/tekmetric";
 import { cacheJobs } from "@/lib/tekmetric-incremental-sync";
 import { maybeAlertOnPrewarmAnomalies } from "@/lib/tekmetric-jobs-prewarm-alerter";
+import {
+  bulkCacheJobs,
+  bulkFetchJobsByShopWindow,
+  isBulkJobsPrewarmEnabled,
+} from "@/lib/tekmetric-bulk-jobs";
 
 // Terminal RO statuses whose `/jobs` payloads are stable after the fact —
 // the same set the backfill consumer treats as cacheable. Anything else
@@ -54,6 +59,17 @@ export interface PrewarmJobsCacheResult {
   errors: number;
   durationMs: number;
   capped: boolean;
+  // Bulk-path metrics (task #146). `bulkPagesFetched` counts paged
+  // /jobs?shop=X&updatedDateStart=… calls actually issued; `apiCallsSaved`
+  // is the per-RO call count this run AVOIDED vs. the legacy per-RO
+  // shape (i.e. `toFetch.length - bulkPagesFetched`, floored at 0).
+  // `bulkPath` records which path actually ran for the row — `"bulk"`
+  // when the bulk shape was enabled (env kill-switch NOT set to
+  // "false") and the bulk pull succeeded, `"per-ro"` for the legacy
+  // fallback (kill-switch flipped off OR bulk pull threw).
+  bulkPath: "bulk" | "per-ro";
+  bulkPagesFetched: number;
+  apiCallsSaved: number;
 }
 
 /**
@@ -104,6 +120,9 @@ export async function prewarmTekmetricJobsCacheForOnboarding(
     errors: 0,
     durationMs: 0,
     capped: false,
+    bulkPath: "per-ro",
+    bulkPagesFetched: 0,
+    apiCallsSaved: 0,
   };
 
   console.log(
@@ -192,40 +211,121 @@ export async function prewarmTekmetricJobsCacheForOnboarding(
 
   const toFetch = terminalRoIds.filter((id) => !cachedSet.has(id));
 
-  console.log(
-    `[Tekmetric Prewarm] Shop ${shopId}: ${terminalRoIds.length} terminal RO(s) in window, ${cachedSet.size} already cached, fetching ${toFetch.length} (concurrency=${concurrency})`
-  );
+  // Bulk shop-level path (task #146). The legacy per-RO shape would issue
+  // `toFetch.length` /jobs?repairOrderId=… calls — for a fresh shop with
+  // hundreds of terminal ROs in the lookback window, that's the dominant
+  // cost of first-time history ingestion. The bulk shape pulls the same
+  // jobs in shop-level pages of 100 (typically a 20-30x reduction in API
+  // call count). The legacy per-RO path stays in place behind a kill-switch
+  // (`TEKMETRIC_BULK_JOBS_PREWARM_ENABLED=false`) so a misbehaving bulk
+  // shop can be flipped back to per-RO without a code deploy.
+  const bulkEnabled = isBulkJobsPrewarmEnabled();
+  let bulkSucceeded = false;
 
-  const limit = pLimit(concurrency);
-  await Promise.all(
-    toFetch.map((roId) =>
-      limit(async () => {
-        try {
-          const jobsResp = await getJobs(tekmetricShopId, {
-            repairOrderId: roId,
-            size: 100,
-          });
-          const jobs = jobsResp.content || [];
-          // Cache even empty arrays: an indexed terminal RO that
-          // genuinely has no jobs is still a stable answer, and the
-          // backfill consumer is set up to treat empty as a cache hit.
-          await cacheJobs(db, roId, jobs);
-          result.rosCached++;
-          result.jobsCached += jobs.length;
-        } catch (err: any) {
-          result.errors++;
-          console.warn(
-            `[Tekmetric Prewarm] Shop ${shopId}: jobs fetch failed for RO ${roId}: ${err?.message || err}`
-          );
-        }
-      })
-    )
-  );
+  if (bulkEnabled && toFetch.length > 0) {
+    console.log(
+      `[Tekmetric Prewarm] Shop ${shopId}: ${terminalRoIds.length} terminal RO(s) in window, ${cachedSet.size} already cached, bulk-fetching jobs for ${toFetch.length} RO(s) via /jobs?shop=X&updatedDateStart=…`
+    );
+    try {
+      const updatedDateEnd = new Date().toISOString();
+      const bulk = await bulkFetchJobsByShopWindow(tekmetricShopId, {
+        updatedDateStart,
+        updatedDateEnd,
+      });
+      result.bulkPath = "bulk";
+      result.bulkPagesFetched = bulk.pagesFetched;
+      // For each terminal RO we needed to fetch, write either the bulk
+      // result OR an empty array. Caching empty is correct here: the
+      // bulk pull's date filter matches the RO list filter exactly, so
+      // a terminal RO with no jobs in the bulk response truly has no
+      // jobs in the window. The backfill consumer treats empty as a
+      // cache hit; the per-RO backfill fallback is the safety net for
+      // the rare case where a job's updatedDate fell outside the
+      // window.
+      const cacheEntries: Array<{
+        repairOrderId: number;
+        jobs: TekmetricJob[];
+      }> = [];
+      let bulkRoHits = 0;
+      let totalJobs = 0;
+      for (const roId of toFetch) {
+        const jobs = bulk.jobsByRoId.get(roId) || [];
+        if (jobs.length > 0) bulkRoHits++;
+        cacheEntries.push({ repairOrderId: roId, jobs });
+        totalJobs += jobs.length;
+      }
+      try {
+        await bulkCacheJobs(db, cacheEntries);
+        result.rosCached = cacheEntries.length;
+        result.jobsCached = totalJobs;
+        // API calls saved this run vs. the legacy per-RO shape: each RO
+        // would have cost one /jobs call; the bulk path replaced that with
+        // `bulk.pagesFetched` paged shop-level calls. Floor at 0 so a
+        // very small lookback (toFetch < pages) doesn't report a negative.
+        result.apiCallsSaved = Math.max(
+          0,
+          toFetch.length - bulk.pagesFetched
+        );
+        bulkSucceeded = true;
+        console.log(
+          `[Tekmetric Prewarm] Shop ${shopId}: bulk path complete — pages=${bulk.pagesFetched} ros=${cacheEntries.length} (with-jobs=${bulkRoHits}, empty=${cacheEntries.length - bulkRoHits}) jobs=${totalJobs} ~apiCallsSaved=${result.apiCallsSaved}`
+        );
+      } catch (writeErr: any) {
+        // Mongo write failure shouldn't fall back to per-RO API calls
+        // (we already paid for the bulk fetch). Just record an error so
+        // the alerter sees it and the next run will retry.
+        result.errors++;
+        console.warn(
+          `[Tekmetric Prewarm] Shop ${shopId}: bulk cache write failed: ${writeErr?.message || writeErr}`
+        );
+        bulkSucceeded = true;
+      }
+    } catch (err: any) {
+      // Bulk fetch threw — fall through to the per-RO loop below so the
+      // shop still gets warmed (just at the slower per-RO API cost).
+      result.errors++;
+      console.warn(
+        `[Tekmetric Prewarm] Shop ${shopId}: bulk fetch failed; falling back to per-RO path: ${err?.message || err}`
+      );
+    }
+  }
+
+  if (!bulkSucceeded) {
+    console.log(
+      `[Tekmetric Prewarm] Shop ${shopId}: ${terminalRoIds.length} terminal RO(s) in window, ${cachedSet.size} already cached, fetching ${toFetch.length} per-RO (concurrency=${concurrency}, bulkEnabled=${bulkEnabled})`
+    );
+
+    const limit = pLimit(concurrency);
+    await Promise.all(
+      toFetch.map((roId) =>
+        limit(async () => {
+          try {
+            const jobsResp = await getJobs(tekmetricShopId, {
+              repairOrderId: roId,
+              size: 100,
+            });
+            const jobs = jobsResp.content || [];
+            // Cache even empty arrays: an indexed terminal RO that
+            // genuinely has no jobs is still a stable answer, and the
+            // backfill consumer is set up to treat empty as a cache hit.
+            await cacheJobs(db, roId, jobs);
+            result.rosCached++;
+            result.jobsCached += jobs.length;
+          } catch (err: any) {
+            result.errors++;
+            console.warn(
+              `[Tekmetric Prewarm] Shop ${shopId}: jobs fetch failed for RO ${roId}: ${err?.message || err}`
+            );
+          }
+        })
+      )
+    );
+  }
 
   result.durationMs = Date.now() - start;
 
   console.log(
-    `[Tekmetric Prewarm] Shop ${shopId} done: scanned=${result.rosScanned} terminal=${result.terminalRosFound} alreadyCached=${result.alreadyCached} cached=${result.rosCached} jobs=${result.jobsCached} errors=${result.errors} capped=${result.capped} ${result.durationMs}ms`
+    `[Tekmetric Prewarm] Shop ${shopId} done: scanned=${result.rosScanned} terminal=${result.terminalRosFound} alreadyCached=${result.alreadyCached} cached=${result.rosCached} jobs=${result.jobsCached} errors=${result.errors} capped=${result.capped} path=${result.bulkPath} bulkPages=${result.bulkPagesFetched} apiCallsSaved=${result.apiCallsSaved} ${result.durationMs}ms`
   );
 
   await stampShopPrewarmStatus(db, shopId, result);
@@ -272,24 +372,53 @@ async function stampShopPrewarmStatus(
   result: PrewarmJobsCacheResult
 ): Promise<void> {
   try {
+    // Per-shop opt-in for the backfill chunk's bulk pre-pass (task #146).
+    // The prewarm runs at first-time onboarding and is itself the proof
+    // that the bulk shape works on this shop, so on a successful bulk
+    // prewarm we stamp `tekmetric.bulkJobsPrewarm.enabled = true` here.
+    // The backfill cron reads this flag (via
+    // `isBulkJobsPrewarmEnabledForShop`) and only does its bulk pre-pass
+    // for shops that have it set — i.e. shops onboarded after this code
+    // shipped. Existing shops (no flag) keep using the legacy per-RO
+    // path until explicitly opted in.
+    const $set: Record<string, any> = {
+      "tekmetric.jobsCachePrewarm": {
+        completedAt: new Date(),
+        lookbackDays: result.lookbackDays,
+        rosScanned: result.rosScanned,
+        terminalRosFound: result.terminalRosFound,
+        alreadyCached: result.alreadyCached,
+        rosCached: result.rosCached,
+        jobsCached: result.jobsCached,
+        errors: result.errors,
+        capped: result.capped,
+        durationMs: result.durationMs,
+        // Bulk-path metrics (task #146). Persisted so on-call can see
+        // at a glance which path actually ran for a given shop and
+        // how many per-RO API calls the bulk shape avoided. Existing
+        // sync-health UI reads ignore these and keep working.
+        bulkPath: result.bulkPath,
+        bulkPagesFetched: result.bulkPagesFetched,
+        apiCallsSaved: result.apiCallsSaved,
+      },
+    };
+    if (result.bulkPath === "bulk" && result.errors === 0) {
+      $set["tekmetric.bulkJobsPrewarm"] = {
+        enabled: true,
+        enabledAt: new Date(),
+        // Record the prewarm result that opted this shop in so on-call
+        // can audit who turned the flag on without grepping cron logs.
+        enabledByPrewarm: {
+          pagesFetched: result.bulkPagesFetched,
+          rosCached: result.rosCached,
+          jobsCached: result.jobsCached,
+          apiCallsSaved: result.apiCallsSaved,
+        },
+      };
+    }
     await db.collection("shops").updateOne(
       { shopId: { $in: [shopId, String(shopId)] } },
-      {
-        $set: {
-          "tekmetric.jobsCachePrewarm": {
-            completedAt: new Date(),
-            lookbackDays: result.lookbackDays,
-            rosScanned: result.rosScanned,
-            terminalRosFound: result.terminalRosFound,
-            alreadyCached: result.alreadyCached,
-            rosCached: result.rosCached,
-            jobsCached: result.jobsCached,
-            errors: result.errors,
-            capped: result.capped,
-            durationMs: result.durationMs,
-          },
-        },
-      }
+      { $set }
     );
   } catch (err: any) {
     console.warn(

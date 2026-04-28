@@ -324,6 +324,40 @@ export async function getJobs(
   return tekmetricRequest(`/jobs?${queryParams}`, {}, shopId);
 }
 
+// Bulk shop-level /jobs fetch (task #146). Tekmetric's /jobs endpoint
+// accepts `shop` plus `updatedDateStart/End` (or `authorizedDateStart/End`)
+// and returns 100 jobs per page across many ROs in a single call. A shop
+// with ~25k historical jobs can therefore be pulled in ~250 paged calls
+// instead of one-call-per-RO (typical 20-30x reduction). The shape mirrors
+// `getRepairOrders` so callers can iterate the same way. Each returned
+// `TekmetricJob` carries `repairOrderId` so the caller can group by RO
+// and seed `tekmetric_jobs_cache`.
+export async function getJobsByShopWindow(
+  shopId: number,
+  params: {
+    page?: number;
+    size?: number;
+    updatedDateStart?: string;
+    updatedDateEnd?: string;
+    authorizedDateStart?: string;
+    authorizedDateEnd?: string;
+    sort?: string;
+    sortDirection?: 'ASC' | 'DESC';
+  } = {}
+): Promise<PaginatedResponse<TekmetricJob>> {
+  const queryParams = new URLSearchParams({ shop: shopId.toString() });
+  if (params.page !== undefined) queryParams.set('page', params.page.toString());
+  if (params.size !== undefined) queryParams.set('size', params.size.toString());
+  if (params.updatedDateStart) queryParams.set('updatedDateStart', params.updatedDateStart);
+  if (params.updatedDateEnd) queryParams.set('updatedDateEnd', params.updatedDateEnd);
+  if (params.authorizedDateStart) queryParams.set('authorizedDateStart', params.authorizedDateStart);
+  if (params.authorizedDateEnd) queryParams.set('authorizedDateEnd', params.authorizedDateEnd);
+  if (params.sort) queryParams.set('sort', params.sort);
+  if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+
+  return tekmetricRequest(`/jobs?${queryParams}`, {}, shopId);
+}
+
 export async function getCannedJobs(
   shopId: number,
   params: {
