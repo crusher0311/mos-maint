@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import OilDutyToggle from "@/components/plan/OilDutyToggle";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
 import { 
@@ -12,6 +13,16 @@ import {
   estimateMileageFromCarfax
 } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
+import {
+  type EngineProfile,
+  type EngineRiskResult,
+  classifyEngineRisk,
+  loadEngineRiskOverrides,
+  OIL_INTERVAL_RISK_THRESHOLD_MILES,
+  SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+  SAFETY_CHECK_OIL_LEVEL_KEY,
+  SAFETY_CHECK_OIL_LEVEL_TITLE,
+} from "@/lib/engine-risk";
 import { getVehicleRecallsLocal, getEnhancedVehicleDataLocal, type VehicleRecall } from "@/lib/integrations/dataone-local";
 import {
   resolveProtractorConfig,
@@ -313,6 +324,11 @@ type OEMItem = {
   miles?: number | null;
   months?: number | null;
   intervals?: Array<{ units?: string | null; value?: number | null }>;
+  // Task #166: duty-cycle aware intervals from DataOne.
+  intervalMilesNormal?: number | null;
+  intervalMonthsNormal?: number | null;
+  intervalMilesSevere?: number | null;
+  intervalMonthsSevere?: number | null;
 };
 type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
 
@@ -574,6 +590,14 @@ type TriagedItem = {
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  // Task #166: engine-aware oil interval metadata.
+  engineRiskFlag?: boolean;
+  engineRiskReason?: string | null;
+  intervalSchedule?: "severe" | "normal" | null;
+  intervalMilesNormal?: number | null;
+  intervalMonthsNormal?: number | null;
+  intervalMilesSevere?: number | null;
+  intervalMonthsSevere?: number | null;
 };
 
 type ShopIntervalOverride = {
@@ -624,6 +648,8 @@ function triage({
   milesPerDay = null,
   shopIntervals = {},
   vehicleYear = null,
+  engineRisk = null,
+  oilDutyPreference = "severe",
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string; location?: string }>;
@@ -638,6 +664,9 @@ function triage({
   milesPerDay?: number | null;
   shopIntervals?: Record<string, ShopIntervalOverride>;
   vehicleYear?: number | null;
+  // Task #166: engine-aware oil interval inputs.
+  engineRisk?: EngineRiskResult | null;
+  oilDutyPreference?: "normal" | "severe";
 }): Buckets {
   // Earliest possible date: January 1st of the vehicle's model year (or 20 years ago as fallback)
   const earliestDate = vehicleYear 
@@ -787,12 +816,37 @@ function triage({
     // 2. Service was last performed at shop (last?.source === 'shop')
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
+    // Task #166: oil rows honour the per-vehicle Normal/Severe duty
+    // preference when the shop hasn't supplied a custom interval. Severe is
+    // the safer default and matches OEM "Severe-duty" guidance.
+    const isOilRow = serviceKey === "oil";
+    const dutyMilesNormal = o.intervalMilesNormal ?? null;
+    const dutyMilesSevere = o.intervalMilesSevere ?? null;
+    const dutyMonthsNormal = o.intervalMonthsNormal ?? null;
+    const dutyMonthsSevere = o.intervalMonthsSevere ?? null;
+    const dutyMiles = oilDutyPreference === "normal"
+      ? (dutyMilesNormal ?? dutyMilesSevere ?? null)
+      : (dutyMilesSevere ?? dutyMilesNormal ?? null);
+    const dutyMonths = oilDutyPreference === "normal"
+      ? (dutyMonthsNormal ?? dutyMonthsSevere ?? null)
+      : (dutyMonthsSevere ?? dutyMonthsNormal ?? null);
+
     let intervalMiles = usingShopInterval && shopOverride.miles != null
       ? shopOverride.miles
-      : (o.miles ?? null);
+      : (isOilRow && dutyMiles != null ? dutyMiles : (o.miles ?? null));
     let intervalMonths = usingShopInterval && shopOverride.months != null
       ? shopOverride.months
-      : (o.months ?? null);
+      : (isOilRow && dutyMonths != null ? dutyMonths : (o.months ?? null));
+
+    const oilEngineRiskFlag = !!(
+      isOilRow &&
+      engineRisk?.flagged &&
+      intervalMiles != null &&
+      intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+    );
+    const oilEngineRiskReason = oilEngineRiskFlag
+      ? (engineRisk?.reasons?.[0] ?? "Engine flagged for accelerated oil wear.")
+      : null;
 
     // Lifetime-fluid handling: when the OE source has no actionable
     // interval but lists this fluid as "lifetime" / "fill for life", surface a
@@ -924,7 +978,53 @@ function triage({
       // (which would render again as the gray italic pill).
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      // Task #166: surface engine-aware oil metadata so the dashboard can
+      // render the soft warning chip and remember which schedule was used.
+      engineRiskFlag: oilEngineRiskFlag || undefined,
+      engineRiskReason: oilEngineRiskReason,
+      intervalSchedule: isOilRow
+        ? (oilDutyPreference === "normal" ? "normal" : "severe")
+        : null,
+      intervalMilesNormal: isOilRow ? dutyMilesNormal : null,
+      intervalMonthsNormal: isOilRow ? dutyMonthsNormal : null,
+      intervalMilesSevere: isOilRow ? dutyMilesSevere : null,
+      intervalMonthsSevere: isOilRow ? dutyMonthsSevere : null,
     });
+  }
+
+  // Task #166: when an oil row exists, anchor an interim "Safety Check —
+  // oil level" item at SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES (3,000 mi) off
+  // the oil's lastPerformed mileage. This protects vehicles running long
+  // synthetic intervals from running low between scheduled changes.
+  const oilTriaged = triaged.find((t) => t.serviceKey === "oil");
+  if (oilTriaged && !usedServiceKeys.has(SAFETY_CHECK_OIL_LEVEL_KEY)) {
+    const oilLastMiles = oilTriaged.last?.miles ?? null;
+    const safetyDueAtMiles = oilLastMiles != null
+      ? oilLastMiles + SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES
+      : (currentMiles != null ? currentMiles + SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES : null);
+    const safetyMilesToGo =
+      currentMiles != null && safetyDueAtMiles != null
+        ? safetyDueAtMiles - currentMiles
+        : null;
+    triaged.push({
+      key: `oem_${SAFETY_CHECK_OIL_LEVEL_KEY}`,
+      serviceKey: SAFETY_CHECK_OIL_LEVEL_KEY,
+      title: SAFETY_CHECK_OIL_LEVEL_TITLE,
+      category: "Safety Check",
+      intervalMiles: SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+      intervalMonths: null,
+      last: oilTriaged.last,
+      dueAtMiles: safetyDueAtMiles,
+      dueAtDate: null,
+      milesToGo: safetyMilesToGo,
+      daysToGo: null,
+      bump: null,
+      source: "oem",
+      reason: "Interim safety check anchored to oil change history.",
+      recommendedDefault: true,
+      recommendedReason: "Auto-inserted by Detect Dog to verify oil level mid-interval.",
+    });
+    usedServiceKeys.add(SAFETY_CHECK_OIL_LEVEL_KEY);
   }
 
   // Add standalone DVI findings (red/yellow items not matched to OEM)
@@ -1187,7 +1287,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   const vehicle = await db.collection("vehicles").findOne(
     { shopId, vin },
-    { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1 } }
+    { projection: { year: 1, make: 1, model: 1, vin: 1, lastMileage: 1, customerId: 1, updatedAt: 1, declinedServices: 1, oilDutyPreference: 1 } }
   );
 
   // Early mileage check and cache lookup (skip cache if force refresh)
@@ -1736,6 +1836,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
     intervals: Array.isArray(x.intervals)
       ? x.intervals.map((iv: any) => ({ units: iv?.units ?? null, value: iv?.value ?? null }))
       : [],
+    // Task #166: forward duty-cycle aware intervals so the dashboard's
+    // local triage can honour the per-vehicle Normal/Severe preference.
+    intervalMilesNormal: x.intervalMilesNormal ?? null,
+    intervalMonthsNormal: x.intervalMonthsNormal ?? null,
+    intervalMilesSevere: x.intervalMilesSevere ?? null,
+    intervalMonthsSevere: x.intervalMonthsSevere ?? null,
   }));
 
   // Debug: Log what data we have
@@ -1768,6 +1874,33 @@ async function PlanContent({ params, searchParams }: PageProps) {
     const title = item.title?.toLowerCase() || "";
     return title.includes("inspect") || title.startsWith("check ");
   };
+
+  // Task #166: classify the engine for oil-interval risk so the dashboard's
+  // local triage can flag long intervals on at-risk engines and the soft
+  // warning chip surfaces consistently with the extension.
+  const oilDutyPreference: "normal" | "severe" =
+    vehicle?.oilDutyPreference === "normal" ? "normal" : "severe";
+  const dataoneVehicleProfile: any = oemData?.vehicle ?? {};
+  const engineProfile: EngineProfile = {
+    engine_name: dataoneVehicleProfile.engine ?? null,
+    engine_size: typeof dataoneVehicleProfile.engine_size === "number" ? dataoneVehicleProfile.engine_size : null,
+    engine_block: dataoneVehicleProfile.engine_block ?? null,
+    engine_cylinders: typeof dataoneVehicleProfile.engine_cylinders === "number" ? dataoneVehicleProfile.engine_cylinders : null,
+    engine_induction: dataoneVehicleProfile.engine_induction ?? null,
+    engine_aspiration: dataoneVehicleProfile.engine_aspiration ?? null,
+    fuel_type: dataoneVehicleProfile.fuel_type ?? null,
+    make: vehicleMake ?? null,
+    model: vehicleModel ?? null,
+    year: vehicleYear ?? null,
+  };
+  let engineRisk: EngineRiskResult | null = null;
+  try {
+    const overrides = await loadEngineRiskOverrides(db);
+    engineRisk = classifyEngineRisk(engineProfile, overrides);
+  } catch (err) {
+    console.warn(`[Plan] engine-risk classification failed for ${vin}:`, err);
+    engineRisk = null;
+  }
 
   // Use cached buckets if available, otherwise build from triage
   let buckets: Buckets;
@@ -1850,6 +1983,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
       milesPerDay: mpdBlended,
       shopIntervals,
       vehicleYear: vehicle?.year ?? null,
+      engineRisk,
+      oilDutyPreference,
     });
 
     buckets = showInspectItems ? rawBuckets : {
@@ -1925,6 +2060,15 @@ async function PlanContent({ params, searchParams }: PageProps) {
       matchedDeferred: item.matchedDeferred,
       action: item.action ?? null,
       notes: item.notes ?? null,
+      // Task #166: persist engine-aware metadata so cached plans render
+      // the soft warning chip and remember which duty schedule was used.
+      engineRiskFlag: item.engineRiskFlag,
+      engineRiskReason: item.engineRiskReason ?? null,
+      intervalSchedule: item.intervalSchedule ?? null,
+      intervalMilesNormal: item.intervalMilesNormal ?? null,
+      intervalMonthsNormal: item.intervalMonthsNormal ?? null,
+      intervalMilesSevere: item.intervalMilesSevere ?? null,
+      intervalMonthsSevere: item.intervalMonthsSevere ?? null,
       recommendedDefault: item.recommendedDefault,
       recommendedReason: item.recommendedReason ?? null,
     });
@@ -1949,6 +2093,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
       soonMiles,
       soonDays,
       showInspectItems,
+      // Task #166: persist classifier output and active duty preference so
+      // cached reads keep the chip + interval choice in sync.
+      engineRisk: engineRisk
+        ? {
+            flagged: engineRisk.flagged,
+            reasons: engineRisk.reasons ?? [],
+            source: engineRisk.source,
+            matchedOverrideId: engineRisk.matchedOverrideId ?? null,
+            matchedOverrideLabel: engineRisk.matchedOverrideLabel ?? null,
+          }
+        : undefined,
+      oilDutyPreference,
     };
     
     setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {
@@ -2015,6 +2171,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             </div>
 
             <div className="flex items-center gap-3">
+              <OilDutyToggle vin={vin} initialPreference={vehicle?.oilDutyPreference === "normal" ? "normal" : "severe"} />
               <ShareReportButton vin={vin} />
               <PrintButton />
               <nav className="flex items-center gap-2 text-xs sm:text-sm print:hidden">
@@ -2224,6 +2381,22 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
+                          </span>
+                        )}
+                        {t.engineRiskFlag && (
+                          <span
+                            className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 inline-flex items-center gap-1"
+                            title={t.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                          >
+                            ⚠ Engine flagged — long oil interval
+                          </span>
+                        )}
+                        {t.recommendedDefault && (
+                          <span
+                            className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
+                            title={t.recommendedReason ?? undefined}
+                          >
+                            Shop recommendation
                           </span>
                         )}
                         {t.bump === "red" && t.source !== "protractor" && (
@@ -2524,6 +2697,22 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
                     )}
+                    {t.engineRiskFlag && (
+                      <span
+                        className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 inline-flex items-center gap-1"
+                        title={t.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                      >
+                        ⚠ Engine flagged — long oil interval
+                      </span>
+                    )}
+                    {t.recommendedDefault && (
+                      <span
+                        className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
+                        title={t.recommendedReason ?? undefined}
+                      >
+                        Shop recommendation
+                      </span>
+                    )}
                     {t.bump === "yellow" && t.source !== "protractor" && (
                       <span className={`rounded-full text-white px-2 py-0.5 ${t.dviSource === "autovitals" ? "bg-teal-600" : t.dviSource === "tekmetric" ? "bg-orange-500" : "bg-amber-600"}`}>
                         {t.dviSource === "autovitals" ? "AutoVitals 🟡" : t.dviSource === "tekmetric" ? "Tekmetric DVI 🟡" : "DVI 🟡"}
@@ -2763,6 +2952,22 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
+                      </span>
+                    )}
+                    {t.engineRiskFlag && (
+                      <span
+                        className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 inline-flex items-center gap-1"
+                        title={t.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                      >
+                        ⚠ Engine flagged — long oil interval
+                      </span>
+                    )}
+                    {t.recommendedDefault && (
+                      <span
+                        className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
+                        title={t.recommendedReason ?? undefined}
+                      >
+                        Shop recommendation
                       </span>
                     )}
                     {t.declined && (

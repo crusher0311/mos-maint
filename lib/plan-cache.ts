@@ -6,10 +6,16 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
 /**
  * Bump this whenever the cached plan shape changes incompatibly so old
  * cache entries are skipped on read instead of being served with missing
- * fields. v2 (Apr 2026, task 163): adds `notes`, `action`,
- * `recommendedDefault`, `recommendedReason`.
+ * fields.
+ *  - v2 (Apr 2026, task 163): adds `notes`, `action`,
+ *    `recommendedDefault`, `recommendedReason`.
+ *  - v3 (Apr 2026, task 166): adds engine-aware oil interval fields
+ *    (`engineRiskFlag`, `engineRiskReason`, `intervalSchedule`,
+ *    `intervalMilesNormal/Severe`, `intervalMonthsNormal/Severe`) plus
+ *    plan-level `engineRisk` / `oilDutyPreference` and the
+ *    auto-inserted Safety Check — oil level row.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 2;
+export const PLAN_CACHE_SCHEMA_VERSION = 3;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -50,6 +56,19 @@ export interface TriagedItemCache {
   recommendedDefault?: boolean;
   /** Human-readable rationale for the recommended-default override. */
   recommendedReason?: string | null;
+  /* -------- Task #166: engine-aware oil interval fields -------- */
+  /** True when the engine is flagged AND the active interval is risky. */
+  engineRiskFlag?: boolean;
+  /** Tooltip / chip rationale for engineRiskFlag. */
+  engineRiskReason?: string | null;
+  /** Which OEM duty schedule fed `intervalMiles` ("severe" | "normal"). */
+  intervalSchedule?: "severe" | "normal" | null;
+  /** OEM Normal-duty interval (mi/months), preserved alongside the active value. */
+  intervalMilesNormal?: number | null;
+  intervalMonthsNormal?: number | null;
+  /** OEM Severe-duty interval (mi/months), preserved alongside the active value. */
+  intervalMilesSevere?: number | null;
+  intervalMonthsSevere?: number | null;
 }
 
 export interface CachedDeferredWork {
@@ -70,6 +89,11 @@ export interface CachedPlanData {
     make?: string | null;
     model?: string | null;
     engine?: string | null;
+    /** Task #166: engine profile fields used by the risk classifier. */
+    engineSize?: number | null;
+    engineCylinders?: number | null;
+    engineInduction?: string | null;
+    engineAspiration?: string | null;
   };
   currentMiles: number | null;
   mpdBlended: number | null;
@@ -80,6 +104,15 @@ export interface CachedPlanData {
   soonDays: number;
   showInspectItems: boolean;
   deferredWork?: CachedDeferredWork[];
+  /** Task #166: classifier output and active duty preference. */
+  engineRisk?: {
+    flagged: boolean;
+    reasons: string[];
+    source: "baseline" | "override-flag" | "override-clear" | "none";
+    matchedOverrideId?: string | null;
+    matchedOverrideLabel?: string | null;
+  };
+  oilDutyPreference?: "normal" | "severe";
 }
 
 export interface CachedPlan {

@@ -77,6 +77,11 @@ interface MaintenanceItem {
   }[];
   miles: number | null;
   months: number | null;
+  /** Task #166: duty-cycle aware intervals from DataOne `interval_type`. */
+  intervalMilesNormal: number | null;
+  intervalMonthsNormal: number | null;
+  intervalMilesSevere: number | null;
+  intervalMonthsSevere: number | null;
 }
 
 interface DataOneApiResponse<T> {
@@ -196,6 +201,10 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
           intervals: [],
           miles: null,
           months: null,
+          intervalMilesNormal: null,
+          intervalMonthsNormal: null,
+          intervalMilesSevere: null,
+          intervalMonthsSevere: null,
         });
       }
     }
@@ -217,11 +226,29 @@ export async function getMaintenanceSchedule(vin: string): Promise<{
           initial_value: intervalDef.initial_value,
         });
 
-        if (intervalDef.units === "Miles" && (item.miles === null || intervalDef.value < item.miles)) {
-          item.miles = intervalDef.value;
+        const it = String(intervalDef.interval_type || "").toLowerCase();
+        const isSevere = it.includes("severe");
+        const isNormal = it.includes("normal");
+        const units = String(intervalDef.units || "");
+        const value: number | null = typeof intervalDef.value === "number" ? intervalDef.value : null;
+
+        if (units === "Miles" && value != null && value > 0) {
+          if (item.miles === null || value < item.miles) item.miles = value;
+          if (isSevere && (item.intervalMilesSevere === null || value < item.intervalMilesSevere)) {
+            item.intervalMilesSevere = value;
+          }
+          if (isNormal && (item.intervalMilesNormal === null || value < item.intervalMilesNormal)) {
+            item.intervalMilesNormal = value;
+          }
         }
-        if (intervalDef.units === "Months" && (item.months === null || intervalDef.value < item.months)) {
-          item.months = intervalDef.value;
+        if (units === "Months" && value != null && value > 0) {
+          if (item.months === null || value < item.months) item.months = value;
+          if (isSevere && (item.intervalMonthsSevere === null || value < item.intervalMonthsSevere)) {
+            item.intervalMonthsSevere = value;
+          }
+          if (isNormal && (item.intervalMonthsNormal === null || value < item.intervalMonthsNormal)) {
+            item.intervalMonthsNormal = value;
+          }
         }
       }
     }
@@ -290,6 +317,21 @@ export async function getEnhancedVehicleData(vin: string): Promise<{
 // CACHING LAYER - MongoDB Atlas cache for DataOne API responses
 // ============================================================================
 
+interface CachedVehicleInfo {
+  year: number;
+  make: string;
+  model: string;
+  engine: string;
+  /** Optional fields added in Task #166 for the engine-risk classifier. */
+  transType?: string | null;
+  engine_size?: number | null;
+  engine_block?: string | null;
+  engine_cylinders?: number | null;
+  engine_induction?: string | null;
+  engine_aspiration?: string | null;
+  fuel_type?: string | null;
+}
+
 interface CachedMaintenanceData {
   squish: string;
   vin: string;
@@ -299,12 +341,7 @@ interface CachedMaintenanceData {
     items: MaintenanceItem[];
     error?: string;
   };
-  vehicle?: {
-    year: number;
-    make: string;
-    model: string;
-    engine: string;
-  };
+  vehicle?: CachedVehicleInfo;
   fetchedAt: Date;
   expiresAt: Date;
   source: "api" | "cache";
@@ -316,12 +353,7 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
   squish: string;
   count: number;
   items: MaintenanceItem[];
-  vehicle?: {
-    year: number;
-    make: string;
-    model: string;
-    engine: string;
-  };
+  vehicle?: CachedVehicleInfo;
   error?: string;
   source: "api" | "cache";
   cachedAt?: Date;
@@ -374,12 +406,19 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     ]);
     
     // Extract vehicle info from decode
-    const vehicleInfo = decoded.ok && decoded.decoded ? {
+    const vehicleInfo: CachedVehicleInfo | undefined = decoded.ok && decoded.decoded ? {
       year: decoded.decoded.year,
       make: decoded.decoded.make,
       model: decoded.decoded.model,
       engine: decoded.decoded.engine_name,
       transType: decoded.decoded.trans_type || null,
+      // Task #166: extra fields used by the engine-risk classifier.
+      engine_size: typeof decoded.decoded.engine_size === "number" ? decoded.decoded.engine_size : null,
+      engine_block: decoded.decoded.engine_block ?? null,
+      engine_cylinders: typeof decoded.decoded.engine_cylinders === "number" ? decoded.decoded.engine_cylinders : null,
+      engine_induction: decoded.decoded.engine_induction ?? null,
+      engine_aspiration: decoded.decoded.engine_aspiration ?? null,
+      fuel_type: decoded.decoded.fuel_type ?? null,
     } : undefined;
     
     // Check if local data has intervals - if items exist but none have miles/months, fall back to API

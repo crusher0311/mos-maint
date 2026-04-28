@@ -20,6 +20,11 @@ export interface OEMItem {
   months?: number | null;
   notes?: string | null;
   intervals?: Array<{ units?: string | null; value?: number | null }>;
+  /** Task #166: duty-cycle aware intervals from DataOne `interval_type`. */
+  intervalMilesNormal?: number | null;
+  intervalMonthsNormal?: number | null;
+  intervalMilesSevere?: number | null;
+  intervalMonthsSevere?: number | null;
 }
 
 export function toOEMItem(item: any): OEMItem {
@@ -36,5 +41,11 @@ export function toOEMItem(item: any): OEMItem {
           value: iv?.value ?? null,
         }))
       : [],
+    // Task #166: forward duty-cycle aware OEM intervals so triage() can
+    // honour the per-vehicle Normal/Severe preference.
+    intervalMilesNormal: item?.intervalMilesNormal ?? null,
+    intervalMonthsNormal: item?.intervalMonthsNormal ?? null,
+    intervalMilesSevere: item?.intervalMilesSevere ?? null,
+    intervalMonthsSevere: item?.intervalMonthsSevere ?? null,
   };
 }

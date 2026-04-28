@@ -23,6 +23,12 @@ import {
 } from "@/lib/service-keys";
 import type { ProtractorDeferredWork } from "@/lib/integrations/protractor";
 import type { TriagedItemCache } from "@/lib/plan-cache";
+import {
+  OIL_INTERVAL_RISK_THRESHOLD_MILES,
+  SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+  SAFETY_CHECK_OIL_LEVEL_KEY,
+  type EngineRiskResult,
+} from "@/lib/engine-risk";
 
 export const DEFAULT_SOON_MILES = 1000;
 export const DEFAULT_SOON_DAYS = 30;
@@ -199,7 +205,8 @@ export function isMatchingHistory(
 // focused smoke tests (see tests/plan-build-oem-mapper.smoke.ts) without
 // pulling in the rest of the triage module. Re-imported and re-exported
 // here so existing callers can keep importing `toOEMItem` / `OEMItem`
-// from triage.ts.
+// from triage.ts. The Task #166 duty-cycle fields live on `OEMItem` in
+// `./oem-item` so the mapper here forwards them automatically.
 import { toOEMItem as _toOEMItem, type OEMItem as _OEMItem } from "./oem-item";
 export const toOEMItem = _toOEMItem;
 export type OEMItem = _OEMItem;
@@ -257,6 +264,14 @@ export interface TriagedItem {
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  /** Task #166: engine-risk + duty-aware oil interval metadata. */
+  engineRiskFlag?: boolean;
+  engineRiskReason?: string | null;
+  intervalSchedule?: "severe" | "normal" | null;
+  intervalMilesNormal?: number | null;
+  intervalMonthsNormal?: number | null;
+  intervalMilesSevere?: number | null;
+  intervalMonthsSevere?: number | null;
 }
 
 export interface Buckets {
@@ -281,6 +296,8 @@ export function triage({
   intervalApplyMode = "always",
   vehicleYear = null,
   vehicleTransType = null,
+  engineRisk = null,
+  oilDutyPreference = "severe",
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -297,6 +314,10 @@ export function triage({
   intervalApplyMode?: string;
   vehicleYear?: number | null;
   vehicleTransType?: string | null;
+  /** Task #166: engine-risk classification result (oil-row chip + safety check). */
+  engineRisk?: EngineRiskResult | null;
+  /** Task #166: per-vehicle Normal/Severe duty preference for oil row. */
+  oilDutyPreference?: "normal" | "severe";
 }): Buckets {
   const earliestDate = vehicleYear
     ? new Date(vehicleYear, 0, 1)
@@ -432,8 +453,37 @@ export function triage({
     }
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
-    let intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : (o.miles ?? null);
-    let intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : (o.months ?? null);
+
+    // Task #166: for the engine-oil row, prefer the duty-cycle aware OEM
+    // interval (Severe by default; Normal when the per-vehicle toggle is on).
+    // Falls back to the existing collapsed value when DataOne does not
+    // expose duty-tagged variants for this vehicle.
+    let intervalSchedule: "severe" | "normal" | null = null;
+    let oemMiles: number | null = o.miles ?? null;
+    let oemMonths: number | null = o.months ?? null;
+    if (serviceKey === "oil") {
+      if (oilDutyPreference === "normal" && o.intervalMilesNormal != null) {
+        oemMiles = o.intervalMilesNormal;
+        intervalSchedule = "normal";
+      } else if (o.intervalMilesSevere != null) {
+        oemMiles = o.intervalMilesSevere;
+        intervalSchedule = "severe";
+      } else if (o.intervalMilesNormal != null) {
+        // Severe was preferred but unavailable — fall back to Normal.
+        oemMiles = o.intervalMilesNormal;
+        intervalSchedule = "normal";
+      }
+      if (oilDutyPreference === "normal" && o.intervalMonthsNormal != null) {
+        oemMonths = o.intervalMonthsNormal;
+      } else if (o.intervalMonthsSevere != null) {
+        oemMonths = o.intervalMonthsSevere;
+      } else if (o.intervalMonthsNormal != null) {
+        oemMonths = o.intervalMonthsNormal;
+      }
+    }
+
+    let intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : oemMiles;
+    let intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : oemMonths;
 
     // Lifetime-fluid handling: when the OE source has no actionable
     // interval but lists this fluid as "lifetime" / "fill for life" /
@@ -520,6 +570,23 @@ export function triage({
       combinedReason = "No record of this service being performed.";
     }
 
+    // Task #166: flag risky engine + long oil interval combos with a soft
+    // warning. Activates only when the classifier says the engine is
+    // flagged and the active oil-change interval (after duty preference,
+    // shop overrides, and lifetime defaults) meets/exceeds the threshold.
+    let engineRiskFlag = false;
+    let engineRiskReason: string | null = null;
+    if (
+      serviceKey === "oil" &&
+      engineRisk?.flagged &&
+      intervalMiles != null &&
+      intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+    ) {
+      engineRiskFlag = true;
+      const reasons = engineRisk.reasons.length > 0 ? engineRisk.reasons.join("; ") : "Engine flagged for shorter oil intervals.";
+      engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} mi.`;
+    }
+
     triaged.push({
       key: uniqueKey,
       serviceKey,
@@ -543,7 +610,68 @@ export function triage({
       notes: o.notes ?? null,
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      engineRiskFlag: engineRiskFlag || undefined,
+      engineRiskReason: engineRiskReason ?? undefined,
+      intervalSchedule: serviceKey === "oil" ? intervalSchedule : null,
+      intervalMilesNormal: serviceKey === "oil" ? (o.intervalMilesNormal ?? null) : null,
+      intervalMonthsNormal: serviceKey === "oil" ? (o.intervalMonthsNormal ?? null) : null,
+      intervalMilesSevere: serviceKey === "oil" ? (o.intervalMilesSevere ?? null) : null,
+      intervalMonthsSevere: serviceKey === "oil" ? (o.intervalMonthsSevere ?? null) : null,
     });
+  }
+
+  // Task #166: when the engine is flagged, auto-insert a "Safety Check —
+  // oil level" item at SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES anchored off
+  // the most recent oil-change record. Marked as a shop recommendation
+  // (recommendedDefault) and only added once per plan.
+  if (engineRisk?.flagged && !usedServiceKeys.has(SAFETY_CHECK_OIL_LEVEL_KEY)) {
+    const oilLast = lastMap.get("oil") ?? null;
+    const safetyIntervalMiles = SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
+    let safetyDueAtMiles: number | null = null;
+    let safetyNeverDone = false;
+
+    const anchorMiles = computeAnchorMiles(oilLast, currentMiles, milesPerDay, today);
+    if (anchorMiles != null) {
+      safetyDueAtMiles = anchorMiles + safetyIntervalMiles;
+    } else if (currentMiles != null) {
+      safetyDueAtMiles = safetyIntervalMiles;
+      safetyNeverDone = true;
+    }
+
+    let safetyDueAtDate: Date | null = null;
+    const safetyMilesToGo = currentMiles != null && safetyDueAtMiles != null ? safetyDueAtMiles - currentMiles : null;
+    if (safetyMilesToGo != null && milesPerDay != null && milesPerDay > 0) {
+      const daysUntilDue = Math.round(safetyMilesToGo / milesPerDay);
+      safetyDueAtDate = new Date(today.getTime() + daysUntilDue * 24 * 60 * 60 * 1000);
+    }
+    const safetyDaysToGo = safetyDueAtDate != null ? Math.ceil((safetyDueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+    const reasons = engineRisk.reasons.length > 0 ? engineRisk.reasons.join("; ") : "Engine flagged for shorter oil intervals.";
+    const safetyRecommendedReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} mi.`;
+
+    triaged.push({
+      key: `safety_check_${SAFETY_CHECK_OIL_LEVEL_KEY}`,
+      serviceKey: SAFETY_CHECK_OIL_LEVEL_KEY,
+      title: "Safety Check — Oil Level",
+      category: "Shop Recommendation",
+      intervalMiles: safetyIntervalMiles,
+      intervalMonths: null,
+      last: oilLast || undefined,
+      dueAtMiles: safetyDueAtMiles,
+      dueAtDate: safetyDueAtDate,
+      milesToGo: safetyMilesToGo,
+      daysToGo: safetyDaysToGo,
+      bump: null,
+      source: "common",
+      reason: safetyNeverDone ? "No record of an oil change to anchor against." : safetyRecommendedReason,
+      action: "inspect",
+      notes: "Auto-added because the engine is flagged for accelerated oil consumption / sludge risk.",
+      recommendedDefault: true,
+      recommendedReason: safetyRecommendedReason,
+      engineRiskFlag: true,
+      engineRiskReason: reasons,
+    });
+    usedServiceKeys.add(SAFETY_CHECK_OIL_LEVEL_KEY);
   }
 
   for (const [dviKey, dviInfo] of dviMap) {
@@ -789,5 +917,13 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
     notes: item.notes ?? null,
     recommendedDefault: item.recommendedDefault ?? false,
     recommendedReason: item.recommendedReason ?? null,
+    // Task #166: persist engine-aware oil metadata for cached plans.
+    engineRiskFlag: item.engineRiskFlag ?? false,
+    engineRiskReason: item.engineRiskReason ?? null,
+    intervalSchedule: item.intervalSchedule ?? null,
+    intervalMilesNormal: item.intervalMilesNormal ?? null,
+    intervalMonthsNormal: item.intervalMonthsNormal ?? null,
+    intervalMilesSevere: item.intervalMilesSevere ?? null,
+    intervalMonthsSevere: item.intervalMonthsSevere ?? null,
   };
 }

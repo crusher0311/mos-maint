@@ -164,8 +164,20 @@ export interface MaintenanceItem {
     units: string;
     initial_value: number;
   }[];
+  /**
+   * Minimum mileage / months across ALL interval rows. Preserved for
+   * backward compatibility; new code that needs the duty-cycle aware
+   * interval should read intervalMilesNormal / intervalMilesSevere
+   * instead. Task #166 (Apr 2026).
+   */
   miles: number | null;
   months: number | null;
+  /** Lowest "Normal" duty interval, or null if not provided by DataOne. */
+  intervalMilesNormal: number | null;
+  intervalMonthsNormal: number | null;
+  /** Lowest "Severe" duty interval, or null if not provided by DataOne. */
+  intervalMilesSevere: number | null;
+  intervalMonthsSevere: number | null;
 }
 
 export async function decodeVinLocal(vin: string): Promise<{
@@ -285,6 +297,10 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
           intervals: [],
           miles: null,
           months: null,
+          intervalMilesNormal: null,
+          intervalMonthsNormal: null,
+          intervalMilesSevere: null,
+          intervalMonthsSevere: null,
         });
       }
     }
@@ -305,12 +321,30 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
           units: intervalDef.units,
           initial_value: intervalDef.initial_value,
         });
-        
-        if (intervalDef.units === "Miles" && (item.miles === null || intervalDef.value < item.miles)) {
-          item.miles = intervalDef.value;
+
+        const it = String(intervalDef.interval_type || "").toLowerCase();
+        const isSevere = it.includes("severe");
+        const isNormal = it.includes("normal");
+        const units = String(intervalDef.units || "");
+        const value: number | null = typeof intervalDef.value === "number" ? intervalDef.value : null;
+
+        if (units === "Miles" && value != null && value > 0) {
+          if (item.miles === null || value < item.miles) item.miles = value;
+          if (isSevere && (item.intervalMilesSevere === null || value < item.intervalMilesSevere)) {
+            item.intervalMilesSevere = value;
+          }
+          if (isNormal && (item.intervalMilesNormal === null || value < item.intervalMilesNormal)) {
+            item.intervalMilesNormal = value;
+          }
         }
-        if (intervalDef.units === "Months" && (item.months === null || intervalDef.value < item.months)) {
-          item.months = intervalDef.value;
+        if (units === "Months" && value != null && value > 0) {
+          if (item.months === null || value < item.months) item.months = value;
+          if (isSevere && (item.intervalMonthsSevere === null || value < item.intervalMonthsSevere)) {
+            item.intervalMonthsSevere = value;
+          }
+          if (isNormal && (item.intervalMonthsNormal === null || value < item.intervalMonthsNormal)) {
+            item.intervalMonthsNormal = value;
+          }
         }
       }
     }

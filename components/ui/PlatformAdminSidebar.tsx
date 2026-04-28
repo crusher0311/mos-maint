@@ -88,6 +88,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
     "/platform-admin/features",
     "/platform-admin/plan-features",
     "/platform-admin/service-mappings",
+    "/platform-admin/engine-risk-overrides",
     "/platform-admin/client-health",
     "/platform-admin/sync-health",
     "/platform-admin/logs",
@@ -126,7 +127,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
   const isEnterprisesSection = ["/platform-admin/enterprises", "/platform-admin/shops", "/platform-admin/users", "/platform-admin/hovercode"].some(p => pathname?.startsWith(p));
   const isShopsSection = ["/platform-admin/shops", "/platform-admin/users", "/platform-admin/hovercode"].some(p => pathname?.startsWith(p));
   const isTicketsSection = ["/platform-admin/tickets", "/platform-admin/cobrowse", "/platform-admin/database"].some(p => pathname?.startsWith(p));
-  const isSettingsSection = ["/platform-admin/settings", "/platform-admin/announcements", "/platform-admin/features", "/platform-admin/plan-features", "/platform-admin/service-mappings"].some(p => pathname?.startsWith(p));
+  const isSettingsSection = ["/platform-admin/settings", "/platform-admin/announcements", "/platform-admin/features", "/platform-admin/plan-features", "/platform-admin/service-mappings", "/platform-admin/engine-risk-overrides"].some(p => pathname?.startsWith(p));
 
   useEffect(() => {
     if (isCrmHierarchySection) setCrmExpanded(true);
@@ -389,6 +390,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
                 <NavLink href="/platform-admin/features" icon={Package} label="Features" indent />
                 <NavLink href="/platform-admin/plan-features" icon={Grid3X3} label="Plan Features" indent />
                 <NavLink href="/platform-admin/service-mappings" icon={ArrowRightLeft} label="Service Mappings" indent />
+                <NavLink href="/platform-admin/engine-risk-overrides" icon={Wrench} label="Engine Risk Overrides" indent />
               </CollapsibleSection>
             </>
           )}

@@ -7,6 +7,16 @@ import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/aut
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import {
+  classifyEngineRisk,
+  loadEngineRiskOverrides,
+  OIL_INTERVAL_RISK_THRESHOLD_MILES,
+  SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+  SAFETY_CHECK_OIL_LEVEL_KEY,
+  type EngineProfile,
+  type EngineRiskOverride,
+  type EngineRiskResult,
+} from "@/lib/engine-risk";
+import {
   resolveProtractorConfig,
   fetchVehicleWithCache as fetchProtractorVehicle,
   fetchDeferredWorkWithCache as fetchProtractorDeferredWork,
@@ -132,10 +142,35 @@ export async function POST(req: NextRequest) {
 
     const vehicleDoc = await db.collection("vehicles").findOne(
       { shopId, vin: vinUpper },
-      { projection: { year: 1, make: 1, model: 1, declinedServices: 1 } }
+      { projection: { year: 1, make: 1, model: 1, declinedServices: 1, oilDutyPreference: 1 } }
     );
     const vehicleYear = vehicleDoc?.year ?? oemData.vehicle?.year ?? null;
     const vehicleTransType: string | null = (oemData.vehicle as any)?.transType || null;
+
+    // Task #166: per-vehicle Normal vs Severe duty toggle. Default Severe.
+    const oilDutyPreference: "normal" | "severe" =
+      vehicleDoc?.oilDutyPreference === "normal" ? "normal" : "severe";
+
+    // Task #166: classify engine risk (baseline + Mongo overrides).
+    const engineProfile: EngineProfile = {
+      year: oemData.vehicle?.year ?? null,
+      make: oemData.vehicle?.make ?? null,
+      model: oemData.vehicle?.model ?? null,
+      engine_name: oemData.vehicle?.engine ?? null,
+      engine_size: (oemData.vehicle as any)?.engine_size ?? null,
+      engine_cylinders: (oemData.vehicle as any)?.engine_cylinders ?? null,
+      engine_block: (oemData.vehicle as any)?.engine_block ?? null,
+      engine_induction: (oemData.vehicle as any)?.engine_induction ?? null,
+      engine_aspiration: (oemData.vehicle as any)?.engine_aspiration ?? null,
+      fuel_type: (oemData.vehicle as any)?.fuel_type ?? null,
+    };
+    let engineRiskOverrides: EngineRiskOverride[] = [];
+    try {
+      engineRiskOverrides = await loadEngineRiskOverrides(db);
+    } catch (err) {
+      console.warn(`[PlanBuild] engine_risk_overrides load failed for ${vin}:`, err);
+    }
+    const engineRisk = classifyEngineRisk(engineProfile, engineRiskOverrides);
 
     const [protractorWOs, tekmetricWOs] = await Promise.all([
       db.collection("protractor_work_orders").find({
@@ -614,6 +649,9 @@ export async function POST(req: NextRequest) {
       mpdBlended = fromToday != null && fromTwo != null ? (fromToday + fromTwo) / 2 : fromTwo ?? fromToday ?? null;
     }
 
+    // Task #166: `toOEMItem` (in lib/plan-build/triage) now forwards the
+    // Normal/Severe duty-cycle interval fields, so the engine-aware oil
+    // logic in `triage()` works without any extra mapping here.
     const oemItems: OEMItem[] = (oemData.items || []).map(toOEMItem);
 
     const declinedServices: DeclinedServiceEntry[] = (vehicleDoc?.declinedServices || []).map((d: any) => ({
@@ -703,6 +741,8 @@ export async function POST(req: NextRequest) {
       intervalApplyMode,
       vehicleYear,
       vehicleTransType,
+      engineRisk,
+      oilDutyPreference,
     });
 
     const isInspectItem = (item: TriagedItem) => {
@@ -730,6 +770,10 @@ export async function POST(req: NextRequest) {
         make: oemData.vehicle?.make ?? null,
         model: oemData.vehicle?.model ?? null,
         engine: oemData.vehicle?.engine ?? null,
+        engineSize: (oemData.vehicle as any)?.engine_size ?? null,
+        engineCylinders: (oemData.vehicle as any)?.engine_cylinders ?? null,
+        engineInduction: (oemData.vehicle as any)?.engine_induction ?? null,
+        engineAspiration: (oemData.vehicle as any)?.engine_aspiration ?? null,
       },
       currentMiles: mileage,
       mpdBlended,
@@ -745,6 +789,14 @@ export async function POST(req: NextRequest) {
         Title: dw.Title,
         Description: dw.Description,
       })) : undefined,
+      engineRisk: {
+        flagged: engineRisk.flagged,
+        reasons: engineRisk.reasons,
+        source: engineRisk.source,
+        matchedOverrideId: engineRisk.matchedOverrideId ?? null,
+        matchedOverrideLabel: engineRisk.matchedOverrideLabel ?? null,
+      },
+      oilDutyPreference,
     };
 
     await setCachedPlan(db, vin, shopId, mileage, planData);
