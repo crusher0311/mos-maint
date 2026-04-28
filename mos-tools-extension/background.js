@@ -276,6 +276,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // -------------------- SMS Context --------------------
+  // CONTRACT — DO NOT CHANGE WITHOUT UPDATING EVERY ADAPTER:
+  // Every SMS adapter (Tekmetric, Shop-Ware, Autoflow, …) MUST push
+  // shop / RO / VIN context updates as
+  //
+  //     chrome.runtime.sendMessage({ action: "SET_SMS_CONTEXT", context })
+  //
+  // (any other shape — e.g. { type: "SMS_CONTEXT_UPDATE" } — is silently
+  // dropped and the side panel will hang on "Loading VHI…", which is the
+  // exact regression that caused task #159.)
+  //
+  // The lockstep is enforced by mos-tools-extension/scripts/
+  // check-sms-context-protocol.cjs (run via `npm run lint:sms-context`).
   if (message.action === "SET_SMS_CONTEXT") {
     currentSmsContext = message.context;
     if (sender?.tab?.id) currentSmsContext._tabId = sender.tab.id;

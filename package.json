@@ -19,6 +19,7 @@
     "test:chunk-speed-email-html": "tsx tests/chunk-speed-email-html.smoke.ts",
     "preview:chunk-speed-alert-email": "tsx scripts/preview-chunk-speed-alert-email.ts",
     "lint:extension-gates": "node scripts/check-extension-gates.cjs",
+    "lint:sms-context": "node mos-tools-extension/scripts/check-sms-context-protocol.cjs",
     "test:e2e:full": "tsx tests/e2e/full-suite.test.ts",
     "backfill:customers": "tsx lib/scripts/backfill-customers.ts",
     "backfill:mongo-to-supabase": "tsx scripts/backfill-mongo-to-supabase.ts",
