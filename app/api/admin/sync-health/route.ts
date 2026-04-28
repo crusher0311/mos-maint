@@ -193,6 +193,7 @@ export async function GET() {
       normalizedStats,
       tekmetricStaleArchivedAgg,
       tekmetricShopDocs,
+      chunkSpeedAlertDocs,
     ] = await Promise.all([
       db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db.collection("backfill_progress").find({}).toArray(),
@@ -251,7 +252,40 @@ export async function GET() {
           },
         },
       ).toArray(),
+      // Per-shop chunk-speed alert dedup rows written by
+      // `/api/cron/backfill-chunk-speed-health`. We surface them inline on
+      // each provider's chunk-speed table so on-call can tell at a glance
+      // which slow shops they've already been paged on (and since when) vs.
+      // brand-new regressions, without context-switching to email. The badge
+      // clears as soon as the dedup row clears (cron deletes the row when
+      // the shop stops breaching), so this is always live state.
+      db.collection("backfill_chunk_speed_alerts").find({}).toArray(),
     ]);
+
+    // Build a `provider:shopId` -> alert map so each chunk-speed row can
+    // attach its own alert state in O(1). Date fields are defensively
+    // normalized so a malformed write into `backfill_chunk_speed_alerts`
+    // (e.g. a hand-edited row) can't 500 the whole sync-health endpoint.
+    const safeIso = (v: any): string | null => {
+      if (!v) return null;
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+    };
+    const chunkSpeedAlertsByKey = new Map<
+      string,
+      { reasons: string[]; firstAlertedAt: string | null; lastAlertedAt: string | null }
+    >();
+    for (const a of chunkSpeedAlertDocs as any[]) {
+      chunkSpeedAlertsByKey.set(`${a.provider}:${Number(a.shopId)}`, {
+        reasons: Array.isArray(a.reasons) ? a.reasons : [],
+        firstAlertedAt: safeIso(a.firstAlertedAt),
+        lastAlertedAt: safeIso(a.lastAlertedAt),
+      });
+    }
+    const lookupChunkSpeedAlert = (
+      provider: "tekmetric" | "protractor" | "shopware",
+      shopId: any,
+    ) => chunkSpeedAlertsByKey.get(`${provider}:${Number(shopId)}`) ?? null;
 
     const tekmetricShopsComplete = tekmetricBackfillProgress.filter((p: any) => p.completed).length;
     const tekmetricShopsTotal = tekmetricBackfillProgress.length;
@@ -373,6 +407,7 @@ export async function GET() {
               advanceMode: p.lastChunkMetrics.advanceMode || null,
             }
           : null,
+        alert: lookupChunkSpeedAlert("tekmetric", p.shopId),
       }))
       .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
       .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));
@@ -403,6 +438,7 @@ export async function GET() {
               advanceMode: p.lastChunkMetrics.advanceMode || null,
             }
           : null,
+        alert: lookupChunkSpeedAlert("protractor", p.shopId),
       }))
       .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
       .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));
@@ -427,6 +463,7 @@ export async function GET() {
               advanceMode: p.lastChunkMetrics.advanceMode || null,
             }
           : null,
+        alert: lookupChunkSpeedAlert("shopware", p.shopId),
       }))
       .filter((s: any) => s.chunkSampleCount && s.chunkSampleCount > 0)
       .sort((a: any, b: any) => (b.p95DurationMs || 0) - (a.p95DurationMs || 0));

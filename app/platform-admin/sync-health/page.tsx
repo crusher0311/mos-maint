@@ -116,6 +116,15 @@ interface ChunkSpeedShop {
     backoff429Ms: number;
     advanceMode: string | null;
   } | null;
+  // Live dedup row from `backfill_chunk_speed_alerts` (written by
+  // /api/cron/backfill-chunk-speed-health). Present only while the shop is
+  // breaching — clears as soon as the cron deletes the dedup row, so this
+  // badge mirrors what on-call has actually been paged on.
+  alert?: {
+    reasons: string[];
+    firstAlertedAt: string | null;
+    lastAlertedAt: string | null;
+  } | null;
 }
 
 interface JobsCachePrewarmShop {
@@ -1291,7 +1300,7 @@ export default function SyncHealthPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px]">
+            <table className="w-full min-w-[1380px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
@@ -1341,6 +1350,12 @@ export default function SyncHealthPage() {
                   </th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">
                     Status
+                  </th>
+                  <th
+                    className="text-left px-4 py-3 text-sm font-medium text-gray-600"
+                    title="Whether the chunk-speed health cron has paged on-call about this shop. Present only while a dedup row exists in backfill_chunk_speed_alerts (clears the moment the shop recovers)."
+                  >
+                    Alerted
                   </th>
                 </tr>
               </thead>
@@ -1397,6 +1412,28 @@ export default function SyncHealthPage() {
                           <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
                             In progress
                           </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                        {s.alert ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full"
+                            title={
+                              `Reasons: ${s.alert.reasons.join(", ") || "—"}` +
+                              `\nFirst alerted: ${formatDateTime(s.alert.firstAlertedAt)}` +
+                              `\nLast alerted: ${formatDateTime(s.alert.lastAlertedAt)}`
+                            }
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>
+                              {s.alert.reasons.join(", ") || "alerted"}
+                            </span>
+                            <span className="text-red-600/70">
+                              · since {formatDate(s.alert.firstAlertedAt)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
                     </tr>
