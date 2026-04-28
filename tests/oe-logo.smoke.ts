@@ -10,7 +10,9 @@
 
 import {
   OE_LOGO_MAP,
+  clearUnmatchedMakeTally,
   getOELogoUrl,
+  getUnmatchedMakeTally,
   normalizeMakeKey,
 } from "../lib/oe-logos";
 
@@ -121,6 +123,68 @@ for (const key of Object.keys(OE_LOGO_MAP)) {
     console.error(`  ✗ canonical key "${key}" failed to resolve`);
   }
 }
+
+// 7. Unmatched-make tally records misses without spamming on every render.
+clearUnmatchedMakeTally();
+
+// Silence the warn-once log for these intentional miss calls so the smoke
+// output stays clean.
+const realWarn = console.warn;
+console.warn = () => {};
+try {
+  getOELogoUrl("Yugo");
+  getOELogoUrl("yugo");
+  getOELogoUrl("  YUGO  ");
+  getOELogoUrl("Studebaker");
+} finally {
+  console.warn = realWarn;
+}
+
+const tally = getUnmatchedMakeTally();
+const yugo = tally.find((e) => e.key === "YUGO");
+const stude = tally.find((e) => e.key === "STUDEBAKER");
+ok(
+  "tally has YUGO entry with count 3 (deduped via normalization)",
+  !!yugo && yugo.count === 3,
+  yugo ? `count=${yugo.count}` : "missing entry",
+);
+ok(
+  "tally tracks raw input samples for YUGO",
+  !!yugo && yugo.samples.includes("Yugo") && yugo.samples.includes("yugo"),
+);
+ok(
+  "tally has STUDEBAKER entry with count 1",
+  !!stude && stude.count === 1,
+);
+ok(
+  "tally is sorted by count desc (YUGO before STUDEBAKER)",
+  tally.findIndex((e) => e.key === "YUGO") <
+    tally.findIndex((e) => e.key === "STUDEBAKER"),
+);
+
+// Empty / null / undefined inputs must NOT pollute the tally.
+clearUnmatchedMakeTally();
+getOELogoUrl(null);
+getOELogoUrl(undefined);
+getOELogoUrl("");
+ok(
+  "null/undefined/empty inputs do not record into the tally",
+  getUnmatchedMakeTally().length === 0,
+);
+
+// Canonical hits must NOT pollute the tally either.
+getOELogoUrl("TOYOTA");
+getOELogoUrl("Mercedes Benz");
+ok(
+  "canonical & alias hits do not record into the tally",
+  getUnmatchedMakeTally().length === 0,
+);
+
+clearUnmatchedMakeTally();
+ok(
+  "clearUnmatchedMakeTally empties the tally",
+  getUnmatchedMakeTally().length === 0,
+);
 
 if (failed === 0) {
   console.log("\nAll OE logo lookup checks passed.");

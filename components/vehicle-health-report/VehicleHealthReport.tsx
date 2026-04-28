@@ -202,6 +202,9 @@ export default function VehicleHealthReport({
   const score = scoreProp ?? computeScore(data);
   const { vehicle, currentMiles, customerName, buckets } = data;
   const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
+  // Resolve once so any unmatched-make miss is recorded a single time per
+  // render instead of twice (once for the conditional, once for `src`).
+  const vehicleOeLogoUrl = getOELogoUrl(vehicle.make);
 
   const approved = data.approvedServiceKeys;
   const complimentaryItems = [
@@ -242,9 +245,9 @@ export default function VehicleHealthReport({
         {/* Vehicle Info Header */}
         <div className="py-4 px-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            {getOELogoUrl(vehicle.make) && (
+            {vehicleOeLogoUrl && (
               <img
-                src={getOELogoUrl(vehicle.make)!}
+                src={vehicleOeLogoUrl}
                 alt={vehicle.make || ""}
                 className="h-10 sm:h-12 object-contain flex-shrink-0"
               />

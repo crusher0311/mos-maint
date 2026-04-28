@@ -1585,6 +1585,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const vehicleMake = dataoneVehicle.vehicle?.make ?? cachedPlan?.plan?.vehicle?.make ?? vehicle?.make ?? oemData.vehicle?.make;
   const vehicleModel = dataoneVehicle.vehicle?.model ?? cachedPlan?.plan?.vehicle?.model ?? vehicle?.model ?? oemData.vehicle?.model;
   const vehicleEngine = dataoneVehicle.vehicle?.engine ?? cachedPlan?.plan?.vehicle?.engine ?? oemData.vehicle?.engine;
+  // Compute the OE logo once so we don't double-record unmatched-make misses
+  // in the unmatched-make tally (each conditional + src JSX call would
+  // otherwise count twice per render).
+  const vehicleOeLogoUrl = getOELogoUrl(vehicleMake);
 
   // Build normalized inputs
 
@@ -1901,9 +1905,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex items-center gap-3">
-              {getOELogoUrl(vehicleMake) && (
+              {vehicleOeLogoUrl && (
                 <img 
-                  src={getOELogoUrl(vehicleMake)!} 
+                  src={vehicleOeLogoUrl} 
                   alt={vehicleMake || ""} 
                   className="h-10 sm:h-12 object-contain flex-shrink-0" 
                 />
@@ -1985,8 +1989,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <img src={shopLogo} alt="Shop Logo" className="h-12" />
           ) : (
             <div className="flex items-center gap-2">
-              {getOELogoUrl(vehicleMake) && (
-                <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || ""} className="h-10" />
+              {vehicleOeLogoUrl && (
+                <img src={vehicleOeLogoUrl} alt={vehicleMake || ""} className="h-10" />
               )}
               <span className="text-lg font-bold text-neutral-800">
                 {[vehicleYear, vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"}
@@ -2008,8 +2012,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
         </div>
         <div className="mt-4">
           <h1 className="text-2xl font-bold flex items-center gap-3">
-            {getOELogoUrl(vehicleMake) && (
-              <img src={getOELogoUrl(vehicleMake)!} alt={vehicleMake || ""} className="h-10" />
+            {vehicleOeLogoUrl && (
+              <img src={vehicleOeLogoUrl} alt={vehicleMake || ""} className="h-10" />
             )}
             {[vehicleYear, vehicleMake, vehicleModel].filter(Boolean).join(" ") || "Vehicle"}
           </h1>

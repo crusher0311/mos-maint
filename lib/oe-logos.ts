@@ -231,10 +231,106 @@ export function normalizeMakeKey(make: string): string {
 }
 
 /**
+ * Per-process tally of make strings that fell through the canonical map and
+ * the alias map. Lets on-call review what's still rendering with no logo so
+ * they can add an alias or drop in a new asset.
+ *
+ * Notes:
+ *  - In-memory only (Node server process or browser tab); not persisted.
+ *  - Bounded by `MAX_UNMATCHED_TALLY_ENTRIES` to avoid unbounded growth from
+ *    junk / typo'd input.
+ *  - We `console.warn` only the *first* time we see a given normalized key,
+ *    so we don't spam logs on every render.
+ */
+export interface UnmatchedMakeEntry {
+  /** Normalized lookup key (uppercase, single-spaced) — matches what would
+   *  need to be added to `OE_LOGO_MAP` or `OE_LOGO_ALIASES`. */
+  key: string;
+  /** Number of times this key has been requested and missed. */
+  count: number;
+  /** ISO timestamp of the first miss for this key. */
+  firstSeen: string;
+  /** ISO timestamp of the most recent miss for this key. */
+  lastSeen: string;
+  /** Up to a handful of raw input strings that produced this key, so on-call
+   *  can see the actual upstream spelling/casing. */
+  samples: string[];
+}
+
+const MAX_UNMATCHED_TALLY_ENTRIES = 500;
+const MAX_SAMPLES_PER_ENTRY = 5;
+
+const unmatchedMakeTally = new Map<string, UnmatchedMakeEntry>();
+
+function recordUnmatchedMake(rawInput: string, normalizedKey: string): void {
+  const existing = unmatchedMakeTally.get(normalizedKey);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    existing.count += 1;
+    existing.lastSeen = now;
+    if (
+      existing.samples.length < MAX_SAMPLES_PER_ENTRY &&
+      !existing.samples.includes(rawInput)
+    ) {
+      existing.samples.push(rawInput);
+    }
+    return;
+  }
+
+  if (unmatchedMakeTally.size >= MAX_UNMATCHED_TALLY_ENTRIES) {
+    // Tally is full; silently drop further new keys rather than evicting
+    // existing data on-call may still be reviewing.
+    return;
+  }
+
+  unmatchedMakeTally.set(normalizedKey, {
+    key: normalizedKey,
+    count: 1,
+    firstSeen: now,
+    lastSeen: now,
+    samples: [rawInput],
+  });
+
+  // Log once per new unknown make so the miss is also visible in standard
+  // log streams without spamming on every render.
+  console.warn(
+    `[oe-logos] No logo for vehicle make "${normalizedKey}" (raw: ${JSON.stringify(rawInput)}). ` +
+      `Add an entry to OE_LOGO_MAP or OE_LOGO_ALIASES in lib/oe-logos.ts.`,
+  );
+}
+
+/**
+ * Snapshot of the current unmatched-make tally, sorted by miss count
+ * descending then most-recently-seen. Safe to call from admin views.
+ */
+export function getUnmatchedMakeTally(): UnmatchedMakeEntry[] {
+  return Array.from(unmatchedMakeTally.values())
+    .map((e) => ({ ...e, samples: [...e.samples] }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return b.lastSeen.localeCompare(a.lastSeen);
+    });
+}
+
+/**
+ * Reset the unmatched-make tally. Intended for admin "clear" actions and
+ * for tests that need a clean slate.
+ */
+export function clearUnmatchedMakeTally(): void {
+  unmatchedMakeTally.clear();
+}
+
+/**
  * Resolve an OE logo URL for the given make. Returns null when no canonical
- * make or alias matches, so callers can omit the logo gracefully.
+ * make or alias matches, so callers can omit the logo gracefully. Misses
+ * are recorded in the unmatched-make tally for later review.
  */
 export function getOELogoUrl(make: string | null | undefined): string | null {
   if (!make) return null;
-  return OE_LOGO_MAP[normalizeMakeKey(make)] || null;
+  const normalized = normalizeMakeKey(make);
+  const url = OE_LOGO_MAP[normalized];
+  if (url) return url;
+  recordUnmatchedMake(make, normalized);
+  return null;
 }
