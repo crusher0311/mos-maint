@@ -138,7 +138,12 @@ interface ChunkSpeedShop {
 
 interface JobsCachePrewarmShop {
   shopId: number;
-  tekmetricShopId: number | null;
+  // Tekmetric-only — undefined for Shop-Ware. The renderer doesn't
+  // surface either ID directly; they're shipped in case the UI ever
+  // wants to deep-link.
+  tekmetricShopId?: number | null;
+  shopwareTenantId?: number | null;
+  shopwareShopId?: number | null;
   completed: boolean;
   hasPrewarmRecord: boolean;
   completedAt: string | null;
@@ -238,6 +243,7 @@ export default function SyncHealthPage() {
   const [resolvingKey, setResolvingKey] = useState<string | null>(null);
   const [rewarmingShopId, setRewarmingShopId] = useState<number | null>(null);
   const [rewarmingAll, setRewarmingAll] = useState(false);
+  const [rewarmingAllShopWare, setRewarmingAllShopWare] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -483,6 +489,62 @@ export default function SyncHealthPage() {
       alert(err.message || "Failed to bulk-warm jobs cache");
     } finally {
       setRewarmingAll(false);
+    }
+  };
+
+  const rewarmAllNeverWarmedShopWare = async (count: number) => {
+    if (count <= 0) {
+      alert("No never-warmed shops to warm.");
+      return;
+    }
+    if (
+      !confirm(
+        `Warm jobs cache for all ${count} never-warmed Shop-Ware shop(s)?\n\n` +
+          `This iterates each shop serially (per-shop SW worker preserves ` +
+          `its own concurrency profile) and may take several minutes. If the ` +
+          `time budget is exhausted, remaining shops are deferred — re-click ` +
+          `to continue.`,
+      )
+    ) {
+      return;
+    }
+    setRewarmingAllShopWare(true);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shopware-rewarm-jobs-cache-all`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        alert(json.error || "Failed to bulk-warm Shop-Ware jobs cache");
+      } else {
+        const lines: string[] = [
+          `Bulk Shop-Ware pre-warm complete (${json.candidateShopCount} candidates)`,
+          `warmed ${json.warmed} · errored ${json.errored} · ` +
+            `skipped ${json.skipped} · deferred ${json.deferred}`,
+          `ROs fetched ${json.rosFetchedTotal} · stored ${json.rosStoredTotal} · ` +
+            `jobs indexed ${json.jobsIndexedTotal} · skipped ${json.jobsSkippedTotal}`,
+          `vehicles ${json.vehiclesStoredTotal} · customers ${json.customersStoredTotal} · ` +
+            `cursor advanced on ${json.cursorAdvancedShopCount} shop(s)`,
+        ];
+        if (json.cappedShopCount > 0) {
+          lines.push(`${json.cappedShopCount} shop(s) hit the 1000-RO cap`);
+        }
+        if (json.perShopErrorsTotal > 0) {
+          lines.push(`${json.perShopErrorsTotal} per-shop write error(s) logged`);
+        }
+        if (json.duration) lines.push(`duration: ${json.duration}`);
+        if (json.deferred > 0) {
+          lines.push("");
+          lines.push("Re-click to continue with deferred shops.");
+        }
+        alert(lines.join("\n"));
+        load();
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to bulk-warm Shop-Ware jobs cache");
+    } finally {
+      setRewarmingAllShopWare(false);
     }
   };
 
@@ -1095,11 +1157,32 @@ export default function SyncHealthPage() {
     missingCount: number | undefined,
     cappedCount: number | undefined,
     errorsCount: number | undefined,
+    opts?: {
+      // Provider-aware bulk warm controls. Defaults to the Tekmetric
+      // handler so existing callers keep working unchanged.
+      onBulkWarm?: (count: number) => void;
+      bulkBusy?: boolean;
+      bulkCapLabel?: string; // e.g. "500-RO cap" / "1000-RO cap"
+      cacheCollectionLabel?: string; // e.g. "tekmetric_jobs_cache"
+      stampFieldLabel?: string; // e.g. "shops.tekmetric.jobsCachePrewarm"
+      // Whether per-row Re-warm buttons should be shown. Off for
+      // Shop-Ware (no per-shop endpoint exists yet) so the bulk
+      // header is the only entry point there.
+      perRowRewarm?: boolean;
+    },
   ) => {
     const list = shops || [];
     const missing = missingCount ?? 0;
     const capped = cappedCount ?? 0;
     const errored = errorsCount ?? 0;
+    const onBulkWarm = opts?.onBulkWarm ?? rewarmAllNeverWarmed;
+    const bulkBusy = opts?.bulkBusy ?? rewarmingAll;
+    const bulkCapLabel = opts?.bulkCapLabel ?? "500-RO cap";
+    const cacheCollectionLabel =
+      opts?.cacheCollectionLabel ?? "tekmetric_jobs_cache";
+    const stampFieldLabel =
+      opts?.stampFieldLabel ?? "shops.tekmetric.jobsCachePrewarm";
+    const perRowRewarm = opts?.perRowRewarm ?? true;
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-4">
@@ -1114,19 +1197,19 @@ export default function SyncHealthPage() {
             {missing > 0 && (
               <span
                 className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
-                title="Shops with no pre-warm record at all — likely onboarded before the pre-warm rolled out. Use Re-warm to one-shot them."
+                title="Shops with no pre-warm record at all — likely onboarded before the pre-warm rolled out. Use Warm-all to one-shot them."
               >
                 {missing} never warmed
               </span>
             )}
             {missing > 0 && (
               <button
-                onClick={() => rewarmAllNeverWarmed(missing)}
-                disabled={rewarmingAll || rewarmingShopId !== null}
+                onClick={() => onBulkWarm(missing)}
+                disabled={bulkBusy || rewarmingShopId !== null}
                 className="inline-flex items-center gap-1.5 px-3 py-1 text-xs bg-orange-600 text-white hover:bg-orange-700 rounded-lg disabled:opacity-50 whitespace-nowrap"
-                title="Iterate every shop with no pre-warm record and run prewarmTekmetricJobsCacheForOnboarding for each. Serial across shops; per-shop /jobs concurrency cap (3) preserved."
+                title={`Iterate every ${providerLabel} shop with no pre-warm record and run the per-shop pre-warm worker for each. Serial across shops; per-shop concurrency profile preserved.`}
               >
-                {rewarmingAll ? (
+                {bulkBusy ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Flame className="w-3.5 h-3.5" />
@@ -1137,7 +1220,7 @@ export default function SyncHealthPage() {
             {capped > 0 && (
               <span
                 className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
-                title="Pre-warm hit the 500-RO cap. The uncached tail will fill in opportunistically as the backfill walks back through history."
+                title={`Pre-warm hit the ${bulkCapLabel}. The uncached tail will fill in opportunistically as the backfill walks back through history.`}
               >
                 {capped} capped
               </span>
@@ -1145,17 +1228,17 @@ export default function SyncHealthPage() {
             {errored > 0 && (
               <span
                 className="px-2 py-0.5 text-xs bg-rose-100 text-rose-800 rounded-full"
-                title="Pre-warm logged at least one /jobs fetch failure for this shop"
+                title="Pre-warm logged at least one fetch/write failure for this shop"
               >
                 {errored} with errors
               </span>
             )}
           </div>
           <p className="text-xs text-gray-500 hidden md:block max-w-md text-right">
-            One-shot warm of <code className="px-1 bg-gray-100 rounded text-[11px]">tekmetric_jobs_cache</code>
+            One-shot warm of <code className="px-1 bg-gray-100 rounded text-[11px]">{cacheCollectionLabel}</code>
             {" "}at onboarding. Stamped on
-            {" "}<code className="px-1 bg-gray-100 rounded text-[11px]">shops.tekmetric.jobsCachePrewarm</code>.
-            Idempotent — Re-warm is safe anytime.
+            {" "}<code className="px-1 bg-gray-100 rounded text-[11px]">{stampFieldLabel}</code>.
+            Idempotent — re-warming is safe anytime.
           </p>
         </div>
 
@@ -1180,19 +1263,31 @@ export default function SyncHealthPage() {
                   </th>
                   <th
                     className="text-right px-4 py-3 text-sm font-medium text-gray-600"
-                    title="Recent terminal repair orders cached during pre-warm"
+                    title={
+                      providerLabel === "Shop-Ware"
+                        ? "Recent ROs upserted into shopware_repair_orders during pre-warm"
+                        : "Recent terminal repair orders cached during pre-warm"
+                    }
                   >
                     ROs cached
                   </th>
                   <th
                     className="text-right px-4 py-3 text-sm font-medium text-gray-600"
-                    title="Total /jobs entries written to tekmetric_jobs_cache"
+                    title={
+                      providerLabel === "Shop-Ware"
+                        ? "Total job_index rows written from terminal ROs during pre-warm"
+                        : "Total /jobs entries written to tekmetric_jobs_cache"
+                    }
                   >
                     Jobs cached
                   </th>
                   <th
                     className="text-right px-4 py-3 text-sm font-medium text-gray-600"
-                    title="Terminal ROs already had a fresh cache row at warm time (skipped)"
+                    title={
+                      providerLabel === "Shop-Ware"
+                        ? "job_index rows whose contentHash matched, so they were skipped (treated as already cached)"
+                        : "Terminal ROs already had a fresh cache row at warm time (skipped)"
+                    }
                   >
                     Already cached
                   </th>
@@ -1202,9 +1297,11 @@ export default function SyncHealthPage() {
                   <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
                     Duration
                   </th>
-                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
-                    Actions
-                  </th>
+                  {perRowRewarm && (
+                    <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1243,7 +1340,7 @@ export default function SyncHealthPage() {
                             {s.capped && (
                               <span
                                 className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full"
-                                title="Hit the 500-RO cap — uncached tail still warmed by the indexing path as the backfill progresses"
+                                title={`Hit the ${bulkCapLabel} — uncached tail still warmed by the indexing path as the backfill progresses`}
                               >
                                 Capped
                               </span>
@@ -1292,23 +1389,25 @@ export default function SyncHealthPage() {
                       <td className="px-4 py-3 text-right text-sm text-gray-700 whitespace-nowrap">
                         {formatDurationMs(s.durationMs)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() =>
-                            rewarmJobsCache(s.shopId, s.hasPrewarmRecord)
-                          }
-                          disabled={rewarmingShopId === s.shopId}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
-                          title="Re-run prewarmTekmetricJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped."
-                        >
-                          {rewarmingShopId === s.shopId ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Flame className="w-3.5 h-3.5" />
-                          )}
-                          {s.hasPrewarmRecord ? "Re-warm" : "Warm now"}
-                        </button>
-                      </td>
+                      {perRowRewarm && (
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() =>
+                              rewarmJobsCache(s.shopId, s.hasPrewarmRecord)
+                            }
+                            disabled={rewarmingShopId === s.shopId}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                            title="Re-run prewarmTekmetricJobsCacheForOnboarding for this shop. Idempotent — fresh cache rows are skipped."
+                          >
+                            {rewarmingShopId === s.shopId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Flame className="w-3.5 h-3.5" />
+                            )}
+                            {s.hasPrewarmRecord ? "Re-warm" : "Warm now"}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -1924,6 +2023,25 @@ export default function SyncHealthPage() {
         tek?.jobsCachePrewarmMissingCount,
         tek?.jobsCachePrewarmCappedCount,
         tek?.jobsCachePrewarmErrorsCount,
+      )}
+
+      {renderJobsCachePrewarmSection(
+        "Shop-Ware",
+        sw?.jobsCachePrewarm,
+        sw?.jobsCachePrewarmMissingCount,
+        sw?.jobsCachePrewarmCappedCount,
+        sw?.jobsCachePrewarmErrorsCount,
+        {
+          onBulkWarm: rewarmAllNeverWarmedShopWare,
+          bulkBusy: rewarmingAllShopWare,
+          bulkCapLabel: "1000-RO cap",
+          cacheCollectionLabel: "shopware_repair_orders + job_index",
+          stampFieldLabel: "shops.shopware.jobsCachePrewarm",
+          // No per-shop Shop-Ware rewarm endpoint exists yet — bulk
+          // header is the only entry point. Per-row rewarm can be added
+          // as a follow-up if/when we ship the per-shop SW endpoint.
+          perRowRewarm: false,
+        },
       )}
 
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
