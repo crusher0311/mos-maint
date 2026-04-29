@@ -94,6 +94,22 @@ interface DestructiveEvaluation {
   reason?: string;
 }
 
+interface ImportHistoryEntry {
+  _id: string;
+  adminEmail: string | null;
+  fileName: string | null;
+  csvByteSize: number;
+  counts: {
+    inserted: number;
+    updated: number;
+    removed: number;
+    unchanged: number;
+  };
+  createdAt: string;
+}
+
+const IMPORT_HISTORY_LIMIT = 20;
+
 export default function EngineRiskOverridesPage() {
   const [items, setItems] = useState<EngineRiskOverride[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,10 +125,13 @@ export default function EngineRiskOverridesPage() {
   const [pendingDestructive, setPendingDestructive] =
     useState<DestructiveEvaluation | null>(null);
   const [confirmDestructive, setConfirmDestructive] = useState(false);
+  const [imports, setImports] = useState<ImportHistoryEntry[]>([]);
+  const [importsLoading, setImportsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void load();
+    void loadImports();
   }, []);
 
   useEffect(() => {
@@ -132,6 +151,21 @@ export default function EngineRiskOverridesPage() {
       setNotice({ type: "error", message: "Failed to load overrides" });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadImports() {
+    setImportsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/engine-risk-overrides/imports?limit=${IMPORT_HISTORY_LIMIT}`,
+      );
+      const data = await res.json();
+      if (data.ok) setImports((data.imports ?? []) as ImportHistoryEntry[]);
+    } catch (err) {
+      // Non-fatal — the override editor still works without history.
+    } finally {
+      setImportsLoading(false);
     }
   }
 
@@ -246,6 +280,7 @@ export default function EngineRiskOverridesPage() {
           confirmDestructive: pendingDestructive?.destructive
             ? confirmDestructive
             : undefined,
+          fileName: pendingFileName,
         }),
       });
       const data = await res.json();
@@ -259,7 +294,7 @@ export default function EngineRiskOverridesPage() {
         message: `Imported: +${r.inserted ?? 0} ~${r.updated ?? 0} −${r.removed ?? 0} (${r.unchanged ?? 0} unchanged).`,
       });
       cancelImport();
-      await load();
+      await Promise.all([load(), loadImports()]);
     } catch (err: any) {
       setNotice({ type: "error", message: err?.message ?? "Import failed" });
     } finally {
@@ -549,6 +584,12 @@ export default function EngineRiskOverridesPage() {
           )}
         </section>
       </div>
+
+      <ImportHistorySection
+        loading={importsLoading}
+        imports={imports}
+        limit={IMPORT_HISTORY_LIMIT}
+      />
     </div>
   );
 
@@ -863,4 +904,163 @@ function MatchInput({
       />
     </label>
   );
+}
+
+function ImportHistorySection({
+  loading,
+  imports,
+  limit,
+}: {
+  loading: boolean;
+  imports: ImportHistoryEntry[];
+  limit: number;
+}) {
+  return (
+    <section className="mt-8">
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Recent CSV imports
+        </h2>
+        <span className="text-xs text-slate-500">
+          last {limit} apply events
+        </span>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-500 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : imports.length === 0 ? (
+        <div className="text-sm text-slate-500 italic border border-dashed border-slate-300 rounded p-6 text-center">
+          No CSV imports recorded yet. Audit entries appear here after the
+          first successful Apply.
+        </div>
+      ) : (
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium">When</th>
+                <th className="text-left px-3 py-2 font-medium">Admin</th>
+                <th className="text-left px-3 py-2 font-medium">File</th>
+                <th className="text-left px-3 py-2 font-medium">Changes</th>
+                <th className="text-right px-3 py-2 font-medium">Original CSV</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {imports.map((imp) => (
+                <tr key={imp._id} className="align-top">
+                  <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                    <div>{formatTimestamp(imp.createdAt)}</div>
+                    <div className="text-xs text-slate-400">
+                      {formatRelative(imp.createdAt)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {imp.adminEmail ?? (
+                      <span className="text-slate-400 italic">unknown</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">
+                    <div className="font-mono text-xs break-all">
+                      {imp.fileName ?? (
+                        <span className="text-slate-400 italic font-sans">
+                          (no file name)
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {formatBytes(imp.csvByteSize)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1 text-xs">
+                      <CountPill
+                        label="add"
+                        count={imp.counts.inserted}
+                        className="bg-emerald-100 text-emerald-800"
+                      />
+                      <CountPill
+                        label="upd"
+                        count={imp.counts.updated}
+                        className="bg-blue-100 text-blue-800"
+                      />
+                      <CountPill
+                        label="rm"
+                        count={imp.counts.removed}
+                        className="bg-red-100 text-red-800"
+                      />
+                      <CountPill
+                        label="same"
+                        count={imp.counts.unchanged}
+                        className="bg-slate-100 text-slate-700"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <a
+                      href={`/api/platform-admin/engine-risk-overrides/imports/${imp._id}/csv`}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-50 text-slate-700"
+                    >
+                      <Download className="w-3 h-3" /> Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CountPill({
+  label,
+  count,
+  className,
+}: {
+  label: string;
+  count: number;
+  className: string;
+}) {
+  const muted = count === 0;
+  return (
+    <span
+      className={`px-1.5 py-0.5 rounded font-medium ${
+        muted ? "bg-slate-100 text-slate-400" : className
+      }`}
+    >
+      {label} {count}
+    </span>
+  );
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.round(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(mo / 12)}y ago`;
+}
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

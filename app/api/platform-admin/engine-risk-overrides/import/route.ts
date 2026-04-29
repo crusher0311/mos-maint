@@ -17,6 +17,7 @@ import {
   type DestructiveImportOptions,
   type OverrideDiff,
 } from "@/lib/engine-risk-csv";
+import { recordEngineRiskOverrideImport } from "@/lib/engine-risk-import-audit";
 
 export const runtime = "nodejs";
 
@@ -97,6 +98,10 @@ export async function POST(request: NextRequest) {
     const csv = typeof body.csv === "string" ? body.csv : "";
     const apply = body.apply === true;
     const confirmDestructive = body.confirmDestructive === true;
+    const fileName =
+      typeof body.fileName === "string" && body.fileName.trim()
+        ? body.fileName.trim()
+        : null;
 
     // Allow header-only CSV: that's how an admin signals "remove all
     // overrides" by uploading an emptied spreadsheet. Only the truly
@@ -172,7 +177,28 @@ export async function POST(request: NextRequest) {
         : null;
     const result = await applyDiff(db, diff, adminEmail);
 
-    return NextResponse.json({ ok: true, applied: true, diff, result });
+    // Best-effort audit. recordEngineRiskOverrideImport never throws, so
+    // a Mongo blip on the audit collection won't undo the override
+    // changes that were just persisted above.
+    const importId = await recordEngineRiskOverrideImport(db, {
+      adminEmail,
+      fileName,
+      csv,
+      counts: {
+        inserted: result.inserted,
+        updated: result.updated,
+        removed: result.removed,
+        unchanged: result.unchanged,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      applied: true,
+      diff,
+      result,
+      importId: importId ? String(importId) : null,
+    });
   } catch (error: any) {
     if (unauthorized(error)) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
