@@ -40,6 +40,7 @@ import {
   type ShopIntervalOverride,
   type ShopServiceHistory,
 } from "@/lib/plan-build/triage";
+import { resolveCustomerName } from "@/lib/plan-build/customer-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -662,7 +663,12 @@ export async function POST(req: NextRequest) {
       declinedAt: d.declinedAt,
     }));
 
-    let customerName: string | null = null;
+    // Customer-name fallback chain — see `lib/plan-build/customer-name.ts`
+    // for the priority rules (Tekmetric → Protractor → Shop-Ware → vehicles).
+    // We fetch each source lazily (only when prior sources resolved nothing)
+    // and pass the raw docs into the pure resolver so the priority +
+    // "Unknown Customer" sentinel handling is testable without a live Mongo.
+    let tekmetricWorkOrderForName: { customerName?: string | null } | null = null;
     const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
     if (tekmetricShopId) {
       try {
@@ -680,21 +686,25 @@ export async function POST(req: NextRequest) {
         );
         if (cachedWO) {
           if (cachedWO.workOrderNumber) latestRoNumber = String(cachedWO.workOrderNumber);
-          if (cachedWO.customerName && cachedWO.customerName !== "Unknown Customer") {
-            customerName = cachedWO.customerName;
-          }
+          tekmetricWorkOrderForName = { customerName: cachedWO.customerName ?? null };
         }
       } catch (err) {
         console.log(`[PlanBuild] MongoDB WO lookup error for ${vin}:`, err);
       }
     }
 
-    if (!customerName && protractorCfg.configured && (protractorVehicleResult as any).ok) {
-      const v = (protractorVehicleResult as any).vehicle;
-      customerName = v?.CustomerName || [v?.FirstName, v?.LastName].filter(Boolean).join(" ") || null;
-    }
+    const protractorVehicleForName =
+      protractorCfg.configured && (protractorVehicleResult as any).ok
+        ? ((protractorVehicleResult as any).vehicle ?? null)
+        : null;
+
+    let customerName = resolveCustomerName({
+      tekmetricWorkOrder: tekmetricWorkOrderForName,
+      protractorVehicle: protractorVehicleForName,
+    });
 
     if (!customerName) {
+      let shopWareWorkOrderForName: { customerName?: string | null } | null = null;
       try {
         const swRo = await db.collection("cached_work_orders").findOne(
           {
@@ -704,13 +714,15 @@ export async function POST(req: NextRequest) {
           },
           { sort: { createdAt: -1 }, projection: { customerName: 1 } }
         );
-        if (swRo?.customerName) customerName = swRo.customerName;
+        if (swRo) shopWareWorkOrderForName = { customerName: swRo.customerName ?? null };
       } catch (err) {
         console.log(`[PlanBuild] cached_work_orders customer lookup error for ${vin}:`, err);
       }
+      customerName = resolveCustomerName({ shopWareWorkOrder: shopWareWorkOrderForName });
     }
 
     if (!customerName) {
+      let vehicleDocForName: { customerName?: string | null } | null = null;
       try {
         const vDoc = await db.collection("vehicles").findOne(
           {
@@ -720,10 +732,11 @@ export async function POST(req: NextRequest) {
           },
           { projection: { customerName: 1 } }
         );
-        if (vDoc?.customerName) customerName = vDoc.customerName;
+        if (vDoc) vehicleDocForName = { customerName: vDoc.customerName ?? null };
       } catch (err) {
         console.log(`[PlanBuild] vehicles customer lookup error for ${vin}:`, err);
       }
+      customerName = resolveCustomerName({ vehicleDoc: vehicleDocForName });
     }
 
     const buckets = triage({
