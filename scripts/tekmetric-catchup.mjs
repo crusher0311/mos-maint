@@ -29,6 +29,11 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import {
+  buildCatchupRunSummary,
+  persistCatchupRunSummary,
+  CATCHUP_RUN_RETENTION,
+} from "./lib/catchup-runs.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -335,6 +340,7 @@ export function renderSummary(results, opts = {}, log = defaultLog) {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const startedAt = new Date();
   const config = getConfig();
   const {
     PROD_BASE_URL, CRON_SECRET, DRY_RUN, MAX_CHUNKS, POLL_INTERVAL_MS,
@@ -461,6 +467,30 @@ async function main() {
   }
 
   renderSummary(results, { dryRun: DRY_RUN }, log);
+
+  // Persist this run's summary so admins can read the last ~20 catch-up
+  // outcomes from the sync-health view instead of having to grep a
+  // multi-hour log (or, worse, re-run the script). Best-effort: a Mongo
+  // hiccup here must not poison the script's exit code, since the real
+  // catch-up work is already done.
+  const finishedAt = new Date();
+  const summary = buildCatchupRunSummary({
+    results,
+    dryRun: DRY_RUN,
+    onlyShops: ONLY_SHOPS,
+    skipShops: SKIP_SHOPS,
+    startedAt,
+    finishedAt,
+    prodBaseUrl: PROD_BASE_URL,
+  });
+  const persistRes = await persistCatchupRunSummary(db, summary, {
+    keep: CATCHUP_RUN_RETENTION,
+  });
+  if (persistRes.ok) {
+    log(`(Persisted run summary to tekmetric_catchup_runs; pruned ${persistRes.prunedCount} older run(s), keeping last ${CATCHUP_RUN_RETENTION}.)`);
+  } else {
+    log(`(WARN: failed to persist run summary: ${persistRes.error})`);
+  }
 
   await mongo.close();
   const needsFollowup = results.filter((r) => r.outcome === "needs-followup");

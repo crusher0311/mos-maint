@@ -219,6 +219,7 @@ export async function GET() {
       protractorShopDocs,
       shopwareShopDocs,
       chunkSpeedAlertDocs,
+      tekmetricCatchupRunDocs,
     ] = await Promise.all([
       db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db.collection("backfill_progress").find({}).toArray(),
@@ -315,6 +316,19 @@ export async function GET() {
       // clears as soon as the dedup row clears (cron deletes the row when
       // the shop stops breaching), so this is always live state.
       db.collection("backfill_chunk_speed_alerts").find({}).toArray(),
+      // Tekmetric catch-up run summaries persisted by
+      // `scripts/tekmetric-catchup.mjs` (task #181). The script writes one
+      // doc per run with the SUMMARY block contents + filters used + a
+      // suggested re-run command. Surfaced here so on-call can pull up the
+      // last few catch-ups from the UI without grepping a multi-hour log.
+      // We pull the most-recent 5 — enough for "what did the last
+      // overnight run cover and what still needs follow-up?" without
+      // bloating the JSON payload.
+      db.collection("tekmetric_catchup_runs")
+        .find({})
+        .sort({ startedAt: -1 })
+        .limit(5)
+        .toArray(),
     ]);
 
     // Build a `provider:shopId` -> alert map so each chunk-speed row can
@@ -341,6 +355,44 @@ export async function GET() {
       provider: "tekmetric" | "protractor" | "shopware",
       shopId: any,
     ) => chunkSpeedAlertsByKey.get(`${provider}:${Number(shopId)}`) ?? null;
+
+    // Serialize catch-up run summaries for the JSON response. Date fields
+    // are normalized to ISO strings so the renderer doesn't have to parse
+    // BSON Date objects, and missing/legacy fields are defaulted to safe
+    // empty values so an old record from before the script change can still
+    // be displayed without crashing the view.
+    const tekmetricCatchupRuns = (tekmetricCatchupRunDocs as any[]).map((d) => {
+      const startedAt = d?.startedAt ? safeIso(d.startedAt) : null;
+      const finishedAt = d?.finishedAt ? safeIso(d.finishedAt) : null;
+      return {
+        startedAt,
+        finishedAt,
+        durationMs: typeof d?.durationMs === "number" ? d.durationMs : null,
+        dryRun: !!d?.dryRun,
+        prodBaseUrl: d?.prodBaseUrl || null,
+        filters: {
+          onlyShops: Array.isArray(d?.filters?.onlyShops) ? d.filters.onlyShops : [],
+          skipShops: Array.isArray(d?.filters?.skipShops) ? d.filters.skipShops : [],
+        },
+        totals: {
+          processed: Number(d?.totals?.processed || 0),
+          completed: Number(d?.totals?.completed || 0),
+          recovered: Number(d?.totals?.recovered || 0),
+          needsFollowup: Number(d?.totals?.needsFollowup || 0),
+          dryRun: Number(d?.totals?.dryRun || 0),
+        },
+        completedShopIds: Array.isArray(d?.completedShopIds) ? d.completedShopIds : [],
+        recoveredShopIds: Array.isArray(d?.recoveredShopIds) ? d.recoveredShopIds : [],
+        dryRunShopIds: Array.isArray(d?.dryRunShopIds) ? d.dryRunShopIds : [],
+        needsFollowup: Array.isArray(d?.needsFollowup)
+          ? d.needsFollowup.map((n: any) => ({
+              shopId: Number(n?.shopId),
+              reason: n?.reason || null,
+            }))
+          : [],
+        suggestedRerunCommand: d?.suggestedRerunCommand || null,
+      };
+    });
 
     const tekmetricShopsComplete = tekmetricBackfillProgress.filter((p: any) => p.completed).length;
     const tekmetricShopsTotal = tekmetricBackfillProgress.length;
@@ -793,6 +845,13 @@ export async function GET() {
           jobsCachePrewarmMissingCount: tekmetricJobsCachePrewarmMissingCount,
           jobsCachePrewarmCappedCount: tekmetricJobsCachePrewarmCappedCount,
           jobsCachePrewarmErrorsCount: tekmetricJobsCachePrewarmErrorsCount,
+          // Persisted catch-up run summaries (task #181). The
+          // `scripts/tekmetric-catchup.mjs` runner writes one record per
+          // run into `tekmetric_catchup_runs`; we expose the most-recent
+          // few here so on-call can read the last SUMMARY blocks straight
+          // from the UI instead of grepping a log.
+          catchupRuns: tekmetricCatchupRuns,
+          catchupRunCount: tekmetricCatchupRuns.length,
         },
         protractor: {
           complete: protractorShopsComplete,

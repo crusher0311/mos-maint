@@ -218,6 +218,32 @@ interface ProviderBackfill {
   invoiceCachePrewarmMissingCount?: number;
   invoiceCachePrewarmCappedCount?: number;
   invoiceCachePrewarmErrorsCount?: number;
+  // Tekmetric-only: persisted catch-up run summaries (task #181).
+  // Populated only on the tekmetric branch by the API; other providers
+  // get `undefined` so the renderer can short-circuit when needed.
+  catchupRuns?: CatchupRun[];
+  catchupRunCount?: number;
+}
+
+interface CatchupRun {
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  dryRun: boolean;
+  prodBaseUrl: string | null;
+  filters: { onlyShops: number[]; skipShops: number[] };
+  totals: {
+    processed: number;
+    completed: number;
+    recovered: number;
+    needsFollowup: number;
+    dryRun: number;
+  };
+  completedShopIds: number[];
+  recoveredShopIds: number[];
+  dryRunShopIds: number[];
+  needsFollowup: { shopId: number; reason: string | null }[];
+  suggestedRerunCommand: string | null;
 }
 
 interface SyncHealthData {
@@ -2895,6 +2921,181 @@ export default function SyncHealthPage() {
     );
   };
 
+  // Last few persisted Tekmetric catch-up runs (task #181). The script
+  // `scripts/tekmetric-catchup.mjs` writes its end-of-run SUMMARY block
+  // (totals + bucketed shop ids + filters used + suggested re-run
+  // command) into `tekmetric_catchup_runs` after each invocation; this
+  // section renders the most-recent few so on-call doesn't have to grep
+  // a multi-hour log to remember what the last run covered.
+  const renderCatchupRunsSection = (runs: CatchupRun[] | undefined) => {
+    const list = runs || [];
+    const newest = list[0] || null;
+    const newestStillNeedsFollowup = newest && newest.totals.needsFollowup > 0;
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-600" />
+            <h2 className="font-semibold text-gray-900">
+              Tekmetric catch-up runs
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded-full">
+              last {list.length} run{list.length === 1 ? "" : "s"}
+            </span>
+            {newestStillNeedsFollowup && (
+              <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full">
+                {newest!.totals.needsFollowup} shop{newest!.totals.needsFollowup === 1 ? "" : "s"} need follow-up
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Persisted SUMMARY blocks from{" "}
+            <code className="font-mono">scripts/tekmetric-catchup.mjs</code>.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-gray-400" />
+            No catch-up runs recorded yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {list.map((run, idx) => {
+              const headerKey = `${run.startedAt || "unknown"}-${idx}`;
+              const isLatest = idx === 0;
+              return (
+                <div key={headerKey} className="p-4 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isLatest && (
+                      <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded-full">
+                        Latest
+                      </span>
+                    )}
+                    <span className="text-sm font-medium text-gray-900">
+                      {formatDateTime(run.startedAt)}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      → {formatDateTime(run.finishedAt)}
+                    </span>
+                    {run.durationMs != null && (
+                      <span className="text-xs text-gray-500">
+                        ({formatDuration(run.durationMs)})
+                      </span>
+                    )}
+                    {run.dryRun && (
+                      <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full">
+                        DRY_RUN
+                      </span>
+                    )}
+                    {run.prodBaseUrl && (
+                      <span className="text-xs text-gray-400 font-mono">
+                        {run.prodBaseUrl}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                      processed {run.totals.processed}
+                    </span>
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                      completed {run.totals.completed}
+                    </span>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                      recovered {run.totals.recovered}
+                    </span>
+                    <span
+                      className={
+                        "px-2 py-0.5 rounded-full " +
+                        (run.totals.needsFollowup > 0
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-gray-100 text-gray-500")
+                      }
+                    >
+                      needs follow-up {run.totals.needsFollowup}
+                    </span>
+                    {run.dryRun && (
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                        dry-run {run.totals.dryRun}
+                      </span>
+                    )}
+                  </div>
+
+                  {(run.filters.onlyShops.length > 0 ||
+                    run.filters.skipShops.length > 0) && (
+                    <div className="text-xs text-gray-600 space-x-3">
+                      {run.filters.onlyShops.length > 0 && (
+                        <span>
+                          ONLY_SHOPS:{" "}
+                          <code className="font-mono">
+                            {run.filters.onlyShops.join(",")}
+                          </code>
+                        </span>
+                      )}
+                      {run.filters.skipShops.length > 0 && (
+                        <span>
+                          SKIP_SHOPS:{" "}
+                          <code className="font-mono">
+                            {run.filters.skipShops.join(",")}
+                          </code>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {run.completedShopIds.length > 0 && (
+                    <div className="text-xs text-gray-700">
+                      <span className="font-medium">Completed:</span>{" "}
+                      <code className="font-mono">
+                        {run.completedShopIds.join(", ")}
+                      </code>
+                    </div>
+                  )}
+                  {run.recoveredShopIds.length > 0 && (
+                    <div className="text-xs text-gray-700">
+                      <span className="font-medium">Recovered:</span>{" "}
+                      <code className="font-mono">
+                        {run.recoveredShopIds.join(", ")}
+                      </code>
+                    </div>
+                  )}
+
+                  {run.needsFollowup.length > 0 && (
+                    <div className="text-xs">
+                      <div className="font-medium text-amber-800 mb-1">
+                        Needs follow-up:
+                      </div>
+                      <ul className="ml-4 list-disc text-gray-700 space-y-0.5">
+                        {run.needsFollowup.map((n) => (
+                          <li key={n.shopId}>
+                            shop <code className="font-mono">{n.shopId}</code>
+                            {n.reason ? <> — {n.reason}</> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {run.suggestedRerunCommand && (
+                    <div className="text-xs">
+                      <div className="font-medium text-gray-700 mb-1">
+                        Suggested re-run:
+                      </div>
+                      <code className="block font-mono px-2 py-1 bg-gray-50 border border-gray-100 rounded text-gray-800 break-all">
+                        {run.suggestedRerunCommand}
+                      </code>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -3116,6 +3317,8 @@ export default function SyncHealthPage() {
           </div>
         </div>
       </div>
+
+      {renderCatchupRunsSection(tek?.catchupRuns)}
 
       {renderRoSkipSection("Tekmetric", tek?.roSkipShops)}
 
