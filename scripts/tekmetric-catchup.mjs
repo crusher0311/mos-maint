@@ -20,132 +20,102 @@
 //               POLL_INTERVAL_MS (default 20000), STUCK_THRESHOLD_MS
 //               (default 1500000 = 25 min), BOOTSTRAP_TIMEOUT_MS (default
 //               45000), DRY_RUN (default false)
+//
+// This file is also imported by `tests/tekmetric-catchup.smoke.mjs` to
+// exercise processShop() and renderSummary() with a fake getProgress + fake
+// fireChunk + fake clock — no live Mongo, no live POST. The top-level Mongo
+// connect / main() runs only when invoked directly as a CLI script.
 
 import path from "node:path";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { MongoClient } = require(path.resolve("./node_modules/mongodb"));
 
-const PROD_BASE_URL       = process.env.PROD_BASE_URL       || "https://mos.tools";
-const CRON_SECRET         = process.env.CRON_SECRET         || "";
-const DRY_RUN             = process.env.DRY_RUN             === "true";
-const MAX_CHUNKS          = Number(process.env.MAX_CHUNKS_PER_SHOP || 30);
-const POLL_INTERVAL_MS    = Number(process.env.POLL_INTERVAL_MS    || 20_000);
-// 60 min default. Empirical evidence from shop 99 catch-up on 2026-04-28:
-// chunk 1 took 43.7 min wall-clock end-to-end (durationMs=2,623,028 for
-// 2,187 ROs, normalize phase made ~280 fresh /jobs API calls when cache
-// missed → 57s of 429 backoff). 45 min was borderline (1.3 min margin);
-// 60 min gives real headroom for shops that have heavier normalize work
-// or hit a 429 storm during bulk-write.
-const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 60 * 60 * 1000);
-const BOOTSTRAP_TIMEOUT   = Number(process.env.BOOTSTRAP_TIMEOUT_MS || 45_000);
-const INTER_SHOP_DELAY    = Number(process.env.INTER_SHOP_DELAY_MS  || 5_000);
-// When a chunk hits stuck=true (no movement in STUCK_THRESHOLD_MS), give the
-// shop ONE more shot at the same chunk after a short cooldown. Empirical
-// evidence from the 2026-04-28/29 run: shop 32 hit a transient stuck on
-// chunk 3 (POST returned but cron never updated metrics or lastRunAt) and
-// the script abandoned the shop ~9 months short of its 2-year goal — a
-// single retry would almost certainly have unstuck it. Multi-retry is
-// intentionally NOT supported: keeps prod load bounded.
-const STUCK_RETRY_COOLDOWN_MS = Number(process.env.STUCK_RETRY_COOLDOWN_MS || 30_000);
-const ONLY_SHOPS = (process.env.ONLY_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
-const SKIP_SHOPS = (process.env.SKIP_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
+// ────────────────────────────────────────────────────────────────────────────
+// Pure helpers / config — safe to import.
+// ────────────────────────────────────────────────────────────────────────────
 
-if (!CRON_SECRET) { console.error("ERROR: CRON_SECRET env var is required"); process.exit(1); }
-if (!process.env.MONGODB_USERNAME || !process.env.MONGODB_PASSWORD) { console.error("ERROR: MONGODB_USERNAME and MONGODB_PASSWORD env vars are required"); process.exit(1); }
+const ts = () => `[${new Date().toISOString().replace("T", " ").replace("Z", "")}]`;
+const defaultLog = (...a) => console.log(ts(), ...a);
+const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const defaultNow = () => Date.now();
 
-const ts = () => `[${new Date().toISOString().replace("T"," ").replace("Z","")}]`;
-const log = (...a) => console.log(ts(), ...a);
+export const isoOrNull = (d) =>
+  d instanceof Date ? d.toISOString() : typeof d === "string" ? d : null;
 
-const mongoUri = `mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
-const mongo = new MongoClient(mongoUri);
-await mongo.connect();
-const db = mongo.db("mos-maintenance-mvp");
-
-const isoOrNull = (d) => (d instanceof Date ? d.toISOString() : (typeof d === "string" ? d : null));
-
-async function listIncomplete() {
-  const docs = await db.collection("tekmetric_backfill_progress")
-    // The cron writes legacy `completed: true` (with -ed) at app/api/cron/tekmetric-backfill/route.ts:475
-    // when a shop reaches the oldest date or has no Tekmetric link, but never
-    // sets the newer `complete: true` field that the rest of this script reads.
-    // Treat either as "done" so we don't pick up already-finished shops.
-    .find({ complete: { $ne: true }, completed: { $ne: true } })
-    .project({ shopId:1, currentChunkEnd:1, totalJobsIndexed:1, lastError:1, lastRunAt:1, _id:0 })
-    .toArray();
-  let f = docs;
-  if (ONLY_SHOPS.length) f = f.filter(d => ONLY_SHOPS.includes(d.shopId));
-  if (SKIP_SHOPS.length) f = f.filter(d => !SKIP_SHOPS.includes(d.shopId));
-  f.sort((a,b) => (a.shopId||0) - (b.shopId||0));
-  return f;
+export function getConfig(env = process.env) {
+  const onlyShops = (env.ONLY_SHOPS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => !isNaN(n));
+  const skipShops = (env.SKIP_SHOPS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => !isNaN(n));
+  return {
+    PROD_BASE_URL:           env.PROD_BASE_URL       || "https://mos.tools",
+    CRON_SECRET:             env.CRON_SECRET         || "",
+    DRY_RUN:                 env.DRY_RUN             === "true",
+    MAX_CHUNKS:              Number(env.MAX_CHUNKS_PER_SHOP || 30),
+    POLL_INTERVAL_MS:        Number(env.POLL_INTERVAL_MS    || 20_000),
+    // 60 min default. Empirical evidence from shop 99 catch-up on 2026-04-28:
+    // chunk 1 took 43.7 min wall-clock end-to-end (durationMs=2,623,028 for
+    // 2,187 ROs, normalize phase made ~280 fresh /jobs API calls when cache
+    // missed → 57s of 429 backoff). 45 min was borderline (1.3 min margin);
+    // 60 min gives real headroom for shops that have heavier normalize work
+    // or hit a 429 storm during bulk-write.
+    STUCK_THRESHOLD_MS:      Number(env.STUCK_THRESHOLD_MS  || 60 * 60 * 1000),
+    BOOTSTRAP_TIMEOUT:       Number(env.BOOTSTRAP_TIMEOUT_MS || 45_000),
+    INTER_SHOP_DELAY:        Number(env.INTER_SHOP_DELAY_MS  || 5_000),
+    // When a chunk hits stuck=true (no movement in STUCK_THRESHOLD_MS), give
+    // the shop ONE more shot at the same chunk after a short cooldown.
+    // Empirical evidence from the 2026-04-28/29 run: shop 32 hit a transient
+    // stuck on chunk 3 (POST returned but cron never updated metrics or
+    // lastRunAt) and the script abandoned the shop ~9 months short of its
+    // 2-year goal — a single retry would almost certainly have unstuck it.
+    // Multi-retry is intentionally NOT supported: keeps prod load bounded.
+    STUCK_RETRY_COOLDOWN_MS: Number(env.STUCK_RETRY_COOLDOWN_MS || 30_000),
+    ONLY_SHOPS:              onlyShops,
+    SKIP_SHOPS:              skipShops,
+  };
 }
 
-async function getProgress(shopId) {
-  return db.collection("tekmetric_backfill_progress").findOne({ shopId });
-}
+// ────────────────────────────────────────────────────────────────────────────
+// processShop — the per-shop chunk loop. Pure modulo injected deps so tests
+// can drive it without a real Mongo / real fetch / real clock.
+//
+// deps:
+//   - getProgress(shopId): async () => progress doc | null
+//   - fireChunk(shopId): async () => { status, ms, body, finishedFast }
+//                        (also responsible for stamping scriptFiredAt in prod)
+//   - config: as returned by getConfig()
+//   - sleep(ms): async; defaults to setTimeout
+//   - now(): ms epoch; defaults to Date.now (override for fake clock)
+//   - log(...args): defaults to console.log with timestamp prefix
+// ────────────────────────────────────────────────────────────────────────────
 
-async function fireChunk(shopId) {
-  // POST to enqueue. We DON'T need the response body — we'll detect completion
-  // via Mongo. We use a short timeout: if the request is at least accepted by
-  // prod within BOOTSTRAP_TIMEOUT, we trust the handler is running.
-  //
-  // BEFORE posting, stamp `scriptFiredAt` on the progress doc. The prod cron
-  // does NOT set any "I'm running" marker on chunk start — only on chunk
-  // end (lastRunAt) — so without our own marker, a Ctrl-C + re-run can't
-  // tell that a chunk is in flight and would fire a duplicate. The stamp
-  // also lets the same script invocation's looksBusy check survive across
-  // chunks.
-  await db.collection("tekmetric_backfill_progress").updateOne(
-    { shopId },
-    { $set: { scriptFiredAt: new Date() } },
-  );
+export async function processShop(shopId, deps) {
+  const {
+    getProgress,
+    fireChunk,
+    config,
+    sleep = defaultSleep,
+    now = defaultNow,
+    log = defaultLog,
+  } = deps;
+  const {
+    MAX_CHUNKS,
+    POLL_INTERVAL_MS,
+    STUCK_THRESHOLD_MS,
+    STUCK_RETRY_COOLDOWN_MS,
+    DRY_RUN,
+  } = config;
 
-  const url = `${PROD_BASE_URL}/api/cron/tekmetric-backfill`;
-  const ctrl = new AbortController();
-  // Use an explicit boolean to detect OUR abort, since the resulting error
-  // shape varies wildly across Node/undici versions (e.message can be empty,
-  // e.name may be DOMException, the error may surface from r.text() instead
-  // of fetch(), etc). If `bootstrapAborted` is true and we got an error,
-  // it's our timer — the chunk is running on prod.
-  let bootstrapAborted = false;
-  const timer = setTimeout(() => { bootstrapAborted = true; ctrl.abort(); }, BOOTSTRAP_TIMEOUT);
-  const t0 = Date.now();
-  try {
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${CRON_SECRET}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ shopId }),
-      signal: ctrl.signal,
-    });
-    // We got headers within BOOTSTRAP_TIMEOUT. Read the body separately —
-    // if our timer then fires mid-stream, we still have the status code.
-    let body = "";
-    try { body = await r.text(); }
-    catch {
-      // Body stream aborted (likely by our timer). Status is still valid,
-      // but the chunk is most likely still running on prod, not "finishedFast".
-      return { status: r.status, ms: Date.now()-t0, body: "", finishedFast: false };
-    }
-    return { status: r.status, ms: Date.now()-t0, body, finishedFast: true };
-  } catch (e) {
-    // OUR timer fired → chunk is running on prod (expected for slow shops)
-    if (bootstrapAborted || ctrl.signal.aborted) {
-      return { status: 0, ms: Date.now()-t0, body: "", finishedFast: false };
-    }
-    // Real network error (DNS, TLS, connection refused, etc) before our timer
-    // — surface it. Include cause for nicer diagnostics since e.message is
-    // often empty for fetch errors.
-    const detail = e?.message || e?.cause?.message || e?.code || e?.cause?.code || String(e);
-    const wrapped = new Error(`fetch failed: ${detail}`);
-    wrapped.cause = e;
-    throw wrapped;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function processShop(shopId) {
   log(`=== SHOP ${shopId} START ===`);
 
   // Track per-shop stuck-retry state across chunks. `stuckRetryForChunk`
@@ -168,7 +138,7 @@ async function processShop(shopId) {
     const beforeMetrics = before?.lastChunkMetrics?.at ? new Date(before.lastChunkMetrics.at).getTime() : 0;
     const beforeJobs    = before?.totalJobsIndexed || 0;
 
-    log(`   chunk ${chunk}/${MAX_CHUNKS}${isStuckRetry ? " [STUCK-RETRY]" : ""}  before:  cursor=${beforeCursor?.slice(0,19)}  jobs=${beforeJobs}`);
+    log(`   chunk ${chunk}/${MAX_CHUNKS}${isStuckRetry ? " [STUCK-RETRY]" : ""}  before:  cursor=${beforeCursor?.slice(0, 19)}  jobs=${beforeJobs}`);
 
     // Safety: don't stack a duplicate chunk if prod looks busy on this shop.
     // Three independent signals indicate a chunk is already running:
@@ -188,11 +158,11 @@ async function processShop(shopId) {
     // the busy check entirely on the retry pass — the whole point is to
     // re-fire the same window.
     const beforeFired = before?.scriptFiredAt ? new Date(before.scriptFiredAt).getTime() : 0;
-    const firedRecently = beforeFired > Date.now() - STUCK_THRESHOLD_MS;
+    const firedRecently = beforeFired > now() - STUCK_THRESHOLD_MS;
     const firedChunkUnfinished = firedRecently && beforeMetrics < beforeFired;
     const looksBusy = !isStuckRetry && (
       before?.inProgress === true ||
-      (beforeRunAt > Date.now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt) ||
+      (beforeRunAt > now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt) ||
       firedChunkUnfinished
     );
     if (looksBusy) {
@@ -200,26 +170,28 @@ async function processShop(shopId) {
         ? `prior script run fired chunk at ${new Date(beforeFired).toISOString()} not yet reflected in metrics`
         : `lastRunAt=${new Date(beforeRunAt).toISOString()} inProgress=${before?.inProgress}`;
       log(`   ⚠ Prod looks busy on shop ${shopId} (${reason}). Waiting for it to drain before firing...`);
-      const drainDeadline = Date.now() + STUCK_THRESHOLD_MS;
-      while (Date.now() < drainDeadline) {
-        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-        const now = await getProgress(shopId);
-        const nowMetrics = now?.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
-        const nowCursor  = isoOrNull(now?.currentChunkEnd);
-        process.stdout.write(`${ts()}    drain-poll: cursor=${nowCursor?.slice(0,10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${now?.inProgress} complete=${now?.complete || now?.completed}\n`);
-        if (now?.complete || now?.completed) {
+      const drainDeadline = now() + STUCK_THRESHOLD_MS;
+      let drained = false;
+      while (now() < drainDeadline) {
+        await sleep(POLL_INTERVAL_MS);
+        const cur = await getProgress(shopId);
+        const nowMetrics = cur?.lastChunkMetrics?.at ? new Date(cur.lastChunkMetrics.at).getTime() : 0;
+        const nowCursor  = isoOrNull(cur?.currentChunkEnd);
+        log(`   drain-poll: cursor=${nowCursor?.slice(0, 10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${cur?.inProgress} complete=${cur?.complete || cur?.completed}`);
+        if (cur?.complete || cur?.completed) {
           log(`   ✓ Shop ${shopId} COMPLETE during drain wait`);
           return { outcome: recoveredFromStuck ? "recovered" : "completed" };
         }
         if (nowCursor !== beforeCursor || nowMetrics > beforeMetrics) {
           log(`   ✓ Drain wait satisfied — cursor advanced or metrics updated. Loop continues with fresh snapshot.`);
           chunk--; // re-snapshot at top of loop
+          drained = true;
           break;
         }
       }
-      if (Date.now() >= drainDeadline) {
-        log(`   ✗ Drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min — moving on`);
-        return { outcome: "needs-followup", reason: `drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min on chunk ${chunk}` };
+      if (!drained) {
+        log(`   ✗ Drain wait exceeded ${STUCK_THRESHOLD_MS / 60000}min — moving on`);
+        return { outcome: "needs-followup", reason: `drain wait exceeded ${STUCK_THRESHOLD_MS / 60000}min on chunk ${chunk}` };
       }
       continue;
     }
@@ -230,40 +202,49 @@ async function processShop(shopId) {
     }
 
     let fired;
-    try { fired = await fireChunk(shopId); }
-    catch (e) { log(`   !! fire error: ${e.message} — sleeping 30s and retrying chunk`); await new Promise(r=>setTimeout(r,30_000)); chunk--; continue; }
+    try {
+      fired = await fireChunk(shopId);
+    } catch (e) {
+      log(`   !! fire error: ${e.message} — sleeping 30s and retrying chunk`);
+      await sleep(30_000);
+      chunk--;
+      continue;
+    }
 
     if (fired.status === 401) {
       log(`   !! 401 Unauthorized — CRON_SECRET wrong, aborting`);
       return { outcome: "needs-followup", reason: "401 Unauthorized (CRON_SECRET wrong)" };
     }
-    if (fired.status >= 500)  { log(`   !! HTTP ${fired.status} from prod — sleeping 60s and retrying chunk`); await new Promise(r=>setTimeout(r,60_000)); chunk--; continue; }
+    if (fired.status >= 500) {
+      log(`   !! HTTP ${fired.status} from prod — sleeping 60s and retrying chunk`);
+      await sleep(60_000);
+      chunk--;
+      continue;
+    }
 
     if (fired.finishedFast) {
       // Got a real response. Either the chunk finished quickly OR no work was needed.
       log(`   POST returned ${fired.status} in ${fired.ms}ms (small chunk or no work)`);
     } else {
-      log(`   POST sent (chunk running on prod) — polling Mongo every ${POLL_INTERVAL_MS/1000}s for cursor movement...`);
+      log(`   POST sent (chunk running on prod) — polling Mongo every ${POLL_INTERVAL_MS / 1000}s for cursor movement...`);
     }
 
     // Poll Mongo until we detect chunk completion (or stuck timeout)
-    const pollDeadline = Date.now() + STUCK_THRESHOLD_MS;
+    const pollDeadline = now() + STUCK_THRESHOLD_MS;
     let lastSeenMetricsAt = beforeMetrics;
     let advanced = false, completed = false, stuck = false;
 
-    while (Date.now() < pollDeadline) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-      const now = await getProgress(shopId);
-      if (!now) { log(`   ?? progress doc disappeared`); stuck = true; break; }
+    while (now() < pollDeadline) {
+      await sleep(POLL_INTERVAL_MS);
+      const cur = await getProgress(shopId);
+      if (!cur) { log(`   ?? progress doc disappeared`); stuck = true; break; }
 
-      const nowCursor    = isoOrNull(now.currentChunkEnd);
-      const nowMetricsAt = now.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
-      const nowJobs      = now.totalJobsIndexed || 0;
-      const nowComplete  = !!(now.complete || now.completed);
+      const nowCursor    = isoOrNull(cur.currentChunkEnd);
+      const nowMetricsAt = cur.lastChunkMetrics?.at ? new Date(cur.lastChunkMetrics.at).getTime() : 0;
+      const nowJobs      = cur.totalJobsIndexed || 0;
+      const nowComplete  = !!(cur.complete || cur.completed);
 
-      // Heartbeat-ish line every poll
-      const elapsedSec = Math.round((Date.now() - (beforeRunAt > 0 ? beforeRunAt : Date.now())) / 1000);
-      process.stdout.write(`${ts()}    poll: cursor=${nowCursor?.slice(0,10)} jobs=${nowJobs} metrics@=${nowMetricsAt > beforeMetrics ? "NEW" : "old"} complete=${nowComplete}\n`);
+      log(`   poll: cursor=${nowCursor?.slice(0, 10)} jobs=${nowJobs} metrics@=${nowMetricsAt > beforeMetrics ? "NEW" : "old"} complete=${nowComplete}`);
 
       if (nowComplete) { completed = true; break; }
       if (nowCursor !== beforeCursor) { advanced = true; break; }
@@ -276,7 +257,7 @@ async function processShop(shopId) {
     if (!advanced && !completed) stuck = true;
 
     const after = await getProgress(shopId);
-    log(`   chunk ${chunk} result: advanced=${advanced} completed=${completed} stuck=${stuck}  cursor: ${beforeCursor?.slice(0,10)} → ${isoOrNull(after?.currentChunkEnd)?.slice(0,10)}  jobs: ${beforeJobs} → ${after?.totalJobsIndexed||0}  err=${after?.lastError||"null"}`);
+    log(`   chunk ${chunk} result: advanced=${advanced} completed=${completed} stuck=${stuck}  cursor: ${beforeCursor?.slice(0, 10)} → ${isoOrNull(after?.currentChunkEnd)?.slice(0, 10)}  jobs: ${beforeJobs} → ${after?.totalJobsIndexed || 0}  err=${after?.lastError || "null"}`);
 
     if (completed) {
       // The cron writes BOTH `complete` and legacy `completed: true` paths;
@@ -289,9 +270,9 @@ async function processShop(shopId) {
     }
     if (stuck) {
       if (!isStuckRetry) {
-        log(`   ⟳ Shop ${shopId} chunk ${chunk} STUCK — retrying once after ${STUCK_RETRY_COOLDOWN_MS/1000}s cooldown`);
+        log(`   ⟳ Shop ${shopId} chunk ${chunk} STUCK — retrying once after ${STUCK_RETRY_COOLDOWN_MS / 1000}s cooldown`);
         stuckRetryForChunk = chunk;
-        await new Promise(r => setTimeout(r, STUCK_RETRY_COOLDOWN_MS));
+        await sleep(STUCK_RETRY_COOLDOWN_MS);
         chunk--; // re-do this chunk; isStuckRetry will be true on the next pass
         continue;
       }
@@ -308,54 +289,197 @@ async function processShop(shopId) {
   return { outcome: "needs-followup", reason: `did not complete after ${MAX_CHUNKS} chunks` };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// renderSummary — prints the end-of-run summary block. Pulled out so tests
+// can assert the bucket counts and the suggested ONLY_SHOPS=… re-run line.
+//
+// `log` is injected so tests can capture the lines instead of writing to
+// stdout. Returns the array of lines that were written, for convenience.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function renderSummary(results, opts = {}, log = defaultLog) {
+  const { dryRun = false } = opts;
+  const completed     = results.filter((r) => r.outcome === "completed");
+  const recovered     = results.filter((r) => r.outcome === "recovered");
+  const needsFollowup = results.filter((r) => r.outcome === "needs-followup");
+  const dryRunBucket  = results.filter((r) => r.outcome === "dry-run");
+
+  const lines = [];
+  const emit = (line) => { lines.push(line); log(line); };
+
+  emit(`\n========== SUMMARY ==========`);
+  emit(`Total shops processed: ${results.length}`);
+  if (dryRun) {
+    emit(`Dry-run (would have fired) (${dryRunBucket.length}): ${dryRunBucket.map((r) => r.shopId).join(", ") || "(none)"}`);
+  }
+  emit(`Completed cleanly (${completed.length}): ${completed.map((r) => r.shopId).join(", ") || "(none)"}`);
+  emit(`Recovered via stuck-retry (${recovered.length}): ${recovered.map((r) => r.shopId).join(", ") || "(none)"}`);
+  emit(`Needs follow-up (${needsFollowup.length}):${needsFollowup.length === 0 ? " (none)" : ""}`);
+  for (const r of needsFollowup) {
+    emit(`    shop ${r.shopId} — ${r.reason || "unknown"}`);
+  }
+  if (needsFollowup.length > 0) {
+    const ids = needsFollowup.map((r) => r.shopId).join(",");
+    emit(``);
+    emit(`Suggested re-run command for the not-recovered shops:`);
+    emit(`    ONLY_SHOPS=${ids} node scripts/tekmetric-catchup.mjs`);
+  }
+  emit(`========== DONE ==========`);
+
+  return lines;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CLI entrypoint — only runs when invoked directly (not when imported by a
+// test). Owns Mongo connection + fireChunk(shop) wrapper that POSTs to prod.
+// ────────────────────────────────────────────────────────────────────────────
+
 async function main() {
+  const config = getConfig();
+  const {
+    PROD_BASE_URL, CRON_SECRET, DRY_RUN, MAX_CHUNKS, POLL_INTERVAL_MS,
+    STUCK_THRESHOLD_MS, BOOTSTRAP_TIMEOUT, INTER_SHOP_DELAY,
+    ONLY_SHOPS, SKIP_SHOPS,
+  } = config;
+
+  if (!CRON_SECRET) { console.error("ERROR: CRON_SECRET env var is required"); process.exit(1); }
+  if (!process.env.MONGODB_USERNAME || !process.env.MONGODB_PASSWORD) {
+    console.error("ERROR: MONGODB_USERNAME and MONGODB_PASSWORD env vars are required");
+    process.exit(1);
+  }
+
+  const { MongoClient } = require(path.resolve("./node_modules/mongodb"));
+  const mongoUri = `mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
+  const mongo = new MongoClient(mongoUri);
+  await mongo.connect();
+  const db = mongo.db("mos-maintenance-mvp");
+
+  const log = defaultLog;
+
+  async function listIncomplete() {
+    const docs = await db.collection("tekmetric_backfill_progress")
+      // The cron writes legacy `completed: true` (with -ed) at app/api/cron/tekmetric-backfill/route.ts:475
+      // when a shop reaches the oldest date or has no Tekmetric link, but never
+      // sets the newer `complete: true` field that the rest of this script reads.
+      // Treat either as "done" so we don't pick up already-finished shops.
+      .find({ complete: { $ne: true }, completed: { $ne: true } })
+      .project({ shopId: 1, currentChunkEnd: 1, totalJobsIndexed: 1, lastError: 1, lastRunAt: 1, _id: 0 })
+      .toArray();
+    let f = docs;
+    if (ONLY_SHOPS.length) f = f.filter((d) => ONLY_SHOPS.includes(d.shopId));
+    if (SKIP_SHOPS.length) f = f.filter((d) => !SKIP_SHOPS.includes(d.shopId));
+    f.sort((a, b) => (a.shopId || 0) - (b.shopId || 0));
+    return f;
+  }
+
+  async function getProgress(shopId) {
+    return db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  }
+
+  async function fireChunk(shopId) {
+    // POST to enqueue. We DON'T need the response body — we'll detect
+    // completion via Mongo. We use a short timeout: if the request is at
+    // least accepted by prod within BOOTSTRAP_TIMEOUT, we trust the handler
+    // is running.
+    //
+    // BEFORE posting, stamp `scriptFiredAt` on the progress doc. The prod
+    // cron does NOT set any "I'm running" marker on chunk start — only on
+    // chunk end (lastRunAt) — so without our own marker, a Ctrl-C + re-run
+    // can't tell that a chunk is in flight and would fire a duplicate. The
+    // stamp also lets the same script invocation's looksBusy check survive
+    // across chunks.
+    await db.collection("tekmetric_backfill_progress").updateOne(
+      { shopId },
+      { $set: { scriptFiredAt: new Date() } },
+    );
+
+    const url = `${PROD_BASE_URL}/api/cron/tekmetric-backfill`;
+    const ctrl = new AbortController();
+    // Use an explicit boolean to detect OUR abort, since the resulting error
+    // shape varies wildly across Node/undici versions (e.message can be
+    // empty, e.name may be DOMException, the error may surface from
+    // r.text() instead of fetch(), etc). If `bootstrapAborted` is true and
+    // we got an error, it's our timer — the chunk is running on prod.
+    let bootstrapAborted = false;
+    const timer = setTimeout(() => { bootstrapAborted = true; ctrl.abort(); }, BOOTSTRAP_TIMEOUT);
+    const t0 = Date.now();
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${CRON_SECRET}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId }),
+        signal: ctrl.signal,
+      });
+      let body = "";
+      try { body = await r.text(); }
+      catch {
+        // Body stream aborted (likely by our timer). Status is still valid,
+        // but the chunk is most likely still running on prod, not "finishedFast".
+        return { status: r.status, ms: Date.now() - t0, body: "", finishedFast: false };
+      }
+      return { status: r.status, ms: Date.now() - t0, body, finishedFast: true };
+    } catch (e) {
+      // OUR timer fired → chunk is running on prod (expected for slow shops)
+      if (bootstrapAborted || ctrl.signal.aborted) {
+        return { status: 0, ms: Date.now() - t0, body: "", finishedFast: false };
+      }
+      // Real network error (DNS, TLS, connection refused, etc) before our
+      // timer — surface it. Include cause for nicer diagnostics since
+      // e.message is often empty for fetch errors.
+      const detail = e?.message || e?.cause?.message || e?.code || e?.cause?.code || String(e);
+      const wrapped = new Error(`fetch failed: ${detail}`);
+      wrapped.cause = e;
+      throw wrapped;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   log(`Tekmetric catch-up starting`);
-  log(`PROD_BASE_URL=${PROD_BASE_URL}  DRY_RUN=${DRY_RUN}  MAX_CHUNKS_PER_SHOP=${MAX_CHUNKS}  POLL=${POLL_INTERVAL_MS/1000}s  STUCK_AFTER=${STUCK_THRESHOLD_MS/60000}min`);
+  log(`PROD_BASE_URL=${PROD_BASE_URL}  DRY_RUN=${DRY_RUN}  MAX_CHUNKS_PER_SHOP=${MAX_CHUNKS}  POLL=${POLL_INTERVAL_MS / 1000}s  STUCK_AFTER=${STUCK_THRESHOLD_MS / 60000}min`);
   if (ONLY_SHOPS.length) log(`ONLY_SHOPS filter: ${ONLY_SHOPS.join(",")}`);
   if (SKIP_SHOPS.length) log(`SKIP_SHOPS filter: ${SKIP_SHOPS.join(",")}`);
 
   const shops = await listIncomplete();
   log(`${shops.length} incomplete shop(s) to process:`);
-  for (const s of shops) log(`    shop=${s.shopId}  cursor=${isoOrNull(s.currentChunkEnd)?.slice(0,10)}  jobs=${s.totalJobsIndexed||0}  lastErr=${s.lastError ? "Y":"N"}`);
+  for (const s of shops) log(`    shop=${s.shopId}  cursor=${isoOrNull(s.currentChunkEnd)?.slice(0, 10)}  jobs=${s.totalJobsIndexed || 0}  lastErr=${s.lastError ? "Y" : "N"}`);
 
   // Collect per-shop outcomes for the end-of-run summary so on-call doesn't
   // have to grep the log to figure out which shops still need a follow-up
   // run.
   const results = [];
-  for (let i=0; i<shops.length; i++) {
+  const deps = { getProgress, fireChunk, config, log };
+  for (let i = 0; i < shops.length; i++) {
     const shopId = shops[i].shopId;
-    log(`\n>>> ${i+1}/${shops.length}: shop ${shopId}`);
-    const result = await processShop(shopId);
+    log(`\n>>> ${i + 1}/${shops.length}: shop ${shopId}`);
+    const result = await processShop(shopId, deps);
     results.push({ shopId, ...result });
-    if (i < shops.length-1) { log(`   sleeping ${INTER_SHOP_DELAY/1000}s before next shop...`); await new Promise(r => setTimeout(r, INTER_SHOP_DELAY)); }
+    if (i < shops.length - 1) {
+      log(`   sleeping ${INTER_SHOP_DELAY / 1000}s before next shop...`);
+      await defaultSleep(INTER_SHOP_DELAY);
+    }
   }
 
-  const completed     = results.filter(r => r.outcome === "completed");
-  const recovered     = results.filter(r => r.outcome === "recovered");
-  const needsFollowup = results.filter(r => r.outcome === "needs-followup");
-  const dryRun        = results.filter(r => r.outcome === "dry-run");
-
-  log(`\n========== SUMMARY ==========`);
-  log(`Total shops processed: ${results.length}`);
-  if (DRY_RUN) {
-    log(`Dry-run (would have fired) (${dryRun.length}): ${dryRun.map(r => r.shopId).join(", ") || "(none)"}`);
-  }
-  log(`Completed cleanly (${completed.length}): ${completed.map(r => r.shopId).join(", ") || "(none)"}`);
-  log(`Recovered via stuck-retry (${recovered.length}): ${recovered.map(r => r.shopId).join(", ") || "(none)"}`);
-  log(`Needs follow-up (${needsFollowup.length}):${needsFollowup.length === 0 ? " (none)" : ""}`);
-  for (const r of needsFollowup) {
-    log(`    shop ${r.shopId} — ${r.reason || "unknown"}`);
-  }
-  if (needsFollowup.length > 0) {
-    const ids = needsFollowup.map(r => r.shopId).join(",");
-    log(``);
-    log(`Suggested re-run command for the not-recovered shops:`);
-    log(`    ONLY_SHOPS=${ids} node scripts/tekmetric-catchup.mjs`);
-  }
-  log(`========== DONE ==========`);
+  renderSummary(results, { dryRun: DRY_RUN }, log);
 
   await mongo.close();
+  const needsFollowup = results.filter((r) => r.outcome === "needs-followup");
   process.exit(needsFollowup.length > 0 ? 1 : 0);
 }
 
-main().catch(async e => { console.error("FATAL:", e); try { await mongo.close(); } catch {}; process.exit(2); });
+const isMainModule = (() => {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    return import.meta.url === pathToFileURL(argv1).href;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMainModule) {
+  main().catch((e) => {
+    console.error("FATAL:", e);
+    process.exit(2);
+  });
+}
