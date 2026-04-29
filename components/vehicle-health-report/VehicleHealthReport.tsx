@@ -38,6 +38,8 @@ interface PlanItem {
   notes?: string | null;
   recommendedDefault?: boolean;
   recommendedReason?: string | null;
+  engineRiskFlag?: boolean;
+  engineRiskReason?: string | null;
 }
 
 interface VehicleInfo {
@@ -376,6 +378,15 @@ export default function VehicleHealthReport({
                                 >
                                   Status: {status.text}
                                 </span>
+                                {item.engineRiskFlag && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                                    title={item.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                                  >
+                                    <span aria-hidden="true">⚠</span>
+                                    Engine flagged — long oil interval
+                                  </span>
+                                )}
                                 {item.declined && (
                                   <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
                                     Previously Declined
@@ -423,12 +434,23 @@ export default function VehicleHealthReport({
                               <p className="text-xs text-gray-600 mt-1 leading-relaxed">
                                 {getItemDescription(item)}
                               </p>
-                              <span
-                                className="text-xs font-bold uppercase mt-2 inline-block"
-                                style={{ color: status.color }}
-                              >
-                                Status: {status.text}
-                              </span>
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-xs font-bold uppercase"
+                                  style={{ color: status.color }}
+                                >
+                                  Status: {status.text}
+                                </span>
+                                {item.engineRiskFlag && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                                    title={item.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                                  >
+                                    <span aria-hidden="true">⚠</span>
+                                    Engine flagged — long oil interval
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -526,6 +548,15 @@ export default function VehicleHealthReport({
                       <div key={item.key} className="flex items-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "red" || item.category === "DVI Finding" ? "bg-red-500" : "bg-red-400"}`} />
                         <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                        {item.engineRiskFlag && (
+                          <span
+                            className="text-[9px] font-semibold text-amber-700 leading-none"
+                            title={item.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                            aria-label="Engine flagged — long oil interval"
+                          >
+                            ⚠
+                          </span>
+                        )}
                       </div>
                     ))}
                     {filteredOverdue.length === 0 && (
@@ -543,6 +574,15 @@ export default function VehicleHealthReport({
                       <div key={item.key} className="flex items-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.bump === "yellow" ? "bg-amber-400" : "bg-amber-500"}`} />
                         <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                        {item.engineRiskFlag && (
+                          <span
+                            className="text-[9px] font-semibold text-amber-700 leading-none"
+                            title={item.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                            aria-label="Engine flagged — long oil interval"
+                          >
+                            ⚠
+                          </span>
+                        )}
                       </div>
                     ))}
                     {filteredDueSoon.length === 0 && (
@@ -560,6 +600,15 @@ export default function VehicleHealthReport({
                       <div key={item.key} className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
                         <span className="text-[11px] sm:text-xs text-gray-700 font-medium leading-tight">{item.title}</span>
+                        {item.engineRiskFlag && (
+                          <span
+                            className="text-[9px] font-semibold text-amber-700 leading-none"
+                            title={item.engineRiskReason ?? "Engine flagged for accelerated oil wear."}
+                            aria-label="Engine flagged — long oil interval"
+                          >
+                            ⚠
+                          </span>
+                        )}
                       </div>
                     ))}
                     {buckets.upcoming.length === 0 && (
