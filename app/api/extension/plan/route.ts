@@ -21,6 +21,17 @@ import {
 } from "@/lib/engine-risk";
 
 /**
+ * Test seam (Task #196): the route handler and `runOnDemandAnalysis`
+ * dereference `__deps.getDb` at call time so the smoke test can swap in an
+ * in-memory Mongo without spinning up a real DB. Production callers should
+ * never touch this object — it defaults to the real implementation and is
+ * only mutated by `tests/plan-build-task-196.smoke.ts`.
+ */
+export const __deps = {
+  getDb,
+};
+
+/**
  * Bumped whenever the extension on-demand analyzer's output shape changes
  * in a way the side panel cares about (Task #175: engineRiskFlag /
  * engineRiskReason on the oil row + auto-inserted Safety Check — Oil Level
@@ -451,7 +462,91 @@ async function backgroundPrefetchShopPlans(
   }
 }
 
-async function runOnDemandAnalysis(
+/**
+ * Convert a single dashboard plan-cache item (the `cachedPlan.plan.buckets.*`
+ * shape produced by `lib/plan-build/triage.ts`) into the side-panel item
+ * shape returned by `/api/extension/plan`.
+ *
+ * Extracted to module scope so the Task #196 smoke test can exercise the
+ * cached-plan path (`getCachedPlan` → `convertItem`) without spinning up the
+ * full GET handler. The closure captures inside the GET handler used to
+ * carry `cachedCurrentMiles`, `currentRoAuthorizedJobs`, and
+ * `currentRoAllJobs` — those are now passed explicitly via `opts`.
+ */
+export function convertCachedPlanItemForSidePanel(
+  item: any,
+  bucket: "overdue" | "dueSoon" | "upcoming" | "complimentary" | undefined,
+  opts: {
+    cachedCurrentMiles: number;
+    currentRoAuthorizedJobs: string[];
+    currentRoAllJobs: string[];
+  },
+) {
+  const { cachedCurrentMiles, currentRoAuthorizedJobs, currentRoAllJobs } = opts;
+  let estimatedDueDate: string | null = null;
+  const existingDueDate = item.daysToGo != null && item.daysToGo > 0
+    ? new Date(Date.now() + item.daysToGo * 86400000).toISOString()
+    : item.dueAtDate || null;
+  const est = computeEstimatedDate(item.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, existingDueDate);
+  let daysToGo = est.daysToGo;
+  estimatedDueDate = est.estimatedDueDate;
+  const progress = computeIntervalProgress(item, cachedCurrentMiles || null);
+  return {
+    service: item.title || item.key,
+    name: item.title || item.key,
+    category: item.category || 'General',
+    interval: item.intervalMiles,
+    intervalMiles: item.intervalMiles,
+    intervalMonths: item.intervalMonths,
+    intervalText: `${item.usingShopInterval ? 'Shop' : 'OEM'}: ${formatIntervalText(item.intervalMiles, item.intervalMonths)}`,
+    intervalSource: item.usingShopInterval ? 'shop' : 'oem',
+    dueAt: item.dueAtMiles,
+    dueMileage: item.dueAtMiles,
+    dueDate: item.dueAtDate,
+    daysToGo,
+    estimatedDueDate,
+    milesToGo: item.milesToGo ?? null,
+    last: item.last ? {
+      source: item.last.source || 'unknown',
+      miles: item.last.miles || null,
+      date: item.last.date || null
+    } : null,
+    lastPerformed: item.last ? {
+      mileage: item.last.miles,
+      date: item.last.date,
+      source: item.last.source
+    } : null,
+    lastPerformedBy: item.last?.source || null,
+    lastPerformedMileage: item.last?.miles || null,
+    source: item.source || 'oem',
+    serviceKey: item.serviceKey,
+    bump: item.bump || null,
+    dviSource: item.dviSource || null,
+    usingShopInterval: item.usingShopInterval,
+    reason: item.reason || null,
+    matchedDeferred: item.matchedDeferred || null,
+    protractorDeferredId: item.protractorDeferredId || null,
+    declined: item.declined || null,
+    // Task #175: forward engine-aware oil warning fields so the side
+    // panel renders the same amber chip + tooltip as the dashboard.
+    engineRiskFlag: !!item.engineRiskFlag,
+    engineRiskReason: item.engineRiskReason ?? null,
+    recommendedDefault: !!item.recommendedDefault,
+    recommendedReason: item.recommendedReason ?? null,
+    approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs, item.serviceKey),
+    onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs, item.serviceKey),
+    progress,
+    // Match partner-API semantics: bucket/triage drives the icon, with
+    // progress.status as a fallback when caller didn't pass a bucket.
+    iconStatus:
+      bucket === "overdue" ? "overdue" :
+      bucket === "dueSoon" ? "soon" :
+      (bucket === "upcoming" || bucket === "complimentary") ? "ok" :
+      (progress.status ?? null),
+  };
+}
+
+export async function runOnDemandAnalysis(
   shopId: number, 
   vin: string, 
   mileage: number | null, 
@@ -464,7 +559,8 @@ async function runOnDemandAnalysis(
   currentRoAuthorizedJobs: string[] = [],
   currentRoAllJobs: string[] = []
 ) {
-  const db = await getDb();
+  // Resolve via __deps so the Task #196 smoke test can swap in fake-mongo.
+  const db = await __deps.getDb();
   
   const currentMileage = mileage || 0;
   console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}, showInspect=${showInspectItems}`);
@@ -1415,68 +1511,12 @@ export async function GET(request: NextRequest) {
       // Synthetic DVI-only findings have no interval data; they get the
       // overdue icon directly because they were flagged red on inspection.
       const dviSyntheticProgress = computeIntervalProgress({}, null);
-      const convertItem = (item: any, bucket?: "overdue" | "dueSoon" | "upcoming" | "complimentary") => {
-        let estimatedDueDate: string | null = null;
-        const existingDueDate = item.daysToGo != null && item.daysToGo > 0
-          ? new Date(Date.now() + item.daysToGo * 86400000).toISOString()
-          : item.dueAtDate || null;
-        const est = computeEstimatedDate(item.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, existingDueDate);
-        let daysToGo = est.daysToGo;
-        estimatedDueDate = est.estimatedDueDate;
-        const progress = computeIntervalProgress(item, cachedCurrentMiles || null);
-        return {
-        service: item.title || item.key,
-        name: item.title || item.key,
-        category: item.category || 'General',
-        interval: item.intervalMiles,
-        intervalMiles: item.intervalMiles,
-        intervalMonths: item.intervalMonths,
-        intervalText: `${item.usingShopInterval ? 'Shop' : 'OEM'}: ${formatIntervalText(item.intervalMiles, item.intervalMonths)}`,
-        intervalSource: item.usingShopInterval ? 'shop' : 'oem',
-        dueAt: item.dueAtMiles,
-        dueMileage: item.dueAtMiles,
-        dueDate: item.dueAtDate,
-        daysToGo,
-        estimatedDueDate,
-        milesToGo: item.milesToGo ?? null,
-        last: item.last ? {
-          source: item.last.source || 'unknown',
-          miles: item.last.miles || null,
-          date: item.last.date || null
-        } : null,
-        lastPerformed: item.last ? {
-          mileage: item.last.miles,
-          date: item.last.date,
-          source: item.last.source
-        } : null,
-        lastPerformedBy: item.last?.source || null,
-        lastPerformedMileage: item.last?.miles || null,
-        source: item.source || 'oem',
-        serviceKey: item.serviceKey,
-        bump: item.bump || null,
-        dviSource: item.dviSource || null,
-        usingShopInterval: item.usingShopInterval,
-        reason: item.reason || null,
-        matchedDeferred: item.matchedDeferred || null,
-        protractorDeferredId: item.protractorDeferredId || null,
-        declined: item.declined || null,
-        // Task #175: forward engine-aware oil warning fields so the side
-        // panel renders the same amber chip + tooltip as the dashboard.
-        engineRiskFlag: !!item.engineRiskFlag,
-        engineRiskReason: item.engineRiskReason ?? null,
-        recommendedDefault: !!item.recommendedDefault,
-        recommendedReason: item.recommendedReason ?? null,
-        approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs, item.serviceKey),
-        onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs, item.serviceKey),
-        progress,
-        // Match partner-API semantics: bucket/triage drives the icon, with
-        // progress.status as a fallback when caller didn't pass a bucket.
-        iconStatus:
-          bucket === "overdue" ? "overdue" :
-          bucket === "dueSoon" ? "soon" :
-          (bucket === "upcoming" || bucket === "complimentary") ? "ok" :
-          (progress.status ?? null),
-      }};
+      const convertItem = (item: any, bucket?: "overdue" | "dueSoon" | "upcoming" | "complimentary") =>
+        convertCachedPlanItemForSidePanel(item, bucket, {
+          cachedCurrentMiles,
+          currentRoAuthorizedJobs,
+          currentRoAllJobs,
+        });
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
       const cachedMiles = cachedPlan.mileage || cachedPlan.plan.currentMiles || 0;
