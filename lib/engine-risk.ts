@@ -18,7 +18,7 @@
  * unflags the engine; a `flag` override always flags it.
  */
 
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 
 /**
  * Mileage threshold above which a flagged-engine oil interval is
@@ -264,6 +264,78 @@ export function classifyEngineRisk(
     };
   }
   return baseline;
+}
+
+/**
+ * Shape accepted by the write helpers below: anything `EngineRiskOverride`
+ * carries except its persisted timestamps and audit fields, which the
+ * helpers stamp themselves.
+ */
+export interface EngineRiskOverrideWriteInput {
+  label: string;
+  reason: string;
+  action: EngineRiskAction;
+  match: EngineRiskOverride["match"];
+}
+
+/**
+ * Centralised insert: every code path that creates an override goes
+ * through here so the audit attribution (`createdBy`, `createdAt`,
+ * `updatedAt`) and the canonical Mongo collection name stay in one
+ * place. Used by both the single-row POST handler and the CSV import.
+ */
+export async function insertEngineRiskOverride(
+  db: Db,
+  input: EngineRiskOverrideWriteInput,
+  adminEmail: string | null,
+): Promise<{ _id: string }> {
+  const now = new Date();
+  const result = await db.collection(ENGINE_RISK_OVERRIDES_COLLECTION).insertOne({
+    label: input.label,
+    reason: input.reason,
+    action: input.action,
+    match: input.match,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: adminEmail,
+  } as EngineRiskOverride);
+  return { _id: String(result.insertedId) };
+}
+
+/**
+ * Centralised update: stamps `updatedAt` and `updatedBy` so audit
+ * attribution does not drift across call sites.
+ */
+export async function updateEngineRiskOverride(
+  db: Db,
+  id: string | ObjectId,
+  input: EngineRiskOverrideWriteInput,
+  adminEmail: string | null,
+): Promise<void> {
+  const _id = typeof id === "string" ? new ObjectId(id) : id;
+  const now = new Date();
+  await db.collection(ENGINE_RISK_OVERRIDES_COLLECTION).updateOne(
+    { _id },
+    {
+      $set: {
+        label: input.label,
+        reason: input.reason,
+        action: input.action,
+        match: input.match,
+        updatedAt: now,
+        updatedBy: adminEmail,
+      },
+    },
+  );
+}
+
+/** Centralised delete so the collection name stays in one place. */
+export async function deleteEngineRiskOverride(
+  db: Db,
+  id: string | ObjectId,
+): Promise<void> {
+  const _id = typeof id === "string" ? new ObjectId(id) : id;
+  await db.collection(ENGINE_RISK_OVERRIDES_COLLECTION).deleteOne({ _id });
 }
 
 export async function loadEngineRiskOverrides(db: Db): Promise<EngineRiskOverride[]> {

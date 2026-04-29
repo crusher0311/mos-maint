@@ -1,7 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Plus, Save, Trash2, AlertTriangle, ShieldCheck, Wrench } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+  AlertTriangle,
+  ShieldCheck,
+  Wrench,
+  Download,
+  Upload,
+  X,
+} from "lucide-react";
 
 interface EngineRiskOverrideMatch {
   make?: string | null;
@@ -42,6 +53,37 @@ const EMPTY_FORM: EngineRiskOverride = {
   },
 };
 
+interface DiffChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+interface DiffEntry {
+  status: "add" | "update" | "remove" | "unchanged" | "error";
+  rowNumber?: number;
+  _id?: string;
+  label: string;
+  current?: EngineRiskOverride;
+  next?: EngineRiskOverride;
+  changes?: DiffChange[];
+  errors?: string[];
+}
+
+interface DiffSummary {
+  total: number;
+  add: number;
+  update: number;
+  remove: number;
+  unchanged: number;
+  errors: number;
+}
+
+interface DiffPayload {
+  entries: DiffEntry[];
+  summary: DiffSummary;
+}
+
 export default function EngineRiskOverridesPage() {
   const [items, setItems] = useState<EngineRiskOverride[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +91,12 @@ export default function EngineRiskOverridesPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [pendingCsv, setPendingCsv] = useState<string | null>(null);
+  const [pendingDiff, setPendingDiff] = useState<DiffPayload | null>(null);
+  const [pendingFileName, setPendingFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void load();
@@ -113,6 +161,79 @@ export default function EngineRiskOverridesPage() {
     }
   }
 
+  function exportCsv() {
+    window.location.href = "/api/platform-admin/engine-risk-overrides/export";
+  }
+
+  function pickImportFile() {
+    fileInputRef.current?.click();
+  }
+
+  async function onFileChosen(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const res = await fetch("/api/platform-admin/engine-risk-overrides/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: text, apply: false }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setNotice({ type: "error", message: data.error ?? "Import preview failed" });
+        return;
+      }
+      setPendingCsv(text);
+      setPendingDiff(data.diff as DiffPayload);
+      setPendingFileName(file.name);
+    } catch (err: any) {
+      setNotice({ type: "error", message: err?.message ?? "Failed to read file" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function cancelImport() {
+    setPendingCsv(null);
+    setPendingDiff(null);
+    setPendingFileName(null);
+  }
+
+  async function applyImport() {
+    if (!pendingCsv || !pendingDiff) return;
+    if (pendingDiff.summary.errors > 0) {
+      setNotice({ type: "error", message: "Fix validation errors before applying." });
+      return;
+    }
+    setApplying(true);
+    try {
+      const res = await fetch("/api/platform-admin/engine-risk-overrides/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: pendingCsv, apply: true }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setNotice({ type: "error", message: data.error ?? "Import failed" });
+        return;
+      }
+      const r = data.result ?? {};
+      setNotice({
+        type: "success",
+        message: `Imported: +${r.inserted ?? 0} ~${r.updated ?? 0} −${r.removed ?? 0} (${r.unchanged ?? 0} unchanged).`,
+      });
+      cancelImport();
+      await load();
+    } catch (err: any) {
+      setNotice({ type: "error", message: err?.message ?? "Import failed" });
+    } finally {
+      setApplying(false);
+    }
+  }
+
   async function remove(id?: string) {
     if (!id) return;
     if (!confirm("Delete this engine-risk override?")) return;
@@ -137,16 +258,55 @@ export default function EngineRiskOverridesPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center gap-3 mb-2 flex-wrap">
         <Wrench className="w-6 h-6 text-slate-600" />
         <h1 className="text-2xl font-semibold text-slate-900">Engine Risk Overrides</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded text-sm flex items-center gap-1 hover:bg-slate-50"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={pickImportFile}
+            disabled={importing}
+            className="bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded text-sm flex items-center gap-1 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            Import CSV
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={onFileChosen}
+          />
+        </div>
       </div>
       <p className="text-sm text-slate-600 mb-6 max-w-3xl">
         Force engines to be flagged or cleared in the engine-aware oil interval
         classifier. Match fields combine with AND semantics; string fields are
         case-insensitive partial matches. Overrides take precedence over the
-        curated baseline rules.
+        curated baseline rules. Use Export/Import CSV to bulk-edit in a
+        spreadsheet — rows omitted from an imported file are removed, blank{" "}
+        <code>_id</code> values create new overrides, and an{" "}
+        <code>_id</code> that no longer exists in the database is treated as a
+        new override (not an in-place replacement).
       </p>
+
+      {pendingDiff && (
+        <ImportDiffModal
+          fileName={pendingFileName}
+          diff={pendingDiff}
+          applying={applying}
+          onCancel={cancelImport}
+          onConfirm={applyImport}
+        />
+      )}
 
       {notice && (
         <div
@@ -382,6 +542,207 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function ImportDiffModal({
+  fileName,
+  diff,
+  applying,
+  onCancel,
+  onConfirm,
+}: {
+  fileName: string | null;
+  diff: DiffPayload;
+  applying: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { entries, summary } = diff;
+  const blocked = summary.errors > 0;
+  const hasChanges = summary.add + summary.update + summary.remove > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
+        <div className="flex items-start justify-between px-5 py-3 border-b">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Review CSV import
+            </h3>
+            <div className="text-xs text-slate-500 mt-0.5">
+              {fileName ?? "uploaded file"} — {summary.total} row
+              {summary.total === 1 ? "" : "s"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-slate-400 hover:text-slate-700"
+            aria-label="Cancel import"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-5 py-3 border-b flex flex-wrap gap-2 text-xs">
+          <SummaryPill label="Add" count={summary.add} className="bg-emerald-100 text-emerald-800" />
+          <SummaryPill label="Update" count={summary.update} className="bg-blue-100 text-blue-800" />
+          <SummaryPill label="Remove" count={summary.remove} className="bg-red-100 text-red-800" />
+          <SummaryPill label="Unchanged" count={summary.unchanged} className="bg-slate-100 text-slate-700" />
+          <SummaryPill label="Errors" count={summary.errors} className="bg-amber-100 text-amber-800" />
+        </div>
+
+        <div className="overflow-y-auto px-5 py-3 flex-1">
+          {entries.length === 0 ? (
+            <div className="text-sm text-slate-500 italic">No rows.</div>
+          ) : (
+            <ul className="space-y-2">
+              {entries.map((entry, idx) => (
+                <DiffRow key={idx} entry={entry} />
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+          {blocked && (
+            <span className="text-xs text-amber-700 mr-auto">
+              Fix the validation errors before applying.
+            </span>
+          )}
+          {!hasChanges && !blocked && (
+            <span className="text-xs text-slate-500 mr-auto">
+              No changes to apply.
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded border border-slate-300 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={applying || blocked || !hasChanges}
+            className="px-3 py-1.5 rounded bg-slate-900 text-white text-sm flex items-center gap-1 disabled:opacity-50"
+          >
+            {applying && <Loader2 className="w-4 h-4 animate-spin" />}
+            Apply changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryPill({
+  label,
+  count,
+  className,
+}: {
+  label: string;
+  count: number;
+  className: string;
+}) {
+  return (
+    <span className={`px-2 py-0.5 rounded font-medium ${className}`}>
+      {label}: {count}
+    </span>
+  );
+}
+
+function DiffRow({ entry }: { entry: DiffEntry }) {
+  const tone =
+    entry.status === "add"
+      ? "border-emerald-200 bg-emerald-50"
+      : entry.status === "update"
+        ? "border-blue-200 bg-blue-50"
+        : entry.status === "remove"
+          ? "border-red-200 bg-red-50"
+          : entry.status === "error"
+            ? "border-amber-300 bg-amber-50"
+            : "border-slate-200 bg-white";
+
+  const badgeTone =
+    entry.status === "add"
+      ? "bg-emerald-200 text-emerald-900"
+      : entry.status === "update"
+        ? "bg-blue-200 text-blue-900"
+        : entry.status === "remove"
+          ? "bg-red-200 text-red-900"
+          : entry.status === "error"
+            ? "bg-amber-300 text-amber-900"
+            : "bg-slate-200 text-slate-700";
+
+  return (
+    <li className={`border rounded p-3 text-xs ${tone}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <span className={`px-2 py-0.5 rounded uppercase tracking-wide font-semibold ${badgeTone}`}>
+          {entry.status}
+        </span>
+        <span className="font-medium text-slate-900 truncate">{entry.label}</span>
+        {entry.rowNumber != null && (
+          <span className="text-slate-500">row {entry.rowNumber}</span>
+        )}
+        {entry._id && <span className="text-slate-400 font-mono">{entry._id}</span>}
+      </div>
+
+      {entry.status === "error" && entry.errors && (
+        <ul className="list-disc list-inside text-amber-800">
+          {entry.errors.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
+
+      {entry.status === "update" && entry.changes && entry.changes.length > 0 && (
+        <ul className="space-y-0.5 text-slate-700">
+          {entry.changes.map((c, i) => (
+            <li key={i} className="font-mono">
+              <span className="text-slate-500">{c.field}:</span>{" "}
+              <span className="line-through text-slate-500">{formatValue(c.from)}</span>{" "}
+              →{" "}
+              <span className="text-slate-900">{formatValue(c.to)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {entry.status === "add" && entry.next && (
+        <div className="text-slate-700">{summarizeOverride(entry.next)}</div>
+      )}
+
+      {entry.status === "remove" && entry.current && (
+        <div className="text-slate-700">{summarizeOverride(entry.current)}</div>
+      )}
+    </li>
+  );
+}
+
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "∅";
+  return String(v);
+}
+
+function summarizeOverride(o: EngineRiskOverride): string {
+  const parts: string[] = [];
+  parts.push(`${o.action}: ${o.reason}`);
+  const m = o.match || {};
+  const matchBits: string[] = [];
+  if (m.make) matchBits.push(`make=${m.make}`);
+  if (m.model) matchBits.push(`model=${m.model}`);
+  if (m.yearMin != null || m.yearMax != null) {
+    matchBits.push(`year=${m.yearMin ?? "*"}–${m.yearMax ?? "*"}`);
+  }
+  if (m.engineNamePattern) matchBits.push(`engine~${m.engineNamePattern}`);
+  if (m.engineSize != null) matchBits.push(`${m.engineSize}L`);
+  if (m.induction) matchBits.push(`induction~${m.induction}`);
+  if (m.aspiration) matchBits.push(`aspiration~${m.aspiration}`);
+  if (m.cylindersMax != null) matchBits.push(`cyl≤${m.cylindersMax}`);
+  if (matchBits.length) parts.push(`match: ${matchBits.join(", ")}`);
+  return parts.join(" · ");
 }
 
 function MatchInput({
