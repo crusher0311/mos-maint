@@ -9,6 +9,26 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
 import { buildReportUrl } from "@/lib/report-share";
+import {
+  classifyEngineRisk,
+  loadEngineRiskOverrides,
+  OIL_INTERVAL_RISK_THRESHOLD_MILES,
+  SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+  SAFETY_CHECK_OIL_LEVEL_KEY,
+  SAFETY_CHECK_OIL_LEVEL_TITLE,
+  type EngineProfile,
+  type EngineRiskOverride,
+} from "@/lib/engine-risk";
+
+/**
+ * Bumped whenever the extension on-demand analyzer's output shape changes
+ * in a way the side panel cares about (Task #175: engineRiskFlag /
+ * engineRiskReason on the oil row + auto-inserted Safety Check — Oil Level
+ * row when the engine is flagged). `maintenance_analysis_cache` rows that
+ * predate this version are treated as stale so existing installs pick up
+ * the new chip without manual reload.
+ */
+const ANALYSIS_CACHE_SCHEMA_VERSION = 2;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -451,7 +471,13 @@ async function runOnDemandAnalysis(
   
   const SOON_MILES = 3000; // Same as dashboard
   const recommendations: any[] = [];
-  
+
+  // Task #175: declared at function scope so the post-OEM "Safety Check —
+  // Oil Level" auto-insertion (well outside the OEM try/catch below) can
+  // still see them when the engine is flagged.
+  let engineRisk: ReturnType<typeof classifyEngineRisk> | null = null;
+  let oilLastForSafety: { date?: Date; mileage?: number; source?: string } | null = null;
+
   // Use prefetched work orders or fetch if not provided
   let shopWorkOrders: any[] = prefetched?.shopWorkOrders || [];
   if (!prefetched?.shopWorkOrders) {
@@ -483,7 +509,43 @@ async function runOnDemandAnalysis(
     }
     const oemResult = await oemFetch;
     console.log(`[Extension] OEM data: ${oemResult.count} items, source: ${oemResult.source}`);
-    
+
+    // Task #175: classify engine risk so the side panel can show the same
+    // amber "Engine flagged — long oil interval" chip the dashboard does
+    // and so we can auto-insert the 3,000 mi "Safety Check — Oil Level"
+    // row when the engine is flagged. Mirrors lib/plan-build/triage.ts.
+    // (engineRisk is hoisted to function scope above so it's still
+    // visible to the safety-row insertion that runs after this try block.)
+    if (oemResult.ok && oemResult.vehicle) {
+      const v = oemResult.vehicle;
+      const engineProfile: EngineProfile = {
+        year: v.year ?? null,
+        make: v.make ?? null,
+        model: v.model ?? null,
+        engine_name: v.engine ?? null,
+        engine_size: v.engine_size ?? null,
+        engine_cylinders: v.engine_cylinders ?? null,
+        engine_block: v.engine_block ?? null,
+        engine_induction: v.engine_induction ?? null,
+        engine_aspiration: v.engine_aspiration ?? null,
+        fuel_type: v.fuel_type ?? null,
+      };
+      let engineRiskOverrides: EngineRiskOverride[] = [];
+      try {
+        engineRiskOverrides = await loadEngineRiskOverrides(db);
+      } catch (err) {
+        console.warn(`[Extension] engine_risk_overrides load failed for ${vin}:`, err);
+      }
+      engineRisk = classifyEngineRisk(engineProfile, engineRiskOverrides);
+      if (engineRisk.flagged) {
+        console.log(`[Extension] Engine risk FLAGGED for VIN ${vin} (${engineRisk.source}): ${engineRisk.reasons.join("; ")}`);
+      }
+    }
+
+    // Note: oilLastForSafety is declared at function scope above so the
+    // post-OEM safety-row insertion can reference the most recent oil
+    // change even though that block runs outside this try/catch.
+
     if (oemResult.ok && oemResult.items?.length > 0) {
       const adminMappings = await getServiceMappings(db);
       let skippedNoInterval = 0;
@@ -591,8 +653,39 @@ async function runOnDemandAnalysis(
         const daysToGo = estResult.daysToGo;
         const estimatedDueDate = estResult.estimatedDueDate;
 
+        // Task #175: when this is the oil row and the engine is flagged
+        // AND the active interval is risky (≥ OIL_INTERVAL_RISK_THRESHOLD_MILES),
+        // attach the same engineRiskFlag/engineRiskReason the dashboard uses
+        // so the side panel can render the amber chip + tooltip.
+        let engineRiskFlag = false;
+        let engineRiskReason: string | null = null;
+        if (
+          serviceKey === "oil" &&
+          engineRisk?.flagged &&
+          intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+        ) {
+          engineRiskFlag = true;
+          const reasons = engineRisk.reasons.length > 0
+            ? engineRisk.reasons.join("; ")
+            : "Engine flagged for shorter oil intervals.";
+          engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} mi.`;
+        }
+
+        // Track the most recent oil-change record so the safety-check row
+        // (added below when the engine is flagged) can anchor against it.
+        if (serviceKey === "oil" && lastPerformed.source !== "unknown" && !oilLastForSafety) {
+          // Preserve the original source ("shop" / "carfax") so the
+          // safety-row downstream can attribute history accurately.
+          oilLastForSafety = {
+            date: lastPerformed.date,
+            mileage: lastPerformed.mileage,
+            source: lastPerformed.source,
+          };
+        }
+
         recommendations.push({
           service: item.maintenance_name,
+          serviceKey: serviceKey || null,
           category: item.maintenance_category,
           dueMileage: nextDueMileage,
           interval: intervalMiles,
@@ -613,6 +706,8 @@ async function runOnDemandAnalysis(
           status,
           approvedThisVisit: isApprovedThisVisit(item.maintenance_name, currentRoAuthorizedJobs, serviceKey || undefined),
           onCurrentRO: isOnCurrentRO(item.maintenance_name, currentRoAllJobs, serviceKey || undefined),
+          engineRiskFlag: engineRiskFlag || undefined,
+          engineRiskReason: engineRiskReason ?? undefined,
         });
       }
       console.log(`[Extension] OEM processing: ${recommendations.length} recs, skipped: noInterval=${skippedNoInterval}, inspect=${skippedInspect}, excluded=${skippedExcluded}`);
@@ -698,6 +793,70 @@ async function runOnDemandAnalysis(
     console.log(`[Extension] DVI applied: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched to OEM, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
   }
 
+  // Task #175: when the engine is flagged, auto-insert a "Safety Check —
+  // Oil Level" row anchored off the most recent oil-change record (or the
+  // current odometer when there's no history). Mirrors the dashboard
+  // behaviour in lib/plan-build/triage.ts so service writers see the same
+  // recommendation at the counter.
+  if (engineRisk?.flagged && !recommendations.some((r: any) =>
+    r.serviceKey === SAFETY_CHECK_OIL_LEVEL_KEY ||
+    (r.service || "").toLowerCase() === SAFETY_CHECK_OIL_LEVEL_TITLE.toLowerCase()
+  )) {
+    const safetyIntervalMiles = SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
+    const anchorMiles = (oilLastForSafety?.mileage && oilLastForSafety.mileage > 0)
+      ? oilLastForSafety.mileage
+      : (currentMileage > 0 ? currentMileage : null);
+    const safetyDueMileage = anchorMiles != null ? anchorMiles + safetyIntervalMiles : safetyIntervalMiles;
+    const safetyMilesToGo = currentMileage > 0 ? safetyDueMileage - currentMileage : safetyIntervalMiles;
+    const safetyStatus = currentMileage > 0 && safetyMilesToGo <= 0
+      ? "overdue"
+      : currentMileage > 0 && safetyMilesToGo <= SOON_MILES
+        ? "due_soon"
+        : "upcoming";
+
+    const reasons = engineRisk.reasons.length > 0
+      ? engineRisk.reasons.join("; ")
+      : "Engine flagged for shorter oil intervals.";
+    const safetyReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} mi.`;
+
+    recommendations.push({
+      service: SAFETY_CHECK_OIL_LEVEL_TITLE,
+      serviceKey: SAFETY_CHECK_OIL_LEVEL_KEY,
+      category: "Shop Recommendation",
+      dueMileage: safetyDueMileage,
+      interval: safetyIntervalMiles,
+      intervalMonths: null,
+      intervalText: `OEM: ${safetyIntervalMiles.toLocaleString()} mi`,
+      intervalSource: "oem",
+      lastPerformedBy: oilLastForSafety?.source ?? null,
+      lastPerformedMileage: oilLastForSafety?.mileage ?? null,
+      last: oilLastForSafety
+        ? {
+            source: oilLastForSafety.source ?? "unknown",
+            miles: oilLastForSafety.mileage ?? null,
+            date: oilLastForSafety.date ? oilLastForSafety.date.toISOString() : null,
+          }
+        : null,
+      milesToGo: safetyMilesToGo,
+      daysToGo: null,
+      estimatedDueDate: null,
+      source: "common",
+      status: safetyStatus,
+      reason: oilLastForSafety ? safetyReason : "No record of an oil change to anchor against.",
+      recommendedDefault: true,
+      recommendedReason: safetyReason,
+      engineRiskFlag: true,
+      // Tooltip on the side-panel chip prefers engineRiskReason.
+      // Use the richer safetyReason here so the auto-inserted row
+      // explains both the engine flag AND why the 3,000 mi check
+      // was added (review feedback on Task #175).
+      engineRiskReason: safetyReason,
+      approvedThisVisit: false,
+      onCurrentRO: false,
+    });
+    console.log(`[Extension] Auto-inserted "${SAFETY_CHECK_OIL_LEVEL_TITLE}" for VIN ${vin} (anchor=${anchorMiles}, dueAt=${safetyDueMileage}, status=${safetyStatus})`);
+  }
+
   // Deduplicate recommendations by service name
   const uniqueRecs = recommendations.reduce((acc: any[], rec) => {
     const exists = acc.find(r => r.service?.toLowerCase() === rec.service?.toLowerCase());
@@ -716,7 +875,10 @@ async function runOnDemandAnalysis(
     return (a.milesToGo ?? Infinity) - (b.milesToGo ?? Infinity);
   });
 
-  // Cache the analysis
+  // Cache the analysis. `schemaVersion` is used at the read site so old
+  // cached recommendations (which are missing engineRiskFlag /
+  // engineRiskReason and the auto-inserted Safety Check — Oil Level row)
+  // are treated as stale and re-built. See ANALYSIS_CACHE_SCHEMA_VERSION.
   await db.collection("maintenance_analysis_cache").updateOne(
     { vin: vin.toUpperCase(), shopId },
     {
@@ -726,6 +888,7 @@ async function runOnDemandAnalysis(
         recommendations: uniqueRecs,
         analyzedAt: new Date(),
         source: "extension_on_demand",
+        schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
         mileageAtAnalysis: currentMileage,
         showInspectItems
       }
@@ -1297,6 +1460,12 @@ export async function GET(request: NextRequest) {
         matchedDeferred: item.matchedDeferred || null,
         protractorDeferredId: item.protractorDeferredId || null,
         declined: item.declined || null,
+        // Task #175: forward engine-aware oil warning fields so the side
+        // panel renders the same amber chip + tooltip as the dashboard.
+        engineRiskFlag: !!item.engineRiskFlag,
+        engineRiskReason: item.engineRiskReason ?? null,
+        recommendedDefault: !!item.recommendedDefault,
+        recommendedReason: item.recommendedReason ?? null,
         approvedThisVisit: isApprovedThisVisit(item.title || item.key, currentRoAuthorizedJobs, item.serviceKey),
         onCurrentRO: isOnCurrentRO(item.title || item.key, currentRoAllJobs, item.serviceKey),
         progress,
@@ -1501,10 +1670,16 @@ export async function GET(request: NextRequest) {
     const cachedAnalysisMileage = analysisData?.mileageAtAnalysis || analysisData?.mileage || 0;
     const currentAnalysisMileage = mileage || 0;
     const mileageChanged = currentAnalysisMileage > 0 && (cachedAnalysisMileage <= 0 || Math.abs(currentAnalysisMileage - cachedAnalysisMileage) > 500);
-    
-    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}, mileageChanged=${mileageChanged} (cached=${cachedAnalysisMileage}, current=${currentAnalysisMileage})`);
-    
-    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations || mileageChanged) {
+
+    // Task #175: treat pre-Task-#175 cached analyses as stale so installs
+    // pick up engineRiskFlag/engineRiskReason + the auto-inserted Safety
+    // Check — Oil Level row without manual reload.
+    const cachedSchemaVersion = analysisData?.schemaVersion ?? 1;
+    const schemaStale = cachedSchemaVersion < ANALYSIS_CACHE_SCHEMA_VERSION;
+
+    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}, mileageChanged=${mileageChanged} (cached=${cachedAnalysisMileage}, current=${currentAnalysisMileage}), schemaVersion=${cachedSchemaVersion}/${ANALYSIS_CACHE_SCHEMA_VERSION}${schemaStale ? " STALE" : ""}`);
+
+    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations || mileageChanged || schemaStale) {
       try {
         const startTime = Date.now();
         
@@ -1703,6 +1878,12 @@ export async function GET(request: NextRequest) {
           reason: rec.reason,
           bump: rec.bump || null,
           dviSource: rec.dviSource || null,
+          // Task #175: surface engine-aware oil warning + the auto-inserted
+          // Safety Check — Oil Level row's metadata in the side panel.
+          engineRiskFlag: !!rec.engineRiskFlag,
+          engineRiskReason: rec.engineRiskReason ?? null,
+          recommendedDefault: !!rec.recommendedDefault,
+          recommendedReason: rec.recommendedReason ?? null,
           approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs, rec.serviceKey || undefined),
           onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs, rec.serviceKey || undefined),
           progress: recProgress,

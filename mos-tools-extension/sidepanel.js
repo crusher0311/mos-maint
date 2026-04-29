@@ -1423,6 +1423,11 @@ function createServiceItemHTML(item, type) {
         ${categoryBadge}
         ${badgeText ? `<span class="status-badge ${badgeClass}">${badgeText}</span>` : ''}
         <span class="interval-badge ${isShopInterval ? 'shop' : 'oem'}">${isShopInterval && currentPlanShopLogo ? `<img src="${escapeHtml(currentPlanShopLogo)}" alt="" class="interval-shop-logo" />` : ''}${intervalText}</span>
+        ${item.engineRiskFlag ? `
+        <span class="engine-risk-badge" title="${escapeHtml(item.engineRiskReason || 'Engine flagged for accelerated oil wear.')}">
+          ⚠ Engine flagged — long oil interval
+        </span>
+        ` : ''}
       </div>
       ${renderProgressBars(item, type)}
       <div class="service-details">

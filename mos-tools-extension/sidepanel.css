@@ -657,6 +657,25 @@ body {
   border-radius: 2px;
 }
 
+/*
+ * Task #175: amber engine-risk chip mirroring the dashboard plan page.
+ * Used on the oil row when the engine is flagged AND the active oil
+ * interval is ≥ OIL_INTERVAL_RISK_THRESHOLD_MILES, and on the
+ * auto-inserted "Safety Check — Oil Level" row.
+ */
+.engine-risk-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FCD34D;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
+}
+
 .service-details {
   font-size: 12px;
   color: var(--gray-600);

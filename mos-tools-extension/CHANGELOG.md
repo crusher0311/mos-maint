@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.26.7 — 2026-04-29
+
+### Added
+- **Engine-aware oil warning in the side panel.** When a vehicle's
+  engine is flagged for shorter oil intervals (TGDI engines, Hyundai/Kia
+  Theta II, etc.) and the active OEM oil interval is ≥ 7,500 mi, the
+  oil row now shows an amber "⚠ Engine flagged — long oil interval"
+  chip with the same hover tooltip the advisor dashboard displays.
+- **Auto-inserted "Safety Check — Oil Level" row.** Flagged engines
+  also get a 3,000 mi safety-check recommendation, anchored off the
+  most recent oil change so service writers see it at the counter.
+- Existing cached analyses are invalidated automatically — no manual
+  reload required for the new chip and row to appear.
+
 ## 1.26.6 — 2026-04-28
 
 ### Fixed
