@@ -167,6 +167,45 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "r&r coolant hose", "r/r coolant hose", "replace radiator hose",
     "replace heater hose"
   ],
+  // Task #204: Dual-clutch transmission fluid (DSG, S-tronic, PDK,
+  // PowerShift, etc.). Distinct from `trans_auto` because several OEMs
+  // either spec a much longer interval (Porsche PDK ≈ 120k mi) or
+  // explicitly market the unit as "sealed for life" (VW DSG 7-speed
+  // dry-clutch DQ200, Ford PowerShift DPS6). Mapping these phrasings to
+  // their own key keeps `trans_auto` ATF/CVT cadences clean.
+  dct: [
+    "dct fluid", "dct service", "dct oil",
+    "dual clutch transmission fluid", "dual-clutch transmission fluid",
+    "dual clutch fluid", "dual-clutch fluid",
+    "dsg fluid", "dsg service", "dsg oil",
+    "s-tronic fluid", "s tronic fluid", "stronic fluid",
+    "pdk fluid", "pdk service", "pdk oil",
+    "powershift fluid", "powershift service",
+    "7g-dct fluid", "7g dct fluid"
+  ],
+  // Task #204: Haldex / electronically-controlled AWD coupling fluid
+  // (VW/Audi quattro on transverse, Volvo AWD, Land Rover ATC, some
+  // Subaru ATC, some Mazda i-Activ). Several OEMs ship these units
+  // with no scheduled service in the owner's manual even though the
+  // coupling supplier (BorgWarner Haldex) recommends ~30k mi.
+  awd_coupling: [
+    "haldex fluid", "haldex oil", "haldex service",
+    "haldex filter", "awd coupling", "awd coupling fluid",
+    "awd clutch fluid", "rear coupling fluid",
+    "active on demand fluid", "active on-demand fluid",
+    "atc fluid", "atc service", "i-activ fluid"
+  ],
+  // Task #204: Hybrid / EV power-electronics coolant. Separate cooling
+  // loop for the inverter, traction motor, and HV battery. Honda IMA
+  // hybrids and several BEV platforms list this loop as not requiring
+  // scheduled replacement; Toyota's hybrid coolant is on a long-life
+  // 100k+ mi interval. We treat the no-interval cases as lifetime.
+  hybrid_coolant: [
+    "inverter coolant", "hybrid coolant", "hybrid system coolant",
+    "battery coolant", "hv battery coolant", "high voltage coolant",
+    "high-voltage coolant", "ev coolant", "power electronics coolant",
+    "traction battery coolant", "drive motor coolant"
+  ],
 };
 
 export const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
@@ -199,6 +238,9 @@ export const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   ac_refrigerant: "A/C Service",
   emissions: "Emissions Inspection",
   coolant_hoses: "Coolant Hoses",
+  dct: "DCT / Dual-Clutch Fluid",
+  awd_coupling: "AWD Coupling / Haldex Fluid",
+  hybrid_coolant: "Hybrid / Inverter Coolant",
 };
 
 /**
@@ -213,6 +255,37 @@ export const LIFETIME_FLUID_DEFAULT_MILES = 120000;
  * Service keys we are willing to surface as "Recommended at 120k mi" when
  * the OE source treats the fluid as lifetime. Limited to fluids — we do not
  * fabricate intervals for parts the OE never schedules (e.g. timing belts).
+ *
+ * Task #204: extended beyond the original ATF / coolant / brake-fluid /
+ * power-steering / differential / transfer-case / manual-trans baseline to
+ * cover three more fluids that real-world OEM schedules treat as lifetime
+ * on at least one platform:
+ *   - `dct` — Dual-clutch transmission fluid. VW/Audi originally marketed
+ *     the 7-speed dry-clutch DSG (DQ200) as a sealed-for-life unit; Ford
+ *     PowerShift (DPS6) shipped with no scheduled change in the owner's
+ *     manual; Porsche PDK lists "inspect at 120k mi". (Sources: VW Service
+ *     Reference DSG TPI 2032359, Ford Owner's Manual DPS6 maintenance
+ *     section, Porsche maintenance schedule 991/992.)
+ *   - `awd_coupling` — Haldex / electronically-controlled AWD coupling
+ *     fluid. The Volvo XC60/XC90 with Haldex Gen 4–5 owner's manual lists
+ *     no scheduled service for the rear coupling; Land Rover ATC and
+ *     several Subaru/Mazda i-Activ AWD units behave the same way.
+ *     (Sources: Volvo XC90 Owner's Manual MY2017+ "Maintenance" chapter,
+ *     Land Rover Range Rover Sport service schedule.)
+ *   - `hybrid_coolant` — Power-electronics / HV-battery / inverter coolant.
+ *     Honda IMA hybrid manuals and several BEV platforms (e.g. Tesla
+ *     Model 3/Y) list no scheduled coolant replacement for the HV loop.
+ *     Toyota's hybrid coolant has a long-life interval but several rows
+ *     come through with no interval set, which lets the lifetime default
+ *     apply only when there is genuinely no OEM cadence.
+ *     (Sources: Honda Insight/Civic Hybrid maintenance schedule, Tesla
+ *     Model 3 owner's manual "Service" section.)
+ *
+ * The `isLifetimeFluidItem` heuristic still requires an explicit lifetime
+ * signal (matching text, lifetime interval-units, OR the OEM omitting
+ * intervals entirely). So adding a key here CANNOT manufacture a 120k-mi
+ * recommendation when the OEM did publish a real interval — the regression
+ * tests in `tests/plan-build-task-204.smoke.ts` lock that down per key.
  */
 export const LIFETIME_FLUID_SERVICE_KEYS = new Set<string>([
   "trans_auto",
@@ -223,6 +296,9 @@ export const LIFETIME_FLUID_SERVICE_KEYS = new Set<string>([
   "coolant",
   "brake_fluid",
   "power_steering",
+  "dct",
+  "awd_coupling",
+  "hybrid_coolant",
 ]);
 
 const LIFETIME_TEXT_PATTERNS: RegExp[] = [
