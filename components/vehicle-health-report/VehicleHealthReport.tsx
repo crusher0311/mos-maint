@@ -38,6 +38,10 @@ interface PlanItem {
   notes?: string | null;
   recommendedDefault?: boolean;
   recommendedReason?: string | null;
+  /** Task #198: True when OEM only schedules an "Inspect …" verb on a known fluid. */
+  inspectOnly?: boolean;
+  /** Task #198: Tooltip / chip rationale for inspectOnly. */
+  inspectOnlyReason?: string | null;
   engineRiskFlag?: boolean;
   engineRiskReason?: string | null;
 }
@@ -152,6 +156,12 @@ function getStatusLabel(item: PlanItem, bucket: "overdue" | "dueSoon"): { text: 
   if (item.recommendedDefault) {
     return { text: "RECOMMENDED", color: "#2563eb" };
   }
+  // Task #198: OEM-only-inspect rows on known fluids surface as an
+  // INSPECT badge rather than OVERDUE / DUE SOON, so customers don't
+  // misread an inspection cadence as an overdue replacement.
+  if (item.inspectOnly) {
+    return { text: "INSPECT", color: "#b45309" };
+  }
   if (bucket === "overdue") {
     return { text: "OVERDUE", color: "#dc2626" };
   }
@@ -162,6 +172,11 @@ function appendNotes(base: string, item: PlanItem): string {
   const extras: string[] = [];
   if (item.recommendedDefault && item.recommendedReason) {
     extras.push(item.recommendedReason);
+  }
+  // Task #198: surface the OEM-inspect rationale in the printed report
+  // body so the printed VHR is self-explanatory even without chip hover.
+  if (item.inspectOnly && item.inspectOnlyReason) {
+    extras.push(item.inspectOnlyReason);
   }
   if (item.notes && item.notes.trim()) {
     extras.push(`Note: ${item.notes.trim()}`);
@@ -387,6 +402,22 @@ export default function VehicleHealthReport({
                                     Engine flagged — long oil interval
                                   </span>
                                 )}
+                                {item.recommendedDefault && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded"
+                                    title={item.recommendedReason ?? "OEM lists this as lifetime fluid; shop recommendation only."}
+                                  >
+                                    OEM lifetime fluid · Shop recommendation
+                                  </span>
+                                )}
+                                {item.inspectOnly && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded"
+                                    title={item.inspectOnlyReason ?? "OEM only schedules an inspection (not a replacement) for this fluid."}
+                                  >
+                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} mi` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
+                                  </span>
+                                )}
                                 {item.declined && (
                                   <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
                                     Previously Declined
@@ -448,6 +479,22 @@ export default function VehicleHealthReport({
                                   >
                                     <span aria-hidden="true">⚠</span>
                                     Engine flagged — long oil interval
+                                  </span>
+                                )}
+                                {item.recommendedDefault && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded"
+                                    title={item.recommendedReason ?? "OEM lists this as lifetime fluid; shop recommendation only."}
+                                  >
+                                    OEM lifetime fluid · Shop recommendation
+                                  </span>
+                                )}
+                                {item.inspectOnly && (
+                                  <span
+                                    className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded"
+                                    title={item.inspectOnlyReason ?? "OEM only schedules an inspection (not a replacement) for this fluid."}
+                                  >
+                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} mi` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
                                   </span>
                                 )}
                               </div>

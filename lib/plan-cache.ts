@@ -14,8 +14,12 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  *    `intervalMilesNormal/Severe`, `intervalMonthsNormal/Severe`) plus
  *    plan-level `engineRisk` / `oilDutyPreference` and the
  *    auto-inserted Safety Check — oil level row.
+ *  - v4 (Apr 2026, task 198): adds `inspectOnly` / `inspectOnlyReason`
+ *    so OEM "Inspect …" rows on known fluids surface with a distinct
+ *    "OEM: Inspect every X mi" chip and bypass the showInspectItems
+ *    filter.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 3;
+export const PLAN_CACHE_SCHEMA_VERSION = 4;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -56,6 +60,15 @@ export interface TriagedItemCache {
   recommendedDefault?: boolean;
   /** Human-readable rationale for the recommended-default override. */
   recommendedReason?: string | null;
+  /**
+   * Task #198: True when the OEM only schedules an "Inspect …" verb on a
+   * known fluid (no matching Replace row). The plan UI / VHR render this
+   * as an "OEM: Inspect every X mi" chip and the showInspectItems filter
+   * skips items with this flag so the fluid is never silently hidden.
+   */
+  inspectOnly?: boolean;
+  /** Tooltip / chip rationale for inspectOnly. */
+  inspectOnlyReason?: string | null;
   /* -------- Task #166: engine-aware oil interval fields -------- */
   /** True when the engine is flagged AND the active interval is risky. */
   engineRiskFlag?: boolean;

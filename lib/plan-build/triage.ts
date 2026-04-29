@@ -18,6 +18,7 @@ import {
   toKeyFromFreeText,
   parseServiceAction,
   isLifetimeFluidItem,
+  isInspectOnlyFluidItem,
   LIFETIME_FLUID_DEFAULT_MILES,
   type ServiceAction,
 } from "@/lib/service-keys";
@@ -264,6 +265,15 @@ export interface TriagedItem {
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  /**
+   * Task #198: True when the OEM only schedules an "Inspect …" verb on a
+   * known fluid (no matching Replace row). Surfaced with an
+   * "OEM: Inspect every X mi" chip and exempt from the
+   * showInspectItems=false filter so customers always see the fluid.
+   */
+  inspectOnly?: boolean;
+  /** Tooltip / chip rationale shown when inspectOnly is true. */
+  inspectOnlyReason?: string | null;
   /** Task #166: engine-risk + duty-aware oil interval metadata. */
   engineRiskFlag?: boolean;
   engineRiskReason?: string | null;
@@ -421,6 +431,24 @@ export function triage({
   const isAutomatic = resolvedTransType ? (resolvedTransType.includes("auto") || resolvedTransType.includes("cvt")) : null;
   const isManual = resolvedTransType ? resolvedTransType.includes("manual") : null;
 
+  // Task #198: precompute the set of OEM serviceKeys that have at least
+  // one replacement-style row (Replace / Flush / Service / Drain — or an
+  // unverbed interval-only row, which we always treat as a replacement).
+  // A fluid is "inspect-only" only when the OEM ships an Inspect verb on
+  // it AND no replacement row exists for the same key. This is the actual
+  // signal Task #198 cares about — a plain Inspect row that coexists with
+  // a Replace row is just routine inspection cadence and stays
+  // suppressible via the showInspectItems toggle.
+  const oemReplacementKeys = new Set<string>();
+  for (const o of oemItems) {
+    const mk = toKeyFromName(o.name || "");
+    if (!mk) continue;
+    const a = parseServiceAction(o.name || "");
+    if (a === null || a === "replace" || a === "flush" || a === "service" || a === "drain") {
+      oemReplacementKeys.add(mk);
+    }
+  }
+
   for (const o of oemItems) {
     const mappedKey = toKeyFromName(o.name || "");
     const serviceKey = mappedKey || `misc_${o.maintenance_id}`;
@@ -512,7 +540,31 @@ export function triage({
       intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
       intervalMonths = null;
       recommendedDefault = true;
-      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Recommended at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+    }
+
+    // Task #198: an OEM "Inspect …" row on a known fluid (no matching
+    // Replace row) needs to surface as an Inspect plan item at the
+    // OEM-stated interval, anchored against last-service like every other
+    // row. We do NOT promote the interval to a shop-recommended replace
+    // here (intentionally out of scope) — we keep the verb and the OEM
+    // cadence, mark the row with `inspectOnly` so the UI can render an
+    // "OEM: Inspect every X mi" chip, and exempt it from the
+    // showInspectItems=false filter so the fluid never silently disappears
+    // for customers whose shops have hidden generic inspect items.
+    let inspectOnly = false;
+    let inspectOnlyReason: string | null = null;
+    if (
+      !recommendedDefault &&
+      mappedKey &&
+      !oemReplacementKeys.has(mappedKey) &&
+      isInspectOnlyFluidItem({ serviceKey: mappedKey, action })
+    ) {
+      inspectOnly = true;
+      const intervalText = intervalMiles && intervalMiles > 0
+        ? `every ${intervalMiles.toLocaleString()} mi`
+        : (intervalMonths && intervalMonths > 0 ? `every ${intervalMonths} mo` : "per OEM schedule");
+      inspectOnlyReason = `OEM only schedules an inspection (not a replacement) ${intervalText}. Have your technician check the fluid's condition; replacement is at the technician's discretion.`;
     }
 
     if (dviMap.has(serviceKey)) usedDviKeys.add(serviceKey);
@@ -610,6 +662,8 @@ export function triage({
       notes: o.notes ?? null,
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      inspectOnly: inspectOnly || undefined,
+      inspectOnlyReason: inspectOnlyReason ?? undefined,
       engineRiskFlag: engineRiskFlag || undefined,
       engineRiskReason: engineRiskReason ?? undefined,
       intervalSchedule: serviceKey === "oil" ? intervalSchedule : null,
@@ -917,6 +971,11 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
     notes: item.notes ?? null,
     recommendedDefault: item.recommendedDefault ?? false,
     recommendedReason: item.recommendedReason ?? null,
+    // Task #198: persist inspect-only fluid flag so cached plans render
+    // the "OEM: Inspect every X mi" chip and the show-inspect-items
+    // exemption stays consistent across cached and freshly-built reads.
+    inspectOnly: item.inspectOnly ?? false,
+    inspectOnlyReason: item.inspectOnlyReason ?? null,
     // Task #166: persist engine-aware oil metadata for cached plans.
     engineRiskFlag: item.engineRiskFlag ?? false,
     engineRiskReason: item.engineRiskReason ?? null,

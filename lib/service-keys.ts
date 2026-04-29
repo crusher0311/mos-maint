@@ -259,6 +259,25 @@ export function isLifetimeIntervalRow(row: { units?: string | null; value?: numb
 }
 
 /**
+ * Task #198: True when an OEM row is an "Inspect …" / "Check …" verb on a
+ * known fluid (one of LIFETIME_FLUID_SERVICE_KEYS). These rows must keep
+ * surfacing on the plan even when the shop has hidden generic inspect
+ * items, because they are usually the only signal a customer gets about
+ * that fluid (the OEM never schedules a replacement). Distinct from the
+ * lifetime-fluid heuristic in `isLifetimeFluidItem` — that one fabricates a
+ * recommended replacement interval; this one keeps the OEM-stated inspect
+ * interval and labels it accordingly.
+ */
+export function isInspectOnlyFluidItem(opts: {
+  serviceKey: string | null;
+  action?: ServiceAction | null;
+}): boolean {
+  const { serviceKey, action } = opts;
+  if (action !== "inspect") return false;
+  return !!serviceKey && LIFETIME_FLUID_SERVICE_KEYS.has(serviceKey);
+}
+
+/**
  * Decide whether an OEM maintenance item should be treated as a lifetime
  * fluid that needs a recommended-default interval. Returns true when:
  *   - any interval row carries a lifetime unit, OR

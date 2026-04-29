@@ -746,6 +746,12 @@ export async function POST(req: NextRequest) {
     });
 
     const isInspectItem = (item: TriagedItem) => {
+      // Task #198: keep inspect-only fluid rows (e.g. Mopar's "Inspect
+      // transmission fluid") in the plan even when the shop has hidden
+      // generic inspect items — they are usually the only OEM signal a
+      // customer gets about that fluid, so dropping them silently
+      // disappears the row entirely.
+      if (item.inspectOnly) return false;
       // Prefer the parsed action verb so the filter cannot be fooled by a
       // canonical display label that hides the original "Inspect …" wording.
       if (item.action === "inspect") return true;

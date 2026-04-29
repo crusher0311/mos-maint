@@ -50,6 +50,7 @@ import { getOELogoUrl } from "@/lib/oe-logos";
 import {
   LIFETIME_FLUID_DEFAULT_MILES,
   isLifetimeFluidItem,
+  isInspectOnlyFluidItem,
   parseServiceAction,
   type ServiceAction,
 } from "@/lib/service-keys";
@@ -590,6 +591,10 @@ type TriagedItem = {
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  /** Task #198: True when OEM only schedules an "Inspect …" verb on a known fluid. */
+  inspectOnly?: boolean;
+  /** Task #198: Tooltip / chip rationale for inspectOnly. */
+  inspectOnlyReason?: string | null;
   // Task #166: engine-aware oil interval metadata.
   engineRiskFlag?: boolean;
   engineRiskReason?: string | null;
@@ -784,6 +789,20 @@ function triage({
     }
   }
 
+  // Task #198: precompute OEM keys that have a replacement-style row, so
+  // a fluid is only flagged inspectOnly when the OEM ships an Inspect verb
+  // and no matching Replace / Flush / Service / Drain (or interval-only)
+  // row exists for the same key. Mirrors lib/plan-build/triage.ts.
+  const oemReplacementKeys = new Set<string>();
+  for (const o of oemItems) {
+    const mk = toKeyFromName(o.name || "");
+    if (!mk) continue;
+    const a = parseServiceAction(o.name || "");
+    if (a === null || a === "replace" || a === "flush" || a === "service" || a === "drain") {
+      oemReplacementKeys.add(mk);
+    }
+  }
+
   for (const o of oemItems) {
     const serviceKey = toKeyFromName(o.name || "") || `misc_${o.maintenance_id}`;
     
@@ -878,7 +897,25 @@ function triage({
       intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
       intervalMonths = null;
       recommendedDefault = true;
-      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Recommended at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+    }
+
+    // Task #198: surface OEM "Inspect …" rows on known fluids with the
+    // OEM-stated interval. Mirrors lib/plan-build/triage.ts so cached &
+    // freshly-built plans agree.
+    let inspectOnly = false;
+    let inspectOnlyReason: string | null = null;
+    if (
+      !recommendedDefault &&
+      !serviceKey.startsWith("misc_") &&
+      !oemReplacementKeys.has(serviceKey) &&
+      isInspectOnlyFluidItem({ serviceKey, action })
+    ) {
+      inspectOnly = true;
+      const intervalText = intervalMiles && intervalMiles > 0
+        ? `every ${intervalMiles.toLocaleString()} mi`
+        : (intervalMonths && intervalMonths > 0 ? `every ${intervalMonths} mo` : "per OEM schedule");
+      inspectOnlyReason = `OEM only schedules an inspection (not a replacement) ${intervalText}. Have your technician check the fluid's condition; replacement is at the technician's discretion.`;
     }
 
     // Track that we've used this DVI key
@@ -978,6 +1015,10 @@ function triage({
       // (which would render again as the gray italic pill).
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      // Task #198: inspect-only fluid flag for the "OEM: Inspect every X mi"
+      // chip and the showInspectItems-filter exemption.
+      inspectOnly: inspectOnly || undefined,
+      inspectOnlyReason: inspectOnlyReason ?? undefined,
       // Task #166: surface engine-aware oil metadata so the dashboard can
       // render the soft warning chip and remember which schedule was used.
       engineRiskFlag: oilEngineRiskFlag || undefined,
@@ -1871,6 +1912,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Filter out "Inspect" or "Check" items if preference is off
   const isInspectItemFilter = (item: TriagedItem) => {
+    // Task #198: keep inspect-only fluid rows visible regardless of the
+    // showInspectItems toggle — they are the only OEM signal a customer
+    // gets about that fluid, and silently dropping them is worse than the
+    // user having to ignore one extra row.
+    if (item.inspectOnly) return false;
     const title = item.title?.toLowerCase() || "";
     return title.includes("inspect") || title.startsWith("check ");
   };
@@ -2071,6 +2117,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
       intervalMonthsSevere: item.intervalMonthsSevere ?? null,
       recommendedDefault: item.recommendedDefault,
       recommendedReason: item.recommendedReason ?? null,
+      // Task #198: persist inspect-only fluid flag so cached plans render
+      // the OEM-inspect chip and apply the showInspectItems exemption.
+      inspectOnly: item.inspectOnly,
+      inspectOnlyReason: item.inspectOnlyReason ?? null,
     });
     
     const planData: CachedPlanData = {
@@ -2365,9 +2415,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
+                        {t.inspectOnly && (
+                          <span
+                            className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
+                            title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
+                          >
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -2602,9 +2660,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
+                        {t.inspectOnly && (
+                          <span
+                            className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
+                            title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
+                          >
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.carfaxMatch && (
@@ -2679,9 +2745,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                        title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                        title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                       >
-                        Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                        OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                      </span>
+                    )}
+                    {t.inspectOnly && (
+                      <span
+                        className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
+                        title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
+                      >
+                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                       </span>
                     )}
                     {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -2869,9 +2943,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                          </span>
+                        )}
+                        {t.inspectOnly && (
+                          <span
+                            className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
+                            title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
+                          >
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -2939,9 +3021,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                        title={t.recommendedReason || "Surfaced because the OEM treats this fluid as lifetime / fill for life"}
+                        title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                       >
-                        Recommended at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                        OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                      </span>
+                    )}
+                    {t.inspectOnly && (
+                      <span
+                        className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
+                        title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
+                      >
+                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                       </span>
                     )}
                     {(t.intervalMiles || t.intervalMonths) && (
