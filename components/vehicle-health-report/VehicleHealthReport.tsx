@@ -262,6 +262,24 @@ export default function VehicleHealthReport({
     (item) => item.milesToGo !== null && item.milesToGo > 5000
   );
 
+  // Task #194: when the plan flags this engine for accelerated oil wear
+  // (or auto-inserts the 3,000-mi Safety Check — Oil Level row), the only
+  // explanation on-card today is a hover tooltip with technical wording.
+  // Customers reading the printed report can't see tooltips, so render a
+  // short plain-English callout block whenever either signal is present.
+  // Rendered above the tab navigation so it appears in SSR HTML on every
+  // tab and prints reliably.
+  const allItems = [
+    ...buckets.overdue,
+    ...buckets.dueSoon,
+    ...buckets.upcoming,
+  ];
+  const hasEngineRiskFlag = allItems.some((item) => item.engineRiskFlag);
+  const hasOilLevelSafetyCheck = allItems.some(
+    (item) => (item.serviceKey ?? item.key ?? "").toLowerCase() === "safety_check_oil_level"
+  );
+  const showEngineFlagCallout = hasEngineRiskFlag || hasOilLevelSafetyCheck;
+
   const tabs: { key: ReportTab; label: string }[] = [
     { key: "recommendations", label: "Recommendations" },
     { key: "plan", label: "Plan" },
@@ -326,6 +344,32 @@ export default function VehicleHealthReport({
             )}
           </div>
         </div>
+
+        {/* Engine-flagged / oil-level safety check explanation (Task #194). */}
+        {showEngineFlagCallout && (
+          <div className="px-4 pb-4">
+            <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 sm:p-4 flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="text-amber-600 text-lg leading-none flex-shrink-0 mt-0.5"
+              >
+                ⚠
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900 leading-tight">
+                  Why we added a 3,000-mile oil-level safety check
+                </p>
+                <p className="text-xs sm:text-sm text-amber-900/90 mt-1 leading-relaxed">
+                  Your vehicle&apos;s factory oil-change interval is on the
+                  longer side, which can let oil run low or wear out before the
+                  next full change. To help catch that early, we&apos;ve added a
+                  quick complimentary oil-level check at about 3,000 miles since
+                  your last oil change.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="border-b border-gray-200">
