@@ -41,6 +41,14 @@ const POLL_INTERVAL_MS    = Number(process.env.POLL_INTERVAL_MS    || 20_000);
 const STUCK_THRESHOLD_MS  = Number(process.env.STUCK_THRESHOLD_MS  || 60 * 60 * 1000);
 const BOOTSTRAP_TIMEOUT   = Number(process.env.BOOTSTRAP_TIMEOUT_MS || 45_000);
 const INTER_SHOP_DELAY    = Number(process.env.INTER_SHOP_DELAY_MS  || 5_000);
+// When a chunk hits stuck=true (no movement in STUCK_THRESHOLD_MS), give the
+// shop ONE more shot at the same chunk after a short cooldown. Empirical
+// evidence from the 2026-04-28/29 run: shop 32 hit a transient stuck on
+// chunk 3 (POST returned but cron never updated metrics or lastRunAt) and
+// the script abandoned the shop ~9 months short of its 2-year goal — a
+// single retry would almost certainly have unstuck it. Multi-retry is
+// intentionally NOT supported: keeps prod load bounded.
+const STUCK_RETRY_COOLDOWN_MS = Number(process.env.STUCK_RETRY_COOLDOWN_MS || 30_000);
 const ONLY_SHOPS = (process.env.ONLY_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
 const SKIP_SHOPS = (process.env.SKIP_SHOPS || "").split(",").map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>!isNaN(n));
 
@@ -140,15 +148,27 @@ async function fireChunk(shopId) {
 async function processShop(shopId) {
   log(`=== SHOP ${shopId} START ===`);
 
+  // Track per-shop stuck-retry state across chunks. `stuckRetryForChunk`
+  // holds the chunk number for which we've already burned the one-shot
+  // retry; if the same chunk stucks again we give up. `recoveredFromStuck`
+  // becomes true if any chunk advanced/completed AFTER its stuck retry —
+  // used to bucket the shop in the end-of-run summary.
+  let stuckRetryForChunk = 0;
+  let recoveredFromStuck = false;
+
   for (let chunk = 1; chunk <= MAX_CHUNKS; chunk++) {
+    const isStuckRetry = stuckRetryForChunk === chunk;
     const before = await getProgress(shopId);
-    if (before?.complete || before?.completed) { log(`   ✓ Shop ${shopId} already complete`); return true; }
+    if (before?.complete || before?.completed) {
+      log(`   ✓ Shop ${shopId} already complete`);
+      return { outcome: recoveredFromStuck ? "recovered" : "completed" };
+    }
     const beforeCursor  = isoOrNull(before?.currentChunkEnd);
     const beforeRunAt   = before?.lastRunAt ? new Date(before.lastRunAt).getTime() : 0;
     const beforeMetrics = before?.lastChunkMetrics?.at ? new Date(before.lastChunkMetrics.at).getTime() : 0;
     const beforeJobs    = before?.totalJobsIndexed || 0;
 
-    log(`   chunk ${chunk}/${MAX_CHUNKS}  before:  cursor=${beforeCursor?.slice(0,19)}  jobs=${beforeJobs}`);
+    log(`   chunk ${chunk}/${MAX_CHUNKS}${isStuckRetry ? " [STUCK-RETRY]" : ""}  before:  cursor=${beforeCursor?.slice(0,19)}  jobs=${beforeJobs}`);
 
     // Safety: don't stack a duplicate chunk if prod looks busy on this shop.
     // Three independent signals indicate a chunk is already running:
@@ -161,12 +181,20 @@ async function processShop(shopId) {
     //      STUCK_THRESHOLD_MS and lastChunkMetrics.at hasn't advanced past
     //      it (chunk we kicked off is still mid-bulk-write). This is the
     //      Ctrl-C + re-run safety net.
+    //
+    // EXCEPTION: on a stuck retry we KNOW prod hasn't moved for
+    // STUCK_THRESHOLD_MS (that's why we're retrying), but the prior
+    // scriptFiredAt + un-advanced metrics will still trip looksBusy. Skip
+    // the busy check entirely on the retry pass — the whole point is to
+    // re-fire the same window.
     const beforeFired = before?.scriptFiredAt ? new Date(before.scriptFiredAt).getTime() : 0;
     const firedRecently = beforeFired > Date.now() - STUCK_THRESHOLD_MS;
     const firedChunkUnfinished = firedRecently && beforeMetrics < beforeFired;
-    const looksBusy = before?.inProgress === true ||
+    const looksBusy = !isStuckRetry && (
+      before?.inProgress === true ||
       (beforeRunAt > Date.now() - 15 * 60 * 1000 && beforeMetrics < beforeRunAt) ||
-      firedChunkUnfinished;
+      firedChunkUnfinished
+    );
     if (looksBusy) {
       const reason = firedChunkUnfinished
         ? `prior script run fired chunk at ${new Date(beforeFired).toISOString()} not yet reflected in metrics`
@@ -179,24 +207,36 @@ async function processShop(shopId) {
         const nowMetrics = now?.lastChunkMetrics?.at ? new Date(now.lastChunkMetrics.at).getTime() : 0;
         const nowCursor  = isoOrNull(now?.currentChunkEnd);
         process.stdout.write(`${ts()}    drain-poll: cursor=${nowCursor?.slice(0,10)} metrics@=${nowMetrics > beforeMetrics ? "NEW" : "old"} inProgress=${now?.inProgress} complete=${now?.complete || now?.completed}\n`);
-        if (now?.complete || now?.completed) { log(`   ✓ Shop ${shopId} COMPLETE during drain wait`); return true; }
+        if (now?.complete || now?.completed) {
+          log(`   ✓ Shop ${shopId} COMPLETE during drain wait`);
+          return { outcome: recoveredFromStuck ? "recovered" : "completed" };
+        }
         if (nowCursor !== beforeCursor || nowMetrics > beforeMetrics) {
           log(`   ✓ Drain wait satisfied — cursor advanced or metrics updated. Loop continues with fresh snapshot.`);
           chunk--; // re-snapshot at top of loop
           break;
         }
       }
-      if (Date.now() >= drainDeadline) { log(`   ✗ Drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min — moving on`); return false; }
+      if (Date.now() >= drainDeadline) {
+        log(`   ✗ Drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min — moving on`);
+        return { outcome: "needs-followup", reason: `drain wait exceeded ${STUCK_THRESHOLD_MS/60000}min on chunk ${chunk}` };
+      }
       continue;
     }
 
-    if (DRY_RUN) { log(`   [DRY_RUN] would POST shopId=${shopId}`); break; }
+    if (DRY_RUN) {
+      log(`   [DRY_RUN] would POST shopId=${shopId}`);
+      return { outcome: "dry-run" };
+    }
 
     let fired;
     try { fired = await fireChunk(shopId); }
     catch (e) { log(`   !! fire error: ${e.message} — sleeping 30s and retrying chunk`); await new Promise(r=>setTimeout(r,30_000)); chunk--; continue; }
 
-    if (fired.status === 401) { log(`   !! 401 Unauthorized — CRON_SECRET wrong, aborting`); return false; }
+    if (fired.status === 401) {
+      log(`   !! 401 Unauthorized — CRON_SECRET wrong, aborting`);
+      return { outcome: "needs-followup", reason: "401 Unauthorized (CRON_SECRET wrong)" };
+    }
     if (fired.status >= 500)  { log(`   !! HTTP ${fired.status} from prod — sleeping 60s and retrying chunk`); await new Promise(r=>setTimeout(r,60_000)); chunk--; continue; }
 
     if (fired.finishedFast) {
@@ -238,15 +278,34 @@ async function processShop(shopId) {
     const after = await getProgress(shopId);
     log(`   chunk ${chunk} result: advanced=${advanced} completed=${completed} stuck=${stuck}  cursor: ${beforeCursor?.slice(0,10)} → ${isoOrNull(after?.currentChunkEnd)?.slice(0,10)}  jobs: ${beforeJobs} → ${after?.totalJobsIndexed||0}  err=${after?.lastError||"null"}`);
 
-    if (completed) { log(`   ✓ Shop ${shopId} COMPLETE after ${chunk} chunk(s)`); return true; }
-    if (stuck) {
-      log(`   ✗ Shop ${shopId} STUCK (no movement in ${STUCK_THRESHOLD_MS/60000} min) — moving on`);
-      return false;
+    if (completed) {
+      // The cron writes BOTH `complete` and legacy `completed: true` paths;
+      // we treat either as done (matches the listIncomplete + before-snapshot
+      // checks above) so we don't drop a real completion just because the
+      // dual-flag check didn't fire.
+      const outcome = (recoveredFromStuck || isStuckRetry) ? "recovered" : "completed";
+      log(`   ✓ Shop ${shopId} COMPLETE after ${chunk} chunk(s)${outcome === "recovered" ? " (recovered via stuck retry)" : ""}`);
+      return { outcome };
     }
-    // advanced — loop for next chunk
+    if (stuck) {
+      if (!isStuckRetry) {
+        log(`   ⟳ Shop ${shopId} chunk ${chunk} STUCK — retrying once after ${STUCK_RETRY_COOLDOWN_MS/1000}s cooldown`);
+        stuckRetryForChunk = chunk;
+        await new Promise(r => setTimeout(r, STUCK_RETRY_COOLDOWN_MS));
+        chunk--; // re-do this chunk; isStuckRetry will be true on the next pass
+        continue;
+      }
+      log(`   ✗ Shop ${shopId} STUCK on chunk ${chunk} after retry — needs follow-up`);
+      return { outcome: "needs-followup", reason: `stuck on chunk ${chunk} after one retry` };
+    }
+    // advanced — if this was the retry pass, mark recovery and loop on
+    if (isStuckRetry) {
+      recoveredFromStuck = true;
+      log(`   ✓ Stuck retry recovered chunk ${chunk} — continuing`);
+    }
   }
-  log(`   ✗ Shop ${shopId} did not complete after ${MAX_CHUNKS} chunks — moving on`);
-  return false;
+  log(`   ✗ Shop ${shopId} did not complete after ${MAX_CHUNKS} chunks — needs follow-up`);
+  return { outcome: "needs-followup", reason: `did not complete after ${MAX_CHUNKS} chunks` };
 }
 
 async function main() {
@@ -259,18 +318,44 @@ async function main() {
   log(`${shops.length} incomplete shop(s) to process:`);
   for (const s of shops) log(`    shop=${s.shopId}  cursor=${isoOrNull(s.currentChunkEnd)?.slice(0,10)}  jobs=${s.totalJobsIndexed||0}  lastErr=${s.lastError ? "Y":"N"}`);
 
-  let done=0, failed=0;
+  // Collect per-shop outcomes for the end-of-run summary so on-call doesn't
+  // have to grep the log to figure out which shops still need a follow-up
+  // run.
+  const results = [];
   for (let i=0; i<shops.length; i++) {
-    log(`\n>>> ${i+1}/${shops.length}: shop ${shops[i].shopId}`);
-    const ok = await processShop(shops[i].shopId);
-    if (ok) done++; else failed++;
+    const shopId = shops[i].shopId;
+    log(`\n>>> ${i+1}/${shops.length}: shop ${shopId}`);
+    const result = await processShop(shopId);
+    results.push({ shopId, ...result });
     if (i < shops.length-1) { log(`   sleeping ${INTER_SHOP_DELAY/1000}s before next shop...`); await new Promise(r => setTimeout(r, INTER_SHOP_DELAY)); }
   }
 
-  log(`\n========== DONE ==========`);
-  log(`completed=${done}  stuck/incomplete=${failed}  total=${shops.length}`);
+  const completed     = results.filter(r => r.outcome === "completed");
+  const recovered     = results.filter(r => r.outcome === "recovered");
+  const needsFollowup = results.filter(r => r.outcome === "needs-followup");
+  const dryRun        = results.filter(r => r.outcome === "dry-run");
+
+  log(`\n========== SUMMARY ==========`);
+  log(`Total shops processed: ${results.length}`);
+  if (DRY_RUN) {
+    log(`Dry-run (would have fired) (${dryRun.length}): ${dryRun.map(r => r.shopId).join(", ") || "(none)"}`);
+  }
+  log(`Completed cleanly (${completed.length}): ${completed.map(r => r.shopId).join(", ") || "(none)"}`);
+  log(`Recovered via stuck-retry (${recovered.length}): ${recovered.map(r => r.shopId).join(", ") || "(none)"}`);
+  log(`Needs follow-up (${needsFollowup.length}):${needsFollowup.length === 0 ? " (none)" : ""}`);
+  for (const r of needsFollowup) {
+    log(`    shop ${r.shopId} — ${r.reason || "unknown"}`);
+  }
+  if (needsFollowup.length > 0) {
+    const ids = needsFollowup.map(r => r.shopId).join(",");
+    log(``);
+    log(`Suggested re-run command for the not-recovered shops:`);
+    log(`    ONLY_SHOPS=${ids} node scripts/tekmetric-catchup.mjs`);
+  }
+  log(`========== DONE ==========`);
+
   await mongo.close();
-  process.exit(failed > 0 ? 1 : 0);
+  process.exit(needsFollowup.length > 0 ? 1 : 0);
 }
 
 main().catch(async e => { console.error("FATAL:", e); try { await mongo.close(); } catch {}; process.exit(2); });
