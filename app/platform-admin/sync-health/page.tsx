@@ -15,6 +15,7 @@ import {
   Gauge,
   Flame,
   X,
+  BookOpen,
 } from "lucide-react";
 import { MAX_RETRY_ATTEMPTS } from "@/lib/integrations/tekmetric/ro-retry-constants";
 
@@ -2939,6 +2940,16 @@ export default function SyncHealthPage() {
             <h2 className="font-semibold text-gray-900">
               Tekmetric catch-up runs
             </h2>
+            <a
+              href="/platform-admin/runbooks/tekmetric-catchup"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-full"
+              title="Open the paste-ready procedure for firing this catch-up from a prod Render Shell"
+            >
+              <BookOpen className="w-3 h-3" />
+              How to run this
+            </a>
             <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded-full">
               last {list.length} run{list.length === 1 ? "" : "s"}
             </span>
@@ -2955,9 +2966,23 @@ export default function SyncHealthPage() {
         </div>
 
         {list.length === 0 ? (
-          <div className="p-8 flex items-center justify-center gap-2 text-gray-500">
-            <CheckCircle2 className="w-5 h-5 text-gray-400" />
-            No catch-up runs recorded yet.
+          <div className="p-8 flex flex-col items-center justify-center gap-2 text-gray-500 text-center">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-gray-400" />
+              No catch-up runs recorded yet.
+            </div>
+            <p className="text-xs text-gray-500 max-w-md">
+              First time firing a catch-up?{" "}
+              <a
+                href="/platform-admin/runbooks/tekmetric-catchup"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-800 underline"
+              >
+                Read the runbook
+              </a>{" "}
+              for the paste-ready procedure to run it from a prod Render Shell.
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
