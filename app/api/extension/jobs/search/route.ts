@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
@@ -343,10 +343,16 @@ export async function GET(request: NextRequest) {
     }
 
     const targetVehicle = { year, make, model, engine, vin };
+    const idFor = (job: any) =>
+      job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+    const corroborationCounts = buildCorroborationCounts(jobs, idFor);
     const scoredJobs: ScoredJob[] = jobs.map(job => {
-      const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+      const jobId = idFor(job);
       const jobSpecs = jobSpecsMap.get(jobId) || null;
-      return scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query);
+      return scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query, {
+        currentShopId: mosShopId,
+        corroboratingCount: corroborationCounts.get(jobId) ?? 1,
+      });
     });
     
     if (scoredJobs.length > 0) {

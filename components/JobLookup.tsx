@@ -38,7 +38,7 @@ type JobResult = {
     totalAmount: number;
   };
   matchScore: number;
-  matchBand?: "exact" | "likely" | "possible" | "poor";
+  matchBand?: "exact" | "likely" | "possible" | "low_confidence";
   matchBandLabel?: string;
   matchReason: string;
   isCurrentLocation?: boolean;

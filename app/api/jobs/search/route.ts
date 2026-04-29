@@ -5,7 +5,7 @@ import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { searchNormalizedCollections } from "@/lib/normalized-job-search";
 import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
-import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 
 export const dynamic = "force-dynamic";
@@ -209,10 +209,16 @@ export async function GET(req: NextRequest) {
   }
 
   const targetVehicle = { year: vehicleYear, make: vehicleMake, model: vehicleModel, engine: vehicleEngine, vin: vehicleVin };
+  const idFor = (job: any) =>
+    job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+  const corroborationCounts = buildCorroborationCounts(jobs, idFor);
   const scoredJobs = jobs.map((job: any) => {
-    const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+    const jobId = idFor(job);
     const jobSpecs = jobSpecsMap.get(jobId) || null;
-    const scored = scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query);
+    const scored = scoreJob(job, targetVehicle, targetSpecs, jobSpecs, query, {
+      currentShopId: shopId,
+      corroboratingCount: corroborationCounts.get(jobId) ?? 1,
+    });
     
     const jobShopId = Number(job.shopId);
     const isCurrentLocation = jobShopId === shopId;
