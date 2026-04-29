@@ -11,8 +11,10 @@ import {
 } from "@/lib/engine-risk";
 import {
   computeOverrideDiff,
+  evaluateDestructiveImport,
   InvalidOverrideCsvError,
   parseOverridesCsv,
+  type DestructiveImportOptions,
   type OverrideDiff,
 } from "@/lib/engine-risk-csv";
 
@@ -21,6 +23,29 @@ export const runtime = "nodejs";
 function unauthorized(error: unknown) {
   const msg = (error as { message?: string })?.message ?? "";
   return msg.toLowerCase().includes("unauthorized");
+}
+
+/**
+ * Task #188: lets ops tune the destructive-import threshold without a
+ * code change. Invalid env values fall back to the library defaults.
+ */
+function readDestructiveOptions(): DestructiveImportOptions {
+  const opts: DestructiveImportOptions = {};
+  const fractionRaw = process.env.ENGINE_RISK_OVERRIDE_DESTRUCTIVE_FRACTION;
+  if (fractionRaw != null && fractionRaw !== "") {
+    const fraction = Number(fractionRaw);
+    if (Number.isFinite(fraction) && fraction > 0 && fraction <= 1) {
+      opts.fractionThreshold = fraction;
+    }
+  }
+  const floorRaw = process.env.ENGINE_RISK_OVERRIDE_DESTRUCTIVE_FLOOR;
+  if (floorRaw != null && floorRaw !== "") {
+    const floor = Number(floorRaw);
+    if (Number.isFinite(floor) && floor >= 0) {
+      opts.floor = Math.floor(floor);
+    }
+  }
+  return opts;
 }
 
 interface ApplyResult {
@@ -71,6 +96,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const csv = typeof body.csv === "string" ? body.csv : "";
     const apply = body.apply === true;
+    const confirmDestructive = body.confirmDestructive === true;
 
     // Allow header-only CSV: that's how an admin signals "remove all
     // overrides" by uploading an emptied spreadsheet. Only the truly
@@ -99,9 +125,19 @@ export async function POST(request: NextRequest) {
       .toArray();
 
     const diff = computeOverrideDiff(parsed, current);
+    const destructive = evaluateDestructiveImport(
+      diff,
+      current.length,
+      readDestructiveOptions(),
+    );
 
     if (!apply) {
-      return NextResponse.json({ ok: true, applied: false, diff });
+      return NextResponse.json({
+        ok: true,
+        applied: false,
+        diff,
+        destructive,
+      });
     }
 
     if (diff.summary.errors > 0) {
@@ -110,6 +146,21 @@ export async function POST(request: NextRequest) {
           ok: false,
           error: `Refusing to apply: ${diff.summary.errors} row(s) have validation errors`,
           diff,
+          destructive,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (destructive.destructive && !confirmDestructive) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            destructive.reason ??
+            "Refusing to apply destructive import without confirmDestructive: true",
+          diff,
+          destructive,
         },
         { status: 400 },
       );

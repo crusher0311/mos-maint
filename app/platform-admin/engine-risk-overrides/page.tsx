@@ -84,6 +84,16 @@ interface DiffPayload {
   summary: DiffSummary;
 }
 
+interface DestructiveEvaluation {
+  destructive: boolean;
+  removed: number;
+  currentTotal: number;
+  fractionRemoved: number;
+  fractionThreshold: number;
+  floor: number;
+  reason?: string;
+}
+
 export default function EngineRiskOverridesPage() {
   const [items, setItems] = useState<EngineRiskOverride[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +106,9 @@ export default function EngineRiskOverridesPage() {
   const [pendingCsv, setPendingCsv] = useState<string | null>(null);
   const [pendingDiff, setPendingDiff] = useState<DiffPayload | null>(null);
   const [pendingFileName, setPendingFileName] = useState<string | null>(null);
+  const [pendingDestructive, setPendingDestructive] =
+    useState<DestructiveEvaluation | null>(null);
+  const [confirmDestructive, setConfirmDestructive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -189,6 +202,10 @@ export default function EngineRiskOverridesPage() {
       setPendingCsv(text);
       setPendingDiff(data.diff as DiffPayload);
       setPendingFileName(file.name);
+      setPendingDestructive(
+        (data.destructive as DestructiveEvaluation | undefined) ?? null,
+      );
+      setConfirmDestructive(false);
     } catch (err: any) {
       setNotice({ type: "error", message: err?.message ?? "Failed to read file" });
     } finally {
@@ -200,6 +217,8 @@ export default function EngineRiskOverridesPage() {
     setPendingCsv(null);
     setPendingDiff(null);
     setPendingFileName(null);
+    setPendingDestructive(null);
+    setConfirmDestructive(false);
   }
 
   async function applyImport() {
@@ -208,12 +227,26 @@ export default function EngineRiskOverridesPage() {
       setNotice({ type: "error", message: "Fix validation errors before applying." });
       return;
     }
+    if (pendingDestructive?.destructive && !confirmDestructive) {
+      setNotice({
+        type: "error",
+        message:
+          "This import would delete a large chunk of overrides. Tick the confirmation checkbox to proceed.",
+      });
+      return;
+    }
     setApplying(true);
     try {
       const res = await fetch("/api/platform-admin/engine-risk-overrides/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv: pendingCsv, apply: true }),
+        body: JSON.stringify({
+          csv: pendingCsv,
+          apply: true,
+          confirmDestructive: pendingDestructive?.destructive
+            ? confirmDestructive
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -302,6 +335,9 @@ export default function EngineRiskOverridesPage() {
         <ImportDiffModal
           fileName={pendingFileName}
           diff={pendingDiff}
+          destructive={pendingDestructive}
+          confirmDestructive={confirmDestructive}
+          onConfirmDestructiveChange={setConfirmDestructive}
           applying={applying}
           onCancel={cancelImport}
           onConfirm={applyImport}
@@ -547,12 +583,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function ImportDiffModal({
   fileName,
   diff,
+  destructive,
+  confirmDestructive,
+  onConfirmDestructiveChange,
   applying,
   onCancel,
   onConfirm,
 }: {
   fileName: string | null;
   diff: DiffPayload;
+  destructive: DestructiveEvaluation | null;
+  confirmDestructive: boolean;
+  onConfirmDestructiveChange: (v: boolean) => void;
   applying: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -560,6 +602,14 @@ function ImportDiffModal({
   const { entries, summary } = diff;
   const blocked = summary.errors > 0;
   const hasChanges = summary.add + summary.update + summary.remove > 0;
+  const isDestructive = !!destructive?.destructive;
+  const destructivePending = isDestructive && !confirmDestructive;
+  const destructivePct = destructive
+    ? Math.round(destructive.fractionRemoved * 100)
+    : 0;
+  const thresholdPct = destructive
+    ? Math.round(destructive.fractionThreshold * 100)
+    : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
@@ -604,13 +654,52 @@ function ImportDiffModal({
           )}
         </div>
 
+        {isDestructive && destructive && (
+          <div className="mx-5 mb-3 mt-1 border border-red-300 bg-red-50 rounded p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
+              <div className="text-xs text-red-900 space-y-1">
+                <div className="font-semibold">
+                  Heads up: this import will delete a large chunk of overrides.
+                </div>
+                <div>
+                  It would remove <span className="font-mono">{destructive.removed}</span>{" "}
+                  of <span className="font-mono">{destructive.currentTotal}</span>{" "}
+                  current override(s) ({destructivePct}%), which is at or above the{" "}
+                  {thresholdPct}% destructive-import threshold (floor:{" "}
+                  {destructive.floor} row(s)). Double-check that the uploaded
+                  spreadsheet is the full list and not a partial extract.
+                </div>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 mt-2 text-xs text-red-900 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={confirmDestructive}
+                onChange={(e) => onConfirmDestructiveChange(e.target.checked)}
+                className="border-red-400"
+                aria-label="Confirm destructive import"
+              />
+              <span>
+                Yes, I reviewed the diff and want to delete{" "}
+                {destructive.removed} override(s).
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
           {blocked && (
             <span className="text-xs text-amber-700 mr-auto">
               Fix the validation errors before applying.
             </span>
           )}
-          {!hasChanges && !blocked && (
+          {!blocked && destructivePending && (
+            <span className="text-xs text-red-700 mr-auto">
+              Confirm the destructive-import checkbox above to enable Apply.
+            </span>
+          )}
+          {!hasChanges && !blocked && !destructivePending && (
             <span className="text-xs text-slate-500 mr-auto">
               No changes to apply.
             </span>
@@ -625,11 +714,15 @@ function ImportDiffModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={applying || blocked || !hasChanges}
-            className="px-3 py-1.5 rounded bg-slate-900 text-white text-sm flex items-center gap-1 disabled:opacity-50"
+            disabled={
+              applying || blocked || !hasChanges || destructivePending
+            }
+            className={`px-3 py-1.5 rounded text-white text-sm flex items-center gap-1 disabled:opacity-50 ${
+              isDestructive ? "bg-red-700 hover:bg-red-800" : "bg-slate-900"
+            }`}
           >
             {applying && <Loader2 className="w-4 h-4 animate-spin" />}
-            Apply changes
+            {isDestructive ? "Apply destructive changes" : "Apply changes"}
           </button>
         </div>
       </div>

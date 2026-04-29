@@ -155,6 +155,77 @@ export interface OverrideDiff {
   summary: OverrideDiffSummary;
 }
 
+/**
+ * Task #188: guardrail thresholds for destructive CSV imports. An admin
+ * who uploads a partial spreadsheet by mistake would otherwise see the
+ * Apply button enabled even when the diff is going to wipe out most of
+ * the existing overrides. We treat an import as "destructive" when it
+ * removes more than a small absolute floor *and* at least a configured
+ * fraction of the existing overrides. Both conditions must hold so a
+ * tiny dataset (e.g. 3 overrides total) doesn't trip the guardrail
+ * every time a single row is dropped.
+ */
+export const DEFAULT_DESTRUCTIVE_REMOVE_FRACTION = 0.25;
+export const DEFAULT_DESTRUCTIVE_REMOVE_FLOOR = 5;
+
+export interface DestructiveImportEvaluation {
+  destructive: boolean;
+  removed: number;
+  currentTotal: number;
+  fractionRemoved: number;
+  fractionThreshold: number;
+  floor: number;
+  reason?: string;
+}
+
+export interface DestructiveImportOptions {
+  fractionThreshold?: number;
+  floor?: number;
+}
+
+export function evaluateDestructiveImport(
+  diff: OverrideDiff,
+  currentTotal: number,
+  options: DestructiveImportOptions = {},
+): DestructiveImportEvaluation {
+  const fractionThreshold =
+    typeof options.fractionThreshold === "number" &&
+    Number.isFinite(options.fractionThreshold) &&
+    options.fractionThreshold > 0 &&
+    options.fractionThreshold <= 1
+      ? options.fractionThreshold
+      : DEFAULT_DESTRUCTIVE_REMOVE_FRACTION;
+  const floor =
+    typeof options.floor === "number" &&
+    Number.isFinite(options.floor) &&
+    options.floor >= 0
+      ? Math.floor(options.floor)
+      : DEFAULT_DESTRUCTIVE_REMOVE_FLOOR;
+  const removed = diff.summary.remove;
+  const fractionRemoved = currentTotal > 0 ? removed / currentTotal : 0;
+  const overFloor = removed > floor;
+  const overFraction = fractionRemoved >= fractionThreshold;
+  const destructive = overFloor && overFraction;
+  const result: DestructiveImportEvaluation = {
+    destructive,
+    removed,
+    currentTotal,
+    fractionRemoved,
+    fractionThreshold,
+    floor,
+  };
+  if (destructive) {
+    const pct = Math.round(fractionRemoved * 100);
+    const thresholdPct = Math.round(fractionThreshold * 100);
+    result.reason =
+      `This import would delete ${removed} of ${currentTotal} existing override(s) ` +
+      `(${pct}%, which is at or above the ${thresholdPct}% destructive-import threshold ` +
+      `with a floor of ${floor} row(s)). ` +
+      `Re-submit with confirmDestructive: true if this is intentional.`;
+  }
+  return result;
+}
+
 function csvCellEscape(value: unknown): string {
   if (value === null || value === undefined) return "";
   const s = typeof value === "string" ? value : String(value);
