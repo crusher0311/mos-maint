@@ -23,6 +23,11 @@
  * bare numeric id (e.g. `laborRate: 9991`), NOT an object. The create payload
  * wraps it back into `{ id: <number> }`.
  *
+ * NOTE on appointmentOption shape: the RO metadata endpoint returns it as a
+ * string enum (e.g. `"DROP"`), but the create endpoint expects a numeric Long.
+ * Confirmed mapping from HAR: `"DROP"` -> 2. Other values are best-guess and
+ * default to 2 (drop-off) so the create doesn't 400 on an unknown enum.
+ *
  * USAGE
  *   1. In Tekmetric, navigate to ANY page on the shop you want to clone within
  *      (e.g. https://shop.tekmetric.com/admin/shop/14245/...). The active
@@ -197,6 +202,14 @@
     ? sourceRo.laborRate
     : sourceRo.laborRate?.id;
 
+  // appointmentOption: GET returns string enum, POST expects numeric Long.
+  // Confirmed mapping from HAR: "DROP" -> 2. Default to 2 (drop-off) for any
+  // string we don't recognize so the create doesn't 400.
+  const APPT_OPTION_MAP = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  const sourceApptOption = typeof sourceRo.appointmentOption === 'number'
+    ? sourceRo.appointmentOption
+    : (APPT_OPTION_MAP[sourceRo.appointmentOption] ?? 2);
+
   console.log(`[CLONE] source RO #${sourceRo.repairOrderNumber} has ${sourceJobs.length} non-archived job(s).`);
   console.log(`        customer: ${sourceRo.customer?.firstName} ${sourceRo.customer?.lastName} (id ${sourceRo.customer?.id})`);
   console.log(`        vehicle: ${sourceRo.vehicle?.year} ${sourceRo.vehicle?.make} ${sourceRo.vehicle?.model} (id ${sourceRo.vehicle?.id})`);
@@ -222,7 +235,7 @@
   // ----- 2. create the new RO
   const createPayload = {
     shop: { id: SHOP_ID },
-    appointmentOption: sourceRo.appointmentOption ?? 2,
+    appointmentOption: sourceApptOption,
     odometerInop: sourceRo.odometerInop ?? false,
     leadSource: sourceRo.leadSource || '',
     vehicle: { id: sourceRo.vehicle.id },
