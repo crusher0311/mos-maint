@@ -1,0 +1,176 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration — Optional helper: augment dump with
+ * full inspection content from the SOURCE shop.
+ *
+ * Use this when Snippet 3's inline cross-shop inspection read fails (you'll
+ * see a 401/403 with "source inspection fetch failed" in the failures
+ * table). It writes a NEW dump file with a `fullContent` field on every
+ * inspection summary; Snippet 3 reads that field directly and skips the
+ * cross-shop fetch.
+ *
+ * Steps:
+ *   1. Switch the active Tekmetric shop back to the SOURCE shop the dump
+ *      came from.
+ *   2. Paste this whole file into the console.
+ *   3. Pick the original tekmetric-open-jobs-dump-*.json from Snippet 1.
+ *   4. It downloads tekmetric-open-jobs-dump-{shop}-{ts}-augmented.json.
+ *   5. Switch back to the destination shop and re-paste 03-load-extras-dest.js,
+ *      picking the augmented dump.
+ *
+ * This snippet is read-only; there is no CONFIRM gate.
+ */
+(async () => {
+  const VERSION = '2026-04-30.1';
+
+  const ENDPOINTS = {
+    base: location.origin,
+    inspectionGet: (shopId, inspectionId) =>
+      `/api/shop/${shopId}/inspection/${inspectionId}`,
+  };
+
+  function readShopIdFromUrl() {
+    const m = location.pathname.match(/\/(?:admin\/)?shop\/(\d+)/);
+    return m ? m[1] : null;
+  }
+  function readShopNameFromDom() {
+    const candidates = document.querySelectorAll(
+      '[class*="ShopSwitcher"], [class*="shop-switcher"], [data-testid*="shop"], header'
+    );
+    for (const el of candidates) {
+      const t = (el.textContent || '').trim();
+      if (t && t.length < 80 && /[A-Za-z]/.test(t)) {
+        return t.replace(/\s+/g, ' ').slice(0, 60);
+      }
+    }
+    return null;
+  }
+  async function captureXAuthToken() {
+    return new Promise((resolve) => {
+      const captured = { token: null };
+      const origFetch = window.fetch;
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+      let timeoutId;
+      function done(token) {
+        if (captured.token) return;
+        captured.token = token;
+        window.fetch = origFetch;
+        XMLHttpRequest.prototype.open = origOpen;
+        XMLHttpRequest.prototype.setRequestHeader = origSetHeader;
+        clearTimeout(timeoutId);
+        resolve(token);
+      }
+      window.fetch = function patched(input, init) {
+        try {
+          const headers = (init && init.headers) || (input && input.headers);
+          if (headers) {
+            const h = headers instanceof Headers ? headers.get('x-auth-token') :
+              (headers['x-auth-token'] || headers['X-Auth-Token']);
+            if (h) done(h);
+          }
+        } catch (_) {}
+        return origFetch.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+        if (typeof name === 'string' && name.toLowerCase() === 'x-auth-token' && value) done(value);
+        return origSetHeader.apply(this, arguments);
+      };
+      const shopId = readShopIdFromUrl();
+      if (shopId) {
+        try { fetch(`${ENDPOINTS.base}/api/shop/${shopId}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
+      }
+      timeoutId = setTimeout(() => done(null), 4000);
+    });
+  }
+  async function jsonFetch(path, token) {
+    const res = await fetch(`${ENDPOINTS.base}${path}`, {
+      headers: { 'x-auth-token': token, 'content-type': 'application/json', 'accept': 'application/json' },
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`${res.status} ${res.statusText} on ${path} :: ${body.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+  async function pickJsonFile(promptText) {
+    return new Promise((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'application/json,.json';
+      input.style.cssText = 'position:fixed;top:20px;left:20px;z-index:999999;padding:12px;background:#fff;border:2px solid #0a0';
+      input.title = promptText;
+      input.onchange = async () => {
+        const f = input.files && input.files[0]; input.remove();
+        if (!f) return reject(new Error('No file picked'));
+        try { resolve({ name: f.name, json: JSON.parse(await f.text()) }); } catch (e) { reject(e); }
+      };
+      document.body.appendChild(input);
+      console.log(`%c[AUGMENT] ${promptText}`, 'color:#0a0;font-weight:bold');
+    });
+  }
+  function downloadJson(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  }
+  function ts() {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+  }
+  function safeFilenamePart(s) {
+    return (s || 'unknown').toString().replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40);
+  }
+
+  console.log(`%c[Tekmetric Migration AUGMENT v${VERSION}] starting…`, 'color:#0a0;font-weight:bold');
+
+  const activeShopId = readShopIdFromUrl();
+  if (!activeShopId) {
+    console.error('[AUGMENT] No shop ID detected in URL. Open the source shop and re-paste.');
+    return;
+  }
+  const { name: dumpName, json: dump } = await pickJsonFile('Pick the tekmetric-open-jobs-dump-*.json from Snippet 1');
+  if (dump.schema !== 'tekmetric-open-jobs-dump') {
+    console.error('[AUGMENT] That file is not a Snippet-1 dump.');
+    return;
+  }
+  if (Number(dump.source.shopId) !== Number(activeShopId)) {
+    console.error(`[AUGMENT] REFUSING TO RUN: dump came from shop ${dump.source.shopId} but active shop is ${activeShopId}. Switch to the dump's source shop and re-paste.`);
+    return;
+  }
+
+  const token = await captureXAuthToken();
+  if (!token) {
+    console.error('[AUGMENT] Could not capture x-auth-token. Click around in Tekmetric and re-paste.');
+    return;
+  }
+
+  const total = dump.repairOrders.reduce((acc, r) => acc + ((r.inspections || []).length), 0);
+  console.log(`[AUGMENT] Will fetch ${total} inspection(s) across ${dump.repairOrders.length} RO(s).`);
+
+  let ok = 0, fail = 0;
+  for (const r of dump.repairOrders) {
+    if (!r.inspections) continue;
+    for (const ins of r.inspections) {
+      if (ins.fullContent) { ok++; continue; }
+      try {
+        ins.fullContent = await jsonFetch(ENDPOINTS.inspectionGet(activeShopId, ins.id), token);
+        ok++;
+      } catch (e) {
+        ins.fullContent = null;
+        ins._fetchError = e.message;
+        fail++;
+        console.warn(`[AUGMENT] inspection ${ins.id} (RO #${r.sourceRoNumber}) failed: ${e.message}`);
+      }
+    }
+  }
+  dump.augmentedAt = new Date().toISOString();
+  dump.counts = { ...(dump.counts || {}), inspectionContentFetched: ok, inspectionContentFailed: fail };
+
+  const fname = `tekmetric-open-jobs-dump-${safeFilenamePart(dump.source.shopName)}-${ts()}-augmented.json`;
+  downloadJson(fname, dump);
+  console.log(`[AUGMENT] Done: ${ok} inspections augmented, ${fail} failed. Wrote ${fname}.`);
+  console.log('[AUGMENT] Now switch the active Tekmetric shop to the destination and re-paste 03-load-extras-dest.js with this augmented file.');
+})();

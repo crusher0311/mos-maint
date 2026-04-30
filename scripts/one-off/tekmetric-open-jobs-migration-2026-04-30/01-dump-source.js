@@ -1,0 +1,310 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration — Snippet 1: DUMP (source shop)
+ *
+ * Paste this whole file into Chrome DevTools Console while you are on
+ * shop.tekmetric.com with the SOURCE shop active. It will:
+ *   1. capture the live x-auth-token from the session
+ *   2. read every non-Posted (Estimate / WIP) RO from the Job Board
+ *   3. fetch each RO's full detail (customer, vehicle, header, jobs with
+ *      labor & parts, notes, customer concerns, mileage, service writer,
+ *      appointment) plus the list of inspection IDs/titles attached
+ *   4. trigger a download of a single tekmetric-open-jobs-dump-{shop}-{ts}.json
+ *
+ * It does NOT write anything to Tekmetric. There is no CONFIRM gate because
+ * this snippet is read-only.
+ *
+ * After it finishes:
+ *   - switch the active Tekmetric shop to the destination shop
+ *   - paste 02-load-core-dest.js
+ *
+ * If anything in this snippet's ENDPOINTS block disagrees with what you saw
+ * during the discovery pass, edit them here before pasting.
+ */
+(async () => {
+  const VERSION = '2026-04-30.1';
+
+  // ----- ENDPOINTS (best-effort defaults; confirm against fixtures/) ------
+  const ENDPOINTS = {
+    base: location.origin, // https://shop.tekmetric.com in practice
+    // Job Board listing — internal endpoint. Common shape:
+    //   /api/shop/{shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=...&size=...
+    // Adjust path/params if discovery shows otherwise.
+    jobBoardList: (shopId, page, size) =>
+      `/api/shop/${shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=${page}&size=${size}&sort=updatedDate,desc`,
+    // Full RO detail — KNOWN endpoint, mirrored from background.js:1281.
+    repairOrderDetail: (shopId, roId) =>
+      `/api/shop/${shopId}/repair-order/${roId}`,
+    // Inspection list per RO — known internal path from
+    // lib/integrations/tekmetric/client.ts:276
+    inspectionList: (shopId, roId) =>
+      `/api/shop/${shopId}/repair-orders/${roId}/inspections`,
+  };
+
+  const PAGE_SIZE = 50;
+
+  // ----- TOKEN + SHOP CAPTURE -------------------------------------------
+  function readShopIdFromUrl() {
+    const m = location.pathname.match(/\/(?:admin\/)?shop\/(\d+)/);
+    return m ? m[1] : null;
+  }
+
+  function readShopNameFromDom() {
+    // Tekmetric typically renders the active shop name in a header / picker.
+    // We pick the first reasonable candidate; falls back to "shop-{id}".
+    const candidates = document.querySelectorAll(
+      '[class*="ShopSwitcher"], [class*="shop-switcher"], [data-testid*="shop"], header'
+    );
+    for (const el of candidates) {
+      const t = (el.textContent || '').trim();
+      if (t && t.length < 80 && /[A-Za-z]/.test(t)) {
+        return t.replace(/\s+/g, ' ').slice(0, 60);
+      }
+    }
+    return null;
+  }
+
+  async function captureXAuthToken() {
+    // Prefer a fresh token by intercepting the next outgoing fetch. The
+    // extension reads the same header off webRequest; from the page we use
+    // a fetch monkey-patch.
+    return new Promise((resolve) => {
+      const captured = { token: null };
+      const origFetch = window.fetch;
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+      let timeoutId;
+
+      function done(token) {
+        if (captured.token) return;
+        captured.token = token;
+        window.fetch = origFetch;
+        XMLHttpRequest.prototype.open = origOpen;
+        XMLHttpRequest.prototype.setRequestHeader = origSetHeader;
+        clearTimeout(timeoutId);
+        resolve(token);
+      }
+
+      window.fetch = function patched(input, init) {
+        try {
+          const headers = (init && init.headers) || (input && input.headers);
+          if (headers) {
+            const h = headers instanceof Headers ? headers.get('x-auth-token') :
+              (headers['x-auth-token'] || headers['X-Auth-Token'] || (typeof headers.get === 'function' ? headers.get('x-auth-token') : null));
+            if (h) done(h);
+          }
+        } catch (_) {}
+        return origFetch.apply(this, arguments);
+      };
+
+      XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+        if (typeof name === 'string' && name.toLowerCase() === 'x-auth-token' && value) {
+          done(value);
+        }
+        return origSetHeader.apply(this, arguments);
+      };
+
+      // Trigger network activity so we capture quickly. Hit the shops list
+      // endpoint — it's lightweight and the page itself calls it.
+      const shopId = readShopIdFromUrl();
+      if (shopId) {
+        // Force a small request — the page's own auth interceptor will attach
+        // x-auth-token, which our patched fetch will see.
+        try {
+          fetch(`${ENDPOINTS.base}/api/shop/${shopId}`, {
+            credentials: 'include',
+          }).catch(() => {});
+        } catch (_) {}
+      }
+
+      timeoutId = setTimeout(() => {
+        if (!captured.token) {
+          // Fall back: scan localStorage / sessionStorage / cookies
+          const stores = [localStorage, sessionStorage];
+          for (const s of stores) {
+            for (let i = 0; i < s.length; i++) {
+              const k = s.key(i);
+              const v = s.getItem(k);
+              if (v && /^[A-Za-z0-9._-]{40,}$/.test(v) && /token|auth/i.test(k || '')) {
+                done(v);
+                return;
+              }
+            }
+          }
+          done(null);
+        }
+      }, 4000);
+    });
+  }
+
+  // ----- HELPERS ---------------------------------------------------------
+  async function jsonFetch(path, token) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      headers: {
+        'x-auth-token': token,
+        'content-type': 'application/json',
+        'accept': 'application/json',
+      },
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`${res.status} ${res.statusText} on ${path} :: ${body.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+
+  function downloadJson(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 1000);
+  }
+
+  function ts() {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+  }
+
+  function safeFilenamePart(s) {
+    return (s || 'unknown').toString().replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40);
+  }
+
+  // ----- MAIN ------------------------------------------------------------
+  console.log(`%c[Tekmetric Migration DUMP v${VERSION}] starting…`, 'color:#0a0;font-weight:bold');
+
+  const shopId = readShopIdFromUrl();
+  if (!shopId) {
+    console.error('[DUMP] No shop ID detected in URL. Open a Tekmetric shop page (e.g. the Job Board) and re-paste.');
+    return;
+  }
+  const shopName = readShopNameFromDom() || `shop-${shopId}`;
+  console.log(`[DUMP] Active shop: ${shopName} (id=${shopId})`);
+
+  console.log('[DUMP] Capturing x-auth-token from live session…');
+  const token = await captureXAuthToken();
+  if (!token) {
+    console.error('[DUMP] Could not capture x-auth-token. Click around in Tekmetric (open an RO, switch tabs) to trigger a request, then re-paste this snippet.');
+    return;
+  }
+  console.log(`[DUMP] Token captured (length=${token.length}).`);
+
+  // 1. List Job Board ROs (paginated)
+  const allRoSummaries = [];
+  let page = 0;
+  while (true) {
+    const path = ENDPOINTS.jobBoardList(shopId, page, PAGE_SIZE);
+    let resp;
+    try {
+      resp = await jsonFetch(path, token);
+    } catch (err) {
+      console.error(`[DUMP] Job Board listing failed at page ${page}:`, err.message);
+      console.error('[DUMP] If this is a 404, the jobBoardList path in ENDPOINTS does not match what this Tekmetric build uses. Update the ENDPOINTS.jobBoardList in this snippet using the captured fixtures/job-board-list.req.json and re-run.');
+      return;
+    }
+    // Tolerate either {content: [...]} or a bare array.
+    const content = Array.isArray(resp) ? resp : (resp.content || resp.repairOrders || resp.data || []);
+    if (!content.length) break;
+    allRoSummaries.push(...content);
+    const totalPages = (resp && resp.totalPages) || (content.length < PAGE_SIZE ? page + 1 : null);
+    console.log(`[DUMP] Listed page ${page + 1}${totalPages ? ` / ${totalPages}` : ''}: ${content.length} ROs (running total ${allRoSummaries.length})`);
+    if (content.length < PAGE_SIZE) break;
+    if (totalPages && page + 1 >= totalPages) break;
+    page++;
+    if (page > 200) {
+      console.warn('[DUMP] Hit hard cap of 200 pages — bailing out of pagination.');
+      break;
+    }
+  }
+  console.log(`[DUMP] Job Board total: ${allRoSummaries.length} open ROs`);
+
+  // 2. Fetch full RO detail + inspection list for each
+  const dumpedRos = [];
+  let inspectionCount = 0;
+  let jobCount = 0;
+  for (let i = 0; i < allRoSummaries.length; i++) {
+    const summary = allRoSummaries[i];
+    const roId = summary.id || summary.repairOrderId;
+    const roNumber = summary.repairOrderNumber || summary.number;
+    try {
+      const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(shopId, roId), token);
+      let inspections = [];
+      try {
+        inspections = await jsonFetch(ENDPOINTS.inspectionList(shopId, roId), token);
+      } catch (e) {
+        // Inspection listing failures are non-fatal at dump time — Snippet 3
+        // is the one that actually needs the inspection content.
+        console.warn(`[DUMP] inspection list failed for RO #${roNumber} (id=${roId}): ${e.message}`);
+      }
+      const inspectionSummaries = (Array.isArray(inspections) ? inspections : (inspections.content || []))
+        .map((ins) => ({ id: ins.id, title: ins.title || ins.name, jobId: ins.jobId || null }));
+      inspectionCount += inspectionSummaries.length;
+      const jobs = detail.jobs || detail.repairOrderJobs || [];
+      jobCount += jobs.length;
+
+      dumpedRos.push({
+        sourceRoId: roId,
+        sourceRoNumber: roNumber,
+        repairOrder: detail,
+        inspections: inspectionSummaries, // full content fetched in Snippet 3
+      });
+      if ((i + 1) % 10 === 0 || i === allRoSummaries.length - 1) {
+        console.log(`[DUMP] RO ${i + 1}/${allRoSummaries.length} (#${roNumber}) — running counts: jobs=${jobCount} inspections=${inspectionCount}`);
+      }
+    } catch (err) {
+      console.error(`[DUMP] Failed to fetch RO #${roNumber} (id=${roId}):`, err.message);
+      dumpedRos.push({
+        sourceRoId: roId,
+        sourceRoNumber: roNumber,
+        repairOrder: null,
+        inspections: [],
+        _dumpError: err.message,
+      });
+    }
+  }
+
+  const dumpedOk = dumpedRos.filter((r) => r.repairOrder).length;
+  const dumpedErr = dumpedRos.length - dumpedOk;
+
+  const payload = {
+    schema: 'tekmetric-open-jobs-dump',
+    schemaVersion: VERSION,
+    dumpedAt: new Date().toISOString(),
+    source: { shopId: Number(shopId), shopName },
+    counts: {
+      ros: dumpedRos.length,
+      rosWithDetail: dumpedOk,
+      rosWithDumpError: dumpedErr,
+      jobs: jobCount,
+      inspections: inspectionCount,
+    },
+    repairOrders: dumpedRos,
+  };
+
+  const filename = `tekmetric-open-jobs-dump-${safeFilenamePart(shopName)}-${ts()}.json`;
+  downloadJson(filename, payload);
+
+  console.log('%c[DUMP] Summary:', 'color:#0a0;font-weight:bold');
+  console.table([{
+    sourceShop: shopName,
+    sourceShopId: shopId,
+    rosListed: allRoSummaries.length,
+    rosWithDetail: dumpedOk,
+    rosWithDumpError: dumpedErr,
+    jobs: jobCount,
+    inspections: inspectionCount,
+    file: filename,
+  }]);
+  if (dumpedErr) {
+    console.warn(`[DUMP] ${dumpedErr} RO(s) had dump errors — see logs above. They will be skipped by Snippet 2 because their repairOrder is null.`);
+  }
+  console.log('[DUMP] Done. Now switch the active Tekmetric shop to the DESTINATION shop, then paste 02-load-core-dest.js.');
+})();
