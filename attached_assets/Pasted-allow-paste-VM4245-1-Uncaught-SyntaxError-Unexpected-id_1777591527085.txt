@@ -1,0 +1,808 @@
+allow paste
+VM4245:1 Uncaught SyntaxError: Unexpected identifier 'paste'
+/* eslint-disable no-console */
+/*
+ * Tekmetric Migration — RECORDER (snippet 0)
+ *
+ * Purpose: passively capture every internal Tekmetric API call you make
+ * while clicking around the UI, so you can confirm the endpoint paths +
+ * request/response shapes used by snippets 1/2/3 BEFORE you run them.
+ *
+ * Read-only. Does NOT modify any Tekmetric request or response. Does NOT
+ * upload anything anywhere — everything stays in this browser tab and
+ * comes back out as a JSON file you save to ./fixtures/.
+ *
+ * USAGE
+ *   1. Open Tekmetric and navigate to the shop you want to record.
+ *   2. Open DevTools console, paste this whole file, hit Enter.
+ *   3. You'll see "[RECORDER] armed". Now click around the UI to exercise
+ *      the operations you care about. Suggested clicks per shop:
+ *
+ *      ON THE SOURCE SHOP:
+ *        - open the Job Board (lets us confirm the list endpoint + filters)
+ *        - click into one open RO (RO detail endpoint)
+ *        - click into one job inside that RO (job detail endpoint, if any)
+ *        - open one inspection on that RO (inspection list + get endpoints)
+ *        - open one photo on that RO (photo list + presign URL endpoints)
+ *
+ *      ON THE DESTINATION SHOP (use a throwaway test RO):
+ *        - click "+ New Job" and add one labor + one part, then save
+ *          (job CREATE endpoint + payload — this is the highest-value capture)
+ *        - create a new inspection from the inspection picker
+ *        - upload a photo to the test RO
+ *        - create a new RO from scratch with one customer concern
+ *
+ *   4. When you're done, run `__tekRec.dump()` in the console. A JSON
+ *      file will download to your Downloads folder. Move it to
+ *      `scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/fixtures/`
+ *      and rename it something useful (e.g.
+ *      `recorder-source-{shopName}-{date}.json`).
+ *
+ *   5. To stop recording without dumping: `__tekRec.stop()`.
+ *      To clear the buffer mid-session: `__tekRec.clear()`.
+ *      To peek at what's been captured so far: `__tekRec.summary()`.
+ *
+ * SAFETY
+ *   - The Authorization / x-auth-token / Cookie headers are stripped
+ *     before anything is logged or saved.
+ *   - Other request/response fields (customer PII, VIN, etc.) are NOT
+ *     scrubbed — capture is verbatim. Delete the recorder JSON files
+ *     when discovery is done.
+ */
+(() => {
+  if (window.__tekRec && window.__tekRec.armed) {
+    console.warn('[RECORDER] already armed; call __tekRec.stop() first to re-arm.');
+    return;
+  }
+
+  const MATCH = /\/api\/(shop\/\d+|inspection|repair-order|customer|vehicle|job|photo|attachment|s3|presign)/i;
+  const SENSITIVE_HEADERS = new Set(['authorization', 'x-auth-token', 'cookie', 'x-csrf-token']);
+
+  const events = [];
+  let seq = 0;
+
+  function scrubHeaders(h) {
+    const out = {};
+    if (!h) return out;
+    if (typeof h.forEach === 'function') {
+      h.forEach((v, k) => {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      for (const [k, v] of h) {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      }
+      return out;
+    }
+    for (const k of Object.keys(h)) {
+      out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : h[k];
+    }
+    return out;
+  }
+
+  async function bodyToString(body) {
+    if (body == null) return null;
+    if (typeof body === 'string') return body.length > 200000 ? body.slice(0, 200000) + '…[truncated]' : body;
+    if (body instanceof FormData) {
+      const out = {};
+      for (const [k, v] of body.entries()) out[k] = (v && v.name) ? `<File:${v.name}:${v.size}>` : String(v);
+      return JSON.stringify(out);
+    }
+    if (body instanceof Blob) return `<Blob:${body.type}:${body.size}>`;
+    if (body instanceof ArrayBuffer) return `<ArrayBuffer:${body.byteLength}>`;
+    try { return JSON.stringify(body); } catch (_) { return '<unserializable>'; }
+  }
+
+  function shouldRecord(url, method) {
+    try {
+      const u = new URL(url, location.origin);
+      // record same-origin Tekmetric API calls + any S3 presign URLs.
+      const isApi = u.origin === location.origin && MATCH.test(u.pathname);
+      const isS3 = /\.amazonaws\.com$/i.test(u.hostname) || u.hostname.includes('s3.');
+      return isApi || isS3;
+    } catch (_) { return false; }
+  }
+
+  // ----- fetch hook -----
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (!shouldRecord(url, method)) return origFetch(input, init);
+    const id = ++seq;
+    const startedAt = Date.now();
+    const reqHeaders = scrubHeaders(init && init.headers);
+    const reqBody = await bodyToString(init && init.body);
+    let res;
+    try {
+      res = await origFetch(input, init);
+    } catch (err) {
+      events.push({
+        id, transport: 'fetch', method, url: String(url), startedAt,
+        status: 'NETWORK_ERROR', error: err.message,
+        request: { headers: reqHeaders, body: reqBody },
+      });
+      throw err;
+    }
+    const clone = res.clone();
+    let respText = '';
+    try { respText = await clone.text(); } catch (_) {}
+    if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+    const respHeaders = {};
+    res.headers.forEach((v, k) => { respHeaders[k] = v; });
+    events.push({
+      id, transport: 'fetch', method, url: String(url), startedAt,
+      durationMs: Date.now() - startedAt,
+      status: res.status,
+      request: { headers: reqHeaders, body: reqBody },
+      response: { headers: respHeaders, body: respText },
+    });
+    return res;
+  };
+
+  // ----- XHR hook -----
+  const OrigXHR = window.XMLHttpRequest;
+  function PatchedXHR() {
+    const xhr = new OrigXHR();
+    let _method = 'GET';
+    let _url = '';
+    let _reqHeaders = {};
+    let _reqBody = null;
+    const origOpen = xhr.open;
+    const origSetHeader = xhr.setRequestHeader;
+    const origSend = xhr.send;
+    xhr.open = function patchedOpen(m, u, ...rest) {
+      _method = (m || 'GET').toUpperCase();
+      _url = u;
+      _reqHeaders = {};
+      return origOpen.call(this, m, u, ...rest);
+    };
+    xhr.setRequestHeader = function patchedSetHeader(k, v) {
+      _reqHeaders[k] = SENSITIVE_HEADERS.has(String(k).toLowerCase()) ? '<redacted>' : v;
+      return origSetHeader.call(this, k, v);
+    };
+    xhr.send = function patchedSend(body) {
+      _reqBody = body;
+      if (shouldRecord(_url, _method)) {
+        const id = ++seq;
+        const startedAt = Date.now();
+        xhr.addEventListener('loadend', async () => {
+          const reqBodyStr = await bodyToString(_reqBody);
+          let respText = '';
+          try {
+            const t = xhr.responseType;
+            if (t === '' || t === 'text') respText = xhr.responseText || '';
+            else if (t === 'json') respText = JSON.stringify(xhr.response);
+            else respText = `<responseType=${t}>`;
+          } catch (_) {}
+          if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+          const respHeaderText = xhr.getAllResponseHeaders() || '';
+          events.push({
+            id, transport: 'xhr', method: _method, url: String(_url), startedAt,
+            durationMs: Date.now() - startedAt,
+            status: xhr.status,
+            request: { headers: _reqHeaders, body: reqBodyStr },
+            response: { headers: respHeaderText, body: respText },
+          });
+        });
+      }
+      return origSend.call(this, body);
+    };
+    return xhr;
+  }
+  PatchedXHR.prototype = OrigXHR.prototype;
+  window.XMLHttpRequest = PatchedXHR;
+
+  function summary() {
+    const byEndpoint = new Map();
+    for (const e of events) {
+      let path;
+      try { path = new URL(e.url, location.origin).pathname.replace(/\/\d+/g, '/{id}'); }
+      catch (_) { path = e.url; }
+      const key = `${e.method} ${path}`;
+      byEndpoint.set(key, (byEndpoint.get(key) || 0) + 1);
+    }
+    const rows = Array.from(byEndpoint.entries()).map(([k, count]) => ({ endpoint: k, count }));
+    rows.sort((a, b) => b.count - a.count);
+    console.table(rows);
+    console.log(`[RECORDER] ${events.length} captured events.`);
+    return rows;
+  }
+
+  function dump() {
+    const blob = new Blob([JSON.stringify({
+      capturedAt: new Date().toISOString(),
+      origin: location.origin,
+      shopUrl: location.href,
+      eventCount: events.length,
+      events,
+    }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tekmetric-recorder-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    console.log(`[RECORDER] dumped ${events.length} events to Downloads.`);
+  }
+
+  function stop() {
+    window.fetch = origFetch;
+    window.XMLHttpRequest = OrigXHR;
+    if (window.__tekRec) window.__tekRec.armed = false;
+    console.log('[RECORDER] stopped. Buffered events still available via __tekRec.events / __tekRec.dump().');
+  }
+
+  function clear() {
+    events.length = 0;
+    seq = 0;
+    console.log('[RECORDER] buffer cleared.');
+  }
+
+  window.__tekRec = { armed: true, events, dump, stop, clear, summary };
+  console.log('%c[RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().', 'color:#0a0;font-weight:bold');
+})();
+
+VM4248:245 [RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().
+undefined
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+estimate:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root flex items-center outline-none cursor-pointer h-10 rounded-lg px-3 py-2 text-label-normal bg-v2-shade-0 hover:bg-v2-shade-50 [&.active-button]:bg-v2-shade-50 border border-solid border-v2-shade-100 visited:ring-0 focus-visible:outline-ring active:ring-0 shadow-xs focus-visible:shadow-none disabled:shadow-none text-v2-shade-900 disabled:text-v2-shade-200 css-hkx3jt>
+Ancestor with aria-hidden: <div#root> <div id=​"root">​…​</div>​<div class=​"flex h-screen flex-col" style=​"padding-top:​ 56px;​">​…​</div>​flex<header class=​"fixed mui-fixed left-auto right-0 top-0 z-[1100]​ box-border flex min-h-14 w-full flex-shrink-0 flex-col text-v2-shade-0 bg-v2-blue-grey-950" style>​…​</header>​flex<main class=​"relative flex flex-auto">​…​</main>​flex<div class=​"flex flex-1">​…​</div>​flex<nav>​…​</nav>​<div class=​"flex-1">​…​</div>​<div class=​"w-full transition-all duration-300 pr-max-sidebar">​…​</div>​<div id=​"ro-header-top-nav-id" class=​"border-b border-b-v2-shade-100 bg-v2-shade-0 font-light [&_h2]​:​m-0 [&_h2]​:​text-v2-shade-900 [&_h2]​:​text-heading-normal [&_svg.small]​:​h-[18px]​ [&_svg.small]​:​w-[18px]​ [&_svg.back]​:​-mb-1.5 [&_svg.back]​:​mr-1.5 sticky z-900 [&_h2]​:​p-0" style=​"top:​ 56px;​">​…​</div>​<div>​…​</div>​<div class=​"sticky z-900 flex justify-center space-x-2 bg-v2-shade-0 py-2 shadow-sm" style=​"top:​ 201px;​">​…​</div>​flex<div class=​"flex w-full flex-col items-center space-y-5 px-6 pb-28 pt-8">​…​</div>​flex<div class=​"w-full max-w-6xl xl:​max-w-7xl w-full">​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm w-full max-w-6xl xl:​max-w-7xl css-1kxnsga" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"w-full max-w-6xl xl:​max-w-7xl">​…​</div>​<div>​…​</div>​<div class=​"flex items-center">​…​</div>​flex<div class=​"space-y-10">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div class=​"w-full overflow-hidden bg-blue-100 transition-all h-0 bg-opacity-0">​</div>​<div class>​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm css-1kxnsga" data-testid=​"job-table-1131290095" id=​"job-1131290095" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"styled-div  ">​…​</div>​<div class=​"flex items-center justify-between bg-v2-shade-25 py-0.5 pl-2.5 pr-2">​…​</div>​flex<div class=​"text-shade-600">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<div data-rbd-droppable-id=​"1131290095" data-rbd-droppable-context-id=​"15">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<table class=​"MuiTable-root styled-table css-1xhtq58">​…​</table>​<tbody class=​"MuiTableBody-root css-y6j1my">​…​</tbody>​<tr class=​"MuiTableRow-root css-16pe4ub">​…​</tr>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-left min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w">​…​</td>​<div class=​"flex items-center space-x-6">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​GP$​</label>​<label>​$96.93​</label>​</div>​<div>​…​</div>​<label>​GP/Hr​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<div class=​"w-full cursor-pointer">​…​</div>​<div class=​"flex items-center justify-between">​…​</div>​flex<div class=​"inline-flex items-center" aria-label>​…​</div>​flex<div>​…​</div>​<label>​Subtotal​</label>​<label>​$96.93​</label>​</div>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-30 [&_label:​last-of-type]​:​opacity-30 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" disabled style=​"width:​ 122px;​">​…​</td>​<div class=​"flex items-center justify-between">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​Labor Tax​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<div class=​"flex items-center justify-between">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​Parts Tax​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<label>​JOB TOTAL​</label>​<label>​$104.51​</label>​</td>​</tr>​</tbody>​</table>​</div>​</div>​</div>​</div>​</div>​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div class=​"w-full overflow-hidden bg-blue-100 transition-all h-0 bg-opacity-0">​</div>​<div class>​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm css-1kxnsga" data-testid=​"job-table-1132259533" id=​"job-1132259533" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"styled-div  ">​…​</div>​<div class=​"flex items-center justify-between bg-v2-shade-25 py-0.5 pl-2.5 pr-2">​…​</div>​flex<div class=​"text-shade-600">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<div data-rbd-droppable-id=​"1132259533" data-rbd-droppable-context-id=​"17">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<table class=​"MuiTable-root styled-table css-1xhtq58">​…​</table>​<tbody class=​"MuiTableBody-root css-y6j1my">​…​</tbody>​<tr class=​"MuiTableRow-root css-16pe4ub">​…​</tr>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-left min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w">​…​</td>​<div class=​"flex items-center space-x-6">​…​</div>​flex<div>​…​</div>​<label>​GP%​</label>​<label>​…​</label>​</div>​<div>​…​</div>​<div>​…​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-30 [&_label:​last-of-type]​:​opacity-30 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" disabled style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​</tr>​</tbody>​</table>​</div>​</div>​</div>​</div>​</div>​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div id=​"DndDescribedBy-2" style=​"display:​ none;​">​…​</div>​<div id=​"DndLiveRegion-2" role=​"status" aria-live=​"assertive" aria-atomic=​"true" style=​"position:​ fixed;​ top:​ 0px;​ left:​ 0px;​ width:​ 1px;​ height:​ 1px;​ margin:​ -1px;​ border:​ 0px;​ padding:​ 0px;​ overflow:​ hidden;​ clip:​ rect(0px, 0px, 0px, 0px)​;​ clip-path:​ inset(100%)​;​ white-space:​ nowrap;​">​</div>​</div>​</div>​<div>​…​</div>​</div>​<div class=​"mb-12 flex flex-col items-center">​…​</div>​flex<div data-call-pop-exclusion-zone=​"estimate-bar" class=​"fixed bottom-0 left-0 z-[999]​ flex w-full flex-col transition-all duration-300 lg:​pr-64 lg:​pl-min-sidebar">​…​</div>​flex</div>​</div>​<div class=​"MuiDrawer-root MuiDrawer-docked css-1wt4220" data-testid=​"ro-sidebar">​…​</div>​</div>​</div>​<div class=​"MuiDrawer-root MuiDrawer-docked css-1k5bhpf">​…​</div>​</div>​</main>​</div>​<div>​</div>​<audio id=​"tekmessage-notification-sound" src=​"/​assets/​notification-8apPF64Q.mp3">​</audio>​media<div>​</div>​</div>​
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+main-D7j3MLUu.js:188 Deprecation warning: use moment.updateLocale(localeName, config) to change an existing locale. moment.defineLocale(localeName, config) should only be used for creating a new locale See http://momentjs.com/guides/#/warnings/define-locale/ for more info.
+Hw @ main-D7j3MLUu.js:188
+$w @ main-D7j3MLUu.js:191
+v_ @ main-D7j3MLUu.js:191
+o2 @ main-D7j3MLUu.js:191
+to @ index-C90urM_L.js:1
+Ac @ main-D7j3MLUu.js:47
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:1 MUI: The SpeedDial component was moved from the lab to the core.
+
+You should use `import { SpeedDial } from '@mui/material'`
+or `import SpeedDial from '@mui/material/SpeedDial'`
+le @ index-DZjbN4hi.js:1
+(anonymous) @ index-DZjbN4hi.js:2
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:3 MUI: The SpeedDialIcon component was moved from the lab to the core.
+
+You should use `import { SpeedDialIcon } from '@mui/material'`
+or `import SpeedDialIcon from '@mui/material/SpeedDialIcon'`
+De @ index-DZjbN4hi.js:3
+(anonymous) @ index-DZjbN4hi.js:4
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:2 MUI: The SpeedDialAction component was moved from the lab to the core.
+
+You should use `import { SpeedDialAction } from '@mui/material'`
+or `import SpeedDialAction from '@mui/material/SpeedDialAction'`
+be @ index-DZjbN4hi.js:2
+(anonymous) @ index-DZjbN4hi.js:3
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+/admin/shop/14245/repair-orders/create:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root disabled:text-v2-shade-200 flex w-full items-center justify-start rounded-md text-paragraph-normal hover:bg-v2-blue-grey-25 bg-v2-shade-50 text-left css-hkx3jt>
+Ancestor with aria-hidden: <div.MuiPopover-root z-[1089] mt-[1px] max-h-[340px] MuiModal-root css-17ewevk> <div role=​"presentation" rootclassname=​"z-[1089]​" class=​"MuiPopover-root z-[1089]​ mt-[1px]​ max-h-[340px]​ MuiModal-root css-17ewevk" aria-hidden=​"true">​…​</div>​
+/admin/shop/14245/repair-orders/create:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root disabled:text-v2-shade-200 flex w-full items-center justify-start rounded-md text-paragraph-normal hover:bg-v2-blue-grey-25 bg-v2-shade-50 text-left css-hkx3jt>
+Ancestor with aria-hidden: <div.MuiPopover-root mt-[1px] max-h-[340px] MuiModal-root css-17ewevk> <div role=​"presentation" class=​"MuiPopover-root mt-[1px]​ max-h-[340px]​ MuiModal-root css-17ewevk" style=​"width:​ 484px;​" aria-hidden=​"true">​…​</div>​
+main-D7j3MLUu.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-D7j3MLUu.js:274
+Promise.then
+EE @ main-D7j3MLUu.js:274
+Q @ main-D7j3MLUu.js:274
+bX @ main-D7j3MLUu.js:274
+(anonymous) @ actions-DRYZ6B1e.js:1
+(anonymous) @ main-D7j3MLUu.js:225
+(anonymous) @ main-D7j3MLUu.js:225
+u.useEffect.F @ index-CH1IDaMV.js:3
+nl @ main-D7j3MLUu.js:49
+Fp @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+ld @ main-D7j3MLUu.js:49
+L @ main-D7j3MLUu.js:34
+U @ main-D7j3MLUu.js:34
+(anonymous) @ setImmediate.js:40
+runIfPresent @ setImmediate.js:69
+(anonymous) @ setImmediate.js:109
+postMessage
+window.postMessage @ estimate:114
+(anonymous) @ setImmediate.js:120
+(anonymous) @ setImmediate.js:27
+e0 @ main-D7j3MLUu.js:34
+s0 @ main-D7j3MLUu.js:34
+e.unstable_scheduleCallback @ main-D7j3MLUu.js:34
+Kz @ main-D7j3MLUu.js:49
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+main-D7j3MLUu.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+__tekRec.dump()
+VM4248:228 [RECORDER] dumped 0 events to Downloads.
+undefined
+main-D7j3MLUu.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-D7j3MLUu.js:274
+Promise.then
+EE @ main-D7j3MLUu.js:274
+Q @ main-D7j3MLUu.js:274
+bX @ main-D7j3MLUu.js:274
+(anonymous) @ actions-DRYZ6B1e.js:1
+(anonymous) @ main-D7j3MLUu.js:225
+(anonymous) @ main-D7j3MLUu.js:225
+u.useEffect.F @ index-CH1IDaMV.js:3
+nl @ main-D7j3MLUu.js:49
+Fp @ main-D7j3MLUu.js:49
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+main-D7j3MLUu.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+__tekRec.summary()
+VM4248:207 
+VM4248:208 [RECORDER] 0 captured events.
+[]
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+inspection:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+main-D7j3MLUu.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-D7j3MLUu.js:274
+Promise.then
+EE @ main-D7j3MLUu.js:274
+Q @ main-D7j3MLUu.js:274
+bX @ main-D7j3MLUu.js:274
+(anonymous) @ actions-DRYZ6B1e.js:1
+(anonymous) @ main-D7j3MLUu.js:225
+(anonymous) @ main-D7j3MLUu.js:225
+u.useEffect.F @ index-CH1IDaMV.js:3
+nl @ main-D7j3MLUu.js:49
+Fp @ main-D7j3MLUu.js:49
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+main-D7j3MLUu.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+estimate:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/* eslint-disable no-console */
+/*
+ * Tekmetric Migration — SMOKE TEST: clone one RO into a new RO IN THE SAME SHOP
+ *
+ * Purpose: end-to-end smoke test of every write endpoint we'll need for the
+ * real cross-shop migration, without any cross-shop ID remapping. Reads one
+ * source RO, then creates a brand-new RO in the SAME shop with the same
+ * customer / vehicle / labor rate / mileage / customer-concerns / jobs
+ * (each job's parts + labor lines preserved verbatim).
+ *
+ * Endpoints exercised (all confirmed against HAR capture 2026-04-30):
+ *   GET  /api/shop/{shopId}/repair-order/{roId}            -> RO + jobs[]
+ *   GET  /api/repair-orders/{roId}/customer-concerns       -> concerns[]
+ *   POST /api/repair-order/create                          -> new RO
+ *   PUT  /api/repair-order/{newRoId}/vehicle-mileage       -> set mileage
+ *   POST /api/repair-orders/{newRoId}/customer-concerns    -> per concern
+ *   POST /api/shop/{shopId}/job                            -> per job (with
+ *                                                            parts+labor inline)
+ *
+ * USAGE
+ *   1. In Tekmetric, navigate to ANY page on the shop you want to clone within
+ *      (e.g. https://shop.tekmetric.com/admin/shop/14245/...). The active
+ *      shop in the URL must match SHOP_ID below.
+ *   2. Open DevTools console.
+ *   3. Set SOURCE_RO_ID below to the RO you want to clone.
+ *   4. Leave CONFIRM=false for a dry-run first — it prints what it would do,
+ *      writes nothing.
+ *   5. Paste the whole file, hit Enter. Read the dry-run output.
+ *   6. Edit CONFIRM to true at the top, re-paste, hit Enter. The new RO will
+ *      be created and you'll get a clickable link to open it.
+ *
+ * NOTE: photos and inspections are NOT cloned by this snippet. Smoke test for
+ * those is intentionally out of scope — the migration runs them separately
+ * via 03-load-extras-dest.js.
+ */
+(async () => {
+  // ===== CONFIG =====
+  const SHOP_ID = 14245;          // active shop you're sitting on
+  const SOURCE_RO_ID = 255022827; // the RO to clone (RO# 001 / Jay Demore / 2021 Silverado)
+  const CONFIRM = false;          // false = dry-run; true = actually create the new RO
+  // ==================
+
+  const BASE = location.origin;
+
+  // sanity: are we on the right shop?
+  const m = location.pathname.match(/\/admin\/shop\/(\d+)\b/);
+  const activeShop = m ? Number(m[1]) : null;
+  if (activeShop !== SHOP_ID) {
+    console.error(`[CLONE] Expected to be on shop ${SHOP_ID}, but URL says shop ${activeShop}. Switch shops in Tekmetric, then re-run.`);
+    return;
+  }
+
+  // ----- token discovery: snipe X-AUTH-TOKEN off any next request, or read from
+  // localStorage if it's there. Most reliable: piggyback on a known-safe GET.
+  async function getToken() {
+    // try localStorage first
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return v;
+      try {
+        const parsed = JSON.parse(v);
+        if (parsed && typeof parsed.token === 'string' && parsed.token.startsWith('eyJ')) return parsed.token;
+        if (parsed && typeof parsed.accessToken === 'string' && parsed.accessToken.startsWith('eyJ')) return parsed.accessToken;
+      } catch (_) {}
+    }
+    // fall back: snipe from the next outgoing request by patching fetch briefly
+    return await new Promise((resolve, reject) => {
+      const origFetch = window.fetch.bind(window);
+      const timeout = setTimeout(() => {
+        window.fetch = origFetch;
+        reject(new Error('Timed out waiting for an outgoing API call to snipe the auth token from. Click anywhere in Tekmetric and re-run.'));
+      }, 8000);
+      window.fetch = function patched(input, init) {
+        try {
+          const headers = (init && init.headers) || {};
+          let token = null;
+          if (headers instanceof Headers) token = headers.get('X-AUTH-TOKEN');
+          else if (Array.isArray(headers)) {
+            const h = headers.find(([k]) => /^x-auth-token$/i.test(k));
+            if (h) token = h[1];
+          } else for (const k of Object.keys(headers)) if (k.toLowerCase() === 'x-auth-token') token = headers[k];
+          if (token) {
+            clearTimeout(timeout);
+            window.fetch = origFetch;
+            resolve(token);
+          }
+        } catch (_) {}
+        return origFetch(input, init);
+      };
+      // nudge a request to fire
+      try { origFetch(`${BASE}/api/shop/${SHOP_ID}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
+    });
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const token = opts.token;
+    const init = {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-AUTH-TOKEN': token,
+      },
+    };
+    if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+    const res = await fetch(`${BASE}${path}`, init);
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch (_) {}
+    return { status: res.status, ok: res.ok, body: parsed, raw: text };
+  }
+
+  function unwrap(resp) {
+    // Tekmetric responses are sometimes {type, message, data, details} and
+    // sometimes the bare object. Normalize.
+    if (resp.body && typeof resp.body === 'object' && 'data' in resp.body && 'type' in resp.body) return resp.body.data;
+    return resp.body;
+  }
+
+  // strip identifiers so Tekmetric mints fresh ones for the new RO
+  function cleanJobForCreate(job, newRoId) {
+    const cleaned = { ...job };
+    cleaned.id = null;
+    cleaned.repairOrderId = newRoId;
+    if (Array.isArray(cleaned.parts)) {
+      cleaned.parts = cleaned.parts.map((p) => ({
+        ...p,
+        id: null,
+        jobId: null,
+        repairOrderId: newRoId,
+        orderId: null,
+        partsTechOrderItemId: null,
+        invoiceNumber: null,
+        orderDate: null,
+        orderNumber: null,
+        orderStatus: null,
+      }));
+    }
+    if (Array.isArray(cleaned.labor)) {
+      cleaned.labor = cleaned.labor.map((l) => ({
+        ...l,
+        id: null,
+        jobId: null,
+        repairOrderId: newRoId,
+      }));
+    }
+    if (Array.isArray(cleaned.discounts)) {
+      cleaned.discounts = cleaned.discounts.map((d) => ({ ...d, id: null, jobId: null, repairOrderId: newRoId }));
+    }
+    if (Array.isArray(cleaned.fees)) {
+      cleaned.fees = cleaned.fees.map((f) => ({ ...f, id: null, jobId: null, repairOrderId: newRoId }));
+    }
+    if (Array.isArray(cleaned.laborTechnicians)) {
+      cleaned.laborTechnicians = cleaned.laborTechnicians.map((lt) => ({ ...lt, id: null }));
+    }
+    return cleaned;
+  }
+
+  console.log(`%c[CLONE] starting — shop ${SHOP_ID}, source RO ${SOURCE_RO_ID}, CONFIRM=${CONFIRM}`,
+    'color:#06c;font-weight:bold');
+
+  let token;
+  try {
+    token = await getToken();
+    console.log('[CLONE] got auth token (len=' + token.length + ').');
+  } catch (e) {
+    console.error('[CLONE] could not get auth token:', e.message);
+    return;
+  }
+
+  // ----- 1. fetch source RO + concerns
+  const roResp = await jsonFetch(`/api/shop/${SHOP_ID}/repair-order/${SOURCE_RO_ID}`, { token });
+  if (!roResp.ok) {
+    console.error(`[CLONE] failed to fetch source RO: status=${roResp.status}`, roResp.body);
+    return;
+  }
+  const sourceRo = unwrap(roResp);
+  const sourceJobs = (sourceRo.jobs || []).filter((j) => !j.archived);
+  console.log(`[CLONE] source RO #${sourceRo.repairOrderNumber} has ${sourceJobs.length} non-archived job(s).`);
+  console.log(`        customer: ${sourceRo.customer?.firstName} ${sourceRo.customer?.lastName} (id ${sourceRo.customer?.id})`);
+  console.log(`        vehicle: ${sourceRo.vehicle?.year} ${sourceRo.vehicle?.make} ${sourceRo.vehicle?.model} (id ${sourceRo.vehicle?.id})`);
+  console.log(`        miles in/out: ${sourceRo.milesIn}/${sourceRo.milesOut}, odometerInop=${sourceRo.odometerInop}`);
+  console.log(`        labor rate id: ${sourceRo.laborRate?.id}`);
+
+  const concernsResp = await jsonFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`, { token });
+  if (!concernsResp.ok) {
+    console.error(`[CLONE] failed to fetch source concerns: status=${concernsResp.status}`, concernsResp.body);
+    return;
+  }
+  const sourceConcerns = Array.isArray(concernsResp.body) ? concernsResp.body : (concernsResp.body?.data || []);
+  console.log(`[CLONE] source RO has ${sourceConcerns.length} customer concern(s).`);
+
+  if (!CONFIRM) {
+    console.warn('[CLONE] DRY RUN — set CONFIRM=true at the top to actually create the new RO.');
+    console.log('[CLONE] would create new RO with customer/vehicle/labor-rate above, plus:');
+    sourceConcerns.forEach((c, i) => console.log(`        concern ${i + 1}: ${c.concern.slice(0, 80)}${c.concern.length > 80 ? '…' : ''}`));
+    sourceJobs.forEach((j, i) => console.log(`        job ${i + 1}: "${j.name}" — ${j.parts?.length || 0} part(s), ${j.labor?.length || 0} labor line(s), status=${j.status}`));
+    return;
+  }
+
+  // ----- 2. create the new RO
+  const createPayload = {
+    shop: { id: SHOP_ID },
+    appointmentOption: sourceRo.appointmentOption ?? 2,
+    odometerInop: sourceRo.odometerInop ?? false,
+    leadSource: sourceRo.leadSource || '',
+    vehicle: { id: sourceRo.vehicle.id },
+    milesIn: sourceRo.milesIn ?? null,
+    laborRate: { id: sourceRo.laborRate.id },
+    customer: { id: sourceRo.customer.id },
+    appointment: null,
+    initialJobs: [],
+    recommendations: [],
+    declinedJobRecommendations: [],
+  };
+  const createResp = await jsonFetch(`/api/repair-order/create`, { token, method: 'POST', body: createPayload });
+  if (!createResp.ok) {
+    console.error(`[CLONE] RO create failed: status=${createResp.status}`, createResp.body);
+    return;
+  }
+  const newRo = unwrap(createResp);
+  const newRoId = newRo.id;
+  console.log(`%c[CLONE] ✓ created new RO id=${newRoId} #${newRo.repairOrderNumber}`, 'color:#0a0;font-weight:bold');
+  const newRoUrl = `${BASE}/admin/shop/${SHOP_ID}/repair-orders/${newRoId}/estimate`;
+  console.log(`        open it: ${newRoUrl}`);
+
+  // ----- 3. set mileage (if source had any)
+  if (sourceRo.milesIn != null || sourceRo.milesOut != null) {
+    const milesResp = await jsonFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
+      token, method: 'PUT',
+      body: {
+        milesIn: sourceRo.milesIn ?? sourceRo.milesOut ?? 0,
+        milesOut: sourceRo.milesOut ?? sourceRo.milesIn ?? 0,
+        odometerInop: sourceRo.odometerInop ?? false,
+      },
+    });
+    if (!milesResp.ok) console.warn(`[CLONE] mileage PUT failed status=${milesResp.status}`, milesResp.body);
+    else console.log(`[CLONE] ✓ mileage set`);
+  }
+
+  // ----- 4. concerns
+  for (let i = 0; i < sourceConcerns.length; i++) {
+    const c = sourceConcerns[i];
+    const r = await jsonFetch(`/api/repair-orders/${newRoId}/customer-concerns`, {
+      token, method: 'POST', body: { concern: c.concern },
+    });
+    if (!r.ok) {
+      console.error(`[CLONE] ✗ concern ${i + 1} failed status=${r.status}`, r.body);
+    } else {
+      console.log(`[CLONE] ✓ concern ${i + 1}/${sourceConcerns.length} created`);
+    }
+  }
+
+  // ----- 5. jobs (one POST per job, parts+labor inline)
+  for (let i = 0; i < sourceJobs.length; i++) {
+    const job = sourceJobs[i];
+    const payload = cleanJobForCreate(job, newRoId);
+    const r = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: payload });
+    if (!r.ok) {
+      console.error(`[CLONE] ✗ job ${i + 1}/${sourceJobs.length} "${job.name}" failed status=${r.status}`);
+      console.error('         response:', r.body);
+      console.error('         payload:', payload);
+      console.warn(`[CLONE] stopping after first job failure. New RO ${newRoId} is partially populated; delete it and re-run after fixing.`);
+      return;
+    }
+    console.log(`[CLONE] ✓ job ${i + 1}/${sourceJobs.length} "${job.name}" created`);
+  }
+
+  console.log(`%c[CLONE] DONE — open the new RO: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
+})();
+
+VM5309:160 [CLONE] starting — shop 14245, source RO 255022827, CONFIRM=false
+VM5309:166 [CLONE] got auth token (len=815).
+Promise {<pending>}
+VM5309:180 [CLONE] source RO #1 has 0 non-archived job(s).
+VM5309:181         customer: Jay Demore (id 82581111)
+VM5309:182         vehicle: 2021 Chevrolet Silverado 1500 (id 118337025)
+VM5309:183         miles in/out: 5000/null, odometerInop=false
+VM5309:184         labor rate id: undefined
+VM5309:192 [CLONE] source RO has 5 customer concern(s).
+VM5309:195 [CLONE] DRY RUN — set CONFIRM=true at the top to actually create the new RO.
+(anonymous) @ VM5309:195
+await in (anonymous)
+(anonymous) @ VM5309:271
+VM5309:196 [CLONE] would create new RO with customer/vehicle/labor-rate above, plus:
+VM5309:197         concern 1: Oil Change
+VM5309:197         concern 2: Customer states that the check engine light illuminated this morning and is stea…
+VM5309:197         concern 3: Customer states there is a rattle over bumps. The rattle occurs specifically whe…
+VM5309:197         concern 4: Customer states that the vehicle's check engine light has been on since this mor…
+VM5309:197         concern 5: Customer states that the check engine light has been on since this morning and i…

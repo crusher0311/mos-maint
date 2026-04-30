@@ -9,13 +9,19 @@
  * (each job's parts + labor lines preserved verbatim).
  *
  * Endpoints exercised (all confirmed against HAR capture 2026-04-30):
- *   GET  /api/shop/{shopId}/repair-order/{roId}            -> RO + jobs[]
+ *   GET  /api/shop/{shopId}/repair-order/{roId}            -> RO metadata
+ *                                                            (customer/vehicle/laborRate/mileage)
+ *   GET  /api/repair-order/{roId}/estimate                 -> jobs[] with parts+labor inline
  *   GET  /api/repair-orders/{roId}/customer-concerns       -> concerns[]
  *   POST /api/repair-order/create                          -> new RO
  *   PUT  /api/repair-order/{newRoId}/vehicle-mileage       -> set mileage
  *   POST /api/repair-orders/{newRoId}/customer-concerns    -> per concern
  *   POST /api/shop/{shopId}/job                            -> per job (with
  *                                                            parts+labor inline)
+ *
+ * NOTE on laborRate shape: the RO metadata endpoint returns laborRate as a
+ * bare numeric id (e.g. `laborRate: 9991`), NOT an object. The create payload
+ * wraps it back into `{ id: <number> }`.
  *
  * USAGE
  *   1. In Tekmetric, navigate to ANY page on the shop you want to clone within
@@ -169,19 +175,33 @@
     return;
   }
 
-  // ----- 1. fetch source RO + concerns
+  // ----- 1. fetch source RO metadata, jobs (from estimate endpoint), and concerns
   const roResp = await jsonFetch(`/api/shop/${SHOP_ID}/repair-order/${SOURCE_RO_ID}`, { token });
   if (!roResp.ok) {
     console.error(`[CLONE] failed to fetch source RO: status=${roResp.status}`, roResp.body);
     return;
   }
   const sourceRo = unwrap(roResp);
-  const sourceJobs = (sourceRo.jobs || []).filter((j) => !j.archived);
+
+  // Jobs come from the estimate endpoint (the RO metadata endpoint returns jobs:null)
+  const estResp = await jsonFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`, { token });
+  if (!estResp.ok) {
+    console.error(`[CLONE] failed to fetch source estimate: status=${estResp.status}`, estResp.body);
+    return;
+  }
+  const sourceEstimate = unwrap(estResp);
+  const sourceJobs = (sourceEstimate.jobs || []).filter((j) => !j.archived);
+
+  // laborRate on the metadata endpoint is a bare number id, not an object
+  const sourceLaborRateId = typeof sourceRo.laborRate === 'number'
+    ? sourceRo.laborRate
+    : sourceRo.laborRate?.id;
+
   console.log(`[CLONE] source RO #${sourceRo.repairOrderNumber} has ${sourceJobs.length} non-archived job(s).`);
   console.log(`        customer: ${sourceRo.customer?.firstName} ${sourceRo.customer?.lastName} (id ${sourceRo.customer?.id})`);
   console.log(`        vehicle: ${sourceRo.vehicle?.year} ${sourceRo.vehicle?.make} ${sourceRo.vehicle?.model} (id ${sourceRo.vehicle?.id})`);
   console.log(`        miles in/out: ${sourceRo.milesIn}/${sourceRo.milesOut}, odometerInop=${sourceRo.odometerInop}`);
-  console.log(`        labor rate id: ${sourceRo.laborRate?.id}`);
+  console.log(`        labor rate id: ${sourceLaborRateId}`);
 
   const concernsResp = await jsonFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`, { token });
   if (!concernsResp.ok) {
@@ -207,7 +227,7 @@
     leadSource: sourceRo.leadSource || '',
     vehicle: { id: sourceRo.vehicle.id },
     milesIn: sourceRo.milesIn ?? null,
-    laborRate: { id: sourceRo.laborRate.id },
+    laborRate: { id: sourceLaborRateId },
     customer: { id: sourceRo.customer.id },
     appointment: null,
     initialJobs: [],
