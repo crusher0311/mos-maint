@@ -7,6 +7,7 @@ import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import { verifyHovercode } from "@/lib/hovercode";
+import { getStickerSizeInches, pngBufferToSizedPdfBuffer } from "@/lib/sticker-pdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -290,6 +291,10 @@ interface StickerRequest {
   customerEmail?: string;
   vehicleId?: string;
   roNumber?: string;
+  // Output format. Defaults to PNG (existing desktop popup-print path). Set
+  // to "pdf" for the mobile print path so iOS Safari / AirPrint render the
+  // sticker at its true physical size instead of as a tiny image on letter.
+  format?: "png" | "pdf";
 }
 
 interface DesignerElement {
@@ -570,6 +575,28 @@ export async function POST(req: NextRequest) {
       );
       console.log(`[Sticker Generate] Auto booking result for shop ${shopId}:`, bookingResult);
     }
+    // Mobile print path needs a real PDF whose page size matches the sticker
+    // (e.g. 2"x2"), because iOS Safari ignores CSS `@page { size }` and
+    // AirPrint defaults to letter — which is what produced the
+    // tiny-image-on-big-page bug. PDFs *do* carry their own page size and
+    // AirPrint honors it.
+    if (body.format === "pdf") {
+      const inches = getStickerSizeInches(size);
+      const pdfBuffer = await pngBufferToSizedPdfBuffer(
+        imageBuffer,
+        inches.width,
+        inches.height,
+      );
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          // `inline` so iOS opens the system PDF preview (with the AirPrint
+          // share button) instead of triggering a download.
+          "Content-Disposition": `inline; filename="sticker-${shopId}-${Date.now()}.pdf"`,
+        },
+      });
+    }
+
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",

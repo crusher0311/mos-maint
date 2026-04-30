@@ -113,6 +113,25 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     return { nextServiceMileage, nextServiceDate };
   }
 
+  // Mobile (iOS Safari, Android Chrome) needs a different print path than
+  // desktop. iOS Safari/AirPrint *ignore* CSS `@page { size }` and default
+  // to letter, which is what produced the bug where a 2x2 sticker rendered
+  // as a tiny image in the corner of an 8.5x11 sheet. The fix is to ask the
+  // backend for a real PDF whose page size matches the sticker, then open
+  // it in a new tab so AirPrint picks up the PDF's embedded page size.
+  // Do NOT "simplify" this back into a popup with @page CSS — it will
+  // regress mobile printing.
+  function isMobileBrowser(): boolean {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    if (/iPad|iPhone|iPod|Android/i.test(ua)) return true;
+    // iPadOS 13+ reports as Macintosh; distinguish by touch support.
+    if (/Macintosh/.test(ua) && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) {
+      return true;
+    }
+    return false;
+  }
+
   async function handlePrint() {
     if (!currentMileage || parseInt(currentMileage.replace(/,/g, ""), 10) <= 0) {
       setError("Please enter a valid current reading");
@@ -121,6 +140,36 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
 
     setError(null);
     setGenerating(true);
+
+    const useMobilePdfPath = isMobileBrowser();
+
+    // CRITICAL: open the destination tab synchronously *off the user's tap*,
+    // before any await. iOS Safari blocks `window.open` once a microtask
+    // boundary has passed since the gesture, so opening it after `await fetch`
+    // is silently rejected. We open with a tiny "loading" placeholder, then
+    // navigate it to the PDF blob URL once the request comes back. Desktop
+    // still benefits from this — `window.open` after an await is also
+    // popup-blocked on some desktop Safari configs.
+    let mobilePrintWindow: Window | null = null;
+    if (useMobilePdfPath) {
+      mobilePrintWindow = window.open("", "_blank");
+      if (mobilePrintWindow) {
+        try {
+          mobilePrintWindow.document.open();
+          mobilePrintWindow.document.write(
+            '<!doctype html><html><head><meta charset="utf-8" /><title>Preparing sticker…</title>' +
+              '<meta name="viewport" content="width=device-width,initial-scale=1" />' +
+              '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;color:#374151}</style>' +
+              "</head><body>Preparing sticker for printing…</body></html>",
+          );
+          mobilePrintWindow.document.close();
+        } catch {
+          // Some browsers throw on document.write into a same-origin blank
+          // tab during navigation — non-fatal, the location swap below still
+          // works.
+        }
+      }
+    }
 
     try {
       const { nextServiceMileage, nextServiceDate } = calculateServiceValues();
@@ -136,6 +185,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           includeQR: true,
           useKilometers: unit === "km",
           useHours: unit === "hrs",
+          format: useMobilePdfPath ? "pdf" : "png",
         }),
       });
 
@@ -144,12 +194,32 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       }
 
       const blob = await res.blob();
-      
+
+      if (useMobilePdfPath) {
+        const pdfUrl = URL.createObjectURL(blob);
+        if (mobilePrintWindow && !mobilePrintWindow.closed) {
+          mobilePrintWindow.location.href = pdfUrl;
+        } else {
+          // Popup was blocked (or never opened) — fall back to navigating
+          // the current tab. AirPrint still picks up the PDF page size.
+          window.location.href = pdfUrl;
+        }
+        // Release the blob URL once the new tab has had a chance to load it.
+        // 60s is plenty even on a slow connection; revoking sooner can break
+        // the navigation in iOS Safari.
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+        onClose();
+        return;
+      }
+
+      // Desktop path: write the PNG into a popup with `@page size` CSS so
+      // the browser's print dialog uses the sticker dimensions. This works
+      // on Chrome/Edge/Firefox/desktop Safari today and we keep it as-is to
+      // avoid regressing those flows.
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
-        
-        // Define exact physical dimensions for each sticker size
+
         const sizeDimensions: Record<string, { width: string; height: string }> = {
           "1.5x2.25": { width: "1.5in", height: "2.25in" },
           "2x2": { width: "2in", height: "2in" },
@@ -158,17 +228,37 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           "2x3.5": { width: "2in", height: "3.5in" },
         };
         const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
-        
-        // Print from NEW WINDOW with !important everywhere to prevent overrides
-        const xOffset = "0in";
-        const yOffset = "0in"; // Start at 0, adjust if needed
-        
+
         const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
         if (!printWindow) {
-          alert("Please allow popups to print stickers");
+          // Desktop popup blocked — fall back to the PDF path so the user
+          // still gets a correctly-sized sticker instead of a dead button.
+          fetch("/api/sticker/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              size: stickerSize,
+              currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
+              nextServiceMileage,
+              nextServiceDate,
+              includeQR: true,
+              useKilometers: unit === "km",
+              useHours: unit === "hrs",
+              format: "pdf",
+            }),
+          })
+            .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("PDF fallback failed"))))
+            .then((pdfBlob) => {
+              const pdfUrl = URL.createObjectURL(pdfBlob);
+              window.location.href = pdfUrl;
+              setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+            })
+            .catch(() => {
+              alert("Please allow popups to print stickers");
+            });
           return;
         }
-        
+
         printWindow.document.open();
         printWindow.document.write(`<!doctype html>
 <html>
@@ -257,6 +347,11 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       onClose();
     } catch (err) {
       console.error("Failed to generate sticker:", err);
+      // If we opened a placeholder mobile tab and the request blew up,
+      // close it so the user isn't stuck on "Preparing sticker…".
+      if (mobilePrintWindow && !mobilePrintWindow.closed) {
+        try { mobilePrintWindow.close(); } catch { /* ignore */ }
+      }
       setError("Failed to generate sticker. Please try again.");
     } finally {
       setGenerating(false);
