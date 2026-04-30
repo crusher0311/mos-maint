@@ -36,7 +36,7 @@
 (async () => {
   // ===== CONFIG =====
   const SHOP_ID = 14245;          // active shop you're sitting on
-  const SOURCE_RO_ID = 324433830; // the RO to clone (RO# 058 / Jay Demore / 2021 Silverado)
+  const SOURCE_RO_ID = 255022827; // the RO to clone (RO# 001 / Jay Demore / 2021 Silverado)
   const CONFIRM = false;          // false = dry-run; true = actually create the new RO
   // ==================
 
