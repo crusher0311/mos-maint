@@ -129,23 +129,41 @@
     return resp.body;
   }
 
-  // strip identifiers so Tekmetric mints fresh ones for the new RO
+  // strip identifiers + denormalized source-RO references so Tekmetric mints
+  // fresh ones for the new RO
   function cleanJobForCreate(job, newRoId) {
     const cleaned = { ...job };
     cleaned.id = null;
     cleaned.repairOrderId = newRoId;
+    // wipe denormalized fields that reference the source RO
+    cleaned.repairOrderNumber = null;
+    cleaned.repairOrderVehicleDescription = null;
+    cleaned.shopId = null;
+    cleaned.applicationId = null;
+    // dates that should reset for the new job
+    cleaned.authorizedDate = null;
+    cleaned.contactedDate = null;
+    cleaned.completedDate = null;
+    cleaned.postedDate = null;
+    cleaned.updatedDate = null;
     if (Array.isArray(cleaned.parts)) {
       cleaned.parts = cleaned.parts.map((p) => ({
         ...p,
         id: null,
         jobId: null,
+        jobStatus: null,
         repairOrderId: newRoId,
+        repairOrderNumber: null,
+        repairOrderCustomerFullName: null,
+        repairOrderVehicleDescription: null,
+        applicationId: null,
         orderId: null,
         partsTechOrderItemId: null,
         invoiceNumber: null,
         orderDate: null,
         orderNumber: null,
         orderStatus: null,
+        orderPartId: null,
       }));
     }
     if (Array.isArray(cleaned.labor)) {
@@ -153,7 +171,8 @@
         ...l,
         id: null,
         jobId: null,
-        repairOrderId: newRoId,
+        jobRepairOrderId: newRoId,
+        applicationId: null,
       }));
     }
     if (Array.isArray(cleaned.discounts)) {
@@ -292,8 +311,10 @@
     const r = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: payload });
     if (!r.ok) {
       console.error(`[CLONE] ✗ job ${i + 1}/${sourceJobs.length} "${job.name}" failed status=${r.status}`);
-      console.error('         response:', r.body);
-      console.error('         payload:', payload);
+      // raw text avoids the browser's {…} truncation of nested `details`
+      console.error('         response (raw):', r.raw);
+      try { console.error('         response (json):', JSON.stringify(r.body, null, 2)); } catch (_) {}
+      console.error('         payload (json):', JSON.stringify(payload, null, 2));
       console.warn(`[CLONE] stopping after first job failure. New RO ${newRoId} is partially populated; delete it and re-run after fixing.`);
       return;
     }
