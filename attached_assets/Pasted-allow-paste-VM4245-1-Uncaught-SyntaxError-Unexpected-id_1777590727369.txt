@@ -1,0 +1,383 @@
+allow paste
+VM4245:1 Uncaught SyntaxError: Unexpected identifier 'paste'
+/* eslint-disable no-console */
+/*
+ * Tekmetric Migration — RECORDER (snippet 0)
+ *
+ * Purpose: passively capture every internal Tekmetric API call you make
+ * while clicking around the UI, so you can confirm the endpoint paths +
+ * request/response shapes used by snippets 1/2/3 BEFORE you run them.
+ *
+ * Read-only. Does NOT modify any Tekmetric request or response. Does NOT
+ * upload anything anywhere — everything stays in this browser tab and
+ * comes back out as a JSON file you save to ./fixtures/.
+ *
+ * USAGE
+ *   1. Open Tekmetric and navigate to the shop you want to record.
+ *   2. Open DevTools console, paste this whole file, hit Enter.
+ *   3. You'll see "[RECORDER] armed". Now click around the UI to exercise
+ *      the operations you care about. Suggested clicks per shop:
+ *
+ *      ON THE SOURCE SHOP:
+ *        - open the Job Board (lets us confirm the list endpoint + filters)
+ *        - click into one open RO (RO detail endpoint)
+ *        - click into one job inside that RO (job detail endpoint, if any)
+ *        - open one inspection on that RO (inspection list + get endpoints)
+ *        - open one photo on that RO (photo list + presign URL endpoints)
+ *
+ *      ON THE DESTINATION SHOP (use a throwaway test RO):
+ *        - click "+ New Job" and add one labor + one part, then save
+ *          (job CREATE endpoint + payload — this is the highest-value capture)
+ *        - create a new inspection from the inspection picker
+ *        - upload a photo to the test RO
+ *        - create a new RO from scratch with one customer concern
+ *
+ *   4. When you're done, run `__tekRec.dump()` in the console. A JSON
+ *      file will download to your Downloads folder. Move it to
+ *      `scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/fixtures/`
+ *      and rename it something useful (e.g.
+ *      `recorder-source-{shopName}-{date}.json`).
+ *
+ *   5. To stop recording without dumping: `__tekRec.stop()`.
+ *      To clear the buffer mid-session: `__tekRec.clear()`.
+ *      To peek at what's been captured so far: `__tekRec.summary()`.
+ *
+ * SAFETY
+ *   - The Authorization / x-auth-token / Cookie headers are stripped
+ *     before anything is logged or saved.
+ *   - Other request/response fields (customer PII, VIN, etc.) are NOT
+ *     scrubbed — capture is verbatim. Delete the recorder JSON files
+ *     when discovery is done.
+ */
+(() => {
+  if (window.__tekRec && window.__tekRec.armed) {
+    console.warn('[RECORDER] already armed; call __tekRec.stop() first to re-arm.');
+    return;
+  }
+
+  const MATCH = /\/api\/(shop\/\d+|inspection|repair-order|customer|vehicle|job|photo|attachment|s3|presign)/i;
+  const SENSITIVE_HEADERS = new Set(['authorization', 'x-auth-token', 'cookie', 'x-csrf-token']);
+
+  const events = [];
+  let seq = 0;
+
+  function scrubHeaders(h) {
+    const out = {};
+    if (!h) return out;
+    if (typeof h.forEach === 'function') {
+      h.forEach((v, k) => {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      for (const [k, v] of h) {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      }
+      return out;
+    }
+    for (const k of Object.keys(h)) {
+      out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : h[k];
+    }
+    return out;
+  }
+
+  async function bodyToString(body) {
+    if (body == null) return null;
+    if (typeof body === 'string') return body.length > 200000 ? body.slice(0, 200000) + '…[truncated]' : body;
+    if (body instanceof FormData) {
+      const out = {};
+      for (const [k, v] of body.entries()) out[k] = (v && v.name) ? `<File:${v.name}:${v.size}>` : String(v);
+      return JSON.stringify(out);
+    }
+    if (body instanceof Blob) return `<Blob:${body.type}:${body.size}>`;
+    if (body instanceof ArrayBuffer) return `<ArrayBuffer:${body.byteLength}>`;
+    try { return JSON.stringify(body); } catch (_) { return '<unserializable>'; }
+  }
+
+  function shouldRecord(url, method) {
+    try {
+      const u = new URL(url, location.origin);
+      // record same-origin Tekmetric API calls + any S3 presign URLs.
+      const isApi = u.origin === location.origin && MATCH.test(u.pathname);
+      const isS3 = /\.amazonaws\.com$/i.test(u.hostname) || u.hostname.includes('s3.');
+      return isApi || isS3;
+    } catch (_) { return false; }
+  }
+
+  // ----- fetch hook -----
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (!shouldRecord(url, method)) return origFetch(input, init);
+    const id = ++seq;
+    const startedAt = Date.now();
+    const reqHeaders = scrubHeaders(init && init.headers);
+    const reqBody = await bodyToString(init && init.body);
+    let res;
+    try {
+      res = await origFetch(input, init);
+    } catch (err) {
+      events.push({
+        id, transport: 'fetch', method, url: String(url), startedAt,
+        status: 'NETWORK_ERROR', error: err.message,
+        request: { headers: reqHeaders, body: reqBody },
+      });
+      throw err;
+    }
+    const clone = res.clone();
+    let respText = '';
+    try { respText = await clone.text(); } catch (_) {}
+    if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+    const respHeaders = {};
+    res.headers.forEach((v, k) => { respHeaders[k] = v; });
+    events.push({
+      id, transport: 'fetch', method, url: String(url), startedAt,
+      durationMs: Date.now() - startedAt,
+      status: res.status,
+      request: { headers: reqHeaders, body: reqBody },
+      response: { headers: respHeaders, body: respText },
+    });
+    return res;
+  };
+
+  // ----- XHR hook -----
+  const OrigXHR = window.XMLHttpRequest;
+  function PatchedXHR() {
+    const xhr = new OrigXHR();
+    let _method = 'GET';
+    let _url = '';
+    let _reqHeaders = {};
+    let _reqBody = null;
+    const origOpen = xhr.open;
+    const origSetHeader = xhr.setRequestHeader;
+    const origSend = xhr.send;
+    xhr.open = function patchedOpen(m, u, ...rest) {
+      _method = (m || 'GET').toUpperCase();
+      _url = u;
+      _reqHeaders = {};
+      return origOpen.call(this, m, u, ...rest);
+    };
+    xhr.setRequestHeader = function patchedSetHeader(k, v) {
+      _reqHeaders[k] = SENSITIVE_HEADERS.has(String(k).toLowerCase()) ? '<redacted>' : v;
+      return origSetHeader.call(this, k, v);
+    };
+    xhr.send = function patchedSend(body) {
+      _reqBody = body;
+      if (shouldRecord(_url, _method)) {
+        const id = ++seq;
+        const startedAt = Date.now();
+        xhr.addEventListener('loadend', async () => {
+          const reqBodyStr = await bodyToString(_reqBody);
+          let respText = '';
+          try {
+            const t = xhr.responseType;
+            if (t === '' || t === 'text') respText = xhr.responseText || '';
+            else if (t === 'json') respText = JSON.stringify(xhr.response);
+            else respText = `<responseType=${t}>`;
+          } catch (_) {}
+          if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+          const respHeaderText = xhr.getAllResponseHeaders() || '';
+          events.push({
+            id, transport: 'xhr', method: _method, url: String(_url), startedAt,
+            durationMs: Date.now() - startedAt,
+            status: xhr.status,
+            request: { headers: _reqHeaders, body: reqBodyStr },
+            response: { headers: respHeaderText, body: respText },
+          });
+        });
+      }
+      return origSend.call(this, body);
+    };
+    return xhr;
+  }
+  PatchedXHR.prototype = OrigXHR.prototype;
+  window.XMLHttpRequest = PatchedXHR;
+
+  function summary() {
+    const byEndpoint = new Map();
+    for (const e of events) {
+      let path;
+      try { path = new URL(e.url, location.origin).pathname.replace(/\/\d+/g, '/{id}'); }
+      catch (_) { path = e.url; }
+      const key = `${e.method} ${path}`;
+      byEndpoint.set(key, (byEndpoint.get(key) || 0) + 1);
+    }
+    const rows = Array.from(byEndpoint.entries()).map(([k, count]) => ({ endpoint: k, count }));
+    rows.sort((a, b) => b.count - a.count);
+    console.table(rows);
+    console.log(`[RECORDER] ${events.length} captured events.`);
+    return rows;
+  }
+
+  function dump() {
+    const blob = new Blob([JSON.stringify({
+      capturedAt: new Date().toISOString(),
+      origin: location.origin,
+      shopUrl: location.href,
+      eventCount: events.length,
+      events,
+    }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tekmetric-recorder-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    console.log(`[RECORDER] dumped ${events.length} events to Downloads.`);
+  }
+
+  function stop() {
+    window.fetch = origFetch;
+    window.XMLHttpRequest = OrigXHR;
+    if (window.__tekRec) window.__tekRec.armed = false;
+    console.log('[RECORDER] stopped. Buffered events still available via __tekRec.events / __tekRec.dump().');
+  }
+
+  function clear() {
+    events.length = 0;
+    seq = 0;
+    console.log('[RECORDER] buffer cleared.');
+  }
+
+  window.__tekRec = { armed: true, events, dump, stop, clear, summary };
+  console.log('%c[RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().', 'color:#0a0;font-weight:bold');
+})();
+
+VM4248:245 [RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().
+undefined
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+estimate:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root flex items-center outline-none cursor-pointer h-10 rounded-lg px-3 py-2 text-label-normal bg-v2-shade-0 hover:bg-v2-shade-50 [&.active-button]:bg-v2-shade-50 border border-solid border-v2-shade-100 visited:ring-0 focus-visible:outline-ring active:ring-0 shadow-xs focus-visible:shadow-none disabled:shadow-none text-v2-shade-900 disabled:text-v2-shade-200 css-hkx3jt>
+Ancestor with aria-hidden: <div#root> <div id=​"root">​…​</div>​<div class=​"flex h-screen flex-col" style=​"padding-top:​ 56px;​">​…​</div>​flex<header class=​"fixed mui-fixed left-auto right-0 top-0 z-[1100]​ box-border flex min-h-14 w-full flex-shrink-0 flex-col text-v2-shade-0 bg-v2-blue-grey-950" style>​…​</header>​flex<main class=​"relative flex flex-auto">​…​</main>​flex<div class=​"flex flex-1">​…​</div>​flex<nav>​…​</nav>​<div class=​"flex-1">​…​</div>​<div class=​"w-full transition-all duration-300 pr-max-sidebar">​…​</div>​<div id=​"ro-header-top-nav-id" class=​"border-b border-b-v2-shade-100 bg-v2-shade-0 font-light [&_h2]​:​m-0 [&_h2]​:​text-v2-shade-900 [&_h2]​:​text-heading-normal [&_svg.small]​:​h-[18px]​ [&_svg.small]​:​w-[18px]​ [&_svg.back]​:​-mb-1.5 [&_svg.back]​:​mr-1.5 sticky z-900 [&_h2]​:​p-0" style=​"top:​ 56px;​">​…​</div>​<div>​…​</div>​<div class=​"sticky z-900 flex justify-center space-x-2 bg-v2-shade-0 py-2 shadow-sm" style=​"top:​ 201px;​">​…​</div>​flex<div class=​"flex w-full flex-col items-center space-y-5 px-6 pb-28 pt-8">​…​</div>​flex<div class=​"w-full max-w-6xl xl:​max-w-7xl w-full">​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm w-full max-w-6xl xl:​max-w-7xl css-1kxnsga" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"w-full max-w-6xl xl:​max-w-7xl">​…​</div>​<div>​…​</div>​<div class=​"flex items-center">​…​</div>​flex<div class=​"space-y-10">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div class=​"w-full overflow-hidden bg-blue-100 transition-all h-0 bg-opacity-0">​</div>​<div class>​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm css-1kxnsga" data-testid=​"job-table-1131290095" id=​"job-1131290095" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"styled-div  ">​…​</div>​<div class=​"flex items-center justify-between bg-v2-shade-25 py-0.5 pl-2.5 pr-2">​…​</div>​flex<div class=​"text-shade-600">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<div data-rbd-droppable-id=​"1131290095" data-rbd-droppable-context-id=​"15">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<table class=​"MuiTable-root styled-table css-1xhtq58">​…​</table>​<tbody class=​"MuiTableBody-root css-y6j1my">​…​</tbody>​<tr class=​"MuiTableRow-root css-16pe4ub">​…​</tr>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-left min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w">​…​</td>​<div class=​"flex items-center space-x-6">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​GP$​</label>​<label>​$96.93​</label>​</div>​<div>​…​</div>​<label>​GP/Hr​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<div class=​"w-full cursor-pointer">​…​</div>​<div class=​"flex items-center justify-between">​…​</div>​flex<div class=​"inline-flex items-center" aria-label>​…​</div>​flex<div>​…​</div>​<label>​Subtotal​</label>​<label>​$96.93​</label>​</div>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-30 [&_label:​last-of-type]​:​opacity-30 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" disabled style=​"width:​ 122px;​">​…​</td>​<div class=​"flex items-center justify-between">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​Labor Tax​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<div class=​"flex items-center justify-between">​…​</div>​flex<div>​…​</div>​<div>​…​</div>​<label>​Parts Tax​</label>​<label>​…​</label>​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<label>​JOB TOTAL​</label>​<label>​$104.51​</label>​</td>​</tr>​</tbody>​</table>​</div>​</div>​</div>​</div>​</div>​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div class=​"w-full overflow-hidden bg-blue-100 transition-all h-0 bg-opacity-0">​</div>​<div class>​…​</div>​<div class=​"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation1 MuiCard-root relative overflow-visible rounded-sm css-1kxnsga" data-testid=​"job-table-1132259533" id=​"job-1132259533" style=​"--Paper-shadow:​ 0px 2px 1px -1px rgba(0,0,0,0.2)​,0px 1px 1px 0px rgba(0,0,0,0.14)​,0px 1px 3px 0px rgba(0,0,0,0.12)​;​">​…​</div>​<div class=​"styled-div  ">​…​</div>​<div class=​"flex items-center justify-between bg-v2-shade-25 py-0.5 pl-2.5 pr-2">​…​</div>​flex<div class=​"text-shade-600">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<div data-rbd-droppable-id=​"1132259533" data-rbd-droppable-context-id=​"17">​…​</div>​<div class=​"table-scroll-container relative overflow-auto verticalScrollGradient mt-0">​…​</div>​<table class=​"MuiTable-root styled-table css-1xhtq58">​…​</table>​<tbody class=​"MuiTableBody-root css-y6j1my">​…​</tbody>​<tr class=​"MuiTableRow-root css-16pe4ub">​…​</tr>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-left min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w">​…​</td>​<div class=​"flex items-center space-x-6">​…​</div>​flex<div>​…​</div>​<label>​GP%​</label>​<label>​…​</label>​</div>​<div>​…​</div>​<div>​…​</div>​</div>​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-30 [&_label:​last-of-type]​:​opacity-30 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" disabled style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​<td class=​"MuiTableCell-root table-header-cell h-8 whitespace-pre-wrap align-middle text-right min-w-[120px]​ [&_label]​:​min-h-0 [&_label:​first-of-type]​:​mb-1 [&_label:​first-of-type]​:​block [&_label:​first-of-type]​:​text-base [&_label:​first-of-type]​:​font-medium [&_label:​first-of-type]​:​text-shade-600 [&_label:​last-of-type]​:​block [&_label:​last-of-type]​:​text-lg [&_label:​last-of-type]​:​font-medium [&_label:​last-of-type]​:​text-shade-600 [&_label:​first-of-type]​:​opacity-50 [&_label:​last-of-type]​:​opacity-90 [&_+_td]​:​border-l [&_+_td]​:​border-l-v2-shade-75 [&_.tk-checkbox]​:​p-0 MuiTableCell-body MuiTableCell-sizeMedium css-3otn4w" style=​"width:​ 122px;​">​…​</td>​</tr>​</tbody>​</table>​</div>​</div>​</div>​</div>​</div>​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div role=​"button" tabindex=​"0" aria-roledescription=​"sortable" aria-describedby=​"DndDescribedBy-2">​…​</div>​<div id=​"DndDescribedBy-2" style=​"display:​ none;​">​…​</div>​<div id=​"DndLiveRegion-2" role=​"status" aria-live=​"assertive" aria-atomic=​"true" style=​"position:​ fixed;​ top:​ 0px;​ left:​ 0px;​ width:​ 1px;​ height:​ 1px;​ margin:​ -1px;​ border:​ 0px;​ padding:​ 0px;​ overflow:​ hidden;​ clip:​ rect(0px, 0px, 0px, 0px)​;​ clip-path:​ inset(100%)​;​ white-space:​ nowrap;​">​</div>​</div>​</div>​<div>​…​</div>​</div>​<div class=​"mb-12 flex flex-col items-center">​…​</div>​flex<div data-call-pop-exclusion-zone=​"estimate-bar" class=​"fixed bottom-0 left-0 z-[999]​ flex w-full flex-col transition-all duration-300 lg:​pr-64 lg:​pl-min-sidebar">​…​</div>​flex</div>​</div>​<div class=​"MuiDrawer-root MuiDrawer-docked css-1wt4220" data-testid=​"ro-sidebar">​…​</div>​</div>​</div>​<div class=​"MuiDrawer-root MuiDrawer-docked css-1k5bhpf">​…​</div>​</div>​</main>​</div>​<div>​</div>​<audio id=​"tekmessage-notification-sound" src=​"/​assets/​notification-8apPF64Q.mp3">​</audio>​media<div>​</div>​</div>​
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+main-D7j3MLUu.js:188 Deprecation warning: use moment.updateLocale(localeName, config) to change an existing locale. moment.defineLocale(localeName, config) should only be used for creating a new locale See http://momentjs.com/guides/#/warnings/define-locale/ for more info.
+Hw @ main-D7j3MLUu.js:188
+$w @ main-D7j3MLUu.js:191
+v_ @ main-D7j3MLUu.js:191
+o2 @ main-D7j3MLUu.js:191
+to @ index-C90urM_L.js:1
+Ac @ main-D7j3MLUu.js:47
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:1 MUI: The SpeedDial component was moved from the lab to the core.
+
+You should use `import { SpeedDial } from '@mui/material'`
+or `import SpeedDial from '@mui/material/SpeedDial'`
+le @ index-DZjbN4hi.js:1
+(anonymous) @ index-DZjbN4hi.js:2
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:3 MUI: The SpeedDialIcon component was moved from the lab to the core.
+
+You should use `import { SpeedDialIcon } from '@mui/material'`
+or `import SpeedDialIcon from '@mui/material/SpeedDialIcon'`
+De @ index-DZjbN4hi.js:3
+(anonymous) @ index-DZjbN4hi.js:4
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+index-DZjbN4hi.js:2 MUI: The SpeedDialAction component was moved from the lab to the core.
+
+You should use `import { SpeedDialAction } from '@mui/material'`
+or `import SpeedDialAction from '@mui/material/SpeedDialAction'`
+be @ index-DZjbN4hi.js:2
+(anonymous) @ index-DZjbN4hi.js:3
+Ac @ main-D7j3MLUu.js:47
+Lz @ main-D7j3MLUu.js:49
+Yz @ main-D7j3MLUu.js:49
+$z @ main-D7j3MLUu.js:49
+Pm @ main-D7j3MLUu.js:49
+ud @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+/admin/shop/14245/repair-orders/create:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root disabled:text-v2-shade-200 flex w-full items-center justify-start rounded-md text-paragraph-normal hover:bg-v2-blue-grey-25 bg-v2-shade-50 text-left css-hkx3jt>
+Ancestor with aria-hidden: <div.MuiPopover-root z-[1089] mt-[1px] max-h-[340px] MuiModal-root css-17ewevk> <div role=​"presentation" rootclassname=​"z-[1089]​" class=​"MuiPopover-root z-[1089]​ mt-[1px]​ max-h-[340px]​ MuiModal-root css-17ewevk" aria-hidden=​"true">​…​</div>​
+/admin/shop/14245/repair-orders/create:1 Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at https://w3c.github.io/aria/#aria-hidden.
+Element with focus: <button.MuiButtonBase-root disabled:text-v2-shade-200 flex w-full items-center justify-start rounded-md text-paragraph-normal hover:bg-v2-blue-grey-25 bg-v2-shade-50 text-left css-hkx3jt>
+Ancestor with aria-hidden: <div.MuiPopover-root mt-[1px] max-h-[340px] MuiModal-root css-17ewevk> <div role=​"presentation" class=​"MuiPopover-root mt-[1px]​ max-h-[340px]​ MuiModal-root css-17ewevk" style=​"width:​ 484px;​" aria-hidden=​"true">​…​</div>​
+main-D7j3MLUu.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-D7j3MLUu.js:274
+Promise.then
+EE @ main-D7j3MLUu.js:274
+Q @ main-D7j3MLUu.js:274
+bX @ main-D7j3MLUu.js:274
+(anonymous) @ actions-DRYZ6B1e.js:1
+(anonymous) @ main-D7j3MLUu.js:225
+(anonymous) @ main-D7j3MLUu.js:225
+u.useEffect.F @ index-CH1IDaMV.js:3
+nl @ main-D7j3MLUu.js:49
+Fp @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+ld @ main-D7j3MLUu.js:49
+L @ main-D7j3MLUu.js:34
+U @ main-D7j3MLUu.js:34
+(anonymous) @ setImmediate.js:40
+runIfPresent @ setImmediate.js:69
+(anonymous) @ setImmediate.js:109
+postMessage
+window.postMessage @ estimate:114
+(anonymous) @ setImmediate.js:120
+(anonymous) @ setImmediate.js:27
+e0 @ main-D7j3MLUu.js:34
+s0 @ main-D7j3MLUu.js:34
+e.unstable_scheduleCallback @ main-D7j3MLUu.js:34
+Kz @ main-D7j3MLUu.js:49
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+main-D7j3MLUu.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+main-D7j3MLUu.js:274 Skipping tracking for Repair Order page
+__tekRec.dump()
+VM4248:228 [RECORDER] dumped 0 events to Downloads.
+undefined
+main-D7j3MLUu.js:274  POST https://shop.tekmetric.com/api/shop/14245/parts-tech/proxy 403 (Forbidden)
+(anonymous) @ main-D7j3MLUu.js:274
+Promise.then
+EE @ main-D7j3MLUu.js:274
+Q @ main-D7j3MLUu.js:274
+bX @ main-D7j3MLUu.js:274
+(anonymous) @ actions-DRYZ6B1e.js:1
+(anonymous) @ main-D7j3MLUu.js:225
+(anonymous) @ main-D7j3MLUu.js:225
+u.useEffect.F @ index-CH1IDaMV.js:3
+nl @ main-D7j3MLUu.js:49
+Fp @ main-D7j3MLUu.js:49
+Dm @ main-D7j3MLUu.js:49
+qc @ main-D7j3MLUu.js:49
+Xz @ main-D7j3MLUu.js:49
+vs @ main-D7j3MLUu.js:47
+(anonymous) @ main-D7j3MLUu.js:49
+main-D7j3MLUu.js:274 {type: 'ERROR', message: 'PartsTech account is not activated.', data: null, details: {…}, responseStatus: 403}
+__tekRec.summary()
+VM4248:207 
+VM4248:208 [RECORDER] 0 captured events.
+[]
