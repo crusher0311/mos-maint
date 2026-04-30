@@ -1,0 +1,223 @@
+/* eslint-disable no-console */
+(async () => {
+  // ===== CONFIG =====
+  const SHOP_ID = 14245;
+  const SOURCE_RO_ID = 255022827;
+  const CONFIRM = true;
+  const JOBS_LIMIT = null;        // <-- start with 1 to validate, then re-run with null for all 11
+  const AUTO_ROLLBACK = true;
+  // ==================
+
+  const BASE = location.origin;
+  const m = location.pathname.match(/\/admin\/shop\/(\d+)\b/);
+  const activeShop = m ? Number(m[1]) : null;
+  if (activeShop !== SHOP_ID) { console.error(`[CLONE] Expected shop ${SHOP_ID}, URL says shop ${activeShop}.`); return; }
+
+  async function getToken() {
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return v;
+      try { const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ')) return p.accessToken;
+      } catch (_) {}
+    }
+    return await new Promise((resolve, reject) => {
+      const orig = window.fetch.bind(window);
+      const t = setTimeout(() => { window.fetch = orig; reject(new Error('Timed out sniping token. Click Tekmetric and re-run.')); }, 8000);
+      window.fetch = function p(input, init) {
+        try {
+          const h = (init && init.headers) || {}; let tok = null;
+          if (h instanceof Headers) tok = h.get('X-AUTH-TOKEN');
+          else if (Array.isArray(h)) { const x = h.find(([k]) => /^x-auth-token$/i.test(k)); if (x) tok = x[1]; }
+          else for (const k of Object.keys(h)) if (k.toLowerCase() === 'x-auth-token') tok = h[k];
+          if (tok) { clearTimeout(t); window.fetch = orig; resolve(tok); }
+        } catch (_) {}
+        return orig(input, init);
+      };
+      try { orig(`${BASE}/api/shop/${SHOP_ID}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
+    });
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const init = { method: opts.method || 'GET', credentials: 'include',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-AUTH-TOKEN': opts.token } };
+    if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+    const res = await fetch(`${BASE}${path}`, init);
+    const text = await res.text();
+    let parsed = null; try { parsed = text ? JSON.parse(text) : null; } catch (_) {}
+    return { status: res.status, ok: res.ok, body: parsed, raw: text };
+  }
+  function unwrap(r) { if (r.body && typeof r.body === 'object' && 'data' in r.body && 'type' in r.body) return r.body.data; return r.body; }
+
+  function leanPart(p, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: 'PART' },
+      name: p.name ?? '', partNumber: p.partNumber ?? '', position: p.position ?? '',
+      quantity: p.quantity ?? 1, cost: p.cost ?? 0, retail: p.retail ?? 0, oemPartNumber: p.oemPartNumber ?? '',
+    };
+    for (const k of ['brand','description','model','fet','msrp','quote','notes',
+      'pcdbPartTypeId','pcdbPartTypeName','partsTechPartId','unitOfMeasure','maxCapacity','specStandard',
+      'warrantyLabel','sortOrder','width','ratio','diameter','constructionType','loadIndex','speedRating',
+      'tireType','mileageWarranty','loadRange','tireCategory','runFlat','sideWallStyle','treadwear','traction','temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
+    }
+    return out;
+  }
+
+  function leanLabor(l, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      name: l.name ?? '', hours: l.hours ?? 0, rate: l.rate ?? 0,
+      autoApplyLaborMatrixId: l.autoApplyLaborMatrixId ?? null,
+      technician: l.technician ? { id: l.technician.id } : null,
+    };
+    for (const k of ['complete','position','warrantyLabel','sortOrder','sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
+    }
+    return out;
+  }
+
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const p = { ...emptyJobResp };
+    p.name = sourceJob.name ?? p.name;
+    p.status = sourceJob.status ?? p.status;
+    p.selected = sourceJob.selected ?? p.selected;
+    p.authorized = sourceJob.authorized ?? p.authorized;
+    p.technician = sourceJob.technician ? { id: sourceJob.technician.id } : null;
+    p.note = sourceJob.note ?? null;
+    p.declinedNote = sourceJob.declinedNote ?? null;
+    p.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    p.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    for (const k of ['taxParts','taxLabor','taxFees','taxTires','taxTiresFet',
+      'packagePrice','packagePriceMethod','packagePriceSurplusOilMethod','packagePriceModsHidden','feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) p[k] = sourceJob[k];
+    }
+    p.parts = (sourceJob.parts || []).map(x => leanPart(x, newJobId));
+    p.labor = (sourceJob.labor || []).map(x => leanLabor(x, newJobId));
+    p.discounts = []; p.fees = []; p.smartJobIds = []; p.smartJobs = []; p.laborTechnicians = [];
+    return p;
+  }
+
+  async function rollback(token, partialRoId) {
+    try {
+      const r = await jsonFetch(`/api/repair-order/${partialRoId}/status`, { token, method: 'PUT',
+        body: { repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } } });
+      if (r.ok) console.warn(`[CLONE] auto-rolled-back partial RO ${partialRoId} (DELETED).`);
+      else console.warn(`[CLONE] auto-rollback FAILED for RO ${partialRoId} status=${r.status}; delete manually:`, r.raw);
+    } catch (e) { console.warn(`[CLONE] auto-rollback threw: ${e.message}`); }
+  }
+
+  console.log(`%c[CLONE] starting — shop ${SHOP_ID}, source RO ${SOURCE_RO_ID}, CONFIRM=${CONFIRM}, JOBS_LIMIT=${JOBS_LIMIT}`, 'color:#06c;font-weight:bold');
+
+  let token;
+  try { token = await getToken(); console.log('[CLONE] got auth token.'); }
+  catch (e) { console.error('[CLONE] auth token error:', e.message); return; }
+
+  const roResp = await jsonFetch(`/api/shop/${SHOP_ID}/repair-order/${SOURCE_RO_ID}`, { token });
+  if (!roResp.ok) { console.error(`[CLONE] failed RO meta status=${roResp.status}`, roResp.raw); return; }
+  const sourceRo = unwrap(roResp);
+
+  const estResp = await jsonFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`, { token });
+  if (!estResp.ok) { console.error(`[CLONE] failed estimate status=${estResp.status}`, estResp.raw); return; }
+  const sourceJobs = (unwrap(estResp).jobs || []).filter(j => !j.archived);
+
+  const sourceLaborRateId = typeof sourceRo.laborRate === 'number' ? sourceRo.laborRate : sourceRo.laborRate?.id;
+  const APPT = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  const sourceApptOption = typeof sourceRo.appointmentOption === 'number'
+    ? sourceRo.appointmentOption : (APPT[sourceRo.appointmentOption] ?? 2);
+
+  console.log(`[CLONE] source RO #${sourceRo.repairOrderNumber}: ${sourceJobs.length} jobs, labor rate id ${sourceLaborRateId}, appt "${sourceRo.appointmentOption}"->${sourceApptOption}`);
+
+  const concernsResp = await jsonFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`, { token });
+  if (!concernsResp.ok) { console.error(`[CLONE] failed concerns status=${concernsResp.status}`, concernsResp.raw); return; }
+  const sourceConcerns = Array.isArray(concernsResp.body) ? concernsResp.body : (concernsResp.body?.data || []);
+
+  if (!CONFIRM) { console.warn('[CLONE] DRY RUN.'); return; }
+
+  const createPayload = {
+    shop: { id: SHOP_ID }, appointmentOption: sourceApptOption,
+    odometerInop: sourceRo.odometerInop ?? false, leadSource: sourceRo.leadSource || '',
+    vehicle: { id: sourceRo.vehicle.id }, milesIn: sourceRo.milesIn ?? null,
+    laborRate: { id: sourceLaborRateId }, customer: { id: sourceRo.customer.id },
+    appointment: null, initialJobs: [], recommendations: [], declinedJobRecommendations: [],
+  };
+  const createResp = await jsonFetch(`/api/repair-order/create`, { token, method: 'POST', body: createPayload });
+  if (!createResp.ok) { console.error(`[CLONE] RO create failed status=${createResp.status}`, createResp.raw); return; }
+  const newRo = unwrap(createResp);
+  const newRoId = newRo.id;
+  const newRoUrl = `${BASE}/admin/shop/${SHOP_ID}/repair-orders/${newRoId}/estimate`;
+  console.log(`%c[CLONE] ✓ created new RO id=${newRoId} #${newRo.repairOrderNumber}`, 'color:#0a0;font-weight:bold');
+  console.log(`        ${newRoUrl}`);
+
+  if (sourceRo.milesIn != null || sourceRo.milesOut != null) {
+    const r = await jsonFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
+      token, method: 'PUT',
+      body: { milesIn: sourceRo.milesIn ?? sourceRo.milesOut ?? 0, milesOut: sourceRo.milesOut ?? sourceRo.milesIn ?? 0, odometerInop: sourceRo.odometerInop ?? false },
+    });
+    if (!r.ok) console.warn(`[CLONE] mileage failed:`, r.raw); else console.log(`[CLONE] ✓ mileage`);
+  }
+
+  for (let i = 0; i < sourceConcerns.length; i++) {
+    const r = await jsonFetch(`/api/repair-orders/${newRoId}/customer-concerns`, { token, method: 'POST', body: { concern: sourceConcerns[i].concern } });
+    if (!r.ok) console.error(`[CLONE] ✗ concern ${i+1}:`, r.raw); else console.log(`[CLONE] ✓ concern ${i+1}/${sourceConcerns.length}`);
+  }
+
+  const jobs = JOBS_LIMIT ? sourceJobs.slice(0, JOBS_LIMIT) : sourceJobs;
+  if (JOBS_LIMIT) console.log(`[CLONE] JOBS_LIMIT=${JOBS_LIMIT} → ${jobs.length} of ${sourceJobs.length} job(s).`);
+
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    const label = `job ${i+1}/${jobs.length} "${job.name}"`;
+
+    const empty = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST',
+      body: { name: job.name || 'New Job', repairOrderId: newRoId, syncPartsAttachedToNonQuotedOrders: false } });
+    if (!empty.ok) {
+      console.error(`[CLONE] ✗ ${label} empty-create status=${empty.status}`, empty.raw);
+      if (AUTO_ROLLBACK) await rollback(token, newRoId);
+      return;
+    }
+    const emptyJob = unwrap(empty);
+
+    const popPayload = buildPopulatePayload(emptyJob, job);
+    const pop = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: popPayload });
+    if (!pop.ok) {
+      console.error(`[CLONE] ✗ ${label} populate status=${pop.status}`);
+      console.error('         response (raw):', pop.raw);
+      try { console.error('         response (json):', JSON.stringify(pop.body, null, 2)); } catch (_) {}
+      console.error('         payload (json):', JSON.stringify(popPayload, null, 2));
+      if (AUTO_ROLLBACK) await rollback(token, newRoId);
+      return;
+    }
+    console.log(`[CLONE] ✓ ${label} — empty-id=${emptyJob.id}, ${job.parts?.length||0}p / ${job.labor?.length||0}l`);
+  }
+
+  console.log(`%c[CLONE] DONE — open: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
+})();
+VM6066:113 [CLONE] starting — shop 14245, source RO 255022827, CONFIRM=true, JOBS_LIMIT=null
+VM6066:116 [CLONE] got auth token.
+Promise {<pending>}
+VM6066:132 [CLONE] source RO #1: 12 jobs, labor rate id 9991, appt "DROP"->2
+VM6066:152 [CLONE] ✓ created new RO id=324435101 #62
+VM6066:153         https://shop.tekmetric.com/admin/shop/14245/repair-orders/324435101/estimate
+VM6066:160 [CLONE] ✓ mileage
+VM6066:165 [CLONE] ✓ concern 1/5
+VM6066:165 [CLONE] ✓ concern 2/5
+VM6066:165 [CLONE] ✓ concern 3/5
+VM6066:165 [CLONE] ✓ concern 4/5
+VM6066:165 [CLONE] ✓ concern 5/5
+VM6066:194 [CLONE] ✓ job 1/12 "6K Lube Oil And Filter" — empty-id=1133873666, 2p / 1l
+VM6066:194 [CLONE] ✓ job 2/12 "Test Job" — empty-id=1133873670, 1p / 1l
+VM6066:194 [CLONE] ✓ job 3/12 "Spark Plugs" — empty-id=1133873671, 1p / 1l
+VM6066:194 [CLONE] ✓ job 4/12 "test" — empty-id=1133873672, 0p / 1l
+VM6066:194 [CLONE] ✓ job 5/12 "New Job" — empty-id=1133873673, 0p / 0l
+VM6066:194 [CLONE] ✓ job 6/12 "LOFS - FULL SYNTHETIC OIL CHANGE" — empty-id=1133873674, 2p / 1l
+VM6066:194 [CLONE] ✓ job 7/12 "6K Lube Oil And Filter" — empty-id=1133873675, 0p / 1l
+VM6066:194 [CLONE] ✓ job 8/12 "LOFS - FULL SYNTHETIC OIL CHANGE" — empty-id=1133873676, 2p / 1l
+VM6066:194 [CLONE] ✓ job 9/12 "LOFS - FULL SYNTHETIC OIL CHANGE" — empty-id=1133873678, 2p / 1l
+VM6066:194 [CLONE] ✓ job 10/12 "6K Lube Oil And Filter" — empty-id=1133873681, 0p / 1l
+VM6066:194 [CLONE] ✓ job 11/12 "LOFS - FULL SYNTHETIC OIL CHANGE" — empty-id=1133873683, 2p / 1l
+VM6066:194 [CLONE] ✓ job 12/12 "6K Lube Oil And Filter" — empty-id=1133873686, 1p / 1l
+VM6066:197 [CLONE] DONE — open: https://shop.tekmetric.com/admin/shop/14245/repair-orders/324435101/estimate
