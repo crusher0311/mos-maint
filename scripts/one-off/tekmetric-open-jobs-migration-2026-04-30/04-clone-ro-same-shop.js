@@ -8,7 +8,7 @@
  * customer / vehicle / labor rate / mileage / customer-concerns / jobs
  * (each job's parts + labor lines preserved verbatim).
  *
- * Endpoints exercised (all confirmed against HAR capture 2026-04-30):
+ * Endpoints exercised (all confirmed against HAR captures 2026-04-30):
  *   GET  /api/shop/{shopId}/repair-order/{roId}            -> RO metadata
  *                                                            (customer/vehicle/laborRate/mileage)
  *   GET  /api/repair-order/{roId}/estimate                 -> jobs[] with parts+labor inline
@@ -16,8 +16,13 @@
  *   POST /api/repair-order/create                          -> new RO
  *   PUT  /api/repair-order/{newRoId}/vehicle-mileage       -> set mileage
  *   POST /api/repair-orders/{newRoId}/customer-concerns    -> per concern
- *   POST /api/shop/{shopId}/job                            -> per job (with
- *                                                            parts+labor inline)
+ *   POST /api/shop/{shopId}/job                            -> empty-job CREATE
+ *                                                            ({name, repairOrderId,
+ *                                                              syncPartsAttachedToNonQuotedOrders})
+ *   POST /api/shop/{shopId}/job                            -> populate (id set,
+ *                                                            parts/labor have tempId)
+ *   PUT  /api/repair-order/{newRoId}/status                -> auto-rollback DELETED
+ *                                                            on failure
  *
  * NOTE on laborRate shape: the RO metadata endpoint returns laborRate as a
  * bare numeric id (e.g. `laborRate: 9991`), NOT an object. The create payload
@@ -27,6 +32,16 @@
  * string enum (e.g. `"DROP"`), but the create endpoint expects a numeric Long.
  * Confirmed mapping from HAR: `"DROP"` -> 2. Other values are best-guess and
  * default to 2 (drop-off) so the create doesn't 400 on an unknown enum.
+ *
+ * NOTE on job creation: a single fat POST with id=null does NOT work — Tekmetric
+ * 500s. The real flow is two-step:
+ *   1. POST {name, repairOrderId, syncPartsAttachedToNonQuotedOrders:false}
+ *      -> returns the freshly minted empty job (with id, defaults).
+ *   2. POST that returned object back, mutated to set source's name/status/
+ *      technician/etc and with parts/labor REPLACED by lean items each carrying
+ *      a `tempId: <random float>` and `jobId: <new id>`. Most of the bloat
+ *      Tekmetric returns on the GET is server-managed and ignored on input —
+ *      sending the GET shape verbatim is what triggers the 500.
  *
  * USAGE
  *   1. In Tekmetric, navigate to ANY page on the shop you want to clone within
@@ -49,6 +64,10 @@
   const SHOP_ID = 14245;          // active shop you're sitting on
   const SOURCE_RO_ID = 255022827; // the RO to clone (RO# 001 / Jay Demore / 2021 Silverado)
   const CONFIRM = false;          // false = dry-run; true = actually create the new RO
+  const JOBS_LIMIT = null;        // null = clone all jobs; set to 1 to test just the
+                                  // first job before doing all 11
+  const AUTO_ROLLBACK = true;     // on any job failure, set the partial RO to DELETED
+                                  // so you don't have to clean it up manually
   // ==================
 
   const BASE = location.origin;
@@ -129,62 +148,108 @@
     return resp.body;
   }
 
-  // strip identifiers + denormalized source-RO references so Tekmetric mints
-  // fresh ones for the new RO
-  function cleanJobForCreate(job, newRoId) {
-    const cleaned = { ...job };
-    cleaned.id = null;
-    cleaned.repairOrderId = newRoId;
-    // wipe denormalized fields that reference the source RO
-    cleaned.repairOrderNumber = null;
-    cleaned.repairOrderVehicleDescription = null;
-    cleaned.shopId = null;
-    cleaned.applicationId = null;
-    // dates that should reset for the new job
-    cleaned.authorizedDate = null;
-    cleaned.contactedDate = null;
-    cleaned.completedDate = null;
-    cleaned.postedDate = null;
-    cleaned.updatedDate = null;
-    if (Array.isArray(cleaned.parts)) {
-      cleaned.parts = cleaned.parts.map((p) => ({
-        ...p,
-        id: null,
-        jobId: null,
-        jobStatus: null,
-        repairOrderId: newRoId,
-        repairOrderNumber: null,
-        repairOrderCustomerFullName: null,
-        repairOrderVehicleDescription: null,
-        applicationId: null,
-        orderId: null,
-        partsTechOrderItemId: null,
-        invoiceNumber: null,
-        orderDate: null,
-        orderNumber: null,
-        orderStatus: null,
-        orderPartId: null,
-      }));
+  // Lean part shape — matches the populate POST captured in HAR. Most of the
+  // 80+ fields Tekmetric returns on GET are server-managed; sending them back
+  // as-is on a new job triggers a 500. We carry over commonly-meaningful fields
+  // (descriptors + tire dimensions + cross-system bridges) but drop everything
+  // tied to source-RO state (orders, inventory, invoices, etc.).
+  function leanPart(p, newJobId) {
+    const out = {
+      tempId: Math.random(),
+      jobId: newJobId,
+      partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: 'PART' },
+      name: p.name ?? '',
+      partNumber: p.partNumber ?? '',
+      position: p.position ?? '',
+      quantity: p.quantity ?? 1,
+      cost: p.cost ?? 0,
+      retail: p.retail ?? 0,
+      oemPartNumber: p.oemPartNumber ?? '',
+    };
+    // optional descriptors — copy if non-null
+    for (const k of ['brand', 'description', 'model', 'fet', 'msrp', 'quote', 'notes',
+      'pcdbPartTypeId', 'pcdbPartTypeName', 'partsTechPartId', 'unitOfMeasure',
+      'maxCapacity', 'specStandard', 'warrantyLabel', 'sortOrder',
+      // tire-specific
+      'width', 'ratio', 'diameter', 'constructionType', 'loadIndex', 'speedRating',
+      'tireType', 'mileageWarranty', 'loadRange', 'tireCategory', 'runFlat',
+      'sideWallStyle', 'treadwear', 'traction', 'temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
     }
-    if (Array.isArray(cleaned.labor)) {
-      cleaned.labor = cleaned.labor.map((l) => ({
-        ...l,
-        id: null,
-        jobId: null,
-        jobRepairOrderId: newRoId,
-        applicationId: null,
-      }));
+    return out;
+  }
+
+  // Lean labor shape — matches the populate POST captured in HAR.
+  function leanLabor(l, newJobId) {
+    const out = {
+      tempId: Math.random(),
+      jobId: newJobId,
+      name: l.name ?? '',
+      hours: l.hours ?? 0,
+      rate: l.rate ?? 0,
+      autoApplyLaborMatrixId: l.autoApplyLaborMatrixId ?? null,
+      technician: l.technician ? { id: l.technician.id } : null,
+    };
+    for (const k of ['complete', 'position', 'warrantyLabel', 'sortOrder', 'sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
     }
-    if (Array.isArray(cleaned.discounts)) {
-      cleaned.discounts = cleaned.discounts.map((d) => ({ ...d, id: null, jobId: null, repairOrderId: newRoId }));
+    return out;
+  }
+
+  // Build the populate POST body from the empty-job response + source job.
+  // Strategy: take the server's freshly minted empty-job object as the base
+  // (so all server-managed defaults are correct), then overwrite the human-
+  // meaningful fields from the source job and replace parts/labor with lean
+  // items carrying tempId.
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const populated = { ...emptyJobResp };
+    // human-set fields we want to carry over from source
+    populated.name = sourceJob.name ?? populated.name;
+    populated.status = sourceJob.status ?? populated.status;
+    populated.selected = sourceJob.selected ?? populated.selected;
+    populated.authorized = sourceJob.authorized ?? populated.authorized;
+    populated.technician = sourceJob.technician
+      ? { id: sourceJob.technician.id }
+      : null;
+    populated.note = sourceJob.note ?? null;
+    populated.declinedNote = sourceJob.declinedNote ?? null;
+    populated.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    populated.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    // tax flags (preserve if source had non-defaults)
+    for (const k of ['taxParts', 'taxLabor', 'taxFees', 'taxTires', 'taxTiresFet']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
     }
-    if (Array.isArray(cleaned.fees)) {
-      cleaned.fees = cleaned.fees.map((f) => ({ ...f, id: null, jobId: null, repairOrderId: newRoId }));
+    // package-pricing carry-over (some shops use this)
+    for (const k of ['packagePrice', 'packagePriceMethod', 'packagePriceSurplusOilMethod',
+      'packagePriceModsHidden', 'feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
     }
-    if (Array.isArray(cleaned.laborTechnicians)) {
-      cleaned.laborTechnicians = cleaned.laborTechnicians.map((lt) => ({ ...lt, id: null }));
+    // parts + labor: replace with lean shapes
+    populated.parts = (sourceJob.parts || []).map((p) => leanPart(p, newJobId));
+    populated.labor = (sourceJob.labor || []).map((l) => leanLabor(l, newJobId));
+    // discounts/fees/smartJobs/laborTechnicians: smoke test source has none
+    // for the test RO; for safety, keep empty arrays (the server seems to
+    // recompute totals anyway). Add lean mappers later if a real RO has them.
+    populated.discounts = [];
+    populated.fees = [];
+    populated.smartJobIds = [];
+    populated.smartJobs = [];
+    populated.laborTechnicians = [];
+    return populated;
+  }
+
+  async function rollbackPartialRo(token, partialRoId) {
+    try {
+      const r = await jsonFetch(`/api/repair-order/${partialRoId}/status`, {
+        token, method: 'PUT',
+        body: { repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } },
+      });
+      if (r.ok) console.warn(`[CLONE] auto-rolled-back partial RO ${partialRoId} (set to DELETED).`);
+      else console.warn(`[CLONE] auto-rollback FAILED for RO ${partialRoId} status=${r.status}; delete it manually:`, r.raw);
+    } catch (e) {
+      console.warn(`[CLONE] auto-rollback threw for RO ${partialRoId}: ${e.message}`);
     }
-    return cleaned;
   }
 
   console.log(`%c[CLONE] starting — shop ${SHOP_ID}, source RO ${SOURCE_RO_ID}, CONFIRM=${CONFIRM}`,
@@ -304,21 +369,44 @@
     }
   }
 
-  // ----- 5. jobs (one POST per job, parts+labor inline)
-  for (let i = 0; i < sourceJobs.length; i++) {
-    const job = sourceJobs[i];
-    const payload = cleanJobForCreate(job, newRoId);
-    const r = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: payload });
-    if (!r.ok) {
-      console.error(`[CLONE] ✗ job ${i + 1}/${sourceJobs.length} "${job.name}" failed status=${r.status}`);
-      // raw text avoids the browser's {…} truncation of nested `details`
-      console.error('         response (raw):', r.raw);
-      try { console.error('         response (json):', JSON.stringify(r.body, null, 2)); } catch (_) {}
-      console.error('         payload (json):', JSON.stringify(payload, null, 2));
-      console.warn(`[CLONE] stopping after first job failure. New RO ${newRoId} is partially populated; delete it and re-run after fixing.`);
+  // ----- 5. jobs (TWO-STEP per job: empty create -> populate)
+  const jobsToClone = JOBS_LIMIT ? sourceJobs.slice(0, JOBS_LIMIT) : sourceJobs;
+  if (JOBS_LIMIT) console.log(`[CLONE] JOBS_LIMIT=${JOBS_LIMIT} → cloning only the first ${jobsToClone.length} of ${sourceJobs.length} job(s).`);
+
+  for (let i = 0; i < jobsToClone.length; i++) {
+    const job = jobsToClone[i];
+    const label = `job ${i + 1}/${jobsToClone.length} "${job.name}"`;
+
+    // 5a. empty-job create
+    const emptyPayload = {
+      name: job.name || 'New Job',
+      repairOrderId: newRoId,
+      syncPartsAttachedToNonQuotedOrders: false,
+    };
+    const emptyResp = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: emptyPayload });
+    if (!emptyResp.ok) {
+      console.error(`[CLONE] ✗ ${label}: empty-create failed status=${emptyResp.status}`);
+      console.error('         response (raw):', emptyResp.raw);
+      console.error('         payload (json):', JSON.stringify(emptyPayload, null, 2));
+      if (AUTO_ROLLBACK) await rollbackPartialRo(token, newRoId);
+      else console.warn(`[CLONE] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
       return;
     }
-    console.log(`[CLONE] ✓ job ${i + 1}/${sourceJobs.length} "${job.name}" created`);
+    const emptyJob = unwrap(emptyResp);
+
+    // 5b. populate (with parts + labor + status etc.)
+    const populatePayload = buildPopulatePayload(emptyJob, job);
+    const popResp = await jsonFetch(`/api/shop/${SHOP_ID}/job`, { token, method: 'POST', body: populatePayload });
+    if (!popResp.ok) {
+      console.error(`[CLONE] ✗ ${label}: populate failed status=${popResp.status}`);
+      console.error('         response (raw):', popResp.raw);
+      try { console.error('         response (json):', JSON.stringify(popResp.body, null, 2)); } catch (_) {}
+      console.error('         payload (json):', JSON.stringify(populatePayload, null, 2));
+      if (AUTO_ROLLBACK) await rollbackPartialRo(token, newRoId);
+      else console.warn(`[CLONE] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
+      return;
+    }
+    console.log(`[CLONE] ✓ ${label} — empty-create id=${emptyJob.id}, populate ok (${job.parts?.length || 0}p / ${job.labor?.length || 0}l)`);
   }
 
   console.log(`%c[CLONE] DONE — open the new RO: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
