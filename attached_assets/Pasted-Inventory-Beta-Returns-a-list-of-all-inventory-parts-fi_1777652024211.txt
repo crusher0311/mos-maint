@@ -1,0 +1,71 @@
+Inventory
+Beta
+Returns a list of all inventory parts filtered by the provided search parameters.
+Request Headers
+Authorization	Bearer access_token
+Request Parameters
+shop
+Integer	Search for inventory part by shop. Required field.
+partTypeId
+Integer	Search for inventory part by their part type id. Required field.
+Permitted Values: [ 1 - (Part), 2 - (Tire), 5 - (Battery) ]
+partNumbers
+Array<String>	Search for inventory part by their part number. The system performs exact matching only.
+width
+String	Search for inventory part by their width. This parameter applies exclusively to tire parts only.
+ratio
+Decimal	Search for inventory part by their ratio. This parameter applies exclusively to tire parts only.
+diameter
+Decimal	Search for inventory part by their diameter. This parameter applies exclusively to tire parts only.
+tireSize
+String	Search for inventory part by their tire size. Tire size is the concatenation of width, ratio and diameter. This parameter applies exclusively to tire parts only.
+sort
+String	Specify the property you'd like to sort on. You can specify multiple sort parameters i.e. "id,name"
+Permitted Values: [ id, name, brand, partNumber ]
+sortDirection
+String	Determine the direction you want to sort your results
+Permitted Values: [ ASC, DESC ]
+size
+Integer	Specify the number of results you would like returned. The maximum page size is 100. For values greater than this value, the API overrides and returns 100 records. You can use pagination to access the next records.
+page
+Integer	Specify the page of results you would like returned
+GET
+/api/v1/inventory
+Example Request
+curl -X GET 'https://sandbox.tekmetric.com/api/v1/inventory?shop=1&partTypeId=2' \
+-H "Authorization: Bearer dd824dda-c02c-478a-aa84-cd9fdb217c15"
+Example Response
+{
+  "content": [
+    {
+      "id": 225021,
+      "name": "Turanza QuietTrack",
+      "partNumber": "056551223A1",
+      "position": null,
+      "description": "",
+      "cost": 25831,
+      "retail": 0,
+      "brand": "Accelera",
+      "ordered": 0,
+      "min": null,
+      "max": null,
+      "shopId": 1,
+      "model": "DUELER H/P SPORT RFT",
+      "width": "205",
+      "ratio": 55,
+      "diameter": 16,
+      "constructionType": "",
+      "loadIndex": null,
+      "speedRating": "",
+      "partTypeId": 2,
+      "oemPartNumber": null,
+      "alternatePartNumber": "",
+      "binNumber": "007-957",
+      "deletedDate": null,
+      "lastUsedDate": null,
+      "inStock": 2,
+      "wip": 0,
+      "available": 2,
+      "totalValue": 51662,
+      "net": 2,
+      "aboveStock": null,
