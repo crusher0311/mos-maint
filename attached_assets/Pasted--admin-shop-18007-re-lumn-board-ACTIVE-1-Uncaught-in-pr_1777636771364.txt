@@ -1,3 +1,14 @@
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
 /* eslint-disable */
 // =============================================================================
 // Tekmetric Open-Jobs Migration — Snippet 2b: RESUME FAILED ROs
@@ -47,8 +58,6 @@
     base: location.origin,
     laborRatesList: (shopId) => `/api/shop/${shopId}/labor-rates`,
     customerCreate: (shopId) => `/api/shop/${shopId}/customers`,
-    customerSearch: (shopId, q) =>
-      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
     vehicleCreate: (shopId, customerId) => `/api/shop/${shopId}/customer/${customerId}/vehicle`,
     vehicleSearch: (shopId, customerId, q) =>
       `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(q)}&size=20`,
@@ -443,3 +452,41 @@
   downloadJson(outName, mappingRows);
   console.log(`[RESUME] Wrote ${outName} (${mappingRows.length} total rows). Use THIS file for snippet 03 / 07.`);
 })();
+
+VM14846:221 [RESUME] version 2026-05-01.2-fix-dump-rows-key — destShopId=18007
+VM14846:120 [RESUME] Pick the source dump JSON (snippet 1 output)
+Promise {<pending>}
+VM14846:120 [RESUME] Pick the existing mapping JSON from snippet 2
+VM14846:241 [RESUME] dump=tekmetric-open-jobs-dump-1Casey-Automotive-Arlington-Heights-0Mes-20260501-062710.json (21 ROs); mapping=tekmetric-migration-mapping-20260501-064723.json (19 rows)
+VM14846:249 [RESUME] 2 source RO(s) need resuming: #184163, #184250
+VM14846:259 [RESUME] dest labor rate id=565339 (Standard Labor Rate)
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/customers 500 (Internal Server Error)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM14846:87
+(anonymous) @ VM14846:279
+await in (anonymous)
+(anonymous) @ VM14846:443
+VM14846:432 [RESUME] FAILED RO #184163 at step "createCustomer": 500  on /api/shop/18007/customers :: {"type":"ERROR","message":"An error has occurred","data":null,"details":{}}
+(anonymous) @ VM14846:432
+await in (anonymous)
+(anonymous) @ VM14846:443
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/customers 500 (Internal Server Error)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM14846:87
+(anonymous) @ VM14846:279
+await in (anonymous)
+(anonymous) @ VM14846:443
+VM14846:432 [RESUME] FAILED RO #184250 at step "createCustomer": 500  on /api/shop/18007/customers :: {"type":"ERROR","message":"An error has occurred","data":null,"details":{}}
+(anonymous) @ VM14846:432
+await in (anonymous)
+(anonymous) @ VM14846:443
+VM14846:437 [RESUME] Successes:
+VM14846:437 
+VM14846:438 [RESUME] Failures:
+(anonymous) @ VM14846:438
+await in (anonymous)
+(anonymous) @ VM14846:443
+VM14846:438 (index)sourceRosourceRoIdsteperror(index)sourceRosourceRoIdsteperror0184163321448223'createCustomer''{"type":"ERROR","message":"An error has occurred","data":null,"details":{}}'1184250323098223'createCustomer''{"type":"ERROR","message":"An error has occurred","data":null,"details":{}}'Array(2)
+VM14846:442 [RESUME] Wrote tekmetric-migration-mapping-20260501-065920-resumed.json (19 total rows). Use THIS file for snippet 03 / 07.
