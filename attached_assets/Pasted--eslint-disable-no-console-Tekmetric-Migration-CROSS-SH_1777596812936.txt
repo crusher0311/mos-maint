@@ -25,33 +25,28 @@
  *     skip the cloned RO instead of duplicating it.
  *
  * REQUIREMENTS
- *   - Tekmetric mints a NEW single-shop-scoped token every time you
- *     switch shops via the dropdown. So this script needs TWO tokens —
- *     one captured on a source-shop tab, one on a dest-shop tab.
- *   - Use 00-print-token.js to grab each token (it auto-copies to
- *     clipboard), then paste both into SOURCE_TOKEN / DEST_TOKEN below.
+ *   - Your active Tekmetric session must be able to reach BOTH shops
+ *     (i.e. you can switch between them via Tekmetric's shop dropdown).
+ *     If your token is org-scoped to only one of them, the source GET
+ *     will 403 and the script bails before writing anything.
  *
  * USAGE
- *   1. Find Jay Demore's customer ID in dest shop 14245 (URL ends in
- *      `/admin/shop/14245/customers/{customerId}`).
- *   2. From his customer page, click his vehicle (URL ends in
- *      `/vehicles/{vehicleId}`).
- *   3. Find the source RO ID in shop 10214 (URL ends in
- *      `/repair-orders/{roId}/estimate`).
- *   4. On a SOURCE-shop tab (10214), paste 00-print-token.js into the
- *      DevTools Console — it copies that tab's token to your clipboard.
- *      Paste it into the SOURCE_TOKEN field below.
- *   5. Switch the tab to a DEST-shop URL (14245) and repeat — paste that
- *      token into DEST_TOKEN below.
- *   6. Fill in the CONFIG block (RO id, customer id, vehicle id, tokens).
- *   7. Open DevTools Console on ANY Tekmetric tab (either shop is fine
- *      — every fetch picks the right token from the config).
- *   8. Paste the whole file. With CONFIRM=false (default) it pre-flights
- *      both shops + validates dest customer/vehicle + prints what it
- *      would do, with no writes.
- *   9. If the dry-run looks right, flip CONFIRM=true at the top, re-paste.
- *      The new RO is created in dest shop with the override
- *      customer/vehicle and a clickable link is printed.
+ *   1. Find Jay Demore's customer ID in dest shop 14245 by opening his
+ *      customer page in Tekmetric — the URL ends in
+ *      `/admin/shop/14245/customers/{customerId}`.
+ *   2. From his customer page, click the vehicle you want — the URL ends
+ *      in `/vehicles/{vehicleId}`.
+ *   3. Find the source RO ID in shop 10214 by opening it — URL ends in
+ *      `/repair-orders/{roId}/estimate`.
+ *   4. Fill in the CONFIG block below.
+ *   5. Open DevTools console on ANY Tekmetric page (either shop's URL is
+ *      fine — most endpoints are not URL-shop-scoped).
+ *   6. Paste the whole file. Leave CONFIRM=false the first time — it
+ *      pre-flights both shops, validates the dest customer + vehicle,
+ *      auto-discovers the dest labor rate, and prints what it would do.
+ *   7. Edit CONFIRM to true at the top, re-paste. The new RO will be
+ *      created in the dest shop with the override customer/vehicle. A
+ *      clickable link to it is printed at the end.
  */
 (async () => {
   // ===== console tee: capture every [CLONE-X] line so we can auto-copy
@@ -93,10 +88,6 @@
   const DEST_CUSTOMER_ID  = 82581111;     // existing customer in DEST shop  (Jay Demore)
   const DEST_VEHICLE_ID   = 118337025;    // existing vehicle in DEST shop   (Jay's vehicle)
   const DEST_LABOR_RATE_ID = null;        // null = auto-discover from a recent dest RO
-  // Tokens are SINGLE-SHOP-SCOPED. Capture each one with 00-print-token.js
-  // (it auto-copies to clipboard) and paste between the quotes:
-  const SOURCE_TOKEN      = '';           // token captured on a SOURCE-shop tab (10214)
-  const DEST_TOKEN        = '';           // token captured on a DEST-shop tab   (14245)
   const CONFIRM           = false;        // false = dry-run; true = actually create
   const JOBS_LIMIT        = null;         // null = clone all jobs; e.g. 1 to test the first only
   const AUTO_ROLLBACK     = true;         // on per-job failure, set partial RO to DELETED
@@ -113,16 +104,47 @@
       return;
     }
   }
-  if (!SOURCE_TOKEN || !SOURCE_TOKEN.startsWith('eyJ')) {
-    console.error('[CLONE-X] SOURCE_TOKEN is missing or not a JWT. Run 00-print-token.js on a source-shop (10214) tab, paste the result into SOURCE_TOKEN at the top of this snippet, then re-paste.');
-    return;
-  }
-  if (!DEST_TOKEN || !DEST_TOKEN.startsWith('eyJ')) {
-    console.error('[CLONE-X] DEST_TOKEN is missing or not a JWT. Run 00-print-token.js on a dest-shop (14245) tab, paste the result into DEST_TOKEN at the top of this snippet, then re-paste.');
-    return;
-  }
-  if (SOURCE_TOKEN === DEST_TOKEN) {
-    console.warn('[CLONE-X] SOURCE_TOKEN and DEST_TOKEN are identical. That usually means you only captured one token. If both shops are in the same org and one token reaches both, this is fine; otherwise, recapture each from its respective tab.');
+
+  // ----- token discovery (works from any tab; same pattern as 04) ---------
+  async function getToken() {
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return v;
+      try {
+        const parsed = JSON.parse(v);
+        if (parsed && typeof parsed.token === 'string' && parsed.token.startsWith('eyJ')) return parsed.token;
+        if (parsed && typeof parsed.accessToken === 'string' && parsed.accessToken.startsWith('eyJ')) return parsed.accessToken;
+      } catch (_) {}
+    }
+    return await new Promise((resolve, reject) => {
+      const origFetch = window.fetch.bind(window);
+      const timeout = setTimeout(() => {
+        window.fetch = origFetch;
+        reject(new Error('Timed out waiting for an outgoing API call to snipe the auth token from. Click anywhere in Tekmetric and re-run.'));
+      }, 8000);
+      window.fetch = function patched(input, init) {
+        try {
+          const headers = (init && init.headers) || {};
+          let token = null;
+          if (headers instanceof Headers) token = headers.get('X-AUTH-TOKEN');
+          else if (Array.isArray(headers)) {
+            const h = headers.find(([k]) => /^x-auth-token$/i.test(k));
+            if (h) token = h[1];
+          } else for (const k of Object.keys(headers)) if (k.toLowerCase() === 'x-auth-token') token = headers[k];
+          if (token) {
+            clearTimeout(timeout);
+            window.fetch = origFetch;
+            resolve(token);
+          }
+        } catch (_) {}
+        return origFetch(input, init);
+      };
+      try {
+        const m = location.pathname.match(/\/admin\/shop\/(\d+)\b/);
+        const probeShop = m ? Number(m[1]) : DEST_SHOP_ID;
+        origFetch(`${BASE}/api/shop/${probeShop}`, { credentials: 'include' }).catch(() => {});
+      } catch (_) {}
+    });
   }
 
   async function jsonFetch(path, opts = {}) {
@@ -143,9 +165,6 @@
     try { parsed = text ? JSON.parse(text) : null; } catch (_) {}
     return { status: res.status, ok: res.ok, body: parsed, raw: text };
   }
-  // bound wrappers so each call site states which side it talks to
-  const srcFetch = (path, opts = {}) => jsonFetch(path, { ...opts, token: SOURCE_TOKEN });
-  const dstFetch = (path, opts = {}) => jsonFetch(path, { ...opts, token: DEST_TOKEN });
 
   function unwrap(resp) {
     if (resp.body && typeof resp.body === 'object' && 'data' in resp.body && 'type' in resp.body) return resp.body.data;
@@ -226,10 +245,10 @@
     return populated;
   }
 
-  async function rollbackPartialRo(partialRoId) {
+  async function rollbackPartialRo(token, partialRoId) {
     try {
-      const r = await dstFetch(`/api/repair-order/${partialRoId}/status`, {
-        method: 'PUT',
+      const r = await jsonFetch(`/api/repair-order/${partialRoId}/status`, {
+        token, method: 'PUT',
         body: { repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } },
       });
       if (r.ok) console.warn(`[CLONE-X] auto-rolled-back partial RO ${partialRoId} (set to DELETED).`);
@@ -242,22 +261,29 @@
   console.log(`%c[CLONE-X] starting — source shop ${SOURCE_SHOP_ID} RO ${SOURCE_RO_ID} → dest shop ${DEST_SHOP_ID} customer ${DEST_CUSTOMER_ID} vehicle ${DEST_VEHICLE_ID}, CONFIRM=${CONFIRM}`,
     'color:#06c;font-weight:bold');
 
-  console.log(`[CLONE-X] using SOURCE_TOKEN (len=${SOURCE_TOKEN.length}) and DEST_TOKEN (len=${DEST_TOKEN.length}).`);
+  let token;
+  try {
+    token = await getToken();
+    console.log(`[CLONE-X] got auth token (len=${token.length}).`);
+  } catch (e) {
+    console.error('[CLONE-X] could not get auth token:', e.message);
+    return;
+  }
 
-  // ----- 0. PRE-FLIGHT: each token must work against its own shop; dest customer + vehicle must exist
-  const probeSrc = await srcFetch(`/api/shop/${SOURCE_SHOP_ID}`);
+  // ----- 0. PRE-FLIGHT: token must reach both shops; dest customer + vehicle must exist
+  const probeSrc = await jsonFetch(`/api/shop/${SOURCE_SHOP_ID}`, { token });
   if (!probeSrc.ok) {
-    console.error(`[CLONE-X] SOURCE_TOKEN cannot reach shop ${SOURCE_SHOP_ID} (status=${probeSrc.status}). Re-capture it on a 10214 tab using 00-print-token.js, paste into SOURCE_TOKEN, re-run.`);
+    console.error(`[CLONE-X] cannot reach source shop ${SOURCE_SHOP_ID} (status=${probeSrc.status}). Your active session can't read this shop. Switch to it via the Tekmetric shop dropdown, or log in to the org that owns it, then re-run.`);
     return;
   }
-  const probeDst = await dstFetch(`/api/shop/${DEST_SHOP_ID}`);
+  const probeDst = await jsonFetch(`/api/shop/${DEST_SHOP_ID}`, { token });
   if (!probeDst.ok) {
-    console.error(`[CLONE-X] DEST_TOKEN cannot reach shop ${DEST_SHOP_ID} (status=${probeDst.status}). Re-capture it on a 14245 tab using 00-print-token.js, paste into DEST_TOKEN, re-run.`);
+    console.error(`[CLONE-X] cannot reach dest shop ${DEST_SHOP_ID} (status=${probeDst.status}). Same fix as above for the dest shop.`);
     return;
   }
-  console.log(`[CLONE-X] ✓ both tokens valid — source ${SOURCE_SHOP_ID}, dest ${DEST_SHOP_ID}.`);
+  console.log(`[CLONE-X] ✓ token reaches both source (${SOURCE_SHOP_ID}) and dest (${DEST_SHOP_ID}).`);
 
-  const destCustResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/customer/${DEST_CUSTOMER_ID}`);
+  const destCustResp = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/customer/${DEST_CUSTOMER_ID}`, { token });
   if (!destCustResp.ok) {
     console.error(`[CLONE-X] dest customer ${DEST_CUSTOMER_ID} not found in shop ${DEST_SHOP_ID} (status=${destCustResp.status}). Double-check the ID from the customer-page URL in Tekmetric.`);
     return;
@@ -265,7 +291,7 @@
   const destCust = unwrap(destCustResp);
   console.log(`[CLONE-X] ✓ dest customer: ${destCust.firstName} ${destCust.lastName} (id ${destCust.id})`);
 
-  const destVehResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/vehicle/${DEST_VEHICLE_ID}`);
+  const destVehResp = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/vehicle/${DEST_VEHICLE_ID}`, { token });
   if (!destVehResp.ok) {
     console.error(`[CLONE-X] dest vehicle ${DEST_VEHICLE_ID} not found in shop ${DEST_SHOP_ID} (status=${destVehResp.status}). Double-check the ID from the vehicle-page URL.`);
     return;
@@ -276,7 +302,7 @@
   // ----- 0b. resolve dest labor rate (auto-discover if not set)
   let destLaborRateId = DEST_LABOR_RATE_ID;
   if (!destLaborRateId) {
-    const recent = await dstFetch(`/api/shop/${DEST_SHOP_ID}/repair-order?page=0&size=10`);
+    const recent = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/repair-order?page=0&size=10`, { token });
     if (recent.ok) {
       const list = (recent.body && (recent.body.content || recent.body.repairOrders || recent.body.data || recent.body)) || [];
       for (const ro of list) {
@@ -294,14 +320,14 @@
   }
 
   // ----- 1. fetch source RO metadata, jobs (from estimate endpoint), and concerns
-  const roResp = await srcFetch(`/api/shop/${SOURCE_SHOP_ID}/repair-order/${SOURCE_RO_ID}`);
+  const roResp = await jsonFetch(`/api/shop/${SOURCE_SHOP_ID}/repair-order/${SOURCE_RO_ID}`, { token });
   if (!roResp.ok) {
     console.error(`[CLONE-X] failed to fetch source RO: status=${roResp.status}`, roResp.body);
     return;
   }
   const sourceRo = unwrap(roResp);
 
-  const estResp = await srcFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`);
+  const estResp = await jsonFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`, { token });
   if (!estResp.ok) {
     console.error(`[CLONE-X] failed to fetch source estimate: status=${estResp.status}`, estResp.body);
     return;
@@ -319,7 +345,7 @@
   console.log(`          source vehicle:  ${sourceRo.vehicle?.year} ${sourceRo.vehicle?.make} ${sourceRo.vehicle?.model} (id ${sourceRo.vehicle?.id}) — IGNORED, using dest override`);
   console.log(`          source miles in/out: ${sourceRo.milesIn}/${sourceRo.milesOut}, odometerInop=${sourceRo.odometerInop}`);
 
-  const concernsResp = await srcFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`);
+  const concernsResp = await jsonFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`, { token });
   if (!concernsResp.ok) {
     console.error(`[CLONE-X] failed to fetch source concerns: status=${concernsResp.status}`, concernsResp.body);
     return;
@@ -365,7 +391,7 @@
     recommendations: [],
     declinedJobRecommendations: [],
   };
-  const createResp = await dstFetch(`/api/repair-order/create`, { method: 'POST', body: createPayload });
+  const createResp = await jsonFetch(`/api/repair-order/create`, { token, method: 'POST', body: createPayload });
   if (!createResp.ok) {
     console.error(`[CLONE-X] RO create failed: status=${createResp.status}`, createResp.body);
     console.error('           payload:', JSON.stringify(createPayload, null, 2));
@@ -379,8 +405,8 @@
 
   // ----- 3. set mileage (if source had any)
   if (sourceRo.milesIn != null || sourceRo.milesOut != null) {
-    const milesResp = await dstFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
-      method: 'PUT',
+    const milesResp = await jsonFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
+      token, method: 'PUT',
       body: {
         milesIn: sourceRo.milesIn ?? sourceRo.milesOut ?? 0,
         milesOut: sourceRo.milesOut ?? sourceRo.milesIn ?? 0,
@@ -394,8 +420,8 @@
   // ----- 4. concerns (first one carries the migration marker)
   for (let i = 0; i < concernsToPost.length; i++) {
     const c = concernsToPost[i];
-    const r = await dstFetch(`/api/repair-orders/${newRoId}/customer-concerns`, {
-      method: 'POST', body: { concern: c.concern },
+    const r = await jsonFetch(`/api/repair-orders/${newRoId}/customer-concerns`, {
+      token, method: 'POST', body: { concern: c.concern },
     });
     if (!r.ok) console.error(`[CLONE-X] ✗ concern ${i + 1} failed status=${r.status}`, r.body);
     else console.log(`[CLONE-X] ✓ concern ${i + 1}/${concernsToPost.length} created`);
@@ -414,25 +440,25 @@
       repairOrderId: newRoId,
       syncPartsAttachedToNonQuotedOrders: false,
     };
-    const emptyResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/job`, { method: 'POST', body: emptyPayload });
+    const emptyResp = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/job`, { token, method: 'POST', body: emptyPayload });
     if (!emptyResp.ok) {
       console.error(`[CLONE-X] ✗ ${label}: empty-create failed status=${emptyResp.status}`);
       console.error('           response (raw):', emptyResp.raw);
       console.error('           payload (json):', JSON.stringify(emptyPayload, null, 2));
-      if (AUTO_ROLLBACK) await rollbackPartialRo(newRoId);
+      if (AUTO_ROLLBACK) await rollbackPartialRo(token, newRoId);
       else console.warn(`[CLONE-X] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
       return;
     }
     const emptyJob = unwrap(emptyResp);
 
     const populatePayload = buildPopulatePayload(emptyJob, job);
-    const popResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/job`, { method: 'POST', body: populatePayload });
+    const popResp = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/job`, { token, method: 'POST', body: populatePayload });
     if (!popResp.ok) {
       console.error(`[CLONE-X] ✗ ${label}: populate failed status=${popResp.status}`);
       console.error('           response (raw):', popResp.raw);
       try { console.error('           response (json):', JSON.stringify(popResp.body, null, 2)); } catch (_) {}
       console.error('           payload (json):', JSON.stringify(populatePayload, null, 2));
-      if (AUTO_ROLLBACK) await rollbackPartialRo(newRoId);
+      if (AUTO_ROLLBACK) await rollbackPartialRo(token, newRoId);
       else console.warn(`[CLONE-X] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
       return;
     }
@@ -450,3 +476,23 @@
     console.error = __origErr;
   }
 })();
+
+VM9272:67 [CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+VM9272:67 [CLONE-X] got auth token (len=755).
+Promise {<pending>}
+VM9272:162  GET https://shop.tekmetric.com/api/shop/14245 403 (Forbidden)
+jsonFetch @ VM9272:162
+(anonymous) @ VM9272:279
+await in (anonymous)
+(anonymous) @ VM9272:478
+VM9272:69 [CLONE-X] cannot reach dest shop 14245 (status=403). Same fix as above for the dest shop.
+console.error @ VM9272:69
+(anonymous) @ VM9272:281
+await in (anonymous)
+(anonymous) @ VM9272:478
+VM9272:76 [CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:
+VM9272:77 ====== BEGIN RUN LOG ======
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+[CLONE-X] got auth token (len=755).
+ERR [CLONE-X] cannot reach dest shop 14245 (status=403). Same fix as above for the dest shop.
+====== END RUN LOG ======

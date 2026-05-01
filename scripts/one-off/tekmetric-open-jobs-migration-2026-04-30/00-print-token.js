@@ -1,0 +1,45 @@
+/* eslint-disable no-console */
+/*
+ * Tiny helper: prints (and copies to clipboard) the current Tekmetric tab's
+ * auth token. Use this twice — once on a SOURCE-shop tab, once on a
+ * DEST-shop tab — and paste the two values into 06's SOURCE_TOKEN /
+ * DEST_TOKEN config block.
+ *
+ * Why: each shop switch in Tekmetric mints a new single-shop-scoped token,
+ * so the cross-shop clone needs two of them.
+ *
+ * USAGE
+ *   1. Open the source-shop URL in Tekmetric (e.g. /admin/shop/10214/...).
+ *   2. Open DevTools → Console. Paste this whole file. Hit Enter.
+ *   3. The token is printed AND copied to your clipboard. Paste it into
+ *      the SOURCE_TOKEN line at the top of 06-clone-ro-cross-shop-…js.
+ *   4. Switch the Tekmetric tab to the dest shop (or open a second tab).
+ *      Repeat steps 2–3 — paste THIS token into DEST_TOKEN in 06.
+ */
+(async () => {
+  let token = null;
+  for (const k of Object.keys(localStorage)) {
+    const v = localStorage.getItem(k) || '';
+    if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) { token = v; break; }
+    try {
+      const parsed = JSON.parse(v);
+      if (parsed && typeof parsed.token === 'string' && parsed.token.startsWith('eyJ')) { token = parsed.token; break; }
+      if (parsed && typeof parsed.accessToken === 'string' && parsed.accessToken.startsWith('eyJ')) { token = parsed.accessToken; break; }
+    } catch (_) {}
+  }
+  if (!token) {
+    console.error('[TOKEN] no token found in localStorage. Click around in Tekmetric to fire an API call, then re-run.');
+    return;
+  }
+  const m = location.pathname.match(/\/admin\/shop\/(\d+)\b/);
+  const shopId = m ? m[1] : '(unknown)';
+  console.log(`%c[TOKEN] current shop = ${shopId}, token length = ${token.length}`, 'color:#06c;font-weight:bold');
+  try {
+    await navigator.clipboard.writeText(token);
+    console.log(`%c[TOKEN] ✓ token copied to clipboard — paste into 06's ${shopId === '10214' ? 'SOURCE_TOKEN' : (shopId === '14245' ? 'DEST_TOKEN' : 'SOURCE_TOKEN or DEST_TOKEN')} field`,
+      'color:#0a0;font-weight:bold');
+  } catch (_) {
+    console.log('%c[TOKEN] could not auto-copy. Manually copy the token between the markers below:', 'color:#c60;font-weight:bold');
+    console.log('====== BEGIN TOKEN ======\n' + token + '\n====== END TOKEN ======');
+  }
+})();
