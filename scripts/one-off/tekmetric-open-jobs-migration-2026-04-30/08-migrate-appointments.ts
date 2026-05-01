@@ -362,6 +362,33 @@ async function main() {
         continue;
       }
 
+      // Tekmetric GET /appointments returns nested objects for some
+      // fields; CreateAppointmentParams expects scalar codes/ids. Unwrap
+      // them here so we don't silently drop the values.
+      const raw = appt as any;
+      const rideOptionCode: 'LOANER' | 'RIDE' | 'NONE' | undefined = (() => {
+        const v = raw.rideOption;
+        if (!v) return undefined;
+        if (typeof v === 'string') return v as 'LOANER' | 'RIDE' | 'NONE';
+        if (typeof v === 'object' && typeof v.code === 'string') {
+          return v.code as 'LOANER' | 'RIDE' | 'NONE';
+        }
+        return undefined;
+      })();
+      const appointmentOptionId: number | undefined = (() => {
+        const v = raw.appointmentOption;
+        if (typeof raw.appointmentOptionId === 'number') return raw.appointmentOptionId;
+        if (v && typeof v === 'object' && typeof v.id === 'number') return v.id;
+        return undefined;
+      })();
+      const statusCode: 'NONE' | 'ARRIVED' | 'NO_SHOW' | 'CANCELLED' | undefined = (() => {
+        const v = raw.appointmentStatus ?? raw.status;
+        if (typeof v === 'string' && v !== 'NONE') {
+          return v as 'NONE' | 'ARRIVED' | 'NO_SHOW' | 'CANCELLED';
+        }
+        return undefined;
+      })();
+
       const createParams: CreateAppointmentParams = {
         shopId: args.dest,
         customerId: destCust.id,
@@ -369,13 +396,13 @@ async function main() {
         startTime: appt.startTime,
         endTime: appt.endTime,
         title: appt.title,
-        description: (appt as any).description || appt.note,
+        description: raw.description || appt.note,
         color: appt.color,
-        dropoffTime: (appt as any).dropoffTime,
-        pickupTime: (appt as any).pickupTime,
-        rideOption: (appt as any).rideOption,
-        appointmentOption: (appt as any).appointmentOption,
-        appointmentOptionId: (appt as any).appointmentOptionId,
+        dropoffTime: raw.dropoffTime,
+        pickupTime: raw.pickupTime,
+        rideOption: rideOptionCode,
+        status: statusCode,
+        appointmentOptionId,
       };
 
       const created = await createAppointment(createParams);
