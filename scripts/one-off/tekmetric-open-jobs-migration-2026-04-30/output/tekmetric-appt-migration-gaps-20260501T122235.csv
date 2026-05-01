@@ -1,0 +1,2 @@
+status,reason,sourceApptId,startTime,endTime,title,customerName,customerEmail,customerPhone,vehicleVin,vehicleYMM,sourceCustomerId,sourceVehicleId,destCustomerId,destVehicleId
+error,"Tekmetric API error 401: {""type"":""ERROR"",""message"":""Missing credentials"",""data"":null,""details"":{}}",61125880,2026-05-13T12:30:00Z,2026-05-13T13:00:00Z,,LARA JACKSON,,8472593818,JM1DE1HY4B0130756,2011 Mazda 2,61783411,87823551,106235112,153471669

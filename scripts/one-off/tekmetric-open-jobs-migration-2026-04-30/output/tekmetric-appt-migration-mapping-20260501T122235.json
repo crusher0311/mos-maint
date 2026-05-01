@@ -1,0 +1,41 @@
+{
+  "schema": "tekmetric-appt-migration-mapping",
+  "schemaVersion": 1,
+  "createdAt": "2026-05-01T12:22:35.647Z",
+  "args": {
+    "dryRun": false,
+    "limit": 1,
+    "pageSize": 100,
+    "src": 10216,
+    "dest": 18007
+  },
+  "counts": {
+    "total": 1,
+    "created": 0,
+    "dryRun": 0,
+    "gapCustomer": 0,
+    "gapVehicle": 0,
+    "error": 1
+  },
+  "results": [
+    {
+      "sourceApptId": 61125880,
+      "sourceCustomerId": 61783411,
+      "sourceVehicleId": 87823551,
+      "startTime": "2026-05-13T12:30:00Z",
+      "endTime": "2026-05-13T13:00:00Z",
+      "title": "",
+      "status": "error",
+      "customerName": "LARA JACKSON",
+      "customerEmail": "",
+      "customerPhone": "8472593818",
+      "vehicleVin": "JM1DE1HY4B0130756",
+      "vehicleYMM": "2011 Mazda 2",
+      "destCustomerId": 106235112,
+      "customerMatchedBy": "phone",
+      "destVehicleId": 153471669,
+      "vehicleMatchedBy": "vin",
+      "error": "Tekmetric API error 401: {\"type\":\"ERROR\",\"message\":\"Missing credentials\",\"data\":null,\"details\":{}}"
+    }
+  ]
+}
