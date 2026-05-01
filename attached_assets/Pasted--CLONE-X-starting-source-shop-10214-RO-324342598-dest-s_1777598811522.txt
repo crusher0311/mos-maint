@@ -1,0 +1,36 @@
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=true
+VM9607:72 [CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+Promise {<pending>}
+VM9607:72 [CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+VM9607:72 [CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+VM9607:72 [CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+VM9607:72 [CLONE-X] ✓ using configured dest labor rate id = 9991
+VM9607:72 [CLONE-X] source RO #2721246 has 2 non-archived job(s).
+VM9607:72           source customer: VARSHA AKELLA (id 106024131) — IGNORED, using dest override
+VM9607:72           source vehicle:  2005 Toyota Prius (id 153101827) — IGNORED, using dest override
+VM9607:72           source miles in/out: 109834/109834, odometerInop=false
+VM9607:72 [CLONE-X] source RO has 1 customer concern(s).
+VM9607:72 [CLONE-X] ✓ created new RO id=324435804 #63 in shop 14245
+VM9607:72            open it: https://shop.tekmetric.com/admin/shop/14245/repair-orders/324435804/estimate
+VM9607:72 [CLONE-X] ✓ mileage set
+VM9607:72 [CLONE-X] ✓ concern 1/1 created
+VM9607:72 [CLONE-X] ✓ job 1/2 "IR - INSPECT REAR SUSPENSION" — empty-create id=1133876036, populate ok (0p / 1l)
+VM9607:72 [CLONE-X] ✓ job 2/2 "Remove & Replace Rear Strut Assemblies" — empty-create id=1133876037, populate ok (2p / 2l)
+VM9607:72 [CLONE-X] DONE — open the new RO: https://shop.tekmetric.com/admin/shop/14245/repair-orders/324435804/estimate
+VM9607:81 [CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:
+VM9607:82 ====== BEGIN RUN LOG ======
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=true
+[CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+[CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+[CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+[CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+[CLONE-X] ✓ using configured dest labor rate id = 9991
+[CLONE-X] source RO #2721246 has 2 non-archived job(s).
+[CLONE-X] source RO has 1 customer concern(s).
+[CLONE-X] ✓ created new RO id=324435804 #63 in shop 14245
+[CLONE-X] ✓ mileage set
+[CLONE-X] ✓ concern 1/1 created
+[CLONE-X] ✓ job 1/2 "IR - INSPECT REAR SUSPENSION" — empty-create id=1133876036, populate ok (0p / 1l)
+[CLONE-X] ✓ job 2/2 "Remove & Replace Rear Strut Assemblies" — empty-create id=1133876037, populate ok (2p / 2l)
+[CLONE-X] DONE — open the new RO: https://shop.tekmetric.com/admin/shop/14245/repair-orders/324435804/estimate
+====== END RUN LOG ======
