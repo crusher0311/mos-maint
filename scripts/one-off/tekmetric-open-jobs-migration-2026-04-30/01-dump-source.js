@@ -22,15 +22,21 @@
  * during the discovery pass, edit them here before pasting.
  */
 (async () => {
-  const VERSION = '2026-05-01.1-tokenfix';
+  const VERSION = '2026-05-01.2-jobboardendpoint';
 
   // ----- ENDPOINTS (confirmed against HAR captures + same-shop smoke test) -
   const ENDPOINTS = {
     base: location.origin, // https://shop.tekmetric.com in practice
-    // Job Board listing — internal endpoint. Common shape:
-    //   /api/shop/{shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=...&size=...
-    jobBoardList: (shopId, page, size) =>
-      `/api/shop/${shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=${page}&size=${size}&sort=updatedDate,desc`,
+    // Job Board listing — internal endpoint. Confirmed via HAR
+    // (shop.tekmetric.com 2026-05-01) on shop 10214: this is what the
+    // Job Board UI itself fires. Returns a flat JSON array (no pagination
+    // wrapper) of RO summaries with `id`, `repairOrderNumber`, and
+    // `repairOrderStatus.code` (values: ESTIMATE, WORKINPROGRESS, etc.).
+    // The previous /api/shop/{id}/repair-order?status=... path now 404s
+    // for everyone — Tekmetric removed it.
+    //   board=ACTIVE limits to open ROs (Estimate + WIP).
+    jobBoardList: (shopId) =>
+      `/api/shop/${shopId}/job-board-group-by?view=column&board=ACTIVE&groupBy=ROSTATUS`,
     // RO header / metadata — customer, vehicle, laborRate, mileage, header
     // fields. NOTE: this endpoint returns `jobs: null` — jobs must be fetched
     // separately from the estimate endpoint below.
@@ -51,7 +57,10 @@
       `/api/shop/${shopId}/repair-orders/${roId}/inspections`,
   };
 
-  const PAGE_SIZE = 50;
+  // Status codes that count as "open" on the Job Board. The endpoint
+  // already filters by board=ACTIVE but we double-check client-side in
+  // case Tekmetric ever loosens that filter.
+  const OPEN_STATUS_CODES = new Set(['ESTIMATE', 'WORKINPROGRESS']);
 
   // ----- TOKEN + SHOP CAPTURE -------------------------------------------
   function readShopIdFromUrl() {
@@ -158,34 +167,29 @@
   }
   console.log(`[DUMP] Token captured (length=${token.length}).`);
 
-  // 1. List Job Board ROs (paginated)
-  const allRoSummaries = [];
-  let page = 0;
-  while (true) {
-    const path = ENDPOINTS.jobBoardList(shopId, page, PAGE_SIZE);
-    let resp;
-    try {
-      resp = await jsonFetch(path, token);
-    } catch (err) {
-      console.error(`[DUMP] Job Board listing failed at page ${page}:`, err.message);
-      console.error('[DUMP] If this is a 404, the jobBoardList path in ENDPOINTS does not match what this Tekmetric build uses. Update the ENDPOINTS.jobBoardList in this snippet using the captured fixtures/job-board-list.req.json and re-run.');
-      return;
-    }
-    // Tolerate either {content: [...]} or a bare array.
-    const content = Array.isArray(resp) ? resp : (resp.content || resp.repairOrders || resp.data || []);
-    if (!content.length) break;
-    allRoSummaries.push(...content);
-    const totalPages = (resp && resp.totalPages) || (content.length < PAGE_SIZE ? page + 1 : null);
-    console.log(`[DUMP] Listed page ${page + 1}${totalPages ? ` / ${totalPages}` : ''}: ${content.length} ROs (running total ${allRoSummaries.length})`);
-    if (content.length < PAGE_SIZE) break;
-    if (totalPages && page + 1 >= totalPages) break;
-    page++;
-    if (page > 200) {
-      console.warn('[DUMP] Hit hard cap of 200 pages — bailing out of pagination.');
-      break;
-    }
+  // 1. List Job Board ROs (single call — endpoint returns a flat array, no pagination).
+  const path = ENDPOINTS.jobBoardList(shopId);
+  let resp;
+  try {
+    resp = await jsonFetch(path, token);
+  } catch (err) {
+    console.error('[DUMP] Job Board listing failed:', err.message);
+    console.error('[DUMP] If this is a 404, Tekmetric has changed the Job Board endpoint again. Re-run 00-recorder.js, click into the Job Board, then update ENDPOINTS.jobBoardList in this file.');
+    return;
   }
-  console.log(`[DUMP] Job Board total: ${allRoSummaries.length} open ROs`);
+  // Tolerate either a bare array (current shape) or a {content:[...]} wrapper (legacy).
+  const rawList = Array.isArray(resp) ? resp : (resp.content || resp.repairOrders || resp.data || []);
+  // Defensive client-side filter: keep only ESTIMATE + WORKINPROGRESS.
+  const allRoSummaries = rawList.filter((ro) => {
+    const code = ro && ro.repairOrderStatus && ro.repairOrderStatus.code;
+    return code ? OPEN_STATUS_CODES.has(code) : true; // if shape is unknown, keep it; we'll dedup in detail step
+  });
+  const skipped = rawList.length - allRoSummaries.length;
+  console.log(`[DUMP] Job Board total: ${allRoSummaries.length} open ROs${skipped > 0 ? ` (skipped ${skipped} with non-open status)` : ''}`);
+  if (allRoSummaries.length === 0) {
+    console.warn('[DUMP] No open ROs returned. If you can SEE open ROs on the Job Board UI right now, the endpoint shape may have changed — re-run 00-recorder.js to confirm.');
+    return;
+  }
 
   // 2. Fetch full RO detail + estimate (jobs) + concerns + inspection list for each.
   //    The RO detail endpoint returns `jobs: null`, so we MUST also hit the

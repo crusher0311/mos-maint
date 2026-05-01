@@ -1,0 +1,472 @@
+/* eslint-disable no-console */
+/*
+ * Tekmetric Migration — RECORDER (snippet 0)
+ *
+ * Purpose: passively capture every internal Tekmetric API call you make
+ * while clicking around the UI, so you can confirm the endpoint paths +
+ * request/response shapes used by snippets 1/2/3 BEFORE you run them.
+ *
+ * Read-only. Does NOT modify any Tekmetric request or response. Does NOT
+ * upload anything anywhere — everything stays in this browser tab and
+ * comes back out as a JSON file you save to ./fixtures/.
+ *
+ * USAGE
+ *   1. Open Tekmetric and navigate to the shop you want to record.
+ *   2. Open DevTools console, paste this whole file, hit Enter.
+ *   3. You'll see "[RECORDER] armed". Now click around the UI to exercise
+ *      the operations you care about. Suggested clicks per shop:
+ *
+ *      ON THE SOURCE SHOP:
+ *        - open the Job Board (lets us confirm the list endpoint + filters)
+ *        - click into one open RO (RO detail endpoint)
+ *        - click into one job inside that RO (job detail endpoint, if any)
+ *        - open one inspection on that RO (inspection list + get endpoints)
+ *        - open one photo on that RO (photo list + presign URL endpoints)
+ *
+ *      ON THE DESTINATION SHOP (use a throwaway test RO):
+ *        - click "+ New Job" and add one labor + one part, then save
+ *          (job CREATE endpoint + payload — this is the highest-value capture)
+ *        - create a new inspection from the inspection picker
+ *        - upload a photo to the test RO
+ *        - create a new RO from scratch with one customer concern
+ *
+ *   4. When you're done, run `__tekRec.dump()` in the console. A JSON
+ *      file will download to your Downloads folder. Move it to
+ *      `scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/fixtures/`
+ *      and rename it something useful (e.g.
+ *      `recorder-source-{shopName}-{date}.json`).
+ *
+ *   5. To stop recording without dumping: `__tekRec.stop()`.
+ *      To clear the buffer mid-session: `__tekRec.clear()`.
+ *      To peek at what's been captured so far: `__tekRec.summary()`.
+ *
+ * SAFETY
+ *   - The Authorization / x-auth-token / Cookie headers are stripped
+ *     before anything is logged or saved.
+ *   - Other request/response fields (customer PII, VIN, etc.) are NOT
+ *     scrubbed — capture is verbatim. Delete the recorder JSON files
+ *     when discovery is done.
+ */
+(() => {
+  if (window.__tekRec && window.__tekRec.armed) {
+    console.warn('[RECORDER] already armed; call __tekRec.stop() first to re-arm.');
+    return;
+  }
+
+  const MATCH = /\/api\/(shop\/\d+|inspection|repair-order|customer|vehicle|job|photo|attachment|s3|presign)/i;
+  const SENSITIVE_HEADERS = new Set(['authorization', 'x-auth-token', 'cookie', 'x-csrf-token']);
+
+  const events = [];
+  let seq = 0;
+
+  function scrubHeaders(h) {
+    const out = {};
+    if (!h) return out;
+    if (typeof h.forEach === 'function') {
+      h.forEach((v, k) => {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      });
+      return out;
+    }
+    if (Array.isArray(h)) {
+      for (const [k, v] of h) {
+        out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : v;
+      }
+      return out;
+    }
+    for (const k of Object.keys(h)) {
+      out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '<redacted>' : h[k];
+    }
+    return out;
+  }
+
+  async function bodyToString(body) {
+    if (body == null) return null;
+    if (typeof body === 'string') return body.length > 200000 ? body.slice(0, 200000) + '…[truncated]' : body;
+    if (body instanceof FormData) {
+      const out = {};
+      for (const [k, v] of body.entries()) out[k] = (v && v.name) ? `<File:${v.name}:${v.size}>` : String(v);
+      return JSON.stringify(out);
+    }
+    if (body instanceof Blob) return `<Blob:${body.type}:${body.size}>`;
+    if (body instanceof ArrayBuffer) return `<ArrayBuffer:${body.byteLength}>`;
+    try { return JSON.stringify(body); } catch (_) { return '<unserializable>'; }
+  }
+
+  function shouldRecord(url, method) {
+    try {
+      const u = new URL(url, location.origin);
+      // record same-origin Tekmetric API calls + any S3 presign URLs.
+      const isApi = u.origin === location.origin && MATCH.test(u.pathname);
+      const isS3 = /\.amazonaws\.com$/i.test(u.hostname) || u.hostname.includes('s3.');
+      return isApi || isS3;
+    } catch (_) { return false; }
+  }
+
+  // ----- fetch hook -----
+  const origFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    if (!shouldRecord(url, method)) return origFetch(input, init);
+    const id = ++seq;
+    const startedAt = Date.now();
+    const reqHeaders = scrubHeaders(init && init.headers);
+    const reqBody = await bodyToString(init && init.body);
+    let res;
+    try {
+      res = await origFetch(input, init);
+    } catch (err) {
+      events.push({
+        id, transport: 'fetch', method, url: String(url), startedAt,
+        status: 'NETWORK_ERROR', error: err.message,
+        request: { headers: reqHeaders, body: reqBody },
+      });
+      throw err;
+    }
+    const clone = res.clone();
+    let respText = '';
+    try { respText = await clone.text(); } catch (_) {}
+    if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+    const respHeaders = {};
+    res.headers.forEach((v, k) => { respHeaders[k] = v; });
+    events.push({
+      id, transport: 'fetch', method, url: String(url), startedAt,
+      durationMs: Date.now() - startedAt,
+      status: res.status,
+      request: { headers: reqHeaders, body: reqBody },
+      response: { headers: respHeaders, body: respText },
+    });
+    return res;
+  };
+
+  // ----- XHR hook -----
+  const OrigXHR = window.XMLHttpRequest;
+  function PatchedXHR() {
+    const xhr = new OrigXHR();
+    let _method = 'GET';
+    let _url = '';
+    let _reqHeaders = {};
+    let _reqBody = null;
+    const origOpen = xhr.open;
+    const origSetHeader = xhr.setRequestHeader;
+    const origSend = xhr.send;
+    xhr.open = function patchedOpen(m, u, ...rest) {
+      _method = (m || 'GET').toUpperCase();
+      _url = u;
+      _reqHeaders = {};
+      return origOpen.call(this, m, u, ...rest);
+    };
+    xhr.setRequestHeader = function patchedSetHeader(k, v) {
+      _reqHeaders[k] = SENSITIVE_HEADERS.has(String(k).toLowerCase()) ? '<redacted>' : v;
+      return origSetHeader.call(this, k, v);
+    };
+    xhr.send = function patchedSend(body) {
+      _reqBody = body;
+      if (shouldRecord(_url, _method)) {
+        const id = ++seq;
+        const startedAt = Date.now();
+        xhr.addEventListener('loadend', async () => {
+          const reqBodyStr = await bodyToString(_reqBody);
+          let respText = '';
+          try {
+            const t = xhr.responseType;
+            if (t === '' || t === 'text') respText = xhr.responseText || '';
+            else if (t === 'json') respText = JSON.stringify(xhr.response);
+            else respText = `<responseType=${t}>`;
+          } catch (_) {}
+          if (respText.length > 200000) respText = respText.slice(0, 200000) + '…[truncated]';
+          const respHeaderText = xhr.getAllResponseHeaders() || '';
+          events.push({
+            id, transport: 'xhr', method: _method, url: String(_url), startedAt,
+            durationMs: Date.now() - startedAt,
+            status: xhr.status,
+            request: { headers: _reqHeaders, body: reqBodyStr },
+            response: { headers: respHeaderText, body: respText },
+          });
+        });
+      }
+      return origSend.call(this, body);
+    };
+    return xhr;
+  }
+  PatchedXHR.prototype = OrigXHR.prototype;
+  window.XMLHttpRequest = PatchedXHR;
+
+  function summary() {
+    const byEndpoint = new Map();
+    for (const e of events) {
+      let path;
+      try { path = new URL(e.url, location.origin).pathname.replace(/\/\d+/g, '/{id}'); }
+      catch (_) { path = e.url; }
+      const key = `${e.method} ${path}`;
+      byEndpoint.set(key, (byEndpoint.get(key) || 0) + 1);
+    }
+    const rows = Array.from(byEndpoint.entries()).map(([k, count]) => ({ endpoint: k, count }));
+    rows.sort((a, b) => b.count - a.count);
+    console.table(rows);
+    console.log(`[RECORDER] ${events.length} captured events.`);
+    return rows;
+  }
+
+  function dump() {
+    const blob = new Blob([JSON.stringify({
+      capturedAt: new Date().toISOString(),
+      origin: location.origin,
+      shopUrl: location.href,
+      eventCount: events.length,
+      events,
+    }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = URL.createObjectURL(blob);
+    a.download = `tekmetric-recorder-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    console.log(`[RECORDER] dumped ${events.length} events to Downloads.`);
+  }
+
+  function stop() {
+    window.fetch = origFetch;
+    window.XMLHttpRequest = OrigXHR;
+    if (window.__tekRec) window.__tekRec.armed = false;
+    console.log('[RECORDER] stopped. Buffered events still available via __tekRec.events / __tekRec.dump().');
+  }
+
+  function clear() {
+    events.length = 0;
+    seq = 0;
+    console.log('[RECORDER] buffer cleared.');
+  }
+
+  window.__tekRec = { armed: true, events, dump, stop, clear, summary };
+  console.log('%c[RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().', 'color:#0a0;font-weight:bold');
+})();
+
+VM13023:245 [RECORDER] armed. Click around Tekmetric, then call __tekRec.summary() / __tekRec.dump() / __tekRec.stop().
+undefined
+main-CVQgBt6W.js:274  GET https://shop.tekmetric.com/api/tekmerchant/shop/10214/repair-orders/315133870/payment-attempt 404 (Not Found)
+(anonymous) @ main-CVQgBt6W.js:274
+Promise.then
+EE @ main-CVQgBt6W.js:274
+Q @ main-CVQgBt6W.js:274
+(anonymous) @ main-CVQgBt6W.js:309
+(anonymous) @ main-CVQgBt6W.js:225
+(anonymous) @ index-DIzTRlia.js:2
+nl @ main-CVQgBt6W.js:49
+Fp @ main-CVQgBt6W.js:49
+(anonymous) @ main-CVQgBt6W.js:49
+L @ main-CVQgBt6W.js:34
+U @ main-CVQgBt6W.js:34
+(anonymous) @ setImmediate.js:40
+runIfPresent @ setImmediate.js:69
+(anonymous) @ setImmediate.js:109
+postMessage
+window.postMessage @ VM12365 customers:95
+(anonymous) @ setImmediate.js:120
+(anonymous) @ setImmediate.js:27
+e0 @ main-CVQgBt6W.js:34
+s0 @ main-CVQgBt6W.js:34
+e.unstable_scheduleCallback @ main-CVQgBt6W.js:34
+Kz @ main-CVQgBt6W.js:49
+gn @ main-CVQgBt6W.js:49
+Gz @ main-CVQgBt6W.js:49
+jm @ main-CVQgBt6W.js:49
+Promise.then
+(anonymous) @ main-CVQgBt6W.js:49
+kp @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Bn @ main-CVQgBt6W.js:49
+WM @ main-CVQgBt6W.js:49
+Dm @ main-CVQgBt6W.js:49
+qc @ main-CVQgBt6W.js:49
+Xz @ main-CVQgBt6W.js:49
+vs @ main-CVQgBt6W.js:47
+(anonymous) @ main-CVQgBt6W.js:49
+main-CVQgBt6W.js:274 {responseStatus: 404, type: 'ERROR', message: 'Server error'}
