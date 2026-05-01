@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.12-unwrap-and-reuse';
+  const VERSION = '2026-05-01.11-real-labor-rate-id';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -800,45 +800,6 @@
     }
   }
 
-  // 2026-05-01.12: build a reuse map from the dest Job Board so a re-paste
-  // doesn't duplicate ROs created in a previous run. The Job Board summary
-  // exposes customerId + vehicleId per RO (HAR-confirmed shape), so we key
-  // by `${destCustomerId}-${destVehicleId}`. If a match is found mid-loop
-  // we skip createRo and append concerns/jobs onto the existing dest RO.
-  // This recovers from the v.11 partial run that left 21 empty ROs in 18008.
-  const existingByCustVeh = {};
-  try {
-    const destBoard = await jsonFetch(ENDPOINTS.jobBoardList(destShopId), token);
-    let destBoardRos = Array.isArray(destBoard)
-      ? destBoard
-      : (destBoard.repairOrders || destBoard.content || destBoard.groups || []);
-    // The /job-board-group-by endpoint can return either a flat RO array or
-    // an array of column groups each holding `repairOrders`. Flatten.
-    if (destBoardRos.length && destBoardRos[0] && Array.isArray(destBoardRos[0].repairOrders)) {
-      destBoardRos = destBoardRos.flatMap((g) => g.repairOrders || []);
-    }
-    for (const ro of destBoardRos) {
-      if (ro && ro.customerId && ro.vehicleId && ro.id) {
-        const key = `${ro.customerId}-${ro.vehicleId}`;
-        // Prefer the EARLIEST-created match so re-runs land on the same row.
-        const prev = existingByCustVeh[key];
-        if (!prev || (ro.createdDate && prev.createdDate && ro.createdDate < prev.createdDate)) {
-          existingByCustVeh[key] = {
-            id: ro.id,
-            repairOrderNumber: ro.repairOrderNumber,
-            createdDate: ro.createdDate,
-          };
-        }
-      }
-    }
-    console.log(
-      `[LOAD-CORE] ✓ pre-scanned dest Job Board: ${Object.keys(existingByCustVeh).length} ` +
-      `existing RO(s) indexed by customer+vehicle for reuse`
-    );
-  } catch (e) {
-    console.warn(`[LOAD-CORE] dest Job Board pre-scan failed (${e.message}); reuse disabled`);
-  }
-
   for (let i = 0; i < willCreate.length; i++) {
     const item = willCreate[i];
     const src = item.repairOrder;
@@ -1079,67 +1040,60 @@
       //    + payload shape from 04-clone-ro-same-shop.js. We do NOT pass
       //    concerns inline here — concerns get POSTed one-at-a-time on the
       //    next step, which mirrors what the Tekmetric UI itself does.
-      //
-      // 2026-05-01.12: before posting, check the dest Job Board pre-scan
-      // for an RO already attached to this same (customer, vehicle). If
-      // present, REUSE it — skip createRo and let concerns/jobs append.
-      // This makes re-pastes idempotent and recovers the 21 empty ROs left
-      // by the v.11 partial run on shop 18008.
       step = 'createRo';
-      const reuseKey = `${destCustomerId}-${destVehicleId}`;
-      const reuse = existingByCustVeh[reuseKey];
-      let newRoId;
-      let newRoNumber;
-      if (reuse) {
-        newRoId = reuse.id;
-        newRoNumber = reuse.repairOrderNumber;
-        console.log(
-          `[LOAD-CORE] ↻ reusing existing dest RO #${newRoNumber} (id=${newRoId}) ` +
-          `for source RO #${src.repairOrderNumber} — same customer+vehicle`
-        );
-        // Drop the slot from the reuse map so two source ROs sharing one
-        // (customer, vehicle) pair don't both collapse onto the same dest
-        // RO — the second one will fall through to createRo.
-        delete existingByCustVeh[reuseKey];
-      } else {
-        const apptOption = normalizeApptOption(src.appointmentOption);
-        const createPayload = {
-          shop: { id: Number(destShopId) },
-          appointmentOption: apptOption,
-          odometerInop: src.odometerInop ?? false,
-          leadSource: src.leadSource || '',
-          vehicle: { id: destVehicleId },
-          milesIn: src.milesIn ?? null,
-          laborRate: destLaborRateId ? { id: destLaborRateId } : undefined,
-          customer: { id: destCustomerId },
-          appointment: null,
-          initialJobs: [],
-          recommendations: [],
-          declinedJobRecommendations: [],
-        };
-        console.log(
-          `[LOAD-CORE] createRo payload for source RO #${src.repairOrderNumber}:`,
-          JSON.parse(JSON.stringify(createPayload))
-        );
-        const createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
+      const apptOption = normalizeApptOption(src.appointmentOption);
+      const createPayload = {
+        shop: { id: Number(destShopId) },
+        appointmentOption: apptOption,
+        odometerInop: src.odometerInop ?? false,
+        leadSource: src.leadSource || '',
+        vehicle: { id: destVehicleId },
+        milesIn: src.milesIn ?? null,
+        laborRate: destLaborRateId ? { id: destLaborRateId } : undefined,
+        customer: { id: destCustomerId },
+        appointment: null,
+        initialJobs: [],
+        recommendations: [],
+        declinedJobRecommendations: [],
+      };
+      // 2026-05-01.10: log the exact payload right before send so the next
+      // run's console captures full evidence of what we asked Tekmetric to
+      // create (key suspects: vehicle.id, customer.id, laborRate.id).
+      console.log(
+        `[LOAD-CORE] createRo payload for source RO #${src.repairOrderNumber}:`,
+        JSON.parse(JSON.stringify(createPayload))
+      );
+      let createdRo;
+      try {
+        createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
           method: 'POST',
           body: JSON.stringify(createPayload),
         });
-        // 2026-05-01.12: createRo response is wrapped:
-        //   { type:"SUCCESS", message:"New repair order created",
-        //     data: { id, repairOrderNumber, ... } }
-        // The v.11 code read .id off the envelope, which is undefined,
-        // and every downstream call hit /api/repair-orders/undefined/...
-        const ro = (createdRo && createdRo.data) ? createdRo.data : createdRo;
-        if (!ro || !ro.id) {
-          throw new Error(
-            `createRo returned no usable id. envelope-keys=${JSON.stringify(Object.keys(createdRo || {}))} ` +
-            `data-keys=${JSON.stringify(Object.keys((createdRo && createdRo.data) || {}))}`
+      } catch (e1) {
+        // 2026-05-01.10 self-heal: the auto-discovered destLaborRateId
+        // (16000 from existing dest RO) may not be a valid labor-rate ROW
+        // in the dest shop — Tekmetric returns 404 + "Internal server error"
+        // rather than a clean validation error. Retry once without
+        // laborRate so the backend uses the shop default. If that succeeds,
+        // every subsequent RO in this run also drops laborRate.
+        if (createPayload.laborRate) {
+          console.warn(
+            `[LOAD-CORE] createRo failed (${e1.status || 'err'}), retrying without laborRate…`
           );
+          delete createPayload.laborRate;
+          createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
+            method: 'POST',
+            body: JSON.stringify(createPayload),
+          });
+          // Permanently disable laborRate for the rest of this run so we
+          // don't keep paying the retry tax on every RO.
+          destLaborRateId = null;
+          cachedDestLaborRateId = null;
+        } else {
+          throw e1;
         }
-        newRoId = ro.id;
-        newRoNumber = ro.repairOrderNumber;
       }
+      const newRoId = createdRo.id;
 
       // 3. Set vehicle mileage (PUT) if source had any.
       if (src.milesIn != null || src.milesOut != null) {
@@ -1222,7 +1176,7 @@
 
       successes.push({
         sourceRo: sourceRoNumber,
-        destRo: newRoNumber,
+        destRo: createdRo.repairOrderNumber,
         destRoId: newRoId,
         jobs: srcJobs.length,
         labor: labors,
@@ -1232,11 +1186,11 @@
         sourceRoId,
         sourceRoNumber,
         destRoId: newRoId,
-        destRoNumber: newRoNumber,
+        destRoNumber: createdRo.repairOrderNumber,
         reused: false,
         jobMappings,
       });
-      console.log(`[LOAD-CORE] (${i + 1}/${willCreate.length}) #${sourceRoNumber} → #${newRoNumber} (${srcJobs.length} jobs, ${parts} parts, ${labors} labor lines)`);
+      console.log(`[LOAD-CORE] (${i + 1}/${willCreate.length}) #${sourceRoNumber} → #${createdRo.repairOrderNumber} (${srcJobs.length} jobs, ${parts} parts, ${labors} labor lines)`);
     } catch (err) {
       console.error(`[LOAD-CORE] FAILED RO #${sourceRoNumber} at step "${step}": ${err.message}`);
       failures.push({
@@ -1278,3 +1232,643 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13353:406 [Tekmetric Migration LOAD-CORE v2026-05-01.11-real-labor-rate-id] starting…
+VM13353:255 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13353:256 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13353:420 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13353:433 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13353:445 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13353:511 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13353:539 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13353:547 [LOAD-CORE] Plan:
+VM13353:548 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13353:562 [LOAD-CORE] First few that will be created:
+VM13353:563 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13353:577 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13353:577
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:786 [LOAD-CORE] ✓ resolved dest labor-rate id = 565350 (name="Standard Labor Rate", value=16000 cents) for shop 18008
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721265: customer=106147250 vehicle=153329945 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721265: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721265 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2720892: customer=106157573 vehicle=153313699 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2720892: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2720892 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2720892 at step "createJob[0](INSPECT FOR FUEL LEAK)": createJob[0](INSPECT FOR FUEL LEAK): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721001: customer=106163060 vehicle=153343794 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721001: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721001 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721001 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721060: customer=106152290 vehicle=153332965 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721060: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721060 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721063: customer=106170522 vehicle=153315105 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721063: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721063 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721063 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721079: customer=106168717 vehicle=153346152 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721079: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: 'Returning Customer', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721079 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721143: customer=106152944 vehicle=153334078 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721143: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721143 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721143 at step "createJob[0](Install Provided Skid Plates)": createJob[0](Install Provided Skid Plates): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721170: customer=106165706 vehicle=153340646 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721170: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721170 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721170 at step "createJob[0](Replace  Brake Master Cylinder)": createJob[0](Replace  Brake Master Cylinder): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721175: customer=106144769 vehicle=153286468 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721175: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721175 at step "createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)": createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721193: customer=106155843 vehicle=153305136 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721193: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721193 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721193 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721205: customer=106160250 vehicle=153325323 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721205: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721205 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721209: customer=106169374 vehicle=153298151 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721209: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721209 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721209 at step "createJob[0](IF - INSPECT FRONT SUSPENSION)": createJob[0](IF - INSPECT FRONT SUSPENSION): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721214: customer=106143775 vehicle=153281474 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721214: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721214 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721214 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721233: customer=106155497 vehicle=153338176 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721233: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721233 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721233 at step "createJob[0](NI - NOISE INSPECTION)": createJob[0](NI - NOISE INSPECTION): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721245: customer=106178587 vehicle=153327621 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721245: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721245 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721245 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721246: customer=106133773 vehicle=153285475 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721246: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721246 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/repair-orders/undefined/customer-concerns 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1141
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721246 at step "addConcern[0]": 400  on /api/repair-orders/undefined/customer-concerns :: {"type":"ERROR","message":"Method parameter 'repairOrderId': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721247: customer=106144323 vehicle=153335228 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721247: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/vehicle-mileage 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+(anonymous) @ VM13353:1102
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1111 [LOAD-CORE]   #2721247 mileage PUT failed (non-fatal): 400  on /api/repair-order/undefined/vehicle-mileage :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"undefined\"","data":null,"details":{}}
+(anonymous) @ VM13353:1111
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721247 at step "createJob[0](DMX SYN-BLEND OIL CHANGE)": createJob[0](DMX SYN-BLEND OIL CHANGE): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721258: customer=106162022 vehicle=153290459 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721258: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721258 at step "createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011)": createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721262: customer=106151365 vehicle=153357547 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721262: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721262 at step "createJob[0](Resecure Exhaust Heat Shield)": createJob[0](Resecure Exhaust Heat Shield): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721263: customer=106156913 vehicle=153309368 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721263: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721263 at step "createJob[0](DMX SYNTHETIC OIL CHANGE )": createJob[0](DMX SYNTHETIC OIL CHANGE ): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1034 [LOAD-CORE] resolved IDs for source RO #2721264: customer=106142449 vehicle=153311341 laborRate=565350
+VM13353:1062 [LOAD-CORE] createRo payload for source RO #2721264: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/job 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+createJobTwoStep @ VM13353:377
+(anonymous) @ VM13353:1157
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13023:118  PUT https://shop.tekmetric.com/api/repair-order/undefined/status 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13353:198
+rollbackPartialRo @ VM13353:395
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:401 [LOAD-CORE] auto-rollback FAILED for RO undefined: 400  on /api/repair-order/undefined/status :: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"undefined\"","data":null,"details":{}}; delete it manually.
+rollbackPartialRo @ VM13353:401
+await in rollbackPartialRo
+(anonymous) @ VM13353:1170
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1195 [LOAD-CORE] FAILED RO #2721264 at step "createJob[0](DMX SYNTHETIC OIL CHANGE )": createJob[0](DMX SYNTHETIC OIL CHANGE ): 400  on /api/shop/18008/job :: {"type":"ERROR","message":"Error saving job","data":null,"details":{"repairOrderId":"Repair order is required"}}
+(anonymous) @ VM13353:1195
+await in (anonymous)
+(anonymous) @ VM13353:1234
+VM13353:1207 [LOAD-CORE] Successes:
+VM13353:1208 
+VM13353:1210 [LOAD-CORE] Failures:
+VM13353:1211 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`12720892321023374'createJob[0](INSPECT FOR FUEL LEAK)''''createJob[0](INSPECT FOR FUEL LEAK): 400  on /api/…ls":{"repairOrderId":"Repair order is required"}}'22721001321701729'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`32721060322599022'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/s…ls":{"repairOrderId":"Repair order is required"}}'42721063322618310'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`52721079322765797'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`62721143323391292'createJob[0](Install Provided Skid Plates)''''createJob[0](Install Provided Skid Plates): 400  o…ls":{"repairOrderId":"Repair order is required"}}'72721170323628624'createJob[0](Replace  Brake Master Cylinder)''''createJob[0](Replace  Brake Master Cylinder): 400 …ls":{"repairOrderId":"Repair order is required"}}'82721175323646078'createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)''''createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)…ls":{"repairOrderId":"Repair order is required"}}'92721193324010591'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/s…ls":{"repairOrderId":"Repair order is required"}}'102721205324031687'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`112721209324050816'createJob[0](IF - INSPECT FRONT SUSPENSION)''''createJob[0](IF - INSPECT FRONT SUSPENSION): 400  …ls":{"repairOrderId":"Repair order is required"}}'122721214324104201'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): 400  on /api/s…ls":{"repairOrderId":"Repair order is required"}}'132721233324204864'createJob[0](NI - NOISE INSPECTION)''''createJob[0](NI - NOISE INSPECTION): 400  on /api/…ls":{"repairOrderId":"Repair order is required"}}'142721245324342162'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`152721246324342598'addConcern[0]'400`{"type":"ERROR","message":"Method parameter 'repai… string: \\"undefined\\"","data":null,"details":{}}`162721247324345536'createJob[0](DMX SYN-BLEND OIL CHANGE)''''createJob[0](DMX SYN-BLEND OIL CHANGE): 400  on /a…ls":{"repairOrderId":"Repair order is required"}}'172721258324403473'createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011)''''createJob[0](DT - DIAGNOSTIC TEST check engine lig…ls":{"repairOrderId":"Repair order is required"}}'182721262324414665'createJob[0](Resecure Exhaust Heat Shield)''''createJob[0](Resecure Exhaust Heat Shield): 400  o…ls":{"repairOrderId":"Repair order is required"}}'192721263324418417'createJob[0](DMX SYNTHETIC OIL CHANGE )''''createJob[0](DMX SYNTHETIC OIL CHANGE ): 400  on /…ls":{"repairOrderId":"Repair order is required"}}'202721264324429491'createJob[0](DMX SYNTHETIC OIL CHANGE )''''createJob[0](DMX SYNTHETIC OIL CHANGE ): 400  on /…ls":{"repairOrderId":"Repair order is required"}}'Array(21)
+VM13353:1232 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-062351.json
+VM13353:1233 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
