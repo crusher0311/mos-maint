@@ -25,55 +25,95 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-04-30.1';
+  const VERSION = '2026-04-30.2';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
-  // create customers / vehicles / ROs / jobs in the destination.
+  // create ROs / jobs in the destination.
   // ============================================================
   const CONFIRM = false;
 
-  // Job-payload behavior toggle.
-  //   false (default) → preserve the SOURCE labor item rate / technician
-  //                     when present, falling back to dest defaults. This
-  //                     is the more migration-faithful behavior — it
-  //                     keeps the rates the customer was quoted at the
-  //                     old shop.
-  //   true            → always use the DESTINATION RO's labor rate and
-  //                     defaultTechnician (strict mirror of the
-  //                     extension's createTekmetricJob in
-  //                     mos-tools-extension/background.js). Flip this on
-  //                     if Tekmetric's job-create endpoint rejects the
-  //                     source-rate payload during the smoke test.
-  const FORCE_DEST_LABOR_RATE_AND_TECH = false;
+  // Same-shop smoke test toggle. Defaults to false: refuses to load a dump
+  // back into the same shop it came from (safety net against picking the
+  // wrong active shop pre-transfer).
+  //
+  // Set to true to allow same-shop loading. Useful for an end-to-end smoke
+  // of the dump-then-load pipeline against your own shop (Service Solutions
+  // Garage / 14245) before the real run. With source IDs preserved (see
+  // USE_SOURCE_IDS_DIRECT below) the new ROs will reuse the existing
+  // customer / vehicle / labor-rate rows in your shop, so no duplicates
+  // get created — only new ROs do.
+  const ALLOW_SAME_SHOP_SMOKE_TEST = false;
 
-  // Marker prefixed onto the destination RO's customer concern so we can
-  // detect already-migrated ROs on a re-run.
+  // For tonight's real run, Tekmetric's account transfer preserves customer,
+  // vehicle, and labor-rate IDs across the transfer. The dumped source IDs
+  // therefore still resolve in the destination shop and can be used directly
+  // as `customer.id` / `vehicle.id` / `laborRate.id` on the RO-create payload.
+  // This matches the proven flow from 04-clone-ro-same-shop.js.
+  //
+  // Set to false ONLY if you discover post-transfer that IDs were NOT
+  // preserved — that flips on the legacy match-by-email/VIN-or-create path
+  // (kept for safety, but unused by default).
+  const USE_SOURCE_IDS_DIRECT = true;
+
+  // On any per-job failure during a load, set the partially-populated
+  // destination RO to status=DELETED so the dest Job Board doesn't fill up
+  // with broken half-ROs that someone has to clean up by hand. The RO
+  // sticks around in DELETED state for forensics.
+  const AUTO_ROLLBACK_PARTIAL_RO = true;
+
+  // Marker prefixed onto the destination RO's first customer concern so we
+  // can detect already-migrated ROs on a re-run.
   const MIGRATION_MARKER = (sourceRoNumber) => `[migrated from RO#${sourceRoNumber}]`;
   const MIGRATION_MARKER_RE = /\[migrated from RO#(\d+)\]/;
 
-  // ----- ENDPOINTS (best-effort defaults; confirm against fixtures/) ------
+  // ----- ENDPOINTS (confirmed against HAR captures + 04-clone-ro-same-shop
+  //                  smoke test that successfully cloned RO #62 in shop 14245
+  //                  with all 5 concerns and 12 jobs verbatim) --------------
   const ENDPOINTS = {
     base: location.origin,
     // Job Board listing on DEST — used to scan for already-migrated markers.
     jobBoardList: (shopId, page, size) =>
       `/api/shop/${shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=${page}&size=${size}&sort=updatedDate,desc`,
+    // RO header / metadata. NOTE: returns jobs:null and may return concerns
+    // depending on Tekmetric build, hence the dedicated concerns endpoint.
     repairOrderDetail: (shopId, roId) =>
       `/api/shop/${shopId}/repair-order/${roId}`,
-    // Customer search by phone/email — used to match existing customers
-    // already created by Tekmetric's own transfer (which copies customers).
+    // Concerns — authoritative per-RO list. Used during marker pre-scan
+    // when RO summary/detail doesn't expose customerConcerns.
+    repairOrderConcerns: (roId) =>
+      `/api/repair-orders/${roId}/customer-concerns`,
+    // Legacy customer/vehicle search — only used if USE_SOURCE_IDS_DIRECT=false.
     customerSearch: (shopId, q) =>
       `/api/shop/${shopId}/customer?search=${encodeURIComponent(q)}&page=0&size=20`,
     customerCreate: (shopId) => `/api/shop/${shopId}/customer`,
-    // Vehicle search by VIN — same reason as customer search.
     vehicleSearch: (shopId, q) =>
       `/api/shop/${shopId}/vehicle?search=${encodeURIComponent(q)}&page=0&size=20`,
     vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicle`,
-    // Create RO. Per discovery may need to be `/repair-order` (singular).
-    repairOrderCreate: (shopId) => `/api/shop/${shopId}/repair-order`,
-    // Create job — KNOWN endpoint, mirrors background.js:1352.
+    // Create RO — confirmed-working endpoint from 04-clone-ro-same-shop.js.
+    // NOT the per-shop variant (`/api/shop/{shopId}/repair-order`) — that
+    // one is the GET listing endpoint; POSTing to it returns 404/405.
+    repairOrderCreate: () => `/api/repair-order/create`,
+    // Set vehicle mileage (PUT) — proven in 04 smoke test.
+    vehicleMileage: (newRoId) => `/api/repair-order/${newRoId}/vehicle-mileage`,
+    // Append a customer concern to an RO (POST). Proven in 04 smoke test.
+    addConcern: (newRoId) => `/api/repair-orders/${newRoId}/customer-concerns`,
+    // Job create — both empty-create and populate POST to the same path
+    // (the body shape decides which mode).
     jobCreate: (shopId) => `/api/shop/${shopId}/job`,
+    // Status PUT — used by auto-rollback to set partial ROs to DELETED.
+    roStatus: (roId) => `/api/repair-order/${roId}/status`,
   };
+
+  // appointmentOption: GET returns string enum, POST expects numeric Long.
+  // Confirmed in HAR: "DROP" -> 2. Default to 2 (drop-off) for any string
+  // we don't recognize so the create doesn't 400 on an unknown enum.
+  const APPT_OPTION_MAP = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  function normalizeApptOption(v) {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') return APPT_OPTION_MAP[v] ?? 2;
+    return 2;
+  }
 
   const PAGE_SIZE = 50;
 
@@ -197,72 +237,148 @@
   }
 
   // ----- DOMAIN HELPERS --------------------------------------------------
+  //
+  // All helpers below are ported verbatim from 04-clone-ro-same-shop.js,
+  // which we proved end-to-end against shop 14245 / RO #62 (5 concerns,
+  // 12 jobs, all parts + labor preserved).
+  //
+  // Why job-create is two-step:
+  //   A single fat POST with id=null does NOT work — Tekmetric 500s.
+  //   The real flow is:
+  //     1. POST {name, repairOrderId, syncPartsAttachedToNonQuotedOrders:false}
+  //        -> returns the freshly minted empty job (with id, defaults).
+  //     2. POST that returned object back, mutated to set the source job's
+  //        name/status/technician/etc and with parts/labor REPLACED by lean
+  //        items each carrying a `tempId: <random float>` and `jobId: <new id>`.
+  //   Most of the bloat Tekmetric returns on the GET is server-managed and
+  //   ignored on input — sending the GET shape verbatim is what triggers
+  //   the 500.
 
-  // Build a job payload mirroring the known shape from
-  // mos-tools-extension/background.js:createTekmetricJob.
-  function buildJobPayload(srcJob, destRo, destRoLaborRate) {
-    // Labor rate / technician resolution. See FORCE_DEST_LABOR_RATE_AND_TECH
-    // at the top of this snippet for the trade-off rationale.
-    const pickRate = (item) => {
-      if (FORCE_DEST_LABOR_RATE_AND_TECH) return destRoLaborRate || 15000;
-      return typeof item.rate === 'number' ? item.rate : (destRoLaborRate || 15000);
-    };
-    const pickTech = (item) => {
-      if (FORCE_DEST_LABOR_RATE_AND_TECH) return destRo.defaultTechnician || null;
-      return item.technician || destRo.defaultTechnician || null;
-    };
-    const labor = (srcJob.labor || srcJob.laborItems || []).map((item) => ({
+  // Lean part shape — matches the populate POST captured in HAR. We carry
+  // commonly-meaningful descriptor / tire fields and drop everything tied
+  // to source-RO state (orders, inventory, invoices, etc.).
+  function leanPart(p, newJobId) {
+    const out = {
       tempId: Math.random(),
-      jobId: null,
-      name: item.name || item.description || 'Labor',
-      hours: parseFloat(item.hours) || 0,
-      rate: pickRate(item),
-      technician: pickTech(item),
-    }));
-    const parts = (srcJob.parts || []).map((part) => ({
-      tempId: Math.random(),
-      jobId: null,
-      name: part.name || part.description || 'Part',
-      partNumber: part.partNumber || '',
-      oemPartNumber: part.oemPartNumber || '',
-      brand: part.brand || '',
-      cost: typeof part.cost === 'number' ? part.cost : Math.round((parseFloat(part.cost) || 0) * 100),
-      quantity: parseInt(part.quantity) || 1,
-      retail: typeof part.retail === 'number' ? part.retail : Math.round((parseFloat(part.retail) || parseFloat(part.price) || 0) * 100),
-      position: part.position || '',
-      partType: part.partType || { id: 1, code: 'PART' },
-    }));
-    const veh = destRo.vehicle || {};
-    const vehicleDesc = veh.year || veh.make || veh.model
-      ? `${veh.year || ''} ${veh.make || ''} ${veh.model || ''}`.trim()
-      : '';
-    return {
-      repairOrderId: parseInt(destRo.id),
-      repairOrderNumber: destRo.repairOrderNumber,
-      repairOrderVehicleDescription: vehicleDesc,
-      name: srcJob.name || srcJob.jobName || 'Job',
-      status: srcJob.status || 'Pending',
-      selected: true,
-      archived: false,
-      authorized: srcJob.authorized ?? null,
-      authorizedDate: srcJob.authorizedDate ?? null,
-      milesOut: destRo.milesOut ?? destRo.vehicle?.mileageOut ?? null,
-      technician: FORCE_DEST_LABOR_RATE_AND_TECH
-        ? (destRo.defaultTechnician ?? null)
-        : (srcJob.technician ?? destRo.defaultTechnician ?? null),
-      labor,
-      parts,
-      discounts: srcJob.discounts || [],
-      fees: srcJob.fees || [],
-      feeable: srcJob.feeable ?? true,
-      taxLabor: destRo.taxLabor ?? false,
-      taxParts: destRo.taxParts ?? true,
-      taxFees: destRo.taxFees ?? true,
-      taxTires: destRo.taxTires ?? false,
-      taxTiresFet: destRo.taxTiresFet ?? true,
-      note: srcJob.note ?? null,
-      notDeclined: true,
+      jobId: newJobId,
+      partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: 'PART' },
+      name: p.name ?? '',
+      partNumber: p.partNumber ?? '',
+      position: p.position ?? '',
+      quantity: p.quantity ?? 1,
+      cost: p.cost ?? 0,
+      retail: p.retail ?? 0,
+      oemPartNumber: p.oemPartNumber ?? '',
     };
+    for (const k of ['brand', 'description', 'model', 'fet', 'msrp', 'quote', 'notes',
+      'pcdbPartTypeId', 'pcdbPartTypeName', 'partsTechPartId', 'unitOfMeasure',
+      'maxCapacity', 'specStandard', 'warrantyLabel', 'sortOrder',
+      // tire-specific
+      'width', 'ratio', 'diameter', 'constructionType', 'loadIndex', 'speedRating',
+      'tireType', 'mileageWarranty', 'loadRange', 'tireCategory', 'runFlat',
+      'sideWallStyle', 'treadwear', 'traction', 'temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
+    }
+    return out;
+  }
+
+  // Lean labor shape — matches the populate POST captured in HAR.
+  function leanLabor(l, newJobId) {
+    const out = {
+      tempId: Math.random(),
+      jobId: newJobId,
+      name: l.name ?? '',
+      hours: l.hours ?? 0,
+      rate: l.rate ?? 0,
+      autoApplyLaborMatrixId: l.autoApplyLaborMatrixId ?? null,
+      technician: l.technician ? { id: l.technician.id } : null,
+    };
+    for (const k of ['complete', 'position', 'warrantyLabel', 'sortOrder', 'sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
+    }
+    return out;
+  }
+
+  // Build the populate POST body from the empty-job response + source job.
+  // Strategy: take the server's freshly minted empty-job object as the base
+  // (so all server-managed defaults are correct), then overwrite the human-
+  // meaningful fields from the source job and replace parts/labor with lean
+  // items carrying tempId.
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const populated = { ...emptyJobResp };
+    populated.name = sourceJob.name ?? populated.name;
+    populated.status = sourceJob.status ?? populated.status;
+    populated.selected = sourceJob.selected ?? populated.selected;
+    populated.authorized = sourceJob.authorized ?? populated.authorized;
+    populated.technician = sourceJob.technician
+      ? { id: sourceJob.technician.id }
+      : null;
+    populated.note = sourceJob.note ?? null;
+    populated.declinedNote = sourceJob.declinedNote ?? null;
+    populated.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    populated.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    for (const k of ['taxParts', 'taxLabor', 'taxFees', 'taxTires', 'taxTiresFet']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
+    }
+    for (const k of ['packagePrice', 'packagePriceMethod', 'packagePriceSurplusOilMethod',
+      'packagePriceModsHidden', 'feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
+    }
+    populated.parts = (sourceJob.parts || []).map((p) => leanPart(p, newJobId));
+    populated.labor = (sourceJob.labor || sourceJob.laborItems || []).map((l) => leanLabor(l, newJobId));
+    // Force empty for tonight's run — matches 04-clone-ro-same-shop.js
+    // proven behavior. These substructures reference server-managed entities
+    // (discount rules, fee schedules, smart-job catalog rows, technician
+    // assignment rows) that may not exist with the same shape in the dest
+    // shop and have triggered populate-POST 500s in earlier experiments.
+    // If a real RO surfaces non-empty data here we'll handle it case-by-case
+    // post-migration; the marker pre-scan + reconcile path keeps that safe.
+    populated.discounts = [];
+    populated.fees = [];
+    populated.smartJobIds = [];
+    populated.smartJobs = [];
+    populated.laborTechnicians = [];
+    return populated;
+  }
+
+  // Two-step job create. Returns { ok, populated } on success, throws on
+  // failure (so caller can record the failure + auto-rollback). `shopId` is
+  // the DESTINATION shop. `newRoId` is the freshly created dest RO. `srcJob`
+  // is the source job from the dump (with parts + labor inline).
+  async function createJobTwoStep(shopId, newRoId, srcJob, token) {
+    // 1. empty-job create
+    const emptyPayload = {
+      name: srcJob.name || 'New Job',
+      repairOrderId: newRoId,
+      syncPartsAttachedToNonQuotedOrders: false,
+    };
+    const emptyJob = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+      method: 'POST',
+      body: JSON.stringify(emptyPayload),
+    });
+    if (!emptyJob || !emptyJob.id) {
+      throw new Error(`empty-create returned no id (got ${JSON.stringify(emptyJob).slice(0, 200)})`);
+    }
+    // 2. populate POST
+    const populatePayload = buildPopulatePayload(emptyJob, srcJob);
+    const populated = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+      method: 'POST',
+      body: JSON.stringify(populatePayload),
+    });
+    return { emptyJob, populated };
+  }
+
+  async function rollbackPartialRo(token, partialRoId) {
+    try {
+      await jsonFetch(ENDPOINTS.roStatus(partialRoId), token, {
+        method: 'PUT',
+        body: JSON.stringify({ repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } }),
+      });
+      console.warn(`[LOAD-CORE] auto-rolled-back partial RO ${partialRoId} (set to DELETED).`);
+    } catch (e) {
+      console.warn(`[LOAD-CORE] auto-rollback FAILED for RO ${partialRoId}: ${e.message}; delete it manually.`);
+    }
   }
 
   // ----- MAIN ------------------------------------------------------------
@@ -282,10 +398,15 @@
   }
   console.log(`[LOAD-CORE] Loaded dump: ${dumpFileName} (${dump.repairOrders.length} ROs from ${dump.source.shopName} id=${dump.source.shopId})`);
 
-  // Hard safety check: do not allow loading back into the source shop.
+  // Hard safety check: do not allow loading back into the source shop UNLESS
+  // ALLOW_SAME_SHOP_SMOKE_TEST=true (intended for end-to-end pipeline testing
+  // pre-transfer — see flag docs at top of file).
   if (Number(dump.source.shopId) === Number(destShopId)) {
-    console.error(`[LOAD-CORE] REFUSING TO RUN: dump source shop id (${dump.source.shopId}) equals active shop id (${destShopId}). You appear to be trying to load the dump back into the source shop. Switch the active Tekmetric shop to the destination and re-paste.`);
-    return;
+    if (!ALLOW_SAME_SHOP_SMOKE_TEST) {
+      console.error(`[LOAD-CORE] REFUSING TO RUN: dump source shop id (${dump.source.shopId}) equals active shop id (${destShopId}). You appear to be trying to load the dump back into the source shop. Switch the active Tekmetric shop to the destination and re-paste, or set ALLOW_SAME_SHOP_SMOKE_TEST=true at the top of this snippet for an intentional same-shop pipeline test.`);
+      return;
+    }
+    console.warn(`[LOAD-CORE] %cSAME-SHOP MODE: dump source = active shop (${destShopId}). Proceeding because ALLOW_SAME_SHOP_SMOKE_TEST=true. New ROs will be created alongside the originals (which still exist in this shop).`, 'color:#a60;font-weight:bold');
   }
 
   console.log('[LOAD-CORE] Capturing x-auth-token from live session…');
@@ -324,6 +445,21 @@
   function summaryHasConcernField(ro) {
     return ('customerConcerns' in ro) || ('customerConcern' in ro);
   }
+  // Authoritative concerns lookup: hits the dedicated endpoint that always
+  // returns the concerns array regardless of which Tekmetric build is
+  // serving the summary/detail payloads. Used as the final fallback when
+  // summary + detail both fail to surface a marker.
+  async function fetchConcernsArray(roId) {
+    try {
+      const resp = await jsonFetch(ENDPOINTS.repairOrderConcerns(roId), token);
+      if (Array.isArray(resp)) return resp;
+      if (resp && Array.isArray(resp.content)) return resp.content;
+      if (resp && Array.isArray(resp.customerConcerns)) return resp.customerConcerns;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
   const summariesNeedingDetail = [];
   let page = 0;
   while (true) {
@@ -343,7 +479,10 @@
       }
       if (srcRoNum) {
         alreadyMigrated.set(String(srcRoNum), { destRoId: ro.id, destRoNumber: ro.repairOrderNumber });
-      } else if (!summaryHasConcernField(ro)) {
+      } else {
+        // Defer to deterministic per-RO check below — covers both summaries
+        // missing the field AND summaries that have it but were truncated /
+        // didn't carry the marker text.
         summariesNeedingDetail.push({ id: ro.id, repairOrderNumber: ro.repairOrderNumber });
       }
     }
@@ -352,19 +491,28 @@
     if (page > 200) break;
   }
   if (summariesNeedingDetail.length) {
-    console.log(`[LOAD-CORE] Pre-scan: summary did not expose customerConcerns; fetching detail for ${summariesNeedingDetail.length} dest RO(s) for a deterministic marker check…`);
+    console.log(`[LOAD-CORE] Pre-scan: doing deterministic concern check for ${summariesNeedingDetail.length} dest RO(s) (detail+concerns endpoint)…`);
     let detailMatches = 0;
     for (let i = 0; i < summariesNeedingDetail.length; i++) {
       const s = summariesNeedingDetail[i];
+      let srcRoNum = null;
+      // Try RO detail first (may carry concerns inline on some builds).
       try {
         const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(destShopId, s.id), token);
-        const srcRoNum = extractMarkerFromConcernsField(detail.customerConcerns ?? detail.customerConcern);
-        if (srcRoNum) {
-          alreadyMigrated.set(String(srcRoNum), { destRoId: detail.id, destRoNumber: detail.repairOrderNumber });
-          detailMatches++;
-        }
+        srcRoNum = extractMarkerFromConcernsField(detail.customerConcerns ?? detail.customerConcern);
       } catch (e) {
-        console.warn(`[LOAD-CORE] detail fetch for dest RO #${s.repairOrderNumber} failed: ${e.message}`);
+        console.warn(`[LOAD-CORE] detail fetch for dest RO #${s.repairOrderNumber} failed: ${e.message}; falling back to concerns endpoint.`);
+      }
+      // Authoritative fallback: always hit the dedicated concerns endpoint
+      // when detail didn't yield a marker. This is what makes the marker
+      // pre-scan reliable across Tekmetric build variants.
+      if (!srcRoNum) {
+        const concerns = await fetchConcernsArray(s.id);
+        srcRoNum = extractMarkerFromConcernsField(concerns);
+      }
+      if (srcRoNum) {
+        alreadyMigrated.set(String(srcRoNum), { destRoId: s.id, destRoNumber: s.repairOrderNumber });
+        detailMatches++;
       }
       if ((i + 1) % 25 === 0) {
         console.log(`[LOAD-CORE] pre-scan detail ${i + 1}/${summariesNeedingDetail.length} (${detailMatches} markers found so far)`);
@@ -442,14 +590,21 @@
       return { jobMappings: [], created: 0, missing: 0 };
     }
     const srcJobs = srcRepairOrder.jobs || srcRepairOrder.repairOrderJobs || [];
-    const destJobs = destDetail.jobs || destDetail.repairOrderJobs || [];
+    // Dest RO detail returns jobs:null on most builds. Fetch the dest's
+    // estimate to get its real job list for name-matching.
+    let destJobs = destDetail.jobs || destDetail.repairOrderJobs || [];
+    if (!destJobs.length) {
+      try {
+        const est = await jsonFetch(`/api/repair-order/${destRoId}/estimate`, token);
+        destJobs = (est && (est.jobs || est.repairOrderJobs)) || [];
+      } catch (_) { /* fall through with empty list */ }
+    }
     const destByName = new Map();
     for (const dj of destJobs) {
       const arr = destByName.get(dj.name) || [];
       arr.push(dj);
       destByName.set(dj.name, arr);
     }
-    const destLaborRate = destDetail.laborRate || srcRepairOrder.laborRate || 15000;
     const jobMappings = [];
     let created = 0;
     let missing = 0;
@@ -458,15 +613,14 @@
       const candidates = destByName.get(sj.name) || [];
       let match = candidates.shift() || null;
       if (!match) {
-        // Resume: this job was missing from the previous run. Create it.
+        // Resume: this job was missing from the previous run. Create it
+        // using the proven two-step pattern (empty-create + populate).
         missing++;
         try {
-          const payload = buildJobPayload(sj, destDetail, destLaborRate);
-          const createdJob = await jsonFetch(ENDPOINTS.jobCreate(destShopId), token, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          });
-          match = { id: createdJob && (createdJob.id ?? createdJob.jobId), name: createdJob && createdJob.name };
+          const { populated } = await createJobTwoStep(destShopId, destRoId, sj, token);
+          const id = populated && (populated.id ?? populated.jobId);
+          const name = populated && populated.name;
+          match = { id, name };
           created++;
           console.log(`[LOAD-CORE]   resumed missing job "${sj.name}" on dest RO id=${destRoId} (was missing from prior partial run)`);
         } catch (jobErr) {
@@ -563,11 +717,19 @@
     for (const ro of candidates) {
       let concernField = ro.customerConcerns ?? ro.customerConcern;
       let foundSrcRo = extractMarkerFromConcernsField(concernField);
-      if (!foundSrcRo && !summaryHasConcernField(ro)) {
+      if (!foundSrcRo) {
+        // Try RO detail (some builds carry concerns inline there).
         try {
           const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(destShopId, ro.id), token);
           foundSrcRo = extractMarkerFromConcernsField(detail.customerConcerns ?? detail.customerConcern);
         } catch (_) {}
+      }
+      if (!foundSrcRo) {
+        // Authoritative fallback: dedicated concerns endpoint always
+        // returns the concerns array, regardless of which Tekmetric build
+        // is serving summary/detail.
+        const concerns = await fetchConcernsArray(ro.id);
+        foundSrcRo = extractMarkerFromConcernsField(concerns);
       }
       if (foundSrcRo && String(foundSrcRo) === String(sourceRoNumber)) {
         return { destRoId: ro.id, destRoNumber: ro.repairOrderNumber, scopedBy };
@@ -608,85 +770,145 @@
         continue;
       }
 
-      // 1. Customer: try to match by email/phone first, then create.
-      step = 'matchCustomer';
-      let destCustomerId = null;
+      // 1. Resolve dest customer / vehicle / labor-rate IDs.
+      //    Default path (USE_SOURCE_IDS_DIRECT=true): use the source IDs
+      //    verbatim. Tekmetric account transfer preserves these rows, so
+      //    they exist in the dest shop unchanged.
+      //    Fallback (USE_SOURCE_IDS_DIRECT=false): legacy match-by-email/VIN
+      //    or create new — kept here as insurance only.
       const srcCust = src.customer || {};
-      const cQuery = (srcCust.email && srcCust.email.trim()) ||
-        ((srcCust.phone && srcCust.phone[0] && srcCust.phone[0].number) ? srcCust.phone[0].number :
-          (typeof srcCust.phone === 'string' ? srcCust.phone : null));
-      if (cQuery) {
-        try {
-          const r = await jsonFetch(ENDPOINTS.customerSearch(destShopId, cQuery), token);
-          const list = Array.isArray(r) ? r : (r.content || []);
-          const hit = list.find((c) =>
-            (c.email && srcCust.email && c.email.toLowerCase() === srcCust.email.toLowerCase()) ||
-            ((srcCust.lastName || '').toLowerCase() === (c.lastName || '').toLowerCase() &&
-              (srcCust.firstName || '').toLowerCase() === (c.firstName || '').toLowerCase())
-          );
-          if (hit) destCustomerId = hit.id;
-        } catch (_) { /* swallow — fall through to create */ }
-      }
-      if (!destCustomerId) {
-        step = 'createCustomer';
-        const created = await jsonFetch(ENDPOINTS.customerCreate(destShopId), token, {
-          method: 'POST',
-          body: JSON.stringify({
-            firstName: srcCust.firstName || '',
-            lastName: srcCust.lastName || '',
-            email: srcCust.email || null,
-            phone: srcCust.phone || [],
-            address: srcCust.address || null,
-            customerType: srcCust.customerType || null,
-            notes: srcCust.notes || null,
-          }),
-        });
-        destCustomerId = created.id;
-      }
-
-      // 2. Vehicle: try to match by VIN first, then create + attach to customer.
-      step = 'matchVehicle';
-      let destVehicleId = null;
       const srcVeh = src.vehicle || {};
-      if (srcVeh.vin) {
-        try {
-          const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, srcVeh.vin), token);
-          const list = Array.isArray(r) ? r : (r.content || []);
-          const hit = list.find((v) => (v.vin || '').toUpperCase() === srcVeh.vin.toUpperCase());
-          if (hit) destVehicleId = hit.id;
-        } catch (_) {}
-      }
-      if (!destVehicleId) {
-        step = 'createVehicle';
-        const createdV = await jsonFetch(ENDPOINTS.vehicleCreate(destShopId), token, {
-          method: 'POST',
-          body: JSON.stringify({
-            customerId: destCustomerId,
-            year: srcVeh.year || null,
-            make: srcVeh.make || null,
-            model: srcVeh.model || null,
-            subModel: srcVeh.subModel || null,
-            engine: srcVeh.engine || null,
-            transmission: srcVeh.transmission || null,
-            drivetrain: srcVeh.drivetrain || null,
-            vin: srcVeh.vin || null,
-            licensePlate: srcVeh.licensePlate || srcVeh.plate || null,
-            color: srcVeh.color || null,
-            unitNumber: srcVeh.unitNumber || null,
-            notes: srcVeh.notes || null,
-          }),
-        });
-        destVehicleId = createdV.id;
+      const sourceLaborRateId = (typeof src.laborRate === 'number')
+        ? src.laborRate
+        : (src.laborRate && src.laborRate.id) || null;
+
+      let destCustomerId = null;
+      let destVehicleId = null;
+      let destLaborRateId = sourceLaborRateId;
+
+      if (USE_SOURCE_IDS_DIRECT) {
+        step = 'resolveIds(direct)';
+        destCustomerId = srcCust.id ?? null;
+        destVehicleId = srcVeh.id ?? null;
+        if (!destCustomerId || !destVehicleId) {
+          throw new Error(`source RO is missing customer.id (${srcCust.id}) or vehicle.id (${srcVeh.id}); cannot use USE_SOURCE_IDS_DIRECT`);
+        }
+      } else {
+        // Legacy fallback: match-by-email/VIN-or-create.
+        step = 'matchCustomer';
+        const cQuery = (srcCust.email && srcCust.email.trim()) ||
+          ((srcCust.phone && srcCust.phone[0] && srcCust.phone[0].number) ? srcCust.phone[0].number :
+            (typeof srcCust.phone === 'string' ? srcCust.phone : null));
+        if (cQuery) {
+          try {
+            const r = await jsonFetch(ENDPOINTS.customerSearch(destShopId, cQuery), token);
+            const list = Array.isArray(r) ? r : (r.content || []);
+            const hit = list.find((c) =>
+              (c.email && srcCust.email && c.email.toLowerCase() === srcCust.email.toLowerCase()) ||
+              ((srcCust.lastName || '').toLowerCase() === (c.lastName || '').toLowerCase() &&
+                (srcCust.firstName || '').toLowerCase() === (c.firstName || '').toLowerCase())
+            );
+            if (hit) destCustomerId = hit.id;
+          } catch (_) { /* fall through to create */ }
+        }
+        if (!destCustomerId) {
+          step = 'createCustomer';
+          const created = await jsonFetch(ENDPOINTS.customerCreate(destShopId), token, {
+            method: 'POST',
+            body: JSON.stringify({
+              firstName: srcCust.firstName || '',
+              lastName: srcCust.lastName || '',
+              email: srcCust.email || null,
+              phone: srcCust.phone || [],
+              address: srcCust.address || null,
+              customerType: srcCust.customerType || null,
+              notes: srcCust.notes || null,
+            }),
+          });
+          destCustomerId = created.id;
+        }
+        step = 'matchVehicle';
+        if (srcVeh.vin) {
+          try {
+            const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, srcVeh.vin), token);
+            const list = Array.isArray(r) ? r : (r.content || []);
+            const hit = list.find((v) => (v.vin || '').toUpperCase() === srcVeh.vin.toUpperCase());
+            if (hit) destVehicleId = hit.id;
+          } catch (_) {}
+        }
+        if (!destVehicleId) {
+          step = 'createVehicle';
+          const createdV = await jsonFetch(ENDPOINTS.vehicleCreate(destShopId), token, {
+            method: 'POST',
+            body: JSON.stringify({
+              customerId: destCustomerId,
+              year: srcVeh.year || null,
+              make: srcVeh.make || null,
+              model: srcVeh.model || null,
+              subModel: srcVeh.subModel || null,
+              engine: srcVeh.engine || null,
+              transmission: srcVeh.transmission || null,
+              drivetrain: srcVeh.drivetrain || null,
+              vin: srcVeh.vin || null,
+              licensePlate: srcVeh.licensePlate || srcVeh.plate || null,
+              color: srcVeh.color || null,
+              unitNumber: srcVeh.unitNumber || null,
+              notes: srcVeh.notes || null,
+            }),
+          });
+          destVehicleId = createdV.id;
+        }
       }
 
-      // 3. Create RO with marker prefixed to customer concern.
-      //    Tekmetric payloads vary by build: concerns may be exposed as
-      //    `customerConcerns` (plural array of {concern, ...}) or as
-      //    `customerConcern` (singular — sometimes a string, sometimes an
-      //    object {concern: "..."}). Normalize both to a plural array of
-      //    objects before prepending the migration marker so we don't drop
-      //    the original concern text on builds that use the singular form.
+      // 2. Create the RO using the proven /api/repair-order/create endpoint
+      //    + payload shape from 04-clone-ro-same-shop.js. We do NOT pass
+      //    concerns inline here — concerns get POSTed one-at-a-time on the
+      //    next step, which mirrors what the Tekmetric UI itself does.
       step = 'createRo';
+      const apptOption = normalizeApptOption(src.appointmentOption);
+      const createPayload = {
+        shop: { id: Number(destShopId) },
+        appointmentOption: apptOption,
+        odometerInop: src.odometerInop ?? false,
+        leadSource: src.leadSource || '',
+        vehicle: { id: destVehicleId },
+        milesIn: src.milesIn ?? null,
+        laborRate: destLaborRateId ? { id: destLaborRateId } : undefined,
+        customer: { id: destCustomerId },
+        appointment: null,
+        initialJobs: [],
+        recommendations: [],
+        declinedJobRecommendations: [],
+      };
+      const createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
+        method: 'POST',
+        body: JSON.stringify(createPayload),
+      });
+      const newRoId = createdRo.id;
+
+      // 3. Set vehicle mileage (PUT) if source had any.
+      if (src.milesIn != null || src.milesOut != null) {
+        step = 'setMileage';
+        try {
+          await jsonFetch(ENDPOINTS.vehicleMileage(newRoId), token, {
+            method: 'PUT',
+            body: JSON.stringify({
+              milesIn: src.milesIn ?? src.milesOut ?? 0,
+              milesOut: src.milesOut ?? src.milesIn ?? 0,
+              odometerInop: src.odometerInop ?? false,
+            }),
+          });
+        } catch (e) {
+          console.warn(`[LOAD-CORE]   #${sourceRoNumber} mileage PUT failed (non-fatal): ${e.message}`);
+        }
+      }
+
+      // 4. Append concerns. The first concern carries the migration marker
+      //    so the marker pre-scan can find it on a re-run.
+      //    Tekmetric payloads vary by build: source concerns may come back
+      //    as an array of {concern}, an array of strings, a single string,
+      //    or a single object — normalize all of those shapes.
+      step = 'addConcerns';
       const rawConcerns = src.customerConcerns ?? src.customerConcern ?? [];
       let srcConcerns;
       if (Array.isArray(rawConcerns)) {
@@ -700,63 +922,54 @@
       } else {
         srcConcerns = [];
       }
-      const firstConcern = srcConcerns[0] || { concern: '' };
-      const taggedConcerns = srcConcerns.length
+      const concernsToPost = srcConcerns.length
         ? [
-            { ...firstConcern, concern: `${MIGRATION_MARKER(sourceRoNumber)} ${firstConcern.concern || ''}`.trim() },
-            ...srcConcerns.slice(1),
+            { concern: `${MIGRATION_MARKER(sourceRoNumber)} ${srcConcerns[0].concern || ''}`.trim() },
+            ...srcConcerns.slice(1).map((c) => ({ concern: c.concern || '' })),
           ]
         : [{ concern: MIGRATION_MARKER(sourceRoNumber) }];
-      const createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(destShopId), token, {
-        method: 'POST',
-        body: JSON.stringify({
-          customerId: destCustomerId,
-          vehicleId: destVehicleId,
-          status: src.status || 'ESTIMATE',
-          milesIn: src.milesIn ?? null,
-          milesOut: src.milesOut ?? null,
-          serviceWriter: src.serviceWriter ?? null,
-          serviceWriterId: src.serviceWriter?.id ?? null,
-          appointmentStartTime: src.appointmentStartTime ?? src.appointment?.startTime ?? null,
-          appointmentEndTime: src.appointmentEndTime ?? src.appointment?.endTime ?? null,
-          customerConcerns: taggedConcerns,
-          notes: src.notes || src.note || null,
-          color: src.color || null,
-          tag: src.tag || null,
-          dropOffDate: src.dropOffDate ?? null,
-          completedDate: src.completedDate ?? null,
-        }),
-      });
+      for (let ci = 0; ci < concernsToPost.length; ci++) {
+        step = `addConcern[${ci}]`;
+        await jsonFetch(ENDPOINTS.addConcern(newRoId), token, {
+          method: 'POST',
+          body: JSON.stringify({ concern: concernsToPost[ci].concern }),
+        });
+      }
 
-      // 4. Create each job on the new RO. Record srcJobId→destJobId so
-      //    Snippet 3 can attach photos to the equivalent job entity.
-      step = 'createJob[]';
-      const srcJobs = src.jobs || src.repairOrderJobs || [];
-      const destLaborRate = createdRo.laborRate || src.laborRate || 15000;
+      // 5. Create each job on the new RO using the proven two-step pattern.
+      //    On any per-job failure, optionally auto-rollback the partial RO
+      //    so the dest Job Board doesn't fill up with broken half-ROs.
+      const srcJobs = (src.jobs || src.repairOrderJobs || []).filter((j) => !j.archived);
       let labors = 0; let parts = 0;
       const jobMappings = [];
       for (let j = 0; j < srcJobs.length; j++) {
         const srcJob = srcJobs[j];
         step = `createJob[${j}](${srcJob.name || 'unnamed'})`;
-        const payload = buildJobPayload(srcJob, createdRo, destLaborRate);
-        const createdJob = await jsonFetch(ENDPOINTS.jobCreate(destShopId), token, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        labors += payload.labor.length;
-        parts += payload.parts.length;
-        jobMappings.push({
-          srcJobId: srcJob.id ?? null,
-          srcJobName: srcJob.name ?? null,
-          destJobId: createdJob && (createdJob.id ?? createdJob.jobId) || null,
-          destJobName: createdJob && (createdJob.name ?? null),
-        });
+        try {
+          const { populated } = await createJobTwoStep(destShopId, newRoId, srcJob, token);
+          const id = populated && (populated.id ?? populated.jobId);
+          const name = populated && populated.name;
+          labors += (srcJob.labor || srcJob.laborItems || []).length;
+          parts += (srcJob.parts || []).length;
+          jobMappings.push({
+            srcJobId: srcJob.id ?? null,
+            srcJobName: srcJob.name ?? null,
+            destJobId: id ?? null,
+            destJobName: name ?? null,
+          });
+        } catch (jobErr) {
+          if (AUTO_ROLLBACK_PARTIAL_RO) {
+            await rollbackPartialRo(token, newRoId);
+          }
+          // Re-throw so the outer catch records this as a per-RO failure.
+          throw new Error(`${step}: ${jobErr.message}`);
+        }
       }
 
       successes.push({
         sourceRo: sourceRoNumber,
         destRo: createdRo.repairOrderNumber,
-        destRoId: createdRo.id,
+        destRoId: newRoId,
         jobs: srcJobs.length,
         labor: labors,
         parts,
@@ -764,12 +977,12 @@
       mapping.push({
         sourceRoId,
         sourceRoNumber,
-        destRoId: createdRo.id,
+        destRoId: newRoId,
         destRoNumber: createdRo.repairOrderNumber,
         reused: false,
         jobMappings,
       });
-      console.log(`[LOAD-CORE] (${i + 1}/${willCreate.length}) #${sourceRoNumber} → #${createdRo.repairOrderNumber} (${srcJobs.length} jobs)`);
+      console.log(`[LOAD-CORE] (${i + 1}/${willCreate.length}) #${sourceRoNumber} → #${createdRo.repairOrderNumber} (${srcJobs.length} jobs, ${parts} parts, ${labors} labor lines)`);
     } catch (err) {
       console.error(`[LOAD-CORE] FAILED RO #${sourceRoNumber} at step "${step}": ${err.message}`);
       failures.push({

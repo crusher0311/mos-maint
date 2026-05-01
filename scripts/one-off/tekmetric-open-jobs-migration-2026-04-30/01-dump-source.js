@@ -22,19 +22,29 @@
  * during the discovery pass, edit them here before pasting.
  */
 (async () => {
-  const VERSION = '2026-04-30.1';
+  const VERSION = '2026-04-30.2';
 
-  // ----- ENDPOINTS (best-effort defaults; confirm against fixtures/) ------
+  // ----- ENDPOINTS (confirmed against HAR captures + same-shop smoke test) -
   const ENDPOINTS = {
     base: location.origin, // https://shop.tekmetric.com in practice
     // Job Board listing — internal endpoint. Common shape:
     //   /api/shop/{shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=...&size=...
-    // Adjust path/params if discovery shows otherwise.
     jobBoardList: (shopId, page, size) =>
       `/api/shop/${shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=${page}&size=${size}&sort=updatedDate,desc`,
-    // Full RO detail — KNOWN endpoint, mirrored from background.js:1281.
+    // RO header / metadata — customer, vehicle, laborRate, mileage, header
+    // fields. NOTE: this endpoint returns `jobs: null` — jobs must be fetched
+    // separately from the estimate endpoint below.
     repairOrderDetail: (shopId, roId) =>
       `/api/shop/${shopId}/repair-order/${roId}`,
+    // Jobs (with parts + labor inline) — confirmed in HAR 2026-04-30. This is
+    // the only endpoint that returns the full jobs array for an RO.
+    repairOrderEstimate: (roId) =>
+      `/api/repair-order/${roId}/estimate`,
+    // Customer concerns — confirmed in HAR 2026-04-30. The RO detail endpoint
+    // sometimes embeds concerns, sometimes doesn't; this endpoint is the
+    // authoritative source.
+    repairOrderConcerns: (roId) =>
+      `/api/repair-orders/${roId}/customer-concerns`,
     // Inspection list per RO — known internal path from
     // lib/integrations/tekmetric/client.ts:276
     inspectionList: (shopId, roId) =>
@@ -226,16 +236,45 @@
   }
   console.log(`[DUMP] Job Board total: ${allRoSummaries.length} open ROs`);
 
-  // 2. Fetch full RO detail + inspection list for each
+  // 2. Fetch full RO detail + estimate (jobs) + concerns + inspection list for each.
+  //    The RO detail endpoint returns `jobs: null`, so we MUST also hit the
+  //    estimate endpoint to capture the jobs/parts/labor that Snippet 2 will
+  //    re-create in the destination shop. Concerns are fetched from their own
+  //    endpoint for the same reason — RO detail's `customerConcerns` field
+  //    is unreliable across Tekmetric builds.
   const dumpedRos = [];
   let inspectionCount = 0;
   let jobCount = 0;
+  let concernCount = 0;
+  let estimateMissCount = 0;
+  let concernsMissCount = 0;
   for (let i = 0; i < allRoSummaries.length; i++) {
     const summary = allRoSummaries[i];
     const roId = summary.id || summary.repairOrderId;
     const roNumber = summary.repairOrderNumber || summary.number;
     try {
       const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(shopId, roId), token);
+
+      // Fetch jobs from the estimate endpoint (RO detail returns jobs:null).
+      let jobs = [];
+      try {
+        const est = await jsonFetch(ENDPOINTS.repairOrderEstimate(roId), token);
+        jobs = (est && (est.jobs || est.repairOrderJobs)) || [];
+      } catch (e) {
+        estimateMissCount++;
+        console.warn(`[DUMP] estimate fetch failed for RO #${roNumber} (id=${roId}): ${e.message}`);
+      }
+
+      // Fetch concerns from the dedicated concerns endpoint.
+      let concerns = [];
+      try {
+        const c = await jsonFetch(ENDPOINTS.repairOrderConcerns(roId), token);
+        concerns = Array.isArray(c) ? c : (c && (c.data || c.content)) || [];
+      } catch (e) {
+        concernsMissCount++;
+        console.warn(`[DUMP] concerns fetch failed for RO #${roNumber} (id=${roId}): ${e.message}`);
+      }
+
       let inspections = [];
       try {
         inspections = await jsonFetch(ENDPOINTS.inspectionList(shopId, roId), token);
@@ -246,9 +285,15 @@
       }
       const inspectionSummaries = (Array.isArray(inspections) ? inspections : (inspections.content || []))
         .map((ins) => ({ id: ins.id, title: ins.title || ins.name, jobId: ins.jobId || null }));
+
+      // Overlay jobs + concerns onto the RO detail so Snippet 2 can read
+      // everything off `repairOrder` without juggling extra fields.
+      detail.jobs = jobs;
+      detail.customerConcerns = concerns;
+
       inspectionCount += inspectionSummaries.length;
-      const jobs = detail.jobs || detail.repairOrderJobs || [];
       jobCount += jobs.length;
+      concernCount += concerns.length;
 
       dumpedRos.push({
         sourceRoId: roId,
@@ -257,7 +302,7 @@
         inspections: inspectionSummaries, // full content fetched in Snippet 3
       });
       if ((i + 1) % 10 === 0 || i === allRoSummaries.length - 1) {
-        console.log(`[DUMP] RO ${i + 1}/${allRoSummaries.length} (#${roNumber}) — running counts: jobs=${jobCount} inspections=${inspectionCount}`);
+        console.log(`[DUMP] RO ${i + 1}/${allRoSummaries.length} (#${roNumber}) — running counts: jobs=${jobCount} concerns=${concernCount} inspections=${inspectionCount}`);
       }
     } catch (err) {
       console.error(`[DUMP] Failed to fetch RO #${roNumber} (id=${roId}):`, err.message);
