@@ -175,6 +175,49 @@ export async function getVehicle(vehicleId: number, shopId?: number): Promise<Te
   return tekmetricRequest(`/vehicles/${vehicleId}`, {}, shopId);
 }
 
+export interface TekmetricInventoryPart {
+  id: number;
+  name?: string;
+  partNumber?: string;
+  brand?: string;
+  description?: string;
+  partTypeId: number;
+  shopId: number;
+  cost?: number;
+  retail?: number;
+  min?: number | null;
+  max?: number | null;
+  inStock?: number;
+  binNumber?: string;
+  alternatePartNumber?: string;
+  oemPartNumber?: string;
+  width?: string | null;
+  ratio?: number | null;
+  diameter?: number | null;
+  deletedDate?: string | null;
+}
+
+export async function getInventory(
+  shopId: number,
+  params: {
+    partTypeId: 1 | 2 | 5;
+    page?: number;
+    size?: number;
+    sort?: string;
+    sortDirection?: 'ASC' | 'DESC';
+  }
+): Promise<PaginatedResponse<TekmetricInventoryPart>> {
+  const queryParams = new URLSearchParams({
+    shop: shopId.toString(),
+    partTypeId: params.partTypeId.toString(),
+  });
+  if (params.page !== undefined) queryParams.set('page', params.page.toString());
+  if (params.size !== undefined) queryParams.set('size', params.size.toString());
+  if (params.sort) queryParams.set('sort', params.sort);
+  if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+  return tekmetricRequest(`/inventory?${queryParams}`, {}, shopId);
+}
+
 export async function searchVehiclesByVin(shopId: number, vin: string): Promise<PaginatedResponse<TekmetricVehicle>> {
   const queryParams = new URLSearchParams({ 
     shop: shopId.toString(),
