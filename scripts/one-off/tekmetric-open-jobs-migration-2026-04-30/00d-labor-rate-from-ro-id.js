@@ -18,8 +18,8 @@
  */
 (async () => {
   const DEST_SHOP_ID  = 14245;
-  const DEST_RO_ID    = null;        // <-- paste the numeric RO id here
-  const DEST_TOKEN    = '';          // <-- paste dest token here
+  const DEST_RO_ID    = 255022827;        // <-- paste the numeric RO id here
+  const DEST_TOKEN    = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicmFuZG9uQG15b2lsc3RpY2tlci5jb20iLCJ1c2VySWQiOiIxNDE1MzIiLCJzaG9wSWQiOiIxNDI0NSIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjE1MDIiLCIxMDAiLCIxNTAxIiwiMjAwIiwiMTAxIiwiMTUwMCIsIjIwMSIsIjMwMCIsIjEwMiIsIjE0MDAiLCIxMDMiLCIyMDIiLCIzMDEiLCI0MDAiLCIxMTAyIiwiNTAwIiwiMjAzIiwiMzAyIiwiNDAxIiwiMTMwMCIsIjEyMDEiLCI0MDIiLCIxMTAxIiwiNjAwIiwiMjA0IiwiMTIwMCIsIjUwMSIsIjIwNSIsIjQwMyIsIjcwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDYiLCI4MDAiLCI1MDMiLCI2MDMiLCIyMDciLCI4MDEiLCI5MDAiLCI1MDQiLCI4MDIiLCI1MDUiLCI1MDYiXSwiZW1wbG95ZWVJZCI6IjIyMTEwNiIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wNS0wMVQwMTowNDowOS42MDUwMzc0NDRaIiwiZXhwIjoxNzc3NjU1MDQ5fQ.qmuZci689_-fWGfb070XZbGfm0dcIzDj0dRxgGPGaj8';          // <-- paste dest token here
 
   if (!DEST_RO_ID || typeof DEST_RO_ID !== 'number') {
     console.error('[FIND-LR2] DEST_RO_ID is missing. Open any RO in shop 14245 and copy the number from the URL.');
