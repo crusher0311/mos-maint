@@ -1,0 +1,470 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration — Snippet 8d: CREATE APPOINTMENTS (browser)
+ *
+ * Companion to 08c-dump-source-appts.ts. Loads the appt-dump JSON the Node
+ * script wrote, then for each enriched appointment:
+ *   - looks up the dest customer (email -> phone -> exact-name match)
+ *   - looks up the dest vehicle by VIN, scoped to that customer
+ *   - POSTs the appointment on the destination shop using the user JWT
+ *
+ * USAGE
+ *   1. Run 08c first to dump source appointments to JSON.
+ *   2. Open shop.tekmetric.com in Chrome with a user logged in who can
+ *      access the destination shop.
+ *   3. Edit DEST_SHOP_ID below and CONFIRM (false for dry-run).
+ *   4. Paste the whole snippet into the Console. A file picker opens —
+ *      choose the appt-dump JSON from output/.
+ *   5. The snippet prints a summary and downloads a mapping JSON.
+ *      Re-run with CONFIRM=true to actually create.
+ */
+(async () => {
+  // ============== EDIT THESE PER SHOP ==============
+  const DEST_SHOP_ID = 18009;
+  const CONFIRM = true; // set true on the second paste to actually create
+  // =================================================
+
+  const VERSION = '2026-05-01.2-singular-har-confirmed';
+
+  const ENDPOINTS = {
+    base: location.origin,
+    apptCreate: (shopId) => `/api/shop/${shopId}/appointment`,
+    customerSearch: (shopId, q) =>
+      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
+    vehicleSearch: (shopId, customerId, q) =>
+      `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(q)}&size=20`,
+  };
+
+  function captureToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ'))
+          return p.accessToken;
+      } catch (_) {}
+    }
+    return null;
+  }
+  const TOKEN = captureToken();
+  if (!TOKEN) {
+    console.error('[APPT] No JWT in localStorage. Are you logged in?');
+    return;
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'x-auth-token': TOKEN,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(opts.headers || {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let body;
+    try { body = text ? JSON.parse(text) : null; } catch (_) { body = text; }
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.body = typeof body === 'string' ? body : JSON.stringify(body);
+      throw err;
+    }
+    return body;
+  }
+
+  function downloadJson(name, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  function ts() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, ''); }
+  function pickEmail(c) {
+    if (!c) return null;
+    if (typeof c.email === 'string' && c.email.includes('@')) return c.email.toLowerCase().trim();
+    return null;
+  }
+  function pickPhone(c) {
+    if (!c) return null;
+    const arr = Array.isArray(c.phone) ? c.phone : [];
+    const p = arr.find((x) => x && x.primary) || arr[0];
+    if (!p || !p.number) return null;
+    return String(p.number).replace(/\D+/g, '');
+  }
+  function fullName(c) {
+    if (!c) return '';
+    return `${c.firstName || ''} ${c.lastName || ''}`.trim();
+  }
+
+  // ----- 1. PICK DUMP FILE -------------------------------------------
+  console.log(`%c[APPT] v${VERSION}  dest=${DEST_SHOP_ID}  CONFIRM=${CONFIRM}`,
+    'color:#06f;font-weight:bold');
+  console.log('[APPT] Pick the appt-dump JSON file...');
+  const file = await new Promise((resolveFile) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = () => resolveFile(input.files && input.files[0]);
+    input.click();
+  });
+  if (!file) {
+    console.error('[APPT] No file chosen.');
+    return;
+  }
+  const dump = JSON.parse(await file.text());
+  if (dump.schema !== 'tekmetric-appt-dump') {
+    console.error('[APPT] File schema is not tekmetric-appt-dump:', dump.schema);
+    return;
+  }
+  const items = dump.appointments || [];
+  console.log(`[APPT] loaded ${items.length} appts from ${file.name} (src=${dump.srcShopId})`);
+
+  // ----- 2. RESOLVE + CREATE ----------------------------------------
+  const destCustCache = new Map();
+  const destVehCache = new Map();
+  const results = [];
+
+  for (let i = 0; i < items.length; i += 1) {
+    const { appt: a, srcCustomer, srcVehicle } = items[i];
+    const tag = `(${i + 1}/${items.length})`;
+    const row = {
+      sourceApptId: a.id,
+      sourceCustomerId: a.customerId,
+      sourceVehicleId: a.vehicleId,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      title: a.title || '',
+      customerName: fullName(srcCustomer),
+      customerEmail: pickEmail(srcCustomer) || '',
+      customerPhone: pickPhone(srcCustomer) || '',
+      vehicleVin: (srcVehicle && srcVehicle.vin) || '',
+      vehicleYMM: srcVehicle ? `${srcVehicle.year || ''} ${srcVehicle.make || ''} ${srcVehicle.model || ''}`.trim() : '',
+      status: 'error',
+    };
+
+    try {
+      if (!srcCustomer) {
+        row.status = 'gap-customer';
+        row.error = 'src customer missing in dump';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP (no src customer in dump)`);
+        continue;
+      }
+
+      // dest customer match
+      if (!destCustCache.has(a.customerId)) {
+        const email = pickEmail(srcCustomer);
+        const phone = pickPhone(srcCustomer);
+        const name = fullName(srcCustomer);
+        let hit = null;
+        if (email) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, email));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickEmail(c) === email);
+          if (hit) hit._matchedBy = 'email';
+        }
+        if (!hit && phone) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, phone));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickPhone(c) === phone);
+          if (hit) hit._matchedBy = 'phone';
+        }
+        if (!hit && name) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, name));
+          const list = Array.isArray(r) ? r : r.content || [];
+          const matches = list.filter((c) => fullName(c).toLowerCase() === name.toLowerCase());
+          if (matches.length === 1) {
+            hit = matches[0];
+            hit._matchedBy = 'name';
+          }
+        }
+        destCustCache.set(a.customerId, hit || null);
+      }
+      const destCust = destCustCache.get(a.customerId);
+      if (!destCust) {
+        row.status = 'gap-customer';
+        row.error = 'no matching customer on dest';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP customer "${row.customerName}" (${row.customerEmail || row.customerPhone || 'no contact'})`);
+        continue;
+      }
+      row.destCustomerId = destCust.id;
+      row.customerMatchedBy = destCust._matchedBy;
+
+      // dest vehicle by VIN
+      const vin = (srcVehicle && srcVehicle.vin && String(srcVehicle.vin).trim()) || '';
+      if (!vin) {
+        row.status = 'gap-vehicle';
+        row.error = 'src vehicle has no VIN';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle (no VIN)`);
+        continue;
+      }
+      const vKey = `${destCust.id}-${vin.toUpperCase()}`;
+      if (!destVehCache.has(vKey)) {
+        const r = await jsonFetch(ENDPOINTS.vehicleSearch(DEST_SHOP_ID, destCust.id, vin));
+        const list = Array.isArray(r) ? r : r.content || [];
+        const hit = list.find((v) => (v.vin || '').toUpperCase() === vin.toUpperCase());
+        destVehCache.set(vKey, hit ? hit.id : null);
+      }
+      const destVehId = destVehCache.get(vKey);
+      if (!destVehId) {
+        row.status = 'gap-vehicle';
+        row.error = `no vehicle on dest with VIN ${vin}`;
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle VIN=${vin}`);
+        continue;
+      }
+      row.destVehicleId = destVehId;
+      row.vehicleMatchedBy = 'vin';
+
+      if (!CONFIRM) {
+        row.status = 'dry-run';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: DRY-RUN -> cust ${destCust.id} veh ${destVehId} @ ${a.startTime}`);
+        continue;
+      }
+
+      // Body shape proven from HAR capture 2026-05-01: internal create takes
+      // nested customer/vehicle objects with just `id`, and rideOption/
+      // appointmentOption as `{id}` references (not the full enum object).
+      const rideOptId = a.rideOption && (a.rideOption.id || (typeof a.rideOption === 'number' ? a.rideOption : null));
+      const apptOptId = a.appointmentOption && (a.appointmentOption.id || (typeof a.appointmentOption === 'number' ? a.appointmentOption : null));
+      const body = {
+        shopId: DEST_SHOP_ID,
+        customer: { id: destCust.id },
+        vehicle: { id: destVehId },
+        startTime: a.startTime,
+        endTime: a.endTime,
+        title: a.title || null,
+        color: a.color || null,
+        dropoffTime: a.dropoffTime || null,
+        pickupTime: a.pickupTime || null,
+        rideOption: rideOptId ? { id: rideOptId } : null,
+        appointmentOption: apptOptId ? { id: apptOptId } : null,
+        repairOrder: null,
+        assignedEmployees: [],
+      };
+
+      let created;
+      try {
+        created = await jsonFetch(ENDPOINTS.apptCreate(DEST_SHOP_ID), { method: 'POST', body });
+      } catch (err) {
+        row.status = 'error';
+        row.error = `create failed: ${err.status} ${(err.body || err.message || '').slice(0, 300)}`;
+        results.push(row);
+        console.error(`[APPT] ${tag} appt ${a.id}: CREATE FAILED ${row.error}`);
+        continue;
+      }
+      row.destApptId = created && (created.id || (created.data && created.data.id));
+      row.status = 'created';
+      results.push(row);
+      console.log(`[APPT] ${tag} appt ${a.id}: CREATED dest appt ${row.destApptId}`);
+    } catch (err) {
+      row.status = 'error';
+      row.error = (err.body || err.message || String(err)).slice(0, 500);
+      results.push(row);
+      console.error(`[APPT] ${tag} appt ${a.id}: ERROR ${row.error}`);
+    }
+  }
+
+  // ----- 3. REPORT + DOWNLOAD ---------------------------------------
+  const counts = {
+    total: results.length,
+    created: results.filter((r) => r.status === 'created').length,
+    dryRun: results.filter((r) => r.status === 'dry-run').length,
+    gapCustomer: results.filter((r) => r.status === 'gap-customer').length,
+    gapVehicle: results.filter((r) => r.status === 'gap-vehicle').length,
+    error: results.filter((r) => r.status === 'error').length,
+  };
+  console.log('%c[APPT] ===== SUMMARY =====', 'color:#0a0;font-weight:bold');
+  console.table(counts);
+  const errs = results.filter((r) => r.status === 'error');
+  if (errs.length) {
+    console.log('%c[APPT] Errors:', 'color:#a00;font-weight:bold');
+    console.table(errs.map((r) => ({ srcAppt: r.sourceApptId, error: r.error })));
+  }
+  const gaps = results.filter((r) => r.status === 'gap-customer' || r.status === 'gap-vehicle');
+  if (gaps.length) {
+    console.log('%c[APPT] Gaps (recreate manually):', 'color:#a60;font-weight:bold');
+    console.table(gaps.map((r) => ({
+      srcAppt: r.sourceApptId,
+      when: r.startTime,
+      customer: r.customerName,
+      contact: r.customerEmail || r.customerPhone,
+      vin: r.vehicleVin,
+      ymm: r.vehicleYMM,
+      title: r.title,
+      reason: r.error,
+    })));
+  }
+  const fname = `tekmetric-appt-migration-${dump.srcShopId}-to-${DEST_SHOP_ID}-${ts()}.json`;
+  downloadJson(fname, {
+    schema: 'tekmetric-appt-migration-mapping',
+    schemaVersion: VERSION,
+    createdAt: new Date().toISOString(),
+    src: dump.srcShopId,
+    dest: DEST_SHOP_ID,
+    confirm: CONFIRM,
+    counts,
+    results,
+  });
+  console.log(`[APPT] Wrote ${fname} to Downloads.`);
+  if (!CONFIRM) {
+    console.log('%c[APPT] DRY RUN. Re-paste with CONFIRM = true to create.', 'color:#06f');
+  }
+})();
+
+VM16389:110 [APPT] v2026-05-01.2-singular-har-confirmed  dest=18009  CONFIRM=true
+VM16389:112 [APPT] Pick the appt-dump JSON file...
+Promise {<pending>}
+VM16389:130 [APPT] loaded 97 appts from appt-dump-src10215-20260501T124504.json (src=10215)
+VM16389:272 [APPT] (1/97) appt 54071279: CREATED dest appt 61236287
+VM16389:272 [APPT] (2/97) appt 60193570: CREATED dest appt 61236295
+VM16389:210 [APPT] (3/97) appt 60961660: GAP vehicle (no VIN)
+VM16389:272 [APPT] (4/97) appt 60892651: CREATED dest appt 61236305
+VM16389:272 [APPT] (5/97) appt 60870129: CREATED dest appt 61236307
+VM16389:225 [APPT] (6/97) appt 61035039: GAP vehicle VIN=5N1AT2MVXHC775036
+VM16389:225 [APPT] (7/97) appt 61052815: GAP vehicle VIN=5N1AT2MVXHC775036
+VM16389:225 [APPT] (8/97) appt 61052688: GAP vehicle VIN=5N1AT2MVXHC775036
+VM16389:272 [APPT] (9/97) appt 61145049: CREATED dest appt 61236316
+VM16389:272 [APPT] (10/97) appt 60904580: CREATED dest appt 61236323
+VM16389:272 [APPT] (11/97) appt 60747263: CREATED dest appt 61236325
+VM16389:272 [APPT] (12/97) appt 61088314: CREATED dest appt 61236329
+VM16389:272 [APPT] (13/97) appt 60857663: CREATED dest appt 61236337
+VM16389:210 [APPT] (14/97) appt 61144486: GAP vehicle (no VIN)
+VM16389:272 [APPT] (15/97) appt 58980356: CREATED dest appt 61236348
+VM16389:272 [APPT] (16/97) appt 61179260: CREATED dest appt 61236350
+VM16389:272 [APPT] (17/97) appt 60588342: CREATED dest appt 61236355
+VM16389:272 [APPT] (18/97) appt 60712396: CREATED dest appt 61236360
+VM16389:272 [APPT] (19/97) appt 61061718: CREATED dest appt 61236364
+VM16389:272 [APPT] (20/97) appt 60783754: CREATED dest appt 61236371
+VM16389:272 [APPT] (21/97) appt 61175603: CREATED dest appt 61236378
+VM16389:272 [APPT] (22/97) appt 61230840: CREATED dest appt 61236383
+VM16389:272 [APPT] (23/97) appt 61073743: CREATED dest appt 61236388
+VM16389:272 [APPT] (24/97) appt 60781681: CREATED dest appt 61236394
+VM16389:272 [APPT] (25/97) appt 61079897: CREATED dest appt 61236401
+VM16389:210 [APPT] (26/97) appt 60962899: GAP vehicle (no VIN)
+VM16389:272 [APPT] (27/97) appt 60915197: CREATED dest appt 61236405
+VM16389:272 [APPT] (28/97) appt 61130967: CREATED dest appt 61236411
+VM16389:272 [APPT] (29/97) appt 60942659: CREATED dest appt 61236419
+VM16389:210 [APPT] (30/97) appt 61077871: GAP vehicle (no VIN)
+VM16389:272 [APPT] (31/97) appt 61169938: CREATED dest appt 61236423
+VM16389:272 [APPT] (32/97) appt 60994802: CREATED dest appt 61236425
+VM16389:272 [APPT] (33/97) appt 60949916: CREATED dest appt 61236430
+VM16389:272 [APPT] (34/97) appt 61094094: CREATED dest appt 61236436
+VM16389:272 [APPT] (35/97) appt 61167722: CREATED dest appt 61236443
+VM16389:272 [APPT] (36/97) appt 61226148: CREATED dest appt 61236449
+VM16389:272 [APPT] (37/97) appt 60874204: CREATED dest appt 61236452
+VM16389:272 [APPT] (38/97) appt 60888833: CREATED dest appt 61236457
+VM16389:272 [APPT] (39/97) appt 61046694: CREATED dest appt 61236460
+VM16389:272 [APPT] (40/97) appt 60320920: CREATED dest appt 61236461
+VM16389:210 [APPT] (41/97) appt 61161879: GAP vehicle (no VIN)
+VM16389:272 [APPT] (42/97) appt 60900469: CREATED dest appt 61236468
+VM16389:272 [APPT] (43/97) appt 61222508: CREATED dest appt 61236469
+VM16389:272 [APPT] (44/97) appt 61166870: CREATED dest appt 61236478
+VM16389:210 [APPT] (45/97) appt 61174960: GAP vehicle (no VIN)
+VM16389:272 [APPT] (46/97) appt 61113097: CREATED dest appt 61236485
+VM16389:272 [APPT] (47/97) appt 61152997: CREATED dest appt 61236491
+VM16389:272 [APPT] (48/97) appt 61052240: CREATED dest appt 61236496
+VM16389:272 [APPT] (49/97) appt 61087647: CREATED dest appt 61236499
+VM16389:272 [APPT] (50/97) appt 60673520: CREATED dest appt 61236504
+VM16389:272 [APPT] (51/97) appt 61163164: CREATED dest appt 61236509
+VM16389:272 [APPT] (52/97) appt 61218005: CREATED dest appt 61236512
+VM16389:272 [APPT] (53/97) appt 61097290: CREATED dest appt 61236513
+VM16389:225 [APPT] (54/97) appt 61115908: GAP vehicle VIN=1C4RJFBGXJC411150
+VM16389:272 [APPT] (55/97) appt 60843126: CREATED dest appt 61236522
+VM16389:272 [APPT] (56/97) appt 60999871: CREATED dest appt 61236524
+VM16389:272 [APPT] (57/97) appt 61169828: CREATED dest appt 61236526
+VM16389:272 [APPT] (58/97) appt 60732132: CREATED dest appt 61236533
+VM16389:272 [APPT] (59/97) appt 61120310: CREATED dest appt 61236538
+VM16389:272 [APPT] (60/97) appt 61010513: CREATED dest appt 61236542
+VM16389:272 [APPT] (61/97) appt 60977922: CREATED dest appt 61236547
+VM16389:272 [APPT] (62/97) appt 61018336: CREATED dest appt 61236552
+VM16389:272 [APPT] (63/97) appt 61121410: CREATED dest appt 61236555
+VM16389:210 [APPT] (64/97) appt 60972164: GAP vehicle (no VIN)
+VM16389:210 [APPT] (65/97) appt 60694402: GAP vehicle (no VIN)
+VM16389:272 [APPT] (66/97) appt 61018931: CREATED dest appt 61236565
+VM16389:272 [APPT] (67/97) appt 61234059: CREATED dest appt 61236571
+VM16389:272 [APPT] (68/97) appt 60810358: CREATED dest appt 61236575
+VM16389:272 [APPT] (69/97) appt 61074315: CREATED dest appt 61236579
+VM16389:272 [APPT] (70/97) appt 59835415: CREATED dest appt 61236583
+VM16389:272 [APPT] (71/97) appt 60469230: CREATED dest appt 61236586
+VM16389:272 [APPT] (72/97) appt 60826465: CREATED dest appt 61236593
+VM16389:272 [APPT] (73/97) appt 60856686: CREATED dest appt 61236595
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/repair-orders?view=column&board=ACTIVE:1 Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18009/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+VM16389:272 [APPT] (74/97) appt 60767770: CREATED dest appt 61236603
+VM16389:272 [APPT] (75/97) appt 61047687: CREATED dest appt 61236610
+VM16389:210 [APPT] (76/97) appt 60885713: GAP vehicle (no VIN)
+VM16389:272 [APPT] (77/97) appt 61218712: CREATED dest appt 61236621
+VM16389:272 [APPT] (78/97) appt 60810291: CREATED dest appt 61236629
+VM16389:272 [APPT] (79/97) appt 61234308: CREATED dest appt 61236635
+VM16389:210 [APPT] (80/97) appt 60901625: GAP vehicle (no VIN)
+VM16389:272 [APPT] (81/97) appt 60896830: CREATED dest appt 61236641
+VM16389:272 [APPT] (82/97) appt 60156898: CREATED dest appt 61236646
+VM16389:272 [APPT] (83/97) appt 60741580: CREATED dest appt 61236652
+VM16389:272 [APPT] (84/97) appt 60885333: CREATED dest appt 61236655
+VM16389:272 [APPT] (85/97) appt 60989892: CREATED dest appt 61236660
+VM16389:272 [APPT] (86/97) appt 61144630: CREATED dest appt 61236668
+VM16389:210 [APPT] (87/97) appt 61010137: GAP vehicle (no VIN)
+VM16389:272 [APPT] (88/97) appt 60952825: CREATED dest appt 61236671
+VM16389:272 [APPT] (89/97) appt 61211033: CREATED dest appt 61236674
+VM16389:272 [APPT] (90/97) appt 59858634: CREATED dest appt 61236675
+VM16389:272 [APPT] (91/97) appt 60938617: CREATED dest appt 61236678
+VM16389:272 [APPT] (92/97) appt 60985607: CREATED dest appt 61236679
+VM16389:272 [APPT] (93/97) appt 61043562: CREATED dest appt 61236686
+VM16389:272 [APPT] (94/97) appt 60979102: CREATED dest appt 61236695
+VM16389:272 [APPT] (95/97) appt 60949835: CREATED dest appt 61236701
+VM16389:272 [APPT] (96/97) appt 61025349: CREATED dest appt 61236708
+VM16389:272 [APPT] (97/97) appt 60750115: CREATED dest appt 61236712
+VM16389:290 [APPT] ===== SUMMARY =====
+VM16389:291 (index)Value(index)Valuetotal97created82dryRun0gapCustomer0gapVehicle15error0Object
+VM16389:299 [APPT] Gaps (recreate manually):
+VM16389:300 (index)srcApptwhencustomercontactvinymmtitlereason(index)srcApptwhencustomercontactvinymmtitlereason060961660'2026-05-22T12:30:00Z''KEVIN OBRIEN''kevinobrien3@yahoo.com''''2014 Chevrolet Impala'"[SG] KEVIN OBRIEN's 2014 Chevrolet Impala"'src vehicle has no VIN'161035039'2026-05-11T12:30:00Z''Mike/Dawn Chubeck/Kantner''8472544409''5N1AT2MVXHC775036''2017 Nissan Rogue'"[SG] Mike/Dawn Chubeck/Kantner's 2017 Nissan Rogue"'no vehicle on dest with VIN 5N1AT2MVXHC775036'261052815'2026-05-11T12:30:00Z''Mike/Dawn Chubeck/Kantner''8472544409''5N1AT2MVXHC775036''2017 Nissan Rogue'"[SG] Mike/Dawn Chubeck/Kantner's 2017 Nissan Rogue"'no vehicle on dest with VIN 5N1AT2MVXHC775036'361052688'2026-05-11T12:30:00Z''Mike/Dawn Chubeck/Kantner''8472544409''5N1AT2MVXHC775036''2017 Nissan Rogue'"[SG] Mike/Dawn Chubeck/Kantner's 2017 Nissan Rogue"'no vehicle on dest with VIN 5N1AT2MVXHC775036'461144486'2026-05-07T13:00:00Z''Aaron West''levi1224west@gmail.com''''2013 Toyota Camry'"[SG] Aaron West's 2013 Toyota Camry"'src vehicle has no VIN'560962899'2026-05-05T13:30:00Z''Aaron West''levi1224west@gmail.com''''2013 Toyota Camry'"[SG] Aaron West's 2013 Toyota Camry"'src vehicle has no VIN'661077871'2026-05-05T12:30:00Z''GAIL/JERRY VOLENEC''8478670363''''2018 Subaru Forester''''src vehicle has no VIN'761161879'2026-05-04T13:30:00Z''Lynn Mayer''8472437714''''2009 Chevrolet Malibu''''src vehicle has no VIN'861174960'2026-05-04T13:00:00Z''bob Ginocchio''8479344319''''2014 Nissan Rogue''''src vehicle has no VIN'961115908'2026-05-04T12:30:00Z''JOHN MURRAY''murray100@sbcglobal.net''1C4RJFBGXJC411150''2018 Jeep Grand Cherokee''''no vehicle on dest with VIN 1C4RJFBGXJC411150'1060972164'2026-05-02T13:00:00Z''Steve Doran''steved83@gmail.com''''2023 Subaru Impreza'"[SG] steve doran's 2023 Subaru Impreza"'src vehicle has no VIN'1160694402'2026-05-02T13:00:00Z''JEFF ALMDALE''jca635@comcast.net''''2020 Volvo V60''''src vehicle has no VIN'1260885713'2026-05-02T12:30:00Z''ZENON KRUPA*''kruppinc@yahoo.com''''2025 Hyundai Tucson''''src vehicle has no VIN'1360901625'2026-05-01T16:30:29Z''NARESH/SUNITHA KUMAR''8473059164''''2022 Volkswagen ID.4''''src vehicle has no VIN'1461010137'2026-05-01T13:30:00Z''Nathaniel Wolf''2nwolf@gmail.com''''2017 Lexus ES300h''''src vehicle has no VIN'Array(15)
+VM16389:322 [APPT] Wrote tekmetric-appt-migration-10215-to-18009-20260501T130103.json to Downloads.

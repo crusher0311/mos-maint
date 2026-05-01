@@ -18,3 +18,9 @@ id = "euUL0VFrGsR7eRiJo0AZ7"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10215-20260501T124504.json"
 type = "unspecified"
 title = "Shop 3 dump (10215 → 18009) — 97 appts"
+
+[[outputs]]
+id = "Q91PuHXhGk9ZGxrRQiVTZ"
+uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-gaps-all-shops-20260501.csv"
+type = "table"
+title = "Appointment Gaps — All 3 Shops (call list for front desk)"
