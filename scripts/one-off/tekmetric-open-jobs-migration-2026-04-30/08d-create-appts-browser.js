@@ -20,7 +20,7 @@
  */
 (async () => {
   // ============== EDIT THESE PER SHOP ==============
-  const DEST_SHOP_ID = 18007;
+  const DEST_SHOP_ID = 18009;
   const CONFIRM = true; // set true on the second paste to actually create
   // =================================================
 
