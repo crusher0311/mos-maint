@@ -1,0 +1,1248 @@
+{
+  "schema": "tekmetric-appt-dump",
+  "schemaVersion": "2026-05-01.1",
+  "srcShopId": 10216,
+  "createdAt": "2026-05-01T12:34:52.069Z",
+  "appointments": [
+    {
+      "appt": {
+        "id": 61125880,
+        "shopId": 10216,
+        "customerId": 61783411,
+        "vehicleId": 87823551,
+        "startTime": "2026-05-13T12:30:00Z",
+        "endTime": "2026-05-13T13:00:00Z",
+        "description": "LOF, & CHECK GAS CAP LEVER HARD TO LIFT",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-29T20:04:58Z",
+        "updatedDate": "2026-04-29T20:04:58Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61783411,
+        "firstName": "LARA",
+        "lastName": "JACKSON",
+        "email": "",
+        "phone": [
+          {
+            "id": 68215887,
+            "number": "8472593818",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62090363,
+          "address1": "2315 E OLIVE ST",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "2315 E OLIVE ST, ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "2315 E OLIVE ST"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87823551,
+        "customerId": 61783411,
+        "year": 2011,
+        "make": "Mazda",
+        "model": "2",
+        "subModel": "Touring",
+        "engine": "1.5L 4Cyl GAS MZR Naturally Aspirated",
+        "color": null,
+        "licensePlate": "D835679",
+        "state": "IL",
+        "vin": "JM1DE1HY4B0130756",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Hatchback",
+        "notes": "**Vehicle master information changed from 2011 MAZDA 2 to 2011 Mazda 2 Touring on 4/14/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-04-14T12:31:18Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61118202,
+        "shopId": 10216,
+        "customerId": 61797595,
+        "vehicleId": 87847387,
+        "startTime": "2026-05-11T12:30:00Z",
+        "endTime": "2026-05-11T13:00:00Z",
+        "description": "Oil Change\nTransmission Service\nCheck to see if Head Gasket is leaking or getting gunked up. ",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-06T12:30:00Z",
+        "pickupTime": "2026-05-06T13:30:00Z",
+        "createdDate": "2026-04-29T19:08:21Z",
+        "updatedDate": "2026-04-30T13:25:31Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61797595,
+        "firstName": "STEPHANIE",
+        "lastName": "PISZKIEWICZ",
+        "email": null,
+        "phone": [
+          {
+            "id": 68234237,
+            "number": "2242108280",
+            "type": "Phone",
+            "primary": true
+          },
+          {
+            "id": 68234238,
+            "number": "2242108268",
+            "type": "Phone",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 62089487,
+          "address1": "1946 CHERRY HILL DR",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "1946 CHERRY HILL DR, ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "1946 CHERRY HILL DR"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2025-01-08T23:40:35Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87847387,
+        "customerId": 61797595,
+        "year": 2019,
+        "make": "Honda",
+        "model": "Fit",
+        "subModel": "EX",
+        "engine": "1.5L 4Cyl GAS L15B1 Naturally Aspirated",
+        "color": null,
+        "licensePlate": "X900506",
+        "state": "IL",
+        "vin": "3HGGK5H85KM719682",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Hatchback",
+        "notes": "**Vehicle master information changed from 2019 HONDA FIT to 2019 Honda Fit EX on 1/8/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-03-31T12:32:44Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61223538,
+        "shopId": 10216,
+        "customerId": 61778238,
+        "vehicleId": 110174351,
+        "startTime": "2026-05-09T12:30:00Z",
+        "endTime": "2026-05-09T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] BRETT CASTELLI's 2024 Kia Carnival",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-30T22:15:40Z",
+        "updatedDate": "2026-04-30T22:15:40Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61778238,
+        "firstName": "BRETT",
+        "lastName": "CASTELLI",
+        "email": "",
+        "phone": [
+          {
+            "id": 68209212,
+            "number": "6362122016",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62088019,
+          "address1": "302 E HACKBERRY DR",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "302 E HACKBERRY DR, ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "302 E HACKBERRY DR"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 110174351,
+        "customerId": 61778238,
+        "year": 2024,
+        "make": "Kia",
+        "model": "Carnival",
+        "subModel": "LX",
+        "engine": "3.5L 6Cyl GAS Naturally Aspirated",
+        "color": null,
+        "licensePlate": "CJ87319",
+        "state": "IL",
+        "vin": "KNDNB4H39R6400011",
+        "driveType": "FWD",
+        "transmission": "Automatic",
+        "bodyType": "Mini Passenger Van",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2025-06-02T13:26:05Z",
+        "updatedDate": "2025-06-02T13:26:05Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60942195,
+        "shopId": 10216,
+        "customerId": 74324181,
+        "vehicleId": 112502242,
+        "startTime": "2026-05-08T12:30:00Z",
+        "endTime": "2026-05-08T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] Micheline  Miceli's 2017 Honda Civic",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-27T20:12:24Z",
+        "updatedDate": "2026-04-27T20:12:24Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 74324181,
+        "firstName": "Micheline ",
+        "lastName": "Miceli",
+        "email": "mmm6454@aol.com",
+        "phone": [
+          {
+            "id": 81707817,
+            "number": "8478996454",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 74808660,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2025-04-25T15:46:14Z",
+        "updatedDate": "2025-04-25T15:46:14Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 112502242,
+        "customerId": 74324181,
+        "year": 2017,
+        "make": "Honda",
+        "model": "Civic",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": "ZU16338",
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2025-06-23T21:36:28Z",
+        "updatedDate": "2025-06-23T21:36:28Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 59098018,
+        "shopId": 10216,
+        "customerId": 61786141,
+        "vehicleId": 87828043,
+        "startTime": "2026-05-08T12:30:00Z",
+        "endTime": "2026-05-08T13:00:00Z",
+        "description": "4 Tires and Alignment",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-08T12:30:00Z",
+        "pickupTime": "2026-05-08T13:30:00Z",
+        "createdDate": "2026-03-31T19:59:50Z",
+        "updatedDate": "2026-03-31T19:59:50Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61786141,
+        "firstName": "SANDY",
+        "lastName": "HART",
+        "email": null,
+        "phone": [
+          {
+            "id": 68219434,
+            "number": "6303472783",
+            "type": "Phone",
+            "primary": false
+          },
+          {
+            "id": 68219435,
+            "number": "8472877317",
+            "type": "Phone",
+            "primary": true
+          },
+          {
+            "id": 68219436,
+            "number": "8472559529",
+            "type": "Phone",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 62076548,
+          "address1": "2638 N WINDSOR ",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "2638 N WINDSOR , ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "2638 N WINDSOR "
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2026-01-07T22:25:44Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87828043,
+        "customerId": 61786141,
+        "year": 2018,
+        "make": "Lincoln",
+        "model": "Navigator",
+        "subModel": "Select",
+        "engine": "3.5L 6Cyl GAS Turbocharged",
+        "color": null,
+        "licensePlate": "FLYUA",
+        "state": "IL",
+        "vin": "5LMJJ2JT4JEL13717",
+        "driveType": "4WD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2018 LINCOLN NAVIGATOR to 2018 Lincoln Navigator Select on 1/7/26",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2026-01-08T22:43:13Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61183516,
+        "shopId": 10216,
+        "customerId": 61776475,
+        "vehicleId": 153154171,
+        "startTime": "2026-05-05T12:30:00Z",
+        "endTime": "2026-05-05T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] MARK BORLAND's 2021 Kia Soul",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-30T16:37:03Z",
+        "updatedDate": "2026-04-30T16:37:03Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61776475,
+        "firstName": "MARK",
+        "lastName": "BORLAND",
+        "email": "",
+        "phone": [
+          {
+            "id": 68206902,
+            "number": "2246221555",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62085662,
+          "address1": "1004 HELMLOCK",
+          "address2": null,
+          "city": "MOUNT PROSPECT",
+          "state": "IL",
+          "zip": "60056",
+          "fullAddress": "1004 HELMLOCK, MOUNT PROSPECT, IL 60056",
+          "streetAddress": "1004 HELMLOCK"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 153154171,
+        "customerId": 61776475,
+        "year": 2021,
+        "make": "Kia",
+        "model": "Soul",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-30T16:37:03Z",
+        "updatedDate": "2026-04-30T16:37:03Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61110550,
+        "shopId": 10216,
+        "customerId": 61787994,
+        "vehicleId": 87831405,
+        "startTime": "2026-05-05T12:30:00Z",
+        "endTime": "2026-05-05T13:00:00Z",
+        "description": "LOF",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-29T18:12:01Z",
+        "updatedDate": "2026-04-29T18:12:01Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61787994,
+        "firstName": "GERI",
+        "lastName": "JACOBSON",
+        "email": null,
+        "phone": [
+          {
+            "id": 68221862,
+            "number": "8478189895",
+            "type": "Phone",
+            "primary": false
+          },
+          {
+            "id": 68221863,
+            "number": "8478586996",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62094205,
+          "address1": "1427 PICADILLY CT",
+          "address2": null,
+          "city": "MOUNT PROSPECT",
+          "state": "IL",
+          "zip": "60056",
+          "fullAddress": "1427 PICADILLY CT, MOUNT PROSPECT, IL 60056",
+          "streetAddress": "1427 PICADILLY CT"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2025-09-12T12:33:21Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87831405,
+        "customerId": 61787994,
+        "year": 2019,
+        "make": "Honda",
+        "model": "CR-V",
+        "subModel": "EX-L",
+        "engine": "1.5L 4Cyl GAS L15BE Turbocharged",
+        "color": null,
+        "licensePlate": "XBK756",
+        "state": "IL",
+        "vin": "5J6RW2H83KL015941",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2019 HONDA CR-V to 2019 Honda CR-V EX-L on 9/2/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-09-12T12:33:04Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61220435,
+        "shopId": 10216,
+        "customerId": 88539483,
+        "vehicleId": 133932190,
+        "startTime": "2026-05-04T12:30:00Z",
+        "endTime": "2026-05-04T13:00:00Z",
+        "description": "lof",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-30T21:31:01Z",
+        "updatedDate": "2026-04-30T21:31:01Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 88539483,
+        "firstName": "Pat",
+        "lastName": "Mckown",
+        "email": null,
+        "phone": [
+          {
+            "id": 101878496,
+            "number": "8476307651",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 89157642,
+          "address1": "1341 Village Drive",
+          "address2": "",
+          "city": "Arlington Heights",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "1341 Village Drive, Arlington Heights, IL 60004",
+          "streetAddress": "1341 Village Drive"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2025-10-31T18:02:32Z",
+        "updatedDate": "2025-12-23T19:46:36Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 133932190,
+        "customerId": 88539483,
+        "year": 2017,
+        "make": "GMC",
+        "model": "Acadia",
+        "subModel": "SLT",
+        "engine": "3.6L 6Cyl GAS LGX Naturally Aspirated",
+        "color": null,
+        "licensePlate": "pm2533",
+        "state": "IL",
+        "vin": "1GKKNWLS1HZ279061",
+        "driveType": "4WD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2025-12-23T19:46:56Z",
+        "updatedDate": "2025-12-23T19:46:56Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61122112,
+        "shopId": 10216,
+        "customerId": 61793880,
+        "vehicleId": 87841360,
+        "startTime": "2026-05-04T12:30:00Z",
+        "endTime": "2026-05-04T13:00:00Z",
+        "description": "tire and alignment, reset maintenance reminder\nRO already Started",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-29T19:37:24Z",
+        "updatedDate": "2026-04-29T19:38:18Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61793880,
+        "firstName": "LEE",
+        "lastName": "MARCUS",
+        "email": "",
+        "phone": [
+          {
+            "id": 68229483,
+            "number": "2245651731",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62097158,
+          "address1": "933 PLUM GROVE CIRCLE",
+          "address2": null,
+          "city": "BUFFALO GROVE",
+          "state": "IL",
+          "zip": "60089",
+          "fullAddress": "933 PLUM GROVE CIRCLE, BUFFALO GROVE, IL 60089",
+          "streetAddress": "933 PLUM GROVE CIRCLE"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87841360,
+        "customerId": 61793880,
+        "year": 2007,
+        "make": "Toyota",
+        "model": "Solara",
+        "subModel": "SE",
+        "engine": "3.3L 6Cyl GAS 3MZ-FE Naturally Aspirated",
+        "color": null,
+        "licensePlate": "Q629391",
+        "state": "IL",
+        "vin": "4T1FA38P77U108561",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Convertible",
+        "notes": "**Vehicle master information changed from 2007 TOYOTA SOLARA to 2007 Toyota Solara SE on 1/22/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-06-03T16:53:42Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61084609,
+        "shopId": 10216,
+        "customerId": 61792737,
+        "vehicleId": 87839451,
+        "startTime": "2026-05-04T12:30:00Z",
+        "endTime": "2026-05-04T13:00:00Z",
+        "description": "oil change\nbrakes squeal in reverse sounds like from rear of vehicle\ndriver washer inop",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-29T15:09:50Z",
+        "updatedDate": "2026-04-29T15:09:50Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61792737,
+        "firstName": "MIKE",
+        "lastName": "SMALLER",
+        "email": "THESMALLERS@GMAIL.COM",
+        "phone": [
+          {
+            "id": 68228017,
+            "number": "8472043466",
+            "type": "Phone",
+            "primary": false
+          },
+          {
+            "id": 68228018,
+            "number": "8472764233",
+            "type": "Home",
+            "primary": false
+          },
+          {
+            "id": 68228019,
+            "number": "8472043724",
+            "type": "mike",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62092338,
+          "address1": "41 WILLOW PARKWAY ",
+          "address2": null,
+          "city": "BUFFALO GROVE",
+          "state": "IL",
+          "zip": "60089",
+          "fullAddress": "41 WILLOW PARKWAY , BUFFALO GROVE, IL 60089",
+          "streetAddress": "41 WILLOW PARKWAY "
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2025-08-05T15:47:37Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87839451,
+        "customerId": 61792737,
+        "year": 2020,
+        "make": "Lexus",
+        "model": "RX350",
+        "subModel": "Base",
+        "engine": "3.5L 6Cyl GAS 2GR-FKS Naturally Aspirated",
+        "color": null,
+        "licensePlate": "B5201",
+        "state": "IL",
+        "vin": "2T2HZMDA8LC238266",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2020 LEXUS RX to 2020 Lexus RX350 Base on 4/3/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-04-03T12:32:13Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60517658,
+        "shopId": 10216,
+        "customerId": 61798726,
+        "vehicleId": 87849289,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "Oil Change - Waiter",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-21T16:26:33Z",
+        "updatedDate": "2026-04-21T16:26:33Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61798726,
+        "firstName": "RACHEL",
+        "lastName": "ROSS",
+        "email": null,
+        "phone": [
+          {
+            "id": 68235698,
+            "number": "6306406322",
+            "type": "Phone",
+            "primary": true
+          },
+          {
+            "id": 68235699,
+            "number": "6304453970",
+            "type": "BRANDON",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 62091886,
+          "address1": "1315 N VAIL",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "1315 N VAIL, ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "1315 N VAIL"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2025-06-24T13:11:13Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87849289,
+        "customerId": 61798726,
+        "year": 2014,
+        "make": "Honda",
+        "model": "Odyssey",
+        "subModel": "EX-L",
+        "engine": "3.5L 6Cyl GAS J35Z8 Naturally Aspirated",
+        "color": null,
+        "licensePlate": "ED38515",
+        "state": "IL",
+        "vin": "5FNRL5H66EB010092",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Mini Passenger Van",
+        "notes": "**Vehicle master information changed from 2014 HONDA ODYSSEY to 2014 Honda Odyssey EX-L on 12/16/24",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2024-12-16T13:49:08Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60842634,
+        "shopId": 10216,
+        "customerId": 61792004,
+        "vehicleId": 152729397,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] ANDREW* LEHMANN*'s 2009 Ford Escape",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-27T00:28:41Z",
+        "updatedDate": "2026-04-27T00:28:41Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61792004,
+        "firstName": "ANDREW*",
+        "lastName": "LEHMANN*",
+        "email": "",
+        "phone": [
+          {
+            "id": 68227025,
+            "number": "2246229044",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 62086086,
+          "address1": "101 N EMERSON ST",
+          "address2": null,
+          "city": "MOUNT PROSPECT",
+          "state": "IL",
+          "zip": "60056",
+          "fullAddress": "101 N EMERSON ST, MOUNT PROSPECT, IL 60056",
+          "streetAddress": "101 N EMERSON ST"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 152729397,
+        "customerId": 61792004,
+        "year": 2009,
+        "make": "Ford",
+        "model": "Escape",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-27T00:28:41Z",
+        "updatedDate": "2026-04-27T00:28:41Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60736990,
+        "shopId": 10216,
+        "customerId": 61795664,
+        "vehicleId": null,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "lof",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-23T22:12:26Z",
+        "updatedDate": "2026-04-30T20:18:10Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61795664,
+        "firstName": "DAVID",
+        "lastName": "MOSS",
+        "email": "POUND80@YAHOO.COM",
+        "phone": [
+          {
+            "id": 68231814,
+            "number": "2246284149",
+            "type": "David",
+            "primary": false
+          },
+          {
+            "id": 108200554,
+            "number": "2242586674",
+            "type": "Tom",
+            "primary": true
+          },
+          {
+            "id": 115453187,
+            "number": "2246169285",
+            "type": "Nichole",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 62078254,
+          "address1": "727 N ARLINGTON HEIGHTS R",
+          "address2": null,
+          "city": "ARLINGTON HEIGHTS",
+          "state": "IL",
+          "zip": "60004",
+          "fullAddress": "727 N ARLINGTON HEIGHTS R, ARLINGTON HEIGHTS, IL 60004",
+          "streetAddress": "727 N ARLINGTON HEIGHTS R"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10216,
+        "creditLimit": null,
+        "okForMarketing": false,
+        "createdDate": "2024-10-29T00:00:00Z",
+        "updatedDate": "2026-04-30T20:18:10Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": null
+    }
+  ]
+}

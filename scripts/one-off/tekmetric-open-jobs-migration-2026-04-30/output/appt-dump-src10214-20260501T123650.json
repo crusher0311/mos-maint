@@ -1,0 +1,1724 @@
+{
+  "schema": "tekmetric-appt-dump",
+  "schemaVersion": "2026-05-01.1",
+  "srcShopId": 10214,
+  "createdAt": "2026-05-01T12:36:50.314Z",
+  "appointments": [
+    {
+      "appt": {
+        "id": 61158539,
+        "shopId": 10214,
+        "customerId": 106044867,
+        "vehicleId": 153136308,
+        "startTime": "2026-05-09T12:30:00Z",
+        "endTime": "2026-05-09T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] Lucyna Brzobohaty's 2012 Hyundai Sonata",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-30T13:40:08Z",
+        "updatedDate": "2026-04-30T13:40:08Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 106044867,
+        "firstName": "Lucyna",
+        "lastName": "Brzobohaty",
+        "email": "szczechl@yahoo.com",
+        "phone": [
+          {
+            "id": 115430480,
+            "number": "7082288254",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106620334,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-30T13:40:07Z",
+        "updatedDate": "2026-04-30T13:40:07Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 153136308,
+        "customerId": 106044867,
+        "year": 2012,
+        "make": "Hyundai",
+        "model": "Sonata",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-30T13:40:08Z",
+        "updatedDate": "2026-04-30T13:40:08Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60636657,
+        "shopId": 10214,
+        "customerId": 105499175,
+        "vehicleId": 152204743,
+        "startTime": "2026-05-05T12:30:00Z",
+        "endTime": "2026-05-05T13:00:00Z",
+        "description": "oil change. stabilitrac light. check coolant.",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-05T12:30:00Z",
+        "pickupTime": "2026-05-05T13:30:00Z",
+        "createdDate": "2026-04-22T19:54:02Z",
+        "updatedDate": "2026-04-22T19:54:02Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 105499175,
+        "firstName": "Joseph",
+        "lastName": "Gantner",
+        "email": null,
+        "phone": [
+          {
+            "id": 114825048,
+            "number": "6304214268",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106062663,
+          "address1": "",
+          "address2": "",
+          "city": "",
+          "state": "",
+          "zip": "",
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-22T19:48:13Z",
+        "updatedDate": "2026-04-22T19:48:13Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 152204743,
+        "customerId": 105499175,
+        "year": 2002,
+        "make": "Pontiac",
+        "model": "Bonneville",
+        "subModel": "SLE",
+        "engine": "3.8L 6Cyl GAS L36 Naturally Aspirated",
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Sedan",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-22T19:48:42Z",
+        "updatedDate": "2026-04-22T19:48:42Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60956537,
+        "shopId": 10214,
+        "customerId": 69050198,
+        "vehicleId": 98136912,
+        "startTime": "2026-05-04T12:30:00Z",
+        "endTime": "2026-05-04T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] SAMANTHA MOORE's 2021 Honda CR-V",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-27T21:58:13Z",
+        "updatedDate": "2026-04-27T21:58:13Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 69050198,
+        "firstName": "SAMANTHA",
+        "lastName": "MOORE",
+        "email": "sammoore3512@gmail.com",
+        "phone": [
+          {
+            "id": 76041057,
+            "number": "8477082562",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 69452506,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2025-02-13T01:47:28Z",
+        "updatedDate": "2025-08-25T12:39:43Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 98136912,
+        "customerId": 69050198,
+        "year": 2021,
+        "make": "Honda",
+        "model": "CR-V",
+        "subModel": "EX",
+        "engine": "1.5L 4Cyl GAS L15BE Turbocharged",
+        "color": null,
+        "licensePlate": "br62671",
+        "state": "IL",
+        "vin": "5J6RW2H58ML008704",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2019 Honda CR-V to 2019 Honda CR-V LX on 2/17/25",
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2025-02-17T14:58:21Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61204066,
+        "shopId": 10214,
+        "customerId": 59651637,
+        "vehicleId": 84730568,
+        "startTime": "2026-05-04T12:30:00Z",
+        "endTime": "2026-05-04T13:00:00Z",
+        "description": "ck coolant loss, ck ac issue",
+        "title": null,
+        "color": "#43A96E",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-04T12:30:00Z",
+        "pickupTime": "2026-05-04T13:30:00Z",
+        "createdDate": "2026-04-30T19:15:23Z",
+        "updatedDate": "2026-04-30T19:15:23Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59651637,
+        "firstName": "ADAM ",
+        "lastName": "BAYNE",
+        "email": null,
+        "phone": [
+          {
+            "id": 65958487,
+            "number": "6305596230",
+            "type": "ADAM",
+            "primary": true
+          },
+          {
+            "id": 65958489,
+            "number": "8477086619",
+            "type": "JACKIE",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 59954762,
+          "address1": "1564 YORKSHIRE DR ",
+          "address2": null,
+          "city": "HANOVER PARK",
+          "state": "IL",
+          "zip": "60133",
+          "fullAddress": "1564 YORKSHIRE DR , HANOVER PARK, IL 60133",
+          "streetAddress": "1564 YORKSHIRE DR "
+        },
+        "notes": "4347 6911 2649 9201 10/28 174",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2026-02-25T14:58:25Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 84730568,
+        "customerId": 59651637,
+        "year": 2011,
+        "make": "Mercedes-Benz",
+        "model": "E550",
+        "subModel": "4Matic",
+        "engine": "5.5L 8Cyl GAS 273.970 Naturally Aspirated",
+        "color": null,
+        "licensePlate": "BN51668",
+        "state": "IL",
+        "vin": "WDDHF9AB2BA418164",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sedan",
+        "notes": "**Vehicle master information changed from 2011 MERCEDES-BENZ E550 to 2011 Mercedes-Benz E550 4Matic on 10/14/24",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2024-10-14T21:40:36Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60900384,
+        "shopId": 10214,
+        "customerId": 59669877,
+        "vehicleId": 138634052,
+        "startTime": "2026-05-02T16:30:55Z",
+        "endTime": "2026-05-02T17:00:55Z",
+        "description": "LOF \nWIPERS  \n",
+        "title": null,
+        "color": "#FCB70D",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-27T16:16:49Z",
+        "updatedDate": "2026-04-27T16:16:52Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59669877,
+        "firstName": "TRACEY",
+        "lastName": "HOUSER",
+        "email": "gotmoxy333@hotmail.com",
+        "phone": [
+          {
+            "id": 65981933,
+            "number": "8477779738",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 59993501,
+          "address1": "4A CHAUCER LN",
+          "address2": null,
+          "city": "STREAMWOOD",
+          "state": "IL",
+          "zip": "60107",
+          "fullAddress": "4A CHAUCER LN, STREAMWOOD, IL 60107",
+          "streetAddress": "4A CHAUCER LN"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2025-04-08T18:52:47Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 138634052,
+        "customerId": 59669877,
+        "year": 2026,
+        "make": "Acura",
+        "model": "MDX",
+        "subModel": "Type S",
+        "engine": "3.0L 6Cyl GAS J30AD Turbocharged",
+        "color": null,
+        "licensePlate": "AB46972",
+        "state": "IL",
+        "vin": "5J8YD8H89TL000213",
+        "driveType": "AWD",
+        "transmission": "Automatic",
+        "bodyType": "Sport Utility",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2026-01-19T21:58:02Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60826653,
+        "shopId": 10214,
+        "customerId": 59679372,
+        "vehicleId": 84780558,
+        "startTime": "2026-05-02T13:00:00Z",
+        "endTime": "2026-05-02T13:30:00Z",
+        "description": "a/c not working ",
+        "title": null,
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-02T13:00:00Z",
+        "pickupTime": "2026-05-02T14:00:00Z",
+        "createdDate": "2026-04-25T14:38:59Z",
+        "updatedDate": "2026-04-25T14:39:03Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59679372,
+        "firstName": "AJAY",
+        "lastName": "MAHAJAN",
+        "email": "",
+        "phone": [
+          {
+            "id": 65994024,
+            "number": "6306742032",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 59965945,
+          "address1": "1406 WELLAND CT",
+          "address2": null,
+          "city": "ROSELLE",
+          "state": "IL",
+          "zip": "60172",
+          "fullAddress": "1406 WELLAND CT, ROSELLE, IL 60172",
+          "streetAddress": "1406 WELLAND CT"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": null,
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 84780558,
+        "customerId": 59679372,
+        "year": 2019,
+        "make": "Toyota",
+        "model": "Highlander",
+        "subModel": "SE",
+        "engine": "3.5L 6Cyl GAS 2GR-FKS Naturally Aspirated",
+        "color": null,
+        "licensePlate": "BR24068",
+        "state": "IL",
+        "vin": "5TDJZRFH1KS967390",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2019 TOYOTA HIGHLANDER to 2019 Toyota Highlander SE on 5/14/25",
+        "unitNumber": "",
+        "createdDate": null,
+        "updatedDate": "2025-05-14T12:35:50Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61100260,
+        "shopId": 10214,
+        "customerId": 106006253,
+        "vehicleId": 153081634,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T14:00:00Z",
+        "description": "Vehicle Inspection, Oil Change",
+        "title": "[SG] Jacek  Bieda's 2013 Toyota RAV4",
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-02T12:30:00Z",
+        "pickupTime": "2026-05-02T14:00:00Z",
+        "createdDate": "2026-04-29T16:57:11Z",
+        "updatedDate": "2026-04-29T16:57:11Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 106006253,
+        "firstName": "Jacek ",
+        "lastName": "Bieda",
+        "email": "kasperek2013@gmail.com",
+        "phone": [
+          {
+            "id": 115391648,
+            "number": "8479227416",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106580177,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-29T16:57:11Z",
+        "updatedDate": "2026-04-29T16:57:11Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 153081634,
+        "customerId": 106006253,
+        "year": 2013,
+        "make": "Toyota",
+        "model": "RAV4",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-29T16:57:11Z",
+        "updatedDate": "2026-04-29T16:57:11Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60967165,
+        "shopId": 10214,
+        "customerId": 59676521,
+        "vehicleId": 111000608,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] KENNY MESZAROS's 2016 Chevrolet Equinox",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-28T12:04:31Z",
+        "updatedDate": "2026-04-28T12:04:31Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59676521,
+        "firstName": "KENNY",
+        "lastName": "MESZAROS",
+        "email": null,
+        "phone": [
+          {
+            "id": 65990395,
+            "number": "6305187555",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 59982464,
+          "address1": "138 FILBERT DR ",
+          "address2": null,
+          "city": "STREAMWOOD",
+          "state": "IL",
+          "zip": "60107",
+          "fullAddress": "138 FILBERT DR , STREAMWOOD, IL 60107",
+          "streetAddress": "138 FILBERT DR "
+        },
+        "notes": "847-347-6489 - joe",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2025-11-10T17:45:14Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 111000608,
+        "customerId": 59676521,
+        "year": 2016,
+        "make": "Chevrolet",
+        "model": "Equinox",
+        "subModel": "LT",
+        "engine": "2.4L 4Cyl GAS LEA Naturally Aspirated",
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": "2GNFLFEK7G6359563",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2026-04-22T12:45:34Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61154835,
+        "shopId": 10214,
+        "customerId": 106024131,
+        "vehicleId": 153101827,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "Replace rear struts",
+        "title": null,
+        "color": "#D88177",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-02T12:30:00Z",
+        "pickupTime": "2026-05-02T13:30:00Z",
+        "createdDate": "2026-04-30T13:11:36Z",
+        "updatedDate": "2026-04-30T13:11:36Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 106024131,
+        "firstName": "VARSHA",
+        "lastName": "AKELLA",
+        "email": null,
+        "phone": [
+          {
+            "id": 115408493,
+            "number": "2245786272",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106598855,
+          "address1": "930 Evanston Street",
+          "address2": "",
+          "city": "Hoffman Estates",
+          "state": "IL",
+          "zip": "60169",
+          "fullAddress": "930 Evanston Street, Hoffman Estates, IL 60169",
+          "streetAddress": "930 Evanston Street"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-29T21:59:17Z",
+        "updatedDate": "2026-04-30T14:12:26Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 153101827,
+        "customerId": 106024131,
+        "year": 2005,
+        "make": "Toyota",
+        "model": "Prius",
+        "subModel": "Base",
+        "engine": "1.5L 4Cyl FULL HYBRID EV-GAS (FHEV) 1NZ-FXE Naturally Aspirated",
+        "color": null,
+        "licensePlate": "fl68428",
+        "state": "IL",
+        "vin": "JTDKB20U953062729",
+        "driveType": "FWD",
+        "transmission": "Automatic CVT",
+        "bodyType": "Hatchback",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2026-04-30T13:00:00Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 60503371,
+        "shopId": 10214,
+        "customerId": 79849869,
+        "vehicleId": 114158933,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] DENEE LOGAN's 2020 Kia Sportage",
+        "color": "#F0572A",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-21T14:54:31Z",
+        "updatedDate": "2026-04-21T14:54:31Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 79849869,
+        "firstName": "DENEE",
+        "lastName": "LOGAN",
+        "email": "deneelogan29@gmail.com",
+        "phone": [
+          {
+            "id": 87673472,
+            "number": "7089510012",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 80385509,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2025-07-09T14:47:44Z",
+        "updatedDate": "2025-11-22T13:27:04Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 114158933,
+        "customerId": 79849869,
+        "year": 2020,
+        "make": "Kia",
+        "model": "Sportage",
+        "subModel": "LX",
+        "engine": "2.4L 4Cyl GAS Naturally Aspirated",
+        "color": null,
+        "licensePlate": "DENEE",
+        "state": "IL",
+        "vin": "KNDPM3AC6L7816249",
+        "driveType": "FWD",
+        "transmission": "Automatic",
+        "bodyType": "Sport Utility",
+        "notes": "**Vehicle master information changed from 2020 Kia Sportage to 2020 Kia Sportage SX Turbo on 7/12/25",
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2025-11-22T13:24:56Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61140888,
+        "shopId": 10214,
+        "customerId": 59681035,
+        "vehicleId": 84783537,
+        "startTime": "2026-05-02T12:30:00Z",
+        "endTime": "2026-05-02T13:00:00Z",
+        "description": "BRAKES ",
+        "title": null,
+        "color": "#7A7BD5",
+        "leadSource": null,
+        "arrived": false,
+        "appointmentStatus": "CANCELED",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-29T22:39:20Z",
+        "updatedDate": "2026-04-30T20:38:38Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59681035,
+        "firstName": "MATTHEW",
+        "lastName": "NICHELE",
+        "email": null,
+        "phone": [
+          {
+            "id": 65996172,
+            "number": "8478990510",
+            "type": "Phone",
+            "primary": false
+          },
+          {
+            "id": 65996173,
+            "number": "7732972921",
+            "type": "Phone",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 59966508,
+          "address1": "1713 WINTHROP LN ",
+          "address2": null,
+          "city": "SCHAUMBURG",
+          "state": "IL",
+          "zip": "60193",
+          "fullAddress": "1713 WINTHROP LN , SCHAUMBURG, IL 60193",
+          "streetAddress": "1713 WINTHROP LN "
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2025-08-09T16:10:44Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 84783537,
+        "customerId": 59681035,
+        "year": 2014,
+        "make": "Chevrolet",
+        "model": "Malibu",
+        "subModel": "LS",
+        "engine": "2.5L 4Cyl GAS LKW Naturally Aspirated",
+        "color": null,
+        "licensePlate": "63817FF",
+        "state": "IL",
+        "vin": "1G11B5SL5EF242248",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Sedan",
+        "notes": "**Vehicle master information changed from 2014 CHEVROLET MALIBU to 2014 Chevrolet Malibu LS on 10/7/24",
+        "unitNumber": "",
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2026-04-29T22:38:21Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61119553,
+        "shopId": 10214,
+        "customerId": 104517408,
+        "vehicleId": 150713705,
+        "startTime": "2026-05-01T22:00:00Z",
+        "endTime": "2026-05-01T23:00:00Z",
+        "description": "Car Problems? - I hear a strange noise - Rattling - Notes: I hear a noise when the car is in park and the door is open, ",
+        "title": "[SG] Stacey Williams's 2011 Mazda 3",
+        "color": "#0D4A80",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-01T22:00:00Z",
+        "pickupTime": "2026-05-01T23:00:00Z",
+        "createdDate": "2026-04-29T19:17:50Z",
+        "updatedDate": "2026-04-29T19:17:50Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 104517408,
+        "firstName": "Stacey",
+        "lastName": "Williams",
+        "email": "staceyphoenix10@gmail.com",
+        "phone": [
+          {
+            "id": 113778628,
+            "number": "7733310655",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 105073449,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-10T22:10:03Z",
+        "updatedDate": "2026-04-10T22:10:03Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 150713705,
+        "customerId": 104517408,
+        "year": 2011,
+        "make": "Mazda",
+        "model": "3",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-10T22:10:04Z",
+        "updatedDate": "2026-04-10T22:10:04Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61069569,
+        "shopId": 10214,
+        "customerId": 61212406,
+        "vehicleId": 87086323,
+        "startTime": "2026-05-01T20:00:00Z",
+        "endTime": "2026-05-01T20:30:00Z",
+        "description": "driver side blows warm air ",
+        "title": null,
+        "color": "#43A96E",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-01T20:00:00Z",
+        "pickupTime": "2026-05-01T21:00:00Z",
+        "createdDate": "2026-04-29T13:25:47Z",
+        "updatedDate": "2026-04-29T13:25:50Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 61212406,
+        "firstName": "HERMOSO",
+        "lastName": "JASON ",
+        "email": null,
+        "phone": [
+          {
+            "id": 67641771,
+            "number": "7734145787",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 61510562,
+          "address1": "218 West Kennedy Drive",
+          "address2": "",
+          "city": "Streamwood",
+          "state": "IL",
+          "zip": "60107",
+          "fullAddress": "218 West Kennedy Drive, Streamwood, IL 60107",
+          "streetAddress": "218 West Kennedy Drive"
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-10-21T15:08:25Z",
+        "updatedDate": "2024-10-21T15:08:25Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 87086323,
+        "customerId": 61212406,
+        "year": 2014,
+        "make": "Jeep",
+        "model": "Grand Cherokee",
+        "subModel": "Limited",
+        "engine": "3.6L 6Cyl FLEX ERB Naturally Aspirated",
+        "color": null,
+        "licensePlate": "KDK312",
+        "state": "IL",
+        "vin": "1C4RJFBG6EC558281",
+        "driveType": "AWD",
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2024-10-21T15:10:52Z",
+        "updatedDate": "2024-10-21T15:10:52Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61204281,
+        "shopId": 10214,
+        "customerId": 106064020,
+        "vehicleId": 153165499,
+        "startTime": "2026-05-01T15:00:00Z",
+        "endTime": "2026-05-01T15:30:00Z",
+        "description": "Oil Change",
+        "title": "[SG] Dee Kaur's 2014 Toyota Camry",
+        "color": "#FCB70D",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-01T15:00:00Z",
+        "pickupTime": "2026-05-01T15:30:00Z",
+        "createdDate": "2026-04-30T19:17:00Z",
+        "updatedDate": "2026-05-01T12:12:20Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 106064020,
+        "firstName": "Dee",
+        "lastName": "Kaur",
+        "email": "kaurdil01@gmail.com",
+        "phone": [
+          {
+            "id": 115450288,
+            "number": "6303862317",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106640345,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-30T19:17:00Z",
+        "updatedDate": "2026-04-30T19:17:00Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 153165499,
+        "customerId": 106064020,
+        "year": 2014,
+        "make": "Toyota",
+        "model": "Camry",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-30T19:17:00Z",
+        "updatedDate": "2026-04-30T19:17:00Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61222304,
+        "shopId": 10214,
+        "customerId": 93516636,
+        "vehicleId": 134500659,
+        "startTime": "2026-05-01T14:00:00Z",
+        "endTime": "2026-05-01T14:30:00Z",
+        "description": "Oil Change",
+        "title": "[SG] TONY DEPINTO's 2000 Volvo S70",
+        "color": "#FCB70D",
+        "leadSource": null,
+        "arrived": true,
+        "appointmentStatus": "ARRIVED",
+        "dropoffTime": "2026-05-01T14:00:00Z",
+        "pickupTime": "2026-05-01T14:30:00Z",
+        "createdDate": "2026-04-30T21:55:31Z",
+        "updatedDate": "2026-05-01T12:12:47Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 93516636,
+        "firstName": "TONY",
+        "lastName": "DEPINTO",
+        "email": null,
+        "phone": [
+          {
+            "id": 102319457,
+            "number": "6303909688",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 94187431,
+          "address1": "",
+          "address2": "",
+          "city": "",
+          "state": "",
+          "zip": "",
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2025-12-30T22:41:34Z",
+        "updatedDate": "2025-12-30T22:41:34Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 134500659,
+        "customerId": 93516636,
+        "year": 2000,
+        "make": "Volvo",
+        "model": "S70",
+        "subModel": "GLT",
+        "engine": "2.4L 5Cyl GAS B5244T Turbocharged",
+        "color": null,
+        "licensePlate": "ez11880",
+        "state": "IL",
+        "vin": "YV1LS56D3Y2649977",
+        "driveType": "FWD",
+        "transmission": null,
+        "bodyType": "Sedan",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2025-12-30T22:47:16Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61191386,
+        "shopId": 10214,
+        "customerId": 59656916,
+        "vehicleId": 153158542,
+        "startTime": "2026-05-01T13:30:00Z",
+        "endTime": "2026-05-01T14:00:00Z",
+        "description": "Noise inspection, under the hood there's a sound.",
+        "title": null,
+        "color": "#F0572A",
+        "leadSource": "Returning Customer",
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": null,
+        "pickupTime": null,
+        "createdDate": "2026-04-30T17:38:39Z",
+        "updatedDate": "2026-05-01T12:12:33Z",
+        "deletedDate": null,
+        "rideOption": null,
+        "appointmentOption": {
+          "id": 1,
+          "code": "STAY",
+          "name": "Stay With Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 59656916,
+        "firstName": "MIKE",
+        "lastName": "DEGUIA",
+        "email": "MICHAEL.DEGUIA@LIFEFITNESS.COM",
+        "phone": [
+          {
+            "id": 65965201,
+            "number": "3122860558",
+            "type": "MIKE",
+            "primary": true
+          },
+          {
+            "id": 65965202,
+            "number": "8478092471",
+            "type": "MARITZA",
+            "primary": false
+          }
+        ],
+        "address": {
+          "id": 59955643,
+          "address1": "5 THISTLE CT ",
+          "address2": null,
+          "city": "STREAMWOOD",
+          "state": "IL",
+          "zip": "60107",
+          "fullAddress": "5 THISTLE CT , STREAMWOOD, IL 60107",
+          "streetAddress": "5 THISTLE CT "
+        },
+        "notes": "",
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2024-09-29T00:00:00Z",
+        "updatedDate": "2024-11-05T13:14:27Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 153158542,
+        "customerId": 59656916,
+        "year": 2009,
+        "make": "Honda",
+        "model": "CR-V",
+        "subModel": "EX-L",
+        "engine": "2.4L 4Cyl GAS K24Z1 Naturally Aspirated",
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": "Sport Utility",
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-30T17:38:21Z",
+        "updatedDate": "2026-04-30T17:38:21Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61054063,
+        "shopId": 10214,
+        "customerId": 68165431,
+        "vehicleId": 117976239,
+        "startTime": "2026-05-01T13:30:00Z",
+        "endTime": "2026-05-01T14:30:00Z",
+        "description": "Car Problems? - I hear a strange noise - Squeaky sound - Notes: I think something is wrong with my front driver side Upper control arm. Seems to make a squeaking and/or rattling noise when driving, and especially when turning right. If I’m turning left the noise does not happen at all., ",
+        "title": "[SG] CODY LEWIS's 2019 Dodge Charger",
+        "color": "#D88177",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-01T13:30:00Z",
+        "pickupTime": "2026-05-01T14:30:00Z",
+        "createdDate": "2026-04-28T23:01:33Z",
+        "updatedDate": "2026-05-01T12:12:16Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 68165431,
+        "firstName": "CODY",
+        "lastName": "LEWIS",
+        "email": "codyelewis14@gmail.com",
+        "phone": [
+          {
+            "id": 75084545,
+            "number": "6309367426",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 68555948,
+          "address1": "1348 Beverly Ln",
+          "address2": null,
+          "city": "Streamwood",
+          "state": "IL",
+          "zip": "60107",
+          "fullAddress": "1348 Beverly Ln, Streamwood, IL 60107",
+          "streetAddress": "1348 Beverly Ln"
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": null,
+        "okForMarketing": true,
+        "createdDate": "2025-01-30T00:35:35Z",
+        "updatedDate": "2025-01-30T13:42:11Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": true
+      },
+      "srcVehicle": {
+        "id": 117976239,
+        "customerId": 68165431,
+        "year": 2019,
+        "make": "Dodge",
+        "model": "Charger",
+        "subModel": "R/T",
+        "engine": "5.7L 8Cyl GAS EZH Naturally Aspirated",
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": "2C3CDXCT9KH591609",
+        "driveType": "RWD",
+        "transmission": "Automatic",
+        "bodyType": "Sedan",
+        "notes": "**Vehicle master information changed from 2019 Dodge Charger to 2019 Dodge Charger GT on 8/19/25",
+        "unitNumber": null,
+        "createdDate": null,
+        "updatedDate": "2025-08-19T16:47:03Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    },
+    {
+      "appt": {
+        "id": 61228462,
+        "shopId": 10214,
+        "customerId": 106064020,
+        "vehicleId": 153165499,
+        "startTime": "2026-05-01T13:30:00Z",
+        "endTime": "2026-05-01T14:00:00Z",
+        "description": "Oil Change",
+        "title": "[SG] Dee Kaur's 2014 Toyota Camry",
+        "color": "#FCB70D",
+        "leadSource": null,
+        "arrived": null,
+        "appointmentStatus": "NONE",
+        "dropoffTime": "2026-05-01T13:30:00Z",
+        "pickupTime": "2026-05-01T14:00:00Z",
+        "createdDate": "2026-05-01T02:23:06Z",
+        "updatedDate": "2026-05-01T12:12:43Z",
+        "deletedDate": null,
+        "rideOption": {
+          "id": 3,
+          "code": "NONE",
+          "name": "None"
+        },
+        "appointmentOption": {
+          "id": 2,
+          "code": "DROP",
+          "name": "Drop-off Vehicle"
+        }
+      },
+      "srcCustomer": {
+        "id": 106064020,
+        "firstName": "Dee",
+        "lastName": "Kaur",
+        "email": "kaurdil01@gmail.com",
+        "phone": [
+          {
+            "id": 115450288,
+            "number": "6303862317",
+            "type": "Mobile",
+            "primary": true
+          }
+        ],
+        "address": {
+          "id": 106640345,
+          "address1": null,
+          "address2": null,
+          "city": null,
+          "state": null,
+          "zip": null,
+          "fullAddress": "",
+          "streetAddress": ""
+        },
+        "notes": null,
+        "customerType": {
+          "id": 1,
+          "code": "PERSON",
+          "name": "Person",
+          "person": true,
+          "business": false
+        },
+        "contactFirstName": null,
+        "contactLastName": null,
+        "shopId": 10214,
+        "creditLimit": 0,
+        "okForMarketing": true,
+        "createdDate": "2026-04-30T19:17:00Z",
+        "updatedDate": "2026-04-30T19:17:00Z",
+        "deletedDate": null,
+        "birthday": null,
+        "eligibleForAccountsReceivable": false
+      },
+      "srcVehicle": {
+        "id": 153165499,
+        "customerId": 106064020,
+        "year": 2014,
+        "make": "Toyota",
+        "model": "Camry",
+        "subModel": null,
+        "engine": null,
+        "color": null,
+        "licensePlate": null,
+        "state": null,
+        "vin": null,
+        "driveType": null,
+        "transmission": null,
+        "bodyType": null,
+        "notes": null,
+        "unitNumber": null,
+        "createdDate": "2026-04-30T19:17:00Z",
+        "updatedDate": "2026-04-30T19:17:00Z",
+        "productionDate": null,
+        "deletedDate": null
+      }
+    }
+  ]
+}

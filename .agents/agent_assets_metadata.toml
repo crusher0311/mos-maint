@@ -1,0 +1,20 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "JGLO0JcvLjM7oJ_I-rlxQ"
+uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10216-20260501T123452.json"
+type = "unspecified"
+title = "Arlington dump (10216 → 18007) — 13 appts"
+
+[[outputs]]
+id = "IXQCyhfaN4rjNWBvdQS7g"
+uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10214-20260501T123650.json"
+type = "unspecified"
+title = "Streamwood dump (10214 → 18008) — 18 appts"
+
+[[outputs]]
+id = "euUL0VFrGsR7eRiJo0AZ7"
+uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10215-20260501T124504.json"
+type = "unspecified"
+title = "Shop 3 dump (10215 → 18009) — 97 appts"
