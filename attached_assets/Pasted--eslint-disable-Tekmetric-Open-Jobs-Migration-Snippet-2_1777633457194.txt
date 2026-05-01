@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.8-plural-endpoints';
+  const VERSION = '2026-05-01.6-dest-ids';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -101,22 +101,12 @@
     repairOrderConcerns: (roId) =>
       `/api/repair-orders/${roId}/customer-concerns`,
     // Legacy customer/vehicle search — only used if USE_SOURCE_IDS_DIRECT=false.
-    // 2026-05-01.8 fix: the singular /customer + /vehicle endpoints used by
-    // 02-load-core-dest.js v.7 returned 404 "Requested resource not found"
-    // on shop 18008. The HAR capture from 2026-05-01 shows the live UI
-    // hits /customers (plural) with a specific query-string shape:
-    //   GET /api/shop/14245/customers?search=demo&size=50
-    //       &sort=firstName,lastName&searchVehicleType=ACTIVE
-    // No `page=0`. Vehicles aren't HAR-confirmed yet, but mirroring the
-    // same plural pattern is the best single-shot guess; if vehicleCreate
-    // also 404s we'll capture the real endpoint from the Network tab on
-    // a manual UI add.
     customerSearch: (shopId, q) =>
-      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName&searchVehicleType=ACTIVE`,
-    customerCreate: (shopId) => `/api/shop/${shopId}/customers`,
+      `/api/shop/${shopId}/customer?search=${encodeURIComponent(q)}&page=0&size=20`,
+    customerCreate: (shopId) => `/api/shop/${shopId}/customer`,
     vehicleSearch: (shopId, q) =>
-      `/api/shop/${shopId}/vehicles?search=${encodeURIComponent(q)}&size=20`,
-    vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicles`,
+      `/api/shop/${shopId}/vehicle?search=${encodeURIComponent(q)}&page=0&size=20`,
+    vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicle`,
     // Create RO — confirmed-working endpoint from 04-clone-ro-same-shop.js.
     // NOT the per-shop variant (`/api/shop/{shopId}/repair-order`) — that
     // one is the GET listing endpoint; POSTing to it returns 404/405.
@@ -819,68 +809,32 @@
           throw new Error(`source RO is missing customer.id (${srcCust.id}) or vehicle.id (${srcVeh.id}); cannot use USE_SOURCE_IDS_DIRECT`);
         }
       } else {
-        // Legacy fallback: match-by-email/VIN-or-create. Defensive against
-        // Tekmetric customer fields that are arrays (e.g. emails: [{email,
-        // type, ...}], phones: [{number, type, ...}]) instead of bare
-        // strings — the 2026-05-01.6 live run crashed at .email.trim
-        // because srcCust.email was an array.
-        const pickStr = (val, keys) => {
-          if (val == null) return null;
-          if (typeof val === 'string') return val.trim() || null;
-          if (typeof val === 'number') return String(val);
-          if (Array.isArray(val)) {
-            for (const item of val) {
-              const got = pickStr(item, keys);
-              if (got) return got;
-            }
-            return null;
-          }
-          if (typeof val === 'object') {
-            for (const k of keys) {
-              if (typeof val[k] === 'string' && val[k].trim()) return val[k].trim();
-              if (typeof val[k] === 'number') return String(val[k]);
-            }
-          }
-          return null;
-        };
-        const srcEmailStr = pickStr(srcCust.email, ['email', 'value', 'address']) ||
-                            pickStr(srcCust.emails, ['email', 'value', 'address']);
-        const srcPhoneStr = pickStr(srcCust.phone, ['number', 'value', 'phone']) ||
-                            pickStr(srcCust.phones, ['number', 'value', 'phone']);
-        const srcVinStr = pickStr(srcVeh.vin, ['vin']);
-
+        // Legacy fallback: match-by-email/VIN-or-create.
         step = 'matchCustomer';
-        const cQuery = srcEmailStr || srcPhoneStr || null;
+        const cQuery = (srcCust.email && srcCust.email.trim()) ||
+          ((srcCust.phone && srcCust.phone[0] && srcCust.phone[0].number) ? srcCust.phone[0].number :
+            (typeof srcCust.phone === 'string' ? srcCust.phone : null));
         if (cQuery) {
           try {
             const r = await jsonFetch(ENDPOINTS.customerSearch(destShopId, cQuery), token);
             const list = Array.isArray(r) ? r : (r.content || []);
-            const hit = list.find((c) => {
-              const cEmailStr = pickStr(c.email, ['email', 'value', 'address']) ||
-                                pickStr(c.emails, ['email', 'value', 'address']);
-              if (cEmailStr && srcEmailStr && cEmailStr.toLowerCase() === srcEmailStr.toLowerCase()) return true;
-              const cFirst = (c.firstName || '').toLowerCase();
-              const cLast = (c.lastName || '').toLowerCase();
-              const sFirst = (srcCust.firstName || '').toLowerCase();
-              const sLast = (srcCust.lastName || '').toLowerCase();
-              return sFirst && sLast && cFirst === sFirst && cLast === sLast;
-            });
+            const hit = list.find((c) =>
+              (c.email && srcCust.email && c.email.toLowerCase() === srcCust.email.toLowerCase()) ||
+              ((srcCust.lastName || '').toLowerCase() === (c.lastName || '').toLowerCase() &&
+                (srcCust.firstName || '').toLowerCase() === (c.firstName || '').toLowerCase())
+            );
             if (hit) destCustomerId = hit.id;
           } catch (_) { /* fall through to create */ }
         }
         if (!destCustomerId) {
           step = 'createCustomer';
-          // Pass email/phone in the same shape we received them so we
-          // don't re-shape Tekmetric's own data and trigger a 400.
           const created = await jsonFetch(ENDPOINTS.customerCreate(destShopId), token, {
             method: 'POST',
             body: JSON.stringify({
               firstName: srcCust.firstName || '',
               lastName: srcCust.lastName || '',
-              email: srcCust.email ?? null,
-              emails: srcCust.emails ?? undefined,
-              phone: srcCust.phone ?? [],
-              phones: srcCust.phones ?? undefined,
+              email: srcCust.email || null,
+              phone: srcCust.phone || [],
               address: srcCust.address || null,
               customerType: srcCust.customerType || null,
               notes: srcCust.notes || null,
@@ -889,14 +843,11 @@
           destCustomerId = created.id;
         }
         step = 'matchVehicle';
-        if (srcVinStr) {
+        if (srcVeh.vin) {
           try {
-            const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, srcVinStr), token);
+            const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, srcVeh.vin), token);
             const list = Array.isArray(r) ? r : (r.content || []);
-            const hit = list.find((v) => {
-              const vVin = pickStr(v.vin, ['vin']);
-              return vVin && vVin.toUpperCase() === srcVinStr.toUpperCase();
-            });
+            const hit = list.find((v) => (v.vin || '').toUpperCase() === srcVeh.vin.toUpperCase());
             if (hit) destVehicleId = hit.id;
           } catch (_) {}
         }
@@ -913,7 +864,7 @@
               engine: srcVeh.engine || null,
               transmission: srcVeh.transmission || null,
               drivetrain: srcVeh.drivetrain || null,
-              vin: srcVinStr || null,
+              vin: srcVeh.vin || null,
               licensePlate: srcVeh.licensePlate || srcVeh.plate || null,
               color: srcVeh.color || null,
               unitNumber: srcVeh.unitNumber || null,
@@ -1087,3 +1038,112 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13321:386 [Tekmetric Migration LOAD-CORE v2026-05-01.6-dest-ids] starting…
+VM13321:235 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13321:236 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13321:400 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13321:413 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13321:425 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13321:491 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13321:519 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13321:527 [LOAD-CORE] Plan:
+VM13321:528 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13321:542 [LOAD-CORE] First few that will be created:
+VM13321:543 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13321:557 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13321:557
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:765 [LOAD-CORE] ✓ auto-discovered dest labor-rate id = 16000 (shop 18008)
+VM13321:1001 [LOAD-CORE] FAILED RO #2721265 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2720892 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721001 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721060 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721063 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721079 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721143 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721170 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721175 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721193 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721205 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721209 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721214 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721233 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721245 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721246 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721247 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721258 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721262 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721263 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1001 [LOAD-CORE] FAILED RO #2721264 at step "matchCustomer": srcCust.email.trim is not a function
+(anonymous) @ VM13321:1001
+await in (anonymous)
+(anonymous) @ VM13321:1040
+VM13321:1013 [LOAD-CORE] Successes:
+VM13321:1014 
+VM13321:1016 [LOAD-CORE] Failures:
+VM13321:1017 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'matchCustomer''''srcCust.email.trim is not a function'12720892321023374'matchCustomer''''srcCust.email.trim is not a function'22721001321701729'matchCustomer''''srcCust.email.trim is not a function'32721060322599022'matchCustomer''''srcCust.email.trim is not a function'42721063322618310'matchCustomer''''srcCust.email.trim is not a function'52721079322765797'matchCustomer''''srcCust.email.trim is not a function'62721143323391292'matchCustomer''''srcCust.email.trim is not a function'72721170323628624'matchCustomer''''srcCust.email.trim is not a function'82721175323646078'matchCustomer''''srcCust.email.trim is not a function'92721193324010591'matchCustomer''''srcCust.email.trim is not a function'102721205324031687'matchCustomer''''srcCust.email.trim is not a function'112721209324050816'matchCustomer''''srcCust.email.trim is not a function'122721214324104201'matchCustomer''''srcCust.email.trim is not a function'132721233324204864'matchCustomer''''srcCust.email.trim is not a function'142721245324342162'matchCustomer''''srcCust.email.trim is not a function'152721246324342598'matchCustomer''''srcCust.email.trim is not a function'162721247324345536'matchCustomer''''srcCust.email.trim is not a function'172721258324403473'matchCustomer''''srcCust.email.trim is not a function'182721262324414665'matchCustomer''''srcCust.email.trim is not a function'192721263324418417'matchCustomer''''srcCust.email.trim is not a function'202721264324429491'matchCustomer''''srcCust.email.trim is not a function'Array(21)
+VM13321:1038 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-060407.json
+VM13321:1039 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.

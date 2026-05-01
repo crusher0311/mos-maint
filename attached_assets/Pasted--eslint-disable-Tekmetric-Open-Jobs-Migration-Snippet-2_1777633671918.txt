@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.8-plural-endpoints';
+  const VERSION = '2026-05-01.7-defensive-shape';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -101,22 +101,12 @@
     repairOrderConcerns: (roId) =>
       `/api/repair-orders/${roId}/customer-concerns`,
     // Legacy customer/vehicle search — only used if USE_SOURCE_IDS_DIRECT=false.
-    // 2026-05-01.8 fix: the singular /customer + /vehicle endpoints used by
-    // 02-load-core-dest.js v.7 returned 404 "Requested resource not found"
-    // on shop 18008. The HAR capture from 2026-05-01 shows the live UI
-    // hits /customers (plural) with a specific query-string shape:
-    //   GET /api/shop/14245/customers?search=demo&size=50
-    //       &sort=firstName,lastName&searchVehicleType=ACTIVE
-    // No `page=0`. Vehicles aren't HAR-confirmed yet, but mirroring the
-    // same plural pattern is the best single-shot guess; if vehicleCreate
-    // also 404s we'll capture the real endpoint from the Network tab on
-    // a manual UI add.
     customerSearch: (shopId, q) =>
-      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName&searchVehicleType=ACTIVE`,
-    customerCreate: (shopId) => `/api/shop/${shopId}/customers`,
+      `/api/shop/${shopId}/customer?search=${encodeURIComponent(q)}&page=0&size=20`,
+    customerCreate: (shopId) => `/api/shop/${shopId}/customer`,
     vehicleSearch: (shopId, q) =>
-      `/api/shop/${shopId}/vehicles?search=${encodeURIComponent(q)}&size=20`,
-    vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicles`,
+      `/api/shop/${shopId}/vehicle?search=${encodeURIComponent(q)}&page=0&size=20`,
+    vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicle`,
     // Create RO — confirmed-working endpoint from 04-clone-ro-same-shop.js.
     // NOT the per-shop variant (`/api/shop/{shopId}/repair-order`) — that
     // one is the GET listing endpoint; POSTing to it returns 404/405.
@@ -1087,3 +1077,406 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13327:386 [Tekmetric Migration LOAD-CORE v2026-05-01.7-defensive-shape] starting…
+VM13327:235 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13327:236 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13327:400 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13327:413 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13327:425 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13327:491 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13327:519 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13327:527 [LOAD-CORE] Plan:
+VM13327:528 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13327:542 [LOAD-CORE] First few that will be created:
+VM13327:543 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13327:557 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13327:557
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:765 [LOAD-CORE] ✓ auto-discovered dest labor-rate id = 16000 (shop 18008)
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=7087176598&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721265 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=manuel.camargo%40lewistree.com&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2720892 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=salgado22aaron%40gmail.com&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721001 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=BWERKS1541%40YAHOO.COM&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721060 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=8475301146&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721063 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=6304786968&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721079 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=johnwirtz%40ameritech.net&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721143 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=6303612409&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721170 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=2244366852&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721175 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=8315856077&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721193 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=estein22%40yahoo.com&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721205 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=6304337254&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721209 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=nhc538%40yahoo.com&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721214 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=6309351512&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721233 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=sarahhvanbell%40gmail.com&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721245 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=2245786272&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721246 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=6308302091&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721247 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=2248338017&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721258 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=8478142680&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721262 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=3863167783&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721263 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/customer?search=8473408445&page=0&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:846
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/customer 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13327:178
+(anonymous) @ VM13327:865
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1040 [LOAD-CORE] FAILED RO #2721264 at step "createCustomer": 404  on /api/shop/18008/customer :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13327:1040
+await in (anonymous)
+(anonymous) @ VM13327:1079
+VM13327:1052 [LOAD-CORE] Successes:
+VM13327:1053 
+VM13327:1055 [LOAD-CORE] Failures:
+VM13327:1056 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'12720892321023374'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'22721001321701729'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'32721060322599022'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'42721063322618310'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'52721079322765797'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'62721143323391292'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'72721170323628624'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'82721175323646078'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'92721193324010591'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'102721205324031687'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'112721209324050816'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'122721214324104201'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'132721233324204864'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'142721245324342162'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'152721246324342598'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'162721247324345536'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'172721258324403473'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'182721262324414665'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'192721263324418417'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'202721264324429491'createCustomer'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'Array(21)
+VM13327:1077 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-060744.json
+VM13327:1078 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
