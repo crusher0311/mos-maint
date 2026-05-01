@@ -51,10 +51,10 @@
 (async () => {
   // ===== CONFIG =====
   const SOURCE_SHOP_ID    = 10214;        // shop the RO is being cloned FROM
-  const SOURCE_RO_ID      = null;         // numeric RO id in source shop  (REQUIRED)
+  const SOURCE_RO_ID      = 324342598;    // numeric RO id in source shop  (REQUIRED)
   const DEST_SHOP_ID      = 14245;        // shop the new RO will be created IN
-  const DEST_CUSTOMER_ID  = null;         // existing customer in DEST shop  (REQUIRED — Jay Demore)
-  const DEST_VEHICLE_ID   = null;         // existing vehicle in DEST shop   (REQUIRED — Jay's vehicle)
+  const DEST_CUSTOMER_ID  = 82581111;     // existing customer in DEST shop  (Jay Demore)
+  const DEST_VEHICLE_ID   = 118337025;    // existing vehicle in DEST shop   (Jay's vehicle)
   const DEST_LABOR_RATE_ID = null;        // null = auto-discover from a recent dest RO
   const CONFIRM           = false;        // false = dry-run; true = actually create
   const JOBS_LIMIT        = null;         // null = clone all jobs; e.g. 1 to test the first only
