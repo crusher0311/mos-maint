@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.13-unwrap-job-create';
+  const VERSION = '2026-05-01.12-unwrap-and-reuse';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -374,31 +374,19 @@
       repairOrderId: newRoId,
       syncPartsAttachedToNonQuotedOrders: false,
     };
-    const emptyResp = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+    const emptyJob = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
       method: 'POST',
       body: JSON.stringify(emptyPayload),
     });
-    // 2026-05-01.13: jobCreate response is wrapped just like createRo:
-    //   { type:"SUCCESS", message:"Job(s) added",
-    //     data: { id, repairOrderId, repairOrderNumber, ... } }
-    // v.12 read .id off the envelope (= undefined) and threw
-    // "empty-create returned no id" even though the empty job WAS created.
-    // Unwrap defensively (some endpoints return bare objects).
-    const emptyJob = (emptyResp && emptyResp.data && typeof emptyResp.data === 'object')
-      ? emptyResp.data
-      : emptyResp;
     if (!emptyJob || !emptyJob.id) {
-      throw new Error(`empty-create returned no id (got ${JSON.stringify(emptyResp).slice(0, 200)})`);
+      throw new Error(`empty-create returned no id (got ${JSON.stringify(emptyJob).slice(0, 200)})`);
     }
     // 2. populate POST
     const populatePayload = buildPopulatePayload(emptyJob, srcJob);
-    const populatedResp = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+    const populated = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
       method: 'POST',
       body: JSON.stringify(populatePayload),
     });
-    const populated = (populatedResp && populatedResp.data && typeof populatedResp.data === 'object')
-      ? populatedResp.data
-      : populatedResp;
     return { emptyJob, populated };
   }
 
@@ -1290,3 +1278,281 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13748:406 [Tekmetric Migration LOAD-CORE v2026-05-01.12-unwrap-and-reuse] starting…
+VM13748:255 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13748:256 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13748:420 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13748:433 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13748:445 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13748:511 [LOAD-CORE] Pre-scan: doing deterministic concern check for 22 dest RO(s) (detail+concerns endpoint)…
+VM13748:539 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13748:547 [LOAD-CORE] Plan:
+VM13748:548 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'Recent ROs1Casey Automotive - Streamwood 0Message00Active Ti''18008'21002174truetrueArray(1)
+VM13748:562 [LOAD-CORE] First few that will be created:
+VM13748:563 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13748:577 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13748:577
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:786 [LOAD-CORE] ✓ resolved dest labor-rate id = 565350 (name="Standard Labor Rate", value=16000 cents) for shop 18008
+VM13748:834 [LOAD-CORE] ✓ pre-scanned dest Job Board: 22 existing RO(s) indexed by customer+vehicle for reuse
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721265: customer=106147250 vehicle=153329945 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500000 (id=325399021) for source RO #2721265 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399021 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721265 at step "createJob[0](TIRE - TIRE REPAIR right front slow leak )": createJob[0](TIRE - TIRE REPAIR right front slow leak ): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138722,"repairOrderId":325399021,"repairOrderNumber":500000,"repairOrderVehicleDescription":"2004 Toyota Highlander Base","shopId":null,"app)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2720892: customer=106157573 vehicle=153313699 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500001 (id=325399022) for source RO #2720892 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399022 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2720892 at step "createJob[0](INSPECT FOR FUEL LEAK)": createJob[0](INSPECT FOR FUEL LEAK): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138726,"repairOrderId":325399022,"repairOrderNumber":500001,"repairOrderVehicleDescription":"2009 Mitsubishi Outlander XLS","shopId":null,"a)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721001: customer=106163060 vehicle=153343794 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500002 (id=325399025) for source RO #2721001 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399025 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721001 at step "createJob[0](INSPECT FRONT END)": createJob[0](INSPECT FRONT END): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138730,"repairOrderId":325399025,"repairOrderNumber":500002,"repairOrderVehicleDescription":"2015 Ram 1500 SLT","shopId":null,"applicationId)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721060: customer=106152290 vehicle=153332965 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500003 (id=325399031) for source RO #2721060 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399031 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721060 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138733,"repairOrderId":325399031,"repairOrderNumber":500003,"repairOrderVehicleDescription":"2002 Ford Thunderbird Base","shopId":null,"appl)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721063: customer=106170522 vehicle=153315105 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500004 (id=325399032) for source RO #2721063 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399032 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721063 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138736,"repairOrderId":325399032,"repairOrderNumber":500004,"repairOrderVehicleDescription":"2018 Hyundai Tucson Limited","shopId":null,"app)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721079: customer=106168717 vehicle=153346152 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500005 (id=325399035) for source RO #2721079 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399035 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721079 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138738,"repairOrderId":325399035,"repairOrderNumber":500005,"repairOrderVehicleDescription":"2009 Ford Focus SES","shopId":null,"application)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721143: customer=106152944 vehicle=153334078 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500006 (id=325399036) for source RO #2721143 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399036 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721143 at step "createJob[0](Install Provided Skid Plates)": createJob[0](Install Provided Skid Plates): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138740,"repairOrderId":325399036,"repairOrderNumber":500006,"repairOrderVehicleDescription":"2017 Lincoln Navigator Reserve","shopId":null,")
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721170: customer=106165706 vehicle=153340646 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500007 (id=325399038) for source RO #2721170 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399038 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721170 at step "createJob[0](Replace  Brake Master Cylinder)": createJob[0](Replace  Brake Master Cylinder): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138744,"repairOrderId":325399038,"repairOrderNumber":500007,"repairOrderVehicleDescription":"2006 Chevrolet Silverado 2500 HD WT","shopId":n)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721175: customer=106144769 vehicle=153286468 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500008 (id=325399039) for source RO #2721175 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399039 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721175 at step "createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)": createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138747,"repairOrderId":325399039,"repairOrderNumber":500008,"repairOrderVehicleDescription":"2023 Honda CR-V Hybrid Sport Touring","shopId":)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721193: customer=106155843 vehicle=153305136 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500009 (id=325399040) for source RO #2721193 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399040 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721193 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138755,"repairOrderId":325399040,"repairOrderNumber":500009,"repairOrderVehicleDescription":"2007 Honda Odyssey LX","shopId":null,"applicati)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721205: customer=106160250 vehicle=153325323 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500010 (id=325399042) for source RO #2721205 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399042 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721205 at step "createJob[0](DT - DIAGNOSTIC TEST WASHER PUMP INOP)": createJob[0](DT - DIAGNOSTIC TEST WASHER PUMP INOP): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138758,"repairOrderId":325399042,"repairOrderNumber":500010,"repairOrderVehicleDescription":"2022 Chevrolet Traverse Premier","shopId":null,)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721209: customer=106169374 vehicle=153298151 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500011 (id=325399046) for source RO #2721209 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399046 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721209 at step "createJob[0](IF - INSPECT FRONT SUSPENSION)": createJob[0](IF - INSPECT FRONT SUSPENSION): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138762,"repairOrderId":325399046,"repairOrderNumber":500011,"repairOrderVehicleDescription":"2003 Chevrolet Express 3500 Base","shopId":null)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721214: customer=106143775 vehicle=153281474 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500012 (id=325399048) for source RO #2721214 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399048 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721214 at step "createJob[0](DT - DIAGNOSTIC TEST)": createJob[0](DT - DIAGNOSTIC TEST): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138766,"repairOrderId":325399048,"repairOrderNumber":500012,"repairOrderVehicleDescription":"2019 Honda CR-V EX-L","shopId":null,"applicatio)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721233: customer=106155497 vehicle=153338176 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500013 (id=325399053) for source RO #2721233 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399053 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721233 at step "createJob[0](NI - NOISE INSPECTION)": createJob[0](NI - NOISE INSPECTION): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138770,"repairOrderId":325399053,"repairOrderNumber":500013,"repairOrderVehicleDescription":"2013 GMC Sierra 2500 HD Denali","shopId":null,")
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721245: customer=106178587 vehicle=153327621 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500014 (id=325399055) for source RO #2721245 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399055 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721245 at step "createJob[0](DT - DIAGNOSTIC TEST check engine light on runs ok )": createJob[0](DT - DIAGNOSTIC TEST check engine light on runs ok ): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138774,"repairOrderId":325399055,"repairOrderNumber":500014,"repairOrderVehicleDescription":"2011 Hyundai Santa Fe Limited","shopId":null,"a)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721246: customer=106133773 vehicle=153285475 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500015 (id=325399056) for source RO #2721246 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399056 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721246 at step "createJob[0](IR - INSPECT REAR SUSPENSION)": createJob[0](IR - INSPECT REAR SUSPENSION): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138775,"repairOrderId":325399056,"repairOrderNumber":500015,"repairOrderVehicleDescription":"2005 Toyota Prius Base","shopId":null,"applicat)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721247: customer=106144323 vehicle=153335228 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500016 (id=325399058) for source RO #2721247 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399058 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721247 at step "createJob[0](DMX SYN-BLEND OIL CHANGE)": createJob[0](DMX SYN-BLEND OIL CHANGE): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138778,"repairOrderId":325399058,"repairOrderNumber":500016,"repairOrderVehicleDescription":"2011 Ford Fusion SE","shopId":null,"application)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721258: customer=106162022 vehicle=153290459 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500017 (id=325399061) for source RO #2721258 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399061 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721258 at step "createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011)": createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138782,"repairOrderId":325399061,"repairOrderNumber":500017,"repairOrderVehicleDescription":"2018 Hyundai Elantra SEL","shopId":null,"applic)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721262: customer=106151365 vehicle=153357547 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500018 (id=325399064) for source RO #2721262 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399064 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721262 at step "createJob[0](Resecure Exhaust Heat Shield)": createJob[0](Resecure Exhaust Heat Shield): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138789,"repairOrderId":325399064,"repairOrderNumber":500018,"repairOrderVehicleDescription":"2016 INFINITI QX50 Base","shopId":null,"applica)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721263: customer=106156913 vehicle=153309368 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500019 (id=325399065) for source RO #2721263 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399065 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721263 at step "createJob[0](DMX SYNTHETIC OIL CHANGE )": createJob[0](DMX SYNTHETIC OIL CHANGE ): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138793,"repairOrderId":325399065,"repairOrderNumber":500019,"repairOrderVehicleDescription":"2015 Chevrolet Impala Limited LS","shopId":null)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1073 [LOAD-CORE] resolved IDs for source RO #2721264: customer=106142449 vehicle=153311341 laborRate=565350
+VM13748:1096 [LOAD-CORE] ↻ reusing existing dest RO #500020 (id=325399066) for source RO #2721264 — same customer+vehicle
+VM13748:399 [LOAD-CORE] auto-rolled-back partial RO 325399066 (set to DELETED).
+rollbackPartialRo @ VM13748:399
+await in rollbackPartialRo
+(anonymous) @ VM13748:1216
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1241 [LOAD-CORE] FAILED RO #2721264 at step "createJob[0](DMX SYNTHETIC OIL CHANGE )": createJob[0](DMX SYNTHETIC OIL CHANGE ): empty-create returned no id (got {"type":"SUCCESS","message":"Job(s) added","data":{"id":1136138797,"repairOrderId":325399066,"repairOrderNumber":500020,"repairOrderVehicleDescription":"2020 Honda CR-V EX-L","shopId":null,"applicatio)
+(anonymous) @ VM13748:1241
+await in (anonymous)
+(anonymous) @ VM13748:1280
+VM13748:1253 [LOAD-CORE] Successes:
+VM13748:1254 
+VM13748:1256 [LOAD-CORE] Failures:
+VM13748:1257 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createJob[0](TIRE - TIRE REPAIR right front slow leak )''''createJob[0](TIRE - TIRE REPAIR right front slow l…"2004 Toyota Highlander Base","shopId":null,"app)'12720892321023374'createJob[0](INSPECT FOR FUEL LEAK)''''createJob[0](INSPECT FOR FUEL LEAK): empty-create …"2009 Mitsubishi Outlander XLS","shopId":null,"a)'22721001321701729'createJob[0](INSPECT FRONT END)''''createJob[0](INSPECT FRONT END): empty-create retu…"2015 Ram 1500 SLT","shopId":null,"applicationId)'32721060322599022'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): empty-create r…"2002 Ford Thunderbird Base","shopId":null,"appl)'42721063322618310'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): empty-create r…"2018 Hyundai Tucson Limited","shopId":null,"app)'52721079322765797'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): empty-create r…"2009 Ford Focus SES","shopId":null,"application)'62721143323391292'createJob[0](Install Provided Skid Plates)''''createJob[0](Install Provided Skid Plates): empty-…"2017 Lincoln Navigator Reserve","shopId":null,")'72721170323628624'createJob[0](Replace  Brake Master Cylinder)''''createJob[0](Replace  Brake Master Cylinder): empt…"2006 Chevrolet Silverado 2500 HD WT","shopId":n)'82721175323646078'createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)''''createJob[0](IO - INSPECT COOLING SYSTEM OVERHEAT)…"2023 Honda CR-V Hybrid Sport Touring","shopId":)'92721193324010591'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): empty-create r…"2007 Honda Odyssey LX","shopId":null,"applicati)'102721205324031687'createJob[0](DT - DIAGNOSTIC TEST WASHER PUMP INOP)''''createJob[0](DT - DIAGNOSTIC TEST WASHER PUMP INOP…"2022 Chevrolet Traverse Premier","shopId":null,)'112721209324050816'createJob[0](IF - INSPECT FRONT SUSPENSION)''''createJob[0](IF - INSPECT FRONT SUSPENSION): empty…"2003 Chevrolet Express 3500 Base","shopId":null)'122721214324104201'createJob[0](DT - DIAGNOSTIC TEST)''''createJob[0](DT - DIAGNOSTIC TEST): empty-create r…"2019 Honda CR-V EX-L","shopId":null,"applicatio)'132721233324204864'createJob[0](NI - NOISE INSPECTION)''''createJob[0](NI - NOISE INSPECTION): empty-create …"2013 GMC Sierra 2500 HD Denali","shopId":null,")'142721245324342162'createJob[0](DT - DIAGNOSTIC TEST check engine light on runs ok )''''createJob[0](DT - DIAGNOSTIC TEST check engine lig…:"2011 Hyundai Santa Fe Limited","shopId":null,"a'152721246324342598'createJob[0](IR - INSPECT REAR SUSPENSION)''''createJob[0](IR - INSPECT REAR SUSPENSION): empty-…"2005 Toyota Prius Base","shopId":null,"applicat)'162721247324345536'createJob[0](DMX SYN-BLEND OIL CHANGE)''''createJob[0](DMX SYN-BLEND OIL CHANGE): empty-crea…"2011 Ford Fusion SE","shopId":null,"application)'172721258324403473'createJob[0](DT - DIAGNOSTIC TEST check engine light on p0011)''''createJob[0](DT - DIAGNOSTIC TEST check engine lig…"2018 Hyundai Elantra SEL","shopId":null,"applic)'182721262324414665'createJob[0](Resecure Exhaust Heat Shield)''''createJob[0](Resecure Exhaust Heat Shield): empty-…"2016 INFINITI QX50 Base","shopId":null,"applica)'192721263324418417'createJob[0](DMX SYNTHETIC OIL CHANGE )''''createJob[0](DMX SYNTHETIC OIL CHANGE ): empty-cre…"2015 Chevrolet Impala Limited LS","shopId":null)'202721264324429491'createJob[0](DMX SYNTHETIC OIL CHANGE )''''createJob[0](DMX SYNTHETIC OIL CHANGE ): empty-cre…"2020 Honda CR-V EX-L","shopId":null,"applicatio)'Array(21)
+VM13748:1278 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-062837.json
+VM13748:1279 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
