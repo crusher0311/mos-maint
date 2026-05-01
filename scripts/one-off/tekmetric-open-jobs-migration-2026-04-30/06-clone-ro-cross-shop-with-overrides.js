@@ -95,8 +95,8 @@
   const DEST_LABOR_RATE_ID = null;        // null = auto-discover from a recent dest RO
   // Tokens are SINGLE-SHOP-SCOPED. Capture each one with 00-print-token.js
   // (it auto-copies to clipboard) and paste between the quotes:
-  const SOURCE_TOKEN      = '';           // token captured on a SOURCE-shop tab (10214)
-  const DEST_TOKEN        = '';           // token captured on a DEST-shop tab   (14245)
+  const SOURCE_TOKEN      = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicmFuZG9uQG15b2lsc3RpY2tlci5jb20iLCJ1c2VySWQiOiIxNDE1MzIiLCJzaG9wSWQiOiIxMDIxNCIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjEwMCIsIjEwMSIsIjIwMCIsIjE1MDAiLCIyMDEiLCIzMDAiLCIxNDAwIiwiMTAzIiwiMjAyIiwiMzAxIiwiNDAwIiwiMjAzIiwiMzAyIiwiNDAxIiwiMTMwMCIsIjEyMDEiLCI1MDAiLCIyMDQiLCIxMjAwIiwiNTAxIiwiNDAyIiwiMTEwMSIsIjYwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDUiLCI0MDMiLCI3MDAiLCI1MDMiLCI4MDAiLCI1MDQiLCI2MDMiLCI4MDEiLCI5MDAiLCI1MDUiLCI4MDIiXSwiZW1wbG95ZWVJZCI6IjI5MjY2MyIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wNS0wMVQwMDo1MzowMy4wOTIyNzY5MzhaIiwiZXhwIjoxNzc3NjU0MzgzfQ.33gPbZHKfGBj-trjB05_gheKKudParK40TNgosDmps4';           // token captured on a SOURCE-shop tab (10214)
+  const DEST_TOKEN        = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicmFuZG9uQG15b2lsc3RpY2tlci5jb20iLCJ1c2VySWQiOiIxNDE1MzIiLCJzaG9wSWQiOiIxNDI0NSIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjE1MDIiLCIxMDAiLCIxNTAxIiwiMjAwIiwiMTAxIiwiMTUwMCIsIjIwMSIsIjMwMCIsIjEwMiIsIjE0MDAiLCIxMDMiLCIyMDIiLCIzMDEiLCI0MDAiLCIxMTAyIiwiNTAwIiwiMjAzIiwiMzAyIiwiNDAxIiwiMTMwMCIsIjEyMDEiLCI0MDIiLCIxMTAxIiwiNjAwIiwiMjA0IiwiMTIwMCIsIjUwMSIsIjIwNSIsIjQwMyIsIjcwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDYiLCI4MDAiLCI1MDMiLCI2MDMiLCIyMDciLCI4MDEiLCI5MDAiLCI1MDQiLCI4MDIiLCI1MDUiLCI1MDYiXSwiZW1wbG95ZWVJZCI6IjIyMTEwNiIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wNS0wMVQwMTowNDowOS42MDUwMzc0NDRaIiwiZXhwIjoxNzc3NjU1MDQ5fQ.qmuZci689_-fWGfb070XZbGfm0dcIzDj0dRxgGPGaj8';           // token captured on a DEST-shop tab   (14245)
   const CONFIRM           = false;        // false = dry-run; true = actually create
   const JOBS_LIMIT        = null;         // null = clone all jobs; e.g. 1 to test the first only
   const AUTO_ROLLBACK     = true;         // on per-job failure, set partial RO to DELETED
@@ -276,19 +276,35 @@
   // ----- 0b. resolve dest labor rate (auto-discover if not set)
   let destLaborRateId = DEST_LABOR_RATE_ID;
   if (!destLaborRateId) {
-    const recent = await dstFetch(`/api/shop/${DEST_SHOP_ID}/repair-order?page=0&size=10`);
-    if (recent.ok) {
+    // Try several listing URL shapes — Tekmetric's bare /repair-order listing
+    // 404s; the proven shapes from 02-load-core-dest.js use status= + sort=,
+    // and a vehicleId filter is a strong fallback since prior 02 runs already
+    // created ROs against this customer's vehicle in the dest shop.
+    const probeUrls = [
+      `/api/shop/${DEST_SHOP_ID}/repair-order?vehicleId=${DEST_VEHICLE_ID}&page=0&size=10&sort=updatedDate,desc`,
+      `/api/shop/${DEST_SHOP_ID}/repair-order?customerId=${DEST_CUSTOMER_ID}&page=0&size=10&sort=updatedDate,desc`,
+      `/api/shop/${DEST_SHOP_ID}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS,POSTED&page=0&size=25&sort=updatedDate,desc`,
+    ];
+    for (const url of probeUrls) {
+      const recent = await dstFetch(url);
+      if (!recent.ok) {
+        console.warn(`[CLONE-X] labor-rate probe ${url} returned status=${recent.status}; trying next.`);
+        continue;
+      }
       const list = (recent.body && (recent.body.content || recent.body.repairOrders || recent.body.data || recent.body)) || [];
       for (const ro of list) {
         const lr = typeof ro.laborRate === 'number' ? ro.laborRate : ro.laborRate?.id;
         if (lr) { destLaborRateId = lr; break; }
       }
+      if (destLaborRateId) {
+        console.log(`[CLONE-X] ✓ auto-discovered dest labor rate id = ${destLaborRateId} (from ${url})`);
+        break;
+      }
     }
     if (!destLaborRateId) {
-      console.error(`[CLONE-X] could not auto-discover a labor rate id from any recent RO in dest shop ${DEST_SHOP_ID}. Set DEST_LABOR_RATE_ID at the top of the snippet and re-run.`);
+      console.error(`[CLONE-X] could not auto-discover a labor rate id from any recent RO in dest shop ${DEST_SHOP_ID}. Open any existing RO in shop ${DEST_SHOP_ID} in Tekmetric, copy its labor-rate id from the Network tab (an /api/repair-order/{id} response shows "laborRate": <number>), set DEST_LABOR_RATE_ID at the top of the snippet, and re-run.`);
       return;
     }
-    console.log(`[CLONE-X] ✓ auto-discovered dest labor rate id = ${destLaborRateId}`);
   } else {
     console.log(`[CLONE-X] ✓ using configured dest labor rate id = ${destLaborRateId}`);
   }
