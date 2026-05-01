@@ -1,0 +1,38 @@
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+VM9600:72 [CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+Promise {<pending>}
+VM9600:72 [CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+VM9600:72 [CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+VM9600:72 [CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+VM9600:72 [CLONE-X] ✓ using configured dest labor rate id = 9991
+VM9600:72 [CLONE-X] source RO #2721246 has 2 non-archived job(s).
+VM9600:72           source customer: VARSHA AKELLA (id 106024131) — IGNORED, using dest override
+VM9600:72           source vehicle:  2005 Toyota Prius (id 153101827) — IGNORED, using dest override
+VM9600:72           source miles in/out: 109834/109834, odometerInop=false
+VM9600:72 [CLONE-X] source RO has 1 customer concern(s).
+VM9600:73 [CLONE-X] DRY RUN — set CONFIRM=true at the top to actually create the new RO.
+console.warn @ VM9600:73
+(anonymous) @ VM9600:342
+await in (anonymous)
+(anonymous) @ VM9600:452
+VM9600:72 [CLONE-X] would create new RO in shop 14245:
+VM9600:72             customer: Jay Demore (id 82581111)
+VM9600:72             vehicle:  2021 Chevrolet Silverado 1500 (id 118337025)
+VM9600:72             labor rate: 9991
+VM9600:72             mileage in/out: 109834/109834
+VM9600:72             concern 1: [migrated from RO#2721246] Rear of the vehicle is sitting really low.
+VM9600:72             job 1: "IR - INSPECT REAR SUSPENSION" — 0 part(s), 1 labor line(s), status=Approved
+VM9600:72             job 2: "Remove & Replace Rear Strut Assemblies" — 2 part(s), 2 labor line(s), status=Approved
+VM9600:81 [CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:
+VM9600:82 ====== BEGIN RUN LOG ======
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+[CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+[CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+[CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+[CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+[CLONE-X] ✓ using configured dest labor rate id = 9991
+[CLONE-X] source RO #2721246 has 2 non-archived job(s).
+[CLONE-X] source RO has 1 customer concern(s).
+WARN [CLONE-X] DRY RUN — set CONFIRM=true at the top to actually create the new RO.
+[CLONE-X] would create new RO in shop 14245:
+====== END RUN LOG ======
