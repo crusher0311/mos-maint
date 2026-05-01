@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.9-customer-scoped-vehicle';
+  const VERSION = '2026-05-01.8-plural-endpoints';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -101,25 +101,22 @@
     repairOrderConcerns: (roId) =>
       `/api/repair-orders/${roId}/customer-concerns`,
     // Legacy customer/vehicle search — only used if USE_SOURCE_IDS_DIRECT=false.
-    // 2026-05-01.8: switched customer endpoints to plural /customers per
-    // HAR (GET /api/shop/14245/customers?search=demo&size=50
-    //              &sort=firstName,lastName&searchVehicleType=ACTIVE).
-    // 2026-05-01.9: dropped `searchVehicleType=ACTIVE` from customer
-    // search — that filter only returns customers who have at least one
-    // ACTIVE vehicle, which excludes the 21 vehicle-less customers
-    // v2026-05-01.8 just created in dest 18008. Without this fix, a
-    // re-paste would not match those orphans and would duplicate them.
-    // 2026-05-01.9: vehicle endpoints flipped to customer-scoped per HAR
-    // (GET /api/shop/14245/customer/82581111/vehicles-search shows the
-    // hierarchy is shop -> customer -> vehicle). The shop-level
-    // /api/shop/{id}/vehicles path returned 404 in v.8.
+    // 2026-05-01.8 fix: the singular /customer + /vehicle endpoints used by
+    // 02-load-core-dest.js v.7 returned 404 "Requested resource not found"
+    // on shop 18008. The HAR capture from 2026-05-01 shows the live UI
+    // hits /customers (plural) with a specific query-string shape:
+    //   GET /api/shop/14245/customers?search=demo&size=50
+    //       &sort=firstName,lastName&searchVehicleType=ACTIVE
+    // No `page=0`. Vehicles aren't HAR-confirmed yet, but mirroring the
+    // same plural pattern is the best single-shot guess; if vehicleCreate
+    // also 404s we'll capture the real endpoint from the Network tab on
+    // a manual UI add.
     customerSearch: (shopId, q) =>
-      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
+      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName&searchVehicleType=ACTIVE`,
     customerCreate: (shopId) => `/api/shop/${shopId}/customers`,
-    vehicleSearch: (shopId, customerId, q) =>
-      `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(q)}&size=20`,
-    vehicleCreate: (shopId, customerId) =>
-      `/api/shop/${shopId}/customer/${customerId}/vehicle`,
+    vehicleSearch: (shopId, q) =>
+      `/api/shop/${shopId}/vehicles?search=${encodeURIComponent(q)}&size=20`,
+    vehicleCreate: (shopId) => `/api/shop/${shopId}/vehicles`,
     // Create RO — confirmed-working endpoint from 04-clone-ro-same-shop.js.
     // NOT the per-shop variant (`/api/shop/{shopId}/repair-order`) — that
     // one is the GET listing endpoint; POSTing to it returns 404/405.
@@ -892,14 +889,9 @@
           destCustomerId = created.id;
         }
         step = 'matchVehicle';
-        if (srcVinStr && destCustomerId) {
-          // vehicleSearch is customer-scoped (only returns vehicles
-          // attached to this customer). On a fresh customer, this returns
-          // empty and we fall through to create — that is correct. On a
-          // re-paste that re-matches an existing customer, we'll find any
-          // vehicle we previously created and skip duping it.
+        if (srcVinStr) {
           try {
-            const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, destCustomerId, srcVinStr), token);
+            const r = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, srcVinStr), token);
             const list = Array.isArray(r) ? r : (r.content || []);
             const hit = list.find((v) => {
               const vVin = pickStr(v.vin, ['vin']);
@@ -910,7 +902,7 @@
         }
         if (!destVehicleId) {
           step = 'createVehicle';
-          const createdV = await jsonFetch(ENDPOINTS.vehicleCreate(destShopId, destCustomerId), token, {
+          const createdV = await jsonFetch(ENDPOINTS.vehicleCreate(destShopId), token, {
             method: 'POST',
             body: JSON.stringify({
               customerId: destCustomerId,
@@ -1095,3 +1087,406 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13335:396 [Tekmetric Migration LOAD-CORE v2026-05-01.8-plural-endpoints] starting…
+VM13335:245 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13335:246 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13335:410 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13335:423 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13335:435 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13335:501 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13335:529 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13335:537 [LOAD-CORE] Plan:
+VM13335:538 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13335:552 [LOAD-CORE] First few that will be created:
+VM13335:553 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13335:567 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13335:567
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:775 [LOAD-CORE] ✓ auto-discovered dest labor-rate id = 16000 (shop 18008)
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=JTEDP21A340041868&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721265 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=JA4MT41X69Z013883&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2720892 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1C6RR7LT7FS757431&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721001 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1FAHP60AX2Y106492&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721060 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=KM8J3CA21JU647767&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721063 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1FAHP36N39W115078&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721079 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=5LMJJ2LT8HEL06941&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721143 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1GCHK24U66E265779&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721170 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=7FARS6H91PE005201&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721175 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=5FNRL382X7B018460&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721193 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1GNEVKKW5NJ164809&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721205 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1GBJG31U231103345&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721209 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=7FARW2H87KE017172&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721214 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=1GT22ZCG4DZ210490&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721233 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=5XYZK3AB4BG090673&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721245 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=JTDKB20U953062729&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721246 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=3FAHP0HA9BR301807&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721247 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=5NPD84LF2JH387074&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721258 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=JN1BJ0RR8GM265391&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721262 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=2G1WA5E36F1158744&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721263 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  GET https://shop.tekmetric.com/api/shop/18008/vehicles?search=5J6RW2H82LL041657&size=20 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:894
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18008/vehicles 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13335:188
+(anonymous) @ VM13335:905
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1050 [LOAD-CORE] FAILED RO #2721264 at step "createVehicle": 404  on /api/shop/18008/vehicles :: {"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}
+(anonymous) @ VM13335:1050
+await in (anonymous)
+(anonymous) @ VM13335:1089
+VM13335:1062 [LOAD-CORE] Successes:
+VM13335:1063 
+VM13335:1065 [LOAD-CORE] Failures:
+VM13335:1066 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'12720892321023374'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'22721001321701729'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'32721060322599022'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'42721063322618310'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'52721079322765797'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'62721143323391292'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'72721170323628624'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'82721175323646078'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'92721193324010591'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'102721205324031687'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'112721209324050816'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'122721214324104201'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'132721233324204864'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'142721245324342162'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'152721246324342598'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'162721247324345536'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'172721258324403473'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'182721262324414665'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'192721263324418417'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'202721264324429491'createVehicle'404'{"type":"ERROR","message":"Requested resource not found","data":null,"details":{}}'Array(21)
+VM13335:1087 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-061139.json
+VM13335:1088 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
