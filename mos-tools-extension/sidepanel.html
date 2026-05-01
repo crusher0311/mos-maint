@@ -149,6 +149,14 @@
           </svg>
           <span>Specs</span>
         </button>
+        <!-- Detect Dog: Shop Migration Wizard — platform-admin only.
+             JS reveals this button when mosUser.role === 'platform_admin'. -->
+        <button class="tab-btn hidden" id="tab-btn-migrate" data-tab="migrate" data-platform-admin-only="true" title="Tekmetric Shop Migration">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12h18"/><path d="M12 3l9 9-9 9"/>
+          </svg>
+          <span>Migrate</span>
+        </button>
       </nav>
 
       <!-- Tab content -->
@@ -655,6 +663,87 @@
           <div id="specs-content" class="hidden">
             <div id="specs-vehicle-header" class="specs-vehicle-header"></div>
             <div id="specs-sections" class="specs-sections"></div>
+          </div>
+        </div>
+
+        <!-- Detect Dog: Shop Migration Wizard (platform-admin only) -->
+        <div id="tab-migrate" class="tab-panel hidden">
+          <div class="migrate-wizard">
+            <div class="migrate-header">
+              <h3>Tekmetric Shop Migration</h3>
+              <p class="migrate-sub">Dump open ROs from a source shop and load them into a destination shop. Dry-run by default; you must confirm before any writes.</p>
+            </div>
+
+            <!-- Step 1: pick shops + token status -->
+            <section id="migrate-step-1" class="migrate-step">
+              <h4>1. Source &amp; destination shops</h4>
+              <div class="migrate-row">
+                <label>Source Tekmetric shop
+                  <select id="migrate-source-shop" class="migrate-shop-select">
+                    <option value="">— pick a shop —</option>
+                  </select>
+                </label>
+                <span class="migrate-badge" id="migrate-source-badge">— no token —</span>
+              </div>
+              <div class="migrate-row">
+                <label>Destination Tekmetric shop
+                  <select id="migrate-dest-shop" class="migrate-shop-select">
+                    <option value="">— pick a shop —</option>
+                  </select>
+                </label>
+                <span class="migrate-badge" id="migrate-dest-badge">— no token —</span>
+              </div>
+              <p class="migrate-hint">Only Tekmetric shops you have access to are listed. Open each shop's Tekmetric tab once with this extension installed to cache its <code>x-auth-token</code> server-side.</p>
+              <div class="migrate-actions">
+                <button id="migrate-refresh-tokens" class="btn-secondary">Recheck tokens</button>
+                <button id="migrate-start-run" class="btn-primary">Start migration run</button>
+              </div>
+              <div id="migrate-existing-runs" class="migrate-existing"></div>
+            </section>
+
+            <!-- Step 2: dump preview -->
+            <section id="migrate-step-2" class="migrate-step hidden">
+              <h4>2. Dump source shop</h4>
+              <p>Run id <code id="migrate-run-id">—</code></p>
+              <button id="migrate-run-dump" class="btn-primary">Run dump</button>
+              <div id="migrate-dump-status" class="migrate-status"></div>
+              <div id="migrate-dump-preview"></div>
+            </section>
+
+            <!-- Step 3: load-core dry-run + confirm -->
+            <section id="migrate-step-3" class="migrate-step hidden">
+              <h4>3. Plan &amp; load core ROs</h4>
+              <label class="migrate-toggle">
+                <input type="checkbox" id="migrate-loadcore-direct-ids" />
+                Use source IDs directly (Tekmetric account-transfer mode)
+              </label>
+              <p class="migrate-sub">Default is cross-shop dedup by VIN / phone / email. Only enable direct-ID mode when source &amp; dest are linked under one Tekmetric account and IDs are guaranteed to match.</p>
+              <button id="migrate-loadcore-dry" class="btn-secondary">Re-plan dry-run</button>
+              <button id="migrate-loadcore-confirm" class="btn-danger">Confirm &amp; load</button>
+              <div id="migrate-loadcore-status" class="migrate-status"></div>
+              <div id="migrate-loadcore-preview"></div>
+            </section>
+
+            <!-- Step 4: needs-override sub-list -->
+            <section id="migrate-step-4" class="migrate-step hidden">
+              <h4>4. Needs override</h4>
+              <p class="migrate-sub">These ROs need a destination customer + vehicle picked manually.</p>
+              <div id="migrate-overrides-list"></div>
+            </section>
+
+            <!-- Step 5: load-extras (inspections + photos) -->
+            <section id="migrate-step-5" class="migrate-step hidden">
+              <h4>5. Inspections &amp; photos</h4>
+              <button id="migrate-extras-dry" class="btn-secondary">Dry-run</button>
+              <button id="migrate-extras-confirm" class="btn-danger">Confirm &amp; copy</button>
+              <div id="migrate-extras-status" class="migrate-status"></div>
+              <div id="migrate-extras-preview"></div>
+            </section>
+
+            <section class="migrate-step">
+              <h4>Recent activity</h4>
+              <div id="migrate-audit-log" class="migrate-audit"></div>
+            </section>
           </div>
         </div>
       </main>

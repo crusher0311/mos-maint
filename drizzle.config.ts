@@ -68,5 +68,9 @@ export default defineConfig({
     "support_tickets",
     "production_logs",
     "sniffer_sessions",
+    "tekmetric_migration_runs",
+    "tekmetric_migration_dumps",
+    "tekmetric_migration_mappings",
+    "tekmetric_migration_audit",
   ],
 });
