@@ -873,19 +873,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           const roId = currentSmsContext.roId;
-          const baseUrl = currentSmsContext.smsBaseUrl || tekmetricBaseUrl || 'https://shop.tekmetric.com';
 
           console.log(`[Concern] Adding customer concern to RO #${roId}`);
 
-          const res = await fetch(`${baseUrl}/api/repair-orders/${roId}/customer-concerns`, {
-            method: 'POST',
-            headers: {
-              'accept': 'application/json',
-              'content-type': 'application/json',
-              'x-auth-token': smsTokens.tekmetric
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
             },
-            body: JSON.stringify({ concern: concernText })
-          });
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+            }
+          );
 
           const resBody = await res.text();
           console.log(`[Concern] Response: ${res.status}`, resBody.substring(0, 300));
@@ -1312,21 +1315,312 @@ async function tekmetricFetchWithBackoff(url, init, label) {
   throw new Error(`Tekmetric exceeded ${TEK_MAX_429_RETRIES} retries on ${label || url}`);
 }
 
-async function handleTekmetricApiRequest(endpoint, options = {}) {
-  if (!smsTokens.tekmetric) {
-    throw new Error("No Tekmetric session. Please navigate to a repair order first.");
+// ==================== TEKMETRIC ENDPOINT REPORTER ====================
+// Best-effort, non-blocking, debounced/batched telemetry for Tekmetric
+// internal-API calls made from the extension. Reports get sanitized
+// (numeric path segments → {id}, query string stripped) before they
+// even leave the extension so RO numbers and other PII never make it
+// into the report buffer.
+const TEK_REPORT_FLUSH_INTERVAL_MS = 5000;
+const TEK_REPORT_MAX_BATCH = 20;
+const TEK_REPORT_MAX_QUEUE = 200;
+const TEK_REPORT_PATH = '/api/extension/tek-endpoint-report';
+let tekReportQueue = [];
+let tekReportFlushTimer = null;
+let tekReportFlushInFlight = false;
+
+function tekSanitizeEndpointShape(pathOrUrl) {
+  if (!pathOrUrl || typeof pathOrUrl !== 'string') return null;
+  let s = pathOrUrl.trim();
+  if (!s) return null;
+  // Strip protocol+host so the shape is path-only — the panel groups
+  // across base URLs (shop. / sandbox. / cba.) and we don't want them
+  // splintered into separate buckets.
+  s = s.replace(/^https?:\/\/[^/]+/i, '');
+  // Strip query + fragment.
+  const qIdx = s.indexOf('?');
+  if (qIdx >= 0) s = s.slice(0, qIdx);
+  const hIdx = s.indexOf('#');
+  if (hIdx >= 0) s = s.slice(0, hIdx);
+  // Drop trailing slash (except root).
+  if (s.length > 1 && s.endsWith('/')) s = s.slice(0, -1);
+  // Replace numeric IDs (RO numbers, shop IDs, customer IDs, etc.)
+  // with the literal `{id}`. This is the single most important step
+  // for keeping the dataset PII-free and aggregations meaningful.
+  s = s.replace(/\/\d+(?=\/|$)/g, '/{id}');
+  if (s.length > 200) s = s.slice(0, 200);
+  return s || null;
+}
+
+function tekScheduleReportFlush(immediate = false) {
+  if (immediate) {
+    if (tekReportFlushTimer) {
+      clearTimeout(tekReportFlushTimer);
+      tekReportFlushTimer = null;
+    }
+    tekFlushReports().catch(err => {
+      console.warn('[Tekmetric Report] Flush error:', err.message);
+    });
+    return;
+  }
+  if (tekReportFlushTimer) return;
+  tekReportFlushTimer = setTimeout(() => {
+    tekReportFlushTimer = null;
+    tekFlushReports().catch(err => {
+      console.warn('[Tekmetric Report] Flush error:', err.message);
+    });
+  }, TEK_REPORT_FLUSH_INTERVAL_MS);
+}
+
+function tekEnqueueReport(entry) {
+  if (!entry || !entry.endpointShape) return;
+  // Hard cap the in-memory buffer so a sustained outage can't grow
+  // unbounded. Drop oldest entries first — newest failures are more
+  // useful for triage.
+  if (tekReportQueue.length >= TEK_REPORT_MAX_QUEUE) {
+    tekReportQueue.splice(0, tekReportQueue.length - TEK_REPORT_MAX_QUEUE + 1);
+  }
+  tekReportQueue.push(entry);
+  if (tekReportQueue.length >= TEK_REPORT_MAX_BATCH) {
+    tekScheduleReportFlush(true);
+  } else {
+    tekScheduleReportFlush(false);
+  }
+}
+
+async function tekFlushReports() {
+  if (tekReportFlushInFlight) return;
+  if (tekReportQueue.length === 0) return;
+  if (!mosApiToken || !mosApiUrl) {
+    // No way to deliver — drop everything queued so we don't grow
+    // unbounded while the user is logged out.
+    tekReportQueue = [];
+    return;
+  }
+  const batch = tekReportQueue.splice(0, TEK_REPORT_MAX_BATCH);
+  tekReportFlushInFlight = true;
+  try {
+    const res = await fetch(`${mosApiUrl}${TEK_REPORT_PATH}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mosApiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reports: batch })
+    });
+    if (!res.ok) {
+      // Don't requeue — these are best-effort. A 401 just means the
+      // user logged out while reports were buffered; spinning forever
+      // would be worse than dropping them.
+      console.warn(`[Tekmetric Report] Flush returned ${res.status}, dropping ${batch.length} report(s)`);
+    }
+  } catch (err) {
+    console.warn('[Tekmetric Report] Flush network error:', err.message);
+  } finally {
+    tekReportFlushInFlight = false;
+    // If more piled up while we were flushing, schedule another pass.
+    if (tekReportQueue.length > 0) {
+      tekScheduleReportFlush(tekReportQueue.length >= TEK_REPORT_MAX_BATCH);
+    }
+  }
+}
+
+function tekShowToastOnActiveTab(message, type = 'error') {
+  // Best-effort: pick any open Tekmetric tab and surface the toast there.
+  // We deliberately do NOT await — the user-facing signal must not block
+  // whatever workflow triggered the failed fetch.
+  try {
+    chrome.tabs.query(
+      { url: ['*://shop.tekmetric.com/*', '*://sandbox.tekmetric.com/*', '*://cba.tekmetric.com/*'] },
+      (tabs) => {
+        if (!tabs || tabs.length === 0) return;
+        const tab = tabs.find(t => t.active) || tabs[0];
+        if (!tab?.id) return;
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'SHOW_TOAST',
+          message,
+          type,
+        }).catch(() => {});
+      }
+    );
+  } catch {}
+}
+
+// Build a Tekmetric request: path-prefix + token-injection. Idempotent
+// re: headers — if the caller already passed `x-auth-token`, theirs wins
+// (preserves backwards compatibility with any caller that needs to use
+// a different token, e.g. the per-shop relay path).
+function tekBuildRequest(endpoint, init = {}) {
+  if (!endpoint || typeof endpoint !== 'string') {
+    throw new Error('tekmetricFetch: endpoint must be a non-empty string');
+  }
+  const baseUrl = tekmetricBaseUrl || 'https://shop.tekmetric.com';
+  const url = endpoint.startsWith('http')
+    ? endpoint
+    : `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  // Merge headers case-insensitively so we don't double-up on
+  // `x-auth-token` vs `X-Auth-Token`.
+  const callerHeaders = init.headers || {};
+  const lowerKeys = new Set(
+    Object.keys(callerHeaders).map(k => k.toLowerCase())
+  );
+  const mergedHeaders = { ...callerHeaders };
+  if (!lowerKeys.has('x-auth-token') && smsTokens.tekmetric) {
+    mergedHeaders['x-auth-token'] = smsTokens.tekmetric;
+  }
+  if (!lowerKeys.has('content-type') && init.body != null) {
+    mergedHeaders['content-type'] = 'application/json';
+  }
+  return {
+    url,
+    init: { ...init, headers: mergedHeaders },
+  };
+}
+
+// Single Tekmetric fetch attempt with logging + queued telemetry.
+// Returns the raw Response (or throws on a network error) so callers
+// keep their existing `await res.text()` / `await res.json()` flow.
+async function tekSingleAttempt(endpointForReport, url, init, opts) {
+  const startedAt = Date.now();
+  let response;
+  let networkErr = null;
+  try {
+    response = await tekmetricFetchWithBackoff(url, init, opts.label || endpointForReport);
+  } catch (err) {
+    networkErr = err;
+  }
+  const elapsedMs = Date.now() - startedAt;
+  const status = networkErr ? 0 : response.status;
+  const method = (init.method || 'GET').toUpperCase();
+
+  // Queue the report. We deliberately swallow shape failures (e.g.
+  // missing endpoint) — telemetry must not surface to the caller.
+  try {
+    tekEnqueueReport({
+      endpointShape: tekSanitizeEndpointShape(endpointForReport),
+      method,
+      status,
+      elapsedMs,
+      occurredAt: Date.now(),
+      smsShopId: opts.shopId != null ? String(opts.shopId) : (tekmetricShopId || null),
+      label: opts.label || null,
+      isFallback: !!opts.isFallback,
+      fallbackOf: opts.fallbackOf || null,
+    });
+  } catch {}
+
+  if (networkErr) {
+    console.warn(`[tekmetricFetch] ${method} ${endpointForReport} network error after ${elapsedMs}ms:`, networkErr.message);
+    throw networkErr;
   }
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
-  
-  const response = await tekmetricFetchWithBackoff(`${baseUrl}${endpoint}`, {
-    ...options,
-    headers: {
-      'x-auth-token': smsTokens.tekmetric,
-      'Content-Type': 'application/json',
-      ...options.headers
+  if (!response.ok) {
+    console.warn(`[tekmetricFetch] ${method} ${endpointForReport} → ${status} in ${elapsedMs}ms${opts.label ? ` (${opts.label})` : ''}`);
+  } else if (elapsedMs > 3000) {
+    console.log(`[tekmetricFetch] ${method} ${endpointForReport} → ${status} in ${elapsedMs}ms (slow)`);
+  }
+
+  return response;
+}
+
+// Public helper. Wraps tekmetricFetchWithBackoff with:
+//   - automatic baseUrl prefix + x-auth-token injection
+//   - per-call latency/status logging
+//   - per-call best-effort report into the batched reporter
+//   - optional fallback chain (e.g. listing → detail-by-known-id) when
+//     the primary returns one of `opts.fallbackOnStatuses` (defaults to
+//     [404] — the "endpoint not exposed for this shop" case the
+//     fallback chain was designed for)
+//   - user-facing toast on final 4xx/5xx for mutating requests
+//     (POST/PUT/PATCH/DELETE) by default; opt out with
+//     `signalUserOnError: false`. GETs stay quiet by default since they
+//     are typically background polls.
+//
+// `endpoint` MUST be a path (`/api/...`) — we rebuild the URL with the
+// captured Tekmetric base. `opts.fallbacks` is an array of
+// `{ endpoint, init? }` tried in order on a matching status.
+//
+// Idempotent: re-invoking with identical args produces identical
+// behavior; we don't memoize, and we don't dedupe in-flight calls.
+const DEFAULT_FALLBACK_STATUSES = [404];
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+async function tekmetricFetch(endpoint, init = {}, opts = {}) {
+  if (!smsTokens.tekmetric) {
+    throw new Error('No Tekmetric session token. Open a Tekmetric tab first.');
+  }
+  const method = ((init.method || 'GET') + '').toUpperCase();
+  const isMutating = MUTATING_METHODS.has(method);
+  const fallbackStatuses = Array.isArray(opts.fallbackOnStatuses)
+    ? opts.fallbackOnStatuses
+    : DEFAULT_FALLBACK_STATUSES;
+
+  const built = tekBuildRequest(endpoint, init);
+  let response = await tekSingleAttempt(endpoint, built.url, built.init, {
+    label: opts.label,
+    shopId: opts.shopId,
+  });
+
+  const shouldFallback = (status) =>
+    Array.isArray(opts.fallbacks) &&
+    opts.fallbacks.length > 0 &&
+    fallbackStatuses.includes(status);
+
+  if (!response.ok && shouldFallback(response.status)) {
+    for (const fb of opts.fallbacks) {
+      if (!fb || !fb.endpoint) continue;
+      console.log(`[tekmetricFetch] Primary ${endpoint} returned ${response.status}, trying fallback ${fb.endpoint}`);
+      try {
+        const fbBuilt = tekBuildRequest(fb.endpoint, fb.init || {});
+        const fbResponse = await tekSingleAttempt(fb.endpoint, fbBuilt.url, fbBuilt.init, {
+          label: fb.label || opts.label,
+          shopId: opts.shopId,
+          isFallback: true,
+          fallbackOf: opts.label || endpoint,
+        });
+        if (fbResponse.ok) {
+          response = fbResponse;
+          break;
+        }
+        // Track latest non-ok so the caller sees the most recent
+        // failure status if every fallback fails. Don't keep cascading
+        // unless the new status is also a fallback-trigger.
+        response = fbResponse;
+        if (!fallbackStatuses.includes(fbResponse.status)) break;
+      } catch (err) {
+        console.warn(`[tekmetricFetch] Fallback ${fb.endpoint} threw:`, err.message);
+      }
     }
-  }, endpoint);
+  }
+
+  // Toast policy: by default we surface failures for mutations (the
+  // user clicked a button, they need to know it failed). Background
+  // GETs are silent unless the caller explicitly opts in.
+  const signalUser =
+    opts.signalUserOnError === false
+      ? false
+      : opts.signalUserOnError === true
+        ? true
+        : isMutating;
+
+  if (!response.ok && signalUser) {
+    const label = opts.label ? ` ${opts.label}` : '';
+    tekShowToastOnActiveTab(
+      `Tekmetric request failed (${response.status})${label}. Retry in a moment.`,
+      response.status >= 500 ? 'error' : 'warning',
+    );
+  }
+
+  return response;
+}
+
+async function handleTekmetricApiRequest(endpoint, options = {}) {
+  // Route through the canonical helper so this entrypoint also gets
+  // reporting + (future) fallback support, instead of bypassing it.
+  const response = await tekmetricFetch(endpoint, options, {
+    label: `handleTekmetricApiRequest:${endpoint}`,
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -1341,7 +1635,6 @@ async function createTekmetricJob(shopId, roId, jobData) {
     return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
   }
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const effectiveShopId = shopId || tekmetricShopId;
 
   if (!effectiveShopId || !roId) {
@@ -1350,12 +1643,11 @@ async function createTekmetricJob(shopId, roId, jobData) {
 
   try {
     // First fetch RO to get labor rate and vehicle info
-    const roRes = await fetch(`${baseUrl}/api/shop/${effectiveShopId}/repair-order/${roId}`, {
-      headers: {
-        "x-auth-token": smsTokens.tekmetric,
-        "content-type": "application/json"
-      }
-    });
+    const roRes = await tekmetricFetch(
+      `/api/shop/${effectiveShopId}/repair-order/${roId}`,
+      {},
+      { shopId: effectiveShopId, label: 'createTekmetricJob.fetch-ro' }
+    );
 
     if (!roRes.ok) {
       return { success: false, error: `Failed to fetch repair order: ${roRes.status}` };
@@ -1421,15 +1713,19 @@ async function createTekmetricJob(shopId, roId, jobData) {
 
     console.log("[Tekmetric] Creating job:", jobPayload.name);
 
-    const createRes = await fetch(`${baseUrl}/api/shop/${effectiveShopId}/job`, {
-      method: "POST",
-      headers: {
-        "x-auth-token": smsTokens.tekmetric,
-        "content-type": "application/json",
-        "accept": "application/json"
+    const createRes = await tekmetricFetch(
+      `/api/shop/${effectiveShopId}/job`,
+      {
+        method: "POST",
+        headers: { "accept": "application/json" },
+        body: JSON.stringify(jobPayload),
       },
-      body: JSON.stringify(jobPayload)
-    });
+      {
+        shopId: effectiveShopId,
+        label: 'createTekmetricJob.post-job',
+        signalUserOnError: true,
+      }
+    );
 
     if (!createRes.ok) {
       const errorText = await createRes.text();
@@ -1713,17 +2009,15 @@ async function fetchAndRelayInspections(context) {
   if (!smsTokens.tekmetric) return;
   if (context.roId === lastInspectionFetchRoId) return;
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return;
 
   try {
-    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
-      headers: {
-        'x-auth-token': smsTokens.tekmetric,
-        'content-type': 'application/json'
-      }
-    });
+    const res = await tekmetricFetch(
+      `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
+      {},
+      { shopId, label: 'inspections.list.relay' }
+    );
 
     if (!res.ok) {
       if (res.status !== 404) {
@@ -1861,7 +2155,6 @@ async function prefillDviInspection(context, inspId, tabId) {
   if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
   if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
 
@@ -1875,12 +2168,40 @@ async function prefillDviInspection(context, inspId, tabId) {
 
   let inspArr;
   try {
-    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
-      headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" }
-    });
+    // Listing → detail-by-known-id fallback when the listing endpoint
+    // 404s for this shop. The detail endpoint accepts an inspection id
+    // we know about from the supplied `inspId` arg; without that we
+    // can only try the listing.
+    const fallbacks = inspId
+      ? [{
+          endpoint: `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspId}`,
+          label: 'inspections.detail-by-id.fallback',
+        }]
+      : [];
+    const res = await tekmetricFetch(
+      `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
+      {},
+      {
+        shopId,
+        label: 'prefill-dvi.list-inspections',
+        signalUserOnError: true,
+        fallbacks,
+      }
+    );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
     const data = await res.json();
-    inspArr = Array.isArray(data) ? data : (data.content || data.data || []);
+    // Detail-by-id endpoint returns the inspection object directly;
+    // listing returns either an array or a paginated wrapper. Handle
+    // both shapes uniformly.
+    if (Array.isArray(data)) {
+      inspArr = data;
+    } else if (data && (data.content || data.data)) {
+      inspArr = data.content || data.data || [];
+    } else if (data && data.id) {
+      inspArr = [data];
+    } else {
+      inspArr = [];
+    }
   } catch (err) {
     return { success: false, error: "Failed to fetch inspections: " + err.message };
   }
@@ -1976,17 +2297,13 @@ async function prefillDviInspection(context, inspId, tabId) {
     putBody.finding = update.finding || task.finding || null;
 
     try {
-      const res = await tekmetricFetchWithBackoff(
-        `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
+      const res = await tekmetricFetch(
+        `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspection.id}/tasks/${task.id}`,
         {
           method: "PUT",
-          headers: {
-            "x-auth-token": smsTokens.tekmetric,
-            "content-type": "application/json",
-          },
           body: JSON.stringify(putBody),
         },
-        `prefill-dvi PUT task ${task.id}`
+        { shopId, label: 'prefill-dvi.put-task' }
       );
 
       if (res.ok) {
@@ -2387,7 +2704,6 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
   if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
 
@@ -2397,12 +2713,33 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
 
   let inspArr;
   try {
-    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
-      headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" }
-    });
+    const fallbacks = inspId
+      ? [{
+          endpoint: `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspId}`,
+          label: 'inspections.detail-by-id.fallback',
+        }]
+      : [];
+    const res = await tekmetricFetch(
+      `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
+      {},
+      {
+        shopId,
+        label: 'enhance-findings.list-inspections',
+        signalUserOnError: true,
+        fallbacks,
+      }
+    );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
     const data = await res.json();
-    inspArr = Array.isArray(data) ? data : (data.content || data.data || []);
+    if (Array.isArray(data)) {
+      inspArr = data;
+    } else if (data && (data.content || data.data)) {
+      inspArr = data.content || data.data || [];
+    } else if (data && data.id) {
+      inspArr = [data];
+    } else {
+      inspArr = [];
+    }
   } catch (err) {
     return { success: false, error: "Failed to fetch inspections: " + err.message };
   }
@@ -2516,18 +2853,37 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   await _stateReady;
   if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
 
   let inspArr;
   try {
-    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections`, {
-      headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" }
-    });
+    const fallbacks = inspectionId
+      ? [{
+          endpoint: `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspectionId}`,
+          label: 'inspections.detail-by-id.fallback',
+        }]
+      : [];
+    const res = await tekmetricFetch(
+      `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
+      {},
+      {
+        shopId,
+        label: 'apply-enhanced.list-inspections',
+        fallbacks,
+      }
+    );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
     const data = await res.json();
-    inspArr = Array.isArray(data) ? data : (data.content || data.data || []);
+    if (Array.isArray(data)) {
+      inspArr = data;
+    } else if (data && (data.content || data.data)) {
+      inspArr = data.content || data.data || [];
+    } else if (data && data.id) {
+      inspArr = [data];
+    } else {
+      inspArr = [];
+    }
   } catch (err) {
     return { success: false, error: "Failed to fetch inspections: " + err.message };
   }
@@ -2556,14 +2912,13 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
     putBody[findingField] = item.enhanced;
 
     try {
-      const res = await tekmetricFetchWithBackoff(
-        `${baseUrl}/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${itemInspId}/tasks/${task.id}`,
+      const res = await tekmetricFetch(
+        `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${itemInspId}/tasks/${task.id}`,
         {
           method: "PUT",
-          headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
           body: JSON.stringify(putBody),
         },
-        `enhance-notes PUT task ${task.id}`
+        { shopId, label: 'enhance-notes.put-task' }
       );
       if (res.ok) { applied++; } else { failed++; }
     } catch { failed++; }
@@ -2630,15 +2985,13 @@ async function autoApplyLaborRate(context, options = {}) {
   if (!shopId) return;
 
   // Fetch full RO details from Tekmetric to get vehicle fuelType and job info
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
   let roData;
   try {
-    const res = await fetch(`${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`, {
-      headers: {
-        'x-auth-token': smsTokens.tekmetric,
-        'content-type': 'application/json'
-      }
-    });
+    const res = await tekmetricFetch(
+      `/api/shop/${shopId}/repair-order/${context.roId}`,
+      {},
+      { shopId, label: 'labor-rate.get-ro' }
+    );
     if (!res.ok) {
       console.warn("[LaborRate] Failed to fetch RO details:", res.status);
       return;
@@ -2650,44 +3003,82 @@ async function autoApplyLaborRate(context, options = {}) {
     return;
   }
 
-  // Fetch estimate data — this is the endpoint Tekmetric uses to load jobs with labor
+  // Fetch estimate data — this is the endpoint Tekmetric uses to load
+  // jobs with labor. If the estimate endpoint is unavailable for this
+  // shop (404/5xx), the helper's fallback chain transparently retries
+  // the jobs-list endpoint.
   let estimateData = null;
   try {
-    const estRes = await fetch(`${baseUrl}/api/repair-order/${context.roId}/estimate`, {
-      headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
-    });
+    const estRes = await tekmetricFetch(
+      `/api/repair-order/${context.roId}/estimate`,
+      {},
+      {
+        shopId,
+        label: 'labor-rate.get-estimate',
+        // Estimate endpoint can fail with 404 (not exposed for shop)
+        // OR with 5xx (intermittent backend issue) — original behavior
+        // was to always try /jobs when estimate didn't yield, so we
+        // broaden the trigger here beyond the default [404].
+        fallbackOnStatuses: [404, 500, 502, 503, 504],
+        fallbacks: [{
+          endpoint: `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
+          label: 'labor-rate.get-jobs.fallback',
+        }],
+      }
+    );
     if (estRes.ok) {
       estimateData = await estRes.json();
       const estPayload = estimateData.data || estimateData;
-      const jobsArr = estPayload.jobs || [];
+      // The estimate endpoint returns `{ data: { jobs: [...] } }` while
+      // the jobs-list fallback returns either an array or
+      // `{ content/data: [...] }`. Coerce to a single jobs array.
+      let jobsArr = estPayload.jobs;
+      if (!Array.isArray(jobsArr)) {
+        if (Array.isArray(estimateData)) {
+          jobsArr = estimateData;
+        } else {
+          jobsArr = estimateData.content || estimateData.data || [];
+        }
+      }
       if (Array.isArray(jobsArr) && jobsArr.length > 0) {
         roData.jobs = jobsArr;
-        console.log(`[LaborRate] Loaded ${jobsArr.length} jobs with labor from estimate`);
+        console.log(`[LaborRate] Loaded ${jobsArr.length} jobs with labor from estimate (or fallback)`);
       } else {
-        console.log(`[LaborRate] Estimate endpoint returned no jobs`);
+        console.log(`[LaborRate] Estimate returned 200 with no jobs`);
       }
     } else {
-      console.log(`[LaborRate] Estimate endpoint returned ${estRes.status}`);
+      console.log(`[LaborRate] Estimate (and fallback) returned ${estRes.status}`);
     }
   } catch (err) {
     console.warn("[LaborRate] Error fetching estimate:", err.message);
   }
 
-  // Fallback: fetch jobs from jobs list endpoint
+  // Empty-result fallback (NOT status-based): the estimate endpoint
+  // can return 200 with an empty `jobs` array even when the shop has
+  // jobs on the RO (some shops gate labor visibility behind a separate
+  // permission). The helper's fallback chain only triggers on status
+  // codes, so we explicitly call the jobs-list endpoint here if the
+  // estimate didn't populate any jobs. Preserves the pre-task #224
+  // behavior where this second call was unconditional.
   if (!roData.jobs || roData.jobs.length === 0) {
     try {
-      const jobsRes = await fetch(`${baseUrl}/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`, {
-        headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' }
-      });
+      const jobsRes = await tekmetricFetch(
+        `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
+        {},
+        { shopId, label: 'labor-rate.get-jobs.empty-estimate' }
+      );
       if (jobsRes.ok) {
         const jobsBody = await jobsRes.json();
-        roData.jobs = jobsBody.content || jobsBody.data || jobsBody || [];
-        if (Array.isArray(roData.jobs)) {
-          console.log(`[LaborRate] Fetched ${roData.jobs.length} jobs from jobs list (no labor data)`);
+        const jobsArr = Array.isArray(jobsBody)
+          ? jobsBody
+          : (jobsBody.content || jobsBody.data || []);
+        roData.jobs = Array.isArray(jobsArr) ? jobsArr : [];
+        if (roData.jobs.length > 0) {
+          console.log(`[LaborRate] Empty-estimate fallback fetched ${roData.jobs.length} jobs from jobs list (no labor data)`);
         }
       }
     } catch (err) {
-      console.warn("[LaborRate] Error fetching jobs:", err.message);
+      console.warn("[LaborRate] Error fetching jobs (empty-estimate fallback):", err.message);
     }
   }
 
@@ -2715,12 +3106,11 @@ async function autoApplyLaborRate(context, options = {}) {
   );
   if (needsCustomerDetails && customer.id && shopId) {
     try {
-      const custRes = await fetch(`${baseUrl}/api/shop/${shopId}/customer/${customer.id}`, {
-        headers: {
-          'x-auth-token': smsTokens.tekmetric,
-          'content-type': 'application/json'
-        }
-      });
+      const custRes = await tekmetricFetch(
+        `/api/shop/${shopId}/customer/${customer.id}`,
+        {},
+        { shopId, label: 'labor-rate.get-customer' }
+      );
       if (custRes.ok) {
         const custData = await custRes.json();
         console.log('[LaborRate] Raw customer API response keys:', Object.keys(custData).join(', '));
@@ -2788,7 +3178,7 @@ async function autoApplyLaborRate(context, options = {}) {
   const matchedRoRule = findMatchingRule(roLevelRules, vehicleData);
   if (matchedRoRule) {
     console.log(`[LaborRate] Matched RO-level rule: "${matchedRoRule.name}" (priority ${matchedRoRule.priority}) → $${matchedRoRule.rate}/hr`);
-    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, baseUrl, options);
+    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, options);
     if (roResult?.success) appliedAny = true;
   } else {
     console.log("[LaborRate] No RO-level rule matched");
@@ -2825,7 +3215,7 @@ async function autoApplyLaborRate(context, options = {}) {
       if (!catMatch) continue;
 
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
-      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, baseUrl, options);
+      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, options);
       if (jobResult?.success) {
         appliedAny = true;
         if (jobResult.handledJobIds) {
@@ -2868,11 +3258,11 @@ async function autoApplyLaborRate(context, options = {}) {
 
       try {
         console.log(`[LaborRate] Updating unmatched job "${job.name}" labor to RO rate $${matchedRoRule.rate}/hr`);
-        const res = await fetch(`${baseUrl}/api/shop/${shopId}/job`, {
-          method: 'POST',
-          headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
-          body: JSON.stringify(jobPayload)
-        });
+        const res = await tekmetricFetch(
+          `/api/shop/${shopId}/job`,
+          { method: 'POST', body: JSON.stringify(jobPayload) },
+          { shopId, label: 'labor-rate.post-job-unmatched' }
+        );
         if (res.ok) {
           unmatchedUpdated++;
           console.log(`[LaborRate] Updated job "${job.name}" labor to $${matchedRoRule.rate}/hr`);
@@ -2910,7 +3300,7 @@ async function autoApplyLaborRate(context, options = {}) {
   lastAppliedRoId = context.roId;
 }
 
-async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, baseUrl, options = {}) {
+async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, options = {}) {
   const categoryValues = (matchedRule.conditions || [])
     .filter(c => c.type === 'jobCategory')
     .flatMap(c => c.values || [])
@@ -2975,15 +3365,15 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
       console.log(`[LaborRate] Updating job "${job.name}" labor (${laborNames}) to $${rateInCents/100}/hr via POST /job`);
 
       ownJobPostInFlight = true;
-      const res = await fetch(`${baseUrl}/api/shop/${shopId}/job`, {
-        method: 'POST',
-        headers: { 'x-auth-token': smsTokens.tekmetric, 'content-type': 'application/json' },
-        body: JSON.stringify(jobPayload)
-      });
+      const res = await tekmetricFetch(
+        `/api/shop/${shopId}/job`,
+        { method: 'POST', body: JSON.stringify(jobPayload) },
+        { shopId, label: 'labor-rate.post-job-per-category' }
+      );
       ownJobPostInFlight = false;
 
       if (res.ok) {
-        const resData = await res.json();
+        await res.json();
         updatedCount += updatedLabor.length;
         if (!updatedJobNames.includes(job.name)) updatedJobNames.push(job.name);
         console.log(`[LaborRate] Updated ${updatedLabor.length} labor line(s) on job "${job.name}" to $${rateInCents/100}/hr`);
@@ -3033,7 +3423,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, b
   return { success: false, error: "No matching jobs found for category", handledJobIds };
 }
 
-async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, baseUrl, options = {}) {
+async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, options = {}) {
   const currentRate = roData.laborRate || 0;
   console.log(`[LaborRate] Current rate on RO: ${currentRate} (${currentRate/100}/hr), target: ${rateInCents} (${matchedRule.rate}/hr)`);
 
@@ -3062,14 +3452,15 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, bas
 
     console.log(`[LaborRate] Sending PUT to /api/repair-order/${context.roId}/summary with laborRate: ${rateInCents} ($${matchedRule.rate}/hr)`);
 
-    const updateRes = await fetch(`${baseUrl}/api/repair-order/${context.roId}/summary`, {
-      method: 'PUT',
-      headers: {
-        'x-auth-token': smsTokens.tekmetric,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify(summaryPayload)
-    });
+    const updateRes = await tekmetricFetch(
+      `/api/repair-order/${context.roId}/summary`,
+      { method: 'PUT', body: JSON.stringify(summaryPayload) },
+      {
+        shopId: context.shopId || tekmetricShopId,
+        label: 'labor-rate.put-ro-summary',
+        signalUserOnError: true,
+      }
+    );
 
     const updateBody = await updateRes.text();
     console.log(`[LaborRate] RO update: ${updateRes.status}`);
