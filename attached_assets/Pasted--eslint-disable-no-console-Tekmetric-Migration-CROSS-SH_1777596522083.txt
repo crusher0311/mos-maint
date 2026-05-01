@@ -1,3 +1,5 @@
+
+﻿
 /* eslint-disable no-console */
 /*
  * Tekmetric Migration — CROSS-SHOP CLONE WITH CUSTOMER/VEHICLE OVERRIDES
@@ -49,38 +51,6 @@
  *      clickable link to it is printed at the end.
  */
 (async () => {
-  // ===== console tee: capture every [CLONE-X] line so we can auto-copy
-  // them to the clipboard at the end. Makes it trivial to paste the run
-  // log into chat/email without scrolling/selecting in DevTools. =====
-  const __cloneXBuf = [];
-  const __origLog = console.log.bind(console);
-  const __origWarn = console.warn.bind(console);
-  const __origErr = console.error.bind(console);
-  function __teeStrip(args) {
-    return args
-      .map((a) => (typeof a === 'string' ? a.replace(/%c/g, '') : (() => {
-        try { return JSON.stringify(a); } catch (_) { return String(a); }
-      })()))
-      .filter((s) => !/^color:|^font-weight:|^background:/i.test(s))
-      .join(' ');
-  }
-  console.log  = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push(s); } catch (_) {} return __origLog(...a); };
-  console.warn = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push('WARN ' + s); } catch (_) {} return __origWarn(...a); };
-  console.error = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push('ERR ' + s); } catch (_) {} return __origErr(...a); };
-  async function __copyRunLog() {
-    const txt = __cloneXBuf.join('\n');
-    try {
-      await navigator.clipboard.writeText(txt);
-      __origLog('%c[CLONE-X] ✓ run log copied to clipboard — paste it back into chat with Ctrl+V', 'color:#0a0;font-weight:bold');
-    } catch (_) {
-      __origLog('%c[CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:', 'color:#c60;font-weight:bold');
-      __origLog('====== BEGIN RUN LOG ======\n' + txt + '\n====== END RUN LOG ======');
-    }
-  }
-  // restore console + auto-copy when the IIFE returns (success or early-bail)
-  const __origReturn = (() => {})();
-  // wrap the rest of the function so we always copy on exit
-  try {
   // ===== CONFIG =====
   const SOURCE_SHOP_ID    = 10214;        // shop the RO is being cloned FROM
   const SOURCE_RO_ID      = 324342598;    // numeric RO id in source shop  (REQUIRED)
@@ -466,13 +436,10 @@
   }
 
   console.log(`%c[CLONE-X] DONE — open the new RO: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
-  } catch (__cloneXErr) {
-    console.error(`[CLONE-X] uncaught error: ${__cloneXErr && __cloneXErr.message ? __cloneXErr.message : __cloneXErr}`);
-    if (__cloneXErr && __cloneXErr.stack) console.error(__cloneXErr.stack);
-  } finally {
-    try { await __copyRunLog(); } catch (_) {}
-    console.log = __origLog;
-    console.warn = __origWarn;
-    console.error = __origErr;
-  }
 })();
+VM8171:229 [CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+VM8171:235 [CLONE-X] got auth token (len=815).
+Promise {<pending>}
+VM8171:130 
+ GET https://shop.tekmetric.com/api/shop/10214 403 (Forbidden)
+VM8171:244 [CLONE-X] cannot reach source shop 10214 (status=403). Your active session can't read this shop. Switch to it via the Tekmetric shop dropdown, or log in to the org that owns it, then re-run.
