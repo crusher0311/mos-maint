@@ -1,0 +1,432 @@
+/* eslint-disable */
+// =============================================================================
+// Tekmetric Open-Jobs Migration — Snippet 2b: RESUME FAILED ROs
+// =============================================================================
+// Version: 2026-05-01.1
+//
+// WHY THIS EXISTS
+// ---------------
+// On the Arlington Heights run (source → dest 18007), 19/21 ROs migrated
+// cleanly via 02-load-core-dest.js but 2 failed at the createVehicle step:
+//
+//   POST /api/shop/18007/customer/106233336/vehicle  -> 404
+//   POST /api/shop/18007/customer/106243112/vehicle  -> 404
+//
+// Almost certainly the customer search hit a stale/cross-shop customer for
+// those two source ROs and the vehicle-create then can't find that customer
+// under shop 18007. This snippet bypasses the search entirely for the
+// failed ROs and ALWAYS creates a fresh customer → vehicle → RO → jobs.
+//
+// SAFETY
+// ------
+// We only process source ROs that are MISSING from the mapping file from
+// snippet 02. So the 19 successful ROs are never re-touched. If a duplicate
+// orphan customer was created in the failed run, you may end up with two
+// customer rows for the same person — that's an acceptable tradeoff for
+// finishing the night.
+//
+// HOW TO RUN
+// ----------
+//   1. Confirm the URL bar shows /shop/18007/...  (Arlington Heights dest).
+//   2. Open DevTools → Console.
+//   3. Paste this whole file. Hit Enter.
+//   4. First file picker → the dump JSON from snippet 1 (Arlington Heights
+//      source).
+//   5. Second file picker → the tekmetric-migration-mapping-*.json that
+//      snippet 02 just downloaded for Arlington Heights.
+//   6. Watch the console. A summary table prints. A NEW mapping file is
+//      downloaded with the 19 originals + the newly-resumed rows.
+// =============================================================================
+
+(async () => {
+  const VERSION = '2026-05-01.1';
+  const CONFIRM = true;
+  const ZERO_PART_COST = true;
+
+  const ENDPOINTS = {
+    base: location.origin,
+    laborRatesList: (shopId) => `/api/shop/${shopId}/labor-rates`,
+    customerCreate: (shopId) => `/api/shop/${shopId}/customers`,
+    vehicleCreate: (shopId, customerId) => `/api/shop/${shopId}/customer/${customerId}/vehicle`,
+    vehicleSearch: (shopId, customerId, q) =>
+      `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(q)}&size=20`,
+    repairOrderCreate: () => `/api/repair-order/create`,
+    vehicleMileage: (newRoId) => `/api/repair-order/${newRoId}/vehicle-mileage`,
+    addConcern: (newRoId) => `/api/repair-orders/${newRoId}/customer-concerns`,
+    jobCreate: (shopId) => `/api/shop/${shopId}/job`,
+    roStatus: (roId) => `/api/repair-order/${roId}/status`,
+  };
+
+  const APPT_OPTION_MAP = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  const normalizeApptOption = (v) =>
+    typeof v === 'number' ? v : (typeof v === 'string' ? (APPT_OPTION_MAP[v] ?? 2) : 2);
+
+  function readShopIdFromUrl() {
+    const m = location.pathname.match(/\/(?:admin\/)?shop\/(\d+)/);
+    return m ? m[1] : null;
+  }
+
+  async function captureXAuthToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      if (JWT_RE.test(raw)) return raw;
+      try {
+        const p = JSON.parse(raw);
+        for (const f of ['token', 'accessToken', 'access_token', 'jwt', 'idToken']) {
+          if (p && typeof p[f] === 'string' && JWT_RE.test(p[f])) return p[f];
+        }
+      } catch (_) {}
+    }
+    throw new Error('Could not find a JWT in localStorage. Refresh the tab and re-paste.');
+  }
+
+  async function jsonFetch(path, token, init) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      ...(init || {}),
+      headers: {
+        'x-auth-token': token,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...((init && init.headers) || {}),
+      },
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      const e = new Error(`${res.status} ${res.statusText} on ${path} :: ${body.slice(0, 300)}`);
+      e.status = res.status; e.body = body;
+      throw e;
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  function pickJsonFile(promptText) {
+    return new Promise((resolve, reject) => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'application/json,.json';
+      inp.style.position = 'fixed';
+      inp.style.top = '20px';
+      inp.style.left = '20px';
+      inp.style.zIndex = 999999;
+      inp.style.padding = '12px';
+      inp.style.background = '#fff';
+      inp.style.border = '2px solid #0a0';
+      inp.title = promptText;
+      console.log(`[RESUME] ${promptText}`);
+      inp.onchange = async () => {
+        const f = inp.files && inp.files[0];
+        inp.remove();
+        if (!f) return reject(new Error('no file picked'));
+        try { resolve({ name: f.name, json: JSON.parse(await f.text()) }); }
+        catch (e) { reject(e); }
+      };
+      document.body.appendChild(inp);
+    });
+  }
+
+  function downloadJson(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  }
+
+  function ts() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  }
+
+  // ----- lean part / labor / job builders (mirror snippet 02) -----
+  function leanPart(p, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      name: p.name ?? '', quantity: p.quantity ?? 1,
+      cost: ZERO_PART_COST ? 0 : (p.cost ?? 0),
+      retail: p.retail ?? 0,
+    };
+    for (const k of ['partNumber', 'note', 'category', 'manufacturer', 'sortOrder',
+      'tireType', 'tireSize', 'sideWallStyle', 'treadwear', 'traction', 'temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
+    }
+    return out;
+  }
+
+  function leanLabor(l, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      name: l.name ?? '', hours: l.hours ?? 0, rate: l.rate ?? 0,
+      autoApplyLaborMatrixId: l.autoApplyLaborMatrixId ?? null,
+      technician: l.technician ? { id: l.technician.id } : null,
+    };
+    for (const k of ['complete', 'position', 'warrantyLabel', 'sortOrder', 'sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
+    }
+    return out;
+  }
+
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const populated = { ...emptyJobResp };
+    populated.name = sourceJob.name ?? populated.name;
+    populated.status = sourceJob.status ?? populated.status;
+    populated.selected = sourceJob.selected ?? populated.selected;
+    populated.authorized = sourceJob.authorized ?? populated.authorized;
+    populated.authorizedDate = sourceJob.authorizedDate ?? populated.authorizedDate;
+    populated.authorizedTotal = sourceJob.authorizedTotal ?? populated.authorizedTotal;
+    populated.declined = sourceJob.declined ?? populated.declined;
+    populated.declinedDate = sourceJob.declinedDate ?? populated.declinedDate;
+    populated.declinedTotal = sourceJob.declinedTotal ?? populated.declinedTotal;
+    populated.declinedNote = sourceJob.declinedNote ?? populated.declinedNote;
+    populated.technician = sourceJob.technician ? { id: sourceJob.technician.id } : null;
+    populated.note = sourceJob.note ?? null;
+    populated.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    populated.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    for (const k of ['taxParts', 'taxLabor', 'taxFees', 'taxTires', 'taxTiresFet',
+      'packagePrice', 'packagePriceMethod', 'packagePriceSurplusOilMethod',
+      'packagePriceModsHidden', 'feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
+    }
+    populated.parts = (sourceJob.parts || []).map((p) => leanPart(p, newJobId));
+    populated.labor = (sourceJob.labor || sourceJob.laborItems || []).map((l) => leanLabor(l, newJobId));
+    populated.discounts = []; populated.fees = [];
+    populated.smartJobIds = []; populated.smartJobs = []; populated.laborTechnicians = [];
+    return populated;
+  }
+
+  async function createJobTwoStep(shopId, newRoId, srcJob, token) {
+    const emptyResp = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+      method: 'POST',
+      body: JSON.stringify({ name: srcJob.name || 'New Job', repairOrderId: newRoId, syncPartsAttachedToNonQuotedOrders: false }),
+    });
+    const emptyJob = (emptyResp && emptyResp.data && typeof emptyResp.data === 'object') ? emptyResp.data : emptyResp;
+    if (!emptyJob || !emptyJob.id) throw new Error(`empty-create returned no id (${JSON.stringify(emptyResp).slice(0, 200)})`);
+    const populated = buildPopulatePayload(emptyJob, srcJob);
+    const populatedResp = await jsonFetch(ENDPOINTS.jobCreate(shopId), token, {
+      method: 'POST', body: JSON.stringify(populated),
+    });
+    return (populatedResp && populatedResp.data && typeof populatedResp.data === 'object') ? populatedResp.data : populatedResp;
+  }
+
+  // ---------- preflight ----------
+  const destShopId = readShopIdFromUrl();
+  if (!destShopId) { console.error('[RESUME] could not read shop id from URL.'); return; }
+  console.log(`[RESUME] version ${VERSION} — destShopId=${destShopId}`);
+  if (!CONFIRM) { console.warn('[RESUME] CONFIRM=false — flip to true and re-paste.'); return; }
+
+  const token = await captureXAuthToken();
+  const { name: dumpName, json: dump } = await pickJsonFile('Pick the source dump JSON (snippet 1 output)');
+  if (dump.schema !== 'tekmetric-open-jobs-dump') { console.error(`[RESUME] ${dumpName} is not a snippet-1 dump (schema=${dump.schema}).`); return; }
+  const { name: mapName, json: mapping } = await pickJsonFile('Pick the existing mapping JSON from snippet 2');
+  const mappingRows = Array.isArray(mapping) ? mapping
+    : Array.isArray(mapping && mapping.results) ? mapping.results
+    : Array.isArray(mapping && mapping.mapping) ? mapping.mapping
+    : null;
+  if (!mappingRows) { console.error(`[RESUME] ${mapName} doesn't look like a mapping file.`); return; }
+  console.log(`[RESUME] dump=${dumpName} (${dump.rows.length} ROs); mapping=${mapName} (${mappingRows.length} rows)`);
+
+  const mappedSrcIds = new Set(mappingRows.map((r) => String(r.sourceRoId ?? r.srcRoId ?? '')));
+  const todo = dump.rows.filter((r) => !mappedSrcIds.has(String((r.repairOrder || r).id)));
+  if (!todo.length) { console.log('[RESUME] nothing to resume — all source ROs already in mapping.'); return; }
+  console.log(`[RESUME] ${todo.length} source RO(s) need resuming:`,
+    todo.map((r) => '#' + (r.repairOrder || r).repairOrderNumber).join(', '));
+
+  // ----- discover dest labor rate (default) -----
+  let destLaborRateId = null;
+  try {
+    const rates = await jsonFetch(ENDPOINTS.laborRatesList(destShopId), token);
+    const list = Array.isArray(rates) ? rates : (rates && rates.content) || [];
+    const def = list.find((r) => /default/i.test(r.name)) || list[0];
+    destLaborRateId = def && def.id;
+    console.log(`[RESUME] dest labor rate id=${destLaborRateId} (${def && def.name})`);
+  } catch (e) {
+    console.error(`[RESUME] could not load dest labor rates: ${e.message}`);
+    return;
+  }
+
+  const successes = [], failures = [];
+
+  for (let i = 0; i < todo.length; i++) {
+    const item = todo[i];
+    const src = item.repairOrder || item;
+    const sourceRoNumber = src.repairOrderNumber ?? item.sourceRoNumber ?? '?';
+    const sourceRoId = src.id ?? item.sourceRoId;
+    let step = 'start';
+    try {
+      const srcCust = src.customer || {};
+      const srcVeh = src.vehicle || {};
+
+      // 1. ALWAYS create a fresh customer (no search — that's what failed last time).
+      step = 'createCustomer';
+      const cResp = await jsonFetch(ENDPOINTS.customerCreate(destShopId), token, {
+        method: 'POST',
+        body: JSON.stringify({
+          firstName: srcCust.firstName || '',
+          lastName: srcCust.lastName || '',
+          email: srcCust.email ?? null,
+          emails: srcCust.emails ?? undefined,
+          phone: srcCust.phone ?? [],
+          phones: srcCust.phones ?? undefined,
+          address: srcCust.address || null,
+          customerType: srcCust.customerType || null,
+          notes: srcCust.notes || null,
+        }),
+      });
+      const cust = (cResp && cResp.data && typeof cResp.data === 'object') ? cResp.data : cResp;
+      const destCustomerId = cust && cust.id;
+      if (!destCustomerId) throw new Error(`createCustomer returned no id: ${JSON.stringify(cResp).slice(0, 300)}`);
+      console.log(`[RESUME]   created customer id=${destCustomerId}`);
+
+      // 2. Create vehicle on that customer.
+      step = 'createVehicle';
+      const srcVinStr = (typeof srcVeh.vin === 'string') ? srcVeh.vin.trim() : null;
+      const vResp = await jsonFetch(ENDPOINTS.vehicleCreate(destShopId, destCustomerId), token, {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: destCustomerId,
+          year: srcVeh.year || null, make: srcVeh.make || null, model: srcVeh.model || null,
+          subModel: srcVeh.subModel || null, engine: srcVeh.engine || null,
+          transmission: srcVeh.transmission || null, drivetrain: srcVeh.drivetrain || null,
+          vin: srcVinStr || null, licensePlate: srcVeh.licensePlate || srcVeh.plate || null,
+          color: srcVeh.color || null, unitNumber: srcVeh.unitNumber || null,
+          notes: srcVeh.notes || null,
+        }),
+      });
+      // Resolve vehicle id across the same 3 shapes snippet 02 handles.
+      let destVehicleId = null;
+      if (vResp) {
+        const looksLikeVehicle = ('vin' in vResp) || ('year' in vResp) || ('make' in vResp);
+        if (looksLikeVehicle && vResp.id && vResp.id !== destCustomerId) destVehicleId = vResp.id;
+        if (!destVehicleId && Array.isArray(vResp.vehicles) && vResp.vehicles.length) {
+          const want = (srcVinStr || '').toUpperCase();
+          const m = vResp.vehicles.find((v) => v && v.vin && String(v.vin).toUpperCase() === want);
+          const last = vResp.vehicles[vResp.vehicles.length - 1];
+          destVehicleId = (m && m.id) || (last && last.id) || null;
+        }
+        if (!destVehicleId && vResp.vehicle && vResp.vehicle.id) destVehicleId = vResp.vehicle.id;
+        if (!destVehicleId && vResp.data && vResp.data.id) destVehicleId = vResp.data.id;
+        if (!destVehicleId && vResp.id && vResp.id !== destCustomerId) destVehicleId = vResp.id;
+      }
+      // Verify by VIN search.
+      if (srcVinStr) {
+        try {
+          const r2 = await jsonFetch(ENDPOINTS.vehicleSearch(destShopId, destCustomerId, srcVinStr), token);
+          const list2 = Array.isArray(r2) ? r2 : (r2 && r2.content) || [];
+          const hit2 = list2.find((v) => v && v.vin && String(v.vin).toUpperCase() === srcVinStr.toUpperCase());
+          if (hit2 && hit2.id) destVehicleId = hit2.id;
+        } catch (_) {}
+      }
+      if (!destVehicleId) throw new Error(`createVehicle returned no resolvable id: ${JSON.stringify(vResp).slice(0, 300)}`);
+      console.log(`[RESUME]   created vehicle id=${destVehicleId}`);
+
+      // 3. Create RO.
+      step = 'createRo';
+      const createPayload = {
+        shop: { id: Number(destShopId) },
+        appointmentOption: normalizeApptOption(src.appointmentOption),
+        odometerInop: src.odometerInop ?? false,
+        leadSource: src.leadSource || '',
+        vehicle: { id: destVehicleId },
+        milesIn: src.milesIn ?? null,
+        laborRate: destLaborRateId ? { id: destLaborRateId } : undefined,
+        customer: { id: destCustomerId },
+        appointment: null,
+        initialJobs: [], recommendations: [], declinedJobRecommendations: [],
+      };
+      const createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
+        method: 'POST', body: JSON.stringify(createPayload),
+      });
+      const ro = (createdRo && createdRo.data) ? createdRo.data : createdRo;
+      if (!ro || !ro.id) throw new Error(`createRo returned no id: ${JSON.stringify(createdRo).slice(0, 200)}`);
+      const newRoId = ro.id, newRoNumber = ro.repairOrderNumber;
+      console.log(`[RESUME]   created RO #${newRoNumber} (id=${newRoId})`);
+
+      // 4. Mileage.
+      if (src.milesIn != null || src.milesOut != null) {
+        step = 'setMileage';
+        try {
+          await jsonFetch(ENDPOINTS.vehicleMileage(newRoId), token, {
+            method: 'PUT',
+            body: JSON.stringify({
+              milesIn: src.milesIn ?? src.milesOut ?? 0,
+              milesOut: src.milesOut ?? src.milesIn ?? 0,
+              odometerInop: src.odometerInop ?? false,
+            }),
+          });
+        } catch (e) { console.warn(`[RESUME]   mileage PUT failed (non-fatal): ${e.message}`); }
+      }
+
+      // 5. Concerns.
+      step = 'concerns';
+      const rawConcerns = src.customerConcerns ?? src.concerns ?? [];
+      const concernStrs = [];
+      const flatten = (c) => {
+        if (!c) return;
+        if (typeof c === 'string') { if (c.trim()) concernStrs.push(c.trim()); return; }
+        if (Array.isArray(c)) { for (const x of c) flatten(x); return; }
+        if (typeof c === 'object') {
+          if (typeof c.concern === 'string' && c.concern.trim()) concernStrs.push(c.concern.trim());
+          else if (typeof c.text === 'string' && c.text.trim()) concernStrs.push(c.text.trim());
+        }
+      };
+      flatten(rawConcerns);
+      for (const concern of concernStrs) {
+        try {
+          await jsonFetch(ENDPOINTS.addConcern(newRoId), token, {
+            method: 'POST', body: JSON.stringify({ concern }),
+          });
+        } catch (e) {
+          console.warn(`[RESUME]   addConcern failed (non-fatal): ${e.message}`);
+        }
+      }
+
+      // 6. Jobs.
+      step = 'jobs';
+      const srcJobs = (src.jobs || src.repairOrderJobs || []).filter((j) => !j.archived);
+      const jobMappings = [];
+      let parts = 0, labors = 0;
+      for (let j = 0; j < srcJobs.length; j++) {
+        const sj = srcJobs[j];
+        try {
+          const populated = await createJobTwoStep(destShopId, newRoId, sj, token);
+          jobMappings.push({
+            srcJobId: sj.id ?? null, srcJobName: sj.name ?? null,
+            destJobId: (populated && (populated.id ?? populated.jobId)) ?? null,
+            destJobName: populated && populated.name,
+          });
+          parts += (sj.parts || []).length;
+          labors += (sj.labor || sj.laborItems || []).length;
+        } catch (jobErr) {
+          throw new Error(`createJob[${j}] (${sj.name || 'unnamed'}): ${jobErr.message}`);
+        }
+      }
+
+      successes.push({
+        sourceRo: sourceRoNumber, sourceRoId, destRo: newRoNumber, destRoId: newRoId,
+        jobs: srcJobs.length, parts, labors,
+      });
+      mappingRows.push({
+        sourceRoId, sourceRoNumber, destRoId: newRoId, destRoNumber: newRoNumber,
+        resumed: true, jobMappings,
+      });
+      console.log(`[RESUME] (${i + 1}/${todo.length}) #${sourceRoNumber} → #${newRoNumber} OK (${srcJobs.length} jobs, ${parts} parts, ${labors} labor)`);
+    } catch (e) {
+      console.error(`[RESUME] FAILED RO #${sourceRoNumber} at step "${step}": ${e.message}`);
+      failures.push({ sourceRo: sourceRoNumber, sourceRoId, step, error: (e.body || e.message || '').slice(0, 300) });
+    }
+  }
+
+  console.log('[RESUME] Successes:'); console.table(successes);
+  if (failures.length) { console.warn('[RESUME] Failures:'); console.table(failures); }
+
+  const outName = `tekmetric-migration-mapping-${ts()}-resumed.json`;
+  downloadJson(outName, mappingRows);
+  console.log(`[RESUME] Wrote ${outName} (${mappingRows.length} total rows). Use THIS file for snippet 03 / 07.`);
+})();
