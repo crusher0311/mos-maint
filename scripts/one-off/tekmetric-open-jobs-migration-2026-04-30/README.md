@@ -299,6 +299,70 @@ shops (or pick the smallest source shop and use its destination):
    before doing the real run.
 8. Then run all three real shops back-to-back.
 
+## Snippet 8 — `08-migrate-appointments.ts` (FUTURE appointments)
+
+This one is **not** a browser console snippet. It's a Node script that runs
+from the Replit shell using our MOS `lib/tekmetric.ts` helpers (Tekmetric
+public API + OAuth token). MOS integration must be enabled on both source
+and destination shops before running.
+
+**Scope:** every appointment on the source shop where `startTime >= now`.
+Past appointments are skipped (defensive client-side filter — the public
+API's `startTime` query param is loose and may return some past records).
+
+**Customer / vehicle matching:** for each source appointment, the script
+fetches the source customer + vehicle and looks them up on the destination
+shop via the public-API search:
+
+- customer: email → phone → exact full name (only if unique)
+- vehicle: VIN match (preferring vehicles already owned by the matched
+  dest customer, falling back to any VIN match)
+
+If both are found, the appointment is created on the dest shop with the
+same `startTime`/`endTime`/`title`/`description`/`color` plus
+`dropoffTime` / `pickupTime` / `rideOption` / `appointmentOption` where
+the source appointment carries them.
+
+If either is missing on dest, the appointment is **skipped** (nothing is
+created) and added to a gaps CSV for manual recreation in the Tekmetric
+UI. The script does **not** create customers or vehicles via the public
+API — that endpoint is not exposed.
+
+### Usage
+
+```sh
+# Smoke test first (no writes, only first 3 future appts):
+npx tsx scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/08-migrate-appointments.ts \
+  --src=10216 --dest=18007 --dry-run --limit=3 --page-size=20
+
+# Real run (all future appts):
+npx tsx scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/08-migrate-appointments.ts \
+  --src=10216 --dest=18007
+```
+
+### Outputs
+
+Written to `scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/`:
+
+- `tekmetric-appt-migration-mapping-{ts}.json` — every source appointment
+  with its result (`created` / `dry-run` / `gap-customer` / `gap-vehicle`
+  / `error`), the resolved dest customer / vehicle IDs, and the dest
+  appointment ID for created ones. This is the audit trail.
+- `tekmetric-appt-migration-gaps-{ts}.csv` — the subset of source
+  appointments that need manual recreation, with customer name / email /
+  phone, VIN, year/make/model, and start/end time pre-filled so you can
+  paste each one into Tekmetric's appointment form by hand.
+
+### Re-runs
+
+The script is idempotent **only** in the sense that re-running with the
+same args will read the same source list — it does **not** check the dest
+shop for already-migrated appointments before creating, so a second run
+will create duplicates. If you need to re-run after a partial failure,
+use `--limit` and the mapping JSON from the first run to skip already-
+migrated source appointment IDs by hand, or only re-run after deleting
+the dest appointments that were created in the failed run.
+
 ## After you're done
 
 - Verify all three destination shops look correct in the Tekmetric UI
