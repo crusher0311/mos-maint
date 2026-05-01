@@ -1,0 +1,866 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration — Snippet 8b: APPOINTMENTS (browser)
+ *
+ * The OAuth-based Node script (08-migrate-appointments.ts) failed: Tekmetric
+ * returns 401 "Missing credentials" on every public-API POST /appointments,
+ * even though the same OAuth token can READ both shops successfully. The
+ * internal API + user JWT (same path snippet 02 used to create customers,
+ * vehicles, and ROs) does not have that restriction.
+ *
+ * USAGE
+ *   1. Edit SRC_SHOP_ID and DEST_SHOP_ID below.
+ *   2. Open shop.tekmetric.com in Chrome with a user logged in who has
+ *      access to BOTH shops. The shop you are actively viewing does not
+ *      matter — the snippet hits /api/shop/{id}/... directly with your JWT.
+ *   3. Run with CONFIRM = false first to see the planned summary.
+ *   4. Re-run with CONFIRM = true to actually create.
+ *   5. A mapping JSON downloads to your Downloads folder when done.
+ *
+ * SCOPE
+ *   - Source: every appointment with startTime >= now on SRC_SHOP_ID
+ *   - Per appt: lookup dest customer (email -> phone -> name), lookup dest
+ *     vehicle (VIN, scoped to that customer), then POST a new appointment
+ *     on DEST_SHOP_ID with the same start/end/title/description/color +
+ *     dropoff/pickup/ride/appointment-option fields.
+ *   - Skips (logs to gaps) when dest customer or vehicle is missing.
+ *   - Does NOT create customers or vehicles on dest. (For appointments
+ *     whose customer was already migrated by snippet 02 the customer
+ *     and vehicle already exist on dest; everyone else is a gap.)
+ */
+(async () => {
+  // ============== EDIT THESE TWO PER SHOP ==============
+  const SRC_SHOP_ID = 10216;
+  const DEST_SHOP_ID = 18007;
+  const CONFIRM = false; // set true on the second paste to actually create
+  // =====================================================
+
+  const VERSION = '2026-05-01.1';
+  const PAGE_SIZE = 100;
+  const NOW_ISO = new Date().toISOString();
+  const NOW_MS = Date.now();
+
+  // ----- ENDPOINTS (internal API; same shape as snippet 02) -------------
+  const ENDPOINTS = {
+    base: location.origin,
+    apptList: (shopId, page) =>
+      `/api/shop/${shopId}/appointments?startTime=${encodeURIComponent(
+        NOW_ISO,
+      )}&size=${PAGE_SIZE}&page=${page}`,
+    apptCreate: (shopId) => `/api/shop/${shopId}/appointments`,
+    customerSearch: (shopId, q) =>
+      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
+    customerDetail: (shopId, customerId) => `/api/shop/${shopId}/customer/${customerId}`,
+    vehicleDetail: (shopId, vehicleId) => `/api/shop/${shopId}/vehicle/${vehicleId}`,
+    vehicleSearch: (shopId, customerId, q) =>
+      `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(
+        q,
+      )}&size=20`,
+  };
+
+  // ----- TOKEN CAPTURE (same as snippet 01) -----------------------------
+  function captureToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ'))
+          return p.accessToken;
+      } catch (_) {}
+    }
+    return null;
+  }
+  const TOKEN = captureToken();
+  if (!TOKEN) {
+    console.error('[APPT] Could not find x-auth-token in localStorage. Are you logged in?');
+    return;
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'x-auth-token': TOKEN,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(opts.headers || {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let body;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (_) {
+      body = text;
+    }
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.body = typeof body === 'string' ? body : JSON.stringify(body);
+      throw err;
+    }
+    return body;
+  }
+
+  function downloadJson(name, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+
+  function ts() {
+    return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+  }
+
+  function pickEmail(c) {
+    if (!c) return null;
+    if (typeof c.email === 'string' && c.email.includes('@')) return c.email.toLowerCase().trim();
+    return null;
+  }
+  function pickPhone(c) {
+    if (!c) return null;
+    const arr = Array.isArray(c.phone) ? c.phone : [];
+    const p = arr.find((x) => x && x.primary) || arr[0];
+    if (!p || !p.number) return null;
+    return String(p.number).replace(/\D+/g, '');
+  }
+  function fullName(c) {
+    if (!c) return '';
+    return `${c.firstName || ''} ${c.lastName || ''}`.trim();
+  }
+
+  // ----- 1. PULL FUTURE SOURCE APPOINTMENTS -----------------------------
+  console.log(`%c[APPT] v${VERSION}  src=${SRC_SHOP_ID}  dest=${DEST_SHOP_ID}  CONFIRM=${CONFIRM}`,
+    'color:#06f;font-weight:bold');
+  console.log('[APPT] Pulling source appointments...');
+  const srcAppts = [];
+  let page = 0;
+  let droppedPast = 0;
+  while (page < 500) {
+    let body;
+    try {
+      body = await jsonFetch(ENDPOINTS.apptList(SRC_SHOP_ID, page));
+    } catch (err) {
+      console.error(`[APPT] Source listing failed at page ${page}: ${err.status} ${err.body || err.message}`);
+      console.error('[APPT] If this is a 404, the internal endpoint shape is different; open Network tab on the calendar page and tell the agent the GET URL.');
+      return;
+    }
+    // Tekmetric internal lists may return either a paginated wrapper or
+    // a flat array — handle both.
+    const content = Array.isArray(body) ? body : body.content || [];
+    const isLast = Array.isArray(body) ? content.length < PAGE_SIZE : !!body.last;
+    const future = content.filter((a) => {
+      if (!a.startTime) return true;
+      const ms = Date.parse(a.startTime);
+      if (Number.isNaN(ms)) return true;
+      if (ms < NOW_MS) {
+        droppedPast += 1;
+        return false;
+      }
+      return true;
+    });
+    srcAppts.push(...future);
+    console.log(`[APPT] page ${page}: ${content.length} returned, ${future.length} future`);
+    if (isLast || content.length === 0) break;
+    page += 1;
+  }
+  console.log(`[APPT] dropped ${droppedPast} past-dated entries server returned`);
+  console.log(`[APPT] total future src appts: ${srcAppts.length}`);
+
+  if (!srcAppts.length) {
+    console.log('[APPT] Nothing to do. Done.');
+    return;
+  }
+
+  // ----- 2. RESOLVE DEST IDs + CREATE -----------------------------------
+  const srcCustCache = new Map();
+  const srcVehCache = new Map();
+  const destCustCache = new Map();
+  const destVehCache = new Map();
+
+  const results = [];
+
+  for (let i = 0; i < srcAppts.length; i += 1) {
+    const a = srcAppts[i];
+    const tag = `(${i + 1}/${srcAppts.length})`;
+    const row = {
+      sourceApptId: a.id,
+      sourceCustomerId: a.customerId,
+      sourceVehicleId: a.vehicleId,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      title: a.title || '',
+      status: 'error',
+    };
+
+    try {
+      // src customer
+      if (!srcCustCache.has(a.customerId)) {
+        try {
+          srcCustCache.set(a.customerId, await jsonFetch(ENDPOINTS.customerDetail(SRC_SHOP_ID, a.customerId)));
+        } catch (err) {
+          srcCustCache.set(a.customerId, null);
+          console.warn(`[APPT] ${tag} src customer ${a.customerId} fetch failed: ${err.status}`);
+        }
+      }
+      const srcCust = srcCustCache.get(a.customerId);
+      row.customerName = fullName(srcCust);
+      row.customerEmail = pickEmail(srcCust) || '';
+      row.customerPhone = pickPhone(srcCust) || '';
+
+      // src vehicle (skip if no vehicleId)
+      let srcVeh = null;
+      if (a.vehicleId) {
+        if (!srcVehCache.has(a.vehicleId)) {
+          try {
+            srcVehCache.set(a.vehicleId, await jsonFetch(ENDPOINTS.vehicleDetail(SRC_SHOP_ID, a.vehicleId)));
+          } catch (err) {
+            srcVehCache.set(a.vehicleId, null);
+            console.warn(`[APPT] ${tag} src vehicle ${a.vehicleId} fetch failed: ${err.status}`);
+          }
+        }
+        srcVeh = srcVehCache.get(a.vehicleId);
+      }
+      row.vehicleVin = (srcVeh && srcVeh.vin) || '';
+      row.vehicleYMM = srcVeh
+        ? `${srcVeh.year || ''} ${srcVeh.make || ''} ${srcVeh.model || ''}`.trim()
+        : '';
+
+      if (!srcCust) {
+        row.status = 'gap-customer';
+        row.error = 'src customer fetch failed';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP (src customer fetch failed)`);
+        continue;
+      }
+
+      // dest customer lookup
+      if (!destCustCache.has(a.customerId)) {
+        const email = pickEmail(srcCust);
+        const phone = pickPhone(srcCust);
+        const name = fullName(srcCust);
+        let hit = null;
+        if (email) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, email));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickEmail(c) === email);
+          if (hit) hit._matchedBy = 'email';
+        }
+        if (!hit && phone) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, phone));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickPhone(c) === phone);
+          if (hit) hit._matchedBy = 'phone';
+        }
+        if (!hit && name) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, name));
+          const list = Array.isArray(r) ? r : r.content || [];
+          const matches = list.filter((c) => fullName(c).toLowerCase() === name.toLowerCase());
+          if (matches.length === 1) {
+            hit = matches[0];
+            hit._matchedBy = 'name';
+          }
+        }
+        destCustCache.set(a.customerId, hit || null);
+      }
+      const destCust = destCustCache.get(a.customerId);
+      if (!destCust) {
+        row.status = 'gap-customer';
+        row.error = 'no matching customer on dest';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP customer "${row.customerName}" (${row.customerEmail || row.customerPhone || 'no contact'})`);
+        continue;
+      }
+      row.destCustomerId = destCust.id;
+      row.customerMatchedBy = destCust._matchedBy;
+
+      // dest vehicle by VIN (scoped to dest customer)
+      const vin = (srcVeh && srcVeh.vin && String(srcVeh.vin).trim()) || '';
+      if (!vin) {
+        row.status = 'gap-vehicle';
+        row.error = 'src vehicle has no VIN';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle (no VIN)`);
+        continue;
+      }
+      const vKey = `${destCust.id}-${vin.toUpperCase()}`;
+      if (!destVehCache.has(vKey)) {
+        const r = await jsonFetch(ENDPOINTS.vehicleSearch(DEST_SHOP_ID, destCust.id, vin));
+        const list = Array.isArray(r) ? r : r.content || [];
+        const hit = list.find((v) => (v.vin || '').toUpperCase() === vin.toUpperCase());
+        destVehCache.set(vKey, hit ? hit.id : null);
+      }
+      const destVehId = destVehCache.get(vKey);
+      if (!destVehId) {
+        row.status = 'gap-vehicle';
+        row.error = `no vehicle on dest with VIN ${vin}`;
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle VIN=${vin}`);
+        continue;
+      }
+      row.destVehicleId = destVehId;
+      row.vehicleMatchedBy = 'vin';
+
+      if (!CONFIRM) {
+        row.status = 'dry-run';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: DRY-RUN -> cust ${destCust.id} veh ${destVehId} @ ${a.startTime}`);
+        continue;
+      }
+
+      // Build dest body. Source GET returns appointmentOption / rideOption
+      // as nested objects; the create body wants the full nested form.
+      const body = {
+        shopId: DEST_SHOP_ID,
+        customerId: destCust.id,
+        vehicleId: destVehId,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        title: a.title || null,
+        description: a.description || a.note || null,
+        color: a.color || null,
+        dropoffTime: a.dropoffTime || null,
+        pickupTime: a.pickupTime || null,
+        rideOption: a.rideOption || null,
+        appointmentOption: a.appointmentOption || null,
+        appointmentStatus: a.appointmentStatus || 'NONE',
+        leadSource: a.leadSource || null,
+      };
+
+      let created;
+      try {
+        created = await jsonFetch(ENDPOINTS.apptCreate(DEST_SHOP_ID), {
+          method: 'POST',
+          body,
+        });
+      } catch (err) {
+        row.status = 'error';
+        row.error = `create failed: ${err.status} ${(err.body || err.message || '').slice(0, 300)}`;
+        results.push(row);
+        console.error(`[APPT] ${tag} appt ${a.id}: CREATE FAILED ${row.error}`);
+        continue;
+      }
+
+      row.destApptId = created && (created.id || (created.data && created.data.id));
+      row.status = 'created';
+      results.push(row);
+      console.log(`[APPT] ${tag} appt ${a.id}: CREATED dest appt ${row.destApptId} (cust ${destCust.id} veh ${destVehId})`);
+    } catch (err) {
+      row.status = 'error';
+      row.error = (err.body || err.message || String(err)).slice(0, 500);
+      results.push(row);
+      console.error(`[APPT] ${tag} appt ${a.id}: ERROR ${row.error}`);
+    }
+  }
+
+  // ----- 3. REPORT + DOWNLOAD ------------------------------------------
+  const counts = {
+    total: results.length,
+    created: results.filter((r) => r.status === 'created').length,
+    dryRun: results.filter((r) => r.status === 'dry-run').length,
+    gapCustomer: results.filter((r) => r.status === 'gap-customer').length,
+    gapVehicle: results.filter((r) => r.status === 'gap-vehicle').length,
+    error: results.filter((r) => r.status === 'error').length,
+  };
+
+  console.log('%c[APPT] ===== SUMMARY =====', 'color:#0a0;font-weight:bold');
+  console.table(counts);
+  const errs = results.filter((r) => r.status === 'error');
+  if (errs.length) {
+    console.log('%c[APPT] Errors:', 'color:#a00;font-weight:bold');
+    console.table(errs.map((r) => ({ srcAppt: r.sourceApptId, error: r.error })));
+  }
+  const gaps = results.filter((r) => r.status === 'gap-customer' || r.status === 'gap-vehicle');
+  if (gaps.length) {
+    console.log('%c[APPT] Gaps (recreate manually):', 'color:#a60;font-weight:bold');
+    console.table(
+      gaps.map((r) => ({
+        srcAppt: r.sourceApptId,
+        when: r.startTime,
+        customer: r.customerName,
+        contact: r.customerEmail || r.customerPhone,
+        vin: r.vehicleVin,
+        ymm: r.vehicleYMM,
+        title: r.title,
+        reason: r.error,
+      })),
+    );
+  }
+
+  const fname = `tekmetric-appt-migration-${SRC_SHOP_ID}-to-${DEST_SHOP_ID}-${ts()}.json`;
+  downloadJson(fname, {
+    schema: 'tekmetric-appt-migration-mapping',
+    schemaVersion: VERSION,
+    createdAt: new Date().toISOString(),
+    src: SRC_SHOP_ID,
+    dest: DEST_SHOP_ID,
+    confirm: CONFIRM,
+    counts,
+    results,
+  });
+  console.log(`[APPT] Wrote ${fname} to Downloads.`);
+  if (!CONFIRM) {
+    console.log('%c[APPT] DRY RUN. Re-paste with CONFIRM = true to create on dest.', 'color:#06f');
+  }
+})();
+
+VM15036:142 [APPT] v2026-05-01.1  src=10216  dest=18007  CONFIRM=false
+VM15036:144 [APPT] Pulling source appointments...
+Promise {<pending>}
+VM13023:118  GET https://shop.tekmetric.com/api/shop/10216/appointments?startTime=2026-05-01T12%3A28%3A31.050Z&size=100&page=0 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15036:84
+(anonymous) @ VM15036:151
+(anonymous) @ VM15036:414
+VM15036:153 [APPT] Source listing failed at page 0: 403 {"type":"ERROR","message":"Forbidden: you do not have access to this resource.","data":null,"details":{}}
+(anonymous) @ VM15036:153
+await in (anonymous)
+(anonymous) @ VM15036:414
+VM15036:154 [APPT] If this is a 404, the internal endpoint shape is different; open Network tab on the calendar page and tell the agent the GET URL.
+(anonymous) @ VM15036:154
+await in (anonymous)
+(anonymous) @ VM15036:414
+main-CVQgBt6W.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+main-CVQgBt6W.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration — Snippet 8b: APPOINTMENTS (browser)
+ *
+ * The OAuth-based Node script (08-migrate-appointments.ts) failed: Tekmetric
+ * returns 401 "Missing credentials" on every public-API POST /appointments,
+ * even though the same OAuth token can READ both shops successfully. The
+ * internal API + user JWT (same path snippet 02 used to create customers,
+ * vehicles, and ROs) does not have that restriction.
+ *
+ * USAGE
+ *   1. Edit SRC_SHOP_ID and DEST_SHOP_ID below.
+ *   2. Open shop.tekmetric.com in Chrome with a user logged in who has
+ *      access to BOTH shops. The shop you are actively viewing does not
+ *      matter — the snippet hits /api/shop/{id}/... directly with your JWT.
+ *   3. Run with CONFIRM = false first to see the planned summary.
+ *   4. Re-run with CONFIRM = true to actually create.
+ *   5. A mapping JSON downloads to your Downloads folder when done.
+ *
+ * SCOPE
+ *   - Source: every appointment with startTime >= now on SRC_SHOP_ID
+ *   - Per appt: lookup dest customer (email -> phone -> name), lookup dest
+ *     vehicle (VIN, scoped to that customer), then POST a new appointment
+ *     on DEST_SHOP_ID with the same start/end/title/description/color +
+ *     dropoff/pickup/ride/appointment-option fields.
+ *   - Skips (logs to gaps) when dest customer or vehicle is missing.
+ *   - Does NOT create customers or vehicles on dest. (For appointments
+ *     whose customer was already migrated by snippet 02 the customer
+ *     and vehicle already exist on dest; everyone else is a gap.)
+ */
+(async () => {
+  // ============== EDIT THESE TWO PER SHOP ==============
+  const SRC_SHOP_ID = 10216;
+  const DEST_SHOP_ID = 18007;
+  const CONFIRM = false; // set true on the second paste to actually create
+  // =====================================================
+
+  const VERSION = '2026-05-01.1';
+  const PAGE_SIZE = 100;
+  const NOW_ISO = new Date().toISOString();
+  const NOW_MS = Date.now();
+
+  // ----- ENDPOINTS (internal API; same shape as snippet 02) -------------
+  const ENDPOINTS = {
+    base: location.origin,
+    apptList: (shopId, page) =>
+      `/api/shop/${shopId}/appointments?startTime=${encodeURIComponent(
+        NOW_ISO,
+      )}&size=${PAGE_SIZE}&page=${page}`,
+    apptCreate: (shopId) => `/api/shop/${shopId}/appointments`,
+    customerSearch: (shopId, q) =>
+      `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
+    customerDetail: (shopId, customerId) => `/api/shop/${shopId}/customer/${customerId}`,
+    vehicleDetail: (shopId, vehicleId) => `/api/shop/${shopId}/vehicle/${vehicleId}`,
+    vehicleSearch: (shopId, customerId, q) =>
+      `/api/shop/${shopId}/customer/${customerId}/vehicles-search?search=${encodeURIComponent(
+        q,
+      )}&size=20`,
+  };
+
+  // ----- TOKEN CAPTURE (same as snippet 01) -----------------------------
+  function captureToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ'))
+          return p.accessToken;
+      } catch (_) {}
+    }
+    return null;
+  }
+  const TOKEN = captureToken();
+  if (!TOKEN) {
+    console.error('[APPT] Could not find x-auth-token in localStorage. Are you logged in?');
+    return;
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'x-auth-token': TOKEN,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(opts.headers || {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let body;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (_) {
+      body = text;
+    }
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.body = typeof body === 'string' ? body : JSON.stringify(body);
+      throw err;
+    }
+    return body;
+  }
+
+  function downloadJson(name, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+
+  function ts() {
+    return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '');
+  }
+
+  function pickEmail(c) {
+    if (!c) return null;
+    if (typeof c.email === 'string' && c.email.includes('@')) return c.email.toLowerCase().trim();
+    return null;
+  }
+  function pickPhone(c) {
+    if (!c) return null;
+    const arr = Array.isArray(c.phone) ? c.phone : [];
+    const p = arr.find((x) => x && x.primary) || arr[0];
+    if (!p || !p.number) return null;
+    return String(p.number).replace(/\D+/g, '');
+  }
+  function fullName(c) {
+    if (!c) return '';
+    return `${c.firstName || ''} ${c.lastName || ''}`.trim();
+  }
+
+  // ----- 1. PULL FUTURE SOURCE APPOINTMENTS -----------------------------
+  console.log(`%c[APPT] v${VERSION}  src=${SRC_SHOP_ID}  dest=${DEST_SHOP_ID}  CONFIRM=${CONFIRM}`,
+    'color:#06f;font-weight:bold');
+  console.log('[APPT] Pulling source appointments...');
+  const srcAppts = [];
+  let page = 0;
+  let droppedPast = 0;
+  while (page < 500) {
+    let body;
+    try {
+      body = await jsonFetch(ENDPOINTS.apptList(SRC_SHOP_ID, page));
+    } catch (err) {
+      console.error(`[APPT] Source listing failed at page ${page}: ${err.status} ${err.body || err.message}`);
+      console.error('[APPT] If this is a 404, the internal endpoint shape is different; open Network tab on the calendar page and tell the agent the GET URL.');
+      return;
+    }
+    // Tekmetric internal lists may return either a paginated wrapper or
+    // a flat array — handle both.
+    const content = Array.isArray(body) ? body : body.content || [];
+    const isLast = Array.isArray(body) ? content.length < PAGE_SIZE : !!body.last;
+    const future = content.filter((a) => {
+      if (!a.startTime) return true;
+      const ms = Date.parse(a.startTime);
+      if (Number.isNaN(ms)) return true;
+      if (ms < NOW_MS) {
+        droppedPast += 1;
+        return false;
+      }
+      return true;
+    });
+    srcAppts.push(...future);
+    console.log(`[APPT] page ${page}: ${content.length} returned, ${future.length} future`);
+    if (isLast || content.length === 0) break;
+    page += 1;
+  }
+  console.log(`[APPT] dropped ${droppedPast} past-dated entries server returned`);
+  console.log(`[APPT] total future src appts: ${srcAppts.length}`);
+
+  if (!srcAppts.length) {
+    console.log('[APPT] Nothing to do. Done.');
+    return;
+  }
+
+  // ----- 2. RESOLVE DEST IDs + CREATE -----------------------------------
+  const srcCustCache = new Map();
+  const srcVehCache = new Map();
+  const destCustCache = new Map();
+  const destVehCache = new Map();
+
+  const results = [];
+
+  for (let i = 0; i < srcAppts.length; i += 1) {
+    const a = srcAppts[i];
+    const tag = `(${i + 1}/${srcAppts.length})`;
+    const row = {
+      sourceApptId: a.id,
+      sourceCustomerId: a.customerId,
+      sourceVehicleId: a.vehicleId,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      title: a.title || '',
+      status: 'error',
+    };
+
+    try {
+      // src customer
+      if (!srcCustCache.has(a.customerId)) {
+        try {
+          srcCustCache.set(a.customerId, await jsonFetch(ENDPOINTS.customerDetail(SRC_SHOP_ID, a.customerId)));
+        } catch (err) {
+          srcCustCache.set(a.customerId, null);
+          console.warn(`[APPT] ${tag} src customer ${a.customerId} fetch failed: ${err.status}`);
+        }
+      }
+      const srcCust = srcCustCache.get(a.customerId);
+      row.customerName = fullName(srcCust);
+      row.customerEmail = pickEmail(srcCust) || '';
+      row.customerPhone = pickPhone(srcCust) || '';
+
+      // src vehicle (skip if no vehicleId)
+      let srcVeh = null;
+      if (a.vehicleId) {
+        if (!srcVehCache.has(a.vehicleId)) {
+          try {
+            srcVehCache.set(a.vehicleId, await jsonFetch(ENDPOINTS.vehicleDetail(SRC_SHOP_ID, a.vehicleId)));
+          } catch (err) {
+            srcVehCache.set(a.vehicleId, null);
+            console.warn(`[APPT] ${tag} src vehicle ${a.vehicleId} fetch failed: ${err.status}`);
+          }
+        }
+        srcVeh = srcVehCache.get(a.vehicleId);
+      }
+      row.vehicleVin = (srcVeh && srcVeh.vin) || '';
+      row.vehicleYMM = srcVeh
+        ? `${srcVeh.year || ''} ${srcVeh.make || ''} ${srcVeh.model || ''}`.trim()
+        : '';
+
+      if (!srcCust) {
+        row.status = 'gap-customer';
+        row.error = 'src customer fetch failed';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP (src customer fetch failed)`);
+        continue;
+      }
+
+      // dest customer lookup
+      if (!destCustCache.has(a.customerId)) {
+        const email = pickEmail(srcCust);
+        const phone = pickPhone(srcCust);
+        const name = fullName(srcCust);
+        let hit = null;
+        if (email) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, email));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickEmail(c) === email);
+          if (hit) hit._matchedBy = 'email';
+        }
+        if (!hit && phone) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, phone));
+          const list = Array.isArray(r) ? r : r.content || [];
+          hit = list.find((c) => pickPhone(c) === phone);
+          if (hit) hit._matchedBy = 'phone';
+        }
+        if (!hit && name) {
+          const r = await jsonFetch(ENDPOINTS.customerSearch(DEST_SHOP_ID, name));
+          const list = Array.isArray(r) ? r : r.content || [];
+          const matches = list.filter((c) => fullName(c).toLowerCase() === name.toLowerCase());
+          if (matches.length === 1) {
+            hit = matches[0];
+            hit._matchedBy = 'name';
+          }
+        }
+        destCustCache.set(a.customerId, hit || null);
+      }
+      const destCust = destCustCache.get(a.customerId);
+      if (!destCust) {
+        row.status = 'gap-customer';
+        row.error = 'no matching customer on dest';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP customer "${row.customerName}" (${row.customerEmail || row.customerPhone || 'no contact'})`);
+        continue;
+      }
+      row.destCustomerId = destCust.id;
+      row.customerMatchedBy = destCust._matchedBy;
+
+      // dest vehicle by VIN (scoped to dest customer)
+      const vin = (srcVeh && srcVeh.vin && String(srcVeh.vin).trim()) || '';
+      if (!vin) {
+        row.status = 'gap-vehicle';
+        row.error = 'src vehicle has no VIN';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle (no VIN)`);
+        continue;
+      }
+      const vKey = `${destCust.id}-${vin.toUpperCase()}`;
+      if (!destVehCache.has(vKey)) {
+        const r = await jsonFetch(ENDPOINTS.vehicleSearch(DEST_SHOP_ID, destCust.id, vin));
+        const list = Array.isArray(r) ? r : r.content || [];
+        const hit = list.find((v) => (v.vin || '').toUpperCase() === vin.toUpperCase());
+        destVehCache.set(vKey, hit ? hit.id : null);
+      }
+      const destVehId = destVehCache.get(vKey);
+      if (!destVehId) {
+        row.status = 'gap-vehicle';
+        row.error = `no vehicle on dest with VIN ${vin}`;
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: GAP vehicle VIN=${vin}`);
+        continue;
+      }
+      row.destVehicleId = destVehId;
+      row.vehicleMatchedBy = 'vin';
+
+      if (!CONFIRM) {
+        row.status = 'dry-run';
+        results.push(row);
+        console.log(`[APPT] ${tag} appt ${a.id}: DRY-RUN -> cust ${destCust.id} veh ${destVehId} @ ${a.startTime}`);
+        continue;
+      }
+
+      // Build dest body. Source GET returns appointmentOption / rideOption
+      // as nested objects; the create body wants the full nested form.
+      const body = {
+        shopId: DEST_SHOP_ID,
+        customerId: destCust.id,
+        vehicleId: destVehId,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        title: a.title || null,
+        description: a.description || a.note || null,
+        color: a.color || null,
+        dropoffTime: a.dropoffTime || null,
+        pickupTime: a.pickupTime || null,
+        rideOption: a.rideOption || null,
+        appointmentOption: a.appointmentOption || null,
+        appointmentStatus: a.appointmentStatus || 'NONE',
+        leadSource: a.leadSource || null,
+      };
+
+      let created;
+      try {
+        created = await jsonFetch(ENDPOINTS.apptCreate(DEST_SHOP_ID), {
+          method: 'POST',
+          body,
+        });
+      } catch (err) {
+        row.status = 'error';
+        row.error = `create failed: ${err.status} ${(err.body || err.message || '').slice(0, 300)}`;
+        results.push(row);
+        console.error(`[APPT] ${tag} appt ${a.id}: CREATE FAILED ${row.error}`);
+        continue;
+      }
+
+      row.destApptId = created && (created.id || (created.data && created.data.id));
+      row.status = 'created';
+      results.push(row);
+      console.log(`[APPT] ${tag} appt ${a.id}: CREATED dest appt ${row.destApptId} (cust ${destCust.id} veh ${destVehId})`);
+    } catch (err) {
+      row.status = 'error';
+      row.error = (err.body || err.message || String(err)).slice(0, 500);
+      results.push(row);
+      console.error(`[APPT] ${tag} appt ${a.id}: ERROR ${row.error}`);
+    }
+  }
+
+  // ----- 3. REPORT + DOWNLOAD ------------------------------------------
+  const counts = {
+    total: results.length,
+    created: results.filter((r) => r.status === 'created').length,
+    dryRun: results.filter((r) => r.status === 'dry-run').length,
+    gapCustomer: results.filter((r) => r.status === 'gap-customer').length,
+    gapVehicle: results.filter((r) => r.status === 'gap-vehicle').length,
+    error: results.filter((r) => r.status === 'error').length,
+  };
+
+  console.log('%c[APPT] ===== SUMMARY =====', 'color:#0a0;font-weight:bold');
+  console.table(counts);
+  const errs = results.filter((r) => r.status === 'error');
+  if (errs.length) {
+    console.log('%c[APPT] Errors:', 'color:#a00;font-weight:bold');
+    console.table(errs.map((r) => ({ srcAppt: r.sourceApptId, error: r.error })));
+  }
+  const gaps = results.filter((r) => r.status === 'gap-customer' || r.status === 'gap-vehicle');
+  if (gaps.length) {
+    console.log('%c[APPT] Gaps (recreate manually):', 'color:#a60;font-weight:bold');
+    console.table(
+      gaps.map((r) => ({
+        srcAppt: r.sourceApptId,
+        when: r.startTime,
+        customer: r.customerName,
+        contact: r.customerEmail || r.customerPhone,
+        vin: r.vehicleVin,
+        ymm: r.vehicleYMM,
+        title: r.title,
+        reason: r.error,
+      })),
+    );
+  }
+
+  const fname = `tekmetric-appt-migration-${SRC_SHOP_ID}-to-${DEST_SHOP_ID}-${ts()}.json`;
+  downloadJson(fname, {
+    schema: 'tekmetric-appt-migration-mapping',
+    schemaVersion: VERSION,
+    createdAt: new Date().toISOString(),
+    src: SRC_SHOP_ID,
+    dest: DEST_SHOP_ID,
+    confirm: CONFIRM,
+    counts,
+    results,
+  });
+  console.log(`[APPT] Wrote ${fname} to Downloads.`);
+  if (!CONFIRM) {
+    console.log('%c[APPT] DRY RUN. Re-paste with CONFIRM = true to create on dest.', 'color:#06f');
+  }
+})();
+
+VM15156:142 [APPT] v2026-05-01.1  src=10216  dest=18007  CONFIRM=false
+VM15156:144 [APPT] Pulling source appointments...
+Promise {<pending>}
+VM13023:118  GET https://shop.tekmetric.com/api/shop/10216/appointments?startTime=2026-05-01T12%3A28%3A44.888Z&size=100&page=0 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15156:84
+(anonymous) @ VM15156:151
+(anonymous) @ VM15156:414
+VM15156:153 [APPT] Source listing failed at page 0: 403 {"type":"ERROR","message":"Forbidden: you do not have access to this resource.","data":null,"details":{}}
+(anonymous) @ VM15156:153
+await in (anonymous)
+(anonymous) @ VM15156:414
+VM15156:154 [APPT] If this is a 404, the internal endpoint shape is different; open Network tab on the calendar page and tell the agent the GET URL.
+(anonymous) @ VM15156:154
+await in (anonymous)
+(anonymous) @ VM15156:414
