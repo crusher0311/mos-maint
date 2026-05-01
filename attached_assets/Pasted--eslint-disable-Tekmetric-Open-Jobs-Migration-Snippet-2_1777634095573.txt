@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.10-self-healing';
+  const VERSION = '2026-05-01.9-customer-scoped-vehicle';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -928,94 +928,9 @@
               notes: srcVeh.notes || null,
             }),
           });
-          // 2026-05-01.10: We *guessed* the vehicle endpoint as
-          // POST /api/shop/{id}/customer/{cid}/vehicle and it returned 200
-          // in v.9, but we never verified the response SHAPE. Three plausible
-          // shapes:
-          //   A) bare vehicle object: { id: <vehId>, vin, year, make, ... }
-          //   B) updated customer object: { id: <custId>, vehicles: [{id:<vehId>, ...}, ...] }
-          //   C) wrapped: { vehicle: { id: <vehId>, ... } } or { data: ... }
-          // If the previous run grabbed `createdV.id` from shape B, we sent
-          // a CUSTOMER id into the vehicle.id slot of createRo — which would
-          // explain the 21 createRo 404 "Internal server error" results.
-          // Resolve defensively across all three shapes:
-          let resolvedVehId = null;
-          if (createdV) {
-            // Shape A: bare vehicle object — has VIN-ish fields and id != customerId.
-            const looksLikeVehicle =
-              ('vin' in createdV) || ('year' in createdV) || ('make' in createdV) || ('model' in createdV);
-            if (looksLikeVehicle && createdV.id && createdV.id !== destCustomerId) {
-              resolvedVehId = createdV.id;
-            }
-            // Shape B: customer object with vehicles[] — pick the newest one
-            // whose VIN matches what we just sent (or the last in the array).
-            if (!resolvedVehId && Array.isArray(createdV.vehicles) && createdV.vehicles.length) {
-              const want = (srcVinStr || '').toUpperCase();
-              const match = createdV.vehicles.find(
-                (v) => v && v.vin && String(v.vin).toUpperCase() === want
-              );
-              const last = createdV.vehicles[createdV.vehicles.length - 1];
-              resolvedVehId = (match && match.id) || (last && last.id) || null;
-            }
-            // Shape C: wrapped
-            if (!resolvedVehId && createdV.vehicle && createdV.vehicle.id) {
-              resolvedVehId = createdV.vehicle.id;
-            }
-            if (!resolvedVehId && createdV.data && createdV.data.id) {
-              resolvedVehId = createdV.data.id;
-            }
-            // Last resort: trust the bare .id but only if it differs from the
-            // customer id (otherwise we *know* it's the wrong field).
-            if (!resolvedVehId && createdV.id && createdV.id !== destCustomerId) {
-              resolvedVehId = createdV.id;
-            }
-          }
-          // ALWAYS verify by post-create VIN search before trusting the
-          // response shape. The customer-scoped search returns vehicles
-          // attached to this customer; if our newly-created vehicle is
-          // there with a matching VIN, that id is authoritative — overrides
-          // anything we parsed out of the create response.
-          if (srcVinStr) {
-            try {
-              const r2 = await jsonFetch(
-                ENDPOINTS.vehicleSearch(destShopId, destCustomerId, srcVinStr),
-                token
-              );
-              const list2 = Array.isArray(r2) ? r2 : (r2.content || []);
-              const hit2 = list2.find(
-                (v) => v && v.vin && String(v.vin).toUpperCase() === srcVinStr.toUpperCase()
-              );
-              if (hit2 && hit2.id) {
-                if (resolvedVehId && resolvedVehId !== hit2.id) {
-                  console.warn(
-                    `[LOAD-CORE] vehicle-id override: parsed=${resolvedVehId} ` +
-                    `search-by-VIN=${hit2.id} (using search result)`
-                  );
-                }
-                resolvedVehId = hit2.id;
-              }
-            } catch (_) {}
-          }
-          if (!resolvedVehId) {
-            // Diagnostic — dump the keys so we can see what shape Tekmetric
-            // actually returned and patch v.11.
-            const keys = createdV && typeof createdV === 'object' ? Object.keys(createdV) : [typeof createdV];
-            throw new Error(
-              `createVehicle returned shape we cannot resolve to a vehicle id. ` +
-              `keys=${JSON.stringify(keys)} createdV.id=${createdV && createdV.id} ` +
-              `destCustomerId=${destCustomerId}`
-            );
-          }
-          destVehicleId = resolvedVehId;
+          destVehicleId = createdV.id;
         }
       }
-      // 2026-05-01.10 diagnostic: emit the resolved IDs we're about to send
-      // into createRo so the next run's console output tells us at a glance
-      // whether vehicle.id == customer.id (the bug we're hunting).
-      console.log(
-        `[LOAD-CORE] resolved IDs for source RO #${src.repairOrderNumber}: ` +
-        `customer=${destCustomerId} vehicle=${destVehicleId} laborRate=${destLaborRateId}`
-      );
 
       // 2. Create the RO using the proven /api/repair-order/create endpoint
       //    + payload shape from 04-clone-ro-same-shop.js. We do NOT pass
@@ -1037,43 +952,10 @@
         recommendations: [],
         declinedJobRecommendations: [],
       };
-      // 2026-05-01.10: log the exact payload right before send so the next
-      // run's console captures full evidence of what we asked Tekmetric to
-      // create (key suspects: vehicle.id, customer.id, laborRate.id).
-      console.log(
-        `[LOAD-CORE] createRo payload for source RO #${src.repairOrderNumber}:`,
-        JSON.parse(JSON.stringify(createPayload))
-      );
-      let createdRo;
-      try {
-        createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
-          method: 'POST',
-          body: JSON.stringify(createPayload),
-        });
-      } catch (e1) {
-        // 2026-05-01.10 self-heal: the auto-discovered destLaborRateId
-        // (16000 from existing dest RO) may not be a valid labor-rate ROW
-        // in the dest shop — Tekmetric returns 404 + "Internal server error"
-        // rather than a clean validation error. Retry once without
-        // laborRate so the backend uses the shop default. If that succeeds,
-        // every subsequent RO in this run also drops laborRate.
-        if (createPayload.laborRate) {
-          console.warn(
-            `[LOAD-CORE] createRo failed (${e1.status || 'err'}), retrying without laborRate…`
-          );
-          delete createPayload.laborRate;
-          createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
-            method: 'POST',
-            body: JSON.stringify(createPayload),
-          });
-          // Permanently disable laborRate for the rest of this run so we
-          // don't keep paying the retry tax on every RO.
-          destLaborRateId = null;
-          cachedDestLaborRateId = null;
-        } else {
-          throw e1;
-        }
-      }
+      const createdRo = await jsonFetch(ENDPOINTS.repairOrderCreate(), token, {
+        method: 'POST',
+        body: JSON.stringify(createPayload),
+      });
       const newRoId = createdRo.id;
 
       // 3. Set vehicle mileage (PUT) if source had any.
@@ -1213,3 +1095,259 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13341:399 [Tekmetric Migration LOAD-CORE v2026-05-01.9-customer-scoped-vehicle] starting…
+VM13341:248 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13341:249 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13341:413 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13341:426 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13341:438 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13341:504 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13341:532 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13341:540 [LOAD-CORE] Plan:
+VM13341:541 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13341:555 [LOAD-CORE] First few that will be created:
+VM13341:556 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13341:570 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13341:570
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:778 [LOAD-CORE] ✓ auto-discovered dest labor-rate id = 16000 (shop 18008)
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721265 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2720892 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721001 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721060 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721063 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721079 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721143 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721170 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721175 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721193 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721205 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721209 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721214 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721233 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721245 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721246 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721247 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721258 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721262 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721263 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13341:191
+(anonymous) @ VM13341:955
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1058 [LOAD-CORE] FAILED RO #2721264 at step "createRo": 404  on /api/repair-order/create :: {"type":"ERROR","message":"Internal server error","data":null,"details":{}}
+(anonymous) @ VM13341:1058
+await in (anonymous)
+(anonymous) @ VM13341:1097
+VM13341:1070 [LOAD-CORE] Successes:
+VM13341:1071 
+VM13341:1073 [LOAD-CORE] Failures:
+VM13341:1074 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'12720892321023374'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'22721001321701729'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'32721060322599022'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'42721063322618310'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'52721079322765797'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'62721143323391292'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'72721170323628624'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'82721175323646078'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'92721193324010591'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'102721205324031687'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'112721209324050816'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'122721214324104201'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'132721233324204864'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'142721245324342162'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'152721246324342598'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'162721247324345536'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'172721258324403473'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'182721262324414665'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'192721263324418417'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'202721264324429491'createRo'404'{"type":"ERROR","message":"Internal server error","data":null,"details":{}}'Array(21)
+VM13341:1095 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-061447.json
+VM13341:1096 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
