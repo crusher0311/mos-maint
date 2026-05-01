@@ -320,3 +320,118 @@
     console.log('%c[APPT] DRY RUN. Re-paste with CONFIRM = true to create.', 'color:#06f');
   }
 })();
+
+VM15521:110 [APPT] v2026-05-01.1  dest=18007  CONFIRM=true
+VM15521:112 [APPT] Pick the appt-dump JSON file...
+Promise {<pending>}
+VM15521:130 [APPT] loaded 13 appts from appt-dump-src10216-20260501T123452.json (src=10216)
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (1/13) appt 61125880: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (2/13) appt 61118202: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (3/13) appt 61223538: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:210 [APPT] (4/13) appt 60942195: GAP vehicle (no VIN)
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (5/13) appt 59098018: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:210 [APPT] (6/13) appt 61183516: GAP vehicle (no VIN)
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (7/13) appt 61110550: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (8/13) appt 61220435: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (9/13) appt 61122112: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (10/13) appt 61084609: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM13023:118  POST https://shop.tekmetric.com/api/shop/18007/appointments 405 (Method Not Allowed)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM15521:60
+(anonymous) @ VM15521:257
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:262 [APPT] (11/13) appt 60517658: CREATE FAILED create failed: 405 {"type":"ERROR","message":"HTTP method 'POST' is not supported for this endpoint","data":null,"details":{}}
+(anonymous) @ VM15521:262
+await in (anonymous)
+(anonymous) @ VM15521:322
+VM15521:210 [APPT] (12/13) appt 60842634: GAP vehicle (no VIN)
+VM15521:210 [APPT] (13/13) appt 60736990: GAP vehicle (no VIN)
+VM15521:286 [APPT] ===== SUMMARY =====
+VM15521:287 (index)Value(index)Valuetotal13created0dryRun0gapCustomer0gapVehicle4error9Object
+VM15521:290 [APPT] Errors:
+VM15521:291 (index)srcAppterror(index)srcAppterror061125880'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'161118202'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'261223538'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'359098018'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'461110550'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'561220435'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'661122112'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'761084609'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'860517658'create failed: 405 {"type":"ERROR","message":"HTTP…rted for this endpoint","data":null,"details":{}}'Array(9)
+VM15521:295 [APPT] Gaps (recreate manually):
+VM15521:296 (index)srcApptwhencustomercontactvinymmtitlereason(index)srcApptwhencustomercontactvinymmtitlereason060942195'2026-05-08T12:30:00Z''Micheline  Miceli''mmm6454@aol.com''''2017 Honda Civic'"[SG] Micheline  Miceli's 2017 Honda Civic"'src vehicle has no VIN'161183516'2026-05-05T12:30:00Z''MARK BORLAND''2246221555''''2021 Kia Soul'"[SG] MARK BORLAND's 2021 Kia Soul"'src vehicle has no VIN'260842634'2026-05-02T12:30:00Z''ANDREW* LEHMANN*''2246229044''''2009 Ford Escape'"[SG] ANDREW* LEHMANN*'s 2009 Ford Escape"'src vehicle has no VIN'360736990'2026-05-02T12:30:00Z''DAVID MOSS''pound80@yahoo.com''''''''src vehicle has no VIN'Array(4)
+VM15521:318 [APPT] Wrote tekmetric-appt-migration-10216-to-18007-20260501T124948.json to Downloads.
