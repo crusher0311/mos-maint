@@ -1,0 +1,237 @@
+main-D7j3MLUu.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
+/* eslint-disable no-console */
+(async () => {
+  // ===== CONFIG =====
+  const SOURCE_SHOP_ID = 10214;            // Service Solutions Garage (live)
+  const SOURCE_RO_ID   = 324031687;        // RO to clone from source
+  const DEST_SHOP_ID   = 14245;            // your test shop
+  const DEST_REFERENCE_RO_ID = 255022827;  // Jay Demore's RO in shop 14245
+                                           // (we pull customer/vehicle/laborRate from it)
+  const CONFIRM = true;
+  const JOBS_LIMIT = 1;                    // start with 1; re-run with null for all
+  const AUTO_ROLLBACK = true;
+  // ==================
+
+  const BASE = location.origin;
+  const m = location.pathname.match(/\/admin\/shop\/(\d+)\b/);
+  const activeShop = m ? Number(m[1]) : null;
+  if (activeShop !== DEST_SHOP_ID) { console.error(`[XCLONE] Expected DEST shop ${DEST_SHOP_ID}, URL says ${activeShop}.`); return; }
+
+  async function getToken() {
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v)) return v;
+      try { const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ')) return p.accessToken;
+      } catch (_) {}
+    }
+    return await new Promise((resolve, reject) => {
+      const orig = window.fetch.bind(window);
+      const t = setTimeout(() => { window.fetch = orig; reject(new Error('Timed out sniping token. Click Tekmetric and re-run.')); }, 8000);
+      window.fetch = function p(input, init) {
+        try {
+          const h = (init && init.headers) || {}; let tok = null;
+          if (h instanceof Headers) tok = h.get('X-AUTH-TOKEN');
+          else if (Array.isArray(h)) { const x = h.find(([k]) => /^x-auth-token$/i.test(k)); if (x) tok = x[1]; }
+          else for (const k of Object.keys(h)) if (k.toLowerCase() === 'x-auth-token') tok = h[k];
+          if (tok) { clearTimeout(t); window.fetch = orig; resolve(tok); }
+        } catch (_) {}
+        return orig(input, init);
+      };
+      try { orig(`${BASE}/api/shop/${DEST_SHOP_ID}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
+    });
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const init = { method: opts.method || 'GET', credentials: 'include',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-AUTH-TOKEN': opts.token } };
+    if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+    const res = await fetch(`${BASE}${path}`, init);
+    const text = await res.text();
+    let parsed = null; try { parsed = text ? JSON.parse(text) : null; } catch (_) {}
+    return { status: res.status, ok: res.ok, body: parsed, raw: text };
+  }
+  function unwrap(r) { if (r.body && typeof r.body === 'object' && 'data' in r.body && 'type' in r.body) return r.body.data; return r.body; }
+
+  function leanPart(p, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: 'PART' },
+      name: p.name ?? '', partNumber: p.partNumber ?? '', position: p.position ?? '',
+      quantity: p.quantity ?? 1, cost: p.cost ?? 0, retail: p.retail ?? 0, oemPartNumber: p.oemPartNumber ?? '',
+    };
+    for (const k of ['brand','description','model','fet','msrp','quote','notes',
+      'pcdbPartTypeId','pcdbPartTypeName','partsTechPartId','unitOfMeasure','maxCapacity','specStandard',
+      'warrantyLabel','sortOrder','width','ratio','diameter','constructionType','loadIndex','speedRating',
+      'tireType','mileageWarranty','loadRange','tireCategory','runFlat','sideWallStyle','treadwear','traction','temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
+    }
+    return out;
+  }
+
+  // CROSS-SHOP: technician + autoApplyLaborMatrixId are shop-scoped → forced null.
+  // The labor `rate` (dollar amount) is preserved.
+  function leanLaborCrossShop(l, newJobId) {
+    const out = {
+      tempId: Math.random(), jobId: newJobId,
+      name: l.name ?? '', hours: l.hours ?? 0, rate: l.rate ?? 0,
+      autoApplyLaborMatrixId: null, technician: null,
+    };
+    for (const k of ['complete','position','warrantyLabel','sortOrder','sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
+    }
+    return out;
+  }
+
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const p = { ...emptyJobResp };
+    p.name = sourceJob.name ?? p.name;
+    p.status = sourceJob.status ?? p.status;
+    p.selected = sourceJob.selected ?? p.selected;
+    p.authorized = sourceJob.authorized ?? p.authorized;
+    p.technician = null;  // cross-shop: drop
+    p.note = sourceJob.note ?? null;
+    p.declinedNote = sourceJob.declinedNote ?? null;
+    p.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    p.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    for (const k of ['taxParts','taxLabor','taxFees','taxTires','taxTiresFet',
+      'packagePrice','packagePriceMethod','packagePriceSurplusOilMethod','packagePriceModsHidden','feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) p[k] = sourceJob[k];
+    }
+    p.parts = (sourceJob.parts || []).map(x => leanPart(x, newJobId));
+    p.labor = (sourceJob.labor || []).map(x => leanLaborCrossShop(x, newJobId));
+    p.discounts = []; p.fees = []; p.smartJobIds = []; p.smartJobs = []; p.laborTechnicians = [];
+    return p;
+  }
+
+  async function rollback(token, partialRoId) {
+    try {
+      const r = await jsonFetch(`/api/repair-order/${partialRoId}/status`, { token, method: 'PUT',
+        body: { repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } } });
+      if (r.ok) console.warn(`[XCLONE] auto-rolled-back partial RO ${partialRoId} (DELETED).`);
+      else console.warn(`[XCLONE] auto-rollback FAILED for RO ${partialRoId} status=${r.status}; delete manually:`, r.raw);
+    } catch (e) { console.warn(`[XCLONE] auto-rollback threw: ${e.message}`); }
+  }
+
+  console.log(`%c[XCLONE] starting — source shop ${SOURCE_SHOP_ID} RO ${SOURCE_RO_ID} → dest shop ${DEST_SHOP_ID}, CONFIRM=${CONFIRM}, JOBS_LIMIT=${JOBS_LIMIT}`, 'color:#06c;font-weight:bold');
+
+  let token;
+  try { token = await getToken(); console.log('[XCLONE] got auth token.'); }
+  catch (e) { console.error('[XCLONE] auth token error:', e.message); return; }
+
+  const srcRoResp = await jsonFetch(`/api/shop/${SOURCE_SHOP_ID}/repair-order/${SOURCE_RO_ID}`, { token });
+  if (!srcRoResp.ok) {
+    console.error(`[XCLONE] failed SOURCE RO from shop ${SOURCE_SHOP_ID}: status=${srcRoResp.status}`, srcRoResp.raw);
+    console.error('         (if 403, your token may not have access to that shop — switch into the source shop once to refresh permissions)');
+    return;
+  }
+  const srcRo = unwrap(srcRoResp);
+
+  const srcEstResp = await jsonFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`, { token });
+  if (!srcEstResp.ok) { console.error(`[XCLONE] failed source estimate status=${srcEstResp.status}`, srcEstResp.raw); return; }
+  const srcJobs = (unwrap(srcEstResp).jobs || []).filter(j => !j.archived);
+
+  const srcConcernsResp = await jsonFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`, { token });
+  if (!srcConcernsResp.ok) { console.error(`[XCLONE] failed source concerns status=${srcConcernsResp.status}`, srcConcernsResp.raw); return; }
+  const srcConcerns = Array.isArray(srcConcernsResp.body) ? srcConcernsResp.body : (srcConcernsResp.body?.data || []);
+
+  console.log(`[XCLONE] source RO #${srcRo.repairOrderNumber}: ${srcJobs.length} jobs, ${srcConcerns.length} concerns`);
+  console.log(`         source customer: ${srcRo.customer?.firstName} ${srcRo.customer?.lastName} (id ${srcRo.customer?.id}) — IGNORED`);
+  console.log(`         source vehicle:  ${srcRo.vehicle?.year} ${srcRo.vehicle?.make} ${srcRo.vehicle?.model} (id ${srcRo.vehicle?.id}) — IGNORED`);
+
+  const destRefResp = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/repair-order/${DEST_REFERENCE_RO_ID}`, { token });
+  if (!destRefResp.ok) { console.error(`[XCLONE] failed DEST reference RO status=${destRefResp.status}`, destRefResp.raw); return; }
+  const destRef = unwrap(destRefResp);
+  const destCustomerId = destRef.customer?.id;
+  const destVehicleId = destRef.vehicle?.id;
+  const destLaborRateId = typeof destRef.laborRate === 'number' ? destRef.laborRate : destRef.laborRate?.id;
+  if (!destCustomerId || !destVehicleId || !destLaborRateId) {
+    console.error(`[XCLONE] dest reference RO missing ids. customer=${destCustomerId}, vehicle=${destVehicleId}, laborRate=${destLaborRateId}`);
+    return;
+  }
+  console.log(`[XCLONE] dest reference RO #${destRef.repairOrderNumber} → customer=${destCustomerId}, vehicle=${destVehicleId}, laborRate=${destLaborRateId}`);
+
+  const APPT = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  const apptOption = typeof srcRo.appointmentOption === 'number' ? srcRo.appointmentOption : (APPT[srcRo.appointmentOption] ?? 2);
+
+  if (!CONFIRM) { console.warn('[XCLONE] DRY RUN.'); return; }
+
+  const createPayload = {
+    shop: { id: DEST_SHOP_ID }, appointmentOption: apptOption,
+    odometerInop: srcRo.odometerInop ?? false, leadSource: srcRo.leadSource || '',
+    vehicle:  { id: destVehicleId }, milesIn: srcRo.milesIn ?? null,
+    laborRate:{ id: destLaborRateId }, customer: { id: destCustomerId },
+    appointment: null, initialJobs: [], recommendations: [], declinedJobRecommendations: [],
+  };
+  const createResp = await jsonFetch(`/api/repair-order/create`, { token, method: 'POST', body: createPayload });
+  if (!createResp.ok) { console.error(`[XCLONE] RO create failed status=${createResp.status}`, createResp.raw); return; }
+  const newRo = unwrap(createResp);
+  const newRoId = newRo.id;
+  const newRoUrl = `${BASE}/admin/shop/${DEST_SHOP_ID}/repair-orders/${newRoId}/estimate`;
+  console.log(`%c[XCLONE] ✓ created new RO id=${newRoId} #${newRo.repairOrderNumber} in shop ${DEST_SHOP_ID}`, 'color:#0a0;font-weight:bold');
+  console.log(`         ${newRoUrl}`);
+
+  if (srcRo.milesIn != null || srcRo.milesOut != null) {
+    const r = await jsonFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
+      token, method: 'PUT',
+      body: { milesIn: srcRo.milesIn ?? srcRo.milesOut ?? 0, milesOut: srcRo.milesOut ?? srcRo.milesIn ?? 0, odometerInop: srcRo.odometerInop ?? false },
+    });
+    if (!r.ok) console.warn(`[XCLONE] mileage failed:`, r.raw); else console.log(`[XCLONE] ✓ mileage`);
+  }
+
+  for (let i = 0; i < srcConcerns.length; i++) {
+    const r = await jsonFetch(`/api/repair-orders/${newRoId}/customer-concerns`, { token, method: 'POST', body: { concern: srcConcerns[i].concern } });
+    if (!r.ok) console.error(`[XCLONE] ✗ concern ${i+1}:`, r.raw); else console.log(`[XCLONE] ✓ concern ${i+1}/${srcConcerns.length}`);
+  }
+
+  const jobs = JOBS_LIMIT ? srcJobs.slice(0, JOBS_LIMIT) : srcJobs;
+  if (JOBS_LIMIT) console.log(`[XCLONE] JOBS_LIMIT=${JOBS_LIMIT} → ${jobs.length} of ${srcJobs.length} job(s).`);
+
+  for (let i = 0; i < jobs.length; i++) {
+    const job = jobs[i];
+    const label = `job ${i+1}/${jobs.length} "${job.name}"`;
+
+    const empty = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/job`, { token, method: 'POST',
+      body: { name: job.name || 'New Job', repairOrderId: newRoId, syncPartsAttachedToNonQuotedOrders: false } });
+    if (!empty.ok) {
+      console.error(`[XCLONE] ✗ ${label} empty-create status=${empty.status}`, empty.raw);
+      if (AUTO_ROLLBACK) await rollback(token, newRoId);
+      return;
+    }
+    const emptyJob = unwrap(empty);
+
+    const popPayload = buildPopulatePayload(emptyJob, job);
+    const pop = await jsonFetch(`/api/shop/${DEST_SHOP_ID}/job`, { token, method: 'POST', body: popPayload });
+    if (!pop.ok) {
+      console.error(`[XCLONE] ✗ ${label} populate status=${pop.status}`);
+      console.error('         response (raw):', pop.raw);
+      try { console.error('         response (json):', JSON.stringify(pop.body, null, 2)); } catch (_) {}
+      console.error('         payload (json):', JSON.stringify(popPayload, null, 2));
+      if (AUTO_ROLLBACK) await rollback(token, newRoId);
+      return;
+    }
+    console.log(`[XCLONE] ✓ ${label} — empty-id=${emptyJob.id}, ${job.parts?.length||0}p / ${job.labor?.length||0}l`);
+  }
+
+  console.log(`%c[XCLONE] DONE — open: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
+})();
+VM6271:117 [XCLONE] starting — source shop 10214 RO 324031687 → dest shop 14245, CONFIRM=true, JOBS_LIMIT=1
+VM6271:120 [XCLONE] got auth token.
+Promise {<pending>}
+VM4248:118  GET https://shop.tekmetric.com/api/shop/10214/repair-order/324031687 403 (Forbidden)
+patchedFetch @ VM4248:118
+await in patchedFetch
+jsonFetch @ VM6271:49
+(anonymous) @ VM6271:123
+await in (anonymous)
+(anonymous) @ VM6271:218
+VM6271:125 [XCLONE] failed SOURCE RO from shop 10214: status=403 {"type":"ERROR","message":"Forbidden: you do not have access to this resource.","data":null,"details":{}}
+(anonymous) @ VM6271:125
+await in (anonymous)
+(anonymous) @ VM6271:218
+VM6271:126          (if 403, your token may not have access to that shop — switch into the source shop once to refresh permissions)
+(anonymous) @ VM6271:126
+await in (anonymous)
+(anonymous) @ VM6271:218
