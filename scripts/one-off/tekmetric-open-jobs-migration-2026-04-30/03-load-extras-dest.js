@@ -35,8 +35,12 @@
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN.
+  // 2026-05-01: flipped to true for the live HCAC migration. Snippet 02
+  // already created the dest ROs successfully; this snippet only ADDS
+  // inspections + photos onto them, with per-source-id dedupe markers
+  // in the inspection titles and photo notes, so re-pastes are safe.
   // ============================================================
-  const CONFIRM = false;
+  const CONFIRM = true;
 
   // Inspection title marker. Includes the source inspection ID so each
   // migrated inspection is uniquely identifiable on a re-run, even when
