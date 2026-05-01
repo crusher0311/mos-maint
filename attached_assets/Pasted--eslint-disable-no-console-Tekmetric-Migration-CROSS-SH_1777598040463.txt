@@ -1,0 +1,479 @@
+/* eslint-disable no-console */
+/*
+ * Tekmetric Migration — CROSS-SHOP CLONE WITH CUSTOMER/VEHICLE OVERRIDES
+ *
+ * Purpose: clone one open RO from a SOURCE shop into a brand-new RO in a
+ * DEST shop, attaching it to a customer + vehicle that already exist in
+ * the dest shop (i.e. NOT recreating the source customer/vehicle in dest).
+ *
+ * Use case: you have an RO in shop A under customer Foo, and you want a
+ * test copy of it in shop B under an existing customer Bar / vehicle Baz.
+ *
+ * Modeled on 04-clone-ro-same-shop.js (proven against shop 14245 / RO #62).
+ * Differences vs 04:
+ *   - Source shop and dest shop are separate config knobs.
+ *   - DEST_CUSTOMER_ID and DEST_VEHICLE_ID are required overrides
+ *     (the source customer/vehicle IDs are NOT carried into the dest RO).
+ *   - DEST_LABOR_RATE_ID is auto-discovered from any existing dest RO if
+ *     not set, since the source labor-rate id won't exist in the dest.
+ *   - Each populated job's `technician` and each labor line's
+ *     `autoApplyLaborMatrixId` are forced to null, since those reference
+ *     source-shop entities that don't exist in dest. Re-assign in the UI
+ *     after clone.
+ *   - The first concern is prepended with `[migrated from RO#N]` so
+ *     re-runs of 02-load-core-dest.js (which scans for that marker) will
+ *     skip the cloned RO instead of duplicating it.
+ *
+ * REQUIREMENTS
+ *   - Tekmetric mints a NEW single-shop-scoped token every time you
+ *     switch shops via the dropdown. So this script needs TWO tokens —
+ *     one captured on a source-shop tab, one on a dest-shop tab.
+ *   - Use 00-print-token.js to grab each token (it auto-copies to
+ *     clipboard), then paste both into SOURCE_TOKEN / DEST_TOKEN below.
+ *
+ * USAGE
+ *   1. Find Jay Demore's customer ID in dest shop 14245 (URL ends in
+ *      `/admin/shop/14245/customers/{customerId}`).
+ *   2. From his customer page, click his vehicle (URL ends in
+ *      `/vehicles/{vehicleId}`).
+ *   3. Find the source RO ID in shop 10214 (URL ends in
+ *      `/repair-orders/{roId}/estimate`).
+ *   4. On a SOURCE-shop tab (10214), paste 00-print-token.js into the
+ *      DevTools Console — it copies that tab's token to your clipboard.
+ *      Paste it into the SOURCE_TOKEN field below.
+ *   5. Switch the tab to a DEST-shop URL (14245) and repeat — paste that
+ *      token into DEST_TOKEN below.
+ *   6. Fill in the CONFIG block (RO id, customer id, vehicle id, tokens).
+ *   7. Open DevTools Console on ANY Tekmetric tab (either shop is fine
+ *      — every fetch picks the right token from the config).
+ *   8. Paste the whole file. With CONFIRM=false (default) it pre-flights
+ *      both shops + validates dest customer/vehicle + prints what it
+ *      would do, with no writes.
+ *   9. If the dry-run looks right, flip CONFIRM=true at the top, re-paste.
+ *      The new RO is created in dest shop with the override
+ *      customer/vehicle and a clickable link is printed.
+ */
+(async () => {
+  // ===== console tee: capture every [CLONE-X] line so we can auto-copy
+  // them to the clipboard at the end. Makes it trivial to paste the run
+  // log into chat/email without scrolling/selecting in DevTools. =====
+  const __cloneXBuf = [];
+  const __origLog = console.log.bind(console);
+  const __origWarn = console.warn.bind(console);
+  const __origErr = console.error.bind(console);
+  function __teeStrip(args) {
+    return args
+      .map((a) => (typeof a === 'string' ? a.replace(/%c/g, '') : (() => {
+        try { return JSON.stringify(a); } catch (_) { return String(a); }
+      })()))
+      .filter((s) => !/^color:|^font-weight:|^background:/i.test(s))
+      .join(' ');
+  }
+  console.log  = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push(s); } catch (_) {} return __origLog(...a); };
+  console.warn = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push('WARN ' + s); } catch (_) {} return __origWarn(...a); };
+  console.error = (...a) => { try { const s = __teeStrip(a); if (s.includes('[CLONE-X]')) __cloneXBuf.push('ERR ' + s); } catch (_) {} return __origErr(...a); };
+  async function __copyRunLog() {
+    const txt = __cloneXBuf.join('\n');
+    try {
+      await navigator.clipboard.writeText(txt);
+      __origLog('%c[CLONE-X] ✓ run log copied to clipboard — paste it back into chat with Ctrl+V', 'color:#0a0;font-weight:bold');
+    } catch (_) {
+      __origLog('%c[CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:', 'color:#c60;font-weight:bold');
+      __origLog('====== BEGIN RUN LOG ======\n' + txt + '\n====== END RUN LOG ======');
+    }
+  }
+  // restore console + auto-copy when the IIFE returns (success or early-bail)
+  const __origReturn = (() => {})();
+  // wrap the rest of the function so we always copy on exit
+  try {
+  // ===== CONFIG =====
+  const SOURCE_SHOP_ID    = 10214;        // shop the RO is being cloned FROM
+  const SOURCE_RO_ID      = 324342598;    // numeric RO id in source shop  (REQUIRED)
+  const DEST_SHOP_ID      = 14245;        // shop the new RO will be created IN
+  const DEST_CUSTOMER_ID  = 82581111;     // existing customer in DEST shop  (Jay Demore)
+  const DEST_VEHICLE_ID   = 118337025;    // existing vehicle in DEST shop   (Jay's vehicle)
+  const DEST_LABOR_RATE_ID = null;        // null = auto-discover from a recent dest RO
+  // Tokens are SINGLE-SHOP-SCOPED. Capture each one with 00-print-token.js
+  // (it auto-copies to clipboard) and paste between the quotes:
+  const SOURCE_TOKEN      = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicmFuZG9uQG15b2lsc3RpY2tlci5jb20iLCJ1c2VySWQiOiIxNDE1MzIiLCJzaG9wSWQiOiIxMDIxNCIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjEwMCIsIjEwMSIsIjIwMCIsIjE1MDAiLCIyMDEiLCIzMDAiLCIxNDAwIiwiMTAzIiwiMjAyIiwiMzAxIiwiNDAwIiwiMjAzIiwiMzAyIiwiNDAxIiwiMTMwMCIsIjEyMDEiLCI1MDAiLCIyMDQiLCIxMjAwIiwiNTAxIiwiNDAyIiwiMTEwMSIsIjYwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDUiLCI0MDMiLCI3MDAiLCI1MDMiLCI4MDAiLCI1MDQiLCI2MDMiLCI4MDEiLCI5MDAiLCI1MDUiLCI4MDIiXSwiZW1wbG95ZWVJZCI6IjI5MjY2MyIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wNS0wMVQwMDo1MzowMy4wOTIyNzY5MzhaIiwiZXhwIjoxNzc3NjU0MzgzfQ.33gPbZHKfGBj-trjB05_gheKKudParK40TNgosDmps4';           // token captured on a SOURCE-shop tab (10214)
+  const DEST_TOKEN        = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicmFuZG9uQG15b2lsc3RpY2tlci5jb20iLCJ1c2VySWQiOiIxNDE1MzIiLCJzaG9wSWQiOiIxNDI0NSIsInNob3BUaW1lWm9uZUlkIjoiQW1lcmljYS9DaGljYWdvIiwicGVybWlzc2lvbnMiOlsiMTAwMCIsIjE1MDIiLCIxMDAiLCIxNTAxIiwiMjAwIiwiMTAxIiwiMTUwMCIsIjIwMSIsIjMwMCIsIjEwMiIsIjE0MDAiLCIxMDMiLCIyMDIiLCIzMDEiLCI0MDAiLCIxMTAyIiwiNTAwIiwiMjAzIiwiMzAyIiwiNDAxIiwiMTMwMCIsIjEyMDEiLCI0MDIiLCIxMTAxIiwiNjAwIiwiMjA0IiwiMTIwMCIsIjUwMSIsIjIwNSIsIjQwMyIsIjcwMCIsIjExMDAiLCI2MDEiLCI1MDIiLCIyMDYiLCI4MDAiLCI1MDMiLCI2MDMiLCIyMDciLCI4MDEiLCI5MDAiLCI1MDQiLCI4MDIiLCI1MDUiLCI1MDYiXSwiZW1wbG95ZWVJZCI6IjIyMTEwNiIsImVtcGxveWVlUm9sZSI6eyJpZCI6MSwiY29kZSI6IjEiLCJuYW1lIjoiU2hvcCBBZG1pbiJ9LCJhY2NvdW50VHlwZSI6IlVTRVIiLCJzZXJ2ZXJUaW1lIjoiMjAyNi0wNS0wMVQwMTowNDowOS42MDUwMzc0NDRaIiwiZXhwIjoxNzc3NjU1MDQ5fQ.qmuZci689_-fWGfb070XZbGfm0dcIzDj0dRxgGPGaj8';           // token captured on a DEST-shop tab   (14245)
+  const CONFIRM           = false;        // false = dry-run; true = actually create
+  const JOBS_LIMIT        = null;         // null = clone all jobs; e.g. 1 to test the first only
+  const AUTO_ROLLBACK     = true;         // on per-job failure, set partial RO to DELETED
+  // ==================
+
+  const BASE = location.origin;
+
+  // hard-fail fast on missing required config
+  for (const [k, v] of Object.entries({
+    SOURCE_RO_ID, DEST_CUSTOMER_ID, DEST_VEHICLE_ID,
+  })) {
+    if (v == null) {
+      console.error(`[CLONE-X] Missing required config: ${k}. Fill it in at the top of the snippet and re-paste.`);
+      return;
+    }
+  }
+  if (!SOURCE_TOKEN || !SOURCE_TOKEN.startsWith('eyJ')) {
+    console.error('[CLONE-X] SOURCE_TOKEN is missing or not a JWT. Run 00-print-token.js on a source-shop (10214) tab, paste the result into SOURCE_TOKEN at the top of this snippet, then re-paste.');
+    return;
+  }
+  if (!DEST_TOKEN || !DEST_TOKEN.startsWith('eyJ')) {
+    console.error('[CLONE-X] DEST_TOKEN is missing or not a JWT. Run 00-print-token.js on a dest-shop (14245) tab, paste the result into DEST_TOKEN at the top of this snippet, then re-paste.');
+    return;
+  }
+  if (SOURCE_TOKEN === DEST_TOKEN) {
+    console.warn('[CLONE-X] SOURCE_TOKEN and DEST_TOKEN are identical. That usually means you only captured one token. If both shops are in the same org and one token reaches both, this is fine; otherwise, recapture each from its respective tab.');
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const token = opts.token;
+    const init = {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-AUTH-TOKEN': token,
+      },
+    };
+    if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+    const res = await fetch(`${BASE}${path}`, init);
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch (_) {}
+    return { status: res.status, ok: res.ok, body: parsed, raw: text };
+  }
+  // bound wrappers so each call site states which side it talks to
+  const srcFetch = (path, opts = {}) => jsonFetch(path, { ...opts, token: SOURCE_TOKEN });
+  const dstFetch = (path, opts = {}) => jsonFetch(path, { ...opts, token: DEST_TOKEN });
+
+  function unwrap(resp) {
+    if (resp.body && typeof resp.body === 'object' && 'data' in resp.body && 'type' in resp.body) return resp.body.data;
+    return resp.body;
+  }
+
+  // Lean part / labor / populate helpers — verbatim from 04, except the
+  // populate helper here forces technician = null and labor lines'
+  // autoApplyLaborMatrixId = null because those reference source-shop
+  // entities that don't exist in dest.
+  function leanPart(p, newJobId) {
+    const out = {
+      tempId: Math.random(),
+      jobId: newJobId,
+      partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: 'PART' },
+      name: p.name ?? '',
+      partNumber: p.partNumber ?? '',
+      position: p.position ?? '',
+      quantity: p.quantity ?? 1,
+      cost: p.cost ?? 0,
+      retail: p.retail ?? 0,
+      oemPartNumber: p.oemPartNumber ?? '',
+    };
+    for (const k of ['brand', 'description', 'model', 'fet', 'msrp', 'quote', 'notes',
+      'pcdbPartTypeId', 'pcdbPartTypeName', 'partsTechPartId', 'unitOfMeasure',
+      'maxCapacity', 'specStandard', 'warrantyLabel', 'sortOrder',
+      'width', 'ratio', 'diameter', 'constructionType', 'loadIndex', 'speedRating',
+      'tireType', 'mileageWarranty', 'loadRange', 'tireCategory', 'runFlat',
+      'sideWallStyle', 'treadwear', 'traction', 'temperature']) {
+      if (p[k] !== undefined && p[k] !== null) out[k] = p[k];
+    }
+    return out;
+  }
+
+  function leanLabor(l, newJobId) {
+    const out = {
+      tempId: Math.random(),
+      jobId: newJobId,
+      name: l.name ?? '',
+      hours: l.hours ?? 0,
+      rate: l.rate ?? 0,
+      // null these — they reference source-shop entities
+      autoApplyLaborMatrixId: null,
+      technician: null,
+    };
+    for (const k of ['complete', 'position', 'warrantyLabel', 'sortOrder', 'sectionApplication']) {
+      if (l[k] !== undefined && l[k] !== null) out[k] = l[k];
+    }
+    return out;
+  }
+
+  function buildPopulatePayload(emptyJobResp, sourceJob) {
+    const newJobId = emptyJobResp.id;
+    const populated = { ...emptyJobResp };
+    populated.name = sourceJob.name ?? populated.name;
+    populated.status = sourceJob.status ?? populated.status;
+    populated.selected = sourceJob.selected ?? populated.selected;
+    populated.authorized = sourceJob.authorized ?? populated.authorized;
+    populated.technician = null; // source-shop tech id won't exist in dest
+    populated.note = sourceJob.note ?? null;
+    populated.declinedNote = sourceJob.declinedNote ?? null;
+    populated.jobCategoryCode = sourceJob.jobCategoryCode ?? null;
+    populated.jobCategoryName = sourceJob.jobCategoryName ?? null;
+    for (const k of ['taxParts', 'taxLabor', 'taxFees', 'taxTires', 'taxTiresFet']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
+    }
+    for (const k of ['packagePrice', 'packagePriceMethod', 'packagePriceSurplusOilMethod',
+      'packagePriceModsHidden', 'feeable']) {
+      if (sourceJob[k] !== undefined && sourceJob[k] !== null) populated[k] = sourceJob[k];
+    }
+    populated.parts = (sourceJob.parts || []).map((p) => leanPart(p, newJobId));
+    populated.labor = (sourceJob.labor || []).map((l) => leanLabor(l, newJobId));
+    populated.discounts = [];
+    populated.fees = [];
+    populated.smartJobIds = [];
+    populated.smartJobs = [];
+    populated.laborTechnicians = [];
+    return populated;
+  }
+
+  async function rollbackPartialRo(partialRoId) {
+    try {
+      const r = await dstFetch(`/api/repair-order/${partialRoId}/status`, {
+        method: 'PUT',
+        body: { repairOrderStatus: { code: 'DELETED', name: 'Deleted', id: 7 } },
+      });
+      if (r.ok) console.warn(`[CLONE-X] auto-rolled-back partial RO ${partialRoId} (set to DELETED).`);
+      else console.warn(`[CLONE-X] auto-rollback FAILED for RO ${partialRoId} status=${r.status}; delete it manually:`, r.raw);
+    } catch (e) {
+      console.warn(`[CLONE-X] auto-rollback threw for RO ${partialRoId}: ${e.message}`);
+    }
+  }
+
+  console.log(`%c[CLONE-X] starting — source shop ${SOURCE_SHOP_ID} RO ${SOURCE_RO_ID} → dest shop ${DEST_SHOP_ID} customer ${DEST_CUSTOMER_ID} vehicle ${DEST_VEHICLE_ID}, CONFIRM=${CONFIRM}`,
+    'color:#06c;font-weight:bold');
+
+  console.log(`[CLONE-X] using SOURCE_TOKEN (len=${SOURCE_TOKEN.length}) and DEST_TOKEN (len=${DEST_TOKEN.length}).`);
+
+  // ----- 0. PRE-FLIGHT: each token must work against its own shop; dest customer + vehicle must exist
+  const probeSrc = await srcFetch(`/api/shop/${SOURCE_SHOP_ID}`);
+  if (!probeSrc.ok) {
+    console.error(`[CLONE-X] SOURCE_TOKEN cannot reach shop ${SOURCE_SHOP_ID} (status=${probeSrc.status}). Re-capture it on a 10214 tab using 00-print-token.js, paste into SOURCE_TOKEN, re-run.`);
+    return;
+  }
+  const probeDst = await dstFetch(`/api/shop/${DEST_SHOP_ID}`);
+  if (!probeDst.ok) {
+    console.error(`[CLONE-X] DEST_TOKEN cannot reach shop ${DEST_SHOP_ID} (status=${probeDst.status}). Re-capture it on a 14245 tab using 00-print-token.js, paste into DEST_TOKEN, re-run.`);
+    return;
+  }
+  console.log(`[CLONE-X] ✓ both tokens valid — source ${SOURCE_SHOP_ID}, dest ${DEST_SHOP_ID}.`);
+
+  const destCustResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/customer/${DEST_CUSTOMER_ID}`);
+  if (!destCustResp.ok) {
+    console.error(`[CLONE-X] dest customer ${DEST_CUSTOMER_ID} not found in shop ${DEST_SHOP_ID} (status=${destCustResp.status}). Double-check the ID from the customer-page URL in Tekmetric.`);
+    return;
+  }
+  const destCust = unwrap(destCustResp);
+  console.log(`[CLONE-X] ✓ dest customer: ${destCust.firstName} ${destCust.lastName} (id ${destCust.id})`);
+
+  const destVehResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/vehicle/${DEST_VEHICLE_ID}`);
+  if (!destVehResp.ok) {
+    console.error(`[CLONE-X] dest vehicle ${DEST_VEHICLE_ID} not found in shop ${DEST_SHOP_ID} (status=${destVehResp.status}). Double-check the ID from the vehicle-page URL.`);
+    return;
+  }
+  const destVeh = unwrap(destVehResp);
+  console.log(`[CLONE-X] ✓ dest vehicle: ${destVeh.year || ''} ${destVeh.make || ''} ${destVeh.model || ''} VIN=${destVeh.vin || ''} (id ${destVeh.id})`);
+
+  // ----- 0b. resolve dest labor rate (auto-discover if not set)
+  let destLaborRateId = DEST_LABOR_RATE_ID;
+  if (!destLaborRateId) {
+    const recent = await dstFetch(`/api/shop/${DEST_SHOP_ID}/repair-order?page=0&size=10`);
+    if (recent.ok) {
+      const list = (recent.body && (recent.body.content || recent.body.repairOrders || recent.body.data || recent.body)) || [];
+      for (const ro of list) {
+        const lr = typeof ro.laborRate === 'number' ? ro.laborRate : ro.laborRate?.id;
+        if (lr) { destLaborRateId = lr; break; }
+      }
+    }
+    if (!destLaborRateId) {
+      console.error(`[CLONE-X] could not auto-discover a labor rate id from any recent RO in dest shop ${DEST_SHOP_ID}. Set DEST_LABOR_RATE_ID at the top of the snippet and re-run.`);
+      return;
+    }
+    console.log(`[CLONE-X] ✓ auto-discovered dest labor rate id = ${destLaborRateId}`);
+  } else {
+    console.log(`[CLONE-X] ✓ using configured dest labor rate id = ${destLaborRateId}`);
+  }
+
+  // ----- 1. fetch source RO metadata, jobs (from estimate endpoint), and concerns
+  const roResp = await srcFetch(`/api/shop/${SOURCE_SHOP_ID}/repair-order/${SOURCE_RO_ID}`);
+  if (!roResp.ok) {
+    console.error(`[CLONE-X] failed to fetch source RO: status=${roResp.status}`, roResp.body);
+    return;
+  }
+  const sourceRo = unwrap(roResp);
+
+  const estResp = await srcFetch(`/api/repair-order/${SOURCE_RO_ID}/estimate`);
+  if (!estResp.ok) {
+    console.error(`[CLONE-X] failed to fetch source estimate: status=${estResp.status}`, estResp.body);
+    return;
+  }
+  const sourceEstimate = unwrap(estResp);
+  const sourceJobs = (sourceEstimate.jobs || []).filter((j) => !j.archived);
+
+  const APPT_OPTION_MAP = { DROP: 2, WAIT: 1, PICKUP: 3 };
+  const sourceApptOption = typeof sourceRo.appointmentOption === 'number'
+    ? sourceRo.appointmentOption
+    : (APPT_OPTION_MAP[sourceRo.appointmentOption] ?? 2);
+
+  console.log(`[CLONE-X] source RO #${sourceRo.repairOrderNumber} has ${sourceJobs.length} non-archived job(s).`);
+  console.log(`          source customer: ${sourceRo.customer?.firstName} ${sourceRo.customer?.lastName} (id ${sourceRo.customer?.id}) — IGNORED, using dest override`);
+  console.log(`          source vehicle:  ${sourceRo.vehicle?.year} ${sourceRo.vehicle?.make} ${sourceRo.vehicle?.model} (id ${sourceRo.vehicle?.id}) — IGNORED, using dest override`);
+  console.log(`          source miles in/out: ${sourceRo.milesIn}/${sourceRo.milesOut}, odometerInop=${sourceRo.odometerInop}`);
+
+  const concernsResp = await srcFetch(`/api/repair-orders/${SOURCE_RO_ID}/customer-concerns`);
+  if (!concernsResp.ok) {
+    console.error(`[CLONE-X] failed to fetch source concerns: status=${concernsResp.status}`, concernsResp.body);
+    return;
+  }
+  const sourceConcerns = Array.isArray(concernsResp.body) ? concernsResp.body : (concernsResp.body?.data || []);
+  console.log(`[CLONE-X] source RO has ${sourceConcerns.length} customer concern(s).`);
+
+  // Build the concerns we'll POST: prepend migration marker to first concern
+  // (matches the marker format used by 02-load-core-dest.js so re-runs of
+  // the full migration won't duplicate this RO).
+  const MIGRATION_MARKER = `[migrated from RO#${sourceRo.repairOrderNumber}]`;
+  const concernsToPost = sourceConcerns.length
+    ? [
+        { concern: `${MIGRATION_MARKER} ${sourceConcerns[0].concern || ''}`.trim() },
+        ...sourceConcerns.slice(1).map((c) => ({ concern: c.concern || '' })),
+      ]
+    : [{ concern: MIGRATION_MARKER }];
+
+  if (!CONFIRM) {
+    console.warn('[CLONE-X] DRY RUN — set CONFIRM=true at the top to actually create the new RO.');
+    console.log(`[CLONE-X] would create new RO in shop ${DEST_SHOP_ID}:`);
+    console.log(`            customer: ${destCust.firstName} ${destCust.lastName} (id ${destCust.id})`);
+    console.log(`            vehicle:  ${destVeh.year || ''} ${destVeh.make || ''} ${destVeh.model || ''} (id ${destVeh.id})`);
+    console.log(`            labor rate: ${destLaborRateId}`);
+    console.log(`            mileage in/out: ${sourceRo.milesIn ?? '-'}/${sourceRo.milesOut ?? '-'}`);
+    concernsToPost.forEach((c, i) => console.log(`            concern ${i + 1}: ${c.concern.slice(0, 100)}${c.concern.length > 100 ? '…' : ''}`));
+    sourceJobs.forEach((j, i) => console.log(`            job ${i + 1}: "${j.name}" — ${j.parts?.length || 0} part(s), ${j.labor?.length || 0} labor line(s), status=${j.status}`));
+    return;
+  }
+
+  // ----- 2. create the new RO in DEST shop with override customer/vehicle
+  const createPayload = {
+    shop: { id: DEST_SHOP_ID },
+    appointmentOption: sourceApptOption,
+    odometerInop: sourceRo.odometerInop ?? false,
+    leadSource: sourceRo.leadSource || '',
+    vehicle: { id: DEST_VEHICLE_ID },
+    milesIn: sourceRo.milesIn ?? null,
+    laborRate: { id: destLaborRateId },
+    customer: { id: DEST_CUSTOMER_ID },
+    appointment: null,
+    initialJobs: [],
+    recommendations: [],
+    declinedJobRecommendations: [],
+  };
+  const createResp = await dstFetch(`/api/repair-order/create`, { method: 'POST', body: createPayload });
+  if (!createResp.ok) {
+    console.error(`[CLONE-X] RO create failed: status=${createResp.status}`, createResp.body);
+    console.error('           payload:', JSON.stringify(createPayload, null, 2));
+    return;
+  }
+  const newRo = unwrap(createResp);
+  const newRoId = newRo.id;
+  console.log(`%c[CLONE-X] ✓ created new RO id=${newRoId} #${newRo.repairOrderNumber} in shop ${DEST_SHOP_ID}`, 'color:#0a0;font-weight:bold');
+  const newRoUrl = `${BASE}/admin/shop/${DEST_SHOP_ID}/repair-orders/${newRoId}/estimate`;
+  console.log(`           open it: ${newRoUrl}`);
+
+  // ----- 3. set mileage (if source had any)
+  if (sourceRo.milesIn != null || sourceRo.milesOut != null) {
+    const milesResp = await dstFetch(`/api/repair-order/${newRoId}/vehicle-mileage`, {
+      method: 'PUT',
+      body: {
+        milesIn: sourceRo.milesIn ?? sourceRo.milesOut ?? 0,
+        milesOut: sourceRo.milesOut ?? sourceRo.milesIn ?? 0,
+        odometerInop: sourceRo.odometerInop ?? false,
+      },
+    });
+    if (!milesResp.ok) console.warn(`[CLONE-X] mileage PUT failed status=${milesResp.status}`, milesResp.body);
+    else console.log(`[CLONE-X] ✓ mileage set`);
+  }
+
+  // ----- 4. concerns (first one carries the migration marker)
+  for (let i = 0; i < concernsToPost.length; i++) {
+    const c = concernsToPost[i];
+    const r = await dstFetch(`/api/repair-orders/${newRoId}/customer-concerns`, {
+      method: 'POST', body: { concern: c.concern },
+    });
+    if (!r.ok) console.error(`[CLONE-X] ✗ concern ${i + 1} failed status=${r.status}`, r.body);
+    else console.log(`[CLONE-X] ✓ concern ${i + 1}/${concernsToPost.length} created`);
+  }
+
+  // ----- 5. jobs (TWO-STEP per job: empty create -> populate), POST against DEST shop
+  const jobsToClone = JOBS_LIMIT ? sourceJobs.slice(0, JOBS_LIMIT) : sourceJobs;
+  if (JOBS_LIMIT) console.log(`[CLONE-X] JOBS_LIMIT=${JOBS_LIMIT} → cloning only the first ${jobsToClone.length} of ${sourceJobs.length} job(s).`);
+
+  for (let i = 0; i < jobsToClone.length; i++) {
+    const job = jobsToClone[i];
+    const label = `job ${i + 1}/${jobsToClone.length} "${job.name}"`;
+
+    const emptyPayload = {
+      name: job.name || 'New Job',
+      repairOrderId: newRoId,
+      syncPartsAttachedToNonQuotedOrders: false,
+    };
+    const emptyResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/job`, { method: 'POST', body: emptyPayload });
+    if (!emptyResp.ok) {
+      console.error(`[CLONE-X] ✗ ${label}: empty-create failed status=${emptyResp.status}`);
+      console.error('           response (raw):', emptyResp.raw);
+      console.error('           payload (json):', JSON.stringify(emptyPayload, null, 2));
+      if (AUTO_ROLLBACK) await rollbackPartialRo(newRoId);
+      else console.warn(`[CLONE-X] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
+      return;
+    }
+    const emptyJob = unwrap(emptyResp);
+
+    const populatePayload = buildPopulatePayload(emptyJob, job);
+    const popResp = await dstFetch(`/api/shop/${DEST_SHOP_ID}/job`, { method: 'POST', body: populatePayload });
+    if (!popResp.ok) {
+      console.error(`[CLONE-X] ✗ ${label}: populate failed status=${popResp.status}`);
+      console.error('           response (raw):', popResp.raw);
+      try { console.error('           response (json):', JSON.stringify(popResp.body, null, 2)); } catch (_) {}
+      console.error('           payload (json):', JSON.stringify(populatePayload, null, 2));
+      if (AUTO_ROLLBACK) await rollbackPartialRo(newRoId);
+      else console.warn(`[CLONE-X] stopping. New RO ${newRoId} is partially populated; delete it and re-run.`);
+      return;
+    }
+    console.log(`[CLONE-X] ✓ ${label} — empty-create id=${emptyJob.id}, populate ok (${job.parts?.length || 0}p / ${job.labor?.length || 0}l)`);
+  }
+
+  console.log(`%c[CLONE-X] DONE — open the new RO: ${newRoUrl}`, 'color:#0a0;font-weight:bold');
+  } catch (__cloneXErr) {
+    console.error(`[CLONE-X] uncaught error: ${__cloneXErr && __cloneXErr.message ? __cloneXErr.message : __cloneXErr}`);
+    if (__cloneXErr && __cloneXErr.stack) console.error(__cloneXErr.stack);
+  } finally {
+    try { await __copyRunLog(); } catch (_) {}
+    console.log = __origLog;
+    console.warn = __origWarn;
+    console.error = __origErr;
+  }
+})();
+
+VM9381:72 [CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+VM9381:72 [CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+Promise {<pending>}
+VM9381:72 [CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+VM9381:72 [CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+VM9381:72 [CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+VM9381:140  GET https://shop.tekmetric.com/api/shop/14245/repair-order?page=0&size=10 404 (Not Found)
+jsonFetch @ VM9381:140
+dstFetch @ VM9381:148
+(anonymous) @ VM9381:279
+await in (anonymous)
+(anonymous) @ VM9381:452
+VM9381:74 [CLONE-X] could not auto-discover a labor rate id from any recent RO in dest shop 14245. Set DEST_LABOR_RATE_ID at the top of the snippet and re-run.
+console.error @ VM9381:74
+(anonymous) @ VM9381:288
+await in (anonymous)
+(anonymous) @ VM9381:452
+VM9381:81 [CLONE-X] could not auto-copy; manually copy the block between the ====== markers below:
+VM9381:82 ====== BEGIN RUN LOG ======
+[CLONE-X] starting — source shop 10214 RO 324342598 → dest shop 14245 customer 82581111 vehicle 118337025, CONFIRM=false
+[CLONE-X] using SOURCE_TOKEN (len=755) and DEST_TOKEN (len=815).
+[CLONE-X] ✓ both tokens valid — source 10214, dest 14245.
+[CLONE-X] ✓ dest customer: Jay Demore (id 82581111)
+[CLONE-X] ✓ dest vehicle: 2021 Chevrolet Silverado 1500 VIN=3GCUYEED2MG329819 (id 118337025)
+ERR [CLONE-X] could not auto-discover a labor rate id from any recent RO in dest shop 14245. Set DEST_LABOR_RATE_ID at the top of the snippet and re-run.
+====== END RUN LOG ======
