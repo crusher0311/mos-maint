@@ -11,18 +11,16 @@
  *   3. verify the active shop is NOT the same one the dump came from
  *   4. in dry-run mode (default), print exactly what it WOULD create and stop
  *   5. with CONFIRM = true (see flag below), for each source RO:
- *        - create or match the customer (or reuse source ID — see USE_SOURCE_IDS_DIRECT)
+ *        - skip if a `[migrated from RO#X]` marker is already present in dest
+ *        - create or match the customer
  *        - create or match the vehicle, attached to the customer
  *        - create the RO with header / mileage / service writer / appointment
- *          and the customer concerns COPIED VERBATIM from the source RO
+ *          and the customer concerns prefixed with the migration marker
  *        - POST every job (with labor + parts) onto the new RO
  *   6. download a tekmetric-migration-mapping-{ts}.json with the
  *      sourceRoId/sourceRoNumber → destRoId/destRoNumber map for Snippet 3.
  *
- * ⚠️ NO RE-RUN SAFETY (per Brandon 2026-05-01): the [migrated from RO#X]
- * marker is no longer written to concerns to keep them customer-clean.
- * Re-pasting 02 for the same source-shop dump WILL create duplicate
- * destination ROs. Run once per source shop, verify, do not re-paste.
+ * Re-running is safe: already-migrated source ROs are skipped via the marker.
  *
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
@@ -1011,3 +1009,19 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13272:373 [Tekmetric Migration LOAD-CORE v2026-05-01.3-no-marker] starting…
+VM13272:222 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13272:223 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13272:387 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13272:400 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13272:412 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13272:478 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13272:506 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13272:514 [LOAD-CORE] Plan:
+VM13272:515 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreateconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreateconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174falseArray(1)
+VM13272:528 [LOAD-CORE] First few that will be created:
+VM13272:529 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13272:537 [LOAD-CORE] DRY RUN — no writes performed.
+VM13272:538 [LOAD-CORE] When you are ready, edit this snippet and set CONFIRM = true at the top, then re-paste.
