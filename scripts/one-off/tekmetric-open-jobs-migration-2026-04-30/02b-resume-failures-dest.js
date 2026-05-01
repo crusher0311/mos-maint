@@ -39,7 +39,7 @@
 // =============================================================================
 
 (async () => {
-  const VERSION = '2026-05-01.1';
+  const VERSION = '2026-05-01.2-fix-dump-rows-key';
   const CONFIRM = true;
   const ZERO_PART_COST = true;
 
@@ -230,13 +230,24 @@
     : Array.isArray(mapping && mapping.mapping) ? mapping.mapping
     : null;
   if (!mappingRows) { console.error(`[RESUME] ${mapName} doesn't look like a mapping file.`); return; }
-  console.log(`[RESUME] dump=${dumpName} (${dump.rows.length} ROs); mapping=${mapName} (${mappingRows.length} rows)`);
+  // Snippet-01 dumps use `repairOrders` (older copies may have used `rows`).
+  const dumpRows = Array.isArray(dump.repairOrders) ? dump.repairOrders
+    : Array.isArray(dump.rows) ? dump.rows
+    : null;
+  if (!dumpRows) {
+    console.error(`[RESUME] ${dumpName} has no repairOrders/rows array. Top-level keys: ${Object.keys(dump).join(',')}`);
+    return;
+  }
+  console.log(`[RESUME] dump=${dumpName} (${dumpRows.length} ROs); mapping=${mapName} (${mappingRows.length} rows)`);
 
   const mappedSrcIds = new Set(mappingRows.map((r) => String(r.sourceRoId ?? r.srcRoId ?? '')));
-  const todo = dump.rows.filter((r) => !mappedSrcIds.has(String((r.repairOrder || r).id)));
+  const todo = dumpRows.filter((r) => {
+    const id = r.sourceRoId ?? (r.repairOrder && r.repairOrder.id) ?? r.id;
+    return id != null && !mappedSrcIds.has(String(id));
+  });
   if (!todo.length) { console.log('[RESUME] nothing to resume — all source ROs already in mapping.'); return; }
   console.log(`[RESUME] ${todo.length} source RO(s) need resuming:`,
-    todo.map((r) => '#' + (r.repairOrder || r).repairOrderNumber).join(', '));
+    todo.map((r) => '#' + (r.sourceRoNumber ?? (r.repairOrder && r.repairOrder.repairOrderNumber) ?? '?')).join(', '));
 
   // ----- discover dest labor rate (default) -----
   let destLaborRateId = null;
