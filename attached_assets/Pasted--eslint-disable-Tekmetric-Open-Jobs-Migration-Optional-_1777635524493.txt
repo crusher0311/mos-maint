@@ -21,7 +21,7 @@
  * This snippet is read-only; there is no CONFIRM gate.
  */
 (async () => {
-  const VERSION = '2026-05-01.2-localstorage-token';
+  const VERSION = '2026-04-30.1';
 
   const ENDPOINTS = {
     base: location.origin,
@@ -46,30 +46,42 @@
     return null;
   }
   async function captureXAuthToken() {
-    // 2026-05-01.2: switched from monkey-patch fetch to localStorage JWT
-    // scan. The monkey-patch approach worked sporadically — Tekmetric's
-    // auth interceptor doesn't always run on probe requests fired from
-    // this snippet, and the patched-fetch probe to /api/shop/{id} gets
-    // a 401 instead of attaching the token. The localStorage scan is the
-    // exact pattern proven by 00-print-token, 01-dump-source, 02-load-core,
-    // and 03-load-extras — the JWT is sitting right there as the value
-    // of one of the localStorage keys (raw or wrapped under .token /
-    // .accessToken).
-    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-    for (const k of Object.keys(localStorage)) {
-      const v = localStorage.getItem(k) || '';
-      if (JWT_RE.test(v)) return v;
-      try {
-        const parsed = JSON.parse(v);
-        if (parsed && typeof parsed.token === 'string' && parsed.token.startsWith('eyJ')) {
-          return parsed.token;
-        }
-        if (parsed && typeof parsed.accessToken === 'string' && parsed.accessToken.startsWith('eyJ')) {
-          return parsed.accessToken;
-        }
-      } catch (_) {}
-    }
-    return null;
+    return new Promise((resolve) => {
+      const captured = { token: null };
+      const origFetch = window.fetch;
+      const origOpen = XMLHttpRequest.prototype.open;
+      const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+      let timeoutId;
+      function done(token) {
+        if (captured.token) return;
+        captured.token = token;
+        window.fetch = origFetch;
+        XMLHttpRequest.prototype.open = origOpen;
+        XMLHttpRequest.prototype.setRequestHeader = origSetHeader;
+        clearTimeout(timeoutId);
+        resolve(token);
+      }
+      window.fetch = function patched(input, init) {
+        try {
+          const headers = (init && init.headers) || (input && input.headers);
+          if (headers) {
+            const h = headers instanceof Headers ? headers.get('x-auth-token') :
+              (headers['x-auth-token'] || headers['X-Auth-Token']);
+            if (h) done(h);
+          }
+        } catch (_) {}
+        return origFetch.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+        if (typeof name === 'string' && name.toLowerCase() === 'x-auth-token' && value) done(value);
+        return origSetHeader.apply(this, arguments);
+      };
+      const shopId = readShopIdFromUrl();
+      if (shopId) {
+        try { fetch(`${ENDPOINTS.base}/api/shop/${shopId}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
+      }
+      timeoutId = setTimeout(() => done(null), 4000);
+    });
   }
   async function jsonFetch(path, token) {
     const res = await fetch(`${ENDPOINTS.base}${path}`, {
@@ -162,3 +174,20 @@
   console.log(`[AUGMENT] Done: ${ok} inspections augmented, ${fail} failed. Wrote ${fname}.`);
   console.log('[AUGMENT] Now switch the active Tekmetric shop to the destination and re-paste 03-load-extras-dest.js with this augmented file.');
 })();
+
+VM14224:127 [Tekmetric Migration AUGMENT v2026-04-30.1] starting…
+VM14224:109 [AUGMENT] Pick the tekmetric-open-jobs-dump-*.json from Snippet 1
+Promise {<pending>}
+VM13023:118  GET https://shop.tekmetric.com/api/shop/10214 401 (Unauthorized)
+patchedFetch @ VM13023:118
+await in patchedFetch
+patched @ VM14224:73
+(anonymous) @ VM14224:81
+captureXAuthToken @ VM14224:49
+(anonymous) @ VM14224:144
+await in (anonymous)
+(anonymous) @ VM14224:176
+VM14224:146 [AUGMENT] Could not capture x-auth-token. Click around in Tekmetric and re-paste.
+(anonymous) @ VM14224:146
+await in (anonymous)
+(anonymous) @ VM14224:176
