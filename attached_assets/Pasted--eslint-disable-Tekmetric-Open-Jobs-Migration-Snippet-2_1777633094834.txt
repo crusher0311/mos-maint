@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.6-dest-ids';
+  const VERSION = '2026-05-01.5-no-precheck';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -47,19 +47,16 @@
   // get created — only new ROs do.
   const ALLOW_SAME_SHOP_SMOKE_TEST = false;
 
-  // ID-preservation experiment FAILED on shop 18008 (2026-05-01 live run):
-  // the Tekmetric account transfer does NOT preserve customer / vehicle /
-  // labor-rate IDs in the destination shop. The /api/repair-order/create
-  // endpoint returns 403 "Access Denied" when the payload references entity
-  // IDs that don't belong to the dest shop, which is what happened to all
-  // 21 ROs.
+  // For tonight's real run, Tekmetric's account transfer preserves customer,
+  // vehicle, and labor-rate IDs across the transfer. The dumped source IDs
+  // therefore still resolve in the destination shop and can be used directly
+  // as `customer.id` / `vehicle.id` / `laborRate.id` on the RO-create payload.
+  // This matches the proven flow from 04-clone-ro-same-shop.js.
   //
-  // Default flipped to false: take the legacy match-by-email/VIN-or-create
-  // path. This searches the dest shop for an existing customer by email
-  // (or by VIN for the vehicle), reuses if found, creates fresh otherwise,
-  // and then uses the resolved DEST IDs in the RO-create payload. This is
-  // the same shape that 06-clone-ro-cross-shop-with-overrides.js proved.
-  const USE_SOURCE_IDS_DIRECT = false;
+  // Set to false ONLY if you discover post-transfer that IDs were NOT
+  // preserved — that flips on the legacy match-by-email/VIN-or-create path
+  // (kept for safety, but unused by default).
+  const USE_SOURCE_IDS_DIRECT = true;
 
   // On any per-job failure during a load, set the partially-populated
   // destination RO to status=DELETED so the dest Job Board doesn't fill up
@@ -738,36 +735,6 @@
     return null;
   }
 
-  // ----- Auto-discover dest labor-rate ID (legacy path only) -------------
-  // The 2026-05-01 live run on shop 18008 confirmed that Tekmetric's
-  // account transfer does NOT preserve labor-rate IDs across shops, so
-  // forwarding the source RO's labor-rate ID into the dest RO-create
-  // payload triggers a 403 "Access Denied". Mirror what 06-clone-ro-cross-
-  // shop-with-overrides.js does: read the dest Job Board, fetch detail
-  // for the first RO with a labor rate, and reuse that valid dest ID for
-  // all migrated ROs.
-  let cachedDestLaborRateId = null;
-  if (!USE_SOURCE_IDS_DIRECT) {
-    try {
-      const destBoard = await jsonFetch(ENDPOINTS.jobBoardList(destShopId), token);
-      const destBoardRos = Array.isArray(destBoard) ? destBoard : (destBoard.repairOrders || destBoard.content || []);
-      for (const ro of destBoardRos) {
-        const lrFromSummary = (typeof ro.laborRate === 'number') ? ro.laborRate : (ro.laborRate && ro.laborRate.id);
-        if (lrFromSummary) { cachedDestLaborRateId = lrFromSummary; break; }
-        try {
-          const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(destShopId, ro.id), token);
-          const lr = (typeof detail.laborRate === 'number') ? detail.laborRate : (detail.laborRate && detail.laborRate.id);
-          if (lr) { cachedDestLaborRateId = lr; break; }
-        } catch (_) {}
-      }
-    } catch (_) {}
-    if (cachedDestLaborRateId) {
-      console.log(`[LOAD-CORE] ✓ auto-discovered dest labor-rate id = ${cachedDestLaborRateId} (shop ${destShopId})`);
-    } else {
-      console.warn(`[LOAD-CORE] ⚠️  Could not auto-discover a dest labor-rate id from any RO on shop ${destShopId}'s Job Board. Will omit laborRate from create payload — Tekmetric should fall back to the shop's default labor rate. If the create still 403s, manually create one RO in shop ${destShopId} via the UI, then re-run this snippet.`);
-    }
-  }
-
   for (let i = 0; i < willCreate.length; i++) {
     const item = willCreate[i];
     const src = item.repairOrder;
@@ -796,10 +763,7 @@
 
       let destCustomerId = null;
       let destVehicleId = null;
-      // Legacy path: use the auto-discovered dest labor-rate ID (the source
-      // shop's labor-rate ID does not exist in the dest shop and triggers a
-      // 403). Direct path (deprecated): use the source labor-rate ID.
-      let destLaborRateId = USE_SOURCE_IDS_DIRECT ? sourceLaborRateId : cachedDestLaborRateId;
+      let destLaborRateId = sourceLaborRateId;
 
       if (USE_SOURCE_IDS_DIRECT) {
         step = 'resolveIds(direct)';
@@ -1038,3 +1002,258 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13311:383 [Tekmetric Migration LOAD-CORE v2026-05-01.5-no-precheck] starting…
+VM13311:232 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13311:233 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13311:397 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13311:410 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13311:422 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13311:488 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13311:516 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13311:524 [LOAD-CORE] Plan:
+VM13311:525 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13311:539 [LOAD-CORE] First few that will be created:
+VM13311:540 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13311:554 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13311:554
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721265 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2720892 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721001 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721060 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721063 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721079 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721143 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721170 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721175 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721193 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721205 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721209 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721214 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721233 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721245 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721246 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721247 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721258 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721262 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721263 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 403 (Forbidden)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13311:175
+(anonymous) @ VM13311:862
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:965 [LOAD-CORE] FAILED RO #2721264 at step "createRo": 403  on /api/repair-order/create :: {"type":"ERROR","message":"Access Denied","data":null,"details":{}}
+(anonymous) @ VM13311:965
+await in (anonymous)
+(anonymous) @ VM13311:1004
+VM13311:977 [LOAD-CORE] Successes:
+VM13311:978 
+VM13311:980 [LOAD-CORE] Failures:
+VM13311:981 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'12720892321023374'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'22721001321701729'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'32721060322599022'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'42721063322618310'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'52721079322765797'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'62721143323391292'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'72721170323628624'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'82721175323646078'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'92721193324010591'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'102721205324031687'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'112721209324050816'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'122721214324104201'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'132721233324204864'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'142721245324342162'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'152721246324342598'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'162721247324345536'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'172721258324403473'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'182721262324414665'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'192721263324418417'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'202721264324429491'createRo'403'{"type":"ERROR","message":"Access Denied","data":null,"details":{}}'Array(21)
+VM13311:1002 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-055800.json
+VM13311:1003 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
