@@ -104,3 +104,48 @@
     console.log('====== BEGIN DEST_LABOR_RATE_ID ======\n' + foundId + '\n====== END DEST_LABOR_RATE_ID ======');
   }
 })();
+
+Promise {<pending>}
+VM9392:32  GET https://shop.tekmetric.com/api/shop/14245/repair-order?vehicleId=118337025&page=0&size=10&sort=updatedDate,desc 404 (Not Found)
+get @ VM9392:32
+(anonymous) @ VM9392:59
+(anonymous) @ VM9392:106
+VM9392:61 [FIND-LR] /api/shop/14245/repair-order?vehicleId=118337025&page=0&size=10&sort=updatedDate,desc → status=404; trying next.
+(anonymous) @ VM9392:61
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:32  GET https://shop.tekmetric.com/api/shop/14245/repair-order?customerId=82581111&page=0&size=10&sort=updatedDate,desc 404 (Not Found)
+get @ VM9392:32
+(anonymous) @ VM9392:59
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:61 [FIND-LR] /api/shop/14245/repair-order?customerId=82581111&page=0&size=10&sort=updatedDate,desc → status=404; trying next.
+(anonymous) @ VM9392:61
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:32  GET https://shop.tekmetric.com/api/shop/14245/repair-order?status=ESTIMATE,WORK_IN_PROGRESS,POSTED&page=0&size=25&sort=updatedDate,desc 404 (Not Found)
+get @ VM9392:32
+(anonymous) @ VM9392:59
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:61 [FIND-LR] /api/shop/14245/repair-order?status=ESTIMATE,WORK_IN_PROGRESS,POSTED&page=0&size=25&sort=updatedDate,desc → status=404; trying next.
+(anonymous) @ VM9392:61
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:32  GET https://shop.tekmetric.com/api/shop/14245/repair-order?status=POSTED&page=0&size=25&sort=updatedDate,desc 404 (Not Found)
+get @ VM9392:32
+(anonymous) @ VM9392:59
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:61 [FIND-LR] /api/shop/14245/repair-order?status=POSTED&page=0&size=25&sort=updatedDate,desc → status=404; trying next.
+(anonymous) @ VM9392:61
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:88 [FIND-LR] could not find a laborRate id in any recent RO for shop 14245.
+(anonymous) @ VM9392:88
+await in (anonymous)
+(anonymous) @ VM9392:106
+VM9392:90 Manual fallback: in Tekmetric, open any RO for shop 14245. In DevTools → Network, find the request to /api/repair-order/<roId> and look at the response JSON for "laborRate": <number>. Paste that number into 06's DEST_LABOR_RATE_ID line.
+(anonymous) @ VM9392:90
+await in (anonymous)
+(anonymous) @ VM9392:106
