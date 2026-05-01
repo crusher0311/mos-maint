@@ -24,11 +24,11 @@
   const CONFIRM = true; // set true on the second paste to actually create
   // =================================================
 
-  const VERSION = '2026-05-01.1';
+  const VERSION = '2026-05-01.2-singular-har-confirmed';
 
   const ENDPOINTS = {
     base: location.origin,
-    apptCreate: (shopId) => `/api/shop/${shopId}/appointments`,
+    apptCreate: (shopId) => `/api/shop/${shopId}/appointment`,
     customerSearch: (shopId, q) =>
       `/api/shop/${shopId}/customers?search=${encodeURIComponent(q)}&size=20&sort=firstName,lastName`,
     vehicleSearch: (shopId, customerId, q) =>
@@ -235,21 +235,25 @@
         continue;
       }
 
+      // Body shape proven from HAR capture 2026-05-01: internal create takes
+      // nested customer/vehicle objects with just `id`, and rideOption/
+      // appointmentOption as `{id}` references (not the full enum object).
+      const rideOptId = a.rideOption && (a.rideOption.id || (typeof a.rideOption === 'number' ? a.rideOption : null));
+      const apptOptId = a.appointmentOption && (a.appointmentOption.id || (typeof a.appointmentOption === 'number' ? a.appointmentOption : null));
       const body = {
         shopId: DEST_SHOP_ID,
-        customerId: destCust.id,
-        vehicleId: destVehId,
+        customer: { id: destCust.id },
+        vehicle: { id: destVehId },
         startTime: a.startTime,
         endTime: a.endTime,
         title: a.title || null,
-        description: a.description || a.note || null,
         color: a.color || null,
         dropoffTime: a.dropoffTime || null,
         pickupTime: a.pickupTime || null,
-        rideOption: a.rideOption || null,
-        appointmentOption: a.appointmentOption || null,
-        appointmentStatus: a.appointmentStatus || 'NONE',
-        leadSource: a.leadSource || null,
+        rideOption: rideOptId ? { id: rideOptId } : null,
+        appointmentOption: apptOptId ? { id: apptOptId } : null,
+        repairOrder: null,
+        assignedEmployees: [],
       };
 
       let created;
