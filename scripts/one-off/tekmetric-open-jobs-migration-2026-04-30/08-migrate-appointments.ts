@@ -294,16 +294,19 @@ async function main() {
       row.customerEmail = pickPrimaryEmail(srcCust) || '';
       row.customerPhone = pickPrimaryPhone(srcCust) || '';
 
-      // ---- src vehicle
-      if (!srcVehicleCache.has(appt.vehicleId)) {
-        try {
-          srcVehicleCache.set(appt.vehicleId, await getVehicle(appt.vehicleId, args.src));
-        } catch (err: any) {
-          srcVehicleCache.set(appt.vehicleId, null);
-          console.warn(`[appt-migrate] ${tag} src getVehicle(${appt.vehicleId}) failed: ${err.message}`);
+      // ---- src vehicle (skip the lookup entirely if the appt has no vehicleId)
+      let srcVeh: TekmetricVehicle | null = null;
+      if (appt.vehicleId) {
+        if (!srcVehicleCache.has(appt.vehicleId)) {
+          try {
+            srcVehicleCache.set(appt.vehicleId, await getVehicle(appt.vehicleId, args.src));
+          } catch (err: any) {
+            srcVehicleCache.set(appt.vehicleId, null);
+            console.warn(`[appt-migrate] ${tag} src getVehicle(${appt.vehicleId}) failed: ${err.message}`);
+          }
         }
+        srcVeh = srcVehicleCache.get(appt.vehicleId) || null;
       }
-      const srcVeh = srcVehicleCache.get(appt.vehicleId) || null;
       row.vehicleVin = srcVeh?.vin || '';
       row.vehicleYMM = srcVeh ? `${srcVeh.year || ''} ${srcVeh.make || ''} ${srcVeh.model || ''}`.trim() : '';
 

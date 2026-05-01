@@ -458,7 +458,12 @@ export async function createAppointment(params: CreateAppointmentParams): Promis
   console.log(`[Tekmetric] Creating appointment for customer ${customerId}, vehicle ${vehicleId} at ${startTime}`);
   console.log(`[Tekmetric] Appointment body:`, JSON.stringify(body, null, 2));
   
-  const result = await tekmetricRequest('/appointments', {
+  // Tekmetric's POST /appointments requires `?shop={id}` to establish the
+  // shop auth context — without it the API returns 401 "Missing credentials"
+  // even with a valid Bearer token. (Reads have always passed `?shop=` via
+  // their helpers; the original write helper omitted it, which only became
+  // visible once the appointment-migration script tried to write at scale.)
+  const result = await tekmetricRequest(`/appointments?shop=${shopId}`, {
     method: 'POST',
     body: JSON.stringify(body),
   }, shopId);

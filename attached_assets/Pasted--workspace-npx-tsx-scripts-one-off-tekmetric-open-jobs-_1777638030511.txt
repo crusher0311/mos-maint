@@ -1,0 +1,218 @@
+~/workspace$ npx tsx scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/08-migrate-appointments.ts \
+  --src=10216 --dest=18007
+[appt-migrate] src=10216 dest=18007 dryRun=false limit=none
+[appt-migrate] listing future appointments on source...
+[appt-migrate] fetched page 0 (100 returned, 17 future-only, totalElements=1955)
+[appt-migrate] fetched page 1 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 2 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 3 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 4 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 5 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 6 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 7 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 8 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 9 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 10 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 11 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 12 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 13 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 14 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 15 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 16 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 17 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 18 (100 returned, 0 future-only, totalElements=1955)
+[appt-migrate] fetched page 19 (55 returned, 0 future-only, totalElements=1955)
+[appt-migrate] dropped 1938 past-dated appts that the server returned despite startTime filter
+[appt-migrate] found 17 future appointments on source (after filter/limit)
+[Tekmetric] Creating appointment for customer 106235112, vehicle 153471669 at 2026-05-13T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106235112,
+  "vehicleId": 153471669,
+  "startTime": "2026-05-13T12:30:00Z",
+  "endTime": "2026-05-13T13:00:00Z",
+  "description": "LOF, & CHECK GAS CAP LEVER HARD TO LIFT",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:14:39.194Z
+[appt-migrate] (1/17) appt 61125880: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] 429 on /customers?shop=18007&search=2242108280&size=25 (attempt 1/5), backing off 2907ms
+[Tekmetric] Creating appointment for customer 106259415, vehicle 153497755 at 2026-05-11T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106259415,
+  "vehicleId": 153497755,
+  "startTime": "2026-05-11T12:30:00Z",
+  "endTime": "2026-05-11T13:00:00Z",
+  "description": "Oil Change\nTransmission Service\nCheck to see if Head Gasket is leaking or getting gunked up. ",
+  "color": "#0D4A80",
+  "dropoffTime": "2026-05-06T12:30:00Z",
+  "pickupTime": "2026-05-06T13:30:00Z",
+  "rideOption": "NONE",
+  "appointmentOptionId": 2
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:14:44.320Z
+[Tekmetric] 429 on /appointments (attempt 1/5), backing off 2316ms
+[appt-migrate] (2/17) appt 61118202: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] Creating appointment for customer 106244799, vehicle 153456906 at 2026-05-09T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106244799,
+  "vehicleId": 153456906,
+  "startTime": "2026-05-09T12:30:00Z",
+  "endTime": "2026-05-09T13:00:00Z",
+  "title": "[SG] BRETT CASTELLI's 2024 Kia Carnival",
+  "description": "Oil Change",
+  "color": "#F0572A",
+  "rideOption": "NONE",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:14:48.966Z
+[appt-migrate] (3/17) appt 61223538: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[appt-migrate] (4/17) appt 60942195: GAP vehicle (no VIN on source)
+[appt-migrate] (5/17) appt 59098018: GAP customer "SANDY HART" (8472877317)
+[appt-migrate] (6/17) appt 61183516: GAP vehicle (no VIN on source)
+[appt-migrate] (7/17) appt 61110550: GAP customer "GERI JACOBSON" (8478586996)
+[Tekmetric] Creating appointment for customer 106257888, vehicle 153502920 at 2026-05-04T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106257888,
+  "vehicleId": 153502920,
+  "startTime": "2026-05-04T12:30:00Z",
+  "endTime": "2026-05-04T13:00:00Z",
+  "description": "lof",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:14:54.827Z
+[appt-migrate] (8/17) appt 61220435: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] 429 on /customers?shop=18007&search=2245651731&size=25 (attempt 1/5), backing off 2740ms
+[Tekmetric] Creating appointment for customer 106249917, vehicle 153486201 at 2026-05-04T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106249917,
+  "vehicleId": 153486201,
+  "startTime": "2026-05-04T12:30:00Z",
+  "endTime": "2026-05-04T13:00:00Z",
+  "description": "tire and alignment, reset maintenance reminder\nRO already Started",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:14:59.384Z
+[appt-migrate] (9/17) appt 61122112: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] Creating appointment for customer 106255681, vehicle 153480972 at 2026-05-04T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106255681,
+  "vehicleId": 153480972,
+  "startTime": "2026-05-04T12:30:00Z",
+  "endTime": "2026-05-04T13:00:00Z",
+  "description": "oil change\nbrakes squeal in reverse sounds like from rear of vehicle\ndriver washer inop",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:15:01.224Z
+[appt-migrate] (10/17) appt 61084609: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] 429 on /vehicles/87849289 (attempt 1/5), backing off 2602ms
+[Tekmetric] Creating appointment for customer 106258088, vehicle 153501905 at 2026-05-02T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106258088,
+  "vehicleId": 153501905,
+  "startTime": "2026-05-02T12:30:00Z",
+  "endTime": "2026-05-02T13:00:00Z",
+  "description": "Oil Change - Waiter",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:15:05.676Z
+[appt-migrate] (11/17) appt 60517658: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] 429 on /vehicles/152729397 (attempt 1/5), backing off 2214ms
+[appt-migrate] (12/17) appt 60842634: GAP vehicle (no VIN on source)
+[appt-migrate] (13/17) src getVehicle(null) failed: Tekmetric API error 400: {"type":"ERROR","message":"Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'long'; For input string: \"null\"","data":null,"details":{}}
+[appt-migrate] (13/17) appt 60736990: GAP vehicle (no VIN on source)
+[Tekmetric] Creating appointment for customer 106245873, vehicle 153489397 at 2026-05-01T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106245873,
+  "vehicleId": 153489397,
+  "startTime": "2026-05-01T12:30:00Z",
+  "endTime": "2026-05-01T13:00:00Z",
+  "description": "lof drop off friday for saturday",
+  "color": "#0D4A80",
+  "dropoffTime": "2026-05-01T12:30:00Z",
+  "pickupTime": "2026-05-01T13:30:00Z",
+  "rideOption": "NONE",
+  "appointmentOptionId": 2
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:15:11.391Z
+[appt-migrate] (14/17) appt 61071212: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[appt-migrate] (15/17) appt 60981132: GAP customer "KRISTEN OSPINA" (2246220464)
+[Tekmetric] Creating appointment for customer 106234716, vehicle 153471395 at 2026-05-01T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106234716,
+  "vehicleId": 153471395,
+  "startTime": "2026-05-01T12:30:00Z",
+  "endTime": "2026-05-01T13:00:00Z",
+  "description": "Oil Change - Waiter\nTire Rotation\nHeadlight Bulb",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:15:14.377Z
+[appt-migrate] (16/17) appt 60620934: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+[Tekmetric] Creating appointment for customer 106261163, vehicle 153504905 at 2026-05-01T12:30:00Z
+[Tekmetric] Appointment body: {
+  "shopId": 18007,
+  "customerId": 106261163,
+  "vehicleId": 153504905,
+  "startTime": "2026-05-01T12:30:00Z",
+  "endTime": "2026-05-01T13:00:00Z",
+  "description": "LOF",
+  "color": "#0D4A80",
+  "appointmentOptionId": 1
+}
+[Tekmetric] Received 401, refreshing token and retrying...
+[Tekmetric Auth] Force refreshing token...
+[Tekmetric Auth] Fetching new access token...
+[Tekmetric Auth] New token obtained, expires at 2026-05-01T13:15:16.077Z
+[appt-migrate] (17/17) appt 60552539: ERROR Tekmetric API error 401: {"type":"ERROR","message":"Missing credentials","data":null,"details":{}}
+
+========== SUMMARY ==========
+Total source appts:  17
+Created on dest:     0
+Gap (no customer):   3
+Gap (no vehicle):    4
+Errors:              10
+
+Mapping: /home/runner/workspace/scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/tekmetric-appt-migration-mapping-20260501T122016.json
+Gaps CSV: /home/runner/workspace/scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/tekmetric-appt-migration-gaps-20260501T122016.csv
+=============================
