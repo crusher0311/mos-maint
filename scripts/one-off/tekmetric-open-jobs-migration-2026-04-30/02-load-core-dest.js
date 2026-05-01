@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.3-no-marker';
+  const VERSION = '2026-05-01.4-zero-part-cost';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -63,6 +63,14 @@
   // with broken half-ROs that someone has to clean up by hand. The RO
   // sticks around in DELETED state for forensics.
   const AUTO_ROLLBACK_PARTIAL_RO = true;
+
+  // Per Brandon 2026-05-01: every migrated part should land in the
+  // destination shop with cost=0 so post-transfer profit reporting isn't
+  // double-counting parts that were already paid for at the source shop.
+  // Only the wholesale `cost` field is zeroed — `retail` (what the
+  // customer is charged) is preserved so the customer-facing total on
+  // the migrated RO stays correct.
+  const ZERO_PART_COST = true;
 
   // Marker prefixed onto the destination RO's first customer concern so we
   // can detect already-migrated ROs on a re-run.
@@ -256,7 +264,7 @@
       partNumber: p.partNumber ?? '',
       position: p.position ?? '',
       quantity: p.quantity ?? 1,
-      cost: p.cost ?? 0,
+      cost: ZERO_PART_COST ? 0 : (p.cost ?? 0),
       retail: p.retail ?? 0,
       oemPartNumber: p.oemPartNumber ?? '',
     };
@@ -524,6 +532,7 @@
     rosAlreadyMigrated: skippedBecauseAlreadyMigrated.length,
     rosWillCreate: willCreate.length,
     jobsWillCreate: totalJobs,
+    zeroPartCost: ZERO_PART_COST,
     confirm: CONFIRM,
   }]);
 
