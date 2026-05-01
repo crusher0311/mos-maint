@@ -33,7 +33,7 @@
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
   // create ROs / jobs in the destination.
   // ============================================================
-  const CONFIRM = false;
+  const CONFIRM = true;
 
   // Same-shop smoke test toggle. Defaults to false: refuses to load a dump
   // back into the same shop it came from (safety net against picking the
