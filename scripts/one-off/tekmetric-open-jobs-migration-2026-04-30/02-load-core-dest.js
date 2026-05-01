@@ -25,7 +25,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.1-tokenfix';
+  const VERSION = '2026-05-01.3-no-marker';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -73,8 +73,12 @@
   const ENDPOINTS = {
     base: location.origin,
     // Job Board listing on DEST — used to scan for already-migrated markers.
-    jobBoardList: (shopId, page, size) =>
-      `/api/shop/${shopId}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=${page}&size=${size}&sort=updatedDate,desc`,
+    // Job Board listing — see 01-dump-source.js for the full HAR-confirmed
+    // story. This endpoint replaces the dead
+    //   /api/shop/{id}/repair-order?status=ESTIMATE,WORK_IN_PROGRESS&page=...
+    // path. Returns a flat array (no pagination wrapper) of RO summaries.
+    jobBoardList: (shopId) =>
+      `/api/shop/${shopId}/job-board-group-by?view=column&board=ACTIVE&groupBy=ROSTATUS`,
     // RO header / metadata. NOTE: returns jobs:null and may return concerns
     // depending on Tekmetric build, hence the dedicated concerns endpoint.
     repairOrderDetail: (shopId, roId) =>
@@ -445,17 +449,16 @@
     }
   }
   const summariesNeedingDetail = [];
-  let page = 0;
-  while (true) {
+  {
     let resp;
     try {
-      resp = await jsonFetch(ENDPOINTS.jobBoardList(destShopId, page, PAGE_SIZE), token);
+      resp = await jsonFetch(ENDPOINTS.jobBoardList(destShopId), token);
     } catch (err) {
-      console.warn(`[LOAD-CORE] Job Board pre-scan failed at page ${page}: ${err.message}. Falling through; the per-RO defensive marker recheck (vehicle-VIN-scoped) below will still catch already-migrated ROs before any duplicates are created.`);
-      break;
+      console.warn(`[LOAD-CORE] Job Board pre-scan failed: ${err.message}. Falling through; the per-RO defensive marker recheck (vehicle-VIN-scoped) below will still catch already-migrated ROs before any duplicates are created.`);
+      resp = [];
     }
+    // job-board-group-by returns a flat array; tolerate legacy {content:[...]} too.
     const content = Array.isArray(resp) ? resp : (resp.content || resp.repairOrders || resp.data || []);
-    if (!content.length) break;
     for (const ro of content) {
       let srcRoNum = null;
       if (summaryHasConcernField(ro)) {
@@ -470,9 +473,6 @@
         summariesNeedingDetail.push({ id: ro.id, repairOrderNumber: ro.repairOrderNumber });
       }
     }
-    if (content.length < PAGE_SIZE) break;
-    page++;
-    if (page > 200) break;
   }
   if (summariesNeedingDetail.length) {
     console.log(`[LOAD-CORE] Pre-scan: doing deterministic concern check for ${summariesNeedingDetail.length} dest RO(s) (detail+concerns endpoint)…`);
@@ -540,11 +540,13 @@
   }
 
   // ----- CONFIRMATION PROMPT --------------------------------------------
+  console.warn('%c[LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.', 'color:#a60;font-weight:bold;font-size:13px');
   const promptMsg =
     `MIGRATE ${willCreate.length} ROs (${totalJobs} jobs) from\n` +
     `  ${dump.source.shopName} (id=${dump.source.shopId})\n` +
     `into\n` +
     `  ${destShopName} (id=${destShopId}) ?\n\n` +
+    `⚠️ NO RE-RUN SAFETY: re-pasting will create duplicates.\n\n` +
     `Type the destination shop id (${destShopId}) to confirm.`;
   const typed = window.prompt(promptMsg, '');
   if (String(typed).trim() !== String(destShopId)) {
@@ -887,8 +889,10 @@
         }
       }
 
-      // 4. Append concerns. The first concern carries the migration marker
-      //    so the marker pre-scan can find it on a re-run.
+      // 4. Append concerns — copied verbatim from the source RO. Per Brandon
+      //    2026-05-01: NO migration marker is prepended to keep destination
+      //    concerns customer-clean. NOTE: this removes re-run safety — running
+      //    02 a second time for the same source shop will create duplicate ROs.
       //    Tekmetric payloads vary by build: source concerns may come back
       //    as an array of {concern}, an array of strings, a single string,
       //    or a single object — normalize all of those shapes.
@@ -906,12 +910,9 @@
       } else {
         srcConcerns = [];
       }
-      const concernsToPost = srcConcerns.length
-        ? [
-            { concern: `${MIGRATION_MARKER(sourceRoNumber)} ${srcConcerns[0].concern || ''}`.trim() },
-            ...srcConcerns.slice(1).map((c) => ({ concern: c.concern || '' })),
-          ]
-        : [{ concern: MIGRATION_MARKER(sourceRoNumber) }];
+      const concernsToPost = srcConcerns
+        .map((c) => ({ concern: (c.concern || '').trim() }))
+        .filter((c) => c.concern.length > 0);
       for (let ci = 0; ci < concernsToPost.length; ci++) {
         step = `addConcern[${ci}]`;
         await jsonFetch(ENDPOINTS.addConcern(newRoId), token, {
