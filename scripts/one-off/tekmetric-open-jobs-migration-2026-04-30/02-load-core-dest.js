@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.4-zero-part-cost';
+  const VERSION = '2026-05-01.5-no-precheck';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -742,30 +742,12 @@
     const sourceRoId = item.sourceRoId;
     let step = 'start';
     try {
-      // 0. Defensive per-RO marker check — independent of pre-scan results.
-      //    If pre-scan was incomplete (failed pagination, summary missing
-      //    concern field, RO advanced past Job Board, etc.), this catches
-      //    duplicates before we create any new entities.
-      step = 'verifyNotAlreadyMigrated';
-      const existing = await findExistingMigratedRo(src, sourceRoNumber);
-      if (existing) {
-        console.log(`[LOAD-CORE] (${i + 1}/${willCreate.length}) #${sourceRoNumber} already exists in dest as #${existing.destRoNumber} (id=${existing.destRoId}) — reconciling jobs (was missed by pre-scan).`);
-        const recon = await reconcileJobsOnReusedRo(src, existing.destRoId, sourceRoNumber);
-        if (recon.created > 0) {
-          console.log(`[LOAD-CORE]   resumed ${recon.created} missing job(s) on dest #${existing.destRoNumber}`);
-        }
-        mapping.push({
-          sourceRoId,
-          sourceRoNumber,
-          destRoId: existing.destRoId,
-          destRoNumber: existing.destRoNumber,
-          reused: true,
-          recoveredByPerRoCheck: true,
-          resumedJobs: recon.created,
-          jobMappings: recon.jobMappings,
-        });
-        continue;
-      }
+      // 0. Per-RO marker re-check was REMOVED in v2026-05-01.5-no-precheck.
+      //    Since the migration marker is no longer written to concerns
+      //    (per Brandon 2026-05-01), there is nothing to look for here.
+      //    The previous implementation also crashed on customers whose
+      //    `phone` field wasn't a string (e.g. a number or array entry),
+      //    failing all 21 ROs at this step.
 
       // 1. Resolve dest customer / vehicle / labor-rate IDs.
       //    Default path (USE_SOURCE_IDS_DIRECT=true): use the source IDs
