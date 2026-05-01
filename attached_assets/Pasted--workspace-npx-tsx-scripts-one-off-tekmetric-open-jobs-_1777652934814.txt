@@ -1,0 +1,62 @@
+~/workspace$ npx tsx scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/09a-dump-and-plan-inventory.ts
+
+========= Arlington  10216 -> 18007 =========
+[RateLimit] tekmetric at 602/600, waiting 2142ms (attempt 1/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 2353ms (attempt 1/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 4494ms (attempt 2/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 4994ms (attempt 2/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 8670ms (attempt 3/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 8900ms (attempt 3/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 16809ms (attempt 4/8, exponential backoff)
+[RateLimit] tekmetric at 602/600, waiting 16226ms (attempt 4/8, exponential backoff)
+[RateLimit] tekmetric at 603/600, waiting 3500ms (attempt 5/8, exponential backoff)
+[RateLimit] tekmetric at 602/600, waiting 3500ms (attempt 5/8, exponential backoff)
+[Tekmetric] 429 on /inventory?shop=18007&partTypeId=1&page=1&size=100 (attempt 1/5), backing off 2514ms
+[Tekmetric] 429 on /inventory?shop=10216&partTypeId=1&page=0&size=100 (attempt 1/5), backing off 2003ms
+[Tekmetric] 429 on /inventory?shop=10216&partTypeId=1&page=0&size=100 (attempt 2/5), backing off 4743ms
+[Tekmetric] 429 on /inventory?shop=18007&partTypeId=1&page=1&size=100 (attempt 2/5), backing off 4451ms
+[inv] dest-Arlington shop=18007 pt=Part pages=1 total-so-far=181
+[inv] src-Arlington shop=10216 pt=Part pages=1 total-so-far=182
+[inv] dest-Arlington shop=18007 pt=Tire pages=0 total-so-far=189
+[inv] src-Arlington shop=10216 pt=Tire pages=0 total-so-far=190
+[inv] dest-Arlington shop=18007 pt=Battery pages=0 total-so-far=203
+[inv] src-Arlington shop=10216 pt=Battery pages=0 total-so-far=204
+[inv] wrote /home/runner/workspace/scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/inventory-plan-10216-to-18007-20260501T162524.json
+
+========= Streamwood  10214 -> 18008 =========
+[Tekmetric] 429 on /inventory?shop=18008&partTypeId=1&page=1&size=100 (attempt 1/5), backing off 2492ms
+[inv] src-Streamwood shop=10214 pt=Part pages=1 total-so-far=131
+[inv] src-Streamwood shop=10214 pt=Tire pages=0 total-so-far=134
+[inv] src-Streamwood shop=10214 pt=Battery pages=0 total-so-far=144
+[Tekmetric] 429 on /inventory?shop=18008&partTypeId=1&page=1&size=100 (attempt 2/5), backing off 4775ms
+[Tekmetric] 429 on /inventory?shop=18008&partTypeId=1&page=1&size=100 (attempt 3/5), backing off 8452ms
+[RateLimit] tekmetric at 604/600, waiting 2506ms (attempt 1/8, exponential backoff)
+[RateLimit] tekmetric at 601/600, waiting 4160ms (attempt 2/8, exponential backoff)
+[RateLimit] tekmetric at 602/600, waiting 8062ms (attempt 3/8, exponential backoff)
+[RateLimit] tekmetric at 602/600, waiting 16700ms (attempt 4/8, exponential backoff)
+[RateLimit] tekmetric at 601/600, waiting 3500ms (attempt 5/8, exponential backoff)
+[inv] dest-Streamwood shop=18008 pt=Part pages=1 total-so-far=129
+[Tekmetric] 429 on /inventory?shop=18008&partTypeId=2&page=0&size=100 (attempt 1/5), backing off 2718ms
+[inv] dest-Streamwood shop=18008 pt=Tire pages=0 total-so-far=132
+[inv] dest-Streamwood shop=18008 pt=Battery pages=0 total-so-far=142
+[inv] wrote /home/runner/workspace/scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/inventory-plan-10214-to-18008-20260501T162524.json
+
+========= Shop3  10215 -> 18009 =========
+[Tekmetric] 429 on /inventory?shop=18009&partTypeId=1&page=0&size=100 (attempt 1/5), backing off 2209ms
+[inv] src-Shop3 shop=10215 pt=Part pages=3 total-so-far=301
+[inv] src-Shop3 shop=10215 pt=Tire pages=0 total-so-far=317
+[inv] src-Shop3 shop=10215 pt=Battery pages=0 total-so-far=336
+[Tekmetric] 429 on /inventory?shop=18009&partTypeId=1&page=0&size=100 (attempt 2/5), backing off 4435ms
+[inv] dest-Shop3 shop=18009 pt=Part pages=2 total-so-far=299
+[inv] dest-Shop3 shop=18009 pt=Tire pages=0 total-so-far=315
+[inv] dest-Shop3 shop=18009 pt=Battery pages=0 total-so-far=334
+[inv] wrote /home/runner/workspace/scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/inventory-plan-10215-to-18009-20260501T162524.json
+
+========= SUMMARY =========
+┌─────────┬─────────────────────────────┬──────────┬───────────┬────────┬──────────────┬────────────────────┬──────────────┬────────────┬───────────────┐
+│ (index) │ pair                        │ srcParts │ destParts │ update │ skipNoChange │ skipDestAlreadySet │ skipSrcEmpty │ gapNoMatch │ gapMultiMatch │
+├─────────┼─────────────────────────────┼──────────┼───────────┼────────┼──────────────┼────────────────────┼──────────────┼────────────┼───────────────┤
+│ 0       │ '10216->18007 (Arlington)'  │ 204      │ 203       │ 178    │ 0            │ 0                  │ 21           │ 5          │ 0             │
+│ 1       │ '10214->18008 (Streamwood)' │ 144      │ 142       │ 114    │ 0            │ 0                  │ 28           │ 2          │ 0             │
+│ 2       │ '10215->18009 (Shop3)'      │ 336      │ 334       │ 123    │ 0            │ 0                  │ 208          │ 5          │ 0             │
+└─────────┴─────────────────────────────┴──────────┴───────────┴────────┴──────────────┴────────────────────┴──────────────┴────────────┴───────────────┘
