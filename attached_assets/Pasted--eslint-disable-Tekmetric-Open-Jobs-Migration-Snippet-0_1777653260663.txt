@@ -1,0 +1,412 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration - Snippet 09b: APPLY INVENTORY MIN/MAX
+ *
+ * Companion to 09a-dump-and-plan-inventory.ts. Loads the per-shop plan JSON
+ * the Node script wrote, then for each row whose action === 'update':
+ *   - GETs the full dest part body via the internal API + user JWT
+ *   - mutates `min` and `max` to the planned values
+ *   - PUTs /api/shop/{dest}/inventory/{partId}
+ *
+ * Endpoint shape proven from HAR capture 2026-05-01:
+ *   PUT https://shop.tekmetric.com/api/shop/{shopId}/inventory/{partId}
+ *   Body: the full part object as returned by GET (we read-modify-write so we
+ *   don't accidentally clobber any other fields).
+ *
+ * USAGE
+ *   1. Run 09a first (Node) to produce inventory-plan-{src}-to-{dest}-*.json.
+ *   2. Open shop.tekmetric.com in Chrome with a user logged in who can
+ *      access the destination shop. Navigate to the destination shop so the
+ *      session is in that shop's context (URL contains /admin/shop/{dest}/...).
+ *   3. Edit DEST_SHOP_ID below and CONFIRM (false for dry-run).
+ *   4. Paste the whole snippet into the Console. A file picker opens -
+ *      choose the matching plan JSON from output/.
+ *   5. The snippet prints a summary and downloads a results JSON.
+ *      Re-run with CONFIRM=true to actually write.
+ */
+(async () => {
+  // ============== EDIT THESE PER SHOP ==============
+  const DEST_SHOP_ID = 18007;
+  const CONFIRM = false; // set true on the second paste to actually write
+  // =================================================
+
+  const VERSION = '2026-05-01.1';
+
+  const ENDPOINTS = {
+    base: location.origin,
+    invGet: (shopId, partId) => `/api/shop/${shopId}/inventory/${partId}`,
+    invPut: (shopId, partId) => `/api/shop/${shopId}/inventory/${partId}`,
+  };
+
+  function captureToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ'))
+          return p.accessToken;
+      } catch (_) {}
+    }
+    return null;
+  }
+  const TOKEN = captureToken();
+  if (!TOKEN) {
+    console.error('[INV] No JWT in localStorage. Are you logged in?');
+    return;
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'x-auth-token': TOKEN,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(opts.headers || {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let body;
+    try { body = text ? JSON.parse(text) : null; } catch (_) { body = text; }
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.body = typeof body === 'string' ? body : JSON.stringify(body);
+      throw err;
+    }
+    return body;
+  }
+
+  function downloadJson(name, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  function ts() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, ''); }
+
+  // ----- 1. PICK PLAN FILE -------------------------------------------
+  console.log(`%c[INV] v${VERSION}  dest=${DEST_SHOP_ID}  CONFIRM=${CONFIRM}`,
+    'color:#06f;font-weight:bold');
+  console.log('[INV] Pick the inventory-plan JSON file...');
+  const file = await new Promise((resolveFile) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = () => resolveFile(input.files && input.files[0]);
+    input.click();
+  });
+  if (!file) {
+    console.error('[INV] No file chosen.');
+    return;
+  }
+  const plan = JSON.parse(await file.text());
+  if (plan.schema !== 'tekmetric-inventory-min-max-plan') {
+    console.error('[INV] File schema is not tekmetric-inventory-min-max-plan:', plan.schema);
+    return;
+  }
+  if (plan.destShopId !== DEST_SHOP_ID) {
+    console.error(
+      `[INV] DEST_SHOP_ID mismatch! Plan is for dest=${plan.destShopId}, snippet is set to ${DEST_SHOP_ID}. Aborting.`
+    );
+    return;
+  }
+  const updates = (plan.rows || []).filter((r) => r.action === 'update');
+  console.log(
+    `[INV] loaded plan src=${plan.srcShopId} dest=${plan.destShopId} (${plan.pairName}) -- ${updates.length} updates queued (${plan.rows.length} total rows)`
+  );
+
+  // ----- 2. APPLY ---------------------------------------------------
+  const results = [];
+  for (let i = 0; i < updates.length; i += 1) {
+    const r = updates[i];
+    const tag = `(${i + 1}/${updates.length})`;
+    const out = {
+      destPartId: r.destPartId,
+      partNumber: r.partNumber,
+      brand: r.brand,
+      partTypeId: r.partTypeId,
+      partName: r.partName,
+      plannedMin: r.newMin,
+      plannedMax: r.newMax,
+      previousMin: null,
+      previousMax: null,
+      appliedMin: null,
+      appliedMax: null,
+      status: 'pending',
+    };
+    try {
+      const cur = await jsonFetch(ENDPOINTS.invGet(DEST_SHOP_ID, r.destPartId));
+      out.previousMin = cur.min ?? null;
+      out.previousMax = cur.max ?? null;
+
+      // Apply the same fill-only-where-null-or-zero rule on live read so we
+      // never clobber a value that someone set between dump and apply.
+      const isFillable = (v) => v == null || v === 0;
+      const willCopyMin = isFillable(cur.min) && r.srcMin != null && r.srcMin > 0;
+      const willCopyMax = isFillable(cur.max) && r.srcMax != null && r.srcMax > 0;
+      if (!willCopyMin && !willCopyMax) {
+        out.status = 'skip-dest-now-set';
+        out.appliedMin = cur.min ?? null;
+        out.appliedMax = cur.max ?? null;
+        results.push(out);
+        console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: SKIP (dest now has values: min=${cur.min} max=${cur.max})`);
+        continue;
+      }
+      const nextMin = willCopyMin ? r.srcMin : cur.min;
+      const nextMax = willCopyMax ? r.srcMax : cur.max;
+
+      if (!CONFIRM) {
+        out.status = 'dry-run';
+        out.appliedMin = nextMin;
+        out.appliedMax = nextMax;
+        results.push(out);
+        console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: DRY-RUN min ${cur.min}->${nextMin} max ${cur.max}->${nextMax}`);
+        continue;
+      }
+
+      // Read-modify-write: keep the entire fetched body, only mutate min/max.
+      const updated = { ...cur, min: nextMin, max: nextMax };
+      const resp = await jsonFetch(ENDPOINTS.invPut(DEST_SHOP_ID, r.destPartId), {
+        method: 'PUT',
+        body: updated,
+      });
+      out.status = 'updated';
+      out.appliedMin = (resp && resp.min != null) ? resp.min : nextMin;
+      out.appliedMax = (resp && resp.max != null) ? resp.max : nextMax;
+      results.push(out);
+      console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: UPDATED min ${cur.min}->${out.appliedMin} max ${cur.max}->${out.appliedMax}`);
+    } catch (err) {
+      out.status = 'error';
+      out.error = `${err.status || ''} ${(err.body || err.message || String(err)).slice(0, 300)}`.trim();
+      results.push(out);
+      console.error(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: ERROR ${out.error}`);
+    }
+  }
+
+  // ----- 3. REPORT + DOWNLOAD ---------------------------------------
+  const counts = {
+    total: results.length,
+    updated: results.filter((r) => r.status === 'updated').length,
+    dryRun: results.filter((r) => r.status === 'dry-run').length,
+    skipDestNowSet: results.filter((r) => r.status === 'skip-dest-now-set').length,
+    error: results.filter((r) => r.status === 'error').length,
+  };
+  console.log('%c[INV] ===== SUMMARY =====', 'color:#0a0;font-weight:bold');
+  console.table(counts);
+  const errs = results.filter((r) => r.status === 'error');
+  if (errs.length) {
+    console.log('%c[INV] Errors:', 'color:#a00;font-weight:bold');
+    console.table(errs.map((r) => ({ partId: r.destPartId, partNumber: r.partNumber, error: r.error })));
+  }
+  const fname = `tekmetric-inventory-apply-${plan.srcShopId}-to-${DEST_SHOP_ID}-${ts()}.json`;
+  downloadJson(fname, {
+    schema: 'tekmetric-inventory-min-max-apply',
+    schemaVersion: VERSION,
+    createdAt: new Date().toISOString(),
+    src: plan.srcShopId,
+    dest: DEST_SHOP_ID,
+    confirm: CONFIRM,
+    counts,
+    results,
+  });
+  console.log(`[INV] Wrote ${fname} to Downloads.`);
+  if (!CONFIRM) {
+    console.log('%c[INV] DRY RUN. Re-paste with CONFIRM = true to write.', 'color:#06f');
+  }
+})();
+
+VM16934:97 [INV] v2026-05-01.1  dest=18007  CONFIRM=false
+VM16934:99 [INV] Pick the inventory-plan JSON file...
+Promise {<pending>}
+VM16934:123 [INV] loaded plan src=10216 dest=18007 (Arlington) -- 178 updates queued (183 total rows)
+VM16934:172 [INV] (1/178) part 37196132 950259020D30812: DRY-RUN min null->50 max null->500
+VM16934:172 [INV] (2/178) part 37196137 950240520SB0812: DRY-RUN min null->50 max null->500
+VM16934:172 [INV] (3/178) part 37196191 ANTI: DRY-RUN min null->10 max null->500
+VM16934:172 [INV] (4/178) part 37196143 950250540XE0812: DRY-RUN min null->100 max null->500
+VM16934:172 [INV] (5/178) part 37196139 950240530SB0812: DRY-RUN min null->50 max null->500
+VM16934:172 [INV] (6/178) part 37196141 950250530D30812: DRY-RUN min null->100 max null->500
+VM16934:172 [INV] (7/178) part 37196138 950250520SY0812: DRY-RUN min null->50 max null->500
+VM16934:172 [INV] (8/178) part 37196225 13CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (9/178) part 37196226 15CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (10/178) part 37196227 16CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (11/178) part 37196228 17CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (12/178) part 37196229 18CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (13/178) part 37196230 19CA: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (14/178) part 37196231 20CA: DRY-RUN min null->10 max null->10
+VM16934:172 [INV] (15/178) part 37196232 21CA: DRY-RUN min null->10 max null->10
+VM16934:172 [INV] (16/178) part 37196233 22CA: DRY-RUN min null->10 max null->10
+VM16934:172 [INV] (17/178) part 37196234 24CA: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (18/178) part 37196236 28CA: DRY-RUN min null->10 max null->10
+VM16934:172 [INV] (19/178) part 37196325 141: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (20/178) part 37196323 12B: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (21/178) part 37196326 16A: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (22/178) part 37196324 12E: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (23/178) part 37196322 10A: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (24/178) part 37196179 PA99117: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (25/178) part 37196189 PA99504: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (26/178) part 37196188 PA99486: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (27/178) part 37196185 PA99314: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (28/178) part 37196184 PA99294: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (29/178) part 37196183 PA99229: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (30/178) part 37196178 PA99115: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (31/178) part 37196177 PA99111: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (32/178) part 37196176 PA99097: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (33/178) part 37196275 PA99096: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (34/178) part 37196175 PA99078: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (35/178) part 37196274 PA99072: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (36/178) part 37196174 PA99071: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (37/178) part 37196173 PA99051: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (38/178) part 37196172 PA99050: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (39/178) part 37196190 PA9969: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (40/178) part 37196187 PA9943: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (41/178) part 37196186 PA9941: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (42/178) part 37196180 PA9920: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (43/178) part 37196171 PA6281: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (44/178) part 37196170 PA6279: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (45/178) part 37196273 PA6277: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (46/178) part 37196168 PA6200: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (47/178) part 37196167 PA6165: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (48/178) part 37196166 PA6163: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (49/178) part 37196272 PA6122: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (50/178) part 37196165 PA6121: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (51/178) part 37196164 PA6118: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (52/178) part 37196163 PA6116: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (53/178) part 37196162 PA6103: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (54/178) part 37196161 PA6100: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (55/178) part 37196160 PA6061: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (56/178) part 37196159 PA5833: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (57/178) part 37196158 PA5824: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (58/178) part 37196157 PA5819: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (59/178) part 37196156 PA5789: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (60/178) part 37196155 PA5787: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (61/178) part 37196154 PA5786: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (62/178) part 37196153 PA5780: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (63/178) part 37196152 PA5652: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (64/178) part 37196271 PA5649: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (65/178) part 37196151 PA5645: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (66/178) part 37196270 PA5592: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (67/178) part 37196150 PA5583: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (68/178) part 37196149 PA5582: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (69/178) part 37196148 PA5556: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (70/178) part 37196269 PA5463: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (71/178) part 37196268 PA5462: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (72/178) part 37196267 PA5432: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (73/178) part 37196266 PA5431: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (74/178) part 37196265 PA5323: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (75/178) part 37196147 PA5315: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (76/178) part 37196264 PA5192: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (77/178) part 37196263 PA4878: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (78/178) part 37196146 PA4838: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (79/178) part 37196145 PA4688: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (80/178) part 37196262 PA4675: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (81/178) part 37196144 PA4479: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (82/178) part 37196287 PO4476: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (83/178) part 37196194 PC4068: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (84/178) part 37196254 PC4479: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (85/178) part 37196195 PC4684: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (86/178) part 37196196 PC4761: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (87/178) part 37196197 PC4908: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (88/178) part 37196198 PC5490: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (89/178) part 37196255 PC5530: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (90/178) part 37196256 PC5661: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (91/178) part 37196257 PC5667: DRY-RUN min null->5 max null->5
+VM16934:172 [INV] (92/178) part 37196199 PC5676: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (93/178) part 37196218 PC5844: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (94/178) part 37196258 PC5864: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (95/178) part 37196200 PC5877: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (96/178) part 37196201 PC6067: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (97/178) part 37196202 PC6087: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (98/178) part 37196203 PC6099: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (99/178) part 37196204 PC6115: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (100/178) part 37196205 PC6156: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (101/178) part 37196206 PC6176: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (102/178) part 37196207 PC8222: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (103/178) part 37196215 PC9954: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (104/178) part 37196216 PC9977: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (105/178) part 37196208 PC99076: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (106/178) part 37196209 PC99099: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (107/178) part 37196210 PC99156: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (108/178) part 37196211 PC99157: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (109/178) part 37196219 PC99206C: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (110/178) part 37196220 PC99237C: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (111/178) part 37196222 PC99241C: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (112/178) part 37196214 PC99273: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (113/178) part 37196223 PC99334C: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (114/178) part 37196224 PC9978C: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (115/178) part 37196299 PO5610: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (116/178) part 37196253 2630035503: DRY-RUN min null->24 max null->24
+VM16934:172 [INV] (117/178) part 37196298 PO5609: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (118/178) part 37196297 PO5608: DRY-RUN min null->24 max null->24
+VM16934:172 [INV] (119/178) part 37196242 PO5607EX: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (120/178) part 37196241 PO5545EX: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (121/178) part 37196296 PO5505: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (122/178) part 37196295 PO5476: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (123/178) part 37196294 PO5401: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (124/178) part 37196293 PO5315: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (125/178) part 37196290 PO5247: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (126/178) part 37196289 PO4670: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (127/178) part 37196286 PO4459: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (128/178) part 37196285 PO4457: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (129/178) part 37196284 PO4011: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (130/178) part 37196279 PO2222: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (131/178) part 37196280 PO241: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (132/178) part 37196277 PO195: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (133/178) part 37196276 PO111: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (134/178) part 37196278 PO1A: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (135/178) part 37196238 PO99495: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (136/178) part 37196250 PO99527EX: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (137/178) part 37196248 PO99460EX: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (138/178) part 37196306 UPG64R: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (139/178) part 37196305 PO6311: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (140/178) part 37196239 UPG63R: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (141/178) part 37196246 PO6293EX: DRY-RUN min null->3 max null->3
+VM16934:172 [INV] (142/178) part 37196304 PO6291: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (143/178) part 37196245 PO6290EX: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (144/178) part 37196244 PO6288EX: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (145/178) part 37196303 PO6135: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (146/178) part 37196302 PO5895: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (147/178) part 37196301 PO5839: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (148/178) part 37196281 PO2500: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (149/178) part 37196213 PC99239: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (150/178) part 37196182 PA99223: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (151/178) part 37196283 PO4006: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (152/178) part 37196282 PO252: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (153/178) part 37196288 PO4651: DRY-RUN min null->3 max null->3
+VM16934:172 [INV] (154/178) part 37196291 PO5274: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (155/178) part 37196292 PO5288: DRY-RUN min null->3 max null->3
+VM16934:172 [INV] (156/178) part 37196243 PO6127EX: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (157/178) part 37196300 PO5702: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (158/178) part 37196247 PO6296EX: DRY-RUN min null->12 max null->12
+VM16934:172 [INV] (159/178) part 37196251 PO99602EX: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (160/178) part 37196249 PO99518EX: DRY-RUN min null->6 max null->6
+VM16934:172 [INV] (161/178) part 37196237 PO4610-HN1: DRY-RUN min null->10 max null->48
+VM16934:172 [INV] (162/178) part 37196181 PA99209: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (163/178) part 37196123 15576330000: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (164/178) part 37196124 15576460000: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (165/178) part 37196125 15577380000: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (166/178) part 37196127 15580090000: DRY-RUN min null->4 max null->4
+VM16934:172 [INV] (167/178) part 37196314 47G: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (168/178) part 37196318 51RG: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (169/178) part 37196310 121RG: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (170/178) part 37196311 24RPG: DRY-RUN min null->2 max null->2
+VM16934:172 [INV] (171/178) part 37196313 34GHR: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (172/178) part 37196319 65GHR: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (173/178) part 37196321 94RPG: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (174/178) part 37196312 25GA: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (175/178) part 37196315 48AGM: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (176/178) part 37196317 49AGM: DRY-RUN min null->1 max null->1
+VM16934:172 [INV] (177/178) part 37196316 48GHRA: DRY-RUN min null->1 max null->2
+VM16934:172 [INV] (178/178) part 37196320 90G: DRY-RUN min null->1 max null->1
+VM16934:203 [INV] ===== SUMMARY =====
+VM16934:204 (index)Value(index)Valuetotal178updated0dryRun178skipDestNowSet0error0Object
+VM16934:221 [INV] Wrote tekmetric-inventory-apply-10216-to-18007-20260501T163400.json to Downloads.
+VM16934:223 [INV] DRY RUN. Re-paste with CONFIRM = true to write.
