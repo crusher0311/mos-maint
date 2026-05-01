@@ -31,7 +31,7 @@
  * and just ship inspections — handle photos manually after the migration.
  */
 (async () => {
-  const VERSION = '2026-04-30.1';
+  const VERSION = '2026-05-01.1-tokenfix';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN.
@@ -83,42 +83,26 @@
     return null;
   }
   async function captureXAuthToken() {
-    return new Promise((resolve) => {
-      const captured = { token: null };
-      const origFetch = window.fetch;
-      const origOpen = XMLHttpRequest.prototype.open;
-      const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
-      let timeoutId;
-      function done(token) {
-        if (captured.token) return;
-        captured.token = token;
-        window.fetch = origFetch;
-        XMLHttpRequest.prototype.open = origOpen;
-        XMLHttpRequest.prototype.setRequestHeader = origSetHeader;
-        clearTimeout(timeoutId);
-        resolve(token);
-      }
-      window.fetch = function patched(input, init) {
-        try {
-          const headers = (init && init.headers) || (input && input.headers);
-          if (headers) {
-            const h = headers instanceof Headers ? headers.get('x-auth-token') :
-              (headers['x-auth-token'] || headers['X-Auth-Token']);
-            if (h) done(h);
-          }
-        } catch (_) {}
-        return origFetch.apply(this, arguments);
-      };
-      XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-        if (typeof name === 'string' && name.toLowerCase() === 'x-auth-token' && value) done(value);
-        return origSetHeader.apply(this, arguments);
-      };
-      const shopId = readShopIdFromUrl();
-      if (shopId) {
-        try { fetch(`${ENDPOINTS.base}/api/shop/${shopId}`, { credentials: 'include' }).catch(() => {}); } catch (_) {}
-      }
-      timeoutId = setTimeout(() => done(null), 4000);
-    });
+    // Same proven extraction as 00-print-token.js — scan localStorage for
+    // a JWT-shaped value (raw or wrapped in JSON under .token /
+    // .accessToken). The earlier fetch-monkey-patch approach failed
+    // because Tekmetric's auth interceptor doesn't run on probe requests
+    // fired from this snippet.
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const parsed = JSON.parse(v);
+        if (parsed && typeof parsed.token === 'string' && parsed.token.startsWith('eyJ')) {
+          return parsed.token;
+        }
+        if (parsed && typeof parsed.accessToken === 'string' && parsed.accessToken.startsWith('eyJ')) {
+          return parsed.accessToken;
+        }
+      } catch (_) {}
+    }
+    return null;
   }
   async function jsonFetch(path, token, init) {
     const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
