@@ -26,8 +26,8 @@
  */
 (async () => {
   // ============== EDIT THESE PER SHOP ==============
-  const DEST_SHOP_ID = 18007;
-  const CONFIRM = false; // set true on the second paste to actually write
+  const DEST_SHOP_ID = 18008;
+  const CONFIRM = true; // set true on the second paste to actually write
   // =================================================
 
   const VERSION = '2026-05-01.1';

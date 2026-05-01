@@ -1,0 +1,482 @@
+/* eslint-disable */
+/**
+ * Tekmetric Open Jobs Migration - Snippet 09b: APPLY INVENTORY MIN/MAX
+ *
+ * Companion to 09a-dump-and-plan-inventory.ts. Loads the per-shop plan JSON
+ * the Node script wrote, then for each row whose action === 'update':
+ *   - GETs the full dest part body via the internal API + user JWT
+ *   - mutates `min` and `max` to the planned values
+ *   - PUTs /api/shop/{dest}/inventory/{partId}
+ *
+ * Endpoint shape proven from HAR capture 2026-05-01:
+ *   PUT https://shop.tekmetric.com/api/shop/{shopId}/inventory/{partId}
+ *   Body: the full part object as returned by GET (we read-modify-write so we
+ *   don't accidentally clobber any other fields).
+ *
+ * USAGE
+ *   1. Run 09a first (Node) to produce inventory-plan-{src}-to-{dest}-*.json.
+ *   2. Open shop.tekmetric.com in Chrome with a user logged in who can
+ *      access the destination shop. Navigate to the destination shop so the
+ *      session is in that shop's context (URL contains /admin/shop/{dest}/...).
+ *   3. Edit DEST_SHOP_ID below and CONFIRM (false for dry-run).
+ *   4. Paste the whole snippet into the Console. A file picker opens -
+ *      choose the matching plan JSON from output/.
+ *   5. The snippet prints a summary and downloads a results JSON.
+ *      Re-run with CONFIRM=true to actually write.
+ */
+(async () => {
+  // ============== EDIT THESE PER SHOP ==============
+  const DEST_SHOP_ID = 18007;
+  const CONFIRM = true; // set true on the second paste to actually write
+  // =================================================
+
+  const VERSION = '2026-05-01.1';
+
+  const ENDPOINTS = {
+    base: location.origin,
+    invGet: (shopId, partId) => `/api/shop/${shopId}/inventory/${partId}`,
+    invPut: (shopId, partId) => `/api/shop/${shopId}/inventory/${partId}`,
+  };
+
+  function captureToken() {
+    const JWT_RE = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    for (const k of Object.keys(localStorage)) {
+      const v = localStorage.getItem(k) || '';
+      if (JWT_RE.test(v)) return v;
+      try {
+        const p = JSON.parse(v);
+        if (p && typeof p.token === 'string' && p.token.startsWith('eyJ')) return p.token;
+        if (p && typeof p.accessToken === 'string' && p.accessToken.startsWith('eyJ'))
+          return p.accessToken;
+      } catch (_) {}
+    }
+    return null;
+  }
+  const TOKEN = captureToken();
+  if (!TOKEN) {
+    console.error('[INV] No JWT in localStorage. Are you logged in?');
+    return;
+  }
+
+  async function jsonFetch(path, opts = {}) {
+    const url = path.startsWith('http') ? path : `${ENDPOINTS.base}${path}`;
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'x-auth-token': TOKEN,
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...(opts.headers || {}),
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const text = await res.text();
+    let body;
+    try { body = text ? JSON.parse(text) : null; } catch (_) { body = text; }
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.body = typeof body === 'string' ? body : JSON.stringify(body);
+      throw err;
+    }
+    return body;
+  }
+
+  function downloadJson(name, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+  function ts() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, ''); }
+
+  // ----- 1. PICK PLAN FILE -------------------------------------------
+  console.log(`%c[INV] v${VERSION}  dest=${DEST_SHOP_ID}  CONFIRM=${CONFIRM}`,
+    'color:#06f;font-weight:bold');
+  console.log('[INV] Pick the inventory-plan JSON file...');
+  const file = await new Promise((resolveFile) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = () => resolveFile(input.files && input.files[0]);
+    input.click();
+  });
+  if (!file) {
+    console.error('[INV] No file chosen.');
+    return;
+  }
+  const plan = JSON.parse(await file.text());
+  if (plan.schema !== 'tekmetric-inventory-min-max-plan') {
+    console.error('[INV] File schema is not tekmetric-inventory-min-max-plan:', plan.schema);
+    return;
+  }
+  if (plan.destShopId !== DEST_SHOP_ID) {
+    console.error(
+      `[INV] DEST_SHOP_ID mismatch! Plan is for dest=${plan.destShopId}, snippet is set to ${DEST_SHOP_ID}. Aborting.`
+    );
+    return;
+  }
+  const updates = (plan.rows || []).filter((r) => r.action === 'update');
+  console.log(
+    `[INV] loaded plan src=${plan.srcShopId} dest=${plan.destShopId} (${plan.pairName}) -- ${updates.length} updates queued (${plan.rows.length} total rows)`
+  );
+
+  // ----- 2. APPLY ---------------------------------------------------
+  const results = [];
+  for (let i = 0; i < updates.length; i += 1) {
+    const r = updates[i];
+    const tag = `(${i + 1}/${updates.length})`;
+    const out = {
+      destPartId: r.destPartId,
+      partNumber: r.partNumber,
+      brand: r.brand,
+      partTypeId: r.partTypeId,
+      partName: r.partName,
+      plannedMin: r.newMin,
+      plannedMax: r.newMax,
+      previousMin: null,
+      previousMax: null,
+      appliedMin: null,
+      appliedMax: null,
+      status: 'pending',
+    };
+    try {
+      const cur = await jsonFetch(ENDPOINTS.invGet(DEST_SHOP_ID, r.destPartId));
+      out.previousMin = cur.min ?? null;
+      out.previousMax = cur.max ?? null;
+
+      // Apply the same fill-only-where-null-or-zero rule on live read so we
+      // never clobber a value that someone set between dump and apply.
+      const isFillable = (v) => v == null || v === 0;
+      const willCopyMin = isFillable(cur.min) && r.srcMin != null && r.srcMin > 0;
+      const willCopyMax = isFillable(cur.max) && r.srcMax != null && r.srcMax > 0;
+      if (!willCopyMin && !willCopyMax) {
+        out.status = 'skip-dest-now-set';
+        out.appliedMin = cur.min ?? null;
+        out.appliedMax = cur.max ?? null;
+        results.push(out);
+        console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: SKIP (dest now has values: min=${cur.min} max=${cur.max})`);
+        continue;
+      }
+      const nextMin = willCopyMin ? r.srcMin : cur.min;
+      const nextMax = willCopyMax ? r.srcMax : cur.max;
+
+      if (!CONFIRM) {
+        out.status = 'dry-run';
+        out.appliedMin = nextMin;
+        out.appliedMax = nextMax;
+        results.push(out);
+        console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: DRY-RUN min ${cur.min}->${nextMin} max ${cur.max}->${nextMax}`);
+        continue;
+      }
+
+      // Read-modify-write: keep the entire fetched body, only mutate min/max.
+      const updated = { ...cur, min: nextMin, max: nextMax };
+      const resp = await jsonFetch(ENDPOINTS.invPut(DEST_SHOP_ID, r.destPartId), {
+        method: 'PUT',
+        body: updated,
+      });
+      out.status = 'updated';
+      out.appliedMin = (resp && resp.min != null) ? resp.min : nextMin;
+      out.appliedMax = (resp && resp.max != null) ? resp.max : nextMax;
+      results.push(out);
+      console.log(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: UPDATED min ${cur.min}->${out.appliedMin} max ${cur.max}->${out.appliedMax}`);
+    } catch (err) {
+      out.status = 'error';
+      out.error = `${err.status || ''} ${(err.body || err.message || String(err)).slice(0, 300)}`.trim();
+      results.push(out);
+      console.error(`[INV] ${tag} part ${r.destPartId} ${r.partNumber}: ERROR ${out.error}`);
+    }
+  }
+
+  // ----- 3. REPORT + DOWNLOAD ---------------------------------------
+  const counts = {
+    total: results.length,
+    updated: results.filter((r) => r.status === 'updated').length,
+    dryRun: results.filter((r) => r.status === 'dry-run').length,
+    skipDestNowSet: results.filter((r) => r.status === 'skip-dest-now-set').length,
+    error: results.filter((r) => r.status === 'error').length,
+  };
+  console.log('%c[INV] ===== SUMMARY =====', 'color:#0a0;font-weight:bold');
+  console.table(counts);
+  const errs = results.filter((r) => r.status === 'error');
+  if (errs.length) {
+    console.log('%c[INV] Errors:', 'color:#a00;font-weight:bold');
+    console.table(errs.map((r) => ({ partId: r.destPartId, partNumber: r.partNumber, error: r.error })));
+  }
+  const fname = `tekmetric-inventory-apply-${plan.srcShopId}-to-${DEST_SHOP_ID}-${ts()}.json`;
+  downloadJson(fname, {
+    schema: 'tekmetric-inventory-min-max-apply',
+    schemaVersion: VERSION,
+    createdAt: new Date().toISOString(),
+    src: plan.srcShopId,
+    dest: DEST_SHOP_ID,
+    confirm: CONFIRM,
+    counts,
+    results,
+  });
+  console.log(`[INV] Wrote ${fname} to Downloads.`);
+  if (!CONFIRM) {
+    console.log('%c[INV] DRY RUN. Re-paste with CONFIRM = true to write.', 'color:#06f');
+  }
+})();
+
+VM17010:97 [INV] v2026-05-01.1  dest=18007  CONFIRM=true
+VM17010:99 [INV] Pick the inventory-plan JSON file...
+Promise {<pending>}
+VM17010:123 [INV] loaded plan src=10216 dest=18007 (Arlington) -- 178 updates queued (183 total rows)
+VM17010:186 [INV] (1/178) part 37196132 950259020D30812: UPDATED min null->50 max null->500
+VM17010:186 [INV] (2/178) part 37196137 950240520SB0812: UPDATED min null->50 max null->500
+VM17010:186 [INV] (3/178) part 37196191 ANTI: UPDATED min null->10 max null->500
+VM17010:186 [INV] (4/178) part 37196143 950250540XE0812: UPDATED min null->100 max null->500
+VM17010:186 [INV] (5/178) part 37196139 950240530SB0812: UPDATED min null->50 max null->500
+VM17010:186 [INV] (6/178) part 37196141 950250530D30812: UPDATED min null->100 max null->500
+VM17010:186 [INV] (7/178) part 37196138 950250520SY0812: UPDATED min null->50 max null->500
+VM17010:186 [INV] (8/178) part 37196225 13CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (9/178) part 37196226 15CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (10/178) part 37196227 16CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (11/178) part 37196228 17CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (12/178) part 37196229 18CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (13/178) part 37196230 19CA: UPDATED min null->5 max null->5
+VM17010:186 [INV] (14/178) part 37196231 20CA: UPDATED min null->10 max null->10
+VM17010:186 [INV] (15/178) part 37196232 21CA: UPDATED min null->10 max null->10
+VM17010:186 [INV] (16/178) part 37196233 22CA: UPDATED min null->10 max null->10
+VM17010:186 [INV] (17/178) part 37196234 24CA: UPDATED min null->12 max null->12
+VM17010:186 [INV] (18/178) part 37196236 28CA: UPDATED min null->10 max null->10
+VM17010:186 [INV] (19/178) part 37196325 141: UPDATED min null->1 max null->1
+VM17010:186 [INV] (20/178) part 37196323 12B: UPDATED min null->1 max null->1
+VM17010:186 [INV] (21/178) part 37196326 16A: UPDATED min null->1 max null->1
+VM17010:186 [INV] (22/178) part 37196324 12E: UPDATED min null->1 max null->1
+VM17010:186 [INV] (23/178) part 37196322 10A: UPDATED min null->2 max null->2
+VM17010:186 [INV] (24/178) part 37196179 PA99117: UPDATED min null->1 max null->1
+VM17010:186 [INV] (25/178) part 37196189 PA99504: UPDATED min null->1 max null->1
+VM17010:186 [INV] (26/178) part 37196188 PA99486: UPDATED min null->1 max null->1
+VM17010:186 [INV] (27/178) part 37196185 PA99314: UPDATED min null->1 max null->1
+VM17010:186 [INV] (28/178) part 37196184 PA99294: UPDATED min null->1 max null->1
+VM17010:186 [INV] (29/178) part 37196183 PA99229: UPDATED min null->1 max null->1
+VM17010:186 [INV] (30/178) part 37196178 PA99115: UPDATED min null->1 max null->1
+VM17010:186 [INV] (31/178) part 37196177 PA99111: UPDATED min null->1 max null->1
+VM17010:186 [INV] (32/178) part 37196176 PA99097: UPDATED min null->1 max null->1
+VM17010:186 [INV] (33/178) part 37196275 PA99096: UPDATED min null->2 max null->2
+VM17010:186 [INV] (34/178) part 37196175 PA99078: UPDATED min null->1 max null->1
+VM17010:186 [INV] (35/178) part 37196274 PA99072: UPDATED min null->2 max null->2
+VM17010:186 [INV] (36/178) part 37196174 PA99071: UPDATED min null->1 max null->1
+VM17010:186 [INV] (37/178) part 37196173 PA99051: UPDATED min null->1 max null->1
+VM17010:186 [INV] (38/178) part 37196172 PA99050: UPDATED min null->1 max null->1
+VM17010:186 [INV] (39/178) part 37196190 PA9969: UPDATED min null->1 max null->1
+VM17010:186 [INV] (40/178) part 37196187 PA9943: UPDATED min null->2 max null->2
+VM17010:186 [INV] (41/178) part 37196186 PA9941: UPDATED min null->1 max null->1
+VM17010:186 [INV] (42/178) part 37196180 PA9920: UPDATED min null->1 max null->1
+VM17010:186 [INV] (43/178) part 37196171 PA6281: UPDATED min null->1 max null->1
+VM17010:186 [INV] (44/178) part 37196170 PA6279: UPDATED min null->1 max null->1
+VM17010:186 [INV] (45/178) part 37196273 PA6277: UPDATED min null->1 max null->1
+VM17010:186 [INV] (46/178) part 37196168 PA6200: UPDATED min null->1 max null->1
+VM17010:186 [INV] (47/178) part 37196167 PA6165: UPDATED min null->1 max null->1
+VM17010:186 [INV] (48/178) part 37196166 PA6163: UPDATED min null->1 max null->1
+VM17010:186 [INV] (49/178) part 37196272 PA6122: UPDATED min null->1 max null->1
+VM17010:186 [INV] (50/178) part 37196165 PA6121: UPDATED min null->1 max null->1
+VM17010:186 [INV] (51/178) part 37196164 PA6118: UPDATED min null->1 max null->1
+VM17010:186 [INV] (52/178) part 37196163 PA6116: UPDATED min null->1 max null->1
+VM17010:186 [INV] (53/178) part 37196162 PA6103: UPDATED min null->1 max null->1
+VM17010:186 [INV] (54/178) part 37196161 PA6100: UPDATED min null->2 max null->2
+VM17010:186 [INV] (55/178) part 37196160 PA6061: UPDATED min null->1 max null->1
+VM17010:186 [INV] (56/178) part 37196159 PA5833: UPDATED min null->1 max null->1
+VM17010:186 [INV] (57/178) part 37196158 PA5824: UPDATED min null->1 max null->1
+VM17010:186 [INV] (58/178) part 37196157 PA5819: UPDATED min null->2 max null->2
+VM17010:186 [INV] (59/178) part 37196156 PA5789: UPDATED min null->1 max null->1
+VM17010:186 [INV] (60/178) part 37196155 PA5787: UPDATED min null->1 max null->1
+VM17010:186 [INV] (61/178) part 37196154 PA5786: UPDATED min null->1 max null->1
+VM17010:186 [INV] (62/178) part 37196153 PA5780: UPDATED min null->1 max null->1
+VM17010:186 [INV] (63/178) part 37196152 PA5652: UPDATED min null->1 max null->1
+VM17010:186 [INV] (64/178) part 37196271 PA5649: UPDATED min null->1 max null->1
+VM17010:186 [INV] (65/178) part 37196151 PA5645: UPDATED min null->1 max null->1
+VM17010:186 [INV] (66/178) part 37196270 PA5592: UPDATED min null->1 max null->1
+VM17010:186 [INV] (67/178) part 37196150 PA5583: UPDATED min null->1 max null->1
+VM17010:186 [INV] (68/178) part 37196149 PA5582: UPDATED min null->1 max null->1
+VM17010:186 [INV] (69/178) part 37196148 PA5556: UPDATED min null->1 max null->1
+VM17010:186 [INV] (70/178) part 37196269 PA5463: UPDATED min null->1 max null->1
+VM17010:186 [INV] (71/178) part 37196268 PA5462: UPDATED min null->1 max null->1
+VM17010:186 [INV] (72/178) part 37196267 PA5432: UPDATED min null->1 max null->1
+VM17010:186 [INV] (73/178) part 37196266 PA5431: UPDATED min null->1 max null->1
+VM17010:186 [INV] (74/178) part 37196265 PA5323: UPDATED min null->1 max null->1
+VM17010:186 [INV] (75/178) part 37196147 PA5315: UPDATED min null->1 max null->1
+VM17010:186 [INV] (76/178) part 37196264 PA5192: UPDATED min null->1 max null->1
+VM17010:186 [INV] (77/178) part 37196263 PA4878: UPDATED min null->1 max null->1
+VM17010:186 [INV] (78/178) part 37196146 PA4838: UPDATED min null->2 max null->2
+VM17010:186 [INV] (79/178) part 37196145 PA4688: UPDATED min null->2 max null->2
+VM17010:186 [INV] (80/178) part 37196262 PA4675: UPDATED min null->1 max null->1
+VM17010:186 [INV] (81/178) part 37196144 PA4479: UPDATED min null->1 max null->1
+VM17010:186 [INV] (82/178) part 37196287 PO4476: UPDATED min null->12 max null->12
+VM17010:186 [INV] (83/178) part 37196194 PC4068: UPDATED min null->2 max null->2
+VM17010:186 [INV] (84/178) part 37196254 PC4479: UPDATED min null->2 max null->2
+VM17010:186 [INV] (85/178) part 37196195 PC4684: UPDATED min null->1 max null->1
+VM17010:186 [INV] (86/178) part 37196196 PC4761: UPDATED min null->1 max null->1
+VM17010:186 [INV] (87/178) part 37196197 PC4908: UPDATED min null->1 max null->1
+VM17010:186 [INV] (88/178) part 37196198 PC5490: UPDATED min null->1 max null->1
+VM17010:186 [INV] (89/178) part 37196255 PC5530: UPDATED min null->1 max null->1
+VM17010:186 [INV] (90/178) part 37196256 PC5661: UPDATED min null->1 max null->1
+VM17010:186 [INV] (91/178) part 37196257 PC5667: UPDATED min null->5 max null->5
+VM17010:186 [INV] (92/178) part 37196199 PC5676: UPDATED min null->1 max null->1
+VM17010:186 [INV] (93/178) part 37196218 PC5844: UPDATED min null->1 max null->1
+VM17010:186 [INV] (94/178) part 37196258 PC5864: UPDATED min null->1 max null->1
+VM17010:186 [INV] (95/178) part 37196200 PC5877: UPDATED min null->1 max null->1
+VM17010:186 [INV] (96/178) part 37196201 PC6067: UPDATED min null->1 max null->1
+VM17010:186 [INV] (97/178) part 37196202 PC6087: UPDATED min null->1 max null->1
+VM17010:186 [INV] (98/178) part 37196203 PC6099: UPDATED min null->1 max null->1
+VM17010:186 [INV] (99/178) part 37196204 PC6115: UPDATED min null->2 max null->2
+VM17010:186 [INV] (100/178) part 37196205 PC6156: UPDATED min null->1 max null->1
+VM17010:186 [INV] (101/178) part 37196206 PC6176: UPDATED min null->1 max null->1
+VM17010:186 [INV] (102/178) part 37196207 PC8222: UPDATED min null->1 max null->1
+VM17010:186 [INV] (103/178) part 37196215 PC9954: UPDATED min null->1 max null->1
+VM17010:186 [INV] (104/178) part 37196216 PC9977: UPDATED min null->2 max null->2
+VM17010:186 [INV] (105/178) part 37196208 PC99076: UPDATED min null->1 max null->1
+VM17010:186 [INV] (106/178) part 37196209 PC99099: UPDATED min null->1 max null->1
+VM17010:186 [INV] (107/178) part 37196210 PC99156: UPDATED min null->2 max null->2
+VM17010:186 [INV] (108/178) part 37196211 PC99157: UPDATED min null->1 max null->1
+VM17010:186 [INV] (109/178) part 37196219 PC99206C: UPDATED min null->1 max null->1
+VM17010:186 [INV] (110/178) part 37196220 PC99237C: UPDATED min null->1 max null->1
+VM17010:186 [INV] (111/178) part 37196222 PC99241C: UPDATED min null->1 max null->1
+VM17010:186 [INV] (112/178) part 37196214 PC99273: UPDATED min null->1 max null->1
+VM17010:186 [INV] (113/178) part 37196223 PC99334C: UPDATED min null->1 max null->1
+VM17010:186 [INV] (114/178) part 37196224 PC9978C: UPDATED min null->1 max null->1
+VM17010:186 [INV] (115/178) part 37196299 PO5610: UPDATED min null->6 max null->6
+VM17010:186 [INV] (116/178) part 37196253 2630035503: UPDATED min null->24 max null->24
+VM17010:186 [INV] (117/178) part 37196298 PO5609: UPDATED min null->12 max null->12
+VM17010:186 [INV] (118/178) part 37196297 PO5608: UPDATED min null->24 max null->24
+VM17010:186 [INV] (119/178) part 37196242 PO5607EX: UPDATED min null->4 max null->4
+VM17010:186 [INV] (120/178) part 37196241 PO5545EX: UPDATED min null->1 max null->1
+VM17010:186 [INV] (121/178) part 37196296 PO5505: UPDATED min null->6 max null->6
+VM17010:186 [INV] (122/178) part 37196295 PO5476: UPDATED min null->1 max null->1
+VM17010:186 [INV] (123/178) part 37196294 PO5401: UPDATED min null->1 max null->1
+VM17010:186 [INV] (124/178) part 37196293 PO5315: UPDATED min null->2 max null->2
+VM17010:186 [INV] (125/178) part 37196290 PO5247: UPDATED min null->4 max null->4
+VM17010:186 [INV] (126/178) part 37196289 PO4670: UPDATED min null->6 max null->6
+VM17010:186 [INV] (127/178) part 37196286 PO4459: UPDATED min null->12 max null->12
+VM17010:186 [INV] (128/178) part 37196285 PO4457: UPDATED min null->2 max null->2
+VM17010:186 [INV] (129/178) part 37196284 PO4011: UPDATED min null->1 max null->1
+VM17010:186 [INV] (130/178) part 37196279 PO2222: UPDATED min null->12 max null->12
+VM17010:186 [INV] (131/178) part 37196280 PO241: UPDATED min null->12 max null->12
+VM17010:186 [INV] (132/178) part 37196277 PO195: UPDATED min null->12 max null->12
+VM17010:186 [INV] (133/178) part 37196276 PO111: UPDATED min null->6 max null->6
+VM17010:186 [INV] (134/178) part 37196278 PO1A: UPDATED min null->1 max null->1
+VM17010:186 [INV] (135/178) part 37196238 PO99495: UPDATED min null->2 max null->2
+VM17010:186 [INV] (136/178) part 37196250 PO99527EX: UPDATED min null->1 max null->1
+VM17010:186 [INV] (137/178) part 37196248 PO99460EX: UPDATED min null->1 max null->1
+VM17010:186 [INV] (138/178) part 37196306 UPG64R: UPDATED min null->6 max null->6
+VM17010:186 [INV] (139/178) part 37196305 PO6311: UPDATED min null->12 max null->12
+VM17010:186 [INV] (140/178) part 37196239 UPG63R: UPDATED min null->6 max null->6
+VM17010:186 [INV] (141/178) part 37196246 PO6293EX: UPDATED min null->3 max null->3
+VM17010:186 [INV] (142/178) part 37196304 PO6291: UPDATED min null->2 max null->2
+VM17010:186 [INV] (143/178) part 37196245 PO6290EX: UPDATED min null->1 max null->1
+VM17010:186 [INV] (144/178) part 37196244 PO6288EX: UPDATED min null->1 max null->1
+VM17010:186 [INV] (145/178) part 37196303 PO6135: UPDATED min null->4 max null->4
+VM17010:186 [INV] (146/178) part 37196302 PO5895: UPDATED min null->1 max null->1
+VM17010:186 [INV] (147/178) part 37196301 PO5839: UPDATED min null->12 max null->12
+VM17010:186 [INV] (148/178) part 37196281 PO2500: UPDATED min null->1 max null->1
+VM17010:186 [INV] (149/178) part 37196213 PC99239: UPDATED min null->2 max null->2
+VM17010:186 [INV] (150/178) part 37196182 PA99223: UPDATED min null->1 max null->1
+VM17010:186 [INV] (151/178) part 37196283 PO4006: UPDATED min null->2 max null->2
+VM17010:186 [INV] (152/178) part 37196282 PO252: UPDATED min null->2 max null->2
+VM17010:186 [INV] (153/178) part 37196288 PO4651: UPDATED min null->3 max null->3
+VM17010:186 [INV] (154/178) part 37196291 PO5274: UPDATED min null->4 max null->4
+VM17010:186 [INV] (155/178) part 37196292 PO5288: UPDATED min null->3 max null->3
+VM17010:186 [INV] (156/178) part 37196243 PO6127EX: UPDATED min null->6 max null->6
+VM17010:186 [INV] (157/178) part 37196300 PO5702: UPDATED min null->12 max null->12
+VM17010:186 [INV] (158/178) part 37196247 PO6296EX: UPDATED min null->12 max null->12
+VM17010:186 [INV] (159/178) part 37196251 PO99602EX: UPDATED min null->6 max null->6
+VM17010:186 [INV] (160/178) part 37196249 PO99518EX: UPDATED min null->6 max null->6
+VM17010:186 [INV] (161/178) part 37196237 PO4610-HN1: UPDATED min null->10 max null->48
+VM17010:186 [INV] (162/178) part 37196181 PA99209: UPDATED min null->1 max null->1
+VM17010:186 [INV] (163/178) part 37196123 15576330000: UPDATED min null->4 max null->4
+VM17010:186 [INV] (164/178) part 37196124 15576460000: UPDATED min null->4 max null->4
+VM17010:186 [INV] (165/178) part 37196125 15577380000: UPDATED min null->4 max null->4
+VM17010:186 [INV] (166/178) part 37196127 15580090000: UPDATED min null->4 max null->4
+VM17010:186 [INV] (167/178) part 37196314 47G: UPDATED min null->1 max null->1
+VM17010:186 [INV] (168/178) part 37196318 51RG: UPDATED min null->2 max null->2
+VM17010:186 [INV] (169/178) part 37196310 121RG: UPDATED min null->1 max null->1
+VM17010:186 [INV] (170/178) part 37196311 24RPG: UPDATED min null->2 max null->2
+VM17010:186 [INV] (171/178) part 37196313 34GHR: UPDATED min null->1 max null->1
+VM17010:186 [INV] (172/178) part 37196319 65GHR: UPDATED min null->1 max null->1
+VM17010:186 [INV] (173/178) part 37196321 94RPG: UPDATED min null->1 max null->1
+VM17010:186 [INV] (174/178) part 37196312 25GA: UPDATED min null->1 max null->1
+VM17010:186 [INV] (175/178) part 37196315 48AGM: UPDATED min null->1 max null->1
+VM17010:186 [INV] (176/178) part 37196317 49AGM: UPDATED min null->1 max null->1
+VM17010:186 [INV] (177/178) part 37196316 48GHRA: UPDATED min null->1 max null->2
+VM17010:186 [INV] (178/178) part 37196320 90G: UPDATED min null->1 max null->1
+VM17010:203 [INV] ===== SUMMARY =====
+VM17010:204 (index)Value(index)Valuetotal178updated178dryRun0skipDestNowSet0error0Object
+VM17010:221 [INV] Wrote tekmetric-inventory-apply-10216-to-18007-20260501T163621.json to Downloads.
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+/admin/shop/18007/re…lumn&board=ACTIVE:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+js?id=G-N4QPY5HCYY&cx=c&_slc=1:202  POST https://analytics.google.com/g/collect?v=2&tid=G-N4QPY5HCYY&gtm=45je64t1v9124079961za20g&_p=1777640129039&_gaz=1&gcd=13l3l3l3l2l1&npa=0&dma=0&_eu=EBAIAGQ&are=1&cid=411577897.1777481276&frm=0&ir=1&pscdl=noapi&rcb=10&sr=1536x864&uaa=x86&uab=64&uafvl=Google%2520Chrome%3B147.0.7727.56%7CNot.A%252FBrand%3B8.0.0.0%7CChromium%3B147.0.7727.56&uam=&uamb=0&uap=Windows&uapv=19.0.0&uaw=0&ul=en-us&gaf=2&_s=10&tag_exp=0~115616985~115938465~115938469~116363097~117384405&dl=https%3A%2F%2Fshop.tekmetric.com%2Fadmin%2Fshop%2F18007%2Fappointments%3Fview%3Dweek%26dayViewResource%3DDEFAULT&dp=%2Fadmin%2Fshop%2F18008%2Frepair-orders&dt=Estimates&sid=1777652123&sct=7&seg=1&_tu=wAQ&en=page_view&_ee=1&_et=4278&tfd=13275970 net::ERR_CERT_AUTHORITY_INVALID
+md @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:202
+pl @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:358
+aP @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:828
+dP @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:828
+jP.O @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:834
+jP.add @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:835
+k.Yn @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:853
+k.st @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:853
+(anonymous) @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:851
+Jl @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:369
+so @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:392
+(anonymous) @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:851
+c @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:781
+kL @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:781
+k.rt @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:851
+b @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:855
+u @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:502
+Pl @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:371
+du @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:502
+cu.flush @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:506
+cu.push @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:504
+Tt @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:498
+YB.event @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:658
+oC @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:663
+c.push @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:668
+gC.push @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:669
+wC @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:670
+eD @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:685
+b.push @ js?id=G-N4QPY5HCYY&cx=c&_slc=1:686
+Sa @ analytics.js:51
+Ha.D @ analytics.js:47
+pc.send @ analytics.js:87
+X.b.<computed> @ analytics.js:68
+Z.v @ analytics.js:102
+Z.D @ analytics.js:101
+N @ analytics.js:103
+pb @ main-CVQgBt6W.js:276
+sm @ main-CVQgBt6W.js:276
+BU @ main-CVQgBt6W.js:276
+mg0 @ main-CVQgBt6W.js:276
+(anonymous) @ main-CVQgBt6W.js:276
+nl @ main-CVQgBt6W.js:49
+Fp @ main-CVQgBt6W.js:49
+Dm @ main-CVQgBt6W.js:49
+qc @ main-CVQgBt6W.js:49
+Xz @ main-CVQgBt6W.js:49
+vs @ main-CVQgBt6W.js:47
+(anonymous) @ main-CVQgBt6W.js:49
+main-CVQgBt6W.js:268 Event "payments_service_status" doesn't have any listeners. Putting it in the stack.
