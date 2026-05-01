@@ -27,7 +27,7 @@
  * After it finishes successfully, paste 03-load-extras-dest.js.
  */
 (async () => {
-  const VERSION = '2026-05-01.11-real-labor-rate-id';
+  const VERSION = '2026-05-01.10-self-healing';
 
   // ============================================================
   // SAFETY GATE — defaults to DRY RUN. Flip to true to actually
@@ -133,13 +133,6 @@
     jobCreate: (shopId) => `/api/shop/${shopId}/job`,
     // Status PUT — used by auto-rollback to set partial ROs to DELETED.
     roStatus: (roId) => `/api/repair-order/${roId}/status`,
-    // 2026-05-01.11: list this shop's labor rates. HAR-confirmed shape:
-    // [{ id: 540117, name: "Default", laborRate: 13500 /* cents */, order: 0 }, ...]
-    // The previous auto-discovery scanned existing dest ROs and pulled
-    // `ro.laborRate` (a NUMBER), assuming it was a row id. It is not — it
-    // is the rate VALUE in cents. That mistake passed `id: 16000` ($160.00)
-    // into createRo and earned us 21 × "404 Internal server error".
-    laborRatesList: (shopId) => `/api/shop/${shopId}/labor-rates`,
   };
 
   // appointmentOption: GET returns string enum, POST expects numeric Long.
@@ -766,37 +759,25 @@
   // shop-with-overrides.js does: read the dest Job Board, fetch detail
   // for the first RO with a labor rate, and reuse that valid dest ID for
   // all migrated ROs.
-  // 2026-05-01.11: read labor rates DIRECTLY from /api/shop/{id}/labor-rates
-  // instead of inferring from existing RO summaries. The summary's
-  // `ro.laborRate` field is the rate VALUE in cents, not the row ID, and
-  // misreading it as an ID is exactly what 404'd all 21 createRo calls in
-  // the v.10 run on shop 18008. The dedicated endpoint returns objects
-  // shaped { id, name, laborRate, order } so .id is unambiguous.
   let cachedDestLaborRateId = null;
   if (!USE_SOURCE_IDS_DIRECT) {
     try {
-      const rates = await jsonFetch(ENDPOINTS.laborRatesList(destShopId), token);
-      const list = Array.isArray(rates) ? rates : (rates.content || []);
-      // Prefer the rate named "Default" (or order:0) so the migrated ROs
-      // match what a brand-new Tekmetric RO uses when a tech clicks "+ RO".
-      const def = list.find((r) => r && (String(r.name).toLowerCase() === 'default' || r.order === 0));
-      const pick = def || list[0];
-      if (pick && pick.id) {
-        cachedDestLaborRateId = pick.id;
-        console.log(
-          `[LOAD-CORE] ✓ resolved dest labor-rate id = ${pick.id} ` +
-          `(name="${pick.name}", value=${pick.laborRate} cents) for shop ${destShopId}`
-        );
+      const destBoard = await jsonFetch(ENDPOINTS.jobBoardList(destShopId), token);
+      const destBoardRos = Array.isArray(destBoard) ? destBoard : (destBoard.repairOrders || destBoard.content || []);
+      for (const ro of destBoardRos) {
+        const lrFromSummary = (typeof ro.laborRate === 'number') ? ro.laborRate : (ro.laborRate && ro.laborRate.id);
+        if (lrFromSummary) { cachedDestLaborRateId = lrFromSummary; break; }
+        try {
+          const detail = await jsonFetch(ENDPOINTS.repairOrderDetail(destShopId, ro.id), token);
+          const lr = (typeof detail.laborRate === 'number') ? detail.laborRate : (detail.laborRate && detail.laborRate.id);
+          if (lr) { cachedDestLaborRateId = lr; break; }
+        } catch (_) {}
       }
-    } catch (e) {
-      console.warn(`[LOAD-CORE] labor-rates GET failed: ${e.message}`);
-    }
-    if (!cachedDestLaborRateId) {
-      throw new Error(
-        `Could not resolve a labor-rate id for dest shop ${destShopId}. ` +
-        `GET /api/shop/${destShopId}/labor-rates returned no usable rows. ` +
-        `Add a labor rate manually in the Tekmetric UI (Settings → Labor Rates), then re-run.`
-      );
+    } catch (_) {}
+    if (cachedDestLaborRateId) {
+      console.log(`[LOAD-CORE] ✓ auto-discovered dest labor-rate id = ${cachedDestLaborRateId} (shop ${destShopId})`);
+    } else {
+      console.warn(`[LOAD-CORE] ⚠️  Could not auto-discover a dest labor-rate id from any RO on shop ${destShopId}'s Job Board. Will omit laborRate from create payload — Tekmetric should fall back to the shop's default labor rate. If the create still 403s, manually create one RO in shop ${destShopId} via the UI, then re-run this snippet.`);
     }
   }
 
@@ -1232,3 +1213,532 @@
   console.log(`[LOAD-CORE] Wrote mapping file: ${fname}`);
   console.log('[LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.');
 })();
+
+VM13347:399 [Tekmetric Migration LOAD-CORE v2026-05-01.10-self-healing] starting…
+VM13347:248 [LOAD-CORE] Pick the tekmetric-open-jobs-dump-*.json file produced by Snippet 1
+VM13347:249 [LOAD-CORE] (file picker is in the top-left corner of the page)
+Promise {<pending>}
+VM13347:413 [LOAD-CORE] Loaded dump: tekmetric-open-jobs-dump-Recent-ROs1Casey-Automotive-Streamwood-0-20260501-054205.json (21 ROs from Recent ROs1Casey Automotive Streamwood 0Message00Active Time id=10214)
+VM13347:426 [LOAD-CORE] Capturing x-auth-token from live session…
+VM13347:438 [LOAD-CORE] Pre-scanning destination Job Board for [migrated from RO#X] markers…
+VM13347:504 [LOAD-CORE] Pre-scan: doing deterministic concern check for 1 dest RO(s) (detail+concerns endpoint)…
+VM13347:532 [LOAD-CORE] Pre-scan found 0 already-migrated RO(s) in destination.
+VM13347:540 [LOAD-CORE] Plan:
+VM13347:541 (index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm(index)sourceShopsourceShopIddestShopdestShopIdrosInDumprosWithDumpErrorrosAlreadyMigratedrosWillCreatejobsWillCreatezeroPartCostconfirm0'Recent ROs1Casey Automotive Streamwood 0Message00Active Time'10214'1Casey Automotive - Streamwood 0Message00Active Time ClocksB''18008'21002174truetrueArray(1)
+VM13347:555 [LOAD-CORE] First few that will be created:
+VM13347:556 (index)sourceRocustomervehiclejobs(index)sourceRocustomervehiclejobs02721265'LONNIE ROPP''2004 Toyota Highlander'112720892'LEWIS TREE null''2009 Mitsubishi Outlander'722721001'AARON SALGADO''2015 Ram 1500'332721060'BODY WERKS null''2002 Ford Thunderbird'542721063'DALE PARSONS''2018 Hyundai Tucson'2Array(5)
+VM13347:570 [LOAD-CORE] ⚠️  RE-RUN SAFETY DISABLED in this version. Migration marker is no longer written to concerns. If you re-run 02 for the same source-shop dump, you WILL create duplicate ROs in the destination. Run once, verify, do not re-paste.
+(anonymous) @ VM13347:570
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:778 [LOAD-CORE] ✓ auto-discovered dest labor-rate id = 16000 (shop 18008)
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721265: customer=106147250 vehicle=153329945 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721265: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721265 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2720892: customer=106157573 vehicle=153313699 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2720892: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2720892 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721001: customer=106163060 vehicle=153343794 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721001: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721001 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721060: customer=106152290 vehicle=153332965 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721060: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721060 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721063: customer=106170522 vehicle=153315105 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721063: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721063 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721079: customer=106168717 vehicle=153346152 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721079: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: 'Returning Customer', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721079 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721143: customer=106152944 vehicle=153334078 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721143: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721143 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721170: customer=106165706 vehicle=153340646 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721170: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721170 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721175: customer=106144769 vehicle=153286468 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721175: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721175 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721193: customer=106155843 vehicle=153305136 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721193: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721193 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721205: customer=106160250 vehicle=153325323 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721205: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721205 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721209: customer=106169374 vehicle=153298151 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721209: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721209 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721214: customer=106143775 vehicle=153281474 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721214: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721214 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721233: customer=106155497 vehicle=153338176 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721233: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721233 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721245: customer=106178587 vehicle=153327621 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721245: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721245 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721246: customer=106133773 vehicle=153285475 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721246: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721246 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721247: customer=106144323 vehicle=153335228 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721247: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721247 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721258: customer=106162022 vehicle=153290459 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721258: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721258 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721262: customer=106151365 vehicle=153357547 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721262: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721262 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721263: customer=106156913 vehicle=153309368 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721263: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721263 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1015 [LOAD-CORE] resolved IDs for source RO #2721264: customer=106142449 vehicle=153311341 laborRate=16000
+VM13347:1043 [LOAD-CORE] createRo payload for source RO #2721264: {shop: {…}, appointmentOption: 2, odometerInop: false, leadSource: '', vehicle: {…}, …}
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 404 (Not Found)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1049
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1061 [LOAD-CORE] createRo failed (404), retrying without laborRate…
+(anonymous) @ VM13347:1061
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13023:118  POST https://shop.tekmetric.com/api/repair-order/create 400 (Bad Request)
+patchedFetch @ VM13023:118
+await in patchedFetch
+jsonFetch @ VM13347:191
+(anonymous) @ VM13347:1065
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1176 [LOAD-CORE] FAILED RO #2721264 at step "createRo": 400  on /api/repair-order/create :: {"type":"ERROR","message":"Invalid repair order","data":null,"details":{"laborRate":"Labor Rate is required"}}
+(anonymous) @ VM13347:1176
+await in (anonymous)
+(anonymous) @ VM13347:1215
+VM13347:1188 [LOAD-CORE] Successes:
+VM13347:1189 
+VM13347:1191 [LOAD-CORE] Failures:
+VM13347:1192 (index)sourceRosourceRoIdstepstatuserror(index)sourceRosourceRoIdstepstatuserror02721265324433591'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'12720892321023374'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'22721001321701729'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'32721060322599022'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'42721063322618310'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'52721079322765797'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'62721143323391292'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'72721170323628624'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'82721175323646078'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'92721193324010591'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'102721205324031687'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'112721209324050816'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'122721214324104201'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'132721233324204864'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'142721245324342162'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'152721246324342598'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'162721247324345536'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'172721258324403473'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'182721262324414665'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'192721263324418417'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'202721264324429491'createRo'400'{"type":"ERROR","message":"Invalid repair order","…"details":{"laborRate":"Labor Rate is required"}}'Array(21)
+VM13347:1213 [LOAD-CORE] Wrote mapping file: tekmetric-migration-mapping-20260501-062059.json
+VM13347:1214 [LOAD-CORE] Done. Now paste 03-load-extras-dest.js (still on the destination shop) to copy inspections + photos.
