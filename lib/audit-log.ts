@@ -12,7 +12,8 @@ export type AuditAction =
   | "shop_settings_change"
   | "user_role_change"
   | "api_key_view"
-  | "data_export";
+  | "data_export"
+  | "build_ro_from_vhi";
 
 export interface AuditLogEntry {
   action: AuditAction;

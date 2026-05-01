@@ -466,6 +466,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "BUILD_RO_FROM_VHI") {
+    console.log("[Build RO from VHI] Preview requested");
+    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+    const ctx = message.context || currentSmsContext;
+    if (tabId && ctx) ctx._tabId = tabId;
+
+    if (!ctx?.roId || !ctx?.vin || !ctx?.shopId) {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Missing RO context for build", type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED" }).catch(() => {});
+      }
+      sendResponse({ success: false, error: "Missing context" });
+      return false;
+    }
+
+    fetchBuildRoFromVhiPreview(ctx).then(result => {
+      if (tabId) {
+        if (result.success && result.proposed && result.proposed.length > 0) {
+          chrome.tabs.sendMessage(tabId, {
+            action: "BUILD_RO_FROM_VHI_PREVIEW",
+            preview: result,
+            context: ctx,
+          }).catch(() => {});
+        } else if (result.success && (!result.proposed || result.proposed.length === 0)) {
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "No overdue or due-soon services found in VHI", type: "info" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED" }).catch(() => {});
+        } else {
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: result.error || "Build failed", type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      console.error("[Build RO from VHI] Preview error:", err);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Build error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
+  if (message.action === "APPLY_BUILD_RO_FROM_VHI") {
+    console.log("[Build RO from VHI] Apply requested");
+    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+    const ctx = message.context || currentSmsContext;
+    const selected = message.selected || [];
+    const markerPrefix = message.markerPrefix || "[ai-suggested from VHI";
+
+    if (!ctx?.roId || selected.length === 0) {
+      sendResponse({ success: false, error: "Missing context or no selection" });
+      return false;
+    }
+
+    applyBuildRoFromVhi(ctx, selected, markerPrefix, tabId).then(result => {
+      if (!tabId) return;
+      if (result.success) {
+        // Let the content script render a single rich toast that names failing items.
+        chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_COMPLETE", result }).catch(() => {});
+      } else {
+        chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED", error: result.error || "Build failed" }).catch(() => {});
+      }
+    }).catch(err => {
+      console.error("[Build RO from VHI] Apply error:", err);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "BUILD_RO_FROM_VHI_FAILED", error: "Build error: " + err.message }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
   if (message.action === "CATEGORY_CHANGED") {
     console.log("[LaborRate] Job category changed:", message.jobName, "→", message.newCategory);
     if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId) {
@@ -1942,6 +2014,371 @@ async function prefillDviInspection(context, inspId, tabId) {
     summary: prefillData.summary,
     vehicle: prefillData.vehicle,
     score: prefillData.score,
+  };
+}
+
+// ==================== BUILD RO FROM VHI ====================
+
+async function fetchBuildRoFromVhiPreview(context) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
+  if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
+  if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
+
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+
+  let preview;
+  try {
+    const res = await fetch(`${mosApiUrl}/api/extension/build-ro-from-vhi`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vin: context.vin,
+        smsShopId: shopId,
+        provider: context.provider || "tekmetric",
+        mileage: context.mileage,
+        roId: context.roId || null,
+        vehicleId: context.vehicleId || null,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[Build RO from VHI] Preview API error ${res.status}:`, text.substring(0, 200));
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch (_) {}
+      return { success: false, error: parsed?.error || `VHI preview failed (${res.status})` };
+    }
+
+    preview = await res.json();
+  } catch (err) {
+    return { success: false, error: "VHI preview failed: " + err.message };
+  }
+
+  if (!preview.success) {
+    return { success: false, error: preview.error || "No VHI data available" };
+  }
+
+  return preview;
+}
+
+async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
+  await _stateReady;
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  if (!context?.roId) return { success: false, error: "No RO ID in context" };
+
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+  if (!Array.isArray(selected) || selected.length === 0) {
+    return { success: false, error: "No items selected" };
+  }
+
+  // Build a regex from the configured marker prefix so this stays in sync
+  // with the server's MARKER_PREFIX (`[ai-suggested from VHI`).
+  const prefix = markerPrefix || "[ai-suggested from VHI";
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markerRegex = new RegExp(`${escapedPrefix}:([^\\]]+)\\]`);
+
+  // 1. Fetch existing concerns + jobs to detect already-stamped items (idempotency)
+  let existingConcernTags = new Set();
+  let existingJobTags = new Set();
+
+  try {
+    const concernsRes = await tekmetricFetchWithBackoff(
+      `${baseUrl}/api/repair-orders/${context.roId}/customer-concerns`,
+      {
+        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+      },
+      `build-ro-from-vhi GET concerns ${context.roId}`
+    );
+    if (concernsRes.ok) {
+      const data = await concernsRes.json();
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      for (const c of list) {
+        const text = c?.concern || "";
+        const m = text.match(markerRegex);
+        if (m) existingConcernTags.add(m[1]);
+      }
+    }
+  } catch (err) {
+    console.warn("[Build RO from VHI] Failed to fetch existing concerns:", err.message);
+  }
+
+  try {
+    const estRes = await tekmetricFetchWithBackoff(
+      `${baseUrl}/api/repair-order/${context.roId}/estimate`,
+      {
+        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+      },
+      `build-ro-from-vhi GET estimate ${context.roId}`
+    );
+    if (estRes.ok) {
+      const estData = await estRes.json();
+      const estimate = estData?.data && estData?.type ? estData.data : estData;
+      const jobs = (estimate?.jobs || []).filter(j => !j?.archived);
+      for (const j of jobs) {
+        const m = (j?.name || "").match(markerRegex);
+        if (m) existingJobTags.add(m[1]);
+      }
+    }
+  } catch (err) {
+    console.warn("[Build RO from VHI] Failed to fetch existing jobs:", err.message);
+  }
+
+  // 2. Fetch RO metadata for laborRate (used on populated jobs)
+  let laborRate = 15000;
+  try {
+    const roRes = await tekmetricFetchWithBackoff(
+      `${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`,
+      {
+        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+      },
+      `build-ro-from-vhi GET ro ${context.roId}`
+    );
+    if (roRes.ok) {
+      const roData = await roRes.json();
+      const ro = roData?.data && roData?.type ? roData.data : roData;
+      if (typeof ro.laborRate === "number") {
+        laborRate = ro.laborRate;
+      } else if (ro.laborRate?.rate != null) {
+        laborRate = ro.laborRate.rate;
+      }
+    }
+  } catch (err) {
+    console.warn("[Build RO from VHI] Failed to fetch RO metadata, using default labor rate:", err.message);
+  }
+
+  // 3. For each selected item, create concern + two-step job (skip if already stamped)
+  const results = [];
+  let added = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (let i = 0; i < selected.length; i++) {
+    const item = selected[i];
+    const sk = item.serviceKey;
+
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        action: "BUILD_RO_FROM_VHI_PROGRESS",
+        index: i,
+        total: selected.length,
+        title: item.title,
+      }).catch(() => {});
+    }
+
+    const result = {
+      serviceKey: sk,
+      title: item.title,
+      status: item.status,
+      concernCreated: false,
+      jobCreated: false,
+      jobId: null,
+      outcome: "pending",
+      error: null,
+    };
+
+    if (existingConcernTags.has(sk) && existingJobTags.has(sk)) {
+      result.outcome = "skipped_existing";
+      skipped++;
+      results.push(result);
+      continue;
+    }
+
+    // Create concern (only if not already present)
+    if (!existingConcernTags.has(sk)) {
+      try {
+        const cRes = await tekmetricFetchWithBackoff(
+          `${baseUrl}/api/repair-orders/${context.roId}/customer-concerns`,
+          {
+            method: "POST",
+            headers: {
+              "x-auth-token": smsTokens.tekmetric,
+              "content-type": "application/json",
+              accept: "application/json",
+            },
+            body: JSON.stringify({ concern: item.concern }),
+          },
+          `build-ro-from-vhi POST concern ${sk}`
+        );
+        if (cRes.ok) {
+          result.concernCreated = true;
+          existingConcernTags.add(sk);
+        } else {
+          const txt = await cRes.text();
+          result.outcome = "failed";
+          result.error = `concern create ${cRes.status}: ${txt.substring(0, 200)}`;
+          failed++;
+          results.push(result);
+          continue;
+        }
+      } catch (err) {
+        result.outcome = "failed";
+        result.error = "concern create error: " + err.message;
+        failed++;
+        results.push(result);
+        continue;
+      }
+    }
+
+    // Create job (only if not already present) — two-step
+    if (!existingJobTags.has(sk)) {
+      let emptyJob;
+      try {
+        const emptyRes = await tekmetricFetchWithBackoff(
+          `${baseUrl}/api/shop/${shopId}/job`,
+          {
+            method: "POST",
+            headers: {
+              "x-auth-token": smsTokens.tekmetric,
+              "content-type": "application/json",
+              accept: "application/json",
+            },
+            body: JSON.stringify({
+              name: item.job?.name || item.title,
+              repairOrderId: parseInt(context.roId),
+              syncPartsAttachedToNonQuotedOrders: false,
+            }),
+          },
+          `build-ro-from-vhi POST empty-job ${sk}`
+        );
+        if (!emptyRes.ok) {
+          const txt = await emptyRes.text();
+          result.outcome = "failed";
+          result.error = `empty job ${emptyRes.status}: ${txt.substring(0, 200)}`;
+          failed++;
+          results.push(result);
+          continue;
+        }
+        const j = await emptyRes.json();
+        emptyJob = j?.data && j?.type ? j.data : j;
+      } catch (err) {
+        result.outcome = "failed";
+        result.error = "empty job error: " + err.message;
+        failed++;
+        results.push(result);
+        continue;
+      }
+
+      const newJobId = emptyJob.id;
+      const populated = { ...emptyJob };
+      populated.name = item.job?.name || item.title;
+      populated.note = item.job?.note || null;
+      // Force null cross-shop-style entity refs (technician, laborMatrixId)
+      populated.technician = null;
+      populated.parts = (item.job?.parts || []).map((p) => ({
+        tempId: Math.random(),
+        jobId: newJobId,
+        partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: "PART" },
+        name: p.name || "",
+        partNumber: p.partNumber || "",
+        position: p.position || "",
+        quantity: p.quantity ?? 1,
+        cost: p.cost ?? 0,
+        retail: p.retail ?? 0,
+        oemPartNumber: p.oemPartNumber || "",
+      }));
+      populated.labor = (item.job?.labor || []).map((l) => ({
+        tempId: Math.random(),
+        jobId: newJobId,
+        name: l.name || "Labor",
+        hours: parseFloat(l.hours) || 0,
+        rate: laborRate,
+        autoApplyLaborMatrixId: null,
+        technician: null,
+      }));
+      populated.discounts = [];
+      populated.fees = [];
+      populated.smartJobIds = [];
+      populated.smartJobs = [];
+      populated.laborTechnicians = [];
+
+      try {
+        const popRes = await tekmetricFetchWithBackoff(
+          `${baseUrl}/api/shop/${shopId}/job`,
+          {
+            method: "POST",
+            headers: {
+              "x-auth-token": smsTokens.tekmetric,
+              "content-type": "application/json",
+              accept: "application/json",
+            },
+            body: JSON.stringify(populated),
+          },
+          `build-ro-from-vhi POST populate-job ${sk}`
+        );
+        if (!popRes.ok) {
+          const txt = await popRes.text();
+          result.outcome = "failed";
+          result.error = `populate job ${popRes.status}: ${txt.substring(0, 200)}`;
+          failed++;
+          results.push(result);
+          continue;
+        }
+        result.jobCreated = true;
+        result.jobId = newJobId;
+        existingJobTags.add(sk);
+      } catch (err) {
+        result.outcome = "failed";
+        result.error = "populate job error: " + err.message;
+        failed++;
+        results.push(result);
+        continue;
+      }
+    }
+
+    result.outcome = result.concernCreated || result.jobCreated ? "added" : "skipped_existing";
+    if (result.outcome === "added") added++;
+    else skipped++;
+    results.push(result);
+
+    // gentle pacing
+    await new Promise(r => setTimeout(r, 80));
+  }
+
+  // 4. Send audit log
+  try {
+    await fetch(`${mosApiUrl}/api/extension/build-ro-from-vhi/log`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        smsShopId: shopId,
+        provider: context.provider || "tekmetric",
+        roId: context.roId,
+        roNumber: context.roNumber || null,
+        vin: context.vin,
+        summary: { selected: selected.length, added, skipped, failed },
+        items: results,
+      }),
+    });
+  } catch (err) {
+    console.warn("[Build RO from VHI] Audit log post failed:", err.message);
+  }
+
+  // The originating tab will reload itself in response to the COMPLETE
+  // message; no global JOB_CREATED broadcast (which would spam other open
+  // Tekmetric tabs with a misleading "Job added: undefined" toast).
+
+  const failedItems = results
+    .filter((r) => r.outcome === "failed")
+    .map((r) => ({ title: r.title, serviceKey: r.serviceKey, error: r.error }));
+
+  return {
+    success: true,
+    added,
+    skipped,
+    failed,
+    selected: selected.length,
+    results,
+    failedItems,
   };
 }
 

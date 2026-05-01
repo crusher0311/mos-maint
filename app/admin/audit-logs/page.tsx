@@ -16,6 +16,7 @@ const ACTION_OPTIONS: Array<{ value: "" | AuditAction; label: string }> = [
   { value: "user_role_change", label: "User role change" },
   { value: "api_key_view", label: "API key view" },
   { value: "data_export", label: "Data export" },
+  { value: "build_ro_from_vhi", label: "Build RO from VHI" },
 ];
 
 const DAYS_OPTIONS = [1, 7, 30, 90];
@@ -35,6 +36,7 @@ const ACTION_BADGE_CLASS: Record<string, string> = {
   user_role_change: "bg-orange-100 text-orange-800",
   api_key_view: "bg-pink-100 text-pink-800",
   data_export: "bg-teal-100 text-teal-800",
+  build_ro_from_vhi: "bg-purple-100 text-purple-800",
 };
 
 function formatTarget(log: AuditLogEntry): string {
@@ -55,6 +57,16 @@ function formatDetails(log: AuditLogEntry): string {
       return `${revoked} session${revoked === 1 ? "" : "s"} revoked`;
     }
     return "Password force-reset";
+  }
+  if (log.action === "build_ro_from_vhi") {
+    const s = log.details?.summary || {};
+    const ro = log.details?.roNumber || log.details?.roId;
+    const parts: string[] = [];
+    if (ro) parts.push(`RO ${ro}`);
+    if (typeof s.added === "number") parts.push(`${s.added} added`);
+    if (typeof s.skipped === "number") parts.push(`${s.skipped} skipped`);
+    if (typeof s.failed === "number" && s.failed > 0) parts.push(`${s.failed} failed`);
+    return parts.join(" · ") || "—";
   }
   if (!log.details || Object.keys(log.details).length === 0) return "—";
   try {

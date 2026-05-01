@@ -508,6 +508,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "BUILD_RO_FROM_VHI_PREVIEW") {
+    console.log("[MOS Tools] Showing build-RO-from-VHI modal:", message.preview?.proposed?.length, "items");
+    showBuildRoFromVhiModal(message.preview, message.context);
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "BUILD_RO_FROM_VHI_PROGRESS") {
+    const modal = document.getElementById('mos-build-ro-vhi-modal');
+    if (modal) {
+      const applyBtn = modal.querySelector('button[data-mos-apply-build-ro="1"]');
+      if (applyBtn) {
+        const total = message.total || 0;
+        const cur = (message.index || 0) + 1;
+        applyBtn.textContent = `Adding ${cur}/${total}…`;
+      }
+    }
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "BUILD_RO_FROM_VHI_COMPLETE") {
+    console.log("[MOS Tools] Build RO from VHI complete:", message.result);
+    resetBuildRoFromVhiButton();
+    const modal = document.getElementById('mos-build-ro-vhi-modal');
+    if (modal) modal.remove();
+    const r = message.result || {};
+    const added = r.added || 0;
+    const skipped = r.skipped || 0;
+    const failed = r.failed || 0;
+    const failedItems = Array.isArray(r.failedItems) ? r.failedItems : [];
+
+    if (added > 0) {
+      let msg = `Added ${added} item${added === 1 ? '' : 's'} to RO`;
+      if (skipped > 0) msg += ` · ${skipped} already present`;
+      if (failed > 0) {
+        const names = failedItems.slice(0, 2).map(f => f.title).filter(Boolean);
+        msg += ` · ${failed} failed`;
+        if (names.length) msg += ` (${names.join(', ')}${failed > names.length ? '…' : ''})`;
+      }
+      showToast(msg, failed > 0 ? 'warning' : 'success');
+    } else if (skipped > 0 && failed === 0) {
+      showToast(`All ${skipped} item${skipped === 1 ? '' : 's'} already on this RO — nothing added`, 'info');
+    } else if (failed > 0) {
+      const names = failedItems.slice(0, 2).map(f => f.title).filter(Boolean);
+      const detail = names.length ? `: ${names.join(', ')}${failed > names.length ? '…' : ''}` : '';
+      showToast(`Failed to add ${failed} item${failed === 1 ? '' : 's'}${detail}`, 'error');
+    } else {
+      showToast('No items added', 'info');
+    }
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 1800);
+    sendResponse({ success: true });
+    return false;
+  }
+
+  if (message.action === "BUILD_RO_FROM_VHI_FAILED") {
+    resetBuildRoFromVhiButton();
+    const modal = document.getElementById('mos-build-ro-vhi-modal');
+    if (modal) modal.remove();
+    // Only show a toast here when caller passed explicit error text;
+    // no-op / informational paths emit their own SHOW_TOAST.
+    if (message.error) {
+      showToast(message.error, 'error');
+    }
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "INJECT_CONCERN_TEXT") {
     console.log("[MOS Tools] Injecting concern text into RO");
     const injected = injectConcernText(message.text);
@@ -1019,6 +1090,7 @@ function checkAndInjectButton() {
     fetchShopFeatures(context.shopId, (features) => {
       if (features.dvi_prefill) setTimeout(injectPrefillButton, 200);
       if (features.enhance_notes) setTimeout(injectEnhanceButton, 400);
+      if (features.dvi_prefill) setTimeout(injectBuildRoFromVhiButton, 600);
     });
   } else {
     const existingPrefill = document.getElementById('mos-prefill-dvi-btn');
@@ -1029,6 +1101,10 @@ function checkAndInjectButton() {
     if (existingEnhance) existingEnhance.remove();
     enhanceButtonInjected = false;
     enhanceInFlight = false;
+    const existingBuild = document.getElementById('mos-build-ro-vhi-btn');
+    if (existingBuild) existingBuild.remove();
+    buildRoFromVhiButtonInjected = false;
+    buildRoFromVhiInFlight = false;
     cachedFeatures = null;
   }
 }
@@ -1456,6 +1532,302 @@ function resetPrefillButton() {
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
   }
+}
+
+// ==================== BUILD RO FROM VHI ====================
+let buildRoFromVhiButtonInjected = false;
+let buildRoFromVhiInFlight = false;
+
+function injectBuildRoFromVhiButton() {
+  if (buildRoFromVhiButtonInjected) return;
+  if (document.getElementById('mos-build-ro-vhi-btn')) {
+    buildRoFromVhiButtonInjected = true;
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId) return;
+
+  const prefillBtn = document.getElementById('mos-prefill-dvi-btn');
+  const targetContainer = prefillBtn?.parentElement;
+  if (!targetContainer) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'mos-build-ro-vhi-btn';
+  btn.title = 'Build estimate from VHI (overdue + due-soon services)';
+  btn.type = 'button';
+  // Use a simple emoji-style SVG fallback so we don't require a new icon asset.
+  btn.innerHTML = `
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="9" y1="13" x2="15" y2="13"/>
+      <line x1="9" y1="17" x2="15" y2="17"/>
+      <line x1="12" y1="10" x2="12" y2="10.01"/>
+    </svg>`;
+
+  Object.assign(btn.style, {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
+    padding: '2px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    marginLeft: '6px',
+    transition: 'all 0.2s',
+  });
+
+  btn.addEventListener('mouseenter', () => { btn.style.opacity = '0.7'; });
+  btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleBuildRoFromVhi(btn);
+  });
+
+  targetContainer.appendChild(btn);
+  buildRoFromVhiButtonInjected = true;
+  console.log('[MOS Tools] Build RO from VHI button injected');
+}
+
+function handleBuildRoFromVhi(buttonEl) {
+  if (buildRoFromVhiInFlight) {
+    showToast('Build already in progress', 'info');
+    return;
+  }
+
+  const context = detectContext();
+  if (!context.roId || !context.shopId) {
+    showToast('No repair order detected', 'error');
+    return;
+  }
+  if (!context.vin) {
+    showToast('No VIN detected — cannot build from VHI', 'error');
+    return;
+  }
+  if (!context.mileage) {
+    showToast('No mileage detected — cannot build from VHI', 'error');
+    return;
+  }
+
+  buildRoFromVhiInFlight = true;
+  buttonEl.disabled = true;
+  buttonEl.style.opacity = '0.5';
+  buttonEl.style.cursor = 'wait';
+
+  showToast('Loading VHI suggestions...', 'info');
+
+  safeSendMessage({
+    action: 'BUILD_RO_FROM_VHI',
+    context: {
+      shopId: context.shopId,
+      roId: context.roId,
+      roNumber: context.roNumber || null,
+      vin: context.vin,
+      mileage: context.mileage,
+      provider: 'tekmetric',
+    }
+  }, () => {});
+}
+
+function resetBuildRoFromVhiButton() {
+  buildRoFromVhiInFlight = false;
+  const btn = document.getElementById('mos-build-ro-vhi-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+  }
+}
+
+function showBuildRoFromVhiModal(preview, context) {
+  const proposed = preview?.proposed || [];
+  if (proposed.length === 0) {
+    showToast('No overdue or due-soon services to add', 'info');
+    resetBuildRoFromVhiButton();
+    return;
+  }
+
+  const existing = document.getElementById('mos-build-ro-vhi-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-build-ro-vhi-modal';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: '999999',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, {
+    backgroundColor: '#fff', borderRadius: '12px', width: '720px', maxWidth: '92vw',
+    maxHeight: '82vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  });
+  const summary = preview.summary || {};
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">Build estimate from VHI <span style="color:#6b7280;font-weight:400;font-size:13px">(${summary.overdue || 0} overdue, ${summary.dueSoon || 0} due soon)</span></div>`;
+
+  const selectAllWrap = document.createElement('label');
+  Object.assign(selectAllWrap.style, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer' });
+  const selectAllCb = document.createElement('input');
+  selectAllCb.type = 'checkbox';
+  selectAllCb.checked = true;
+  selectAllWrap.appendChild(selectAllCb);
+  selectAllWrap.appendChild(document.createTextNode('Select all'));
+  header.appendChild(selectAllWrap);
+  modal.appendChild(header);
+
+  const subhead = document.createElement('div');
+  Object.assign(subhead.style, { padding: '8px 20px 0 20px', fontSize: '12px', color: '#6b7280' });
+  const matched = (preview.summary && preview.summary.matchedCannedJobs) || 0;
+  const total = proposed.length;
+  const matchedNote = matched > 0
+    ? `${matched} of ${total} jobs were pre-populated with parts and labor from your shop's canned jobs; the rest use a placeholder labor line. `
+    : '';
+  subhead.textContent = `Each selected item adds a customer concern and a job to this RO. ${matchedNote}Items already added in a prior run will be skipped automatically.`;
+  modal.appendChild(subhead);
+
+  const body = document.createElement('div');
+  Object.assign(body.style, { overflowY: 'auto', padding: '12px 20px', flex: '1' });
+
+  const checkboxes = [];
+
+  proposed.forEach((item, idx) => {
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px',
+      marginBottom: '10px', backgroundColor: '#fafafa',
+    });
+
+    const topRow = document.createElement('div');
+    Object.assign(topRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' });
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.idx = idx;
+    checkboxes.push(cb);
+
+    const titleSpan = document.createElement('span');
+    Object.assign(titleSpan.style, { fontWeight: '600', fontSize: '13px', color: '#111' });
+    titleSpan.textContent = item.title;
+
+    const statusBadge = document.createElement('span');
+    const isOverdue = item.status === 'overdue';
+    Object.assign(statusBadge.style, {
+      fontSize: '11px',
+      fontWeight: '600',
+      padding: '2px 8px',
+      borderRadius: '10px',
+      backgroundColor: isOverdue ? '#FEE2E2' : '#FEF3C7',
+      color: isOverdue ? '#991B1B' : '#92400E',
+      marginLeft: 'auto',
+    });
+    statusBadge.textContent = isOverdue ? 'OVERDUE' : 'DUE SOON';
+
+    topRow.appendChild(cb);
+    topRow.appendChild(titleSpan);
+    topRow.appendChild(statusBadge);
+    card.appendChild(topRow);
+
+    const concernRow = document.createElement('div');
+    Object.assign(concernRow.style, { fontSize: '12px', color: '#374151', marginBottom: '6px', lineHeight: '1.4' });
+    concernRow.innerHTML = `<span style="font-weight:500;color:#6b7280">CONCERN:</span> ${escapeHtml(item.concern)}`;
+    card.appendChild(concernRow);
+
+    const jobRow = document.createElement('div');
+    Object.assign(jobRow.style, { fontSize: '12px', color: '#374151', lineHeight: '1.4' });
+    const laborSummary = (item.job?.labor || []).map(l => `${l.name} (${l.hours}h)`).join(', ') || '—';
+    const partsCount = (item.job?.parts || []).length;
+    const cannedSrc = item.job && item.job.cannedJobSource;
+    const sourceTag = cannedSrc
+      ? ` <span style="font-size:10px;color:#065f46;background:#d1fae5;padding:1px 6px;border-radius:8px;margin-left:6px">from canned job</span>`
+      : ` <span style="font-size:10px;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:8px;margin-left:6px">placeholder labor</span>`;
+    jobRow.innerHTML = `<span style="font-weight:500;color:#6b7280">JOB:</span> ${escapeHtml(item.job?.name || item.title)}${sourceTag} — labor: ${escapeHtml(laborSummary)}${partsCount > 0 ? `, ${partsCount} part(s)` : ''}`;
+    card.appendChild(jobRow);
+
+    body.appendChild(card);
+  });
+
+  selectAllCb.addEventListener('change', () => {
+    checkboxes.forEach(cb => { cb.checked = selectAllCb.checked; });
+  });
+
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, {
+    padding: '12px 20px', borderTop: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'flex-end', gap: '10px',
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  Object.assign(cancelBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db',
+    backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
+  });
+  cancelBtn.addEventListener('click', () => {
+    overlay.remove();
+    resetBuildRoFromVhiButton();
+  });
+
+  const applyBtn = document.createElement('button');
+  applyBtn.textContent = 'Add to RO';
+  applyBtn.setAttribute('data-mos-apply-build-ro', '1');
+  Object.assign(applyBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: 'none',
+    backgroundColor: '#8B5CF6', color: '#fff', cursor: 'pointer',
+    fontSize: '13px', fontWeight: '600',
+  });
+  applyBtn.addEventListener('click', () => {
+    const selected = [];
+    checkboxes.forEach((cb, idx) => {
+      if (cb.checked) selected.push(proposed[idx]);
+    });
+    if (selected.length === 0) {
+      showToast('No items selected', 'info');
+      return;
+    }
+    applyBtn.disabled = true;
+    applyBtn.textContent = `Adding 0/${selected.length}…`;
+    applyBtn.style.opacity = '0.6';
+    cancelBtn.disabled = true;
+
+    safeSendMessage({
+      action: 'APPLY_BUILD_RO_FROM_VHI',
+      context: context,
+      selected: selected,
+      markerPrefix: preview.markerPrefix || '[ai-suggested from VHI',
+    }, () => {});
+  });
+
+  footer.appendChild(cancelBtn);
+  footer.appendChild(applyBtn);
+  modal.appendChild(footer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      resetBuildRoFromVhiButton();
+    }
+  });
+
+  document.body.appendChild(overlay);
 }
 
 // ==================== UI HELPERS ====================

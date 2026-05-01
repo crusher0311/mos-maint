@@ -25,6 +25,7 @@ const ALLOWED_ACTIONS: AuditAction[] = [
   "user_role_change",
   "api_key_view",
   "data_export",
+  "build_ro_from_vhi",
 ];
 
 const ALLOWED_DAYS = [1, 7, 30, 90];
