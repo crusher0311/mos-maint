@@ -3,11 +3,14 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
+import { getStripe, getBillingSettings } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_TRIAL_VIN_LIMIT = 10;
+const DEFAULT_TRIAL_DAYS = 14;
+const MAX_TRIAL_DAYS = 365;
 
 export async function GET() {
   const session = await getSession();
@@ -21,9 +24,10 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [shops, platformSettings, enterprises] = await Promise.all([
+    const [shops, platformSettings, billingSettings, enterprises] = await Promise.all([
       db.collection("shops").find().toArray(),
       db.collection("platform_settings").findOne({ key: "trial" }),
+      getBillingSettings(),
       db.collection("enterprise_accounts").find().toArray(),
     ]);
     
@@ -31,6 +35,7 @@ export async function GET() {
     const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
     
     const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
+    const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
     const shopIds = shops.map(s => s.shopId);
     
     const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
@@ -135,6 +140,16 @@ export async function GET() {
       // Get enterprise info if this shop belongs to one
       const enterprise = shop.enterpriseId ? enterpriseMap.get(shop.enterpriseId.toString()) : null;
       
+      const trialEndsAtRaw = shop.trial?.endsAt || shop.trialEndsAt || null;
+      const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;
+      const trialStartedAtRaw = shop.trial?.startedAt || shop.trialStartedAt || null;
+      const trialStartedAt = trialStartedAtRaw ? new Date(trialStartedAtRaw) : null;
+      const trialDaysLength = shop.trial?.days ?? shop.trialDays ?? null;
+      const trialDaysLeft = trialEndsAt
+        ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+        : null;
+      const cardOnFile = shop.cardOnFile === true || shop.billing?.cardOnFile === true;
+
       return {
         _id: shop._id,
         shopId: shop.shopId,
@@ -147,12 +162,21 @@ export async function GET() {
         vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,
         integrations,
         isLocked: shop.isLocked || false,
+        cardOnFile,
+        trial: trialEndsAt ? {
+          startedAt: trialStartedAt,
+          endsAt: trialEndsAt,
+          days: trialDaysLength,
+          daysLeft: trialDaysLeft,
+          cardOnFile,
+        } : null,
         billing: {
           plan: shop.billing?.plan || "trial",
           status: shop.billing?.status || "trial",
           isPaid,
           vinLimit,
           vinViewCount,
+          cardOnFile,
           stripeSubscriptionAmount: (typeof shop.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
             ?? (typeof shop.billing?.stripeSubscriptionAmount === "number" ? shop.billing.stripeSubscriptionAmount : null),
           stripeProductName: shop.billing?.stripeProductName || null,
@@ -238,6 +262,7 @@ export async function GET() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ),
       defaultVinLimit,
+      defaultTrialDays,
     });
   } catch (err: any) {
     console.error("Platform shops error:", err);
@@ -256,13 +281,29 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { shopName, ownerEmail, ownerPassword, ownerName, plan, status, vinLimit, features } = body;
+    const { shopName, ownerEmail, ownerPassword, ownerName, plan, status, vinLimit, features, trialDays } = body;
 
     if (!shopName || !ownerEmail || !ownerPassword) {
       return NextResponse.json({ error: "Shop name, owner email, and password are required" }, { status: 400 });
     }
 
     const db = await getDb();
+    const billingSettings = await getBillingSettings();
+    const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
+
+    let trialDaysParsed: number | null = null;
+    if (trialDays !== undefined && trialDays !== null && trialDays !== "") {
+      const parsed = Number(trialDays);
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_TRIAL_DAYS) {
+        return NextResponse.json(
+          { error: `Trial days must be between 1 and ${MAX_TRIAL_DAYS}` },
+          { status: 400 }
+        );
+      }
+      trialDaysParsed = Math.floor(parsed);
+    } else {
+      trialDaysParsed = defaultTrialDays;
+    }
 
     const existingUser = await db.collection("users").findOne({ email: ownerEmail.toLowerCase().trim() });
     if (existingUser) {
@@ -292,20 +333,60 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date();
-    const shopDoc = {
+    const normalizedOwnerEmail = ownerEmail.toLowerCase().trim();
+    const useDayBasedTrial = (status || "trial") === "trial" && trialDaysParsed && trialDaysParsed > 0;
+    const trialEndsAt = useDayBasedTrial
+      ? new Date(now.getTime() + trialDaysParsed * 24 * 60 * 60 * 1000)
+      : null;
+
+    let stripeCustomerId: string | null = null;
+    try {
+      const stripeClient = getStripe();
+      const customer = await stripeClient.customers.create({
+        email: normalizedOwnerEmail,
+        name: shopName.trim(),
+        metadata: {
+          shopId: String(newShopId),
+          createdVia: "platform_admin_create_shop",
+          createdBy: session.email,
+        },
+      });
+      stripeCustomerId = customer.id;
+    } catch (stripeErr: any) {
+      console.error(`[Platform Admin] Failed to create Stripe customer for shop ${newShopId}:`, stripeErr?.message);
+    }
+
+    const shopDoc: Record<string, any> = {
       shopId: newShopId,
       name: shopName.trim(),
       status: "active",
       billing: {
         plan: plan || "trial",
         status: status || "trial",
+        cardOnFile: false,
+        ...(stripeCustomerId ? { stripeCustomerId } : {}),
       },
       trialVinLimit: vinLimit ? Number(vinLimit) : 10,
       enabledFeatures: features || { maintenance: true },
+      cardOnFile: false,
+      ...(stripeCustomerId ? { stripeCustomerId } : {}),
       createdAt: now,
       updatedAt: now,
       createdBy: session.email,
     };
+
+    if (useDayBasedTrial && trialEndsAt) {
+      shopDoc.trial = {
+        mode: "days",
+        days: trialDaysParsed,
+        startedAt: now,
+        endsAt: trialEndsAt,
+        reminderSent: {},
+      };
+      shopDoc.trialDays = trialDaysParsed;
+      shopDoc.trialStartedAt = now;
+      shopDoc.trialEndsAt = trialEndsAt;
+    }
 
     await db.collection("shops").insertOne(shopDoc);
 
@@ -329,13 +410,16 @@ export async function POST(req: NextRequest) {
       type: "shop_created",
       shopId: newShopId,
       shopName: shopName.trim(),
-      ownerEmail: ownerEmail.toLowerCase().trim(),
+      ownerEmail: normalizedOwnerEmail,
       plan: plan || "trial",
+      trialDays: useDayBasedTrial ? trialDaysParsed : null,
+      trialEndsAt: trialEndsAt,
+      stripeCustomerId,
       adminEmail: session.email,
       createdAt: now,
     });
 
-    const emailLower = ownerEmail.toLowerCase().trim();
+    const emailLower = normalizedOwnerEmail;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
     const loginUrl = `${baseUrl}/login`;
     let emailSent = false;
@@ -345,7 +429,11 @@ export async function POST(req: NextRequest) {
         shopName.trim(),
         emailLower,
         ownerPassword,
-        loginUrl
+        loginUrl,
+        undefined,
+        useDayBasedTrial && trialEndsAt
+          ? { trialDays: trialDaysParsed!, trialEndsAt }
+          : undefined,
       );
       await sendEmail({ to: emailLower, ...emailContent });
       emailSent = true;
@@ -356,9 +444,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ 
       ok: true, 
-      shop: { shopId: newShopId, name: shopName.trim() },
+      shop: { 
+        shopId: newShopId, 
+        name: shopName.trim(),
+        trialEndsAt,
+        trialDays: useDayBasedTrial ? trialDaysParsed : null,
+        stripeCustomerId,
+      },
       emailSent,
-      message: `Shop "${shopName.trim()}" created with ID ${newShopId}${emailSent ? ". Welcome email sent." : ". Note: Welcome email could not be sent."}`
+      message: `Shop "${shopName.trim()}" created with ID ${newShopId}${useDayBasedTrial ? ` (${trialDaysParsed}-day trial ends ${trialEndsAt!.toLocaleDateString()})` : ""}${emailSent ? ". Welcome email sent." : ". Note: Welcome email could not be sent."}`
     });
   } catch (err: any) {
     console.error("Create shop error:", err);

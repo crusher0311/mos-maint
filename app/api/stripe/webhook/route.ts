@@ -116,6 +116,89 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        if (session.mode === "setup") {
+          const setupShopId = Number(session.metadata?.shopId);
+          const purpose = session.metadata?.purpose;
+          if (setupShopId && (purpose === "trial_card_capture" || !purpose)) {
+            try {
+              const setupIntentRef = session.setup_intent;
+              const setupIntentId: string | null =
+                typeof setupIntentRef === "string"
+                  ? setupIntentRef
+                  : setupIntentRef?.id ?? null;
+              let paymentMethodId: string | null = null;
+              const customerRef = session.customer;
+              let customerId: string | null =
+                typeof customerRef === "string"
+                  ? customerRef
+                  : customerRef?.id ?? null;
+
+              if (setupIntentId) {
+                const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+                const pmRef = setupIntent.payment_method;
+                paymentMethodId =
+                  typeof pmRef === "string" ? pmRef : pmRef?.id ?? null;
+                if (!customerId && setupIntent.customer) {
+                  const siCustomerRef = setupIntent.customer;
+                  customerId =
+                    typeof siCustomerRef === "string"
+                      ? siCustomerRef
+                      : siCustomerRef.id;
+                }
+              }
+
+              if (paymentMethodId && customerId) {
+                try {
+                  await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+                } catch (attachErr: any) {
+                  if (attachErr?.code !== "resource_already_exists") {
+                    console.warn(`[Stripe setup] attach failed for ${paymentMethodId}:`, attachErr?.message);
+                  }
+                }
+                try {
+                  await stripe.customers.update(customerId, {
+                    invoice_settings: { default_payment_method: paymentMethodId },
+                  });
+                } catch (updErr: any) {
+                  console.warn(`[Stripe setup] customer default update failed:`, updErr?.message);
+                }
+              }
+
+              const now = new Date();
+              await db.collection("shops").updateOne(
+                { shopId: setupShopId },
+                {
+                  $set: {
+                    cardOnFile: true,
+                    "billing.cardOnFile": true,
+                    ...(customerId ? { stripeCustomerId: customerId, "billing.stripeCustomerId": customerId } : {}),
+                    ...(paymentMethodId ? { stripePaymentMethodId: paymentMethodId, "billing.stripePaymentMethodId": paymentMethodId } : {}),
+                    cardCapturedAt: now,
+                    cardCaptureSessionId: session.id,
+                    "trial.cardOnFile": true,
+                    updatedAt: now,
+                  },
+                }
+              );
+
+              await db.collection("audit_logs").insertOne({
+                type: "shop_card_captured",
+                shopId: setupShopId,
+                stripeCustomerId: customerId,
+                stripePaymentMethodId: paymentMethodId,
+                checkoutSessionId: session.id,
+                createdAt: now,
+              });
+
+              console.log(`[Stripe setup] Card captured for shop ${setupShopId} (pm=${paymentMethodId})`);
+            } catch (setupErr: any) {
+              console.error(`[Stripe setup] Failed to process setup-mode session:`, setupErr?.message);
+            }
+            break;
+          }
+        }
+
         const isSignupFlow = session.metadata?.signupFlow === "true";
         const pendingId = session.metadata?.pendingId;
         

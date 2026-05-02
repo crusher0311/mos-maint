@@ -68,13 +68,98 @@ export async function PATCH(
 
     const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
     const body = await req.json();
-    const { action, billing, features } = body;
+    const { action, billing, features, trial } = body;
 
     const db = await getDb();
     const shop = await db.collection("shops").findOne({ shopId });
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    if (trial) {
+      const MAX_TRIAL_DAYS = 365;
+      const now = new Date();
+      const currentEndsAt: Date | null = shop.trial?.endsAt
+        ? new Date(shop.trial.endsAt)
+        : (shop.trialEndsAt ? new Date(shop.trialEndsAt) : null);
+
+      let newEndsAt: Date | null = null;
+      let extendDaysApplied: number | null = null;
+
+      if (trial.endsAt) {
+        const parsed = new Date(trial.endsAt);
+        if (Number.isNaN(parsed.getTime())) {
+          return NextResponse.json({ error: "Invalid trial endsAt" }, { status: 400 });
+        }
+        newEndsAt = parsed;
+      } else if (trial.extendDays !== undefined && trial.extendDays !== null) {
+        const days = Number(trial.extendDays);
+        if (!Number.isFinite(days) || days < 1 || days > MAX_TRIAL_DAYS) {
+          return NextResponse.json(
+            { error: `extendDays must be between 1 and ${MAX_TRIAL_DAYS}` },
+            { status: 400 }
+          );
+        }
+        extendDaysApplied = Math.floor(days);
+        const base = currentEndsAt && currentEndsAt.getTime() > now.getTime() ? currentEndsAt : now;
+        newEndsAt = new Date(base.getTime() + extendDaysApplied * 24 * 60 * 60 * 1000);
+      } else {
+        return NextResponse.json({ error: "Provide trial.endsAt or trial.extendDays" }, { status: 400 });
+      }
+
+      const totalDays = shop.trial?.startedAt
+        ? Math.max(1, Math.round((newEndsAt.getTime() - new Date(shop.trial.startedAt).getTime()) / (24 * 60 * 60 * 1000)))
+        : (shop.trial?.days ?? null);
+
+      const updateOps: Record<string, any> = {
+        $set: {
+          "trial.endsAt": newEndsAt,
+          "trial.mode": shop.trial?.mode || "days",
+          "trial.reminderSent": {},
+          ...(shop.trial?.startedAt ? {} : { "trial.startedAt": now }),
+          ...(totalDays ? { "trial.days": totalDays, trialDays: totalDays } : {}),
+          trialEndsAt: newEndsAt,
+          "billing.status": shop.billing?.status === "suspended" ? "trial" : (shop.billing?.status || "trial"),
+          updatedAt: now,
+        },
+      };
+      const unsetFields: Record<string, ""> = {};
+      // Only clear lock/suspension markers on shops that are actually
+      // suspended or in a trial billing state. Never touch
+      // trialConvertedAt on a paid/active shop — doing so could let the
+      // trial cron re-bill or wrongly suspend a paying customer.
+      const status = shop.billing?.status;
+      const isSuspendedOrTrial = !status || status === "suspended" || status === "trial" || status === "trialing";
+      if (shop.isLocked && isSuspendedOrTrial) {
+        unsetFields.isLocked = "";
+        unsetFields.lockedAt = "";
+        unsetFields.lockedBy = "";
+      }
+      if (shop.trialSuspendedAt && isSuspendedOrTrial) {
+        unsetFields.trialSuspendedAt = "";
+      }
+      if (Object.keys(unsetFields).length > 0) {
+        updateOps.$unset = unsetFields;
+      }
+      await db.collection("shops").updateOne({ shopId }, updateOps);
+
+      await db.collection("audit_logs").insertOne({
+        type: "shop_trial_extended",
+        shopId,
+        shopName: shop.name,
+        previousEndsAt: currentEndsAt,
+        newEndsAt,
+        extendDays: extendDaysApplied,
+        adminEmail: session.email,
+        createdAt: now,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        message: `Trial extended to ${newEndsAt.toLocaleDateString()}`,
+        trial: { endsAt: newEndsAt, days: totalDays },
+      });
     }
 
     if (action === "lock") {

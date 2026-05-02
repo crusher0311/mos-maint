@@ -37,6 +37,12 @@ export const stripe = {
   get webhooks() {
     return getStripe().webhooks;
   },
+  get setupIntents() {
+    return getStripe().setupIntents;
+  },
+  get paymentMethods() {
+    return getStripe().paymentMethods;
+  },
 };
 
 export type VinPackConfig = {

@@ -26,7 +26,8 @@ import {
   Plus,
   ShoppingCart,
   X,
-  Trash2
+  Trash2,
+  CheckCircle2
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -45,6 +46,14 @@ interface BillingInfo {
     planId: string;
     effectiveDate: string;
   };
+  cardOnFile?: boolean;
+  trial?: {
+    startedAt: string | null;
+    endsAt: string | null;
+    days: number | null;
+    daysLeft: number | null;
+    cardOnFile: boolean;
+  } | null;
 }
 
 interface Plan {
@@ -579,6 +588,67 @@ function BillingSettingsContent() {
                   </div>
                 </div>
               )}
+
+              {billing?.trial?.endsAt && (() => {
+                const daysLeft = billing.trial?.daysLeft ?? 0;
+                const expired = daysLeft <= 0;
+                const urgent = !expired && daysLeft <= 3;
+                const tone = expired
+                  ? "bg-red-50 border-red-200 text-red-900"
+                  : urgent
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-blue-50 border-blue-200 text-blue-900";
+                const endsLabel = new Date(billing.trial!.endsAt!).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+                return (
+                  <div className={`mt-4 p-4 rounded-lg border ${tone}`}>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-start gap-2">
+                        <Calendar className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-sm">
+                            {expired
+                              ? "Trial ended"
+                              : daysLeft === 1
+                              ? "Trial ends tomorrow"
+                              : `${daysLeft} days left in your trial`}
+                          </p>
+                          <p className="text-xs opacity-80 mt-0.5">
+                            Trial ends {endsLabel}
+                            {billing.trial!.days ? ` · ${billing.trial!.days}-day trial` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {billing.cardOnFile ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 rounded">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Card on file
+                          </span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/stripe/setup-card", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ returnTo: "/dashboard/settings/billing" }),
+                                });
+                                const data = await res.json();
+                                if (data.url) window.location.href = data.url;
+                                else alert(data.error || "Could not start card setup");
+                              } catch (e) {
+                                alert("Could not start card setup");
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-[#3c81c3] text-white rounded text-xs font-medium hover:bg-[#2d6da8]"
+                          >
+                            Add Payment Method
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {!isPaid && (
                 <div className="mt-6">

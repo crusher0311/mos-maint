@@ -12,6 +12,9 @@
     },
     "app/api/cron/invoice-cache-refresh/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/trial-check/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -26,6 +29,10 @@
     {
       "path": "/api/cron/invoice-cache-refresh",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/trial-check",
+      "schedule": "0 13 * * *"
     }
   ],
   "env": {

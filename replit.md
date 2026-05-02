@@ -43,6 +43,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **In-Process Cron Scheduler**: A `node-cron` based scheduler runs inside the main web service, utilizing a Mongo-backed distributed lock for concurrency safety.
 *   **Tekmetric Migration Wizard**: A platform-admin tool within the Detect Dog Chrome extension for migrating Tekmetric open jobs, preserving data integrity and providing detailed audit logs.
 *   **CRM Subsystem Feature Flag**: The entire CRM subsystem (including Onboarding, Sales Pipeline, Marketing, and Pricing) is controlled by a `CRM_ENABLED` environment variable, allowing for soft-hiding UI and API routes without code removal.
+*   **Day-Based Trial with Card Capture**: When a platform admin creates a shop, a configurable trial window (default 14 days, max 365) is started and a Stripe customer is provisioned. The shop owner is prompted on first login to add a payment method via Stripe Checkout (`mode: setup`); a dashboard banner and modal track this state. Countdown surfaces in the dashboard layout and the billing settings page. A daily cron (`/api/cron/trial-check`) sends 7/3/1-day reminder emails, then on trial end either auto-converts the shop to a paid subscription using the saved default payment method or locks/suspends the account and notifies the owner.
 
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)

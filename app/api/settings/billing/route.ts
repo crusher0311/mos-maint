@@ -32,6 +32,25 @@ export async function GET() {
   const periodEnd = billing.periodEnd ?? billing.nextBillingDate;
   const periodStart = billing.periodStart;
 
+  const trialEndsAtRaw = shop?.trial?.endsAt ?? shop?.trialEndsAt ?? null;
+  const trialStartedAtRaw = shop?.trial?.startedAt ?? shop?.trialStartedAt ?? null;
+  const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;
+  const trialStartedAt = trialStartedAtRaw ? new Date(trialStartedAtRaw) : null;
+  const trialDays = shop?.trial?.days ?? shop?.trialDays ?? null;
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
+  const cardOnFile = !!(shop?.cardOnFile || billing?.cardOnFile);
+  const trialBlock = trialEndsAt
+    ? {
+        startedAt: trialStartedAt ? trialStartedAt.toISOString() : null,
+        endsAt: trialEndsAt.toISOString(),
+        days: trialDays,
+        daysLeft: trialDaysLeft,
+        cardOnFile,
+      }
+    : null;
+
   if (isPaid) {
     const vehicleCount = await db.collection("vehicles").countDocuments({ 
       shopId: String(sess.shopId),
@@ -53,6 +72,8 @@ export async function GET() {
       periodEnd,
       monthlyAmount,
       pendingPlanChange,
+      cardOnFile,
+      trial: trialBlock,
     });
   }
 
@@ -63,14 +84,16 @@ export async function GET() {
   const viewedVinCount = await getViewedVinCount(db, shopId);
 
   return NextResponse.json({
-    plan: "Free Trial",
+    plan: trialBlock ? "Trial" : "Free Trial",
     planSlug: billing.plan,
     status: "trial",
     vehicleCount: viewedVinCount,
     vehicleLimit: shopLimit,
-    nextBillingDate: null,
+    nextBillingDate: trialEndsAt ? trialEndsAt.toISOString() : null,
     periodStart,
     periodEnd,
     pendingPlanChange,
+    cardOnFile,
+    trial: trialBlock,
   });
 }

@@ -11,6 +11,15 @@ interface ShopBilling {
   status?: string;
   stripeSubscriptionAmount?: number | null;
   stripeProductName?: string | null;
+  cardOnFile?: boolean;
+}
+
+interface ShopTrial {
+  startedAt: string | null;
+  endsAt: string | null;
+  days: number | null;
+  daysLeft: number | null;
+  cardOnFile: boolean;
 }
 
 const planLabels: Record<string, string> = {
@@ -99,6 +108,8 @@ interface Shop {
   backfill?: BackfillStatus | null;
   stickerCount?: number;
   stickerCountThisMonth?: number;
+  trial?: ShopTrial | null;
+  cardOnFile?: boolean;
 }
 
 export default function PlatformShopsPage() {
@@ -107,6 +118,11 @@ export default function PlatformShopsPage() {
   const [search, setSearch] = useState("");
   const [impersonating, setImpersonating] = useState<number | null>(null);
   const [defaultVinLimit, setDefaultVinLimit] = useState(10);
+  const [defaultTrialDays, setDefaultTrialDays] = useState(14);
+  const [extendTrialShop, setExtendTrialShop] = useState<Shop | null>(null);
+  const [extendTrialDays, setExtendTrialDays] = useState<string>("14");
+  const [extendTrialMode, setExtendTrialMode] = useState<"days" | "date">("days");
+  const [extendTrialDate, setExtendTrialDate] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [vinInput, setVinInput] = useState("");
@@ -124,6 +140,7 @@ export default function PlatformShopsPage() {
     plan: "trial",
     status: "trial",
     vinLimit: "10",
+    trialDays: "14",
     features: {
       maintenance: true,
       job_lookup: false,
@@ -159,6 +176,7 @@ export default function PlatformShopsPage() {
         setCreateShopData({
           shopName: "", ownerEmail: "", ownerPassword: "", ownerName: "",
           plan: "trial", status: "trial", vinLimit: "10",
+          trialDays: String(defaultTrialDays || 14),
           features: { maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false, keytags: false, auto_booking: false, part_xref: false, labor_rates: false },
         });
         loadShops();
@@ -268,6 +286,53 @@ export default function PlatformShopsPage() {
     }
   };
 
+  const extendTrial = async () => {
+    if (!extendTrialShop) return;
+    let body: any = null;
+    if (extendTrialMode === "days") {
+      const days = Number(extendTrialDays);
+      if (!Number.isFinite(days) || days < 1 || days > 365) {
+        alert("Trial extension must be between 1 and 365 days");
+        return;
+      }
+      body = { trial: { extendDays: days } };
+    } else {
+      if (!extendTrialDate) {
+        alert("Please pick a new trial end date");
+        return;
+      }
+      const parsed = new Date(`${extendTrialDate}T23:59:59`);
+      if (Number.isNaN(parsed.getTime())) {
+        alert("Invalid date");
+        return;
+      }
+      body = { trial: { endsAt: parsed.toISOString() } };
+    }
+    setActionLoading(`${extendTrialShop.shopId}-extend`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${extendTrialShop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setExtendTrialShop(null);
+        setExtendTrialDays("14");
+        setExtendTrialDate("");
+        setExtendTrialMode("days");
+        loadShops();
+      } else {
+        alert(data.error || "Failed to extend trial");
+      }
+    } catch (err) {
+      console.error("Extend trial error:", err);
+      alert("Failed to extend trial");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const triggerBackfill = async (shopId: number | string, action: "resume" | "reset") => {
     const numericShopId = typeof shopId === 'string' ? parseInt(shopId) : shopId;
     setActionLoading(`${shopId}-backfill`);
@@ -350,6 +415,9 @@ export default function PlatformShopsPage() {
       if (data.ok) {
         setShops(data.shops || []);
         setDefaultVinLimit(data.defaultVinLimit || 10);
+        if (typeof data.defaultTrialDays === "number") {
+          setDefaultTrialDays(data.defaultTrialDays);
+        }
       }
     } catch (err) {
       console.error("Error loading shops:", err);
@@ -357,6 +425,15 @@ export default function PlatformShopsPage() {
       setLoading(false);
     }
   };
+
+  // Sync the create-shop form's trialDays to the platform default
+  // whenever it loads or changes, so the configured billing setting is
+  // honored on first open instead of the hardcoded "14".
+  useEffect(() => {
+    setCreateShopData((prev) =>
+      prev.trialDays === String(defaultTrialDays) ? prev : { ...prev, trialDays: String(defaultTrialDays) },
+    );
+  }, [defaultTrialDays]);
 
   const searchLower = search.toLowerCase();
   const filteredShops = shops.filter(shop => 
@@ -549,6 +626,21 @@ export default function PlatformShopsPage() {
                             <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
                               ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
                             </span>
+                          )}
+                          {shop.trial?.endsAt && (
+                            <TrialBadge trial={shop.trial} />
+                          )}
+                          {shop.cardOnFile && (
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded" title="Payment method on file">Card on file</span>
+                          )}
+                          {shop.trial?.endsAt && (
+                            <button
+                              onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
+                              className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded"
+                              title="Extend trial"
+                            >
+                              Extend
+                            </button>
                           )}
                         </div>
                         {shop.enterpriseName && !groupByEnterprise && (
@@ -846,6 +938,21 @@ export default function PlatformShopsPage() {
                             <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
                               ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
                             </span>
+                          )}
+                          {shop.trial?.endsAt && (
+                            <TrialBadge trial={shop.trial} />
+                          )}
+                          {shop.cardOnFile && (
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded" title="Payment method on file">Card on file</span>
+                          )}
+                          {shop.trial?.endsAt && (
+                            <button
+                              onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
+                              className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded"
+                              title="Extend trial"
+                            >
+                              Extend
+                            </button>
                           )}
                         </div>
                         {shop.enterpriseName && (
@@ -1352,6 +1459,24 @@ export default function PlatformShopsPage() {
                 </div>
               </div>
 
+              {createShopData.status === "trial" && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Trial Length (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={createShopData.trialDays}
+                    onChange={(e) => setCreateShopData({ ...createShopData, trialDays: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                    placeholder={String(defaultTrialDays)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Default is {defaultTrialDays} days. The owner will be prompted to add a payment method on first login. Their card will not be charged until the trial ends.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Feature Toggles</h4>
                 <div className="space-y-1.5">
@@ -1404,6 +1529,108 @@ export default function PlatformShopsPage() {
           </div>
         </div>
       )}
+
+      {extendTrialShop && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Extend Trial</h3>
+                <p className="text-sm text-gray-500 mt-1">{extendTrialShop.name}</p>
+              </div>
+              <button onClick={() => setExtendTrialShop(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {extendTrialShop.trial?.endsAt && (
+              <p className="text-sm text-gray-600 mb-3">
+                Current trial ends:{" "}
+                <b>{new Date(extendTrialShop.trial.endsAt).toLocaleDateString()}</b>
+                {typeof extendTrialShop.trial.daysLeft === "number" && (
+                  <span className="text-gray-500"> ({extendTrialShop.trial.daysLeft} days left)</span>
+                )}
+              </p>
+            )}
+            <div className="flex gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setExtendTrialMode("days")}
+                className={`px-3 py-1.5 text-xs rounded border ${extendTrialMode === "days" ? "bg-[#3c81c3] text-white border-[#3c81c3]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+              >
+                Add days
+              </button>
+              <button
+                type="button"
+                onClick={() => setExtendTrialMode("date")}
+                className={`px-3 py-1.5 text-xs rounded border ${extendTrialMode === "date" ? "bg-[#3c81c3] text-white border-[#3c81c3]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+              >
+                Set / reset end date
+              </button>
+            </div>
+            {extendTrialMode === "days" ? (
+              <>
+                <label className="block text-xs text-gray-500 mb-1">Add days to trial</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={extendTrialDays}
+                  onChange={(e) => setExtendTrialDays(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                />
+              </>
+            ) : (
+              <>
+                <label className="block text-xs text-gray-500 mb-1">New trial end date</label>
+                <input
+                  type="date"
+                  value={extendTrialDate}
+                  onChange={(e) => setExtendTrialDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Replaces the current trial end date. Suspended shops will be reactivated.</p>
+              </>
+            )}
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => setExtendTrialShop(null)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={extendTrial}
+                disabled={actionLoading === `${extendTrialShop.shopId}-extend`}
+                className="px-4 py-2 bg-[#3c81c3] text-white rounded-lg hover:bg-[#2d6da8] disabled:opacity-50 flex items-center gap-2"
+              >
+                {actionLoading === `${extendTrialShop.shopId}-extend` && <Loader2 className="w-4 h-4 animate-spin" />}
+                {extendTrialMode === "date" ? "Update End Date" : "Extend Trial"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function TrialBadge({ trial }: { trial: ShopTrial }) {
+  if (!trial.endsAt) return null;
+  const daysLeft = trial.daysLeft ?? 0;
+  const expired = daysLeft <= 0;
+  const urgent = !expired && daysLeft <= 3;
+  const cls = expired
+    ? "bg-red-100 text-red-700"
+    : urgent
+    ? "bg-amber-100 text-amber-800"
+    : "bg-yellow-50 text-yellow-800";
+  const label = expired
+    ? "Trial ended"
+    : `${daysLeft}d left`;
+  const tip = `Trial ends ${new Date(trial.endsAt).toLocaleDateString()}${trial.days ? ` (${trial.days}-day trial)` : ""}`;
+  return (
+    <span className={`px-1.5 py-0.5 text-xs rounded ${cls}`} title={tip}>
+      {label}
+    </span>
   );
 }

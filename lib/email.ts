@@ -350,8 +350,27 @@ export function makeCredentialsWelcomeEmail(
   email: string,
   tempPassword: string,
   loginUrl: string,
-  chromeExtensionUrl: string = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd"
+  chromeExtensionUrl: string = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd",
+  trialInfo?: { trialDays: number; trialEndsAt: Date | string }
 ) {
+  const trialEndsAtDate = trialInfo?.trialEndsAt
+    ? (trialInfo.trialEndsAt instanceof Date ? trialInfo.trialEndsAt : new Date(trialInfo.trialEndsAt))
+    : null;
+  const trialEndsLabel = trialEndsAtDate
+    ? trialEndsAtDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : null;
+  const trialBlockHtml = trialInfo && trialEndsLabel
+    ? `
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:20px;margin:24px 0">
+        <h2 style="color:#92400e;font-size:16px;margin:0 0 8px 0">Your ${trialInfo.trialDays}-Day Trial Has Started</h2>
+        <p style="color:#78350f;font-size:15px;margin:0 0 12px 0">
+          Your trial runs through <b>${trialEndsLabel}</b>. To keep service uninterrupted when your trial ends, please add a payment method on your first login — you'll be prompted automatically and won't be charged until your trial converts.
+        </p>
+      </div>`
+    : "";
+  const trialBlockText = trialInfo && trialEndsLabel
+    ? `\n\nYour ${trialInfo.trialDays}-day trial runs through ${trialEndsLabel}. Add a payment method on your first login so service continues without interruption when the trial ends. You won't be charged until the trial converts.\n`
+    : "";
   const subject = `Your MOS Tools Login Credentials — ${shopName}`;
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
@@ -373,6 +392,7 @@ export function makeCredentialsWelcomeEmail(
         <p style="color:#1f2937;font-size:16px;margin:4px 0"><b>Temporary Password:</b> <code style="background:#e0e7ff;padding:2px 8px;border-radius:4px;font-size:15px">${tempPassword}</code></p>
         <p style="color:#dc2626;font-size:14px;margin:12px 0 0 0">Please change your password after your first login.</p>
       </div>
+      ${trialBlockHtml}
       
       <p style="color:#4b5563;font-size:16px">
         These credentials work for both:
@@ -406,7 +426,7 @@ export function makeCredentialsWelcomeEmail(
         <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
       </p>
     </div>`;
-  const text = `Welcome to MOS Tools!\n\nYour account for ${shopName} has been created.\n\nLogin Credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nThese work for both the web dashboard and the Detect Dog Chrome extension.\n\nLog in: ${loginUrl}\nInstall Chrome Extension: ${chromeExtensionUrl}\n\nPlease change your password after your first login.\n\nNeed help? Contact support@mos.tools`;
+  const text = `Welcome to MOS Tools!\n\nYour account for ${shopName} has been created.\n\nLogin Credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nThese work for both the web dashboard and the Detect Dog Chrome extension.\n\nLog in: ${loginUrl}\nInstall Chrome Extension: ${chromeExtensionUrl}\n\nPlease change your password after your first login.${trialBlockText}\n\nNeed help? Contact support@mos.tools`;
   return { subject, html, text };
 }
 
@@ -621,3 +641,92 @@ export function makePaymentRecoveredEmail(shopName: string, loginUrl: string) {
   return { subject, html, text };
 }
 
+
+export function makeTrialReminderEmail(
+  shopName: string,
+  daysLeft: number,
+  trialEndsAt: Date | string,
+  addCardUrl: string,
+) {
+  const endsAtDate = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
+  const endsLabel = endsAtDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const dayWord = daysLeft === 1 ? "day" : "days";
+  const subject = `Action needed: ${daysLeft} ${dayWord} left in your MOS Tools trial`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      <h1 style="color:#1f2937;font-size:22px;margin-bottom:8px">Your trial ends in ${daysLeft} ${dayWord}</h1>
+      <p style="color:#4b5563;font-size:16px">
+        Hi from MOS Tools — your trial for <b>${shopName}</b> ends on <b>${endsLabel}</b>.
+        To keep service running without interruption, add a payment method now. You won't be charged until the trial actually ends.
+      </p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${addCardUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
+      </div>
+      <p style="color:#6b7280;font-size:14px">If you don't add a card before the trial ends, your dashboard will be locked until billing is set up.</p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Your MOS Tools trial for ${shopName} ends in ${daysLeft} ${dayWord} (on ${endsLabel}).\n\nAdd a payment method to keep service running without interruption — you won't be charged until the trial ends.\n\nAdd payment method: ${addCardUrl}`;
+  return { subject, html, text };
+}
+
+export function makeTrialConvertedEmail(
+  shopName: string,
+  planLabel: string,
+  loginUrl: string,
+) {
+  const subject = `Your MOS Tools trial converted to ${planLabel} — ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <h1 style="color:#1f2937;font-size:22px">Welcome aboard!</h1>
+      <p style="color:#4b5563;font-size:16px">
+        Your trial for <b>${shopName}</b> has ended and your subscription on the <b>${planLabel}</b> plan is now active. Service continues uninterrupted, and your card on file has been used to start the subscription.
+      </p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${loginUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Go to Dashboard</a>
+      </div>
+      <p style="color:#6b7280;font-size:14px">You can review or change your subscription anytime from Settings → Billing.</p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Your MOS Tools trial for ${shopName} converted to the ${planLabel} plan. Service continues uninterrupted.\n\nDashboard: ${loginUrl}`;
+  return { subject, html, text };
+}
+
+export function makeTrialSuspendedEmail(
+  shopName: string,
+  addCardUrl: string,
+  ownerFacing: boolean = true,
+) {
+  const subject = ownerFacing
+    ? `Your MOS Tools trial has ended — ${shopName}`
+    : `[Platform] Trial suspended (no card) — ${shopName}`;
+  const html = ownerFacing
+    ? `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <h1 style="color:#991b1b;font-size:22px">Your trial has ended</h1>
+      <p style="color:#4b5563;font-size:16px">
+        Your MOS Tools trial for <b>${shopName}</b> has ended and we don't have a payment method on file. Your dashboard is temporarily locked, but your data is safe.
+      </p>
+      <p style="color:#4b5563;font-size:16px">Add a payment method below to restore full access.</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="${addCardUrl}" style="background:#dc2626;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
+      </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`
+    : `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#1f2937">Trial auto-suspended</h2>
+      <p>Shop <b>${shopName}</b> trial ended with no card on file. The shop has been locked. Owner has been emailed.</p>
+    </div>`;
+  const text = ownerFacing
+    ? `Your MOS Tools trial for ${shopName} has ended. Add a payment method to restore access: ${addCardUrl}`
+    : `[Platform] Shop ${shopName} trial ended with no card on file. Shop locked. Owner notified.`;
+  return { subject, html, text };
+}
