@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Save, ExternalLink, RefreshCw, Copy, Check, Package, CreditCard, Gift, Mail } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Save, ExternalLink, RefreshCw, Copy, Check, Package, CreditCard, Gift, Mail, Send, Eye } from "lucide-react";
 import type { BillingSettings } from "@/lib/stripe";
+import {
+  DEFAULT_TRIAL_REMINDER_SUBJECT,
+  DEFAULT_TRIAL_REMINDER_HTML,
+  DEFAULT_TRIAL_REMINDER_TEXT,
+} from "@/lib/email";
 
 type StripePrice = {
   id: string;
@@ -37,6 +42,87 @@ export default function BillingSettingsForm({
   const [reminderDaysInput, setReminderDaysInput] = useState(
     (initialSettings.trialReminderDays || []).join(", "),
   );
+  const [previewDaysLeft, setPreviewDaysLeft] = useState<number>(3);
+  const [previewShopName, setPreviewShopName] = useState<string>("Sample Auto Shop");
+  const [showPreview, setShowPreview] = useState<boolean>(false);
+  const [sendingTest, setSendingTest] = useState<boolean>(false);
+  const [testMessage, setTestMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Live client-side render of the trial reminder template using sample values.
+  // Mirrors the substitution logic in `lib/email.ts#applyTrialReminderTemplate`
+  // so admins see the same output the cron would produce, without making a
+  // round trip to the server on every keystroke.
+  const previewVars = useMemo(() => {
+    const days = Number.isFinite(previewDaysLeft) && previewDaysLeft > 0
+      ? Math.trunc(previewDaysLeft)
+      : 3;
+    const endsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    return {
+      shopName: previewShopName.trim() || "Sample Auto Shop",
+      daysLeft: String(days),
+      dayWord: days === 1 ? "day" : "days",
+      trialEndsAt: endsAt.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      addCardUrl: "https://app.example.com/dashboard/settings/billing",
+    } as Record<string, string>;
+  }, [previewDaysLeft, previewShopName]);
+
+  const applyTemplate = (tpl: string, vars: Record<string, string>) =>
+    tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, key) =>
+      Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "",
+    );
+
+  // Mirror the server-side fallback in `lib/email.ts#makeTrialReminderEmail`:
+  // empty/whitespace-only overrides fall back to the built-in defaults so the
+  // preview matches what the cron (and the test-send endpoint) will actually
+  // produce when an admin clears a field.
+  const pickTpl = (override: string | undefined, fallback: string) =>
+    override && override.trim() ? override : fallback;
+
+  const renderedPreview = useMemo(() => {
+    const subjectTpl = pickTpl(settings.trialReminderSubject, DEFAULT_TRIAL_REMINDER_SUBJECT);
+    const htmlTpl = pickTpl(settings.trialReminderHtml, DEFAULT_TRIAL_REMINDER_HTML);
+    const textTpl = pickTpl(settings.trialReminderText, DEFAULT_TRIAL_REMINDER_TEXT);
+    return {
+      subject: applyTemplate(subjectTpl, previewVars),
+      html: applyTemplate(htmlTpl, previewVars),
+      text: applyTemplate(textTpl, previewVars),
+    };
+  }, [settings.trialReminderSubject, settings.trialReminderHtml, settings.trialReminderText, previewVars]);
+
+  const handleSendTestEmail = async () => {
+    setSendingTest(true);
+    setTestMessage(null);
+    try {
+      const res = await fetch("/api/admin/billing/preview-trial-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: settings.trialReminderSubject,
+          html: settings.trialReminderHtml,
+          text: settings.trialReminderText,
+          daysLeft: previewDaysLeft,
+          shopName: previewShopName,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to send test email");
+      }
+      setTestMessage({
+        type: "success",
+        text: `Test email sent to ${data?.sentTo || "your inbox"}.`,
+      });
+    } catch (err: any) {
+      setTestMessage({ type: "error", text: err.message });
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   // Parse the comma-separated reminder days input on save. The server also
   // sanitizes, but doing it client-side keeps the on-screen value in sync
@@ -521,6 +607,113 @@ export default function BillingSettingsForm({
               <li><code>{"{{trialEndsAt}}"}</code> — pretty-printed end date</li>
               <li><code>{"{{addCardUrl}}"}</code> — link to add a payment method</li>
             </ul>
+          </div>
+
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">
+              Preview &amp; Test Send
+            </h4>
+            <p className="text-xs text-gray-500 mb-4">
+              Sample values are substituted into the template so you can verify
+              the rendered output before saving. Sending a test will email the
+              rendered reminder to your logged-in address.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Sample shop name
+                </label>
+                <input
+                  type="text"
+                  value={previewShopName}
+                  onChange={(e) => setPreviewShopName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Sample days left
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={previewDaysLeft}
+                  onChange={(e) => setPreviewDaysLeft(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview((v) => !v)}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  {showPreview ? "Hide preview" : "Show preview"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendTestEmail}
+                  disabled={sendingTest}
+                  className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {sendingTest ? "Sending..." : "Send test email"}
+                </button>
+              </div>
+            </div>
+
+            {testMessage && (
+              <div
+                className={`p-3 rounded-md text-sm mb-4 ${
+                  testMessage.type === "success"
+                    ? "bg-green-50 text-green-800 border border-green-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                {testMessage.text}
+              </div>
+            )}
+
+            {showPreview && (
+              <div className="space-y-3">
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Subject
+                  </div>
+                  <div className="text-sm text-gray-900 break-words">
+                    {renderedPreview.subject || (
+                      <span className="text-gray-400 italic">(empty)</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 rounded-md overflow-hidden">
+                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                    <span className="text-xs font-semibold text-gray-500 uppercase">
+                      HTML preview
+                    </span>
+                  </div>
+                  <iframe
+                    title="Trial reminder HTML preview"
+                    srcDoc={renderedPreview.html}
+                    sandbox=""
+                    className="w-full bg-white"
+                    style={{ height: 480, border: 0 }}
+                  />
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <div className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                    Plain-text version
+                  </div>
+                  <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
+                    {renderedPreview.text || "(empty)"}
+                  </pre>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
