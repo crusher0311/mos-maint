@@ -3,6 +3,7 @@
   "version": "1.8.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/dev-cache-guard.cjs",
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "prebuild": "npm run test:plan-build && npm run test:smoke",
     "build": "next build",
