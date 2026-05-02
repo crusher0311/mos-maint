@@ -671,24 +671,62 @@ export async function runProtractorBackfill(
   let totalJobsIndexed = 0;
   let complete = false;
 
-  // Atomic lock acquisition - prevent duplicate instances
-  const lockResult = await db.collection("backfill_progress").findOneAndUpdate(
-    { shopId, inProgress: { $ne: true } },  // Only claim if not already in progress
-    { 
-      $set: { 
-        lastAttemptedAt: new Date(),
-        lastActivityAt: new Date(),
-        inProgress: true,
-        lastError: null,
-        lastErrorAt: null,
-        retryCount: 0,
-      } 
-    },
-    { upsert: true, returnDocument: 'after' }
-  );
+  // Atomic lock acquisition with stale-lock recovery.
+  //
+  // Historical bug: if the process died mid-run (Render redeploy, OOM, etc.)
+  // the recursive chain at the bottom of this function never got to clear
+  // `inProgress: false`, so the flag stayed `true` in Mongo forever. Every
+  // subsequent cron tick saw the stuck flag and bailed out with
+  // "Already in progress", stranding the shop indefinitely. As of 2026-05-02
+  // this had stranded 14 of 17 Protractor backfills for 7-30 days.
+  //
+  // Fix: claim the lock if EITHER (a) inProgress isn't true, OR (b) the lock
+  // is stale (no `lastActivityAt` update in STALE_THRESHOLD_MS — currently
+  // 30 min). `lastActivityAt` is refreshed after every chunk inside the
+  // backfill loop, so a healthy run's lock is always fresh; a process death
+  // freezes that timestamp and the next cron run reclaims after 30 minutes.
+  //
+  // The `upsert: true` is kept for first-time-init (no existing doc). When
+  // the doc exists with a fresh lock, the filter doesn't match, the upsert
+  // tries to insert and hits the unique `shopId` index — we catch the
+  // resulting DuplicateKey (code 11000) and treat it as the legitimate
+  // "Already in progress" signal instead of letting the outer try/catch
+  // misclassify it as a backfill error.
+  const staleLockThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
+  let lockResult: any = null;
+  try {
+    lockResult = await db.collection("backfill_progress").findOneAndUpdate(
+      {
+        shopId,
+        $or: [
+          { inProgress: { $ne: true } },
+          { lastActivityAt: { $lt: staleLockThreshold } },
+        ],
+      },
+      { 
+        $set: { 
+          lastAttemptedAt: new Date(),
+          lastActivityAt: new Date(),
+          inProgress: true,
+          lastError: null,
+          lastErrorAt: null,
+          retryCount: 0,
+        } 
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      // Doc already exists with a fresh lock — another instance owns it.
+      console.log(`[Backfill] Shop ${shopId}: Skipping - another instance already in progress (lock is fresh)`);
+      return { chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: 'Already in progress' };
+    }
+    throw err;
+  }
 
   if (!lockResult) {
-    // Another instance is already running for this shop
+    // Defensive: shouldn't be reachable with `upsert: true`, but kept for
+    // safety in case driver behavior changes.
     console.log(`[Backfill] Shop ${shopId}: Skipping - another instance already in progress`);
     return { chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: 'Already in progress' };
   }
