@@ -11,6 +11,15 @@ import {
 } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
+// Test seam: the smoke suite swaps these out so we can exercise the
+// sanitizer / batching / shop-resolution branches against an in-memory
+// Mongo and a stubbed auth helper without touching the real DB.
+export const __deps = {
+  getDb,
+  validateExtensionToken,
+  findShopBySmsId,
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -134,7 +143,7 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await validateExtensionToken(request);
+    const auth = await __deps.validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
         { error: auth.error || "Unauthorized" },
@@ -183,7 +192,7 @@ export async function POST(request: NextRequest) {
     async function resolveShop(smsShopId: string): Promise<number | null> {
       if (shopCache.has(smsShopId)) return shopCache.get(smsShopId)!;
       try {
-        const r = await findShopBySmsId(smsShopId, {
+        const r = await __deps.findShopBySmsId(smsShopId, {
           userShopIds,
           isPlatformAdmin,
           providerHint: "tekmetric",
@@ -269,7 +278,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     await ensureIndexes(db);
     await db.collection(COLLECTION).insertMany(docs, { ordered: false });
 

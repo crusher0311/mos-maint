@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
 
+// Test seam: the smoke suite swaps these out so the aggregation transform
+// can be exercised against canned grouped rows without a real Mongo and
+// without a Next.js request context for the platform-admin guard.
+export const __deps = {
+  getDb,
+  requirePlatformAdmin,
+};
+
 // Per-shop / per-endpoint Tekmetric health rollup, computed off the
 // `tekmetric_endpoint_reports` collection that the Chrome extension's
 // `tekmetricFetch` helper writes to. Designed to be called from the
@@ -42,8 +50,8 @@ function percentile(sorted: number[], p: number): number | null {
 
 export async function GET() {
   try {
-    await requirePlatformAdmin();
-    const db = await getDb();
+    await __deps.requirePlatformAdmin();
+    const db = await __deps.getDb();
 
     const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
