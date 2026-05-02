@@ -55,6 +55,7 @@ export async function GET() {
       enterprise: 0,
       detect_dog_founder: 0,
       oil_sticker_legacy: 0,
+      appfueled_invoice: 0,
       demo: 0,
       churned: 0,
     };
@@ -83,10 +84,14 @@ export async function GET() {
         statusCounts[status]++;
       }
       
-      const subscriptionAmount = shop.stripeSubscriptionAmount 
-        ? shop.stripeSubscriptionAmount / 100 
-        : configuredPricing[plan] || 0;
-      
+      const invoiceMonthlyAmount = typeof billing.invoiceMonthlyAmount === "number" ? billing.invoiceMonthlyAmount : null;
+
+      const subscriptionAmount = plan === "appfueled_invoice" && invoiceMonthlyAmount !== null
+        ? invoiceMonthlyAmount / 100
+        : shop.stripeSubscriptionAmount
+          ? shop.stripeSubscriptionAmount / 100
+          : configuredPricing[plan] || 0;
+
       if (billing.isPaid && (status === "active" || status === "past_due")) {
         totalMRR += subscriptionAmount;
         paidShopsCount++;
@@ -106,12 +111,13 @@ export async function GET() {
         stripeSubscriptionId: shop.stripeSubscriptionId,
         stripeSubscriptionAmount: shop.stripeSubscriptionAmount || billing.stripeSubscriptionAmount || null,
         stripeProductName: billing.stripeProductName || null,
+        invoiceMonthlyAmount,
         createdAt: shop.createdAt,
       };
     });
 
     shopBillingData.sort((a, b) => {
-      const order = ["enterprise", "professional", "detect_dog_founder", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
+      const order = ["enterprise", "professional", "detect_dog_founder", "appfueled_invoice", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
       return order.indexOf(a.plan) - order.indexOf(b.plan);
     });
 
@@ -144,7 +150,7 @@ export async function GET() {
   }
 }
 
-const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "detect_dog_founder", "demo", "churned", "oil_sticker_legacy"];
+const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "detect_dog_founder", "demo", "churned", "oil_sticker_legacy", "appfueled_invoice"];
 const VALID_STATUSES = ["trial", "active", "past_due", "canceled", "paused"];
 
 export async function PATCH(req: NextRequest) {
@@ -157,17 +163,23 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    const { shopId, stripeCustomerId, stripeSubscriptionId, plan, status } = await req.json();
+    const { shopId, stripeCustomerId, stripeSubscriptionId, plan, status, monthlyAmount } = await req.json();
 
     if (!shopId) {
       return NextResponse.json({ error: "shopId is required" }, { status: 400 });
     }
 
-    if (!stripeCustomerId) {
-      return NextResponse.json({ error: "Stripe Customer ID is required" }, { status: 400 });
-    }
+    const isInvoicePlan = plan === "appfueled_invoice";
 
-    if (!stripeCustomerId.startsWith("cus_")) {
+    if (!isInvoicePlan) {
+      if (!stripeCustomerId) {
+        return NextResponse.json({ error: "Stripe Customer ID is required" }, { status: 400 });
+      }
+
+      if (!stripeCustomerId.startsWith("cus_")) {
+        return NextResponse.json({ error: "Stripe Customer ID must start with 'cus_'" }, { status: 400 });
+      }
+    } else if (stripeCustomerId && !stripeCustomerId.startsWith("cus_")) {
       return NextResponse.json({ error: "Stripe Customer ID must start with 'cus_'" }, { status: 400 });
     }
 
@@ -183,6 +195,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` }, { status: 400 });
     }
 
+    let invoiceMonthlyAmountCents: number | null = null;
+    if (isInvoicePlan) {
+      const amt = typeof monthlyAmount === "number" ? monthlyAmount : Number(monthlyAmount);
+      if (!Number.isFinite(amt) || amt < 0) {
+        return NextResponse.json({ error: "monthlyAmount (in dollars) is required for AppFueled Invoice plan" }, { status: 400 });
+      }
+      invoiceMonthlyAmountCents = Math.round(amt * 100);
+    }
+
     const db = await getDb();
     const shop = await db.collection("shops").findOne({ shopId: Number(shopId) });
     if (!shop) {
@@ -190,10 +211,38 @@ export async function PATCH(req: NextRequest) {
     }
 
     const updateFields: Record<string, any> = {
-      stripeCustomerId,
-      "billing.stripeCustomerId": stripeCustomerId,
       updatedAt: new Date(),
     };
+
+    if (stripeCustomerId) {
+      updateFields.stripeCustomerId = stripeCustomerId;
+      updateFields["billing.stripeCustomerId"] = stripeCustomerId;
+    }
+
+    if (isInvoicePlan) {
+      updateFields["billing.plan"] = "appfueled_invoice";
+      updateFields["billing.status"] = status || "active";
+      updateFields["billing.isPaid"] = true;
+      updateFields["billing.invoiceMonthlyAmount"] = invoiceMonthlyAmountCents;
+
+      await db.collection("shops").updateOne(
+        { shopId: Number(shopId) },
+        { $set: updateFields }
+      );
+
+      await db.collection("audit_logs").insertOne({
+        type: "appfueled_invoice_set",
+        shopId: Number(shopId),
+        shopName: shop.name,
+        plan: "appfueled_invoice",
+        status: updateFields["billing.status"],
+        invoiceMonthlyAmount: invoiceMonthlyAmountCents,
+        performedBy: session.email,
+        createdAt: new Date(),
+      });
+
+      return NextResponse.json({ ok: true });
+    }
 
     let stripeSubData: any = null;
 

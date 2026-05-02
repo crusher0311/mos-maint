@@ -62,7 +62,8 @@ export async function GET() {
     const locationBilling = await Promise.all(shops.map(async (shop) => {
       const billing = shop.billing || {};
       const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || 
-                     billing.plan === "starter" || billing.plan === "plus" || billing.plan === "elite";
+                     billing.plan === "starter" || billing.plan === "plus" || billing.plan === "elite" ||
+                     billing.plan === "appfueled_invoice";
       
       let vehicleCount = 0;
       if (isPaid) {

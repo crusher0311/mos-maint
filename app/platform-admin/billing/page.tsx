@@ -34,6 +34,7 @@ interface ShopBilling {
   stripeSubscriptionId?: string;
   stripeSubscriptionAmount?: number | null;
   stripeProductName?: string | null;
+  invoiceMonthlyAmount?: number | null;
   createdAt?: string;
 }
 
@@ -63,6 +64,7 @@ const planColors: Record<string, string> = {
   enterprise: "bg-green-100 text-green-700",
   detect_dog_founder: "bg-amber-100 text-amber-700",
   oil_sticker_legacy: "bg-purple-100 text-purple-700",
+  appfueled_invoice: "bg-emerald-100 text-emerald-700",
   demo: "bg-yellow-100 text-yellow-700",
   churned: "bg-red-100 text-red-700",
 };
@@ -74,6 +76,7 @@ const planLabels: Record<string, string> = {
   enterprise: "Enterprise",
   detect_dog_founder: "Detect Dog - Founder",
   oil_sticker_legacy: "Oil Sticker - Legacy",
+  appfueled_invoice: "AppFueled Invoice",
   demo: "Demo",
   churned: "Churned",
 };
@@ -100,6 +103,7 @@ export default function PlatformBillingPage() {
   const [linkSubId, setLinkSubId] = useState("");
   const [linkPlan, setLinkPlan] = useState("");
   const [linkStatus, setLinkStatus] = useState("");
+  const [linkInvoiceAmount, setLinkInvoiceAmount] = useState("");
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkError, setLinkError] = useState("");
   const [linkSuccess, setLinkSuccess] = useState("");
@@ -131,6 +135,11 @@ export default function PlatformBillingPage() {
     setLinkSubId(shop.stripeSubscriptionId || "");
     setLinkPlan(shop.plan || "");
     setLinkStatus(shop.status || "");
+    setLinkInvoiceAmount(
+      shop.plan === "appfueled_invoice" && typeof shop.invoiceMonthlyAmount === "number"
+        ? (shop.invoiceMonthlyAmount / 100).toFixed(2)
+        : ""
+    );
     setLinkError("");
   };
 
@@ -140,18 +149,30 @@ export default function PlatformBillingPage() {
     setLinkSubId("");
     setLinkPlan("");
     setLinkStatus("");
+    setLinkInvoiceAmount("");
     setLinkError("");
   };
 
   const saveLinkStripe = async () => {
     if (!linkShop) return;
-    if (!linkCustomerId.trim()) {
-      setLinkError("Stripe Customer ID is required");
-      return;
-    }
-    if (!linkCustomerId.startsWith("cus_")) {
-      setLinkError("Customer ID must start with 'cus_'");
-      return;
+    const isInvoicePlan = linkPlan === "appfueled_invoice";
+    let monthlyAmountNumber: number | undefined;
+    if (isInvoicePlan) {
+      const parsed = parseFloat(linkInvoiceAmount);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setLinkError("Monthly amount (in dollars) is required for AppFueled Invoice");
+        return;
+      }
+      monthlyAmountNumber = parsed;
+    } else {
+      if (!linkCustomerId.trim()) {
+        setLinkError("Stripe Customer ID is required");
+        return;
+      }
+      if (!linkCustomerId.startsWith("cus_")) {
+        setLinkError("Customer ID must start with 'cus_'");
+        return;
+      }
     }
     if (linkSubId && !linkSubId.startsWith("sub_")) {
       setLinkError("Subscription ID must start with 'sub_'");
@@ -166,10 +187,11 @@ export default function PlatformBillingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shopId: linkShop.shopId,
-          stripeCustomerId: linkCustomerId.trim(),
+          stripeCustomerId: linkCustomerId.trim() || undefined,
           stripeSubscriptionId: linkSubId.trim() || undefined,
           plan: linkPlan || undefined,
           status: linkStatus || undefined,
+          monthlyAmount: monthlyAmountNumber,
         }),
       });
       const data = await res.json();
@@ -374,6 +396,7 @@ export default function PlatformBillingPage() {
                 <option value="enterprise">Enterprise</option>
                 <option value="detect_dog_founder">Detect Dog - Founder</option>
                 <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
+                <option value="appfueled_invoice">AppFueled Invoice</option>
                 <option value="demo">Demo</option>
                 <option value="churned">Churned</option>
               </select>
@@ -462,7 +485,11 @@ export default function PlatformBillingPage() {
                               {!shop.stripeCustomerId && "Link"}
                             </button>
                           </div>
-                          {shop.stripeSubscriptionAmount ? (
+                          {shop.plan === "appfueled_invoice" && typeof shop.invoiceMonthlyAmount === "number" ? (
+                            <span className="text-xs text-emerald-700">
+                              ${(shop.invoiceMonthlyAmount / 100).toFixed(2)}/mo · Invoiced
+                            </span>
+                          ) : shop.stripeSubscriptionAmount ? (
                             <span className="text-xs text-gray-500">
                               ${(shop.stripeSubscriptionAmount / 100).toFixed(2)}/mo
                               {shop.stripeProductName && ` · ${shop.stripeProductName}`}
@@ -526,13 +553,13 @@ export default function PlatformBillingPage() {
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stripe Customer ID <span className="text-red-500">*</span>
+                    Stripe Customer ID {linkPlan !== "appfueled_invoice" && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="text"
                     value={linkCustomerId}
                     onChange={(e) => setLinkCustomerId(e.target.value)}
-                    placeholder="cus_..."
+                    placeholder={linkPlan === "appfueled_invoice" ? "cus_... (optional for AppFueled Invoice)" : "cus_..."}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
                   />
                 </div>
@@ -564,6 +591,7 @@ export default function PlatformBillingPage() {
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
                       <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
+                      <option value="appfueled_invoice">AppFueled Invoice</option>
                       <option value="demo">Demo</option>
                     </select>
                   </div>
@@ -583,6 +611,29 @@ export default function PlatformBillingPage() {
                     </select>
                   </div>
                 </div>
+
+                {linkPlan === "appfueled_invoice" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Monthly Amount (USD) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={linkInvoiceAmount}
+                        onChange={(e) => setLinkInvoiceAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Amount this shop is invoiced each month, outside of Stripe.
+                    </p>
+                  </div>
+                )}
 
                 {linkError && (
                   <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
@@ -604,7 +655,7 @@ export default function PlatformBillingPage() {
                   disabled={linkSaving}
                   className="px-4 py-2 text-sm text-white bg-[#3c81c3] hover:bg-[#2d6ba3] rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {linkSaving ? "Saving..." : "Link Stripe"}
+                  {linkSaving ? "Saving..." : linkPlan === "appfueled_invoice" ? "Save" : "Link Stripe"}
                 </button>
               </div>
             </div>

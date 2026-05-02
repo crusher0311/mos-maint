@@ -428,6 +428,7 @@ function BillingSettingsContent() {
   }
 
   const isPaid = billing?.status === "active" && billing?.plan !== "Free Trial";
+  const isInvoicePlan = billing?.planSlug === "appfueled_invoice";
   const currentPlanIndex = plans.findIndex(p => p.slug === billing?.planSlug);
 
   const tabs = [
@@ -517,7 +518,7 @@ function BillingSettingsContent() {
                     <RefreshCw className="w-4 h-4" />
                     Sync
                   </button>
-                  {isPaid && (
+                  {isPaid && !isInvoicePlan && (
                     <button
                       onClick={handleManageBilling}
                       disabled={actionLoading === "portal"}
@@ -526,6 +527,11 @@ function BillingSettingsContent() {
                       {actionLoading === "portal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
                       Manage Subscription
                     </button>
+                  )}
+                  {isInvoicePlan && (
+                    <span className="text-xs text-gray-500 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      Billed via direct invoice — contact support for changes.
+                    </span>
                   )}
                 </div>
               </div>

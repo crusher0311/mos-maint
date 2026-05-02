@@ -28,7 +28,7 @@ export type FeatureSettings = Record<FeatureKey, boolean>;
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
-export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo" | "detect_dog_founder";
+export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo" | "detect_dog_founder" | "appfueled_invoice";
 
 export const FOUNDER_PLAN: BillingPlan = "detect_dog_founder";
 
@@ -127,6 +127,7 @@ const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
   enterprise:         [...FEATURE_KEYS],
   demo:               [...FEATURE_KEYS],
   oil_sticker_legacy: ["oil_sticker", "auto_booking", "labor_rates"],
+  appfueled_invoice:  [...FEATURE_KEYS],
   // The founder plan is a wildcard — every current and future feature is
   // on. The fallback list is computed dynamically below in
   // `getPlanFeaturesFromDatabase` / `getFeatureEntitlements`, but we
