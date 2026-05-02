@@ -41,6 +41,7 @@ interface BillingSettings {
   skipTrialBonusVins: number;
   foundingShopPricing: boolean;
   defaultVinLimit: number;
+  trialConversionMaxPaymentRetries: number;
 }
 
 interface PlatformSettings {
@@ -669,9 +670,41 @@ export default function PlatformSettingsPage() {
               </p>
             </div>
 
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <h3 className="font-semibold text-rose-900 mb-3">Trial Conversion Retry Budget</h3>
+              <p className="text-xs text-rose-700 mb-3">
+                Maximum number of failed Stripe payment attempts allowed before a trial-converting shop is marked churned.
+                Must be an integer of 1 or greater. Picked up automatically by the next webhook.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-rose-700 mb-1">Max Payment Retries</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={billing.trialConversionMaxPaymentRetries ?? 3}
+                    onChange={(e) => {
+                      const parsed = parseInt(e.target.value, 10);
+                      setBilling({
+                        ...billing,
+                        trialConversionMaxPaymentRetries:
+                          Number.isFinite(parsed) && parsed >= 1 ? parsed : 1,
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-rose-300 rounded-md text-sm bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={() => saveSection("billing", billing)}
-              disabled={savingSection === "billing"}
+              disabled={
+                savingSection === "billing" ||
+                !Number.isInteger(billing.trialConversionMaxPaymentRetries) ||
+                billing.trialConversionMaxPaymentRetries < 1
+              }
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
             >
               {savingSection === "billing" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
