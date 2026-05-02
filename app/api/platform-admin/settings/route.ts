@@ -68,6 +68,8 @@ export async function GET() {
           skipTrialBonusVins: billingSettings?.skipTrialBonusVins ?? 50,
           foundingShopPricing: billingSettings?.foundingShopPricing ?? true,
           defaultVinLimit: billingSettings?.defaultVinLimit ?? 300,
+          trialConversionMaxPaymentRetries:
+            billingSettings?.trialConversionMaxPaymentRetries ?? 3,
         },
         general: {
           bookDemoUrl: generalSettings?.bookDemoUrl || "https://calendly.com/mos-tools",
@@ -160,6 +162,11 @@ export async function POST(req: NextRequest) {
             skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
             foundingShopPricing: settings.foundingShopPricing ?? true,
             defaultVinLimit: settings.defaultVinLimit ?? 300,
+            // Trial-conversion retry budget — clamp to >= 1.
+            trialConversionMaxPaymentRetries: Math.max(
+              1,
+              Math.floor(Number(settings.trialConversionMaxPaymentRetries)) || 3,
+            ),
             updatedAt: new Date(),
             updatedBy: session.email,
           } 

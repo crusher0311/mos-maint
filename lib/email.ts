@@ -642,23 +642,95 @@ export function makePaymentRecoveredEmail(shopName: string, loginUrl: string) {
 }
 
 
-// Trial reminder email templates.
-//
-// Admins can override these from the billing settings UI. The strings use
-// `{{var}}` placeholders so non-developers can edit copy without touching
-// JS. Supported variables:
-//   {{shopName}}     — the shop name
-//   {{daysLeft}}     — the integer number of days left in the trial
-//   {{dayWord}}      — "day" or "days" (matches daysLeft for grammar)
-//   {{trialEndsAt}}  — pretty-printed end date ("Monday, July 1, 2026")
-//   {{addCardUrl}}   — link to add a payment method
-//
-// The defaults below are the literal copy that was previously hardcoded in
-// `makeTrialReminderEmail`, so a shop with no overrides gets the same email
-// it always did.
-export const DEFAULT_TRIAL_REMINDER_SUBJECT =
-  "Action needed: {{daysLeft}} {{dayWord}} left in your MOS Tools trial";
+export function makeTrialConversionPaymentFailedEmail(
+  shopName: string,
+  updatePaymentUrl: string,
+  attemptsRemaining: number,
+) {
+  const remainingLabel =
+    attemptsRemaining > 0
+      ? `We'll automatically retry the charge ${attemptsRemaining} more ${
+          attemptsRemaining === 1 ? "time" : "times"
+        } before your dashboard is suspended.`
+      : `This was the last automatic retry — your dashboard will be suspended shortly if payment isn't updated.`;
+  const subject = `[Action Required] Trial conversion payment failed — ${shopName}`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#92400e;font-size:20px;margin:0">Trial conversion payment failed</h1>
+      </div>
+      <p style="color:#4b5563;font-size:16px">
+        Your MOS Tools trial for <b>${shopName}</b> just ended and we tried to charge your card on file
+        to start your subscription, but the payment was declined (this can happen for an expired card,
+        insufficient funds, or a bank security challenge).
+      </p>
+      <p style="color:#4b5563;font-size:16px">${remainingLabel}</p>
+      <div style="text-align:center;margin:30px 0">
+        <a href="${updatePaymentUrl}" style="background:#f59e0b;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Method</a>
+      </div>
+      <p style="color:#4b5563;font-size:14px">
+        Need a hand? Reply to this email or contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`;
+  const text = `Trial conversion payment failed for ${shopName}.\n\nWe tried to charge your card on file to start your subscription, but the payment was declined. ${remainingLabel}\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools if you need help.`;
+  return { subject, html, text };
+}
 
+export function makeTrialConversionSuspendedEmail(
+  shopName: string,
+  updatePaymentUrl: string,
+  ownerFacing: boolean = true,
+) {
+  const subject = ownerFacing
+    ? `[URGENT] Subscription suspended — ${shopName}`
+    : `[Platform] Trial conversion suspended after retries — ${shopName}`;
+  const html = ownerFacing
+    ? `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
+          <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
+        </div>
+      </div>
+      <div style="background:#fee2e2;border-left:4px solid #dc2626;padding:16px;border-radius:4px;margin-bottom:20px">
+        <h1 style="color:#991b1b;font-size:20px;margin:0">Subscription suspended</h1>
+      </div>
+      <p style="color:#4b5563;font-size:16px">
+        We weren't able to collect payment on your subscription for <b>${shopName}</b> after several
+        automatic retries, so we've temporarily suspended the dashboard. Your data is safe.
+      </p>
+      <p style="color:#4b5563;font-size:16px">
+        Update your payment method below and your account will be restored as soon as the next charge succeeds.
+      </p>
+      <div style="text-align:center;margin:30px 0">
+        <a href="${updatePaymentUrl}" style="background:#dc2626;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Now</a>
+      </div>
+      <p style="color:#4b5563;font-size:14px">
+        Need help? Contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+      </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
+      <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
+    </div>`
+    : `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#1f2937">Trial conversion suspended after retries</h2>
+      <p>Shop <b>${shopName}</b> burned through its retry budget after the trial converted. The shop has been locked and the owner has been emailed.</p>
+      <p><a href="${updatePaymentUrl}" style="color:#2563eb">Open shop in platform admin</a></p>
+    </div>`;
+  const text = ownerFacing
+    ? `Subscription suspended for ${shopName}\n\nWe couldn't collect payment after several automatic retries. Your data is safe — update your payment method to restore access: ${updatePaymentUrl}\n\nContact support@mos.tools for help.`
+    : `[Platform] Trial conversion for ${shopName} burned through its retry budget. Shop locked. Owner notified. Admin: ${updatePaymentUrl}`;
+  return { subject, html, text };
+}
+
+export const DEFAULT_TRIAL_REMINDER_SUBJECT = "Action needed: {daysLeft} {dayWord} left in your MOS Tools trial";
 export const DEFAULT_TRIAL_REMINDER_HTML = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
       <div style="text-align:center;margin-bottom:24px">
@@ -666,67 +738,46 @@ export const DEFAULT_TRIAL_REMINDER_HTML = `
           <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
         </div>
       </div>
-      <h1 style="color:#1f2937;font-size:22px;margin-bottom:8px">Your trial ends in {{daysLeft}} {{dayWord}}</h1>
+      <h1 style="color:#1f2937;font-size:22px;margin-bottom:8px">Your trial ends in {daysLeft} {dayWord}</h1>
       <p style="color:#4b5563;font-size:16px">
-        Hi from MOS Tools — your trial for <b>{{shopName}}</b> ends on <b>{{trialEndsAt}}</b>.
+        Hi from MOS Tools — your trial for <b>{shopName}</b> ends on <b>{endsLabel}</b>.
         To keep service running without interruption, add a payment method now. You won't be charged until the trial actually ends.
       </p>
       <div style="text-align:center;margin:24px 0">
-        <a href="{{addCardUrl}}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
+        <a href="{addCardUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
       </div>
       <p style="color:#6b7280;font-size:14px">If you don't add a card before the trial ends, your dashboard will be locked until billing is set up.</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
     </div>`;
-
-export const DEFAULT_TRIAL_REMINDER_TEXT =
-  "Your MOS Tools trial for {{shopName}} ends in {{daysLeft}} {{dayWord}} (on {{trialEndsAt}}).\n\nAdd a payment method to keep service running without interruption — you won't be charged until the trial ends.\n\nAdd payment method: {{addCardUrl}}";
-
-function applyTrialReminderTemplate(
-  template: string,
-  vars: Record<string, string>,
-): string {
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key) => {
-    return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "";
-  });
-}
-
-export type TrialReminderTemplateOverrides = {
-  subject?: string;
-  html?: string;
-  text?: string;
-};
+export const DEFAULT_TRIAL_REMINDER_TEXT = `Your MOS Tools trial for {shopName} ends in {daysLeft} {dayWord} (on {endsLabel}).\n\nAdd a payment method to keep service running without interruption — you won't be charged until the trial ends.\n\nAdd payment method: {addCardUrl}`;
 
 export function makeTrialReminderEmail(
   shopName: string,
   daysLeft: number,
   trialEndsAt: Date | string,
   addCardUrl: string,
-  templates?: TrialReminderTemplateOverrides,
 ) {
   const endsAtDate = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
   const endsLabel = endsAtDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   const dayWord = daysLeft === 1 ? "day" : "days";
-
-  const vars: Record<string, string> = {
-    shopName,
-    daysLeft: String(daysLeft),
-    dayWord,
-    trialEndsAt: endsLabel,
-    addCardUrl,
-  };
-
-  // Empty/whitespace-only overrides fall back to the safe defaults so admins
-  // can't accidentally ship a blank email by clearing a field.
-  const subjectTpl = templates?.subject?.trim() ? templates.subject : DEFAULT_TRIAL_REMINDER_SUBJECT;
-  const htmlTpl = templates?.html?.trim() ? templates.html : DEFAULT_TRIAL_REMINDER_HTML;
-  const textTpl = templates?.text?.trim() ? templates.text : DEFAULT_TRIAL_REMINDER_TEXT;
-
-  return {
-    subject: applyTrialReminderTemplate(subjectTpl, vars),
-    html: applyTrialReminderTemplate(htmlTpl, vars),
-    text: applyTrialReminderTemplate(textTpl, vars),
-  };
+  const subject = DEFAULT_TRIAL_REMINDER_SUBJECT
+    .replace("{daysLeft}", String(daysLeft))
+    .replace("{dayWord}", dayWord)
+    .replace("{shopName}", shopName);
+  const html = DEFAULT_TRIAL_REMINDER_HTML
+    .replace("{daysLeft}", String(daysLeft))
+    .replace("{dayWord}", dayWord)
+    .replace("{shopName}", shopName)
+    .replace("{endsLabel}", endsLabel)
+    .replace("{addCardUrl}", addCardUrl);
+  const text = DEFAULT_TRIAL_REMINDER_TEXT
+    .replace("{daysLeft}", String(daysLeft))
+    .replace("{dayWord}", dayWord)
+    .replace("{shopName}", shopName)
+    .replace("{endsLabel}", endsLabel)
+    .replace("{addCardUrl}", addCardUrl);
+  return { subject, html, text };
 }
 
 export function makeTrialConvertedEmail(

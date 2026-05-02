@@ -127,6 +127,12 @@ export type BillingSettings = {
   trialReminderSubject: string;
   trialReminderHtml: string;
   trialReminderText: string;
+  // Max times Stripe is allowed to fail the first invoice on a
+  // trial-converted subscription before we hard-suspend the shop. See
+  // `lib/trial-conversion-billing.ts` for the decision helper that
+  // consumes this and the `invoice.payment_failed` webhook handler in
+  // `app/api/stripe/webhook/route.ts` for where it's applied.
+  trialConversionMaxPaymentRetries: number;
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
@@ -176,6 +182,7 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   trialReminderSubject: DEFAULT_TRIAL_REMINDER_SUBJECT,
   trialReminderHtml: DEFAULT_TRIAL_REMINDER_HTML,
   trialReminderText: DEFAULT_TRIAL_REMINDER_TEXT,
+  trialConversionMaxPaymentRetries: 3,
 };
 
 export async function getBillingSettings(): Promise<BillingSettings> {
@@ -243,6 +250,8 @@ export async function getBillingSettings(): Promise<BillingSettings> {
         typeof settings.trialReminderText === "string" && settings.trialReminderText.trim()
           ? settings.trialReminderText
           : DEFAULT_TRIAL_REMINDER_TEXT,
+      trialConversionMaxPaymentRetries:
+        settings.trialConversionMaxPaymentRetries ?? 3,
     };
   } catch (error) {
     console.error("Error loading billing settings:", error);
@@ -257,76 +266,6 @@ export async function saveBillingSettings(settings: Partial<BillingSettings>): P
     { $set: { ...settings, type: "billing", updatedAt: new Date() } },
     { upsert: true }
   );
-}
-
-export interface CardSetupSessionResult {
-  url: string;
-  sessionId: string;
-  customerId: string;
-}
-
-/**
- * Shared helper used by both the shop-owner flow (`/api/stripe/setup-card`)
- * and the platform-admin "resend card-capture email" action so they go through
- * the same Stripe Checkout setup-mode pathway.
- *
- * Looks up (or creates) a Stripe customer for the shop, persists the customer
- * id back onto the shop, then opens a Checkout session with mode="setup" so
- * the recipient lands on Stripe's hosted card form.
- */
-export async function createCardSetupSession(opts: {
-  shopId: number;
-  ownerEmail?: string | null;
-  returnTo?: string;
-  purpose?: string;
-  createdVia?: string;
-}): Promise<CardSetupSessionResult> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: Number(opts.shopId) });
-  if (!shop) {
-    throw new Error(`Shop ${opts.shopId} not found`);
-  }
-
-  const baseUrl = getBaseUrl();
-  const returnTo = opts.returnTo && opts.returnTo.startsWith("/") ? opts.returnTo : "/dashboard";
-  const sep = returnTo.includes("?") ? "&" : "?";
-
-  let customerId: string | undefined = shop.stripeCustomerId || shop.billing?.stripeCustomerId;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: opts.ownerEmail || undefined,
-      name: shop.name,
-      metadata: {
-        shopId: String(opts.shopId),
-        shopName: shop.name || "",
-        createdVia: opts.createdVia || "createCardSetupSession",
-      },
-    });
-    customerId = customer.id;
-
-    await db.collection("shops").updateOne(
-      { shopId: Number(opts.shopId) },
-      { $set: { stripeCustomerId: customerId, "billing.stripeCustomerId": customerId } },
-    );
-  }
-
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: "setup",
-    payment_method_types: ["card"],
-    success_url: `${baseUrl}${returnTo}${sep}card_setup=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}${returnTo}${sep}card_setup=canceled`,
-    metadata: {
-      shopId: String(opts.shopId),
-      purpose: opts.purpose || "trial_card_capture",
-    },
-  });
-
-  if (!session.url) {
-    throw new Error("Stripe did not return a checkout URL");
-  }
-
-  return { url: session.url, sessionId: session.id, customerId };
 }
 
 export function getBaseUrl() {

@@ -80,6 +80,12 @@ export async function POST(req: NextRequest) {
         typeof body.trialReminderText === "string" && body.trialReminderText.trim()
           ? body.trialReminderText
           : DEFAULT_TRIAL_REMINDER_TEXT,
+      // Trial-conversion retry budget (see lib/trial-conversion-billing.ts).
+      // Clamp to >= 1 so a typo can't suspend shops on the first failure.
+      trialConversionMaxPaymentRetries: Math.max(
+        1,
+        Math.floor(Number(body.trialConversionMaxPaymentRetries)) || 3,
+      ),
       updatedAt: new Date(),
       updatedBy: session.email,
     };

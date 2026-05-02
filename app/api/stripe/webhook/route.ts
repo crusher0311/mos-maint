@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
-import { sendEmail, makeWelcomeEmail, makeCredentialsWelcomeEmail, makePaymentFailedEmail, makePaymentRecoveredEmail } from "@/lib/email";
+import {
+  sendEmail,
+  makeWelcomeEmail,
+  makeCredentialsWelcomeEmail,
+  makePaymentFailedEmail,
+  makePaymentRecoveredEmail,
+  makeTrialConversionPaymentFailedEmail,
+  makeTrialConversionSuspendedEmail,
+} from "@/lib/email";
+import {
+  evaluateTrialConversionFailure,
+  isTrialConvertedSubscription,
+} from "@/lib/trial-conversion-billing";
+import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { createHovercodeQR } from "@/lib/hovercode";
 import { getNextShopId } from "@/lib/ids";
 import Stripe from "stripe";
@@ -491,18 +504,33 @@ export async function POST(req: NextRequest) {
         const resolved = await resolveShopId(db, subscription.metadata, customerId);
         
         if (resolved) {
-          const { shopId } = resolved;
+          const { shopId, shop } = resolved;
           const status = subscription.status === "active" ? "active" : subscription.status;
           const currentPeriodEnd = (subscription as any).current_period_end 
             ? new Date((subscription as any).current_period_end * 1000)
             : null;
-          
+
+          // Don't let a sub.updated event downgrade an internal "suspended"
+          // status. Recovery branches in invoice.payment_succeeded key off
+          // "past_due"/"suspended", so only let active or canceled clear it
+          // (unpaid would lose the suspended marker without unlocking).
+          const preserveSuspension =
+            shop?.billing?.status === "suspended" &&
+            status !== "active" &&
+            status !== "canceled";
+
           const updateData: Record<string, any> = {
-            "billing.status": status,
             "billing.nextBillingDate": currentPeriodEnd,
             "billing.stripeSubscriptionId": subscription.id,
             "billing.updatedAt": new Date(),
           };
+          if (!preserveSuspension) {
+            updateData["billing.status"] = status;
+          } else {
+            console.log(
+              `[Stripe] Shop ${shopId} preserving internal "suspended" status (Stripe reports ${status})`,
+            );
+          }
 
           if (status === "active") {
             updateData["billing.isPaid"] = true;
@@ -585,6 +613,17 @@ export async function POST(req: NextRequest) {
               "billing.gracePeriodExtendedAt": null,
             };
 
+            // Reset the trial-conversion retry counter on success so a
+            // future, unrelated decline doesn't immediately trip suspension.
+            if (
+              isTrialConvertedSubscription(subscription.metadata) &&
+              shop?.billing?.trialConversion?.failedAttempts
+            ) {
+              updateData["billing.trialConversion.failedAttempts"] = 0;
+              updateData["billing.trialConversion.recoveredAt"] = new Date();
+              console.log(`[Stripe] Shop ${shopId} trial-converted payment recovered - clearing failure counter`);
+            }
+
             const firstItem = subscription.items?.data?.[0];
             if (firstItem?.price) {
               const amount = firstItem.price.unit_amount || 0;
@@ -619,7 +658,18 @@ export async function POST(req: NextRequest) {
               updateData["enabledFeatures.auto_booking"] = planFeatures.auto_booking;
               updateData["enabledFeatures.part_xref"] = planFeatures.part_xref;
               updateData["enabledFeatures.labor_rates"] = planFeatures.labor_rates;
-              
+
+              // Trial-conversion suspensions also lock the shop; recovery
+              // has to unlock it or the dashboard stays inaccessible.
+              if (shop?.isLocked && shop?.lockedBy === "system:stripe-webhook") {
+                updateData.isLocked = false;
+                updateData.lockedAt = null;
+                updateData.lockedBy = null;
+                updateData.unlockedAt = new Date();
+                updateData.unlockedBy = "system:stripe-webhook";
+                console.log(`[Stripe] Shop ${shopId} unlocked after trial-conversion payment recovery`);
+              }
+
               console.log(`[Stripe] Shop ${shopId} payment recovered from suspended - re-enabling features for ${plan} plan`);
               
               const owner = await db.collection("users").findOne({ shopId, role: "owner" });
@@ -657,23 +707,124 @@ export async function POST(req: NextRequest) {
             const shopId = failResolved.shopId;
             const shop = failResolved.shop;
             const now = new Date();
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+            const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+            const owner = await db.collection("users").findOne({ shopId, role: "owner" });
+
+            // Trial-converted subs run a dedicated retry counter + hard
+            // suspension path (see lib/trial-conversion-billing.ts) instead
+            // of the legacy 7-day grace flow used for normal subs.
+            if (isTrialConvertedSubscription(subscription.metadata)) {
+              const billingSettings = await getBillingSettings();
+              const prevFailures = Number(shop?.billing?.trialConversion?.failedAttempts) || 0;
+              const decision = evaluateTrialConversionFailure(
+                prevFailures,
+                billingSettings.trialConversionMaxPaymentRetries,
+              );
+
+              const updateData: Record<string, any> = {
+                "billing.status": "past_due",
+                "billing.updatedAt": now,
+                "billing.trialConversion.failedAttempts": decision.failureCount,
+                "billing.trialConversion.lastFailedAt": now,
+                "billing.trialConversion.lastInvoiceId": (invoice as any).id || null,
+              };
+              if (decision.isFirstFailure) {
+                updateData["billing.trialConversion.firstFailedAt"] = now;
+              }
+
+              if (decision.shouldSuspend) {
+                updateData.isLocked = true;
+                updateData.lockedAt = now;
+                updateData.lockedBy = "system:stripe-webhook";
+                updateData["billing.status"] = "suspended";
+                updateData["billing.trialConversion.suspendedAt"] = now;
+                updateData["billing.isPaid"] = false;
+
+                console.log(
+                  `[Stripe] Shop ${shopId} trial-converted subscription burned through ${decision.maxRetries} retries - suspending`,
+                );
+
+                if (owner?.email && shop) {
+                  const ownerMsg = makeTrialConversionSuspendedEmail(
+                    shop.name || `Shop ${shopId}`,
+                    updatePaymentUrl,
+                    true,
+                  );
+                  sendEmail({ to: owner.email, ...ownerMsg }).catch((err) => {
+                    console.error(`[Stripe] Failed to send trial-conversion suspended email to ${owner.email}:`, err);
+                  });
+                }
+
+                try {
+                  const adminEmails = await getPlatformAdminEmails();
+                  if (adminEmails.length > 0) {
+                    const adminUrl = `${baseUrl}/platform-admin/shops`;
+                    const adminMsg = makeTrialConversionSuspendedEmail(
+                      shop?.name || `Shop ${shopId}`,
+                      adminUrl,
+                      false,
+                    );
+                    sendEmail({
+                      to: adminEmails[0],
+                      ...(adminEmails.length > 1
+                        ? { cc: adminEmails.slice(1).join(",") }
+                        : {}),
+                      ...adminMsg,
+                    }).catch((err) => {
+                      console.error(`[Stripe] Failed to send trial-conversion admin alert:`, err);
+                    });
+                  }
+                } catch (adminErr: any) {
+                  console.error(`[Stripe] Failed to look up platform admins:`, adminErr?.message);
+                }
+
+                await db.collection("audit_logs").insertOne({
+                  type: "shop_trial_conversion_suspended",
+                  shopId,
+                  shopName: shop?.name || null,
+                  stripeSubscriptionId: subscription.id,
+                  failedAttempts: decision.failureCount,
+                  maxRetries: decision.maxRetries,
+                  createdAt: now,
+                });
+              } else {
+                console.log(
+                  `[Stripe] Shop ${shopId} trial-converted payment failed (attempt ${decision.failureCount}/${decision.maxRetries}, ${decision.attemptsRemaining} remaining)`,
+                );
+
+                if (owner?.email && shop) {
+                  const ownerMsg = makeTrialConversionPaymentFailedEmail(
+                    shop.name || `Shop ${shopId}`,
+                    updatePaymentUrl,
+                    decision.attemptsRemaining,
+                  );
+                  sendEmail({ to: owner.email, ...ownerMsg }).catch((err) => {
+                    console.error(`[Stripe] Failed to send trial-conversion payment failed email to ${owner.email}:`, err);
+                  });
+                }
+              }
+
+              await db.collection("shops").updateOne({ shopId }, { $set: updateData });
+              break;
+            }
+
+            // Standard (non-trial-converted) subscription: keep the existing
+            // 7-day grace-period dunning behavior unchanged.
             const gracePeriodDays = 7;
             const gracePeriodEndsAt = new Date(now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000);
-            
+
             const updateData: Record<string, any> = {
               "billing.status": "past_due",
               "billing.updatedAt": now,
             };
-            
+
             if (!shop?.billing?.gracePeriodStartedAt) {
               updateData["billing.gracePeriodStartedAt"] = now;
               updateData["billing.gracePeriodEndsAt"] = gracePeriodEndsAt;
               console.log(`[Stripe] Shop ${shopId} payment failed - starting 7-day grace period (ends ${gracePeriodEndsAt.toISOString()})`);
-              
-              const owner = await db.collection("users").findOne({ shopId, role: "owner" });
+
               if (owner?.email && shop) {
-                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
-                const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
                 const emailContent = makePaymentFailedEmail(shop.name || `Shop ${shopId}`, updatePaymentUrl, gracePeriodEndsAt);
                 sendEmail({ to: owner.email, ...emailContent }).catch(err => {
                   console.error(`[Stripe] Failed to send payment failed email to ${owner.email}:`, err);
