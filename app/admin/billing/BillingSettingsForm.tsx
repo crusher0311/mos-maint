@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Save, ExternalLink, RefreshCw, Copy, Check, Package, CreditCard, Gift } from "lucide-react";
+import { Save, ExternalLink, RefreshCw, Copy, Check, Package, CreditCard, Gift, Mail } from "lucide-react";
 import type { BillingSettings } from "@/lib/stripe";
 
 type StripePrice = {
@@ -34,23 +34,55 @@ export default function BillingSettingsForm({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [stripeData, setStripeData] = useState<{ products: StripeProduct[]; prices: StripePrice[] } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [reminderDaysInput, setReminderDaysInput] = useState(
+    (initialSettings.trialReminderDays || []).join(", "),
+  );
+
+  // Parse the comma-separated reminder days input on save. The server also
+  // sanitizes, but doing it client-side keeps the on-screen value in sync
+  // with what actually gets persisted.
+  const parseReminderDays = (raw: string): number[] => {
+    const parts = raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const set = new Set<number>();
+    for (const p of parts) {
+      const n = Number(p);
+      if (Number.isFinite(n) && Math.trunc(n) > 0) set.add(Math.trunc(n));
+    }
+    return Array.from(set).sort((a, b) => b - a);
+  };
 
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
 
     try {
+      const reminderDays = parseReminderDays(reminderDaysInput);
+      const payload = { ...settings, trialReminderDays: reminderDays };
       const res = await fetch("/api/admin/billing/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to save");
+        throw new Error(data?.error || "Failed to save");
       }
 
+      // Rehydrate from the server's sanitized response so the UI matches
+      // exactly what was persisted (the server fills in safe defaults if
+      // the admin cleared a template field or the day list).
+      const persisted = (data?.settings ?? null) as BillingSettings | null;
+      if (persisted) {
+        setSettings(persisted);
+        setReminderDaysInput((persisted.trialReminderDays || []).join(", "));
+      } else {
+        setSettings({ ...settings, trialReminderDays: reminderDays });
+        setReminderDaysInput(reminderDays.join(", "));
+      }
       setMessage({ type: "success", text: "Billing settings saved successfully" });
     } catch (err: any) {
       setMessage({ type: "error", text: err.message });
@@ -579,6 +611,88 @@ export default function BillingSettingsForm({
             <label htmlFor="foundingShopPricing" className="text-sm font-medium text-gray-700">
               Founding Shop Pricing Active
             </label>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-gray-200">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Mail className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Trial Reminder Emails</h3>
+              <p className="text-sm text-gray-500">
+                Configure when the trial cron sends reminders and what they say. Leave a template
+                blank to use the built-in default.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reminder Days Before Trial Ends
+              </label>
+              <input
+                type="text"
+                value={reminderDaysInput}
+                onChange={(e) => setReminderDaysInput(e.target.value)}
+                placeholder="e.g. 14, 7, 3, 1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Comma-separated list of positive whole numbers. Each day-out match triggers exactly
+                one reminder email per shop. Default is <code>7, 3, 1</code>.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subject Line
+              </label>
+              <input
+                type="text"
+                value={settings.trialReminderSubject}
+                onChange={(e) => setSettings({ ...settings, trialReminderSubject: e.target.value })}
+                placeholder="Action needed: {{daysLeft}} {{dayWord}} left in your MOS Tools trial"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                HTML Body
+              </label>
+              <textarea
+                value={settings.trialReminderHtml}
+                onChange={(e) => setSettings({ ...settings, trialReminderHtml: e.target.value })}
+                rows={10}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Plain-Text Body
+              </label>
+              <textarea
+                value={settings.trialReminderText}
+                onChange={(e) => setSettings({ ...settings, trialReminderText: e.target.value })}
+                rows={5}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-900 font-medium mb-2">Available placeholders</p>
+            <ul className="text-xs text-blue-800 space-y-1 font-mono">
+              <li><code>{"{{shopName}}"}</code> — the shop name</li>
+              <li><code>{"{{daysLeft}}"}</code> — number of days until the trial ends</li>
+              <li><code>{"{{dayWord}}"}</code> — "day" or "days" (matches daysLeft)</li>
+              <li><code>{"{{trialEndsAt}}"}</code> — pretty-printed end date</li>
+              <li><code>{"{{addCardUrl}}"}</code> — link to add a payment method</li>
+            </ul>
           </div>
         </div>
       </div>

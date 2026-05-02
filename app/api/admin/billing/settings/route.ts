@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
+import { sanitizeTrialReminderDays } from "@/lib/stripe";
+import {
+  DEFAULT_TRIAL_REMINDER_SUBJECT,
+  DEFAULT_TRIAL_REMINDER_HTML,
+  DEFAULT_TRIAL_REMINDER_TEXT,
+} from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +64,22 @@ export async function POST(req: NextRequest) {
       defaultVinLimit: body.defaultVinLimit ?? 300,
       foundingShopPricing: body.foundingShopPricing ?? true,
       skipTrialBonusVins: body.skipTrialBonusVins ?? 50,
+      // Trial reminder cron config (admin-tunable). Sanitize the day list
+      // here so the cron always reads a clean array, and fall back to the
+      // safe defaults if the admin clears a template field.
+      trialReminderDays: sanitizeTrialReminderDays(body.trialReminderDays),
+      trialReminderSubject:
+        typeof body.trialReminderSubject === "string" && body.trialReminderSubject.trim()
+          ? body.trialReminderSubject
+          : DEFAULT_TRIAL_REMINDER_SUBJECT,
+      trialReminderHtml:
+        typeof body.trialReminderHtml === "string" && body.trialReminderHtml.trim()
+          ? body.trialReminderHtml
+          : DEFAULT_TRIAL_REMINDER_HTML,
+      trialReminderText:
+        typeof body.trialReminderText === "string" && body.trialReminderText.trim()
+          ? body.trialReminderText
+          : DEFAULT_TRIAL_REMINDER_TEXT,
       updatedAt: new Date(),
       updatedBy: session.email,
     };
@@ -68,7 +90,12 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
-    return NextResponse.json({ success: true });
+    // Return the persisted/sanitized values so the form can rehydrate its
+    // local state — otherwise an admin who cleared (e.g.) the day list or a
+    // template field would briefly see an empty input even though the
+    // server stored the safe defaults.
+    const { type: _type, updatedAt: _updatedAt, updatedBy: _updatedBy, ...persistedSettings } = updateData;
+    return NextResponse.json({ success: true, settings: persistedSettings });
   } catch (error: any) {
     console.error("Error saving billing settings:", error);
     return NextResponse.json(

@@ -642,37 +642,91 @@ export function makePaymentRecoveredEmail(shopName: string, loginUrl: string) {
 }
 
 
-export function makeTrialReminderEmail(
-  shopName: string,
-  daysLeft: number,
-  trialEndsAt: Date | string,
-  addCardUrl: string,
-) {
-  const endsAtDate = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
-  const endsLabel = endsAtDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-  const dayWord = daysLeft === 1 ? "day" : "days";
-  const subject = `Action needed: ${daysLeft} ${dayWord} left in your MOS Tools trial`;
-  const html = `
+// Trial reminder email templates.
+//
+// Admins can override these from the billing settings UI. The strings use
+// `{{var}}` placeholders so non-developers can edit copy without touching
+// JS. Supported variables:
+//   {{shopName}}     — the shop name
+//   {{daysLeft}}     — the integer number of days left in the trial
+//   {{dayWord}}      — "day" or "days" (matches daysLeft for grammar)
+//   {{trialEndsAt}}  — pretty-printed end date ("Monday, July 1, 2026")
+//   {{addCardUrl}}   — link to add a payment method
+//
+// The defaults below are the literal copy that was previously hardcoded in
+// `makeTrialReminderEmail`, so a shop with no overrides gets the same email
+// it always did.
+export const DEFAULT_TRIAL_REMINDER_SUBJECT =
+  "Action needed: {{daysLeft}} {{dayWord}} left in your MOS Tools trial";
+
+export const DEFAULT_TRIAL_REMINDER_HTML = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;padding:20px">
       <div style="text-align:center;margin-bottom:24px">
         <div style="display:inline-block;background:#2563eb;border-radius:12px;padding:12px">
           <span style="color:white;font-size:24px;font-weight:bold">MOS</span>
         </div>
       </div>
-      <h1 style="color:#1f2937;font-size:22px;margin-bottom:8px">Your trial ends in ${daysLeft} ${dayWord}</h1>
+      <h1 style="color:#1f2937;font-size:22px;margin-bottom:8px">Your trial ends in {{daysLeft}} {{dayWord}}</h1>
       <p style="color:#4b5563;font-size:16px">
-        Hi from MOS Tools — your trial for <b>${shopName}</b> ends on <b>${endsLabel}</b>.
+        Hi from MOS Tools — your trial for <b>{{shopName}}</b> ends on <b>{{trialEndsAt}}</b>.
         To keep service running without interruption, add a payment method now. You won't be charged until the trial actually ends.
       </p>
       <div style="text-align:center;margin:24px 0">
-        <a href="${addCardUrl}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
+        <a href="{{addCardUrl}}" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Add Payment Method</a>
       </div>
       <p style="color:#6b7280;font-size:14px">If you don't add a card before the trial ends, your dashboard will be locked until billing is set up.</p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
     </div>`;
-  const text = `Your MOS Tools trial for ${shopName} ends in ${daysLeft} ${dayWord} (on ${endsLabel}).\n\nAdd a payment method to keep service running without interruption — you won't be charged until the trial ends.\n\nAdd payment method: ${addCardUrl}`;
-  return { subject, html, text };
+
+export const DEFAULT_TRIAL_REMINDER_TEXT =
+  "Your MOS Tools trial for {{shopName}} ends in {{daysLeft}} {{dayWord}} (on {{trialEndsAt}}).\n\nAdd a payment method to keep service running without interruption — you won't be charged until the trial ends.\n\nAdd payment method: {{addCardUrl}}";
+
+function applyTrialReminderTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key) => {
+    return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "";
+  });
+}
+
+export type TrialReminderTemplateOverrides = {
+  subject?: string;
+  html?: string;
+  text?: string;
+};
+
+export function makeTrialReminderEmail(
+  shopName: string,
+  daysLeft: number,
+  trialEndsAt: Date | string,
+  addCardUrl: string,
+  templates?: TrialReminderTemplateOverrides,
+) {
+  const endsAtDate = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
+  const endsLabel = endsAtDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const dayWord = daysLeft === 1 ? "day" : "days";
+
+  const vars: Record<string, string> = {
+    shopName,
+    daysLeft: String(daysLeft),
+    dayWord,
+    trialEndsAt: endsLabel,
+    addCardUrl,
+  };
+
+  // Empty/whitespace-only overrides fall back to the safe defaults so admins
+  // can't accidentally ship a blank email by clearing a field.
+  const subjectTpl = templates?.subject?.trim() ? templates.subject : DEFAULT_TRIAL_REMINDER_SUBJECT;
+  const htmlTpl = templates?.html?.trim() ? templates.html : DEFAULT_TRIAL_REMINDER_HTML;
+  const textTpl = templates?.text?.trim() ? templates.text : DEFAULT_TRIAL_REMINDER_TEXT;
+
+  return {
+    subject: applyTrialReminderTemplate(subjectTpl, vars),
+    html: applyTrialReminderTemplate(htmlTpl, vars),
+    text: applyTrialReminderTemplate(textTpl, vars),
+  };
 }
 
 export function makeTrialConvertedEmail(

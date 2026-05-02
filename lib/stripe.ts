@@ -1,5 +1,32 @@
 import Stripe from "stripe";
 import { getDb } from "@/lib/mongo";
+import {
+  DEFAULT_TRIAL_REMINDER_SUBJECT,
+  DEFAULT_TRIAL_REMINDER_HTML,
+  DEFAULT_TRIAL_REMINDER_TEXT,
+} from "@/lib/email";
+
+// Default schedule the trial-check cron has used historically. Admins can
+// override this list from the billing settings page.
+export const DEFAULT_TRIAL_REMINDER_DAYS: number[] = [7, 3, 1];
+
+/**
+ * Coerce an arbitrary value into a clean, sorted-descending list of unique
+ * positive integer reminder days. Used by both the cron and the settings
+ * save endpoint so junk like ["7", "3.4", -1, "abc"] turns into [7, 3].
+ */
+export function sanitizeTrialReminderDays(input: unknown): number[] {
+  if (!Array.isArray(input)) return [...DEFAULT_TRIAL_REMINDER_DAYS];
+  const cleaned = new Set<number>();
+  for (const raw of input) {
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n)) continue;
+    const intN = Math.trunc(n);
+    if (intN > 0) cleaned.add(intN);
+  }
+  if (cleaned.size === 0) return [...DEFAULT_TRIAL_REMINDER_DAYS];
+  return Array.from(cleaned).sort((a, b) => b - a);
+}
 
 let stripeInstance: Stripe | null = null;
 
@@ -95,6 +122,11 @@ export type BillingSettings = {
   defaultVinLimit: number;
   foundingShopPricing: boolean;
   skipTrialBonusVins: number;
+  // Trial reminder cron config (admin-tunable)
+  trialReminderDays: number[];
+  trialReminderSubject: string;
+  trialReminderHtml: string;
+  trialReminderText: string;
 };
 
 const DEFAULT_BILLING_SETTINGS: BillingSettings = {
@@ -140,6 +172,10 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   defaultVinLimit: 300,
   foundingShopPricing: true,
   skipTrialBonusVins: 50,
+  trialReminderDays: [...DEFAULT_TRIAL_REMINDER_DAYS],
+  trialReminderSubject: DEFAULT_TRIAL_REMINDER_SUBJECT,
+  trialReminderHtml: DEFAULT_TRIAL_REMINDER_HTML,
+  trialReminderText: DEFAULT_TRIAL_REMINDER_TEXT,
 };
 
 export async function getBillingSettings(): Promise<BillingSettings> {
@@ -194,6 +230,19 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       defaultVinLimit: settings.defaultVinLimit ?? 300,
       foundingShopPricing: settings.foundingShopPricing ?? true,
       skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
+      trialReminderDays: sanitizeTrialReminderDays(settings.trialReminderDays),
+      trialReminderSubject:
+        typeof settings.trialReminderSubject === "string" && settings.trialReminderSubject.trim()
+          ? settings.trialReminderSubject
+          : DEFAULT_TRIAL_REMINDER_SUBJECT,
+      trialReminderHtml:
+        typeof settings.trialReminderHtml === "string" && settings.trialReminderHtml.trim()
+          ? settings.trialReminderHtml
+          : DEFAULT_TRIAL_REMINDER_HTML,
+      trialReminderText:
+        typeof settings.trialReminderText === "string" && settings.trialReminderText.trim()
+          ? settings.trialReminderText
+          : DEFAULT_TRIAL_REMINDER_TEXT,
     };
   } catch (error) {
     console.error("Error loading billing settings:", error);

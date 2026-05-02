@@ -14,7 +14,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const REMINDER_DAYS = [7, 3, 1];
 
 function isAuthorized(req: NextRequest): boolean {
   if (!CRON_SECRET) return true;
@@ -84,12 +83,22 @@ async function processOne(
     if (cardOnFile) {
       return { shopId, skipped: "card_on_file", daysLeft };
     }
-    const reminderDay = REMINDER_DAYS.find((d) => daysLeft === d);
+    const reminderDay = settings.trialReminderDays.find((d) => daysLeft === d);
     if (reminderDay) {
       const sent = shop.trial?.reminderSent || {};
       if (!sent[String(reminderDay)] && ownerEmail) {
         try {
-          const msg = makeTrialReminderEmail(shop.name, daysLeft, trialEndsAt, addCardUrl);
+          const msg = makeTrialReminderEmail(
+            shop.name,
+            daysLeft,
+            trialEndsAt,
+            addCardUrl,
+            {
+              subject: settings.trialReminderSubject,
+              html: settings.trialReminderHtml,
+              text: settings.trialReminderText,
+            },
+          );
           await sendEmail({ to: ownerEmail, ...msg });
           await db.collection("shops").updateOne(
             { shopId },
@@ -225,7 +234,14 @@ async function runChecks(req: NextRequest) {
     process.env.NEXT_PUBLIC_BASE_URL ||
     (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "https://mos.tools");
 
-  const horizon = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000);
+  // Look ahead far enough to catch the biggest configured reminder day. The
+  // hardcoded schedule used to be 7/3/1, so an 8-day horizon was always
+  // safe; with admin-tunable days (e.g. 14) we need to scale the window.
+  const maxReminderDay = settings.trialReminderDays.length > 0
+    ? Math.max(...settings.trialReminderDays)
+    : 7;
+  const horizonDays = Math.max(maxReminderDay + 1, 8);
+  const horizon = new Date(Date.now() + horizonDays * 24 * 60 * 60 * 1000);
   const candidates = await db
     .collection("shops")
     .find({
