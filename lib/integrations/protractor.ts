@@ -1128,6 +1128,49 @@ export interface WorkOrderServicePackage {
   }>;
 }
 
+/**
+ * Build the Protractor "Concern" ServicePackage blocks for a new work order.
+ *
+ * Contract (locked in by tests/plan-build-task-246.smoke.ts):
+ *   - When `concerns` is a non-empty array, each non-empty/whitespace-trimmed
+ *     entry becomes its own ServicePackage with Chapter "Concern" and an
+ *     incrementing Rank starting at 1, in the order provided.
+ *   - When `concerns` is missing/empty, falls back to the legacy single
+ *     `concernText` (trimmed) as a single Concern ServicePackage.
+ *   - When both are provided, `concerns` wins (back-compat preserved for
+ *     callers that haven't migrated yet, but new behavior is preferred).
+ *   - Empty / whitespace-only entries inside `concerns` are filtered out and
+ *     do not create empty Protractor blocks.
+ */
+export function buildConcernServicePackages(input: {
+  concerns?: string[];
+  concernText?: string;
+}): Array<{
+  ID: string;
+  Chapter: "Concern";
+  Rank: number;
+  ServicePackageHeader: { Title: string; Description: string };
+  ServicePackageLines: { ItemCollection: never[] };
+}> {
+  const concernList = (input.concerns && input.concerns.length > 0)
+    ? input.concerns.map((c) => (c || "").trim()).filter((c) => c.length > 0)
+    : (input.concernText && input.concernText.trim()
+        ? [input.concernText.trim()]
+        : []);
+
+  let rank = 1;
+  return concernList.map((concern) => ({
+    ID: crypto.randomUUID(),
+    Chapter: "Concern" as const,
+    Rank: rank++,
+    ServicePackageHeader: {
+      Title: "Customer Concern Assistant",
+      Description: concern,
+    },
+    ServicePackageLines: { ItemCollection: [] },
+  }));
+}
+
 export async function createProtractorWorkOrder(
   shopId: number,
   params: {
@@ -1172,29 +1215,10 @@ export async function createProtractorWorkOrder(
   }
   if (params.note) body.Note = params.note;
 
-  const initialPackages: any[] = [];
-  let rank = 1;
-
-  // Prefer the multi-concern array if provided; fall back to the legacy
-  // single concernText for back-compat with any other caller.
-  const concernList = (params.concerns && params.concerns.length > 0)
-    ? params.concerns.map(c => (c || "").trim()).filter(c => c.length > 0)
-    : (params.concernText && params.concernText.trim()
-        ? [params.concernText.trim()]
-        : []);
-
-  for (const concern of concernList) {
-    initialPackages.push({
-      ID: crypto.randomUUID(),
-      Chapter: "Concern",
-      Rank: rank++,
-      ServicePackageHeader: {
-        Title: "Customer Concern Assistant",
-        Description: concern,
-      },
-      ServicePackageLines: { ItemCollection: [] },
-    });
-  }
+  const initialPackages: any[] = buildConcernServicePackages({
+    concerns: params.concerns,
+    concernText: params.concernText,
+  });
 
   if (initialPackages.length > 0) {
     body.ServicePackages = { ItemCollection: initialPackages };
