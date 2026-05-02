@@ -5,6 +5,7 @@ import {
   updateShopFeatures,
   updateShopBilling,
   pickValidFeatures,
+  isFounderPlan,
   type BillingPlan,
   type BillingStatus
 } from "@/lib/featureResolver";
@@ -232,19 +233,39 @@ export async function PATCH(
       });
     }
 
-    if (features) {
-      const featureUpdate = pickValidFeatures(features);
+    // The effective plan after this PATCH (incoming change wins over the
+    // stored value) — used to decide whether to skip writing per-feature
+    // overrides for founder shops.
+    const effectivePlan: string = (billing?.plan as string | undefined)
+      ?? (shop.billing?.plan as string | undefined)
+      ?? "trial";
 
-      await updateShopFeatures(shopId as number, featureUpdate);
-      
-      await db.collection("audit_logs").insertOne({
-        type: "shop_features_updated",
-        shopId,
-        shopName: shop.name,
-        changes: featureUpdate,
-        adminEmail: session.email,
-        createdAt: new Date(),
-      });
+    if (features) {
+      if (isFounderPlan(effectivePlan)) {
+        // Founder plan is a wildcard — every feature is on regardless of
+        // per-shop overrides. Skip writing overrides so changing the plan
+        // later doesn't leave stale `enabledFeatures` toggles behind.
+        await db.collection("audit_logs").insertOne({
+          type: "shop_features_skipped_founder",
+          shopId,
+          shopName: shop.name,
+          adminEmail: session.email,
+          createdAt: new Date(),
+        });
+      } else {
+        const featureUpdate = pickValidFeatures(features);
+
+        await updateShopFeatures(shopId as number, featureUpdate);
+
+        await db.collection("audit_logs").insertOne({
+          type: "shop_features_updated",
+          shopId,
+          shopName: shop.name,
+          changes: featureUpdate,
+          adminEmail: session.email,
+          createdAt: new Date(),
+        });
+      }
     }
 
     if (billing || features) {

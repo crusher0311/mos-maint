@@ -1,5 +1,12 @@
 import { getDb } from "./mongo";
 
+/**
+ * Test seam: smoke tests can swap `__deps.getDb` to inject an in-memory
+ * Mongo stand-in without touching production callers. Mirrors the
+ * `__deps` pattern used by the cron route handlers under `app/api/cron/`.
+ */
+export const __deps = { getDb };
+
 export const FEATURE_KEYS = [
   "maintenance",
   "job_lookup",
@@ -21,7 +28,24 @@ export type FeatureSettings = Record<FeatureKey, boolean>;
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
-export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo";
+export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo" | "detect_dog_founder";
+
+export const FOUNDER_PLAN: BillingPlan = "detect_dog_founder";
+
+export function isFounderPlan(plan: string | null | undefined): boolean {
+  return plan === FOUNDER_PLAN;
+}
+
+/**
+ * Build a FeatureSettings object that has every key in FEATURE_KEYS set
+ * to `true`. Reads `FEATURE_KEYS` at call time so newly added features
+ * are picked up automatically (the whole point of the founder wildcard).
+ */
+export function buildAllFeaturesEnabled(): FeatureSettings {
+  const out = {} as FeatureSettings;
+  for (const k of FEATURE_KEYS) out[k] = true;
+  return out;
+}
 
 export interface ShopBilling {
   plan: BillingPlan;
@@ -103,6 +127,11 @@ const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
   enterprise:         [...FEATURE_KEYS],
   demo:               [...FEATURE_KEYS],
   oil_sticker_legacy: ["oil_sticker", "auto_booking", "labor_rates"],
+  // The founder plan is a wildcard — every current and future feature is
+  // on. The fallback list is computed dynamically below in
+  // `getPlanFeaturesFromDatabase` / `getFeatureEntitlements`, but we
+  // include all current keys here for callers that read this map directly.
+  detect_dog_founder: [...FEATURE_KEYS],
 };
 
 const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = Object.fromEntries(
@@ -110,8 +139,14 @@ const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = Object.from
 ) as Record<BillingPlan, FeatureSettings>;
 
 async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
+  // Founder plan is a wildcard — every current and future feature is on.
+  // Read FEATURE_KEYS at call time so newly added features are picked up
+  // automatically without anyone editing this file.
+  if (isFounderPlan(plan)) {
+    return buildAllFeaturesEnabled();
+  }
   try {
-    const db = await getDb();
+    const db = await __deps.getDb();
     const platformFeatures = await db.collection("platform_features")
       .find({ status: "active" })
       .toArray();
@@ -139,7 +174,7 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
 }
 
 export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   const shop = await db.collection("shops").findOne({ shopId });
 
@@ -161,14 +196,22 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   const status: BillingStatus = shop.billing?.status || "trial";
   const vinLimit = shop.trialVinLimit ?? shop.billing?.vinLimit ?? 10;
 
-  const planFeatures = await getPlanFeaturesFromDatabase(plan);
-
   const shopFeatures: Partial<FeatureSettings> = shop.enabledFeatures || {};
 
-  const effectiveFeatures = {} as FeatureSettings;
-  for (const key of FEATURE_KEYS) {
-    effectiveFeatures[key] =
-      shopFeatures[key] ?? enterpriseFeatures[key] ?? planFeatures[key] ?? false;
+  // Founder plan is a wildcard: every current AND future feature key is
+  // on, regardless of per-shop or per-enterprise overrides. Read
+  // FEATURE_KEYS at call time so newly added entries take effect on the
+  // very next request without touching this file or PLAN_FALLBACK_KEYS.
+  let effectiveFeatures: FeatureSettings;
+  if (isFounderPlan(plan)) {
+    effectiveFeatures = buildAllFeaturesEnabled();
+  } else {
+    const planFeatures = await getPlanFeaturesFromDatabase(plan);
+    effectiveFeatures = {} as FeatureSettings;
+    for (const key of FEATURE_KEYS) {
+      effectiveFeatures[key] =
+        shopFeatures[key] ?? enterpriseFeatures[key] ?? planFeatures[key] ?? false;
+    }
   }
 
   const billing: ShopBilling = {
@@ -238,7 +281,7 @@ export async function updateShopFeatures(
   shopId: number,
   features: Partial<FeatureSettings>
 ): Promise<void> {
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   const shop = await db.collection("shops").findOne({ shopId });
   const existingFeatures = shop?.enabledFeatures || {};
@@ -255,7 +298,7 @@ export async function updateShopBilling(
   shopId: number,
   billing: Partial<ShopBilling>
 ): Promise<void> {
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   const updateFields: any = { updatedAt: new Date() };
   if (billing.plan !== undefined) updateFields["billing.plan"] = billing.plan;
@@ -272,7 +315,7 @@ export async function updateEnterpriseFeatures(
   enterpriseId: string,
   features: Partial<FeatureSettings>
 ): Promise<void> {
-  const db = await getDb();
+  const db = await __deps.getDb();
   const { ObjectId } = await import("mongodb");
 
   const enterprise = await db.collection("enterprise_accounts").findOne({

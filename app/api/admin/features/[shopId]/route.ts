@@ -11,8 +11,23 @@ import {
   FeatureId,
   FEATURES,
 } from "@/lib/features";
+import { getDb } from "@/lib/mongo";
+import { isFounderPlan } from "@/lib/featureResolver";
 
 export const dynamic = "force-dynamic";
+
+async function isShopOnFounderPlan(shopId: number): Promise<boolean> {
+  try {
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { "billing.plan": 1 } }
+    );
+    return isFounderPlan(shop?.billing?.plan);
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -28,11 +43,32 @@ export async function GET(
     return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
   }
 
+  const founder = await isShopOnFounderPlan(shopId);
   const features = await getShopFeatures(shopId);
+
+  if (founder) {
+    // Founder plan = wildcard. Report every feature as on, sourced from
+    // the plan rather than per-shop overrides, so the UI can show locked
+    // toggles and a plan-included caption.
+    return NextResponse.json({
+      ok: true,
+      shopId,
+      planLocked: true,
+      planLabel: "Detect Dog – Founder",
+      features: {
+        shopId,
+        enabledFeatures: FEATURES.map(f => f.id),
+        featureSettings: features?.featureSettings || {},
+        subscriptions: features?.subscriptions || [],
+      },
+      availableFeatures: FEATURES,
+    });
+  }
 
   return NextResponse.json({
     ok: true,
     shopId,
+    planLocked: false,
     features: features || {
       shopId,
       enabledFeatures: ["maintenance"],
@@ -62,6 +98,18 @@ export async function PUT(
 
   if (!Array.isArray(enabledFeatures)) {
     return NextResponse.json({ error: "enabledFeatures must be an array" }, { status: 400 });
+  }
+
+  // Founder plan is a wildcard — every feature is on regardless of
+  // overrides. Skip the write so changing the plan later doesn't leave
+  // stale `enabledFeatures` toggles behind.
+  if (await isShopOnFounderPlan(shopId)) {
+    return NextResponse.json({
+      ok: true,
+      shopId,
+      planLocked: true,
+      enabledFeatures: FEATURES.map(f => f.id),
+    });
   }
 
   const validFeatureIds = new Set(FEATURES.map(f => f.id));
@@ -100,6 +148,17 @@ export async function POST(
   const validFeatureIds = new Set(FEATURES.map(f => f.id));
   if (!validFeatureIds.has(featureId)) {
     return NextResponse.json({ error: "Invalid feature ID" }, { status: 400 });
+  }
+
+  // Founder plan = wildcard. No-op the toggle and report every feature
+  // as enabled so the UI stays consistent.
+  if (await isShopOnFounderPlan(shopId)) {
+    return NextResponse.json({
+      ok: true,
+      shopId,
+      planLocked: true,
+      enabledFeatures: FEATURES.map(f => f.id),
+    });
   }
 
   if (action === "enable") {

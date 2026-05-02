@@ -1618,7 +1618,13 @@ export default function PlatformShopsPage() {
 
               <div>
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Feature Toggles</h4>
-                <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
+                {billingEdits.plan === "detect_dog_founder" ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-3">
+                    Detect Dog – Founder includes every current and future feature. Toggles are locked on.
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
+                )}
                 <div className="space-y-2">
                   {[
                     { key: "maintenance", label: "Maintenance Tracking", desc: "Track vehicle maintenance schedules and DVI insights" },
@@ -1632,20 +1638,37 @@ export default function PlatformShopsPage() {
                     { key: "concern_assistant", label: "Concern Assistant", desc: "AI-powered customer concern intake with follow-up questions and RO injection" },
                     { key: "dvi_prefill", label: "DVI Pre-fill (VHI)", desc: "Auto-fill DVI inspection ratings using VHI maintenance data" },
                     { key: "enhance_notes", label: "Enhance Notes (AI)", desc: "AI-powered rewriting of technician notes into customer-facing language" },
-                  ].map(feature => (
-                    <label key={feature.key} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={featureEdits[feature.key as keyof ShopFeatures] === true}
-                        onChange={(e) => setFeatureEdits({ ...featureEdits, [feature.key]: e.target.checked })}
-                        className="mt-0.5 w-4 h-4 text-[#3c81c3] border-gray-300 rounded focus:ring-[#3c81c3]"
-                      />
-                      <div>
-                        <div className="font-medium text-gray-900 text-sm">{feature.label}</div>
-                        <div className="text-xs text-gray-500">{feature.desc}</div>
-                      </div>
-                    </label>
-                  ))}
+                  ].map(feature => {
+                    const isFounder = billingEdits.plan === "detect_dog_founder";
+                    const checked = isFounder
+                      ? true
+                      : featureEdits[feature.key as keyof ShopFeatures] === true;
+                    return (
+                      <label
+                        key={feature.key}
+                        className={`flex items-start gap-3 p-3 border border-gray-200 rounded-lg ${
+                          isFounder ? "bg-amber-50/40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isFounder}
+                          onChange={(e) => setFeatureEdits({ ...featureEdits, [feature.key]: e.target.checked })}
+                          className="mt-0.5 w-4 h-4 text-[#3c81c3] border-gray-300 rounded focus:ring-[#3c81c3] disabled:opacity-60"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900 text-sm">{feature.label}</div>
+                          <div className="text-xs text-gray-500">{feature.desc}</div>
+                          {isFounder && (
+                            <div className="text-[11px] text-amber-700 mt-1">
+                              Included with Detect Dog – Founder
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1659,9 +1682,12 @@ export default function PlatformShopsPage() {
               </button>
               <button
                 onClick={() => updateShopSettings(
-                  selectedShop.shopId, 
-                  { ...billingEdits, vinLimit: Number(vinInput) } as any, 
-                  featureEdits
+                  selectedShop.shopId,
+                  { ...billingEdits, vinLimit: Number(vinInput) } as any,
+                  // Founder plan = wildcard. Don't write per-feature
+                  // overrides so changing the plan later doesn't leave
+                  // stale toggles behind.
+                  billingEdits.plan === "detect_dog_founder" ? undefined : featureEdits
                 )}
                 disabled={actionLoading !== null}
                 className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
