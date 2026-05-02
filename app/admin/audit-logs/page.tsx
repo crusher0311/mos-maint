@@ -17,6 +17,7 @@ const ACTION_OPTIONS: Array<{ value: "" | AuditAction; label: string }> = [
   { value: "api_key_view", label: "API key view" },
   { value: "data_export", label: "Data export" },
   { value: "build_ro_from_vhi", label: "Build RO from VHI" },
+  { value: "billing_settings_change", label: "Billing settings change" },
 ];
 
 const DAYS_OPTIONS = [1, 7, 30, 90];
@@ -37,6 +38,7 @@ const ACTION_BADGE_CLASS: Record<string, string> = {
   api_key_view: "bg-pink-100 text-pink-800",
   data_export: "bg-teal-100 text-teal-800",
   build_ro_from_vhi: "bg-purple-100 text-purple-800",
+  billing_settings_change: "bg-blue-100 text-blue-800",
 };
 
 function formatTarget(log: AuditLogEntry): string {
@@ -57,6 +59,20 @@ function formatDetails(log: AuditLogEntry): string {
       return `${revoked} session${revoked === 1 ? "" : "s"} revoked`;
     }
     return "Password force-reset";
+  }
+  if (log.action === "billing_settings_change") {
+    const field = log.details?.field;
+    if (typeof field === "string" && field) {
+      const before = log.details?.before;
+      const after = log.details?.after;
+      const summarize = (v: unknown): string => {
+        if (Array.isArray(v)) return `[${v.join(", ")}]`;
+        if (v === undefined || v === null) return "—";
+        const s = typeof v === "string" ? v : JSON.stringify(v);
+        return s.length > 60 ? `${s.slice(0, 57)}…` : s;
+      };
+      return `${field}: ${summarize(before)} → ${summarize(after)}`;
+    }
   }
   if (log.action === "build_ro_from_vhi") {
     const s = log.details?.summary || {};

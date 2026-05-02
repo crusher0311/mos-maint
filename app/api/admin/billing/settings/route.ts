@@ -1,12 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
-import { sanitizeTrialReminderDays } from "@/lib/stripe";
+import { getBillingSettings, sanitizeTrialReminderDays } from "@/lib/stripe";
+import { logAdminAction } from "@/lib/audit-log";
 import {
   DEFAULT_TRIAL_REMINDER_SUBJECT,
   DEFAULT_TRIAL_REMINDER_HTML,
   DEFAULT_TRIAL_REMINDER_TEXT,
 } from "@/lib/email";
+
+type TrialReminderField =
+  | "trialReminderDays"
+  | "trialReminderSubject"
+  | "trialReminderHtml"
+  | "trialReminderText";
+
+const TRIAL_REMINDER_FIELDS: TrialReminderField[] = [
+  "trialReminderDays",
+  "trialReminderSubject",
+  "trialReminderHtml",
+  "trialReminderText",
+];
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+  return a === b;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +43,11 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const db = await getDb();
+
+    // Snapshot the current persisted (and sanitized) values so we can detect
+    // which trial reminder fields were actually mutated by this admin save and
+    // record an audit-log entry per change.
+    const previousSettings = await getBillingSettings();
 
     const updateData = {
       type: "billing",
@@ -95,6 +125,61 @@ export async function POST(req: NextRequest) {
       { $set: updateData },
       { upsert: true }
     );
+
+    // Audit-log any trial reminder field changes so we can later answer
+    // "who edited the template / schedule and when?". One entry per changed
+    // field keeps the audit trail filterable and avoids burying a single
+    // field change inside an opaque blob.
+    //
+    // We dual-write:
+    //   1. `audit_logs` — the convention used by other trial-related events
+    //      (see `shop_trial_reminder_sent` writes in
+    //      `app/api/cron/trial-check/route.ts`). This is the system source of
+    //      truth and is what shop-history / downstream tooling reads.
+    //   2. `admin_audit_logs` via `logAdminAction()` — so the entry shows up
+    //      in the existing platform-admin audit log view (which reads from
+    //      `admin_audit_logs`).
+    try {
+      const headerStore = req.headers;
+      const ipAddress =
+        headerStore.get("x-forwarded-for") ||
+        headerStore.get("x-real-ip") ||
+        undefined;
+      const userAgent = headerStore.get("user-agent") || undefined;
+      const now = new Date();
+
+      for (const field of TRIAL_REMINDER_FIELDS) {
+        const before = previousSettings[field];
+        const after = updateData[field];
+        if (valuesEqual(before, after)) continue;
+
+        await db.collection("audit_logs").insertOne({
+          type: "billing_settings_change",
+          adminEmail: session.email,
+          field,
+          before,
+          after,
+          ipAddress,
+          userAgent,
+          createdAt: now,
+        });
+
+        await logAdminAction({
+          action: "billing_settings_change",
+          adminEmail: session.email,
+          ipAddress,
+          userAgent,
+          details: {
+            field,
+            before,
+            after,
+          },
+        });
+      }
+    } catch (auditErr) {
+      // Never let audit logging failures break the save itself.
+      console.error("[billing/settings] Failed to write audit log:", auditErr);
+    }
 
     // Return the persisted/sanitized values so the form can rehydrate its
     // local state — otherwise an admin who cleared (e.g.) the day list or a

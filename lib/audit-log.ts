@@ -13,7 +13,8 @@ export type AuditAction =
   | "user_role_change"
   | "api_key_view"
   | "data_export"
-  | "build_ro_from_vhi";
+  | "build_ro_from_vhi"
+  | "billing_settings_change";
 
 export interface AuditLogEntry {
   action: AuditAction;

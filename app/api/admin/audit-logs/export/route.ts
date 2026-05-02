@@ -26,6 +26,7 @@ const ALLOWED_ACTIONS: AuditAction[] = [
   "api_key_view",
   "data_export",
   "build_ro_from_vhi",
+  "billing_settings_change",
 ];
 
 const ALLOWED_DAYS = [1, 7, 30, 90];
