@@ -45,7 +45,7 @@ export async function GET() {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth] = await Promise.all([
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth, cardCaptureEmailLogs, ownerEmailRows] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -75,7 +75,43 @@ export async function GET() {
       db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray()
+      ]).toArray(),
+      db.collection("audit_logs").aggregate([
+        {
+          $match: {
+            type: { $in: ["shop_card_capture_email_resent", "shop_trial_reminder_sent"] },
+            shopId: { $in: allShopIdVariants },
+          },
+        },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: "$shopId",
+            entries: {
+              $push: {
+                type: "$type",
+                ownerEmail: "$ownerEmail",
+                adminEmail: "$adminEmail",
+                mode: "$mode",
+                daysLeft: "$daysLeft",
+                createdAt: "$createdAt",
+              },
+            },
+          },
+        },
+        { $project: { entries: { $slice: ["$entries", 10] } } },
+      ]).toArray(),
+      db.collection("users").aggregate([
+        { $match: { shopId: { $in: shopIds }, role: { $in: ["owner", "admin"] } } },
+        { $sort: { createdAt: 1 } },
+        {
+          $group: {
+            _id: "$shopId",
+            email: { $first: "$email" },
+            emailLower: { $first: "$emailLower" },
+          },
+        },
+      ]).toArray(),
     ]);
     
     const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
@@ -112,7 +148,122 @@ export async function GET() {
       const key = String(v._id);
       vehicleCountMap.set(key, (vehicleCountMap.get(key) || 0) + v.count);
     }
-    
+
+    type CardCaptureEntry = {
+      sentAt: Date | null;
+      recipient: string | null;
+      source: "admin" | "cron";
+      adminEmail: string | null;
+      mode: string | null;
+      daysLeft: number | null;
+    };
+
+    type RawAuditEntry = {
+      type?: unknown;
+      ownerEmail?: unknown;
+      adminEmail?: unknown;
+      mode?: unknown;
+      daysLeft?: unknown;
+      createdAt?: unknown;
+    };
+
+    type CardCaptureLogGroup = {
+      _id: unknown;
+      entries?: RawAuditEntry[];
+    };
+
+    type OwnerEmailRow = {
+      _id: unknown;
+      email?: unknown;
+      emailLower?: unknown;
+    };
+
+    const toDate = (value: unknown): Date | null => {
+      if (value instanceof Date) {
+        return Number.isFinite(value.getTime()) ? value : null;
+      }
+      if (typeof value === "string" || typeof value === "number") {
+        const parsed = new Date(value);
+        return Number.isFinite(parsed.getTime()) ? parsed : null;
+      }
+      return null;
+    };
+
+    const toStringOrNull = (value: unknown): string | null =>
+      typeof value === "string" && value.length > 0 ? value : null;
+
+    const ownerEmailMap = new Map<string, string>();
+    for (const row of ownerEmailRows as OwnerEmailRow[]) {
+      const email = toStringOrNull(row.email) ?? toStringOrNull(row.emailLower);
+      if (email) ownerEmailMap.set(String(row._id), email);
+    }
+
+    const sortAndCapHistory = (entries: CardCaptureEntry[]): CardCaptureEntry[] =>
+      entries
+        .filter((e) => e.sentAt !== null)
+        .sort((a, b) => (b.sentAt as Date).getTime() - (a.sentAt as Date).getTime())
+        .slice(0, 10);
+
+    const cardCaptureHistoryMap = new Map<string, CardCaptureEntry[]>();
+    for (const log of cardCaptureEmailLogs as CardCaptureLogGroup[]) {
+      const key = String(log._id);
+      const existing = cardCaptureHistoryMap.get(key) ?? [];
+      const mapped: CardCaptureEntry[] = (log.entries ?? []).map((e) => ({
+        sentAt: toDate(e.createdAt),
+        recipient: toStringOrNull(e.ownerEmail),
+        source: e.type === "shop_card_capture_email_resent" ? "admin" : "cron",
+        adminEmail: toStringOrNull(e.adminEmail),
+        mode: toStringOrNull(e.mode),
+        daysLeft: typeof e.daysLeft === "number" ? e.daysLeft : null,
+      }));
+      // Merge entries when shopId variants (number/string) produce
+      // separate buckets for the same logical shop.
+      cardCaptureHistoryMap.set(key, sortAndCapHistory([...existing, ...mapped]));
+    }
+
+    // Merge entries from `trial.reminderSent` directly on each shop. Older
+    // shops may have reminders recorded there without a matching audit log
+    // entry; this keeps history complete and prevents admins from missing
+    // sends. Dedupe against audit-log entries when timestamps are within
+    // 60s and the daysLeft matches.
+    for (const shop of shops) {
+      const key = String(shop.shopId);
+      const reminderSent = shop.trial?.reminderSent;
+      if (!reminderSent || typeof reminderSent !== "object") continue;
+
+      const ownerEmail = ownerEmailMap.get(key) ?? null;
+      const reminderRecord = reminderSent as Record<string, unknown>;
+      const fromTrial: CardCaptureEntry[] = [];
+      for (const [dayKey, rawSentAt] of Object.entries(reminderRecord)) {
+        const sentAt = toDate(rawSentAt);
+        if (!sentAt) continue;
+        const days = Number(dayKey);
+        fromTrial.push({
+          sentAt,
+          recipient: ownerEmail,
+          source: "cron",
+          adminEmail: null,
+          mode: "reminder",
+          daysLeft: Number.isFinite(days) ? days : null,
+        });
+      }
+      if (fromTrial.length === 0) continue;
+
+      const existing = cardCaptureHistoryMap.get(key) ?? [];
+      const deduped: CardCaptureEntry[] = [...existing];
+      for (const entry of fromTrial) {
+        const entryMs = (entry.sentAt as Date).getTime();
+        const isDup = existing.some((e) => {
+          if (e.source !== "cron" || !e.sentAt) return false;
+          const sameDay = e.daysLeft === entry.daysLeft;
+          const close = Math.abs(e.sentAt.getTime() - entryMs) < 60_000;
+          return sameDay && close;
+        });
+        if (!isDup) deduped.push(entry);
+      }
+      cardCaptureHistoryMap.set(key, sortAndCapHistory(deduped));
+    }
+
     const enrichedShops = shops.map(shop => {
       const integrations: string[] = [];
       if (shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId) integrations.push("Protractor");
@@ -150,6 +301,9 @@ export async function GET() {
         : null;
       const cardOnFile = shop.cardOnFile === true || shop.billing?.cardOnFile === true;
 
+      const cardCaptureHistory = cardCaptureHistoryMap.get(String(shop.shopId)) || [];
+      const lastCardCaptureEmail = cardCaptureHistory[0] || null;
+
       return {
         _id: shop._id,
         shopId: shop.shopId,
@@ -183,6 +337,8 @@ export async function GET() {
         },
         stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
+        lastCardCaptureEmail,
+        cardCaptureEmailHistory: cardCaptureHistory,
         stickerConfig: shop.stickerConfig || {},
         enabledFeatures: shop.enabledFeatures || {},
         backfill: activeIntegration ? (() => {

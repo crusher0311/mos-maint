@@ -75,6 +75,15 @@ interface IntegrationDetails {
   } | null;
 }
 
+interface CardCaptureEmailEntry {
+  sentAt: string | null;
+  recipient: string | null;
+  source: "admin" | "cron";
+  adminEmail: string | null;
+  mode: string | null;
+  daysLeft: number | null;
+}
+
 interface BackfillStatus {
   completed: boolean;
   inProgress: boolean;
@@ -110,6 +119,49 @@ interface Shop {
   stickerCountThisMonth?: number;
   trial?: ShopTrial | null;
   cardOnFile?: boolean;
+  lastCardCaptureEmail?: CardCaptureEmailEntry | null;
+  cardCaptureEmailHistory?: CardCaptureEmailEntry[];
+}
+
+function formatTimeAgo(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const t = new Date(input).getTime();
+  if (!Number.isFinite(t)) return null;
+  const diffMs = Date.now() - t;
+  if (diffMs < 0) return "just now";
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(days / 365);
+  return `${years}y ago`;
+}
+
+function describeCardCaptureSource(entry: CardCaptureEmailEntry): string {
+  if (entry.source === "admin") {
+    return entry.adminEmail ? `admin (${entry.adminEmail})` : "admin";
+  }
+  if (entry.daysLeft !== null && entry.daysLeft !== undefined) {
+    return `cron (${entry.daysLeft}-day reminder)`;
+  }
+  return "cron";
+}
+
+function buildCardCaptureHistoryTitle(history: CardCaptureEmailEntry[] | undefined): string {
+  if (!history || history.length === 0) {
+    return "No card-capture emails sent yet";
+  }
+  const lines = history.map((e) => {
+    const when = e.sentAt ? new Date(e.sentAt).toLocaleString() : "unknown time";
+    const who = e.recipient || "unknown recipient";
+    return `• ${when} — ${who} — ${describeCardCaptureSource(e)}`;
+  });
+  return `Card-capture email history (most recent first):\n${lines.join("\n")}`;
 }
 
 export default function PlatformShopsPage() {
@@ -282,6 +334,7 @@ export default function PlatformShopsPage() {
       const data = await res.json();
       if (data.ok) {
         alert(data.message || "Card-capture email sent");
+        loadShops();
       } else {
         alert(data.error || "Failed to send email");
       }
@@ -889,24 +942,59 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
-                      {shop.trial?.endsAt && (
-                        <button
-                          onClick={() => resendCardCaptureEmail(shop)}
-                          disabled={actionLoading !== null}
-                          title={shop.cardOnFile ? "Resend card-capture email (card already on file)" : "Resend card-capture email to owner"}
-                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                            shop.cardOnFile
-                              ? "text-gray-500 hover:bg-gray-50"
-                              : "text-amber-600 hover:bg-amber-50"
-                          }`}
-                        >
-                          {actionLoading === `${shop.shopId}-resend-card` ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Mail className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
+                      {shop.trial?.endsAt && (() => {
+                        const lastEmail = shop.lastCardCaptureEmail || null;
+                        const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
+                        const sentMs = lastEmail?.sentAt ? Date.now() - new Date(lastEmail.sentAt).getTime() : null;
+                        const isRecent = sentMs !== null && sentMs < 24 * 60 * 60 * 1000;
+                        const baseTitle = shop.cardOnFile
+                          ? "Resend card-capture email (card already on file)"
+                          : "Resend card-capture email to owner";
+                        const historyTitle = buildCardCaptureHistoryTitle(shop.cardCaptureEmailHistory);
+                        const lastLine = lastEmail
+                          ? `Last sent ${sentAgo} to ${lastEmail.recipient || "unknown"} via ${describeCardCaptureSource(lastEmail)}`
+                          : "No card-capture emails sent yet";
+                        return (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => resendCardCaptureEmail(shop)}
+                              disabled={actionLoading !== null}
+                              title={`${baseTitle}\n\n${lastLine}\n\n${historyTitle}`}
+                              className={`relative p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                                shop.cardOnFile
+                                  ? "text-gray-500 hover:bg-gray-50"
+                                  : "text-amber-600 hover:bg-amber-50"
+                              }`}
+                            >
+                              {actionLoading === `${shop.shopId}-resend-card` ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Mail className="w-4 h-4" />
+                              )}
+                              {isRecent && (
+                                <span
+                                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </button>
+                            {sentAgo && (
+                              <span
+                                className={`text-[11px] leading-tight ${isRecent ? "text-emerald-700" : "text-gray-500"} flex flex-col max-w-[140px]`}
+                                title={`${lastLine}\n\n${historyTitle}`}
+                              >
+                                <span className="whitespace-nowrap">Sent {sentAgo}</span>
+                                {lastEmail?.recipient && (
+                                  <span className="truncate text-gray-500">
+                                    to {lastEmail.recipient}
+                                    {lastEmail.source === "admin" ? " · admin" : " · cron"}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <button
                         onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
                         disabled={actionLoading !== null}
@@ -1216,24 +1304,59 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
-                      {shop.trial?.endsAt && (
-                        <button
-                          onClick={() => resendCardCaptureEmail(shop)}
-                          disabled={actionLoading !== null}
-                          title={shop.cardOnFile ? "Resend card-capture email (card already on file)" : "Resend card-capture email to owner"}
-                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                            shop.cardOnFile
-                              ? "text-gray-500 hover:bg-gray-50"
-                              : "text-amber-600 hover:bg-amber-50"
-                          }`}
-                        >
-                          {actionLoading === `${shop.shopId}-resend-card` ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Mail className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
+                      {shop.trial?.endsAt && (() => {
+                        const lastEmail = shop.lastCardCaptureEmail || null;
+                        const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
+                        const sentMs = lastEmail?.sentAt ? Date.now() - new Date(lastEmail.sentAt).getTime() : null;
+                        const isRecent = sentMs !== null && sentMs < 24 * 60 * 60 * 1000;
+                        const baseTitle = shop.cardOnFile
+                          ? "Resend card-capture email (card already on file)"
+                          : "Resend card-capture email to owner";
+                        const historyTitle = buildCardCaptureHistoryTitle(shop.cardCaptureEmailHistory);
+                        const lastLine = lastEmail
+                          ? `Last sent ${sentAgo} to ${lastEmail.recipient || "unknown"} via ${describeCardCaptureSource(lastEmail)}`
+                          : "No card-capture emails sent yet";
+                        return (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => resendCardCaptureEmail(shop)}
+                              disabled={actionLoading !== null}
+                              title={`${baseTitle}\n\n${lastLine}\n\n${historyTitle}`}
+                              className={`relative p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                                shop.cardOnFile
+                                  ? "text-gray-500 hover:bg-gray-50"
+                                  : "text-amber-600 hover:bg-amber-50"
+                              }`}
+                            >
+                              {actionLoading === `${shop.shopId}-resend-card` ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Mail className="w-4 h-4" />
+                              )}
+                              {isRecent && (
+                                <span
+                                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </button>
+                            {sentAgo && (
+                              <span
+                                className={`text-[11px] leading-tight ${isRecent ? "text-emerald-700" : "text-gray-500"} flex flex-col max-w-[140px]`}
+                                title={`${lastLine}\n\n${historyTitle}`}
+                              >
+                                <span className="whitespace-nowrap">Sent {sentAgo}</span>
+                                {lastEmail?.recipient && (
+                                  <span className="truncate text-gray-500">
+                                    to {lastEmail.recipient}
+                                    {lastEmail.source === "admin" ? " · admin" : " · cron"}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <button
                         onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
                         disabled={actionLoading !== null}
