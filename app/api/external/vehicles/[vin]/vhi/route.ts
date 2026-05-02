@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
 
 export const GET = createExternalEndpoint(
   "vehicles:read",
-  async (req: NextRequest, { shopId, isPartner }) => {
+  async (req: NextRequest, { shopId, isPartner, partnerId }) => {
+    const requestId = req.headers.get("x-request-id") || randomUUID();
     const pathParts = req.nextUrl.pathname.split("/");
     const vinIndex = pathParts.indexOf("vehicles") + 1;
     const vin = pathParts[vinIndex]?.toUpperCase();
@@ -24,6 +26,11 @@ export const GET = createExternalEndpoint(
         { status: 400 }
       );
     }
+
+    console.log(
+      `[PartnerVHI] request_in requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+      `isPartner=${isPartner} apiKeyShopId=${shopId} vin=${vin}`
+    );
 
     let resolvedShopId = shopId;
 
@@ -218,12 +225,28 @@ export const GET = createExternalEndpoint(
       );
     }
 
-    console.log(`[VHI External] No valid cache for ${vin} at shop ${resolvedShopId}, triggering build with mileage ${mileage}...`);
+    console.log(
+      `[PartnerVHI] rebuild_start requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+      `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner}`
+    );
     const result = await rebuildVhi(resolvedShopId, vin, mileage, { invalidateFirst: false });
 
     if (!result.success) {
+      console.error(
+        `[PartnerVHI] rebuild_failed requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+        `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} ` +
+        `failedStage=${result.failedStage || "unknown"} upstreamStatus=${result.upstreamStatus ?? "n/a"} ` +
+        `upstreamError=${typeof result.upstreamError === "string" ? result.upstreamError : JSON.stringify(result.upstreamError ?? null)}`
+      );
       return NextResponse.json(
-        { success: false, error: result.error || "Failed to build maintenance plan" },
+        {
+          success: false,
+          error: result.error || "Failed to build maintenance plan",
+          failedStage: result.failedStage,
+          upstreamStatus: result.upstreamStatus,
+          upstreamError: result.upstreamError,
+          requestId,
+        },
         { status: 500 }
       );
     }

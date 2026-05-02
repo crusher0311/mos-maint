@@ -99,8 +99,20 @@ export const POST = createExternalEndpoint(
     });
 
     if (!result.success) {
+      console.error(
+        `[VHI Analyze] Build failed: VIN=${vin.toUpperCase()} shop=${resolvedShopId} ` +
+        `sms=${smsLower} smsShopId=${smsShopId} mileage=${mileage} ` +
+        `failedStage=${result.failedStage || "unknown"} upstreamStatus=${result.upstreamStatus ?? "n/a"}` +
+        (isPartner ? ` partner=${partnerId}` : "")
+      );
       return NextResponse.json(
-        { success: false, error: result.error },
+        {
+          success: false,
+          error: result.error,
+          failedStage: result.failedStage,
+          upstreamStatus: result.upstreamStatus,
+          upstreamError: result.upstreamError,
+        },
         { status: 500 }
       );
     }

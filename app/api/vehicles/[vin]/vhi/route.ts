@@ -124,7 +124,7 @@ export async function GET(
     if (mileage) {
       console.log(`[VHI API] No valid cache for ${vin} at shop ${shopId}, triggering build with mileage ${mileage}...`);
       const built = await triggerPlanBuild(shopId, vin, mileage);
-      if (built) {
+      if (built.ok) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         cached = await getCachedPlan(db, vin, shopId, mileage);
         if (cached) {

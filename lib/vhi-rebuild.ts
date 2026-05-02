@@ -2,6 +2,17 @@ import { getDb } from "@/lib/mongo";
 import { getCachedPlan, invalidateCachedPlan, type CachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
 
+export type VhiRebuildFailedStage =
+  | "triggerPlanBuild"
+  | "cacheReadAfterBuild";
+
+export interface PlanBuildTriggerResult {
+  ok: boolean;
+  status?: number;
+  upstreamError?: any;
+  errorMessage?: string;
+}
+
 export interface VhiRebuildResult {
   success: boolean;
   vin: string;
@@ -35,6 +46,9 @@ export interface VhiRebuildResult {
   };
   cachedAt?: Date;
   error?: string;
+  failedStage?: VhiRebuildFailedStage;
+  upstreamStatus?: number;
+  upstreamError?: any;
 }
 
 function getInternalSecret(): string {
@@ -45,7 +59,7 @@ export async function triggerPlanBuild(
   shopId: number,
   vin: string,
   mileage: number
-): Promise<boolean> {
+): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
@@ -67,14 +81,39 @@ export async function triggerPlanBuild(
 
     if (!res.ok) {
       const text = await res.text();
-      console.error(`[VHI Rebuild] Plan build failed (${res.status}):`, text.slice(0, 300));
-      return false;
+      let parsed: any = undefined;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = text;
+      }
+      const message =
+        (parsed && typeof parsed === "object" && (parsed.details || parsed.error || parsed.message)) ||
+        (typeof parsed === "string" ? parsed : undefined) ||
+        `HTTP ${res.status}`;
+      console.error(
+        `[VHI Rebuild] Plan build failed shopId=${shopId} vin=${vin} mileage=${mileage} status=${res.status}:`,
+        typeof parsed === "string" ? parsed : JSON.stringify(parsed)
+      );
+      return {
+        ok: false,
+        status: res.status,
+        upstreamError: parsed,
+        errorMessage: typeof message === "string" ? message : String(message),
+      };
     }
 
-    return true;
+    return { ok: true, status: res.status };
   } catch (err: any) {
-    console.error(`[VHI Rebuild] Plan build trigger error:`, err.message);
-    return false;
+    console.error(
+      `[VHI Rebuild] Plan build trigger error shopId=${shopId} vin=${vin} mileage=${mileage}:`,
+      err?.message
+    );
+    return {
+      ok: false,
+      upstreamError: { error: "fetch_failed", message: err?.message },
+      errorMessage: err?.message || "Plan build trigger failed",
+    };
   }
 }
 
@@ -97,13 +136,16 @@ export async function rebuildVhi(
     console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build...`);
     const built = await triggerPlanBuild(shopId, vinUpper, mileage);
 
-    if (!built) {
+    if (!built.ok) {
       return {
         success: false,
         vin: vinUpper,
         shopId,
         built: false,
         error: "Failed to build maintenance plan",
+        failedStage: "triggerPlanBuild",
+        upstreamStatus: built.status,
+        upstreamError: built.upstreamError ?? built.errorMessage,
       };
     }
 
@@ -117,6 +159,8 @@ export async function rebuildVhi(
         shopId,
         built: true,
         error: "Plan build completed but cache not yet available",
+        failedStage: "cacheReadAfterBuild",
+        upstreamStatus: built.status,
       };
     }
   }

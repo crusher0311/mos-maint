@@ -83,6 +83,37 @@ API keys are scoped to specific permissions:
             },
           },
         },
+        VHIRebuildError: {
+          type: "object",
+          description: "Returned when an on-demand maintenance plan rebuild fails. Includes upstream detail so partners can distinguish transient build failures from permanent data issues (e.g., missing OEM data).",
+          properties: {
+            success: { type: "boolean", enum: [false] },
+            error: {
+              type: "string",
+              description: "Generic, stable error string (kept for backwards compatibility). Examples: 'Failed to build maintenance plan', 'Plan build completed but cache not yet available'.",
+            },
+            failedStage: {
+              type: "string",
+              nullable: true,
+              enum: ["triggerPlanBuild", "cacheReadAfterBuild"],
+              description: "Which stage of the rebuild failed. 'triggerPlanBuild' = the internal /api/plan-build call returned non-2xx or threw. 'cacheReadAfterBuild' = build succeeded but the cached plan was not visible yet.",
+            },
+            upstreamStatus: {
+              type: "integer",
+              nullable: true,
+              description: "HTTP status code returned by the internal plan-build service (when applicable).",
+            },
+            upstreamError: {
+              nullable: true,
+              description: "Full upstream error body — parsed JSON object when the upstream returned JSON, otherwise the raw text. May include 'error' and 'details' fields from the underlying plan builder (no truncation).",
+            },
+            requestId: {
+              type: "string",
+              nullable: true,
+              description: "Correlation id for this request. Grep server logs for `[PartnerVHI]` + this id to trace the failure.",
+            },
+          },
+        },
         Appointment: {
           type: "object",
           properties: {
@@ -451,6 +482,10 @@ API keys are scoped to specific permissions:
             "403": { description: "Permission denied — API key lacks vehicles:read permission", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "404": { description: "No VHI data available — maintenance plan not yet built for this vehicle", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "500": {
+              description: "Plan build failed. Response includes the upstream HTTP status, the full upstream error body, and which stage failed so partners can distinguish transient build failures from permanent data issues. Logs are correlated by `requestId` under the `[PartnerVHI]` prefix.",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/VHIRebuildError" } } },
+            },
           },
         },
       },
@@ -541,6 +576,10 @@ API keys are scoped to specific permissions:
             "403": { description: "Permission denied — API key not authorized for this shop", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "404": { description: "Shop not found for the given SMS and SMS shop ID", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "429": { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "500": {
+              description: "Plan build failed. Response includes `failedStage`, `upstreamStatus`, and the full `upstreamError` body from the internal plan-build service.",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/VHIRebuildError" } } },
+            },
           },
         },
       },

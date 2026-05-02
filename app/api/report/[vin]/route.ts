@@ -85,7 +85,7 @@ export async function GET(
       if (mileage) {
         console.log(`[Report API] No cached plan for ${vin}, triggering rebuild with mileage ${mileage}...`);
         const built = await triggerPlanBuild(Number(shopId), vin, mileage);
-        if (built) {
+        if (built.ok) {
           await new Promise((resolve) => setTimeout(resolve, 500));
           cachedPlan = await db.collection("cached_plans").findOne(
             { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
