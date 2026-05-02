@@ -3828,6 +3828,18 @@ function gatherAnsweredQuestions() {
   return answered;
 }
 
+function gatherCurrentRoundResults() {
+  const inputs = elements.concernQuestions.querySelectorAll('.concern-answer-input');
+  const results = [];
+  inputs.forEach(input => {
+    results.push({
+      question: input.dataset.question,
+      answered: input.value.trim().length > 0,
+    });
+  });
+  return results;
+}
+
 async function handleConcernReview() {
   const answered = gatherAnsweredQuestions();
   if (answered.length === 0) {
@@ -3836,6 +3848,7 @@ async function handleConcernReview() {
   }
 
   hideConcernError();
+  const roundResults = gatherCurrentRoundResults();
   concernState.exchanges = [...concernState.exchanges, ...answered.filter(a =>
     !concernState.exchanges.some(e => e.question === a.question)
   )];
@@ -3853,7 +3866,9 @@ async function handleConcernReview() {
           action: 'review',
           concern: concernState.concern,
           answeredQuestions: concernState.exchanges,
-          conversationId: concernState.conversationId
+          conversationId: concernState.conversationId,
+          shopId: currentContext?.shopId || null,
+          roundResults
         })
       }
     });
@@ -3892,6 +3907,7 @@ async function handleConcernFinish() {
   }
 
   hideConcernError();
+  const roundResults = gatherCurrentRoundResults();
   elements.concernLoading.classList.remove('hidden');
   elements.concernConversation.classList.add('hidden');
 
@@ -3912,7 +3928,9 @@ async function handleConcernFinish() {
           conversationText: conversationLines.join('\n'),
           conversationId: concernState.conversationId,
           concern: concernState.concern,
-          exchanges: concernState.exchanges
+          exchanges: concernState.exchanges,
+          shopId: currentContext?.shopId || null,
+          roundResults
         })
       }
     });

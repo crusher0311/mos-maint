@@ -7,22 +7,31 @@ import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { SYMPTOM_QUESTION_GUIDE } from "@/lib/symptomQuestionGuide";
+import {
+  biasSymptomGuide,
+  getSkipHints,
+  inferSymptomCategory,
+  recordRoundResults,
+  renderHintsForPrompt,
+  type RoundResult,
+  type SkipHints,
+} from "@/lib/concernSkipLearning";
 
-function generateFollowUpPrompt(customerConcern: string): string {
+function generateFollowUpPrompt(customerConcern: string, guide: string, hintsBlock: string): string {
   return `You are an experienced automotive service advisor assistant helping a service advisor gather information from a customer about their vehicle issue.
 
 The customer's initial concern is: "${customerConcern}"
 
 Use the following symptom-based question guide to select the most relevant follow-up questions. Match the concern to the appropriate system category and pick the best questions. Adapt the wording naturally — do not copy questions verbatim if they need context adjustments.
 
-${SYMPTOM_QUESTION_GUIDE}
+${guide}
 
-Based on the customer's concern, generate 3-5 targeted follow-up questions the service advisor should ask. Start with the most diagnostic-critical questions first. Use professional, conversational language that a service advisor would naturally use when speaking to a customer.
+${hintsBlock}Based on the customer's concern, generate 3-5 targeted follow-up questions the service advisor should ask. Start with the most diagnostic-critical questions first. Use professional, conversational language that a service advisor would naturally use when speaking to a customer.
 
 Return ONLY the questions as a numbered list (1. 2. 3. etc), no introductory text.`;
 }
 
-function generateReviewPrompt(customerConcern: string, answeredQuestions: { question: string; response: string }[]): string {
+function generateReviewPrompt(customerConcern: string, answeredQuestions: { question: string; response: string }[], guide: string, hintsBlock: string): string {
   const qaPairs = answeredQuestions.map(r => `Q: ${r.question}\nA: ${r.response}`).join('\n\n');
 
   return `You are an experienced automotive service advisor assistant helping gather more details about a vehicle issue.
@@ -33,9 +42,9 @@ Previous Follow-Up Questions and Responses:
 ${qaPairs}
 
 Use this symptom-based question guide to identify any important questions not yet asked:
-${SYMPTOM_QUESTION_GUIDE}
+${guide}
 
-Based on the conversation so far and the question guide, generate up to 3 additional follow-up questions to further clarify the issue. Avoid repeating questions already answered. Focus on narrowing down the root cause for the technician. Use professional, conversational language.
+${hintsBlock}Based on the conversation so far and the question guide, generate up to 3 additional follow-up questions to further clarify the issue. Avoid repeating questions already answered. Focus on narrowing down the root cause for the technician. Use professional, conversational language.
 
 Return ONLY the questions as a numbered list (1. 2. 3. etc), no introductory text.`;
 }
@@ -80,8 +89,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Concern text is required" }, { status: 400 });
       }
 
+      const db = await getDb();
+      const symptomCategory = inferSymptomCategory(concern);
+      const effectiveShopId = shopId || String(session.shopId);
+      const hints = await getSkipHints({ db, shopId: effectiveShopId, symptomCategory });
+      const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
+      const hintsBlock = renderHintsForPrompt(hints);
+
       const openai = getOpenAI();
-      const prompt = generateFollowUpPrompt(concern);
+      const prompt = generateFollowUpPrompt(concern, biasedGuide, hintsBlock);
       const startTime = Date.now();
 
       const completion = await openai.chat.completions.create({
@@ -103,14 +119,15 @@ export async function POST(request: NextRequest) {
         .map(line => line.replace(/^\d+\.\s*/, '').replace(/^-\s*/, '').replace(/^Q:\s*/i, '').trim())
         .filter(line => line.length > 5 && line.endsWith('?'));
 
-      const db = await getDb();
       const conversation = {
         userId: session.email,
-        shopId: shopId || String(session.shopId),
+        shopId: effectiveShopId,
         vin: vin || null,
         vehicleDisplay: vehicleDisplay || null,
         concern,
+        symptomCategory,
         exchanges: [],
+        roundResults: [] as { results: RoundResult[]; recordedAt: Date }[],
         status: "active",
         source: "dashboard",
         createdAt: new Date(),
@@ -127,13 +144,40 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "review") {
-      const { concern, answeredQuestions, conversationId } = body;
+      const { concern, answeredQuestions, conversationId, roundResults } = body;
       if (!concern || !answeredQuestions?.length) {
         return NextResponse.json({ error: "Concern and answered questions required" }, { status: 400 });
       }
 
+      const db = await getDb();
+      const symptomCategory = inferSymptomCategory(concern);
+      const effectiveShopId = body.shopId || String(session.shopId);
+
+      if (Array.isArray(roundResults) && roundResults.length > 0 && conversationId) {
+        const cleanResults: RoundResult[] = roundResults
+          .filter((r: any) => typeof r?.question === "string" && r.question.trim())
+          .map((r: any) => ({ question: String(r.question), answered: !!r.answered }));
+        if (cleanResults.length) {
+          await recordRoundResults({
+            db,
+            shopId: effectiveShopId,
+            symptomCategory,
+            results: cleanResults,
+          });
+          const { ObjectId } = await import("mongodb");
+          await db.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
+            { _id: new ObjectId(conversationId) },
+            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
+          );
+        }
+      }
+
+      const hints = await getSkipHints({ db, shopId: effectiveShopId, symptomCategory });
+      const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
+      const hintsBlock = renderHintsForPrompt(hints);
+
       const openai = getOpenAI();
-      const prompt = generateReviewPrompt(concern, answeredQuestions);
+      const prompt = generateReviewPrompt(concern, answeredQuestions, biasedGuide, hintsBlock);
       const startTime = Date.now();
 
       const completion = await openai.chat.completions.create({
@@ -168,9 +212,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "cleanup") {
-      const { conversationText, conversationId, concern, exchanges } = body;
+      const { conversationText, conversationId, concern, exchanges, roundResults } = body;
       if (!conversationText) {
         return NextResponse.json({ error: "Conversation text required" }, { status: 400 });
+      }
+
+      if (Array.isArray(roundResults) && roundResults.length > 0 && conversationId && concern) {
+        const db2 = await getDb();
+        const symptomCategory = inferSymptomCategory(concern);
+        const effectiveShopId = body.shopId || String(session.shopId);
+        const cleanResults: RoundResult[] = roundResults
+          .filter((r: any) => typeof r?.question === "string" && r.question.trim())
+          .map((r: any) => ({ question: String(r.question), answered: !!r.answered }));
+        if (cleanResults.length) {
+          await recordRoundResults({
+            db: db2,
+            shopId: effectiveShopId,
+            symptomCategory,
+            results: cleanResults,
+          });
+          const { ObjectId } = await import("mongodb");
+          await db2.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
+            { _id: new ObjectId(conversationId) },
+            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
+          );
+        }
       }
 
       const openai = getOpenAI();

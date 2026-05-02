@@ -117,6 +117,7 @@ export default function ConcernAssistantPage() {
           concern,
           answeredQuestions: allExchanges,
           conversationId,
+          roundResults: gatherRoundResults(),
         }),
       });
       const data = await res.json();
@@ -157,6 +158,7 @@ export default function ConcernAssistantPage() {
           conversationId,
           concern,
           exchanges: allExchanges,
+          roundResults: gatherRoundResults(),
         }),
       });
       const data = await res.json();
@@ -226,6 +228,13 @@ export default function ConcernAssistantPage() {
         response: (answers[i] || "").trim(),
       }))
       .filter(e => e.response.length > 0);
+  }
+
+  function gatherRoundResults(): { question: string; answered: boolean }[] {
+    return questions.map((q, i) => ({
+      question: q,
+      answered: (answers[i] || "").trim().length > 0,
+    }));
   }
 
   const selectedWOData = workOrders.find(w => w.id === selectedWO);

@@ -91,6 +91,13 @@ export default function ConcernAssistantModal({
       .filter(e => e.response.length > 0);
   }
 
+  function gatherRoundResults(): { question: string; answered: boolean }[] {
+    return questions.map((q, i) => ({
+      question: q,
+      answered: (answers[i] || "").trim().length > 0,
+    }));
+  }
+
   async function handleSubmitConcern() {
     if (!concern.trim()) return;
     setLoading(true);
@@ -128,6 +135,7 @@ export default function ConcernAssistantModal({
     setError("");
     const allExchanges = [...exchanges, ...answered.filter(a => !exchanges.some(e => e.question === a.question))];
     setExchanges(allExchanges);
+    const roundResults = gatherRoundResults();
     try {
       const res = await fetch("/api/dashboard/concern-assistant", {
         method: "POST",
@@ -137,6 +145,7 @@ export default function ConcernAssistantModal({
           concern,
           answeredQuestions: allExchanges,
           conversationId,
+          roundResults,
         }),
       });
       const data = await res.json();
@@ -166,6 +175,7 @@ export default function ConcernAssistantModal({
       conversationLines.push(`Service Advisor asks: ${e.question}`);
       conversationLines.push(`Customer responds: ${e.response}`);
     });
+    const roundResults = gatherRoundResults();
 
     try {
       const res = await fetch("/api/dashboard/concern-assistant", {
@@ -177,6 +187,7 @@ export default function ConcernAssistantModal({
           conversationId,
           concern,
           exchanges: allExchanges,
+          roundResults,
         }),
       });
       const data = await res.json();

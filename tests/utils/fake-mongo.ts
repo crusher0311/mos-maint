@@ -238,17 +238,33 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
           },
           async updateOne(filter: any, update: any, opts?: any) {
             ops.push({ op: "updateOne", collection: name, filter, update, opts });
+            const applyInc = (target: Doc, inc: any) => {
+              for (const [k, v] of Object.entries(inc || {})) {
+                target[k] = (Number(target[k]) || 0) + Number(v);
+              }
+            };
+            const applyPush = (target: Doc, push: any) => {
+              for (const [k, v] of Object.entries(push || {})) {
+                if (!Array.isArray(target[k])) target[k] = [];
+                target[k].push(v);
+              }
+            };
             const idx = data.findIndex((d) => matchesFilter(d, filter));
             if (idx >= 0) {
               Object.assign(data[idx], update.$set || {});
+              applyInc(data[idx], update.$inc);
+              applyPush(data[idx], update.$push);
               return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
             }
             if (opts?.upsert) {
-              data.push({
+              const seed: Doc = {
                 ...filter,
                 ...(update.$setOnInsert || {}),
                 ...(update.$set || {}),
-              });
+              };
+              applyInc(seed, update.$inc);
+              applyPush(seed, update.$push);
+              data.push(seed);
               return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
             }
             return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
