@@ -355,7 +355,6 @@ These endpoints are available to partners via API keys.
 | `/api/platform-admin/settings` | GET, POST |
 | `/api/platform-admin/shops` | GET |
 | `/api/platform-admin/shops/:shopId` | GET, PATCH, DELETE |
-| `/api/platform-admin/shops/:shopId/vins` | POST |
 | `/api/platform-admin/stats` | GET |
 | `/api/platform-admin/stripe/products` | GET, POST |
 | `/api/platform-admin/tekmetric-usage` | GET |

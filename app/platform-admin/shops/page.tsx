@@ -346,30 +346,6 @@ export default function PlatformShopsPage() {
     }
   };
 
-  const vinAction = async (shopId: number | string, action: string, value?: number) => {
-    setActionLoading(`${shopId}-${action}`);
-    try {
-      const res = await fetch(`/api/platform-admin/shops/${shopId}/vins`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, value }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        loadShops();
-        setSelectedShop(null);
-        setModalAction(null);
-      } else {
-        alert(data.error || "Action failed");
-      }
-    } catch (err) {
-      console.error("VIN action error:", err);
-      alert("Action failed");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const toggleLock = async (shopId: number | string, isLocked: boolean) => {
     const action = isLocked ? "unlock" : "lock";
     setActionLoading(`${shopId}-${action}`);
@@ -858,11 +834,6 @@ export default function PlatformShopsPage() {
       setReviewDialog({ shop, mode: "flag" });
     },
     triggerExtendTrial: (shop: Shop) => { setExtendTrialShop(shop); setExtendTrialDays("14"); },
-    triggerResetViews: (shop: Shop) => {
-      if (confirm(`Reset the recorded viewed-VIN total for ${shop.name}?`)) {
-        vinAction(shop.shopId, "resetViews");
-      }
-    },
   };
 
   const colSpan = 6;
@@ -1828,7 +1799,6 @@ interface ShopRowProps {
   deleteShop: (shop: Shop) => void;
   resendCardCaptureEmail: (shop: Shop) => void;
   triggerExtendTrial: (shop: Shop) => void;
-  triggerResetViews: (shop: Shop) => void;
   triggerApproveReview: (shop: Shop) => void;
   triggerFlagReview: (shop: Shop) => void;
 }
@@ -1838,7 +1808,7 @@ function ShopRow(props: ShopRowProps) {
     shop, hideEnterpriseLine, actionLoading, impersonating, expandedShop, setExpandedShop,
     openMenuShopId, setOpenMenuShopId, accessShop, openFeatureModal,
     toggleLock, deleteShop, resendCardCaptureEmail, triggerExtendTrial,
-    triggerResetViews, triggerApproveReview, triggerFlagReview,
+    triggerApproveReview, triggerFlagReview,
   } = props;
   const reviewStatus = (shop.reviewStatus || "approved") as ShopReviewStatus;
   const needsReview = reviewStatus !== "approved";
@@ -2051,7 +2021,6 @@ function ShopRow(props: ShopRowProps) {
               isOpen={openMenuShopId === shop._id}
               setOpen={(open) => setOpenMenuShopId(open ? shop._id : null)}
               actionLoading={actionLoading}
-              triggerResetViews={triggerResetViews}
               triggerExtendTrial={triggerExtendTrial}
               resendCardCaptureEmail={resendCardCaptureEmail}
               toggleLock={toggleLock}
@@ -2130,14 +2099,13 @@ function ShopRow(props: ShopRowProps) {
 
 function ShopRowMenu({
   shop, isOpen, setOpen, actionLoading,
-  triggerResetViews, triggerExtendTrial,
+  triggerExtendTrial,
   resendCardCaptureEmail, toggleLock, deleteShop,
 }: {
   shop: Shop;
   isOpen: boolean;
   setOpen: (open: boolean) => void;
   actionLoading: string | null;
-  triggerResetViews: (shop: Shop) => void;
   triggerExtendTrial: (shop: Shop) => void;
   resendCardCaptureEmail: (shop: Shop) => void;
   toggleLock: (shopId: number | string, isLocked: boolean) => void;
@@ -2182,10 +2150,8 @@ function ShopRowMenu({
       </button>
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-          {item(<RotateCcw className="w-4 h-4 text-orange-600" />, "Reset viewed VINs", () => triggerResetViews(shop))}
           {shop.trial?.endsAt && (
             <>
-              <div className="border-t border-gray-100 my-1" />
               {item(<Clock className="w-4 h-4 text-blue-600" />, "Extend trial", () => triggerExtendTrial(shop))}
               {item(
                 <Mail className={`w-4 h-4 ${shop.cardOnFile ? "text-gray-500" : "text-amber-600"}`} />,

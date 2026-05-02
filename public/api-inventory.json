@@ -1374,15 +1374,6 @@
       "description": "Platform admin operations"
     },
     {
-      "path": "/api/platform-admin/shops/:shopId/vins",
-      "methods": [
-        "POST"
-      ],
-      "category": "Platform Admin (Internal)",
-      "isExternal": false,
-      "description": "Platform admin operations"
-    },
-    {
       "path": "/api/platform-admin/stats",
       "methods": [
         "GET"
