@@ -1134,7 +1134,16 @@ export async function createProtractorWorkOrder(
     contactId: string;
     vehicleId: string;
     vin?: string;
+    /**
+     * Single-concern back-compat input. New callers should prefer `concerns`.
+     * If both are provided, `concerns` wins.
+     */
     concernText?: string;
+    /**
+     * Multi-concern input. Each entry becomes its own ServicePackage with
+     * Chapter "Concern" and an incrementing Rank in the order provided.
+     */
+    concerns?: string[];
     note?: string;
     mileage?: number;
     workflowStage?: string;
@@ -1166,14 +1175,22 @@ export async function createProtractorWorkOrder(
   const initialPackages: any[] = [];
   let rank = 1;
 
-  if (params.concernText) {
+  // Prefer the multi-concern array if provided; fall back to the legacy
+  // single concernText for back-compat with any other caller.
+  const concernList = (params.concerns && params.concerns.length > 0)
+    ? params.concerns.map(c => (c || "").trim()).filter(c => c.length > 0)
+    : (params.concernText && params.concernText.trim()
+        ? [params.concernText.trim()]
+        : []);
+
+  for (const concern of concernList) {
     initialPackages.push({
       ID: crypto.randomUUID(),
       Chapter: "Concern",
       Rank: rank++,
       ServicePackageHeader: {
         Title: "Customer Concern Assistant",
-        Description: params.concernText,
+        Description: concern,
       },
       ServicePackageLines: { ItemCollection: [] },
     });

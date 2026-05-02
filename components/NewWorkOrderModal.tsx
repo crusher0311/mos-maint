@@ -24,6 +24,7 @@ import {
   Camera,
   UserPlus,
   ChevronDown,
+  HelpCircle,
 } from "lucide-react";
 
 const US_STATES = [
@@ -110,6 +111,13 @@ type Exchange = {
   response: string;
 };
 
+type SavedConcern = {
+  original: string;
+  cleanedText: string;
+  exchanges: Exchange[];
+  conversationId: string | null;
+};
+
 type Step = "concern" | "customer" | "vehicle" | "note" | "jobs" | "confirm";
 
 type SelectedJob = {
@@ -155,6 +163,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [concernLoading, setConcernLoading] = useState(false);
   const [concernError, setConcernError] = useState("");
+  const [savedConcerns, setSavedConcerns] = useState<SavedConcern[]>([]);
+  const [editingConcernIndex, setEditingConcernIndex] = useState<number | null>(null);
 
   const [noteText, setNoteText] = useState("");
 
@@ -208,6 +218,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setAnswers({});
       setCleanedText("");
       setConversationId(null);
+      setSavedConcerns([]);
+      setEditingConcernIndex(null);
       setNoteText("");
       setConcernError("");
       setCreating(false);
@@ -315,13 +327,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   async function handleAnswersSubmit() {
     setConcernLoading(true);
     setConcernError("");
-    const newExchanges = questions.map((q, i) => ({
-      question: q,
-      response: answers[i] || "No answer provided",
-    }));
+    const newExchanges = questions
+      .map((q, i) => ({
+        question: q,
+        response: (answers[i] || "").trim(),
+      }))
+      .filter(e => !exchanges.some(prev => prev.question === e.question));
     const allExchanges = [...exchanges, ...newExchanges];
     const conversationText = `Customer concern: ${concern.trim()}\n\n` +
-      allExchanges.map(e => `Q: ${e.question}\nA: ${e.response}`).join("\n\n");
+      allExchanges.map(e => `Q: ${e.question}\nA: ${e.response || "No answer provided"}`).join("\n\n");
     try {
       const res = await fetch("/api/dashboard/concern-assistant", {
         method: "POST",
@@ -344,6 +358,145 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     } finally {
       setConcernLoading(false);
     }
+  }
+
+  async function handleMoreQuestions() {
+    // Split current questions into answered vs unanswered. Only the answered
+    // ones become committed exchanges; unanswered ones stay visible so the
+    // user can still answer them (or let the model resurface them).
+    const answeredNow = questions
+      .map((q, i) => ({
+        question: q,
+        response: (answers[i] || "").trim(),
+      }))
+      .filter(e => e.response.length > 0 && !exchanges.some(prev => prev.question === e.question));
+    const unansweredNow = questions
+      .map((q, i) => ({ q, a: (answers[i] || "").trim() }))
+      .filter(({ a }) => a.length === 0);
+
+    if (answeredNow.length === 0 && exchanges.length === 0) {
+      setConcernError("Please answer at least one question before requesting more.");
+      return;
+    }
+    setConcernLoading(true);
+    setConcernError("");
+    const allExchanges = [...exchanges, ...answeredNow];
+    try {
+      const res = await fetch("/api/dashboard/concern-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "review",
+          concern: concern.trim(),
+          answeredQuestions: allExchanges,
+          conversationId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to get more questions");
+      // Only commit answered Q&A to exchanges on success. Unanswered ones
+      // stay in the visible questions list at the top, with their text
+      // preserved (none yet, since they had no answer).
+      setExchanges(allExchanges);
+      const carriedQuestions = unansweredNow.map(u => u.q);
+      const seen = new Set([
+        ...allExchanges.map(e => e.question),
+        ...carriedQuestions,
+      ]);
+      const freshFromApi: string[] = (data.questions || []).filter(
+        (q: string) => !seen.has(q),
+      );
+      const nextQuestions = [...carriedQuestions, ...freshFromApi];
+      setQuestions(nextQuestions);
+      setAnswers({});
+      if (freshFromApi.length === 0) {
+        setConcernError(
+          carriedQuestions.length > 0
+            ? "No new questions came back — you can answer the remaining ones above, or finish the write-up."
+            : "No additional unique questions came back — you can finish or refine the concern text instead.",
+        );
+      }
+    } catch (err: any) {
+      setConcernError(err.message);
+    } finally {
+      setConcernLoading(false);
+    }
+  }
+
+  function resetActiveConcernEditor() {
+    setConcern("");
+    setConcernStage("start");
+    setQuestions([]);
+    setExchanges([]);
+    setAnswers({});
+    setCleanedText("");
+    setConversationId(null);
+    setEditingConcernIndex(null);
+    setConcernError("");
+  }
+
+  function commitActiveConcernDraft(): SavedConcern[] {
+    const draftText = (cleanedText || concern).trim();
+    if (!draftText) return savedConcerns;
+    const entry: SavedConcern = {
+      original: concern.trim(),
+      cleanedText: cleanedText.trim() || concern.trim(),
+      exchanges,
+      conversationId,
+    };
+    let next: SavedConcern[];
+    if (editingConcernIndex !== null) {
+      next = savedConcerns.map((c, i) => (i === editingConcernIndex ? entry : c));
+    } else {
+      next = [...savedConcerns, entry];
+    }
+    setSavedConcerns(next);
+    return next;
+  }
+
+  function handleAddAnotherConcern() {
+    commitActiveConcernDraft();
+    resetActiveConcernEditor();
+  }
+
+  function handleEditSavedConcern(index: number) {
+    const target = savedConcerns[index];
+    if (!target) return;
+    // Auto-save the current editor before switching: if we're editing some
+    // other concern, commit those edits back into savedConcerns so they
+    // aren't lost. If we're not currently editing but have an unsaved draft,
+    // commit it as a new entry. commitActiveConcernDraft only ever updates
+    // the entry at `editingConcernIndex` or appends — it never reorders or
+    // removes — so the target `index` stays valid.
+    const hasDraft = (cleanedText || concern).trim().length > 0;
+    const switchingEditor = editingConcernIndex !== null && editingConcernIndex !== index;
+    if (hasDraft && (editingConcernIndex === null || switchingEditor)) {
+      commitActiveConcernDraft();
+    }
+    setConcern(target.original || target.cleanedText);
+    setCleanedText(target.cleanedText);
+    setExchanges(target.exchanges || []);
+    setConversationId(target.conversationId);
+    setQuestions([]);
+    setAnswers({});
+    setConcernStage(target.cleanedText ? "result" : "start");
+    setEditingConcernIndex(index);
+    setConcernError("");
+  }
+
+  function handleRemoveSavedConcern(index: number) {
+    setSavedConcerns(prev => prev.filter((_, i) => i !== index));
+    if (editingConcernIndex === index) {
+      resetActiveConcernEditor();
+    } else if (editingConcernIndex !== null && index < editingConcernIndex) {
+      setEditingConcernIndex(editingConcernIndex - 1);
+    }
+  }
+
+  function handleContinueFromConcernStep() {
+    commitActiveConcernDraft();
+    resetActiveConcernEditor();
+    setStep("customer");
   }
 
   function isFieldVisible(section: "customer" | "vehicle", key: string): boolean {
@@ -586,7 +739,20 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setCreating(true);
     setCreateError("");
     try {
-      const concernTextValue = cleanedText || concern || "";
+      // Final concern list = saved concerns (in entry order) + any in-progress
+      // active draft the user typed but never explicitly saved.
+      const savedTexts = savedConcerns.map(c => (c.cleanedText || c.original || "").trim()).filter(Boolean);
+      const draftText = (cleanedText || concern).trim();
+      const draftAlreadySaved = editingConcernIndex !== null;
+      const allConcerns = (draftText && !draftAlreadySaved)
+        ? [...savedTexts, draftText]
+        : savedTexts;
+      const seen = new Set<string>();
+      const concerns = allConcerns.filter(c => {
+        if (seen.has(c)) return false;
+        seen.add(c);
+        return true;
+      });
       const res = await fetch("/api/dashboard/protractor/create-work-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -594,7 +760,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
           vin: selectedVehicle.vin || undefined,
-          concernText: concernTextValue || undefined,
+          concerns: concerns.length > 0 ? concerns : undefined,
           note: noteText.trim() || undefined,
           mileage: mileageInput ? Number(mileageInput) : undefined,
           servicePackages: selectedJobs.length > 0 ? selectedJobs : undefined,
@@ -680,6 +846,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   }
 
   if (!isOpen) return null;
+
+  const draftConcernText = (cleanedText || concern).trim();
+  const draftIsBeingEdited = editingConcernIndex !== null;
+  const totalConcernCount = savedConcerns.length + (draftConcernText && !draftIsBeingEdited ? 1 : 0);
+  const concernIndicatorLabel = totalConcernCount === 0
+    ? null
+    : totalConcernCount === 1
+      ? "1 concern attached"
+      : `${totalConcernCount} concerns attached`;
 
   const vehicleDisplay = selectedVehicle
     ? [selectedVehicle.year, selectedVehicle.make, selectedVehicle.model].filter(Boolean).join(" ")
@@ -925,11 +1100,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
                 <User className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{contactDisplay}</span>
-                {(cleanedText || concern) && (
+                {concernIndicatorLabel && (
                   <>
                     <span className="text-gray-300 mx-1">|</span>
                     <MessageSquareText className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600 text-xs">Concern attached</span>
+                    <span className="text-green-600 text-xs">{concernIndicatorLabel}</span>
                   </>
                 )}
               </div>
@@ -1247,12 +1422,73 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
           {step === "concern" && (
             <div className="space-y-4">
+              {savedConcerns.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Saved Concerns ({savedConcerns.length})
+                    </label>
+                  </div>
+                  <div className="space-y-1.5">
+                    {savedConcerns.map((c, idx) => {
+                      const isEditing = editingConcernIndex === idx;
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-lg p-2.5 ${
+                            isEditing ? "border-blue-300 bg-blue-50/50" : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                                  #{idx + 1}
+                                </span>
+                                {isEditing && (
+                                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                    Editing
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-xs text-gray-600 whitespace-pre-wrap line-clamp-3">
+                                {c.cleanedText || c.original}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => handleEditSavedConcern(idx)}
+                                disabled={isEditing}
+                                className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                title="Edit this concern"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleRemoveSavedConcern(idx)}
+                                className="p-1 text-gray-400 hover:text-red-500 rounded"
+                                title="Remove this concern"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {concernStage === "start" && (
                 <div className="space-y-3">
                   <label className="block text-sm font-medium text-gray-700">
-                    Customer Concern <span className="text-gray-400 font-normal">(optional)</span>
+                    {savedConcerns.length > 0 ? "Add Another Concern" : "Customer Concern"}
+                    {savedConcerns.length === 0 && <span className="text-gray-400 font-normal"> (optional)</span>}
                   </label>
-                  <p className="text-xs text-gray-500">Describe the customer's issue to generate a structured write-up with AI-guided follow-up questions.</p>
+                  <p className="text-xs text-gray-500">
+                    Describe the customer's issue to generate a structured write-up with AI-guided follow-up questions.
+                  </p>
                   <textarea
                     value={concern}
                     onChange={e => setConcern(e.target.value)}
@@ -1262,7 +1498,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                     autoFocus
                   />
                   {concernError && <p className="text-sm text-red-600">{concernError}</p>}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleConcernSubmit}
                       disabled={!concern.trim() || concernLoading}
@@ -1272,10 +1508,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       Build Concern Write-up
                     </button>
                     <button
-                      onClick={() => setStep("customer")}
+                      onClick={handleContinueFromConcernStep}
                       className="flex items-center gap-2 px-4 py-2 text-gray-700 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50"
                     >
-                      Skip
+                      {savedConcerns.length > 0 || concern.trim() ? "Continue to Customer" : "Skip"}
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -1284,6 +1520,25 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
               {concernStage === "questions" && (
                 <div className="space-y-3">
+                  <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded">
+                    <span className="font-medium text-gray-700">Concern:</span>{" "}
+                    <span className="whitespace-pre-wrap">{concern}</span>
+                  </div>
+                  {exchanges.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                        {exchanges.length} previous answer{exchanges.length === 1 ? "" : "s"}
+                      </summary>
+                      <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-gray-200">
+                        {exchanges.map((e, i) => (
+                          <div key={i}>
+                            <div className="font-medium text-gray-600">Q: {e.question}</div>
+                            <div className="text-gray-500">A: {e.response || <em>no answer</em>}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                   <p className="text-sm text-gray-600">Answer the follow-up questions to build a thorough write-up:</p>
                   {questions.map((q, i) => (
                     <div key={i} className="space-y-1">
@@ -1298,39 +1553,65 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                     </div>
                   ))}
                   {concernError && <p className="text-sm text-red-600">{concernError}</p>}
-                  <button
-                    onClick={handleAnswersSubmit}
-                    disabled={concernLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {concernLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    Generate Write-up
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAnswersSubmit}
+                      disabled={concernLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {concernLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      Generate Write-up
+                    </button>
+                    <button
+                      onClick={handleMoreQuestions}
+                      disabled={concernLoading}
+                      className="flex items-center gap-2 px-4 py-2 text-blue-700 border border-blue-300 bg-blue-50 text-sm font-medium rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                      title="Generate another round of follow-up questions"
+                    >
+                      {concernLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <HelpCircle className="w-4 h-4" />}
+                      More Questions
+                    </button>
+                  </div>
                 </div>
               )}
 
               {concernStage === "result" && (
                 <div className="space-y-3">
-                  <label className="block text-sm font-medium text-gray-700">Concern Write-up</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Concern Write-up
+                    {editingConcernIndex !== null && (
+                      <span className="ml-2 text-xs font-normal text-blue-600">
+                        (editing concern #{editingConcernIndex + 1})
+                      </span>
+                    )}
+                  </label>
                   <textarea
                     value={cleanedText}
                     onChange={e => setCleanedText(e.target.value)}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                     rows={5}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => { setConcernStage("start"); setConcern(""); setCleanedText(""); setQuestions([]); setExchanges([]); setAnswers({}); }}
+                      onClick={handleAddAnotherConcern}
+                      className="flex items-center gap-2 px-4 py-2 text-blue-700 border border-blue-300 bg-blue-50 text-sm font-medium rounded-lg hover:bg-blue-100"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {editingConcernIndex !== null ? "Save & Add Another Concern" : "Add Another Concern"}
+                    </button>
+                    <button
+                      onClick={() => { resetActiveConcernEditor(); }}
                       className="flex items-center gap-2 px-4 py-2 text-gray-700 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50"
+                      title="Discard this draft and start a new concern"
                     >
                       <RotateCcw className="w-4 h-4" />
                       Start Over
                     </button>
                     <button
-                      onClick={() => setStep("customer")}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+                      onClick={handleContinueFromConcernStep}
+                      className="ml-auto flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
                     >
-                      Next: Select Customer
+                      Continue to Customer
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -1347,11 +1628,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 <span className="text-gray-300 mx-1">|</span>
                 <Car className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{vehicleDisplay}</span>
-                {(cleanedText || concern) && (
+                {concernIndicatorLabel && (
                   <>
                     <span className="text-gray-300 mx-1">|</span>
                     <MessageSquareText className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600 text-xs">Concern attached</span>
+                    <span className="text-green-600 text-xs">{concernIndicatorLabel}</span>
                   </>
                 )}
               </div>
@@ -1389,11 +1670,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 <span className="text-gray-300 mx-1">|</span>
                 <Car className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{vehicleDisplay}</span>
-                {(cleanedText || concern) && (
+                {concernIndicatorLabel && (
                   <>
                     <span className="text-gray-300 mx-1">|</span>
                     <MessageSquareText className="w-4 h-4 text-green-500" />
-                    <span className="text-green-600 text-xs">Concern attached</span>
+                    <span className="text-green-600 text-xs">{concernIndicatorLabel}</span>
                   </>
                 )}
               </div>
@@ -1626,6 +1907,38 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                   ) : (
                     <p className="text-sm text-gray-500 text-center py-4">No job history found. Try searching or check back later.</p>
                   )}
+                </div>
+              )}
+
+              {totalConcernCount > 0 && (
+                <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      <MessageSquareText className="w-4 h-4 text-green-600" />
+                      Customer Concerns ({totalConcernCount})
+                    </span>
+                    <button
+                      onClick={() => setStep("concern")}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {[
+                      ...savedConcerns.map(c => (c.cleanedText || c.original || "").trim()),
+                      ...(draftConcernText && !draftIsBeingEdited ? [draftConcernText] : []),
+                    ].filter(Boolean).map((text, idx) => (
+                      <div key={idx} className="flex items-start gap-2 py-1.5 px-2 bg-gray-50 rounded-md">
+                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <p className="text-xs text-gray-700 whitespace-pre-wrap line-clamp-2 flex-1 min-w-0">
+                          {text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

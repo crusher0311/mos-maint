@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { contactId, vehicleId, vin, concernText, note, mileage, servicePackages } = body;
+    const { contactId, vehicleId, vin, concernText, concerns, note, mileage, servicePackages } = body;
 
     if (!contactId || !vehicleId) {
       return NextResponse.json({ error: "Contact and vehicle are required" }, { status: 400 });
@@ -36,6 +36,9 @@ export async function POST(req: NextRequest) {
       vehicleId,
       vin: vin || undefined,
       concernText: concernText || undefined,
+      concerns: Array.isArray(concerns)
+        ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+        : undefined,
       note: note || undefined,
       mileage: mileage || undefined,
       servicePackages: servicePackages || undefined,
