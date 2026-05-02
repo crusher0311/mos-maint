@@ -76,7 +76,7 @@ try {
     shopId: 4242,
     name: "Founder Shop",
     enterpriseId: "ent-1",
-    billing: { plan: FOUNDER_PLAN, status: "active", vinLimit: 999 },
+    billing: { plan: FOUNDER_PLAN, status: "active" },
     enabledFeatures: {
       // A stored "false" override on a real feature must NOT win for
       // founder shops — the wildcard always evaluates to true.
@@ -136,7 +136,7 @@ try {
     const trialShop = {
       shopId: 99,
       name: "Trial Shop",
-      billing: { plan: "trial", status: "trial", vinLimit: 10 },
+      billing: { plan: "trial", status: "trial" },
       // On the trial plan `maintenance` is on by default; overriding to
       // false must still take effect to prove we didn't accidentally
       // wildcard everything.

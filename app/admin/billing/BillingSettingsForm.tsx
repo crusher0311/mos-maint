@@ -830,10 +830,9 @@ export default function BillingSettingsForm({
         <h4 className="font-semibold text-blue-900 mb-2">Stripe Setup Checklist</h4>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>1. Create products in Stripe Dashboard with the correct names</li>
-          <li>2. Add metadata: <code className="bg-blue-100 px-1 rounded">plan_type: pro</code>, <code className="bg-blue-100 px-1 rounded">included_vins: 300</code>, <code className="bg-blue-100 px-1 rounded">founding_plan: true</code></li>
-          <li>3. For VIN packs, add: <code className="bg-blue-100 px-1 rounded">vin_pack: 100</code> (or 250, 500) and <code className="bg-blue-100 px-1 rounded">type: overage</code></li>
-          <li>4. Click "Fetch from Stripe" above to pull in your products</li>
-          <li>5. Copy product and price IDs into the fields, then Save</li>
+          <li>2. Add metadata: <code className="bg-blue-100 px-1 rounded">plan_type: pro</code>, <code className="bg-blue-100 px-1 rounded">founding_plan: true</code></li>
+          <li>3. Click "Fetch from Stripe" above to pull in your products</li>
+          <li>4. Copy product and price IDs into the fields, then Save</li>
         </ul>
       </div>
     </div>

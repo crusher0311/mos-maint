@@ -24,9 +24,8 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [shops, platformSettings, billingSettings, enterprises] = await Promise.all([
+    const [shops, billingSettings, enterprises] = await Promise.all([
       db.collection("shops").find().toArray(),
-      db.collection("platform_settings").findOne({ key: "trial" }),
       getBillingSettings(),
       db.collection("enterprise_accounts").find().toArray(),
     ]);

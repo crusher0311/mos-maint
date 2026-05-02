@@ -72,13 +72,6 @@ export const stripe = {
   },
 };
 
-export type VinPackConfig = {
-  productId: string;
-  priceId: string;
-  vinCount: number;
-  price: number;
-};
-
 export type BillingSettings = {
   // Tier-specific pricing (Starter, Plus, Elite)
   starterProductId: string;
