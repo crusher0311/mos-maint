@@ -1,0 +1,50 @@
+2026-05-02T20:31:30.956645957Z 
+2026-05-02T20:31:30.956649807Z stuck → retry → stuck again buckets shop as 'needs-followup' (chunk # in reason)
+2026-05-02T20:31:30.956973899Z   ✓ outcome === 'needs-followup'
+2026-05-02T20:31:30.9569844Z   ✓ reason includes 'stuck on chunk 1 after one retry'
+2026-05-02T20:31:30.957022282Z   ✓ retry fires exactly ONCE for the stuck chunk (no infinite loop): fireChunk called exactly twice total
+2026-05-02T20:31:30.957062835Z   ✓ needs-followup log line emitted
+2026-05-02T20:31:30.957084027Z 
+2026-05-02T20:31:30.957086787Z looksBusy guard is bypassed on the stuck-retry pass
+2026-05-02T20:31:30.957384507Z   ✓ recovery still completed: outcome === 'recovered'
+2026-05-02T20:31:30.957395448Z   ✓ fireChunk called for the retry pass (not blocked by looksBusy)
+2026-05-02T20:31:30.957449131Z   ✓ no 'Prod looks busy' log line on the retry pass
+2026-05-02T20:31:30.957531267Z   ✓ retry pass logged with [STUCK-RETRY] marker
+2026-05-02T20:31:30.957538237Z 
+2026-05-02T20:31:30.957541977Z renderSummary: ONLY_SHOPS=… line appears only for needs-followup bucket
+2026-05-02T20:31:30.957739321Z   ✓ summary lists completed bucket with shopId 5
+2026-05-02T20:31:30.957778513Z   ✓ summary lists recovered bucket with shopId 7
+2026-05-02T20:31:30.957786744Z   ✓ summary lists needs-followup bucket count = 2
+2026-05-02T20:31:30.957822936Z   ✓ summary lists needs-followup reason for shop 9 (chunk 3 in reason)
+2026-05-02T20:31:30.95787442Z   ✓ summary renders the suggested ONLY_SHOPS=9,11 re-run line
+2026-05-02T20:31:30.957899191Z   ✓ no ONLY_SHOPS line when nothing is in needs-followup
+2026-05-02T20:31:30.957926983Z   ✓ no 'Suggested re-run command' header when nothing is in needs-followup
+2026-05-02T20:31:30.957942704Z   ✓ needs-followup header still shown with '(none)' tag
+2026-05-02T20:31:30.957999328Z   ✓ dry-run summary shows the dry-run bucket line
+2026-05-02T20:31:30.958013759Z   ✓ no ONLY_SHOPS line in dry-run summary
+2026-05-02T20:31:30.958018159Z 
+2026-05-02T20:31:30.95802039Z All tekmetric-catchup smoke checks passed.
+2026-05-02T20:31:31.083854691Z 
+2026-05-02T20:31:31.083877443Z > mos-maintenance-mvp@1.8.0 test:vhr-engine-risk
+2026-05-02T20:31:31.083881263Z > tsx tests/vhr-engine-risk.smoke.ts
+2026-05-02T20:31:31.083883873Z 
+2026-05-02T20:31:33.06426529Z /opt/render/project/src/tests/vhr-engine-risk.smoke.ts:37
+2026-05-02T20:31:33.064289632Z (globalThis as any).navigator = dom.window.navigator;
+2026-05-02T20:31:33.064295022Z                     ^
+2026-05-02T20:31:33.064299153Z 
+2026-05-02T20:31:33.064302773Z 
+2026-05-02T20:31:33.064305983Z TypeError: Cannot set property navigator of #<Object> which has only a getter
+2026-05-02T20:31:33.064309143Z     at VehicleHealthReport (/opt/render/project/src/tests/vhr-engine-risk.smoke.ts:37:21)
+2026-05-02T20:31:33.064311843Z     at Object.<anonymous> (/opt/render/project/src/tests/vhr-engine-risk.smoke.ts:332:1)
+2026-05-02T20:31:33.064314294Z     at Module._compile (node:internal/modules/cjs/loader:1730:14)
+2026-05-02T20:31:33.064317234Z     at Object.transformer (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+2026-05-02T20:31:33.064319714Z     at Module.load (node:internal/modules/cjs/loader:1465:32)
+2026-05-02T20:31:33.064322184Z     at Function._load (node:internal/modules/cjs/loader:1282:12)
+2026-05-02T20:31:33.064324644Z     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-05-02T20:31:33.064339305Z     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+2026-05-02T20:31:33.064341845Z     at cjsLoader (node:internal/modules/esm/translators:266:5)
+2026-05-02T20:31:33.064344336Z     at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:200:7)
+2026-05-02T20:31:33.064347056Z 
+2026-05-02T20:31:33.064349546Z Node.js v22.16.0
+2026-05-02T20:31:33.153462236Z ==> Build failed 😞
+2026-05-02T20:31:33.153484888Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

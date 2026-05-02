@@ -34,7 +34,16 @@ const dom = new JSDOM(
 
 (globalThis as any).window = dom.window;
 (globalThis as any).document = dom.window.document;
-(globalThis as any).navigator = dom.window.navigator;
+// Node 22 ships `navigator` as a built-in read-only global, so a plain
+// `globalThis.navigator = …` assignment throws "Cannot set property
+// navigator of #<Object> which has only a getter". Use defineProperty
+// (configurable + writable) so the same line works on Node 20 (where it
+// was a no-op assignment) and Node 22 (Render builds run on Node 22).
+Object.defineProperty(globalThis, "navigator", {
+  value: dom.window.navigator,
+  configurable: true,
+  writable: true,
+});
 (globalThis as any).HTMLElement = dom.window.HTMLElement;
 (globalThis as any).HTMLAnchorElement = dom.window.HTMLAnchorElement;
 (globalThis as any).Element = dom.window.Element;
