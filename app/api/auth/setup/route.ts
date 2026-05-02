@@ -78,7 +78,6 @@ export async function POST(req: NextRequest) {
         metadata: {
           pendingId,
           reservedShopId: String(reservedShopId),
-          bonusVins: String(billingSettings.skipTrialBonusVins || 50),
         },
       },
       metadata: {

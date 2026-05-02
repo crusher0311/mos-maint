@@ -13,7 +13,6 @@ import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
 interface ShopBilling {
   plan: string;
   isPaid: boolean;
-  vinLimit: number;
   vinViewCount: number;
   status?: string;
   stripeSubscriptionAmount?: number | null;
@@ -220,7 +219,6 @@ export default function PlatformShopsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [impersonating, setImpersonating] = useState<number | null>(null);
-  const [defaultVinLimit, setDefaultVinLimit] = useState(10);
   const [defaultTrialDays, setDefaultTrialDays] = useState(14);
   const [extendTrialShop, setExtendTrialShop] = useState<Shop | null>(null);
   const [extendTrialDays, setExtendTrialDays] = useState<string>("14");
@@ -228,8 +226,7 @@ export default function PlatformShopsPage() {
   const [extendTrialDate, setExtendTrialDate] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
-  const [vinInput, setVinInput] = useState("");
-  const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | "manageFeatures" | null>(null);
+  const [modalAction, setModalAction] = useState<"manageFeatures" | null>(null);
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
   const [openMenuShopId, setOpenMenuShopId] = useState<string | null>(null);
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
@@ -281,7 +278,6 @@ export default function PlatformShopsPage() {
     ownerName: "",
     plan: "trial",
     status: "trial",
-    vinLimit: "10",
     trialDays: "14",
     features: {
       maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false,
@@ -311,7 +307,7 @@ export default function PlatformShopsPage() {
         setShowCreateShop(false);
         setCreateShopData({
           shopName: "", ownerEmail: "", ownerPassword: "", ownerName: "",
-          plan: "trial", status: "trial", vinLimit: "10",
+          plan: "trial", status: "trial",
           trialDays: String(defaultTrialDays || 14),
           features: { maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false, keytags: false, auto_booking: false, part_xref: false, labor_rates: false },
         });
@@ -363,7 +359,6 @@ export default function PlatformShopsPage() {
         loadShops();
         setSelectedShop(null);
         setModalAction(null);
-        setVinInput("");
       } else {
         alert(data.error || "Action failed");
       }
@@ -605,7 +600,6 @@ export default function PlatformShopsPage() {
       plan: shop.billing.plan || "trial",
       status: shop.billing.status || "trial",
     });
-    setVinInput(String(shop.billing.vinLimit || 10));
     setTrialResetDays(String(defaultTrialDays || 14));
     setModalAction("manageFeatures");
   };
@@ -725,7 +719,6 @@ export default function PlatformShopsPage() {
       const data = await res.json();
       if (data.ok) {
         setShops(data.shops || []);
-        setDefaultVinLimit(data.defaultVinLimit || 10);
         if (typeof data.defaultTrialDays === "number") {
           setDefaultTrialDays(data.defaultTrialDays);
         }
@@ -865,14 +858,8 @@ export default function PlatformShopsPage() {
       setReviewDialog({ shop, mode: "flag" });
     },
     triggerExtendTrial: (shop: Shop) => { setExtendTrialShop(shop); setExtendTrialDays("14"); },
-    triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => {
-      setSelectedShop(shop);
-      setModalAction(action);
-      if (action === "addViews") setVinInput("10");
-      else if (action === "setLimit") setVinInput(String(shop.billing.vinLimit));
-    },
     triggerResetViews: (shop: Shop) => {
-      if (confirm(`Reset all viewed VINs for ${shop.name}? This will start their trial fresh.`)) {
+      if (confirm(`Reset the recorded viewed-VIN total for ${shop.name}?`)) {
         vinAction(shop.shopId, "resetViews");
       }
     },
@@ -1098,75 +1085,8 @@ export default function PlatformShopsPage() {
       </div>
 
       <div className="text-sm text-gray-500">
-        Showing {filteredShops.length} of {shops.length} shops | Default trial limit: {defaultVinLimit} VINs
+        Showing {filteredShops.length} of {shops.length} shops
       </div>
-
-      {selectedShop && modalAction && modalAction !== "manageFeatures" && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedShop(null); setModalAction(null); }}>
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {modalAction === "addViews" ? "Add VINs" : modalAction === "resetLimit" ? "Reset to Default" : "Set VIN Limit"}
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {modalAction === "addViews"
-                ? `Add extra VINs to ${selectedShop.name}'s trial allowance`
-                : modalAction === "resetLimit"
-                ? `Reset ${selectedShop.name} to use the default trial limit (${defaultVinLimit} VINs)`
-                : `Set a custom VIN limit for ${selectedShop.name}`
-              }
-            </p>
-            {modalAction !== "resetLimit" && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {modalAction === "addViews" ? "VINs to add" : "New VIN limit"}
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={vinInput}
-                  onChange={(e) => setVinInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
-                />
-                {modalAction === "setLimit" && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Current: {selectedShop.billing.vinViewCount} used of {selectedShop.billing.vinLimit} limit
-                  </p>
-                )}
-                {modalAction === "addViews" && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Will increase limit from {selectedShop.billing.vinLimit} to {selectedShop.billing.vinLimit + (Number(vinInput) || 0)}
-                  </p>
-                )}
-              </div>
-            )}
-            {modalAction === "resetLimit" && (
-              <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                <p className="text-sm text-orange-800">
-                  This will remove any custom VIN limit and revert to the platform default of {defaultVinLimit} VINs.
-                </p>
-              </div>
-            )}
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => { setSelectedShop(null); setModalAction(null); }}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => vinAction(selectedShop.shopId, modalAction, modalAction === "resetLimit" ? undefined : Number(vinInput))}
-                disabled={(modalAction !== "resetLimit" && (!vinInput || Number(vinInput) < 1)) || actionLoading !== null}
-                className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {actionLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                )}
-                {modalAction === "addViews" ? "Add VINs" : modalAction === "resetLimit" ? "Reset to Default" : "Set Limit"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedShop && modalAction === "manageFeatures" && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setSelectedShop(null); setModalAction(null); }}>
@@ -1186,7 +1106,6 @@ export default function PlatformShopsPage() {
                         const newPlan = e.target.value;
                         setBillingEdits({ ...billingEdits, plan: newPlan });
                         if (newPlan === "demo") {
-                          setVinInput("999999");
                           setFeatureEdits({
                             maintenance: true, job_lookup: true, common_failures: true,
                             oil_sticker: true, keytags: true, auto_booking: true,
@@ -1218,16 +1137,6 @@ export default function PlatformShopsPage() {
                       <option value="demo">Demo</option>
                     </select>
                   </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs text-gray-500 mb-1">VIN Limit</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={vinInput}
-                    onChange={(e) => setVinInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
-                  />
                 </div>
               </div>
 
@@ -1384,7 +1293,7 @@ export default function PlatformShopsPage() {
               <button
                 onClick={() => updateShopSettings(
                   selectedShop.shopId,
-                  { ...billingEdits, vinLimit: Number(vinInput) } as any,
+                  billingEdits as any,
                   // Founder plan = wildcard. Don't write per-feature
                   // overrides so changing the plan later doesn't leave
                   // stale toggles behind.
@@ -1457,7 +1366,7 @@ export default function PlatformShopsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Plan</label>
                   <select
@@ -1467,7 +1376,6 @@ export default function PlatformShopsPage() {
                       const newData = { ...createShopData, plan };
                       if (plan === "enterprise" || plan === "demo") {
                         newData.status = plan === "demo" ? "demo" : "active";
-                        newData.vinLimit = "999999";
                         newData.features = {
                           maintenance: true, job_lookup: true, common_failures: true,
                           oil_sticker: true, keytags: true, auto_booking: true,
@@ -1497,16 +1405,6 @@ export default function PlatformShopsPage() {
                     <option value="active">Active</option>
                     <option value="demo">Demo</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">VIN Limit</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={createShopData.vinLimit}
-                    onChange={(e) => setCreateShopData({ ...createShopData, vinLimit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
-                  />
                 </div>
               </div>
 
@@ -1930,7 +1828,6 @@ interface ShopRowProps {
   deleteShop: (shop: Shop) => void;
   resendCardCaptureEmail: (shop: Shop) => void;
   triggerExtendTrial: (shop: Shop) => void;
-  triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => void;
   triggerResetViews: (shop: Shop) => void;
   triggerApproveReview: (shop: Shop) => void;
   triggerFlagReview: (shop: Shop) => void;
@@ -1941,7 +1838,7 @@ function ShopRow(props: ShopRowProps) {
     shop, hideEnterpriseLine, actionLoading, impersonating, expandedShop, setExpandedShop,
     openMenuShopId, setOpenMenuShopId, accessShop, openFeatureModal,
     toggleLock, deleteShop, resendCardCaptureEmail, triggerExtendTrial,
-    triggerVinModal, triggerResetViews, triggerApproveReview, triggerFlagReview,
+    triggerResetViews, triggerApproveReview, triggerFlagReview,
   } = props;
   const reviewStatus = (shop.reviewStatus || "approved") as ShopReviewStatus;
   const needsReview = reviewStatus !== "approved";
@@ -1949,8 +1846,6 @@ function ShopRow(props: ShopRowProps) {
   const isExpanded = expandedShop === shop._id;
   const stickerThisMonth = shop.stickerCountThisMonth || 0;
   const stickerTotal = shop.stickerCount || 0;
-  const usagePct = Math.min(100, (shop.billing.vinViewCount / Math.max(1, shop.billing.vinLimit)) * 100);
-
   const lastEmail = shop.lastCardCaptureEmail || null;
   const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
 
@@ -2026,25 +1921,9 @@ function ShopRow(props: ShopRowProps) {
         {/* Usage cell */}
         <td className="px-4 py-3">
           <div className="space-y-1.5">
-            <div>
-              <div className={`text-sm font-medium ${
-                shop.billing.vinViewCount >= shop.billing.vinLimit
-                  ? "text-red-600"
-                  : shop.billing.isPaid ? "text-green-600" : "text-gray-900"
-              }`}>
-                {shop.billing.vinViewCount} / {shop.billing.vinLimit} VINs
-                {shop.billing.isPaid && <span className="ml-1 text-green-500 text-[11px]">(Paid)</span>}
-              </div>
-              <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
-                <div
-                  className={`h-full transition-all ${
-                    shop.billing.vinViewCount >= shop.billing.vinLimit
-                      ? "bg-red-500"
-                      : shop.billing.isPaid ? "bg-green-500" : "bg-[#3c81c3]"
-                  }`}
-                  style={{ width: `${usagePct}%` }}
-                />
-              </div>
+            <div className="text-sm text-gray-900">
+              VINs viewed: <span className="font-medium">{shop.billing.vinViewCount.toLocaleString()}</span>
+              {shop.billing.isPaid && <span className="ml-1 text-green-500 text-[11px]">(Paid)</span>}
             </div>
             <div className="text-[11px] text-gray-500">
               <span className="text-gray-700 font-medium">{stickerThisMonth}</span> stickers this month
@@ -2172,7 +2051,6 @@ function ShopRow(props: ShopRowProps) {
               isOpen={openMenuShopId === shop._id}
               setOpen={(open) => setOpenMenuShopId(open ? shop._id : null)}
               actionLoading={actionLoading}
-              triggerVinModal={triggerVinModal}
               triggerResetViews={triggerResetViews}
               triggerExtendTrial={triggerExtendTrial}
               resendCardCaptureEmail={resendCardCaptureEmail}
@@ -2252,14 +2130,13 @@ function ShopRow(props: ShopRowProps) {
 
 function ShopRowMenu({
   shop, isOpen, setOpen, actionLoading,
-  triggerVinModal, triggerResetViews, triggerExtendTrial,
+  triggerResetViews, triggerExtendTrial,
   resendCardCaptureEmail, toggleLock, deleteShop,
 }: {
   shop: Shop;
   isOpen: boolean;
   setOpen: (open: boolean) => void;
   actionLoading: string | null;
-  triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => void;
   triggerResetViews: (shop: Shop) => void;
   triggerExtendTrial: (shop: Shop) => void;
   resendCardCaptureEmail: (shop: Shop) => void;
@@ -2305,9 +2182,6 @@ function ShopRowMenu({
       </button>
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
-          {item(<Plus className="w-4 h-4 text-green-600" />, "Add VINs", () => triggerVinModal(shop, "addViews"))}
-          {item(<Settings className="w-4 h-4 text-blue-600" />, "Set custom VIN limit", () => triggerVinModal(shop, "setLimit"))}
-          {item(<X className="w-4 h-4 text-gray-500" />, "Reset VIN limit", () => triggerVinModal(shop, "resetLimit"))}
           {item(<RotateCcw className="w-4 h-4 text-orange-600" />, "Reset viewed VINs", () => triggerResetViews(shop))}
           {shop.trial?.endsAt && (
             <>

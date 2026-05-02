@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
 interface BillingConfig {
-  mosProIncludedVins: number;
   mosProPrice: number;
 }
 
@@ -28,7 +27,6 @@ export default function SetupWizardContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(wasCancelled ? "Payment was cancelled. You can try again when ready." : "");
   const [billingConfig, setBillingConfig] = useState<BillingConfig>({
-    mosProIncludedVins: 300,
     mosProPrice: 199,
   });
 
@@ -105,7 +103,7 @@ export default function SetupWizardContent() {
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
           <p className="text-sm text-blue-800">
-            <strong>${billingConfig.mosProPrice}/month</strong> includes {billingConfig.mosProIncludedVins} VINs
+            <strong>${billingConfig.mosProPrice}/month</strong>
           </p>
           <p className="text-xs text-blue-600 mt-1">
             You can configure integrations after setup in Settings

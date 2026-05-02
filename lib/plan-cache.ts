@@ -228,64 +228,22 @@ export async function invalidateCachedPlan(db: Db, vin: string, shopId: number):
   });
 }
 
+/**
+ * Records a (shopId, vin, roNumber) view in `viewed_vins` and returns the
+ * running total. Task #271: VINs are no longer a billing/quota dimension —
+ * this function always returns `allowed: true` and the `limit` argument is
+ * accepted for backward compatibility but ignored. The running total keeps
+ * growing so admin views can display "VINs viewed: N".
+ */
 export async function checkAndTrackVin(
-  db: Db, 
-  shopId: number, 
-  vin: string, 
-  limit: number,
+  db: Db,
+  shopId: number,
+  vin: string,
+  _limit: number,
   roId?: string | null
 ): Promise<{ count: number; isNew: boolean; allowed: boolean }> {
-  const normalizedVin = vin.toUpperCase();
-  const normalizedRoNumber = roId?.trim() || null;
-  
-  // Track by VIN + RO combination - each visit counts as a new view
-  // Use roNumber to match the existing MongoDB index (shopId_vin_roNumber)
-  const query: any = { shopId, vin: normalizedVin, roNumber: normalizedRoNumber };
-  
-  const existing = await db.collection("viewed_vins").findOne(query);
-  
-  if (existing) {
-    // Same VIN + RO already viewed - doesn't count again
-    const count = await db.collection("viewed_vins").countDocuments({ shopId });
-    await db.collection("viewed_vins").updateOne(
-      query,
-      { $set: { lastViewedAt: new Date() }, $inc: { viewCount: 1 } }
-    );
-    return { count, isNew: false, allowed: true };
-  }
-  
-  // New VIN + RO combination - counts as a new view
-  const count = await db.collection("viewed_vins").countDocuments({ shopId });
-  
-  if (count >= limit) {
-    return { count, isNew: true, allowed: false };
-  }
-  
-  const now = new Date();
-  
-  try {
-    await db.collection("viewed_vins").insertOne({
-      shopId,
-      vin: normalizedVin,
-      roNumber: normalizedRoNumber,
-      firstViewedAt: now,
-      lastViewedAt: now,
-      viewCount: 1,
-    });
-    return { count: count + 1, isNew: true, allowed: true };
-  } catch (err: any) {
-    // Handle duplicate key error gracefully (race condition or null roNumber conflict)
-    if (err.code === 11000) {
-      // Already exists - just update and return as existing
-      await db.collection("viewed_vins").updateOne(
-        query,
-        { $set: { lastViewedAt: now }, $inc: { viewCount: 1 } }
-      );
-      const updatedCount = await db.collection("viewed_vins").countDocuments({ shopId });
-      return { count: updatedCount, isNew: false, allowed: true };
-    }
-    throw err;
-  }
+  const { count, isNew } = await trackViewedVin(db, shopId, vin, roId);
+  return { count, isNew, allowed: true };
 }
 
 export async function trackViewedVin(db: Db, shopId: number, vin: string, roId?: string | null): Promise<{ count: number; isNew: boolean }> {

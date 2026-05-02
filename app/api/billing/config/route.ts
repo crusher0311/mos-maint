@@ -11,9 +11,6 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       config: {
-        trialVinLimit: settings.trialVinLimit,
-        skipTrialBonusVins: settings.skipTrialBonusVins,
-        mosProIncludedVins: settings.mosProIncludedVins,
         mosProPrice: settings.mosProPrice,
       },
     });
@@ -22,9 +19,6 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       config: {
-        trialVinLimit: 10,
-        skipTrialBonusVins: 50,
-        mosProIncludedVins: 300,
         mosProPrice: 199,
       },
     });

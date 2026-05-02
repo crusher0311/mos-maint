@@ -54,7 +54,6 @@ export async function GET(
         billing: {
           plan: shop.billing?.plan || "trial",
           status: shop.billing?.status || "trial",
-          vinLimit: shop.trialVinLimit || 10,
           vinViewCount,
           stripeCustomerId: shop.billing?.stripeCustomerId || shop.stripeCustomerId || null,
           cardOnFile: !!shop.cardOnFile,
@@ -353,7 +352,6 @@ export async function PATCH(
       const billingUpdate: any = {};
       if (billing.plan !== undefined) billingUpdate.plan = billing.plan as BillingPlan;
       if (billing.status !== undefined) billingUpdate.status = billing.status as BillingStatus;
-      if (billing.vinLimit !== undefined) billingUpdate.vinLimit = billing.vinLimit;
       
       await updateShopBilling(shopId as number, billingUpdate);
       
@@ -412,7 +410,6 @@ export async function PATCH(
           billing: {
             plan: updatedShop?.billing?.plan || "trial",
             status: updatedShop?.billing?.status || "trial",
-            vinLimit: updatedShop?.trialVinLimit || 10,
           },
           enabledFeatures: updatedShop?.enabledFeatures || {},
         },

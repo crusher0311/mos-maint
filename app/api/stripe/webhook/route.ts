@@ -231,18 +231,14 @@ export async function POST(req: NextRequest) {
           
           const shopId = pending.reservedShopId;
           const now = new Date();
-          const billingSettings = await getBillingSettings();
-          const baseVins = billingSettings.mosProIncludedVins || 300;
-          const bonusVins = billingSettings.skipTrialBonusVins || 50;
           const webhookToken = crypto.randomBytes(12).toString("hex");
-          
+
+          // Task #271: VIN-based billing removed. No vinLimit/skippedTrialBonus.
           const billingForReview = {
             plan: "pro",
             status: "active",
-            vinLimit: baseVins + bonusVins,
             stripeSubscriptionId: session.subscription as string | undefined,
             stripeCustomerId: session.customer as string | undefined,
-            skippedTrialBonus: bonusVins,
             updatedAt: now,
           };
           const initialAutoFlagReasons = computeAutoFlagReasons({
@@ -326,7 +322,7 @@ export async function POST(req: NextRequest) {
         const shopId = Number(session.metadata?.shopId);
         const plan = session.metadata?.plan || "pro";
         const skippedTrial = session.metadata?.skippedTrial === "true";
-        
+
         if (shopId) {
           const updateData: Record<string, any> = {
             "billing.plan": plan,
@@ -336,23 +332,10 @@ export async function POST(req: NextRequest) {
             "billing.updatedAt": new Date(),
             "billing.pendingCheckoutSessionId": null,
           };
-          
-          if (skippedTrial) {
-            const billingSettings = await db.collection("platform_settings").findOne({ type: "billing" });
-            let baseVins = billingSettings?.defaultVinLimit || 300;
-            if (plan === "starter" && billingSettings?.starterIncludedVins) {
-              baseVins = billingSettings.starterIncludedVins;
-            } else if (plan === "plus" && billingSettings?.plusIncludedVins) {
-              baseVins = billingSettings.plusIncludedVins;
-            } else if (plan === "elite" && billingSettings?.eliteIncludedVins) {
-              baseVins = billingSettings.eliteIncludedVins;
-            }
-            const bonus = billingSettings?.skipTrialBonusVins || 50;
-            updateData["billing.vinLimit"] = baseVins + bonus;
-            updateData["billing.skippedTrialBonus"] = bonus;
-            console.log(`[Stripe] Shop ${shopId} skipped trial, setting VIN limit to ${baseVins + bonus} (tier: ${plan})`);
-          }
-          
+
+          // Task #271: skipTrial no longer grants bonus VINs (VINs are not a
+          // billing dimension). Time-based trial logic still lives elsewhere.
+
           updateData["enabledFeatures.maintenance"] = true;
           updateData["enabledFeatures.job_lookup"] = true;
           updateData["enabledFeatures.common_failures"] = true;
@@ -366,7 +349,7 @@ export async function POST(req: NextRequest) {
             { shopId },
             { $set: updateData }
           );
-          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skip trial bonus applied)" : ""}`);
+          console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skipTrial flag set)" : ""}`);
         } else if (session.customer_details?.email) {
           const crmEmail = session.customer_details.email.toLowerCase().trim();
           const crmName = session.customer_details.name || "";
@@ -439,7 +422,6 @@ export async function POST(req: NextRequest) {
               plan: validatedPlan,
               status: "active",
               isPaid: true,
-              vinLimit: 300,
               stripeCustomerId: session.customer as string | undefined,
               stripeSubscriptionId: session.subscription as string | undefined,
               updatedAt: now,

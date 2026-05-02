@@ -29,7 +29,6 @@ interface ShopBilling {
   status: string;
   isPaid: boolean;
   vinViewCount: number;
-  vinLimit: number;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   stripeSubscriptionAmount?: number | null;
@@ -451,16 +450,8 @@ export default function PlatformBillingPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-center">
-                          <div className={`text-sm font-medium ${shop.vinViewCount >= shop.vinLimit ? "text-red-600" : "text-gray-900"}`}>
-                            {shop.vinViewCount} / {shop.vinLimit}
-                          </div>
-                          <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-auto mt-1">
-                            <div
-                              className={`h-full rounded-full ${shop.vinViewCount >= shop.vinLimit ? "bg-red-500" : "bg-[rgba(60,129,195,0.1)]0"}`}
-                              style={{ width: `${Math.min(100, (shop.vinViewCount / shop.vinLimit) * 100)}%` }}
-                            />
-                          </div>
+                        <div className="text-center text-sm text-gray-900">
+                          VINs viewed: <span className="font-medium">{shop.vinViewCount.toLocaleString()}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">

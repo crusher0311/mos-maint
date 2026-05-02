@@ -73,27 +73,13 @@ export async function POST(req: NextRequest) {
       mosProProductId: body.mosProProductId || "",
       mosProPriceId: body.mosProPriceId || "",
       mosProPrice: body.mosProPrice ?? 199,
-      mosProIncludedVins: body.mosProIncludedVins ?? 300,
-      // VIN packs
-      vinPack100ProductId: body.vinPack100ProductId || "",
-      vinPack100PriceId: body.vinPack100PriceId || "",
-      vinPack100Price: body.vinPack100Price ?? 39,
-      vinPack250ProductId: body.vinPack250ProductId || "",
-      vinPack250PriceId: body.vinPack250PriceId || "",
-      vinPack250Price: body.vinPack250Price ?? 79,
-      vinPack500ProductId: body.vinPack500ProductId || "",
-      vinPack500PriceId: body.vinPack500PriceId || "",
-      vinPack500Price: body.vinPack500Price ?? 149,
       // Onboarding
       onboardingProductId: body.onboardingProductId || "",
       onboardingPriceId: body.onboardingPriceId || "",
       onboardingPrice: body.onboardingPrice ?? 495,
       // Trial settings
       trialDays: body.trialDays ?? 14,
-      trialVinLimit: body.trialVinLimit ?? 10,
-      defaultVinLimit: body.defaultVinLimit ?? 300,
       foundingShopPricing: body.foundingShopPricing ?? true,
-      skipTrialBonusVins: body.skipTrialBonusVins ?? 50,
       // Trial reminder cron config (admin-tunable). Sanitize the day list
       // here so the cron always reads a clean array, and fall back to the
       // safe defaults if the admin clears a template field.

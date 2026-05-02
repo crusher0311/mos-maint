@@ -50,7 +50,6 @@ export function buildAllFeaturesEnabled(): FeatureSettings {
 export interface ShopBilling {
   plan: BillingPlan;
   status: BillingStatus;
-  vinLimit: number;
   vinViewCount?: number;
   gracePeriodStartedAt?: Date | null;
   gracePeriodEndsAt?: Date | null;
@@ -195,7 +194,6 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
 
   const plan: BillingPlan = shop.billing?.plan || "trial";
   const status: BillingStatus = shop.billing?.status || "trial";
-  const vinLimit = shop.trialVinLimit ?? shop.billing?.vinLimit ?? 10;
 
   const shopFeatures: Partial<FeatureSettings> = shop.enabledFeatures || {};
 
@@ -218,7 +216,6 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   const billing: ShopBilling = {
     plan,
     status,
-    vinLimit,
     vinViewCount: 0,
   };
 
@@ -248,7 +245,6 @@ function createDefaultEntitlements(): FeatureEntitlements {
   const billing: ShopBilling = {
     plan: "trial",
     status: "trial",
-    vinLimit: 10,
   };
 
   return {
@@ -304,7 +300,6 @@ export async function updateShopBilling(
   const updateFields: any = { updatedAt: new Date() };
   if (billing.plan !== undefined) updateFields["billing.plan"] = billing.plan;
   if (billing.status !== undefined) updateFields["billing.status"] = billing.status;
-  if (billing.vinLimit !== undefined) updateFields.trialVinLimit = billing.vinLimit;
 
   await db.collection("shops").updateOne(
     { shopId },

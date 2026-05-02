@@ -16,7 +16,6 @@ import {
   Settings,
   ChevronRight,
   X,
-  Package,
   ArrowUp,
   ArrowDown,
   Download,
@@ -32,7 +31,6 @@ interface LocationBilling {
   planDisplay: string;
   status: string;
   vehicleCount: number;
-  vinLimit: number | null;
   nextBillingDate: string | null;
   enabledFeatures: string[];
   stripeCustomerId?: string;
@@ -66,12 +64,6 @@ interface Plan {
   stripeMonthlyPriceId?: string;
 }
 
-interface VinPack {
-  size: number;
-  price: number;
-  priceId: string;
-}
-
 interface Invoice {
   id: string;
   number: string;
@@ -93,7 +85,6 @@ export default function EnterpriseBillingPage() {
   
   const [selectedLocation, setSelectedLocation] = useState<LocationBilling | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [vinPacks, setVinPacks] = useState<VinPack[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -106,10 +97,9 @@ export default function EnterpriseBillingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [billingRes, plansRes, addonsRes, invoicesRes] = await Promise.all([
+      const [billingRes, plansRes, invoicesRes] = await Promise.all([
         fetch("/api/enterprise/billing"),
         fetch("/api/stripe/plans"),
-        fetch("/api/settings/addons"),
         fetch("/api/enterprise/billing/invoices")
       ]);
 
@@ -125,11 +115,6 @@ export default function EnterpriseBillingPage() {
       if (plansRes.ok) {
         const plansData = await plansRes.json();
         setPlans(plansData.plans || []);
-      }
-
-      if (addonsRes.ok) {
-        const addonsData = await addonsRes.json();
-        setVinPacks(addonsData.vinPacks || []);
       }
 
       if (invoicesRes.ok) {
@@ -184,45 +169,6 @@ export default function EnterpriseBillingPage() {
       loadBillingData();
     } catch (err: any) {
       setError(err.message || "Failed to change plan");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handlePurchaseVinPack = async (location: LocationBilling, pack: VinPack) => {
-    if (!confirm(`Purchase ${pack.size} additional VINs for ${location.name} for $${pack.price}?`)) {
-      return;
-    }
-
-    setActionLoading(`vin-${pack.size}`);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/enterprise/billing/purchase-vins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shopId: location.shopId,
-          packSize: pack.size
-        }),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || "Failed to purchase VINs");
-      }
-
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-        return;
-      }
-
-      setSuccess(`${pack.size} VINs added to ${location.name}`);
-      setSelectedLocation(null);
-      loadBillingData();
-    } catch (err: any) {
-      setError(err.message || "Failed to purchase VINs");
     } finally {
       setActionLoading(null);
     }
@@ -478,9 +424,6 @@ export default function EnterpriseBillingPage() {
                         <p className="text-sm text-gray-500">Vehicles</p>
                         <p className="font-medium text-gray-900">
                           {location.vehicleCount.toLocaleString()}
-                          {location.vinLimit && (
-                            <span className="text-gray-400"> / {location.vinLimit.toLocaleString()}</span>
-                          )}
                         </p>
                       </div>
 
@@ -615,9 +558,6 @@ export default function EnterpriseBillingPage() {
                   <p className="text-sm text-gray-500 mb-1">Vehicles</p>
                   <p className="font-semibold text-gray-900">
                     {selectedLocation.vehicleCount.toLocaleString()}
-                    {selectedLocation.vinLimit && (
-                      <span className="font-normal text-gray-500"> / {selectedLocation.vinLimit.toLocaleString()}</span>
-                    )}
                   </p>
                 </div>
               </div>
@@ -684,35 +624,6 @@ export default function EnterpriseBillingPage() {
                   })}
                 </div>
               </div>
-
-              {vinPacks.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Package className="w-4 h-4 text-green-600" />
-                    Purchase Additional VINs
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {vinPacks.map((pack) => (
-                      <button
-                        key={pack.size}
-                        onClick={() => handlePurchaseVinPack(selectedLocation, pack)}
-                        disabled={actionLoading === `vin-${pack.size}`}
-                        className="p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-colors text-center"
-                      >
-                        {actionLoading === `vin-${pack.size}` ? (
-                          <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                        ) : (
-                          <>
-                            <p className="text-2xl font-bold text-gray-900">{pack.size}</p>
-                            <p className="text-sm text-gray-500">VINs</p>
-                            <p className="text-sm font-medium text-blue-600 mt-1">${pack.price}</p>
-                          </>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {selectedLocation.stripeCustomerId && (
                 <div className="pt-4 border-t border-gray-200">

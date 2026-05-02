@@ -83,7 +83,6 @@ export async function GET() {
         planDisplay: (billing.plan || shop.plan) ? ((billing.plan || shop.plan).charAt(0).toUpperCase() + (billing.plan || shop.plan).slice(1)) : "Free Trial",
         status: billing.status || "trial",
         vehicleCount,
-        vinLimit: shop.trialVinLimit || billing.vinLimit || shop.vinLimit || null,
         nextBillingDate: billing.nextBillingDate || null,
         stripeCustomerId: shop.stripeCustomerId || null,
         stripeSubscriptionId: billing.stripeSubscriptionId || shop.stripeSubscriptionId || null,

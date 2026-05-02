@@ -101,27 +101,13 @@ export type BillingSettings = {
   mosProProductId: string;
   mosProPriceId: string;
   mosProPrice: number;
-  mosProIncludedVins: number;
-  // VIN packs
-  vinPack100ProductId: string;
-  vinPack100PriceId: string;
-  vinPack100Price: number;
-  vinPack250ProductId: string;
-  vinPack250PriceId: string;
-  vinPack250Price: number;
-  vinPack500ProductId: string;
-  vinPack500PriceId: string;
-  vinPack500Price: number;
   // Onboarding
   onboardingProductId: string;
   onboardingPriceId: string;
   onboardingPrice: number;
   // Trial settings
   trialDays: number;
-  trialVinLimit: number;
-  defaultVinLimit: number;
   foundingShopPricing: boolean;
-  skipTrialBonusVins: number;
   // Trial reminder cron config (admin-tunable)
   trialReminderDays: number[];
   trialReminderSubject: string;
@@ -157,27 +143,13 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
   mosProProductId: "",
   mosProPriceId: "",
   mosProPrice: 199,
-  mosProIncludedVins: 300,
-  // VIN packs
-  vinPack100ProductId: "",
-  vinPack100PriceId: "",
-  vinPack100Price: 39,
-  vinPack250ProductId: "",
-  vinPack250PriceId: "",
-  vinPack250Price: 79,
-  vinPack500ProductId: "",
-  vinPack500PriceId: "",
-  vinPack500Price: 149,
   // Onboarding
   onboardingProductId: "",
   onboardingPriceId: "",
   onboardingPrice: 495,
   // Trial settings
   trialDays: 14,
-  trialVinLimit: 10,
-  defaultVinLimit: 300,
   foundingShopPricing: true,
-  skipTrialBonusVins: 50,
   trialReminderDays: [...DEFAULT_TRIAL_REMINDER_DAYS],
   trialReminderSubject: DEFAULT_TRIAL_REMINDER_SUBJECT,
   trialReminderHtml: DEFAULT_TRIAL_REMINDER_HTML,
@@ -216,27 +188,13 @@ export async function getBillingSettings(): Promise<BillingSettings> {
       mosProProductId: settings.mosProProductId || "",
       mosProPriceId: settings.mosProPriceId || "",
       mosProPrice: settings.mosProPrice ?? 199,
-      mosProIncludedVins: settings.mosProIncludedVins ?? 300,
-      // VIN packs
-      vinPack100ProductId: settings.vinPack100ProductId || "",
-      vinPack100PriceId: settings.vinPack100PriceId || "",
-      vinPack100Price: settings.vinPack100Price ?? 39,
-      vinPack250ProductId: settings.vinPack250ProductId || "",
-      vinPack250PriceId: settings.vinPack250PriceId || "",
-      vinPack250Price: settings.vinPack250Price ?? 79,
-      vinPack500ProductId: settings.vinPack500ProductId || "",
-      vinPack500PriceId: settings.vinPack500PriceId || "",
-      vinPack500Price: settings.vinPack500Price ?? 149,
       // Onboarding
       onboardingProductId: settings.onboardingProductId || "",
       onboardingPriceId: settings.onboardingPriceId || "",
       onboardingPrice: settings.onboardingPrice ?? 495,
       // Trial settings
       trialDays: settings.trialDays ?? 14,
-      trialVinLimit: settings.trialVinLimit ?? 10,
-      defaultVinLimit: settings.defaultVinLimit ?? 300,
       foundingShopPricing: settings.foundingShopPricing ?? true,
-      skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
       trialReminderDays: sanitizeTrialReminderDays(settings.trialReminderDays),
       trialReminderSubject:
         typeof settings.trialReminderSubject === "string" && settings.trialReminderSubject.trim()

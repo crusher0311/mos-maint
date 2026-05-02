@@ -6,8 +6,6 @@ import { getViewedVinCount } from "@/lib/plan-cache";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_TRIAL_VIN_LIMIT = 10;
-
 export async function GET() {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,10 +79,6 @@ export async function GET() {
     });
   }
 
-  const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
-  const defaultLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
-  const shopLimit = shop?.trialVinLimit ?? defaultLimit;
-
   const viewedVinCount = await getViewedVinCount(db, shopId);
 
   return NextResponse.json({
@@ -92,7 +86,7 @@ export async function GET() {
     planSlug: billing.plan,
     status: "trial",
     vehicleCount: viewedVinCount,
-    vehicleLimit: shopLimit,
+    vehicleLimit: null,
     nextBillingDate: trialEndsAt ? trialEndsAt.toISOString() : null,
     periodStart,
     periodEnd,

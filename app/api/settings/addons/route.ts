@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getBillingSettings } from "@/lib/stripe";
 
 export interface FeatureAddon {
   slug: string;
@@ -23,28 +22,6 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const settings = await getBillingSettings();
-
-    const vinPacks = [
-      {
-        size: 100,
-        price: settings.vinPack100Price,
-        priceId: settings.vinPack100PriceId,
-        productId: settings.vinPack100ProductId,
-      },
-      {
-        size: 250,
-        price: settings.vinPack250Price,
-        priceId: settings.vinPack250PriceId,
-        productId: settings.vinPack250ProductId,
-      },
-      {
-        size: 500,
-        price: settings.vinPack500Price,
-        priceId: settings.vinPack500PriceId,
-        productId: settings.vinPack500ProductId,
-      },
-    ];
 
     const platformFeatures = await db.collection("platform_features")
       .find({ status: "active", category: { $in: ["core", "addon"] } })
@@ -65,7 +42,6 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      vinPacks,
       featureAddons,
     });
   } catch (error) {

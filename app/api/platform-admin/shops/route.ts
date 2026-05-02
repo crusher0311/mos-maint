@@ -9,7 +9,6 @@ import { computeAutoFlagReasons, getReviewFields } from "@/lib/shop-review";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_TRIAL_VIN_LIMIT = 10;
 const DEFAULT_TRIAL_DAYS = 14;
 const MAX_TRIAL_DAYS = 365;
 
@@ -35,7 +34,6 @@ export async function GET() {
     // Build enterprise lookup map
     const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
     
-    const defaultVinLimit = platformSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT;
     const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
     const shopIds = shops.map(s => s.shopId);
     
@@ -275,7 +273,6 @@ export async function GET() {
       if (shop.shopware?.tenantId) integrations.push("Shop-Ware");
       
       const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo" || shop.billing?.plan === "detect_dog_founder";
-      const vinLimit = shop.billing?.vinLimit ?? shop.trialVinLimit ?? defaultVinLimit;
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;
       const hasProtractor = !!(shop.protractor?.configured || shop.protractor?.apiKey || shop.protractorApiKey || shop.protractorConnectionId);
       const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
@@ -335,7 +332,6 @@ export async function GET() {
           plan: shop.billing?.plan || "trial",
           status: shop.billing?.status || "trial",
           isPaid,
-          vinLimit,
           vinViewCount,
           cardOnFile,
           stripeSubscriptionAmount: (typeof shop.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
@@ -425,7 +421,6 @@ export async function GET() {
       shops: enrichedShops.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ),
-      defaultVinLimit,
       defaultTrialDays,
     });
   } catch (err: any) {
@@ -445,7 +440,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { shopName, ownerEmail, ownerPassword, ownerName, plan, status, vinLimit, features, trialDays } = body;
+    const { shopName, ownerEmail, ownerPassword, ownerName, plan, status, features, trialDays } = body;
 
     if (!shopName || !ownerEmail || !ownerPassword) {
       return NextResponse.json({ error: "Shop name, owner email, and password are required" }, { status: 400 });
@@ -552,7 +547,6 @@ export async function POST(req: NextRequest) {
         cardOnFile: false,
         ...(stripeCustomerId ? { stripeCustomerId } : {}),
       },
-      trialVinLimit: vinLimit ? Number(vinLimit) : 10,
       enabledFeatures: features || { maintenance: true },
       cardOnFile: false,
       ...(stripeCustomerId ? { stripeCustomerId } : {}),

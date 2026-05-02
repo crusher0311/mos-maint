@@ -4,7 +4,7 @@ import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/li
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
-import { checkAndTrackVin, getCachedPlan } from "@/lib/plan-cache";
+import { trackViewedVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
@@ -1344,30 +1344,12 @@ export async function GET(request: NextRequest) {
       }, { headers: corsHeaders });
     }
 
-    // Track VIN+RO view against trial limit (skip for paid shops)
-    const isPaid = shopDoc?.billing?.plan === "professional" || shopDoc?.billing?.plan === "enterprise";
-    let vinTrackingResult: { allowed: boolean; count: number; limit: number | null } | null = null;
-    
-    if (!isPaid) {
-      const platformSettings = await db.collection("platform_settings").findOne({ key: "trial" });
-      const defaultLimit = platformSettings?.vinLimit ?? 10;
-      const shopLimit = shopDoc?.trialVinLimit ?? defaultLimit;
-      
-      const trackResult = await checkAndTrackVin(db, mosShopId, vin.toUpperCase(), shopLimit, roId);
-      vinTrackingResult = { allowed: trackResult.allowed, count: trackResult.count, limit: shopLimit };
-      
-      if (!trackResult.allowed) {
-        return NextResponse.json({
-          vehicle: { vin: vin.toUpperCase() },
-          mileage,
-          overdue: [],
-          dueSoon: [],
-          recommended: [],
-          requiresUpgrade: true,
-          vinUsage: { count: trackResult.count, limit: shopLimit },
-          message: `Trial limit reached (${trackResult.count}/${shopLimit} visits). Upgrade to continue.`
-        }, { headers: corsHeaders });
-      }
+    // Task #271: VIN-based gating removed. Still record the view so the
+    // running "VINs viewed: N" total stays accurate for admin views.
+    try {
+      await trackViewedVin(db, mosShopId, vin.toUpperCase(), roId);
+    } catch (e: any) {
+      console.warn(`[Extension] Failed to record viewed VIN: ${e?.message}`);
     }
 
     if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {

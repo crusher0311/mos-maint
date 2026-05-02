@@ -5,8 +5,6 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_TRIAL_VIN_LIMIT = 10;
-
 export async function GET() {
   const session = await getSession();
   if (!session) {
@@ -18,8 +16,7 @@ export async function GET() {
 
   try {
     const db = await getDb();
-    const [trialSettings, billingSettings, generalSettings] = await Promise.all([
-      db.collection("platform_settings").findOne({ key: "trial" }),
+    const [billingSettings, generalSettings] = await Promise.all([
       db.collection("platform_settings").findOne({ type: "billing" }),
       db.collection("platform_settings").findOne({ key: "general" }),
     ]);
@@ -27,9 +24,6 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       settings: {
-        trial: {
-          vinLimit: trialSettings?.vinLimit ?? DEFAULT_TRIAL_VIN_LIMIT,
-        },
         billing: {
           // Tier-specific pricing
           starterProductId: billingSettings?.starterProductId || "",
@@ -48,26 +42,12 @@ export async function GET() {
           mosProProductId: billingSettings?.mosProProductId || "",
           mosProPriceId: billingSettings?.mosProPriceId || "",
           mosProPrice: billingSettings?.mosProPrice ?? 199,
-          mosProIncludedVins: billingSettings?.mosProIncludedVins ?? 300,
-          // VIN packs
-          vinPack100ProductId: billingSettings?.vinPack100ProductId || "",
-          vinPack100PriceId: billingSettings?.vinPack100PriceId || "",
-          vinPack100Price: billingSettings?.vinPack100Price ?? 39,
-          vinPack250ProductId: billingSettings?.vinPack250ProductId || "",
-          vinPack250PriceId: billingSettings?.vinPack250PriceId || "",
-          vinPack250Price: billingSettings?.vinPack250Price ?? 79,
-          vinPack500ProductId: billingSettings?.vinPack500ProductId || "",
-          vinPack500PriceId: billingSettings?.vinPack500PriceId || "",
-          vinPack500Price: billingSettings?.vinPack500Price ?? 149,
           // Onboarding
           onboardingProductId: billingSettings?.onboardingProductId || "",
           onboardingPriceId: billingSettings?.onboardingPriceId || "",
           onboardingPrice: billingSettings?.onboardingPrice ?? 495,
           // Trial settings
-          trialVinLimit: billingSettings?.trialVinLimit ?? 10,
-          skipTrialBonusVins: billingSettings?.skipTrialBonusVins ?? 50,
           foundingShopPricing: billingSettings?.foundingShopPricing ?? true,
-          defaultVinLimit: billingSettings?.defaultVinLimit ?? 300,
           trialConversionMaxPaymentRetries:
             billingSettings?.trialConversionMaxPaymentRetries ?? 3,
         },
@@ -95,30 +75,6 @@ export async function POST(req: NextRequest) {
     const { key, settings } = await req.json();
     const db = await getDb();
 
-    if (key === "trial") {
-      const vinLimit = Number(settings?.vinLimit);
-      if (isNaN(vinLimit) || vinLimit < 1) {
-        return NextResponse.json({ error: "Invalid VIN limit" }, { status: 400 });
-      }
-
-      await db.collection("platform_settings").updateOne(
-        { key: "trial" },
-        { 
-          $set: { 
-            vinLimit,
-            updatedAt: new Date(),
-            updatedBy: session.email,
-          } 
-        },
-        { upsert: true }
-      );
-
-      return NextResponse.json({ 
-        ok: true, 
-        message: `Default trial VIN limit set to ${vinLimit}` 
-      });
-    }
-
     if (key === "billing") {
       await db.collection("platform_settings").updateOne(
         { type: "billing" },
@@ -142,26 +98,12 @@ export async function POST(req: NextRequest) {
             mosProProductId: settings.mosProProductId || "",
             mosProPriceId: settings.mosProPriceId || "",
             mosProPrice: settings.mosProPrice ?? 199,
-            mosProIncludedVins: settings.mosProIncludedVins ?? 300,
-            // VIN packs
-            vinPack100ProductId: settings.vinPack100ProductId || "",
-            vinPack100PriceId: settings.vinPack100PriceId || "",
-            vinPack100Price: settings.vinPack100Price ?? 39,
-            vinPack250ProductId: settings.vinPack250ProductId || "",
-            vinPack250PriceId: settings.vinPack250PriceId || "",
-            vinPack250Price: settings.vinPack250Price ?? 79,
-            vinPack500ProductId: settings.vinPack500ProductId || "",
-            vinPack500PriceId: settings.vinPack500PriceId || "",
-            vinPack500Price: settings.vinPack500Price ?? 149,
             // Onboarding
             onboardingProductId: settings.onboardingProductId || "",
             onboardingPriceId: settings.onboardingPriceId || "",
             onboardingPrice: settings.onboardingPrice ?? 495,
             // Trial settings
-            trialVinLimit: settings.trialVinLimit ?? 10,
-            skipTrialBonusVins: settings.skipTrialBonusVins ?? 50,
             foundingShopPricing: settings.foundingShopPricing ?? true,
-            defaultVinLimit: settings.defaultVinLimit ?? 300,
             // Trial-conversion retry budget — clamp to >= 1.
             trialConversionMaxPaymentRetries: Math.max(
               1,

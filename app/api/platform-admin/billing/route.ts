@@ -106,7 +106,6 @@ export async function GET() {
         status,
         isPaid: billing.isPaid || false,
         vinViewCount: billing.vinViewCount || 0,
-        vinLimit: billing.vinLimit || 10,
         stripeCustomerId: shop.stripeCustomerId,
         stripeSubscriptionId: shop.stripeSubscriptionId,
         stripeSubscriptionAmount: shop.stripeSubscriptionAmount || billing.stripeSubscriptionAmount || null,

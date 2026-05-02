@@ -77,7 +77,6 @@ export async function POST(req: NextRequest) {
     plan: validatedPlan,
     status: "active",
     isPaid: true,
-    vinLimit: 300,
     stripeCustomerId: stripeCustomerId || null,
     stripeSubscriptionId: stripeSubscriptionId || null,
     updatedAt: now,

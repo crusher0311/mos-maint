@@ -95,12 +95,6 @@ interface PlatformFeature {
   includedInTiers: string[];
 }
 
-interface VinPack {
-  size: number;
-  price: number;
-  priceId: string;
-}
-
 interface FeatureAddon {
   slug: string;
   name: string;
@@ -114,7 +108,7 @@ interface FeatureAddon {
 
 interface CartItem {
   id: string;
-  type: "vin-pack" | "feature";
+  type: "feature";
   name: string;
   price: number;
   priceId: string;
@@ -139,7 +133,6 @@ function BillingSettingsContent() {
   const [features, setFeatures] = useState<PlatformFeature[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [vinPacks, setVinPacks] = useState<VinPack[]>([]);
   const [featureAddons, setFeatureAddons] = useState<FeatureAddon[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -184,7 +177,7 @@ function BillingSettingsContent() {
           planSlug: "starter",
           status: "trial",
           vehicleCount: 0,
-          vehicleLimit: 10,
+          vehicleLimit: 0,
         });
       }
 
@@ -206,7 +199,6 @@ function BillingSettingsContent() {
 
       if (addonsRes.ok) {
         const data = await addonsRes.json();
-        setVinPacks(data.vinPacks || []);
         setFeatureAddons(data.featureAddons || []);
       }
     } catch (err) {
@@ -293,56 +285,6 @@ function BillingSettingsContent() {
     }
   }
 
-  async function handleBuyVinPack(packSize: number, priceId: string) {
-    if (!priceId) {
-      setError("VIN pack not configured. Please contact support.");
-      return;
-    }
-    setActionLoading(`vin-${packSize}`);
-    setError(null);
-    try {
-      const res = await fetch("/api/stripe/create-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, product: `vin-pack-${packSize}`, mode: "payment" }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error(data.error || "Failed to create checkout");
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  function addVinPackToCart(pack: VinPack) {
-    if (!pack.priceId) {
-      setError("VIN pack not configured. Please contact support.");
-      return;
-    }
-    const existingItem = cart.find(item => item.id === `vin-pack-${pack.size}`);
-    if (existingItem) {
-      setError("This VIN pack is already in your cart.");
-      return;
-    }
-    const newItem: CartItem = {
-      id: `vin-pack-${pack.size}`,
-      type: "vin-pack",
-      name: `${pack.size} VIN Pack`,
-      price: pack.price,
-      priceId: pack.priceId,
-      isRecurring: false,
-      size: pack.size,
-    };
-    setCart([...cart, newItem]);
-    setSuccess(`Added ${pack.size} VIN Pack to cart`);
-    setTimeout(() => setSuccess(null), 2000);
-  }
-
   function addFeatureToCart(feature: FeatureAddon) {
     if (!feature.stripePriceId) {
       setError("Feature pricing not configured. Please contact support.");
@@ -385,15 +327,11 @@ function BillingSettingsContent() {
   const monthlyTotal = recurringItems.reduce((sum, item) => sum + item.price, 0);
   const oneTimeTotal = oneTimeItems.reduce((sum, item) => sum + item.price, 0);
 
-  const hasMixedCart = recurringItems.length > 0 && oneTimeItems.length > 0;
+  const hasMixedCart = false;
 
   async function handleCartCheckout() {
     if (cart.length === 0) {
       setError("Your cart is empty");
-      return;
-    }
-    if (hasMixedCart) {
-      setError("You have both subscriptions and one-time purchases in your cart. Please checkout VIN packs and features separately.");
       return;
     }
     setActionLoading("checkout");
@@ -403,7 +341,6 @@ function BillingSettingsContent() {
         priceId: item.priceId,
         type: item.type,
         slug: item.slug,
-        size: item.size,
       }));
       
       const res = await fetch("/api/stripe/create-checkout", {
@@ -564,8 +501,8 @@ function BillingSettingsContent() {
                     <Building2 className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Vehicles</p>
-                    <p className="font-semibold text-gray-900">{billing?.vehicleCount || 0} / {billing?.vehicleLimit || 10}</p>
+                    <p className="text-xs text-gray-500">VINs viewed</p>
+                    <p className="font-semibold text-gray-900">{billing?.vehicleCount || 0}</p>
                   </div>
                 </div>
 
@@ -656,22 +593,6 @@ function BillingSettingsContent() {
                 );
               })()}
 
-              {!isPaid && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Vehicle Usage</span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {billing?.vehicleCount || 0} of {billing?.vehicleLimit || 10} used
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min(100, ((billing?.vehicleCount || 0) / (billing?.vehicleLimit || 10)) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             {!isPaid && (
@@ -839,8 +760,8 @@ function BillingSettingsContent() {
                   {cart.map((item) => (
                     <div key={item.id} className="px-4 py-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${item.type === 'vin-pack' ? 'bg-blue-100' : 'bg-purple-100'}`}>
-                          <Package className={`w-4 h-4 ${item.type === 'vin-pack' ? 'text-blue-600' : 'text-purple-600'}`} />
+                        <div className="p-2 rounded-lg bg-purple-100">
+                          <Package className="w-4 h-4 text-purple-600" />
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">{item.name}</p>
@@ -878,15 +799,6 @@ function BillingSettingsContent() {
                       </div>
                     )}
                   </div>
-                  {hasMixedCart && (
-                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-amber-800">
-                        VIN packs and feature subscriptions must be checked out separately. 
-                        Remove one type to proceed.
-                      </p>
-                    </div>
-                  )}
                   <button
                     onClick={handleCartCheckout}
                     disabled={actionLoading === "checkout" || hasMixedCart}
@@ -900,65 +812,6 @@ function BillingSettingsContent() {
                     Proceed to Checkout
                   </button>
                 </div>
-              </div>
-            )}
-
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">VIN Packs</h2>
-              <p className="text-gray-500 text-sm mt-1">
-                Purchase additional vehicle lookups to add to your account
-              </p>
-            </div>
-
-            {vinPacks.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <h3 className="font-medium text-gray-900 mb-1">VIN packs not configured</h3>
-                <p className="text-sm text-gray-500">
-                  Contact support for more information.
-                </p>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-3 gap-4">
-                {vinPacks.map((pack) => (
-                  <div
-                    key={pack.size}
-                    className="bg-white rounded-xl border border-gray-200 p-6 hover:border-blue-300 transition-colors"
-                  >
-                    <div className="text-center">
-                      <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-4">
-                        <Package className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900">{pack.size} VINs</h3>
-                      <div className="mt-2">
-                        <span className="text-3xl font-bold text-gray-900">${pack.price}</span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        ${(pack.price / pack.size).toFixed(2)} per VIN
-                      </p>
-                    </div>
-                    {isInCart(`vin-pack-${pack.size}`) ? (
-                      <button
-                        onClick={() => removeFromCart(`vin-pack-${pack.size}`)}
-                        className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-green-600 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2 group"
-                      >
-                        <Check className="w-4 h-4 group-hover:hidden" />
-                        <X className="w-4 h-4 hidden group-hover:block" />
-                        <span className="group-hover:hidden">In Cart</span>
-                        <span className="hidden group-hover:inline">Remove</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => addVinPackToCart(pack)}
-                        disabled={!pack.priceId}
-                        className="w-full mt-6 py-2.5 px-4 rounded-lg font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        <ShoppingCart className="w-4 h-4" />
-                        {pack.priceId ? "Add to Cart" : "Coming Soon"}
-                      </button>
-                    )}
-                  </div>
-                ))}
               </div>
             )}
 

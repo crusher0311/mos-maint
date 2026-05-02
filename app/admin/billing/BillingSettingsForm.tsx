@@ -360,132 +360,6 @@ export default function BillingSettingsForm({
 
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <Package className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">VIN Packs (One-Time Purchases)</h3>
-              <p className="text-sm text-gray-500">For shops that exceed their monthly limit</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-medium text-gray-900">100 VINs - $39</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack100ProductId}
-                    onChange={(e) => setSettings({ ...settings, vinPack100ProductId: e.target.value })}
-                    placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack100PriceId}
-                    onChange={(e) => setSettings({ ...settings, vinPack100PriceId: e.target.value })}
-                    placeholder="price_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
-                  <input
-                    type="number"
-                    value={settings.vinPack100Price}
-                    onChange={(e) => setSettings({ ...settings, vinPack100Price: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-medium text-gray-900">250 VINs - $79</span>
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Best Value</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack250ProductId}
-                    onChange={(e) => setSettings({ ...settings, vinPack250ProductId: e.target.value })}
-                    placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack250PriceId}
-                    onChange={(e) => setSettings({ ...settings, vinPack250PriceId: e.target.value })}
-                    placeholder="price_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
-                  <input
-                    type="number"
-                    value={settings.vinPack250Price}
-                    onChange={(e) => setSettings({ ...settings, vinPack250Price: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-medium text-gray-900">500 VINs - $149</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Product ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack500ProductId}
-                    onChange={(e) => setSettings({ ...settings, vinPack500ProductId: e.target.value })}
-                    placeholder="prod_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ID</label>
-                  <input
-                    type="text"
-                    value={settings.vinPack500PriceId}
-                    onChange={(e) => setSettings({ ...settings, vinPack500PriceId: e.target.value })}
-                    placeholder="price_..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
-                  <input
-                    type="number"
-                    value={settings.vinPack500Price}
-                    onChange={(e) => setSettings({ ...settings, vinPack500Price: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <Gift className="w-5 h-5 text-mos-blue" />
             </div>
@@ -534,12 +408,12 @@ export default function BillingSettingsForm({
               <Gift className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Trial & Bonus Settings</h3>
-              <p className="text-sm text-gray-500">Configure free trial and skip-trial bonus incentive</p>
+              <h3 className="text-lg font-semibold text-gray-900">Trial Settings</h3>
+              <p className="text-sm text-gray-500">Configure free trial length</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Trial Period (days)
@@ -552,52 +426,6 @@ export default function BillingSettingsForm({
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Trial VIN Limit
-              </label>
-              <input
-                type="number"
-                value={settings.trialVinLimit}
-                onChange={(e) => setSettings({ ...settings, trialVinLimit: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">VINs allowed during free trial</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Skip Trial Bonus VINs
-              </label>
-              <input
-                type="number"
-                value={settings.skipTrialBonusVins}
-                onChange={(e) => setSettings({ ...settings, skipTrialBonusVins: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Extra VINs for skipping trial (300 + 50 = 350)</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Pro Plan VIN Limit
-              </label>
-              <input
-                type="number"
-                value={settings.defaultVinLimit}
-                onChange={(e) => setSettings({ ...settings, defaultVinLimit: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Default for paid subscribers</p>
-            </div>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-amber-800">
-              <strong>Skip Trial Incentive:</strong> When a new shop skips the {settings.trialVinLimit} VIN free trial and subscribes immediately, 
-              they receive {settings.defaultVinLimit} + {settings.skipTrialBonusVins} = <strong>{settings.defaultVinLimit + settings.skipTrialBonusVins} VINs</strong> for their first month.
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
