@@ -43,6 +43,7 @@ function isPasswordChangeAllowedPath(pathname: string) {
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
+  if (pathname.startsWith("/api/callbacks/")) return true;
   if (pathname.startsWith("/api/ping")) return true;
   if (pathname.startsWith("/api/e2e/")) return true;
   if (pathname.startsWith("/api/extension/")) return true;
