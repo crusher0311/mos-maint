@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { 
   validateApiKey, 
@@ -13,6 +14,16 @@ export interface ExternalApiContext {
   shopId: number;
   isPartner: boolean;
   partnerId?: string;
+  requestId: string;
+}
+
+function resolveRequestId(req: NextRequest): string {
+  const inbound =
+    req.headers.get("x-request-id") || req.headers.get("x-correlation-id");
+  if (inbound && inbound.trim().length > 0 && inbound.length <= 128) {
+    return inbound.trim();
+  }
+  return randomUUID();
 }
 
 export type ExternalApiHandler = (
@@ -26,9 +37,15 @@ export function withExternalAuth(
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const startTime = Date.now();
+    const requestId = resolveRequestId(req);
     let statusCode = 200;
     let apiKey: ApiKey | undefined;
-    
+
+    const withRequestIdHeader = (res: NextResponse): NextResponse => {
+      res.headers.set("X-Request-Id", requestId);
+      return res;
+    };
+
     try {
       const authHeader = req.headers.get("authorization");
       const apiKeyHeader = req.headers.get("x-api-key");
@@ -43,23 +60,24 @@ export function withExternalAuth(
       
       if (!rawKey) {
         statusCode = 401;
-        return NextResponse.json(
+        return withRequestIdHeader(NextResponse.json(
           { 
             error: "Authentication required",
-            message: "Provide API key via Authorization: Bearer <key> or X-API-Key header"
+            message: "Provide API key via Authorization: Bearer <key> or X-API-Key header",
+            requestId,
           },
           { status: 401 }
-        );
+        ));
       }
       
       const validation = await validateApiKey(rawKey);
       
       if (!validation.valid || !validation.apiKey) {
         statusCode = 401;
-        return NextResponse.json(
-          { error: "Invalid API key", message: validation.error },
+        return withRequestIdHeader(NextResponse.json(
+          { error: "Invalid API key", message: validation.error, requestId },
           { status: 401 }
-        );
+        ));
       }
       
       apiKey = validation.apiKey;
@@ -67,23 +85,25 @@ export function withExternalAuth(
       const hasPermission = await checkPermission(apiKey, requiredPermission);
       if (!hasPermission) {
         statusCode = 403;
-        return NextResponse.json(
+        return withRequestIdHeader(NextResponse.json(
           { 
             error: "Permission denied",
-            message: `This API key does not have the '${requiredPermission}' permission`
+            message: `This API key does not have the '${requiredPermission}' permission`,
+            requestId,
           },
           { status: 403 }
-        );
+        ));
       }
       
       const rateLimitCheck = await checkRateLimit(apiKey.keyHash, apiKey.rateLimit);
       if (!rateLimitCheck.allowed) {
         statusCode = 429;
-        return NextResponse.json(
+        return withRequestIdHeader(NextResponse.json(
           { 
             error: "Rate limit exceeded",
             message: `Rate limit of ${apiKey.rateLimit} requests per minute exceeded`,
-            retryAfter: Math.ceil((rateLimitCheck.resetAt.getTime() - Date.now()) / 1000)
+            retryAfter: Math.ceil((rateLimitCheck.resetAt.getTime() - Date.now()) / 1000),
+            requestId,
           },
           { 
             status: 429,
@@ -94,7 +114,7 @@ export function withExternalAuth(
               "Retry-After": String(Math.ceil((rateLimitCheck.resetAt.getTime() - Date.now()) / 1000))
             }
           }
-        );
+        ));
       }
       
       const context: ExternalApiContext = {
@@ -102,6 +122,7 @@ export function withExternalAuth(
         shopId: apiKey.shopId,
         isPartner: apiKey.isPartner === true,
         partnerId: apiKey.partnerId,
+        requestId,
       };
       
       const response = await handler(req, context);
@@ -114,18 +135,19 @@ export function withExternalAuth(
           "X-RateLimit-Limit": String(apiKey.rateLimit),
           "X-RateLimit-Remaining": String(rateLimitCheck.remaining - 1),
           "X-RateLimit-Reset": rateLimitCheck.resetAt.toISOString(),
+          "X-Request-Id": requestId,
         }
       });
       
       return enrichedResponse;
       
     } catch (err: any) {
-      console.error("[External API] Error:", err);
+      console.error(`[External API] Error requestId=${requestId}:`, err);
       statusCode = 500;
-      return NextResponse.json(
-        { error: "Internal server error", message: err.message },
+      return withRequestIdHeader(NextResponse.json(
+        { error: "Internal server error", message: err.message, requestId },
         { status: 500 }
-      );
+      ));
     } finally {
       if (apiKey) {
         const responseTime = Date.now() - startTime;

@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
@@ -14,8 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = createExternalEndpoint(
   "vehicles:read",
-  async (req: NextRequest, { shopId, isPartner, partnerId }) => {
-    const requestId = req.headers.get("x-request-id") || randomUUID();
+  async (req: NextRequest, { shopId, isPartner, partnerId, requestId }) => {
     const pathParts = req.nextUrl.pathname.split("/");
     const vinIndex = pathParts.indexOf("vehicles") + 1;
     const vin = pathParts[vinIndex]?.toUpperCase();

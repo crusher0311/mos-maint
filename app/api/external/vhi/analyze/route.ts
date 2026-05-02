@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export const POST = createExternalEndpoint(
   "vehicles:read",
-  async (req: NextRequest, { shopId: apiKeyShopId, isPartner, partnerId }) => {
+  async (req: NextRequest, { shopId: apiKeyShopId, isPartner, partnerId, requestId }) => {
     const body = await req.json();
     const { vin, sms, smsShopId, roNumber, mileage: providedMileage } = body;
 
@@ -89,7 +89,7 @@ export const POST = createExternalEndpoint(
     }
 
     console.log(
-      `[VHI Analyze] Building VHI: VIN=${vin.toUpperCase()}, shop=${resolvedShopId}, ` +
+      `[VHI Analyze] Building VHI: requestId=${requestId} VIN=${vin.toUpperCase()}, shop=${resolvedShopId}, ` +
       `sms=${smsLower}, smsShopId=${smsShopId}, RO=${roNumber || "N/A"}, mileage=${mileage}` +
       (isPartner ? `, partner=${partnerId}` : "")
     );
@@ -100,7 +100,7 @@ export const POST = createExternalEndpoint(
 
     if (!result.success) {
       console.error(
-        `[VHI Analyze] Build failed: VIN=${vin.toUpperCase()} shop=${resolvedShopId} ` +
+        `[VHI Analyze] Build failed: requestId=${requestId} VIN=${vin.toUpperCase()} shop=${resolvedShopId} ` +
         `sms=${smsLower} smsShopId=${smsShopId} mileage=${mileage} ` +
         `failedStage=${result.failedStage || "unknown"} upstreamStatus=${result.upstreamStatus ?? "n/a"}` +
         (isPartner ? ` partner=${partnerId}` : "")
@@ -112,6 +112,7 @@ export const POST = createExternalEndpoint(
           failedStage: result.failedStage,
           upstreamStatus: result.upstreamStatus,
           upstreamError: result.upstreamError,
+          requestId,
         },
         { status: 500 }
       );

@@ -26,6 +26,12 @@ Each API key has a configured rate limit (requests per minute). Rate limit heade
 - \`X-RateLimit-Remaining\`: Remaining requests in current window
 - \`X-RateLimit-Reset\`: When the rate limit resets (ISO 8601)
 
+## Request Correlation
+
+Every external API response includes an \`X-Request-Id\` header containing a correlation id for that request. The id is also embedded in the JSON body of error responses as \`requestId\`, and is included in server log lines (e.g., \`[PartnerVHI]\`, \`[VHI Analyze]\`, \`[External API]\`). Capture this id client-side and quote it when reporting issues so MOS support can trace the request end-to-end.
+
+You may also supply your own correlation id by sending an \`X-Request-Id\` (or \`X-Correlation-Id\`) header on the request — when present (max 128 chars), it will be honored and echoed back; otherwise a UUID is generated.
+
 ## Permissions
 
 API keys are scoped to specific permissions:
