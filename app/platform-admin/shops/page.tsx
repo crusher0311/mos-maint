@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle, Mail, CreditCard } from "lucide-react";
 
 interface ShopBilling {
   plan: string;
@@ -131,6 +131,14 @@ export default function PlatformShopsPage() {
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
   const [groupByEnterprise, setGroupByEnterprise] = useState(false);
+  type TrialFilter = "all" | "trial_active" | "ending_7" | "ending_3" | "expired" | "no_card";
+  type SortBy = "createdAt" | "trialEndsAt";
+  const TRIAL_FILTERS: readonly TrialFilter[] = ["all", "trial_active", "ending_7", "ending_3", "expired", "no_card"];
+  const SORT_OPTIONS: readonly SortBy[] = ["createdAt", "trialEndsAt"];
+  const isTrialFilter = (v: string): v is TrialFilter => (TRIAL_FILTERS as readonly string[]).includes(v);
+  const isSortBy = (v: string): v is SortBy => (SORT_OPTIONS as readonly string[]).includes(v);
+  const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
   const [showCreateShop, setShowCreateShop] = useState(false);
   const [createShopData, setCreateShopData] = useState({
     shopName: "",
@@ -257,6 +265,29 @@ export default function PlatformShopsPage() {
     } catch (err) {
       console.error("Lock/unlock error:", err);
       alert("Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const resendCardCaptureEmail = async (shop: Shop) => {
+    if (!confirm(`Resend the card-capture email to the owner of "${shop.name}"?`)) return;
+    setActionLoading(`${shop.shopId}-resend-card`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend_card_capture" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Card-capture email sent");
+      } else {
+        alert(data.error || "Failed to send email");
+      }
+    } catch (err) {
+      console.error("Resend card-capture error:", err);
+      alert("Failed to send email");
     } finally {
       setActionLoading(null);
     }
@@ -436,12 +467,34 @@ export default function PlatformShopsPage() {
   }, [defaultTrialDays]);
 
   const searchLower = search.toLowerCase();
-  const filteredShops = shops.filter(shop => 
-    shop.name?.toLowerCase().includes(searchLower) ||
-    (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
-    (shop.enterpriseName && shop.enterpriseName.toLowerCase().includes(searchLower)) ||
-    String(shop.shopId).includes(search)
-  );
+  const now = Date.now();
+  const filteredShops = shops
+    .filter(shop =>
+      shop.name?.toLowerCase().includes(searchLower) ||
+      (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
+      (shop.enterpriseName && shop.enterpriseName.toLowerCase().includes(searchLower)) ||
+      String(shop.shopId).includes(search)
+    )
+    .filter(shop => {
+      if (trialFilter === "all") return true;
+      const endsAtMs = shop.trial?.endsAt ? new Date(shop.trial.endsAt).getTime() : null;
+      const cardOnFile = !!shop.cardOnFile;
+      const daysLeft = shop.trial?.daysLeft ?? null;
+      if (trialFilter === "trial_active") return endsAtMs !== null && endsAtMs > now;
+      if (trialFilter === "ending_7") return endsAtMs !== null && endsAtMs > now && (daysLeft ?? 999) <= 7;
+      if (trialFilter === "ending_3") return endsAtMs !== null && endsAtMs > now && (daysLeft ?? 999) <= 3;
+      if (trialFilter === "expired") return endsAtMs !== null && endsAtMs <= now;
+      if (trialFilter === "no_card") return endsAtMs !== null && !cardOnFile;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "trialEndsAt") {
+        const aEnds = a.trial?.endsAt ? new Date(a.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
+        const bEnds = b.trial?.endsAt ? new Date(b.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
+        if (aEnds !== bEnds) return aEnds - bEnds;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   
   // Group shops by enterprise if enabled
   const groupedShops = groupByEnterprise 
@@ -543,8 +596,8 @@ export default function PlatformShopsPage() {
         </div>
       </div>
 
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-4 items-center">
+        <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
@@ -553,6 +606,38 @@ export default function PlatformShopsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500 whitespace-nowrap">Trial</label>
+          <select
+            value={trialFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isTrialFilter(v)) setTrialFilter(v);
+            }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3]"
+          >
+            <option value="all">All shops</option>
+            <option value="trial_active">Trial active</option>
+            <option value="ending_7">Ending in ≤ 7 days</option>
+            <option value="ending_3">Ending in ≤ 3 days</option>
+            <option value="expired">Trial expired</option>
+            <option value="no_card">No card on file</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500 whitespace-nowrap">Sort</label>
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isSortBy(v)) setSortBy(v);
+            }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3]"
+          >
+            <option value="createdAt">Newest first</option>
+            <option value="trialEndsAt">Trial ending soonest</option>
+          </select>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
           <input
@@ -630,9 +715,15 @@ export default function PlatformShopsPage() {
                           {shop.trial?.endsAt && (
                             <TrialBadge trial={shop.trial} />
                           )}
-                          {shop.cardOnFile && (
-                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded" title="Payment method on file">Card on file</span>
-                          )}
+                          {shop.cardOnFile ? (
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded inline-flex items-center gap-1" title="Payment method on file">
+                              <CreditCard className="w-3 h-3" /> Card on file
+                            </span>
+                          ) : shop.trial?.endsAt ? (
+                            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded inline-flex items-center gap-1" title="No payment method on file yet">
+                              <CreditCard className="w-3 h-3" /> No card
+                            </span>
+                          ) : null}
                           {shop.trial?.endsAt && (
                             <button
                               onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
@@ -798,6 +889,24 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                      {shop.trial?.endsAt && (
+                        <button
+                          onClick={() => resendCardCaptureEmail(shop)}
+                          disabled={actionLoading !== null}
+                          title={shop.cardOnFile ? "Resend card-capture email (card already on file)" : "Resend card-capture email to owner"}
+                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                            shop.cardOnFile
+                              ? "text-gray-500 hover:bg-gray-50"
+                              : "text-amber-600 hover:bg-amber-50"
+                          }`}
+                        >
+                          {actionLoading === `${shop.shopId}-resend-card` ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Mail className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
                         disabled={actionLoading !== null}
@@ -942,9 +1051,15 @@ export default function PlatformShopsPage() {
                           {shop.trial?.endsAt && (
                             <TrialBadge trial={shop.trial} />
                           )}
-                          {shop.cardOnFile && (
-                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded" title="Payment method on file">Card on file</span>
-                          )}
+                          {shop.cardOnFile ? (
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded inline-flex items-center gap-1" title="Payment method on file">
+                              <CreditCard className="w-3 h-3" /> Card on file
+                            </span>
+                          ) : shop.trial?.endsAt ? (
+                            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded inline-flex items-center gap-1" title="No payment method on file yet">
+                              <CreditCard className="w-3 h-3" /> No card
+                            </span>
+                          ) : null}
                           {shop.trial?.endsAt && (
                             <button
                               onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
@@ -1101,6 +1216,24 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                      {shop.trial?.endsAt && (
+                        <button
+                          onClick={() => resendCardCaptureEmail(shop)}
+                          disabled={actionLoading !== null}
+                          title={shop.cardOnFile ? "Resend card-capture email (card already on file)" : "Resend card-capture email to owner"}
+                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                            shop.cardOnFile
+                              ? "text-gray-500 hover:bg-gray-50"
+                              : "text-amber-600 hover:bg-amber-50"
+                          }`}
+                        >
+                          {actionLoading === `${shop.shopId}-resend-card` ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Mail className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
                         disabled={actionLoading !== null}
