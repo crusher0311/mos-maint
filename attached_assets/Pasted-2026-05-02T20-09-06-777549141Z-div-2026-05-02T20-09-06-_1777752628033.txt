@@ -1,0 +1,50 @@
+2026-05-02T20:09:06.777549141Z     </div>
+2026-05-02T20:09:06.777551071Z   ✗ override text substitutes all placeholders — got: Your MOS Tools trial for Acme Auto ends in 7 days (on Wednesday, July 1, 2026).
+2026-05-02T20:09:06.777552951Z 
+2026-05-02T20:09:06.777555051Z Add a payment method to keep service running without interruption — you won't be charged until the trial ends.
+2026-05-02T20:09:06.777556971Z 
+2026-05-02T20:09:06.777558991Z Add payment method: https://example.com/billing
+2026-05-02T20:09:06.777630722Z   ✓ empty subject override falls back to default subject
+2026-05-02T20:09:06.777634882Z   ✓ whitespace-only html override falls back to default html
+2026-05-02T20:09:06.777637302Z   ✓ empty text override falls back to default text body
+2026-05-02T20:09:06.777754185Z   ✗ unknown placeholders render as empty string, not literal {{...}} — got: Action needed: 1 day left in your MOS Tools trial
+2026-05-02T20:09:06.777757375Z   ✗ DEFAULT_TRIAL_REMINDER_HTML mentions {{shopName}}
+2026-05-02T20:09:06.777762275Z   ✗ DEFAULT_TRIAL_REMINDER_HTML mentions {{daysLeft}}
+2026-05-02T20:09:06.777764335Z   ✗ DEFAULT_TRIAL_REMINDER_HTML mentions {{dayWord}}
+2026-05-02T20:09:06.777813346Z   ✗ DEFAULT_TRIAL_REMINDER_HTML mentions {{trialEndsAt}}
+2026-05-02T20:09:06.777817506Z   ✗ DEFAULT_TRIAL_REMINDER_HTML mentions {{addCardUrl}}
+2026-05-02T20:09:06.777829286Z   ✗ DEFAULT_TRIAL_REMINDER_TEXT mentions {{shopName}}
+2026-05-02T20:09:06.777832336Z   ✗ DEFAULT_TRIAL_REMINDER_TEXT mentions {{daysLeft}}
+2026-05-02T20:09:06.777849586Z   ✗ DEFAULT_TRIAL_REMINDER_TEXT mentions {{dayWord}}
+2026-05-02T20:09:06.777856527Z   ✗ DEFAULT_TRIAL_REMINDER_TEXT mentions {{trialEndsAt}}
+2026-05-02T20:09:06.777863117Z   ✗ DEFAULT_TRIAL_REMINDER_TEXT mentions {{addCardUrl}}
+2026-05-02T20:09:06.777869037Z   ✗ DEFAULT_TRIAL_REMINDER_SUBJECT mentions {{daysLeft}} and {{dayWord}}
+2026-05-02T20:09:06.778780235Z   ✓ cron route no longer defines a hardcoded REMINDER_DAYS constant
+2026-05-02T20:09:06.778791195Z   ✓ cron route reads settings.trialReminderDays for the day match
+2026-05-02T20:09:06.778878306Z   ✓ cron route forwards the configured subject/html/text into makeTrialReminderEmail
+2026-05-02T20:09:06.778924967Z   ✓ cron route candidate horizon scales with the largest configured reminder day
+2026-05-02T20:09:06.779661781Z   ✓ save-settings route persists trialReminderDays
+2026-05-02T20:09:06.779672762Z   ✓ save-settings route persists trialReminderSubject
+2026-05-02T20:09:06.779674932Z   ✓ save-settings route persists trialReminderHtml
+2026-05-02T20:09:06.779676882Z   ✓ save-settings route persists trialReminderText
+2026-05-02T20:09:06.779691972Z   ✓ save-settings route sanitizes the day list before persisting
+2026-05-02T20:09:06.779731003Z   ✓ save-settings route returns the persisted settings so the UI can rehydrate
+2026-05-02T20:09:06.779791594Z   ✓ BillingSettings type declares "trialReminderDays: number[]"
+2026-05-02T20:09:06.779794344Z   ✓ BillingSettings type declares "trialReminderSubject: string"
+2026-05-02T20:09:06.779796484Z   ✓ BillingSettings type declares "trialReminderHtml: string"
+2026-05-02T20:09:06.779807434Z   ✓ BillingSettings type declares "trialReminderText: string"
+2026-05-02T20:09:06.781241442Z   ✓ admin form has a Trial Reminder Emails section heading
+2026-05-02T20:09:06.781248952Z   ✓ admin form has a reminder days input bound to the parser
+2026-05-02T20:09:06.781256252Z   ✓ admin form binds trialReminderSubject to a controlled input
+2026-05-02T20:09:06.781295443Z   ✓ admin form binds trialReminderHtml to a controlled input
+2026-05-02T20:09:06.781315863Z   ✓ admin form binds trialReminderText to a controlled input
+2026-05-02T20:09:06.781333813Z   ✓ admin form documents the {{shopName}} placeholder for users
+2026-05-02T20:09:06.781356914Z   ✓ admin form documents the {{daysLeft}} placeholder for users
+2026-05-02T20:09:06.781382685Z   ✓ admin form documents the {{dayWord}} placeholder for users
+2026-05-02T20:09:06.781385325Z   ✓ admin form documents the {{trialEndsAt}} placeholder for users
+2026-05-02T20:09:06.781420685Z   ✓ admin form documents the {{addCardUrl}} placeholder for users
+2026-05-02T20:09:06.781423205Z   ✓ admin form rehydrates local state from the server response after save
+2026-05-02T20:09:06.781434635Z 
+2026-05-02T20:09:06.781438935Z 15 Task #236 regression check(s) failed.
+2026-05-02T20:09:06.857310965Z ==> Build failed 😞
+2026-05-02T20:09:06.857328215Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
