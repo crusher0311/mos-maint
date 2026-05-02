@@ -249,11 +249,18 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
                 target[k].push(v);
               }
             };
+            const applyAddToSet = (target: Doc, addToSet: any) => {
+              for (const [k, v] of Object.entries(addToSet || {})) {
+                if (!Array.isArray(target[k])) target[k] = [];
+                if (!target[k].includes(v)) target[k].push(v);
+              }
+            };
             const idx = data.findIndex((d) => matchesFilter(d, filter));
             if (idx >= 0) {
               Object.assign(data[idx], update.$set || {});
               applyInc(data[idx], update.$inc);
               applyPush(data[idx], update.$push);
+              applyAddToSet(data[idx], update.$addToSet);
               return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
             }
             if (opts?.upsert) {
@@ -264,6 +271,7 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
               };
               applyInc(seed, update.$inc);
               applyPush(seed, update.$push);
+              applyAddToSet(seed, update.$addToSet);
               data.push(seed);
               return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
             }

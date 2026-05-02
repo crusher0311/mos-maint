@@ -30,6 +30,13 @@ export const MIN_ASKED_FOR_HIGH_SKIP = 3;
 export const HIGH_SKIP_RATE = 0.6;
 export const HIGH_ANSWER_RATE = 0.7;
 export const MAX_HINTS_PER_LIST = 5;
+/**
+ * A question only counts as a "global avoid" once advisors at this many
+ * distinct shops have left it blank. Without this guardrail a single shop
+ * with idiosyncratic intake habits could poison the global rollup for
+ * every other shop (Task #269).
+ */
+export const MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP = 2;
 
 export type RoundResult = { question: string; answered: boolean };
 
@@ -99,18 +106,28 @@ export async function recordRoundResults(opts: {
     const inc = { asked: 1, skipped: r.answered ? 0 : 1, answered: r.answered ? 1 : 0 };
 
     for (const scope of [shopIdStr, null]) {
+      // Track which shops have actually contributed to the global rollup
+      // so `getSkipHints` can require a quorum of distinct shops before
+      // surfacing a question as a global "avoid". Without this, one shop's
+      // idiosyncratic skip can drag a useful question into the avoid list
+      // for every other shop (Task #269).
+      const trackShop = scope === null && shopIdStr != null;
+      const update: Record<string, any> = {
+        $inc: inc,
+        $set: { lastUpdated: new Date(), lastSampleText: r.question },
+        $setOnInsert: {
+          shopId: scope,
+          symptomCategory,
+          normalizedQuestion: normalized,
+          createdAt: new Date(),
+        },
+      };
+      if (trackShop) {
+        update.$addToSet = { contributingShopIds: shopIdStr };
+      }
       await col.updateOne(
         { shopId: scope, symptomCategory, normalizedQuestion: normalized },
-        {
-          $inc: inc,
-          $set: { lastUpdated: new Date(), lastSampleText: r.question },
-          $setOnInsert: {
-            shopId: scope,
-            symptomCategory,
-            normalizedQuestion: normalized,
-            createdAt: new Date(),
-          },
-        },
+        update,
         { upsert: true },
       );
     }
@@ -138,27 +155,42 @@ export async function getSkipHints(opts: {
     : [];
   const globalDocs = await col.find({ shopId: null, symptomCategory }).toArray();
 
-  const byNorm = new Map<string, any>();
-  for (const d of globalDocs) byNorm.set(d.normalizedQuestion, d);
-  for (const d of shopDocs) byNorm.set(d.normalizedQuestion, d);
+  const byNorm = new Map<string, { doc: any; fromGlobal: boolean }>();
+  for (const d of globalDocs) byNorm.set(d.normalizedQuestion, { doc: d, fromGlobal: true });
+  for (const d of shopDocs) byNorm.set(d.normalizedQuestion, { doc: d, fromGlobal: false });
 
   const scored = Array.from(byNorm.values())
-    .map((d) => {
+    .map(({ doc: d, fromGlobal }) => {
       const asked = Number(d.asked || 0);
       const skipped = Number(d.skipped || 0);
       const rate = asked > 0 ? skipped / asked : 0;
+      // Legacy global docs written before Task #269 lack
+      // `contributingShopIds` entirely. Grandfather them in (treat the
+      // count as Infinity) so the guardrail doesn't retroactively
+      // suppress hints that were already in use — the quorum only
+      // gates docs written under the new schema.
+      const hasField = Array.isArray(d.contributingShopIds);
+      const distinctShops = hasField
+        ? d.contributingShopIds.length
+        : Number.POSITIVE_INFINITY;
       return {
         question: String(d.lastSampleText || d.normalizedQuestion),
         normalized: String(d.normalizedQuestion),
         asked,
         skipped,
         rate,
+        fromGlobal,
+        distinctShops,
       };
     })
     .filter((x) => x.asked >= minAsked);
 
   const avoid = scored
     .filter((x) => x.rate >= HIGH_SKIP_RATE)
+    // Global-only entries need a quorum of distinct contributing shops, so
+    // one outlier shop's quirky skip habits can't poison the avoid list for
+    // every other shop (Task #269). Per-shop entries are unaffected.
+    .filter((x) => !x.fromGlobal || x.distinctShops >= MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP)
     .sort((a, b) => b.rate - a.rate || b.asked - a.asked)
     .slice(0, MAX_HINTS_PER_LIST);
 

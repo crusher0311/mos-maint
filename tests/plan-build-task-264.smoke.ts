@@ -25,6 +25,7 @@
 import {
   HIGH_SKIP_RATE,
   MIN_ASKED_FOR_HIGH_SKIP,
+  MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP,
   biasSymptomGuide,
   getSkipHints,
   inferSymptomCategory,
@@ -142,14 +143,90 @@ async function main() {
   );
 
   section("getSkipHints — global fallback for new shop");
-  const newShopHints = await getSkipHints({
+  // Shop 42 is the only shop that's contributed so far, so the global
+  // rollup for the warn-light question only has one distinct contributing
+  // shop. Per Task #269, the global avoid should NOT surface to other
+  // shops yet — that would let one outlier shop poison the global list.
+  const newShopHintsSingleShop = await getSkipHints({
     db: fake.db as any,
     shopId: 9999,
     symptomCategory: "BRAKES",
   });
   ok(
-    "brand-new shop still sees the warn-light hint via global rollup",
-    newShopHints.avoid.some((a) => /warning lights/i.test(a.question)),
+    "single-shop global skip does NOT surface to other shops (Task #269 guardrail)",
+    !newShopHintsSingleShop.avoid.some((a) => /warning lights/i.test(a.question)),
+    `MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP=${MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP}`,
+  );
+
+  // Now have a second shop also skip the same warn-light question. With
+  // two distinct contributing shops, the global avoid SHOULD surface.
+  for (let i = 0; i < 3; i++) {
+    await recordRoundResults({
+      db: fake.db as any,
+      shopId: 77,
+      symptomCategory: "BRAKES",
+      results: [{ question: "Are any warning lights on?", answered: false }],
+    });
+  }
+  const globalWarnDoc = stats.find(
+    (d) => d.shopId === null && d.normalizedQuestion === "are any warning lights on",
+  );
+  ok(
+    "global rollup tracks distinct contributing shops",
+    Array.isArray(globalWarnDoc?.contributingShopIds) &&
+      globalWarnDoc!.contributingShopIds.length === 2 &&
+      globalWarnDoc!.contributingShopIds.includes("42") &&
+      globalWarnDoc!.contributingShopIds.includes("77"),
+  );
+
+  const newShopHintsTwoShops = await getSkipHints({
+    db: fake.db as any,
+    shopId: 9999,
+    symptomCategory: "BRAKES",
+  });
+  ok(
+    "global avoid surfaces to other shops once ≥2 distinct shops have skipped it",
+    newShopHintsTwoShops.avoid.some((a) => /warning lights/i.test(a.question)),
+  );
+
+  // Per-shop behavior must be unchanged: shop 42's own avoid list still
+  // shows the warn-light question even though only 42 has skipped it,
+  // because per-shop entries don't need cross-shop quorum.
+  const hints42AfterSecondShop = await getSkipHints({
+    db: fake.db as any,
+    shopId: 42,
+    symptomCategory: "BRAKES",
+  });
+  ok(
+    "per-shop avoid is unchanged by the global quorum guardrail",
+    hints42AfterSecondShop.avoid.some((a) => /warning lights/i.test(a.question)),
+  );
+
+  // Legacy global rollup docs written before Task #269 won't have a
+  // `contributingShopIds` array. They should be grandfathered in so the
+  // new guardrail doesn't retroactively suppress hints that were already
+  // in production use.
+  const legacyFake = makeFakeDb({
+    concern_question_stats: [
+      {
+        shopId: null,
+        symptomCategory: "BRAKES",
+        normalizedQuestion: "is the noise louder when braking",
+        lastSampleText: "Is the noise louder when braking?",
+        asked: 10,
+        skipped: 8,
+        // No contributingShopIds field — pre-Task-#269 doc.
+      },
+    ],
+  });
+  const legacyHints = await getSkipHints({
+    db: legacyFake.db as any,
+    shopId: 12345,
+    symptomCategory: "BRAKES",
+  });
+  ok(
+    "legacy global docs (no contributingShopIds field) are grandfathered into avoid",
+    legacyHints.avoid.some((a) => /louder when braking/i.test(a.question)),
   );
 
   section("biasSymptomGuide");
