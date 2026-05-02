@@ -45,6 +45,9 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **CRM Subsystem Feature Flag**: The entire CRM subsystem (including Onboarding, Sales Pipeline, Marketing, and Pricing) is controlled by a `CRM_ENABLED` environment variable, allowing for soft-hiding UI and API routes without code removal.
 *   **Day-Based Trial with Card Capture**: When a platform admin creates a shop, a configurable trial window (default 14 days, max 365) is started and a Stripe customer is provisioned. The shop owner is prompted on first login to add a payment method via Stripe Checkout (`mode: setup`); a dashboard banner and modal track this state. Countdown surfaces in the dashboard layout and the billing settings page. A daily cron (`/api/cron/trial-check`) sends reminder emails on a platform-admin-tunable day schedule (defaults to 7/3/1) using subject/HTML/text templates that admins can edit from the billing settings page (`{{shopName}}`, `{{daysLeft}}`, `{{dayWord}}`, `{{trialEndsAt}}`, `{{addCardUrl}}` placeholders). On trial end the cron either auto-converts the shop to a paid subscription using the saved default payment method or locks/suspends the account and notifies the owner.
 
+## Dev Server Notes
+*   **Webpack watcher exclusions** (`next.config.js`): The dev server (`next dev`) explicitly ignores `.local/`, `.next/`, `.git/`, `node_modules/`, `.cache/`, `.upm/`, `.config/`, `.dataone/`, `_archive/`, `attached_assets/`, `.replit_integration_files/`, and `tsconfig.tsbuildinfo`. **Do not remove `.local/`** — that path holds Replit's workflow log files, including this dev server's own stdout. Watching it causes every compile log line to retrigger webpack, producing an infinite "Compiled in …" rebuild loop on idle. Use globs only (no RegExp entries) since Next 14's webpack rejects mixed RegExp+string arrays.
+
 ## External Dependencies
 *   **Database**: MongoDB Atlas, PostgreSQL (Supabase)
 *   **AI**: OpenAI API, Deepgram
