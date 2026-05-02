@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { computeAutoFlagReasons } from "@/lib/shop-review";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -118,7 +119,16 @@ export async function POST(req: NextRequest) {
 
     const shopId = counter.seq || 10001;
 
-    // Create shop document
+    // Create shop document.
+    // task #252: stamp pending review + auto-flag reasons so the platform
+    // admin can review before any transactional email is sent. New admin-
+    // created shops have no billing/Stripe customer yet, so we expect at
+    // least the no_stripe_customer reason.
+    const initialAutoFlagReasons = computeAutoFlagReasons({
+      billing: undefined,
+      cardOnFile: false,
+      stripeCustomerId: undefined,
+    });
     const shopDoc = {
       shopId,
       name: name.trim(),
@@ -127,6 +137,11 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
       status: "active",
+      reviewStatus: "pending" as const,
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNotes: null,
+      autoFlagReasons: initialAutoFlagReasons,
       ...(autoflowConfig && {
         credentials: {
           autoflow: autoflowConfig

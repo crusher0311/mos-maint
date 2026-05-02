@@ -99,7 +99,21 @@ async function processOne(
               text: settings.trialReminderText,
             },
           );
-          await sendEmail({ to: ownerEmail, ...msg });
+          const result = await sendEmail({
+            to: ownerEmail,
+            ...msg,
+            shopId,
+            emailKind: "trial_reminder",
+          });
+          if (!result.ok) {
+            // Email was suppressed by the review gate. Don't mark
+            // reminderSent — once the shop is approved, the next cron
+            // run will re-send the reminder for the same day window.
+            console.warn(
+              `[trial-check] reminder suppressed for ${shopId} (review gate): ${result.reason}`,
+            );
+            return { shopId, action: "reminder_suppressed", reminderDay, reason: result.reason };
+          }
           await db.collection("shops").updateOne(
             { shopId },
             { $set: { [`trial.reminderSent.${reminderDay}`]: now } },
@@ -165,7 +179,7 @@ async function processOne(
         if (ownerEmail) {
           try {
             const msg = makeTrialConvertedEmail(shop.name, planSlug, `${baseUrl}/dashboard`);
-            await sendEmail({ to: ownerEmail, ...msg });
+            await sendEmail({ to: ownerEmail, ...msg, shopId, emailKind: "trial_converted" });
           } catch (err: any) {
             console.error(`[trial-check] converted email failed for ${shopId}:`, err?.message);
           }
@@ -201,7 +215,7 @@ async function processOne(
   if (ownerEmail) {
     try {
       const msg = makeTrialSuspendedEmail(shop.name, addCardUrl, true);
-      await sendEmail({ to: ownerEmail, ...msg });
+      await sendEmail({ to: ownerEmail, ...msg, shopId, emailKind: "trial_suspended" });
     } catch (err: any) {
       console.error(`[trial-check] suspend email failed for ${shopId}:`, err?.message);
     }

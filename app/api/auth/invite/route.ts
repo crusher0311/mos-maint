@@ -56,8 +56,13 @@ export async function POST(req: NextRequest) {
   let emailSent = false;
   try {
     const msg = makeInviteEmail(setupUrl, shopName, locationIdentifier, inviteRole);
-    await sendEmail({ to: emailInput, ...msg });
-    emailSent = true;
+    const inviteResult = await sendEmail({
+      to: emailInput,
+      ...msg,
+      shopId: sess.shopId,
+      emailKind: "credentials_welcome",
+    });
+    emailSent = inviteResult.ok;
   } catch (err) {
     console.error("Failed to send invite email:", err);
   }

@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings } from "@/lib/stripe";
+import { computeAutoFlagReasons, getReviewFields } from "@/lib/shop-review";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -304,6 +305,7 @@ export async function GET() {
       const cardCaptureHistory = cardCaptureHistoryMap.get(String(shop.shopId)) || [];
       const lastCardCaptureEmail = cardCaptureHistory[0] || null;
 
+      const reviewFields = getReviewFields(shop);
       return {
         _id: shop._id,
         shopId: shop.shopId,
@@ -317,6 +319,11 @@ export async function GET() {
         integrations,
         isLocked: shop.isLocked || false,
         cardOnFile,
+        reviewStatus: reviewFields.reviewStatus,
+        reviewedAt: reviewFields.reviewedAt,
+        reviewedBy: reviewFields.reviewedBy,
+        reviewNotes: reviewFields.reviewNotes,
+        autoFlagReasons: reviewFields.autoFlagReasons,
         trial: trialEndsAt ? {
           startedAt: trialStartedAt,
           endsAt: trialEndsAt,
@@ -512,10 +519,32 @@ export async function POST(req: NextRequest) {
       console.error(`[Platform Admin] Failed to create Stripe customer for shop ${newShopId}:`, stripeErr?.message);
     }
 
+    // task #252: even admin-created shops start in pending review so the
+    // approve/flag queue is the single audit point. Compute auto-flag
+    // reasons up-front so admins see the relevant signals.
+    const shopBillingForAutoFlag = {
+      plan: plan || "trial",
+      status: status || "trial",
+      cardOnFile: false,
+      stripeCustomerId: stripeCustomerId || null,
+      stripeSubscriptionId: null,
+    };
+    const initialAutoFlagReasons = computeAutoFlagReasons({
+      billing: shopBillingForAutoFlag,
+      cardOnFile: false,
+      stripeCustomerId,
+      isLocked: false,
+      trial: useDayBasedTrial && trialEndsAt ? { endsAt: trialEndsAt } : null,
+    });
     const shopDoc: Record<string, any> = {
       shopId: newShopId,
       name: shopName.trim(),
       status: "active",
+      reviewStatus: "pending" as const,
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNotes: null,
+      autoFlagReasons: initialAutoFlagReasons,
       billing: {
         plan: plan || "trial",
         status: status || "trial",
@@ -591,7 +620,7 @@ export async function POST(req: NextRequest) {
           ? { trialDays: trialDaysParsed!, trialEndsAt }
           : undefined,
       );
-      await sendEmail({ to: emailLower, ...emailContent });
+      await sendEmail({ to: emailLower, ...emailContent, shopId: newShopId, emailKind: "credentials_welcome" });
       emailSent = true;
       console.log(`[Platform Admin] Welcome email sent to ${emailLower} for shop ${newShopId}`);
     } catch (emailErr: any) {

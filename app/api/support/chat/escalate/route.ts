@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   await linkSessionToTicket(sessionId, ticketId);
 
   const ticketEmail = makeTicketCreatedEmail(ticketNumber, ticketSubject, "general");
-  await sendEmail({ to: session.email, ...ticketEmail });
+  await sendEmail({ to: session.email, ...ticketEmail, shopId: session.shopId, emailKind: "ticket_created" });
 
   await createNotification({
     userId: session.email,

@@ -78,12 +78,23 @@ export async function POST(req: NextRequest) {
     if (type === "tekmetric") {
       const emailData = makeTekmetricSetupEmail(shopName, ownerEmail);
       
-      await sendEmail({
+      const tekResult = await sendEmail({
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html,
         text: emailData.text,
+        shopId,
+        emailKind: "tekmetric_setup",
       });
+      if (!tekResult.ok) {
+        return NextResponse.json(
+          {
+            error:
+              "This shop is awaiting platform-admin review and cannot send transactional email yet. Please contact your account manager.",
+          },
+          { status: 403 },
+        );
+      }
 
       await db.collection("shops").updateOne(
         { shopId: { $in: [shopId, Number(shopId), String(shopId)] } },

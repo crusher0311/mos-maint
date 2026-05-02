@@ -17,6 +17,7 @@ import {
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { createHovercodeQR } from "@/lib/hovercode";
 import { getNextShopId } from "@/lib/ids";
+import { computeAutoFlagReasons } from "@/lib/shop-review";
 import Stripe from "stripe";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -235,21 +236,35 @@ export async function POST(req: NextRequest) {
           const bonusVins = billingSettings.skipTrialBonusVins || 50;
           const webhookToken = crypto.randomBytes(12).toString("hex");
           
+          const billingForReview = {
+            plan: "pro",
+            status: "active",
+            vinLimit: baseVins + bonusVins,
+            stripeSubscriptionId: session.subscription as string | undefined,
+            stripeCustomerId: session.customer as string | undefined,
+            skippedTrialBonus: bonusVins,
+            updatedAt: now,
+          };
+          const initialAutoFlagReasons = computeAutoFlagReasons({
+            billing: billingForReview,
+            cardOnFile: true,
+            stripeCustomerId: session.customer as string | undefined,
+          });
           const shopDoc = {
             shopId,
             name: pending.shopName,
             webhookToken,
             createdAt: now,
             updatedAt: now,
-            billing: {
-              plan: "pro",
-              status: "active",
-              vinLimit: baseVins + bonusVins,
-              stripeSubscriptionId: session.subscription,
-              stripeCustomerId: session.customer,
-              skippedTrialBonus: bonusVins,
-              updatedAt: now,
-            },
+            // task #252: every new shop lands in "pending" review until a
+            // platform admin explicitly approves them. Until then, the
+            // sendEmail() gate suppresses every transactional email.
+            reviewStatus: "pending" as const,
+            reviewedAt: null,
+            reviewedBy: null,
+            reviewNotes: null,
+            autoFlagReasons: initialAutoFlagReasons,
+            billing: billingForReview,
             enabledFeatures: {
               maintenance: true,
               job_lookup: true,
@@ -300,7 +315,7 @@ export async function POST(req: NextRequest) {
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
           try {
             const welcomeMsg = makeWelcomeEmail(pending.shopName, `${baseUrl}/login`);
-            await sendEmail({ to: pending.adminEmail, ...welcomeMsg });
+            await sendEmail({ to: pending.adminEmail, ...welcomeMsg, shopId, emailKind: "welcome" });
           } catch (emailErr) {
             console.error("[Stripe] Failed to send welcome email:", emailErr);
           }
@@ -420,6 +435,20 @@ export async function POST(req: NextRequest) {
             const rawShopName = session.metadata?.shopName || crmName || "New Shop";
             const shopNameFromMeta = rawShopName.slice(0, 200).trim();
 
+            const billingForReview = {
+              plan: validatedPlan,
+              status: "active",
+              isPaid: true,
+              vinLimit: 300,
+              stripeCustomerId: session.customer as string | undefined,
+              stripeSubscriptionId: session.subscription as string | undefined,
+              updatedAt: now,
+            };
+            const initialAutoFlagReasons = computeAutoFlagReasons({
+              billing: billingForReview,
+              cardOnFile: true,
+              stripeCustomerId: session.customer as string | undefined,
+            });
             const shopDoc = {
               shopId: newShopId,
               name: shopNameFromMeta,
@@ -427,15 +456,13 @@ export async function POST(req: NextRequest) {
               createdAt: now,
               updatedAt: now,
               provisionedVia: "crm_stripe",
-              billing: {
-                plan: validatedPlan,
-                status: "active",
-                isPaid: true,
-                vinLimit: 300,
-                stripeCustomerId: session.customer,
-                stripeSubscriptionId: session.subscription,
-                updatedAt: now,
-              },
+              // task #252: pending review until a platform admin approves.
+              reviewStatus: "pending" as const,
+              reviewedAt: null,
+              reviewedBy: null,
+              reviewNotes: null,
+              autoFlagReasons: initialAutoFlagReasons,
+              billing: billingForReview,
               enabledFeatures: {
                 maintenance: true,
                 job_lookup: true,
@@ -488,7 +515,7 @@ export async function POST(req: NextRequest) {
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
             try {
               const emailContent = makeCredentialsWelcomeEmail(shopNameFromMeta, crmEmail, tempPassword, `${baseUrl}/login`);
-              await sendEmail({ to: crmEmail, ...emailContent });
+              await sendEmail({ to: crmEmail, ...emailContent, shopId: newShopId, emailKind: "credentials_welcome" });
               console.log(`[Stripe CRM] Welcome email with credentials sent to ${crmEmail}`);
             } catch (emailErr) {
               console.error("[Stripe CRM] Failed to send welcome email:", emailErr);
@@ -677,7 +704,7 @@ export async function POST(req: NextRequest) {
                 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
                 const loginUrl = `${baseUrl}/dashboard`;
                 const emailContent = makePaymentRecoveredEmail(shop.name || `Shop ${shopId}`, loginUrl);
-                sendEmail({ to: owner.email, ...emailContent }).catch(err => {
+                sendEmail({ to: owner.email, ...emailContent, shopId, emailKind: "payment_recovered" }).catch(err => {
                   console.error(`[Stripe] Failed to send payment recovered email to ${owner.email}:`, err);
                 });
               }
@@ -751,7 +778,7 @@ export async function POST(req: NextRequest) {
                     updatePaymentUrl,
                     true,
                   );
-                  sendEmail({ to: owner.email, ...ownerMsg }).catch((err) => {
+                  sendEmail({ to: owner.email, ...ownerMsg, shopId, emailKind: "trial_conversion_suspended" }).catch((err) => {
                     console.error(`[Stripe] Failed to send trial-conversion suspended email to ${owner.email}:`, err);
                   });
                 }
@@ -799,7 +826,7 @@ export async function POST(req: NextRequest) {
                     updatePaymentUrl,
                     decision.attemptsRemaining,
                   );
-                  sendEmail({ to: owner.email, ...ownerMsg }).catch((err) => {
+                  sendEmail({ to: owner.email, ...ownerMsg, shopId, emailKind: "trial_conversion_payment_failed" }).catch((err) => {
                     console.error(`[Stripe] Failed to send trial-conversion payment failed email to ${owner.email}:`, err);
                   });
                 }
@@ -826,7 +853,7 @@ export async function POST(req: NextRequest) {
 
               if (owner?.email && shop) {
                 const emailContent = makePaymentFailedEmail(shop.name || `Shop ${shopId}`, updatePaymentUrl, gracePeriodEndsAt);
-                sendEmail({ to: owner.email, ...emailContent }).catch(err => {
+                sendEmail({ to: owner.email, ...emailContent, shopId, emailKind: "payment_failed" }).catch(err => {
                   console.error(`[Stripe] Failed to send payment failed email to ${owner.email}:`, err);
                 });
               }

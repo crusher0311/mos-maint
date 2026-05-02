@@ -3,6 +3,7 @@ import { crmDisabledResponse } from "@/lib/feature-flags/gate";
 import { getDb } from "@/lib/mongo";
 import { getNextShopId } from "@/lib/ids";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
+import { computeAutoFlagReasons } from "@/lib/shop-review";
 import { createHovercodeQR } from "@/lib/hovercode";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
@@ -72,6 +73,20 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   const webhookToken = crypto.randomBytes(12).toString("hex");
 
+  const billingForReview = {
+    plan: validatedPlan,
+    status: "active",
+    isPaid: true,
+    vinLimit: 300,
+    stripeCustomerId: stripeCustomerId || null,
+    stripeSubscriptionId: stripeSubscriptionId || null,
+    updatedAt: now,
+  };
+  const initialAutoFlagReasons = computeAutoFlagReasons({
+    billing: billingForReview,
+    cardOnFile: !!stripeCustomerId,
+    stripeCustomerId: stripeCustomerId || undefined,
+  });
   const shopDoc = {
     shopId,
     name: sanitizedShopName,
@@ -79,15 +94,13 @@ export async function POST(req: NextRequest) {
     createdAt: now,
     updatedAt: now,
     provisionedVia: "crm",
-    billing: {
-      plan: validatedPlan,
-      status: "active",
-      isPaid: true,
-      vinLimit: 300,
-      stripeCustomerId: stripeCustomerId || null,
-      stripeSubscriptionId: stripeSubscriptionId || null,
-      updatedAt: now,
-    },
+    // task #252: pending review until a platform admin approves.
+    reviewStatus: "pending" as const,
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewNotes: null,
+    autoFlagReasons: initialAutoFlagReasons,
+    billing: billingForReview,
     enabledFeatures: {
       maintenance: true,
       job_lookup: true,
@@ -135,7 +148,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const emailContent = makeCredentialsWelcomeEmail(shopName, emailLower, tempPassword, loginUrl);
-    await sendEmail({ to: emailLower, ...emailContent });
+    await sendEmail({ to: emailLower, ...emailContent, shopId, emailKind: "credentials_welcome" });
     console.log(`[CRM Provision] Welcome email sent to ${emailLower}`);
   } catch (emailErr) {
     console.error("[CRM Provision] Failed to send welcome email:", emailErr);

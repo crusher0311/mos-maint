@@ -170,7 +170,9 @@ export async function POST(request: NextRequest) {
         to: session.email,
         subject: userEmailContent.subject,
         html: userEmailContent.html,
-        text: userEmailContent.text
+        text: userEmailContent.text,
+        shopId: session.shopId,
+        emailKind: "ticket_created",
       });
     } catch (emailErr) {
       console.error("Failed to send ticket confirmation email:", emailErr);

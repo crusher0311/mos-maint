@@ -59,7 +59,18 @@ export async function POST(req: NextRequest) {
           const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
           const emailContent = makeGraceReminderEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl, daysRemaining);
           
-          await sendEmail({ to: owner.email, ...emailContent });
+          const reminderResult = await sendEmail({
+            to: owner.email,
+            ...emailContent,
+            shopId: shop.shopId,
+            emailKind: "grace_reminder",
+          });
+          if (!reminderResult.ok) {
+            console.warn(
+              `[Grace Period] reminder suppressed for shop ${shop.shopId}: ${reminderResult.reason}`,
+            );
+            continue;
+          }
           await db.collection("shops").updateOne(
             { shopId: shop.shopId },
             { $set: { "billing.lastReminderSentAt": now } }
@@ -102,7 +113,12 @@ export async function POST(req: NextRequest) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
         const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
         const emailContent = makeAccountSuspendedEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl);
-        sendEmail({ to: owner.email, ...emailContent }).catch(err => {
+        sendEmail({
+          to: owner.email,
+          ...emailContent,
+          shopId: shop.shopId,
+          emailKind: "account_suspended",
+        }).catch(err => {
           console.error(`[Grace Period] Failed to send suspended email to ${owner.email}:`, err);
         });
       }

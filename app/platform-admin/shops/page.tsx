@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle, Mail, CreditCard } from "lucide-react";
+import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle, Mail, CreditCard, ShieldCheck, ShieldAlert, Flag } from "lucide-react";
+import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
 
 interface ShopBilling {
   plan: string;
@@ -121,6 +122,44 @@ interface Shop {
   cardOnFile?: boolean;
   lastCardCaptureEmail?: CardCaptureEmailEntry | null;
   cardCaptureEmailHistory?: CardCaptureEmailEntry[];
+  reviewStatus?: ShopReviewStatus | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  reviewNotes?: string | null;
+  autoFlagReasons?: string[] | null;
+}
+
+function ReviewBadges({ shop }: { shop: Shop }) {
+  const status = (shop.reviewStatus || "approved") as ShopReviewStatus;
+  if (status === "approved") return null;
+  const reasons = Array.isArray(shop.autoFlagReasons) ? shop.autoFlagReasons : [];
+  const reasonText = reasons.length
+    ? reasons.map((r) => REVIEW_REASON_LABELS[r] ?? r).join("\n• ")
+    : null;
+  const notesLine = shop.reviewNotes ? `\n\nNotes: ${shop.reviewNotes}` : "";
+  const tip =
+    (status === "flagged"
+      ? "Flagged — transactional email is suppressed."
+      : "Pending platform-admin review — transactional email is suppressed.") +
+    (reasonText ? `\n\nAuto-flag reasons:\n• ${reasonText}` : "") +
+    notesLine;
+  return status === "flagged" ? (
+    <span
+      className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded inline-flex items-center gap-1"
+      title={tip}
+    >
+      <ShieldAlert className="w-3 h-3" /> Flagged
+      {reasons.length > 0 && <span className="opacity-70">({reasons.length})</span>}
+    </span>
+  ) : (
+    <span
+      className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-xs rounded inline-flex items-center gap-1"
+      title={tip}
+    >
+      <Clock4 className="w-3 h-3" /> Pending review
+      {reasons.length > 0 && <span className="opacity-70">({reasons.length})</span>}
+    </span>
+  );
 }
 
 function formatTimeAgo(input: string | null | undefined): string | null {
@@ -191,6 +230,18 @@ export default function PlatformShopsPage() {
   const isSortBy = (v: string): v is SortBy => (SORT_OPTIONS as readonly string[]).includes(v);
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  type ReviewFilter = "all" | "pending" | "flagged" | "approved" | "needs_review";
+  const REVIEW_FILTERS: readonly ReviewFilter[] = ["all", "needs_review", "pending", "flagged", "approved"];
+  const isReviewFilter = (v: string): v is ReviewFilter =>
+    (REVIEW_FILTERS as readonly string[]).includes(v);
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
+  const [reviewDialog, setReviewDialog] = useState<{ shop: Shop; mode: "approve" | "flag" } | null>(
+    null,
+  );
+  const [reviewNotesInput, setReviewNotesInput] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [bulkApproveConfirmOpen, setBulkApproveConfirmOpen] = useState(false);
+  const [bulkApproveSubmitting, setBulkApproveSubmitting] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkSending, setBulkSending] = useState(false);
   type BulkResult = {
@@ -364,6 +415,74 @@ export default function PlatformShopsPage() {
       alert("Bulk send failed");
     } finally {
       setBulkSending(false);
+    }
+  };
+
+  const submitReviewDecision = async (
+    shop: Shop,
+    decision: "approve" | "flag",
+    notes: string,
+  ) => {
+    const trimmed = notes.trim();
+    if (decision === "flag" && !trimmed) {
+      alert("Please add a note explaining why this shop is flagged.");
+      return;
+    }
+    setReviewSubmitting(true);
+    setActionLoading(`${shop.shopId}-review-${decision}`);
+    try {
+      const res = await fetch(
+        `/api/platform-admin/shops/${shop.shopId}/review`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision, notes: trimmed || undefined }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.error || "Failed to update review status");
+        return;
+      }
+      setReviewDialog(null);
+      setReviewNotesInput("");
+      await loadShops();
+    } catch (err) {
+      console.error("Review decision error:", err);
+      alert("Failed to update review status");
+    } finally {
+      setReviewSubmitting(false);
+      setActionLoading(null);
+    }
+  };
+
+  const submitBulkApprove = async (shopIds: (number | string)[]) => {
+    if (shopIds.length === 0) return;
+    setBulkApproveSubmitting(true);
+    try {
+      const res = await fetch("/api/platform-admin/shops/bulk-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.error || "Bulk approve failed");
+        return;
+      }
+      setBulkApproveConfirmOpen(false);
+      const errCount = data.errorCount || 0;
+      alert(
+        `Approved ${data.approvedCount} shop${data.approvedCount === 1 ? "" : "s"}.` +
+          (errCount > 0 ? ` ${errCount} error${errCount === 1 ? "" : "s"} — see console.` : ""),
+      );
+      if (errCount > 0) console.warn("[Bulk approve errors]", data.errors);
+      await loadShops();
+    } catch (err) {
+      console.error("Bulk approve error:", err);
+      alert("Bulk approve failed");
+    } finally {
+      setBulkApproveSubmitting(false);
     }
   };
 
@@ -585,6 +704,12 @@ export default function PlatformShopsPage() {
       if (trialFilter === "no_card") return endsAtMs !== null && !cardOnFile;
       return true;
     })
+    .filter(shop => {
+      if (reviewFilter === "all") return true;
+      const status = (shop.reviewStatus || "approved") as ShopReviewStatus;
+      if (reviewFilter === "needs_review") return status === "pending" || status === "flagged";
+      return status === reviewFilter;
+    })
     .sort((a, b) => {
       if (sortBy === "trialEndsAt") {
         const aEnds = a.trial?.endsAt ? new Date(a.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
@@ -600,6 +725,13 @@ export default function PlatformShopsPage() {
   // cohort they're looking at).
   const bulkEligibleShops = filteredShops.filter(
     (s) => !!s.trial?.endsAt && !s.cardOnFile,
+  );
+
+  // Shops eligible for bulk-approve: every shop in the current filtered view
+  // that is currently pending review (not flagged — those need a manual
+  // decision since the admin already chose to flag them).
+  const bulkApprovePendingShops = filteredShops.filter(
+    (s) => (s.reviewStatus || "approved") === "pending",
   );
 
   // Group shops by enterprise if enabled
@@ -731,6 +863,38 @@ export default function PlatformShopsPage() {
             <option value="no_card">No card on file</option>
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500 whitespace-nowrap">Review</label>
+          <select
+            value={reviewFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isReviewFilter(v)) setReviewFilter(v);
+            }}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3]"
+          >
+            <option value="all">All review states</option>
+            <option value="needs_review">Needs review (pending + flagged)</option>
+            <option value="pending">Pending review</option>
+            <option value="flagged">Flagged</option>
+            <option value="approved">Approved</option>
+          </select>
+        </div>
+        {bulkApprovePendingShops.length > 0 && (
+          <button
+            onClick={() => setBulkApproveConfirmOpen(true)}
+            disabled={bulkApproveSubmitting}
+            title="Approve every pending shop in the current filtered view (re-enables transactional email)"
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-lg disabled:opacity-50"
+          >
+            {bulkApproveSubmitting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ShieldCheck className="w-4 h-4" />
+            )}
+            Approve {bulkApprovePendingShops.length} pending
+          </button>
+        )}
         {bulkEligibleShops.length > 0 && (
           <button
             onClick={() => setBulkConfirmOpen(true)}
@@ -854,6 +1018,7 @@ export default function PlatformShopsPage() {
                               Extend
                             </button>
                           )}
+                          <ReviewBadges shop={shop} />
                         </div>
                         {shop.enterpriseName && !groupByEnterprise && (
                           <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
@@ -1010,6 +1175,40 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                      {(shop.reviewStatus || "approved") !== "approved" && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setReviewNotesInput("");
+                              setReviewDialog({ shop, mode: "approve" });
+                            }}
+                            disabled={actionLoading !== null}
+                            title="Approve shop (re-enables transactional email)"
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
+                          >
+                            {actionLoading === `${shop.shopId}-review-approve` ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setReviewNotesInput(shop.reviewNotes || "");
+                              setReviewDialog({ shop, mode: "flag" });
+                            }}
+                            disabled={actionLoading !== null}
+                            title="Flag shop with notes (keeps email suppressed)"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                          >
+                            {actionLoading === `${shop.shopId}-review-flag` ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Flag className="w-4 h-4" />
+                            )}
+                          </button>
+                        </>
+                      )}
                       {shop.trial?.endsAt && (() => {
                         const lastEmail = shop.lastCardCaptureEmail || null;
                         const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
@@ -1225,6 +1424,7 @@ export default function PlatformShopsPage() {
                               Extend
                             </button>
                           )}
+                          <ReviewBadges shop={shop} />
                         </div>
                         {shop.enterpriseName && (
                           <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
@@ -1372,6 +1572,40 @@ export default function PlatformShopsPage() {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                      {(shop.reviewStatus || "approved") !== "approved" && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setReviewNotesInput("");
+                              setReviewDialog({ shop, mode: "approve" });
+                            }}
+                            disabled={actionLoading !== null}
+                            title="Approve shop (re-enables transactional email)"
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
+                          >
+                            {actionLoading === `${shop.shopId}-review-approve` ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setReviewNotesInput(shop.reviewNotes || "");
+                              setReviewDialog({ shop, mode: "flag" });
+                            }}
+                            disabled={actionLoading !== null}
+                            title="Flag shop with notes (keeps email suppressed)"
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                          >
+                            {actionLoading === `${shop.shopId}-review-flag` ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Flag className="w-4 h-4" />
+                            )}
+                          </button>
+                        </>
+                      )}
                       {shop.trial?.endsAt && (() => {
                         const lastEmail = shop.lastCardCaptureEmail || null;
                         const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
@@ -1976,6 +2210,201 @@ export default function PlatformShopsPage() {
           onClose={() => setBulkResults(null)}
         />
       )}
+
+      {reviewDialog && (
+        <ReviewDecisionDialog
+          shop={reviewDialog.shop}
+          mode={reviewDialog.mode}
+          notes={reviewNotesInput}
+          onNotesChange={setReviewNotesInput}
+          submitting={reviewSubmitting}
+          onCancel={() => {
+            if (!reviewSubmitting) {
+              setReviewDialog(null);
+              setReviewNotesInput("");
+            }
+          }}
+          onConfirm={() =>
+            submitReviewDecision(reviewDialog.shop, reviewDialog.mode, reviewNotesInput)
+          }
+        />
+      )}
+
+      {bulkApproveConfirmOpen && (
+        <BulkApproveConfirmDialog
+          shops={bulkApprovePendingShops}
+          submitting={bulkApproveSubmitting}
+          onCancel={() => {
+            if (!bulkApproveSubmitting) setBulkApproveConfirmOpen(false);
+          }}
+          onConfirm={() =>
+            submitBulkApprove(bulkApprovePendingShops.map((s) => s.shopId))
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function ReviewDecisionDialog({
+  shop,
+  mode,
+  notes,
+  onNotesChange,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  shop: Shop;
+  mode: "approve" | "flag";
+  notes: string;
+  onNotesChange: (v: string) => void;
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const reasons = Array.isArray(shop.autoFlagReasons) ? shop.autoFlagReasons : [];
+  const isApprove = mode === "approve";
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={() => { if (!submitting) onCancel(); }}
+    >
+      <div
+        className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          {isApprove ? (
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+          ) : (
+            <Flag className="w-5 h-5 text-red-600" />
+          )}
+          {isApprove ? "Approve shop" : "Flag shop"}
+        </h3>
+        <div className="text-sm text-gray-600 mb-4">
+          <div className="font-medium text-gray-800">{shop.name}</div>
+          <div className="text-xs text-gray-500">ID {shop.shopId}</div>
+        </div>
+        {reasons.length > 0 && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="text-xs font-medium text-amber-800 mb-1">
+              Auto-flag reasons:
+            </div>
+            <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+              {reasons.map((r) => (
+                <li key={r}>{REVIEW_REASON_LABELS[r] ?? r}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="text-sm text-gray-600 mb-3">
+          {isApprove
+            ? "Approving re-enables transactional email for this shop and clears the auto-flag reasons. Notes are optional."
+            : "Flagging keeps transactional email suppressed. A note explaining the reason is required."}
+        </p>
+        <textarea
+          value={notes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder={isApprove ? "Optional notes…" : "Required: why is this shop flagged?"}
+          rows={4}
+          maxLength={2000}
+          disabled={submitting}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent disabled:opacity-60"
+        />
+        <div className="flex gap-3 justify-end mt-4">
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting || (!isApprove && !notes.trim())}
+            className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 flex items-center gap-2 ${
+              isApprove
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-red-600 hover:bg-red-700"
+            }`}
+          >
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isApprove ? "Approve" : "Flag"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkApproveConfirmDialog({
+  shops,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  shops: Shop[];
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const sample = shops.slice(0, 8);
+  const remaining = shops.length - sample.length;
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={() => { if (!submitting) onCancel(); }}
+    >
+      <div
+        className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-emerald-600" />
+          Approve {shops.length} pending shop{shops.length === 1 ? "" : "s"}
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          This re-enables transactional email for every pending shop in the
+          current filtered view and clears their auto-flag reasons. Flagged
+          shops are not touched.
+        </p>
+        <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4 max-h-64 overflow-y-auto">
+          {sample.map((s) => (
+            <div key={String(s.shopId)} className="px-3 py-2 text-sm flex items-center justify-between gap-2">
+              <span className="font-medium text-gray-800 truncate">{s.name}</span>
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                ID {s.shopId}
+                {Array.isArray(s.autoFlagReasons) && s.autoFlagReasons.length > 0
+                  ? ` · ${s.autoFlagReasons.length} reason${s.autoFlagReasons.length === 1 ? "" : "s"}`
+                  : ""}
+              </span>
+            </div>
+          ))}
+          {remaining > 0 && (
+            <div className="px-3 py-2 text-xs text-gray-500 italic">
+              …and {remaining} more
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {submitting ? "Approving…" : `Approve ${shops.length}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

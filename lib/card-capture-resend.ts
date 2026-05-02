@@ -110,7 +110,27 @@ export async function resendCardCaptureForShop(opts: {
   }
 
   try {
-    await sendEmail({ to: ownerEmail, ...msg });
+    const result = await sendEmail({
+      to: ownerEmail,
+      ...msg,
+      shopId: numericShopId,
+      emailKind: "card_capture_resend",
+    });
+    if (!result.ok) {
+      // Suppressed by the review gate (task #252). Surface so the
+      // caller (single resend / bulk endpoint) can record this in the
+      // per-shop result instead of silently lying about delivery.
+      return {
+        ok: false,
+        shopId,
+        shopName: shop.name,
+        ownerEmail,
+        mode,
+        stripeCustomerId: setupSession.customerId ?? undefined,
+        stripeCheckoutSessionId: setupSession.sessionId ?? undefined,
+        error: `Email suppressed: shop is ${result.reviewStatus || "not approved"} for review`,
+      };
+    }
   } catch (err: any) {
     console.error(
       `[Platform Admin] Failed to send card-capture email for shop ${shopId}:`,

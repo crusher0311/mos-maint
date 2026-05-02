@@ -287,7 +287,9 @@ export async function PATCH(request: NextRequest) {
           to: ticket.userEmail,
           subject: emailContent.subject,
           html: emailContent.html,
-          text: emailContent.text
+          text: emailContent.text,
+          shopId: ticket.shopId,
+          emailKind: "ticket_updated",
         });
       } catch (emailErr) {
         console.error("Failed to send ticket update email:", emailErr);

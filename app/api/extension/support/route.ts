@@ -191,7 +191,7 @@ async function handleEscalate(user: any, body: any) {
 
   try {
     const ticketEmail = makeTicketCreatedEmail(ticketNumber, ticketSubject, "General");
-    await sendEmail({ to: user.email, ...ticketEmail });
+    await sendEmail({ to: user.email, ...ticketEmail, shopId: user.shopId, emailKind: "ticket_created" });
   } catch (e) {
     console.error("[Extension Support] Failed to send ticket email:", e);
   }
@@ -319,7 +319,7 @@ async function handleTicket(user: any, body: any) {
     };
     const categoryLabel = categoryLabels[ticket.category] || ticket.category;
     const ticketEmail = makeTicketCreatedEmail(ticketNumber, subject, categoryLabel);
-    await sendEmail({ to: user.email, ...ticketEmail });
+    await sendEmail({ to: user.email, ...ticketEmail, shopId: user.shopId, emailKind: "ticket_created" });
   } catch (e) {
     console.error("[Extension Support] Failed to send ticket email:", e);
   }

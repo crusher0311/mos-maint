@@ -1,6 +1,12 @@
 // lib/email.ts
 // Minimal Resend email helper with safe fallbacks.
 
+import { getDb } from "./mongo";
+import {
+  getReviewStateForShopId,
+  type GatedEmailKind,
+} from "./shop-review";
+
 type SendArgs = {
   to: string;
   subject: string;
@@ -8,13 +14,84 @@ type SendArgs = {
   text?: string;
   cc?: string;
   replyTo?: string;
+  // When provided, the helper looks up the shop's review state and
+  // refuses to send any transactional email unless the shop has been
+  // explicitly approved by a platform admin (task #252). Callers that
+  // intentionally bypass the gate (platform admin <-> internal mail,
+  // password resets to individual users, etc.) simply omit shopId.
+  shopId?: number | string | null;
+  emailKind?: GatedEmailKind;
 };
+
+export type SendEmailResult =
+  | { ok: true; dev?: boolean }
+  | {
+      ok: false;
+      suppressed: true;
+      reason: "shop_not_approved" | "shop_not_found";
+      reviewStatus?: string;
+      autoFlagReasons?: string[];
+    };
 
 function hasEmailEnv() {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-export async function sendEmail({ to, subject, html, text, cc, replyTo }: SendArgs) {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  cc,
+  replyTo,
+  shopId,
+  emailKind,
+}: SendArgs): Promise<SendEmailResult> {
+  // Gate: if the caller supplied a shopId, look up the review state and
+  // suppress the send unless the shop is "approved". Logged with enough
+  // structure that the admin can grep for shopId/emailKind later.
+  if (shopId !== undefined && shopId !== null && shopId !== "") {
+    try {
+      const db = await getDb();
+      const { found, fields } = await getReviewStateForShopId(db, shopId);
+      if (!found || fields.reviewStatus !== "approved") {
+        const reason = found ? "shop_not_approved" : "shop_not_found";
+        console.warn("[email:SUPPRESSED]", {
+          shopId,
+          emailKind: emailKind || null,
+          reviewStatus: fields.reviewStatus,
+          autoFlagReasons: fields.autoFlagReasons,
+          to,
+          subject,
+          reason,
+        });
+        return {
+          ok: false,
+          suppressed: true,
+          reason,
+          reviewStatus: fields.reviewStatus,
+          autoFlagReasons: fields.autoFlagReasons,
+        };
+      }
+    } catch (err: any) {
+      // Fail closed: if we can't look up review state, don't accidentally
+      // spam an unreviewed shop. Surface the error so the cron / webhook
+      // caller can record it.
+      console.error("[email:GATE-LOOKUP-FAILED]", {
+        shopId,
+        emailKind: emailKind || null,
+        error: err?.message,
+      });
+      return {
+        ok: false,
+        suppressed: true,
+        reason: "shop_not_approved",
+        reviewStatus: "pending",
+        autoFlagReasons: ["review_lookup_failed"],
+      };
+    }
+  }
+
   if (!hasEmailEnv()) {
     // Dev fallback: log instead of sending
     console.log("[email:DEV-FALLBACK]", { to, subject, html, text, cc, replyTo });
