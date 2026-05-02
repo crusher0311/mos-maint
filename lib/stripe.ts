@@ -314,3 +314,86 @@ export async function fetchStripeProducts() {
 export const STRIPE_PRODUCTS = {
   professional: "prod_TgrceDug91whUy",
 };
+
+export async function ensureStripeCustomer(opts: {
+  shopId: number;
+  ownerEmail: string;
+  createdVia?: string;
+  createdBy?: string;
+}): Promise<{ customerId: string; created: boolean }> {
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne({ shopId: opts.shopId });
+  if (!shop) throw new Error(`Shop not found: ${opts.shopId}`);
+
+  const existing: string | undefined =
+    shop.billing?.stripeCustomerId || shop.stripeCustomerId;
+  if (existing) {
+    try {
+      const found = await getStripe().customers.retrieve(existing);
+      if (found && !(found as any).deleted) {
+        return { customerId: existing, created: false };
+      }
+    } catch (err: any) {
+      if (err?.code !== "resource_missing") throw err;
+    }
+  }
+
+  const customer = await getStripe().customers.create({
+    email: opts.ownerEmail,
+    name: shop.name,
+    metadata: {
+      shopId: String(opts.shopId),
+      createdVia: opts.createdVia || "ensure_stripe_customer",
+      ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
+    },
+  });
+
+  await db.collection("shops").updateOne(
+    { shopId: opts.shopId },
+    {
+      $set: {
+        "billing.stripeCustomerId": customer.id,
+        stripeCustomerId: customer.id,
+        updatedAt: new Date(),
+      },
+    },
+  );
+
+  return { customerId: customer.id, created: true };
+}
+
+export async function createCardSetupSession(opts: {
+  shopId: number;
+  ownerEmail: string;
+  returnTo?: string;
+  purpose?: string;
+  createdVia?: string;
+}): Promise<{ url: string; sessionId: string; customerId: string }> {
+  const { customerId } = await ensureStripeCustomer({
+    shopId: opts.shopId,
+    ownerEmail: opts.ownerEmail,
+    createdVia: opts.createdVia,
+  });
+
+  const baseUrl = getBaseUrl();
+  const returnTo =
+    opts.returnTo && opts.returnTo.startsWith("/")
+      ? opts.returnTo
+      : "/dashboard";
+
+  const session = await getStripe().checkout.sessions.create({
+    mode: "setup",
+    customer: customerId,
+    payment_method_types: ["card"],
+    success_url: `${baseUrl}${returnTo}?card_setup=success`,
+    cancel_url: `${baseUrl}${returnTo}?card_setup=cancelled`,
+    metadata: {
+      shopId: String(opts.shopId),
+      purpose: opts.purpose || "card_capture",
+      createdVia: opts.createdVia || "createCardSetupSession",
+    },
+  });
+
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return { url: session.url, sessionId: session.id, customerId };
+}

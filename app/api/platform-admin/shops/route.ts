@@ -341,6 +341,7 @@ export async function GET() {
           stripeSubscriptionAmount: (typeof shop.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
             ?? (typeof shop.billing?.stripeSubscriptionAmount === "number" ? shop.billing.stripeSubscriptionAmount : null),
           stripeProductName: shop.billing?.stripeProductName || null,
+          stripeCustomerId: shop.billing?.stripeCustomerId || shop.stripeCustomerId || null,
         },
         stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
         stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,

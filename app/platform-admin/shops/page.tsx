@@ -18,6 +18,7 @@ interface ShopBilling {
   status?: string;
   stripeSubscriptionAmount?: number | null;
   stripeProductName?: string | null;
+  stripeCustomerId?: string | null;
   cardOnFile?: boolean;
 }
 
@@ -233,6 +234,7 @@ export default function PlatformShopsPage() {
   const [openMenuShopId, setOpenMenuShopId] = useState<string | null>(null);
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
+  const [trialResetDays, setTrialResetDays] = useState<string>("14");
   const [groupByEnterprise, setGroupByEnterprise] = useState(false);
   type TrialFilter = "all" | "trial_active" | "ending_7" | "ending_3" | "expired" | "no_card";
   type SortBy = "createdAt" | "trialEndsAt";
@@ -604,7 +606,89 @@ export default function PlatformShopsPage() {
       status: shop.billing.status || "trial",
     });
     setVinInput(String(shop.billing.vinLimit || 10));
+    setTrialResetDays(String(defaultTrialDays || 14));
     setModalAction("manageFeatures");
+  };
+
+  const resetTrialFromModal = async () => {
+    if (!selectedShop) return;
+    const days = Number(trialResetDays);
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      alert("Trial days must be between 1 and 365");
+      return;
+    }
+    if (!confirm(`Reset trial for "${selectedShop.name}" to ${days} days starting now? This clears any prior trial reminder/suspension state.`)) return;
+    setActionLoading(`${selectedShop.shopId}-reset-trial`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${selectedShop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trial: { setDays: days } }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Trial reset");
+        loadShops();
+        setSelectedShop(null);
+        setModalAction(null);
+      } else {
+        alert(data.error || "Failed to reset trial");
+      }
+    } catch (err) {
+      console.error("Reset trial error:", err);
+      alert("Failed to reset trial");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const createStripeCustomerFromModal = async () => {
+    if (!selectedShop) return;
+    setActionLoading(`${selectedShop.shopId}-stripe-customer`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${selectedShop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_stripe_customer" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Stripe customer ready");
+        loadShops();
+      } else {
+        alert(data.error || "Failed to create Stripe customer");
+      }
+    } catch (err) {
+      console.error("Create Stripe customer error:", err);
+      alert("Failed to create Stripe customer");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const resendCardCaptureFromModal = async () => {
+    if (!selectedShop) return;
+    if (!confirm(`Resend the card-capture email to the owner of "${selectedShop.name}"?`)) return;
+    setActionLoading(`${selectedShop.shopId}-resend-card-modal`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${selectedShop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend_card_capture" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Card-capture email sent");
+        loadShops();
+      } else {
+        alert(data.error || "Failed to send email");
+      }
+    } catch (err) {
+      console.error("Resend card-capture (modal) error:", err);
+      alert("Failed to send email");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const deleteShop = async (shop: Shop) => {
@@ -1144,6 +1228,92 @@ export default function PlatformShopsPage() {
                     onChange={(e) => setVinInput(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
                   />
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-gray-500" />
+                  Trial &amp; Card Capture
+                </h4>
+
+                <div className="grid grid-cols-2 gap-3 text-xs mb-4">
+                  <div>
+                    <div className="text-gray-500">Current trial</div>
+                    <div className="font-medium text-gray-900">
+                      {selectedShop.trial?.endsAt
+                        ? `${selectedShop.trial.daysLeft ?? "?"} days left · ends ${new Date(selectedShop.trial.endsAt).toLocaleDateString()}`
+                        : "No active trial"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Stripe customer</div>
+                    <div className="font-medium text-gray-900 break-all">
+                      {selectedShop.billing.stripeCustomerId ? (
+                        <span title={selectedShop.billing.stripeCustomerId}>
+                          {selectedShop.billing.stripeCustomerId}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700">Not yet created</span>
+                      )}
+                    </div>
+                    <div className="text-gray-500 mt-0.5">
+                      Card on file: {selectedShop.billing.cardOnFile || selectedShop.cardOnFile ? "Yes" : "No"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Reset trial to (days from now)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={trialResetDays}
+                        onChange={(e) => setTrialResetDays(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+                      />
+                      <button
+                        onClick={resetTrialFromModal}
+                        disabled={actionLoading === `${selectedShop.shopId}-reset-trial`}
+                        className="px-3 py-2 text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        {actionLoading === `${selectedShop.shopId}-reset-trial` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reset Trial
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Starts a fresh trial from today. Clears reminder and suspension state. Blocked on active paid shops.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {!selectedShop.billing.stripeCustomerId && (
+                      <button
+                        onClick={createStripeCustomerFromModal}
+                        disabled={actionLoading === `${selectedShop.shopId}-stripe-customer`}
+                        className="px-3 py-2 text-xs bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {actionLoading === `${selectedShop.shopId}-stripe-customer` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Create Stripe Customer
+                      </button>
+                    )}
+                    <button
+                      onClick={resendCardCaptureFromModal}
+                      disabled={actionLoading === `${selectedShop.shopId}-resend-card-modal`}
+                      className="px-3 py-2 text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {actionLoading === `${selectedShop.shopId}-resend-card-modal` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <Mail className="w-3.5 h-3.5" />
+                      {selectedShop.billing.cardOnFile || selectedShop.cardOnFile
+                        ? "Resend Card-Capture Email"
+                        : "Send Card-Capture Email"}
+                    </button>
+                  </div>
                 </div>
               </div>
 

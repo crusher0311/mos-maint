@@ -10,6 +10,7 @@ import {
   type BillingStatus
 } from "@/lib/featureResolver";
 import { resendCardCaptureForShop } from "@/lib/card-capture-resend";
+import { ensureStripeCustomer } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,15 @@ export async function GET(
 
     const vinViewCount = await db.collection("viewed_vins").countDocuments({ shopId });
 
+    const trialEndsAtRaw = shop.trial?.endsAt || shop.trialEndsAt || null;
+    const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;
+    const trialStartedAtRaw = shop.trial?.startedAt || shop.trialStartedAt || null;
+    const trialStartedAt = trialStartedAtRaw ? new Date(trialStartedAtRaw) : null;
+    const trialDaysLength = shop.trial?.days ?? shop.trialDays ?? null;
+    const trialDaysLeft = trialEndsAt
+      ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : null;
+
     return NextResponse.json({
       ok: true,
       shop: {
@@ -46,7 +56,15 @@ export async function GET(
           status: shop.billing?.status || "trial",
           vinLimit: shop.trialVinLimit || 10,
           vinViewCount,
+          stripeCustomerId: shop.billing?.stripeCustomerId || shop.stripeCustomerId || null,
+          cardOnFile: !!shop.cardOnFile,
         },
+        trial: trialEndsAt ? {
+          startedAt: trialStartedAt,
+          endsAt: trialEndsAt,
+          days: trialDaysLength,
+          daysLeft: trialDaysLeft,
+        } : null,
         enabledFeatures: shop.enabledFeatures || {},
         createdAt: shop.createdAt,
         isLocked: shop.isLocked || false,
@@ -85,6 +103,68 @@ export async function PATCH(
       const currentEndsAt: Date | null = shop.trial?.endsAt
         ? new Date(shop.trial.endsAt)
         : (shop.trialEndsAt ? new Date(shop.trialEndsAt) : null);
+
+      if (trial.setDays !== undefined && trial.setDays !== null) {
+        const days = Number(trial.setDays);
+        if (!Number.isFinite(days) || days < 1 || days > MAX_TRIAL_DAYS) {
+          return NextResponse.json(
+            { error: `setDays must be between 1 and ${MAX_TRIAL_DAYS}` },
+            { status: 400 }
+          );
+        }
+        const daysFloored = Math.floor(days);
+        const newEndsAt = new Date(now.getTime() + daysFloored * 24 * 60 * 60 * 1000);
+        const status = shop.billing?.status;
+        const isPaidActive =
+          status === "active" &&
+          shop.billing?.plan &&
+          shop.billing.plan !== "trial" &&
+          shop.billing.plan !== "trialing";
+        if (isPaidActive) {
+          return NextResponse.json(
+            { error: "Cannot reset trial on an active paid shop. Change billing.plan to 'trial' first." },
+            { status: 409 }
+          );
+        }
+        const updateOps: Record<string, any> = {
+          $set: {
+            "trial.mode": "days",
+            "trial.days": daysFloored,
+            "trial.startedAt": now,
+            "trial.endsAt": newEndsAt,
+            "trial.reminderSent": {},
+            trialDays: daysFloored,
+            trialStartedAt: now,
+            trialEndsAt: newEndsAt,
+            "billing.plan": shop.billing?.plan && shop.billing.plan !== "trial" ? shop.billing.plan : "trial",
+            "billing.status": "trial",
+            updatedAt: now,
+          },
+          $unset: {
+            isLocked: "",
+            lockedAt: "",
+            lockedBy: "",
+            trialSuspendedAt: "",
+            trialConvertedAt: "",
+          },
+        };
+        await db.collection("shops").updateOne({ shopId }, updateOps);
+        await db.collection("audit_logs").insertOne({
+          type: "shop_trial_reset",
+          shopId,
+          shopName: shop.name,
+          previousEndsAt: currentEndsAt,
+          newEndsAt,
+          days: daysFloored,
+          adminEmail: session.email,
+          createdAt: now,
+        });
+        return NextResponse.json({
+          ok: true,
+          message: `Trial reset to ${daysFloored} days (ends ${newEndsAt.toLocaleDateString()})`,
+          trial: { startedAt: now, endsAt: newEndsAt, days: daysFloored },
+        });
+      }
 
       let newEndsAt: Date | null = null;
       let extendDaysApplied: number | null = null;
@@ -177,6 +257,60 @@ export async function PATCH(
         createdAt: new Date(),
       });
       return NextResponse.json({ ok: true, message: "Shop locked" });
+    }
+
+    if (action === "create_stripe_customer") {
+      const numericShopId = typeof shopId === "number" ? shopId : Number(shopId);
+      if (!Number.isFinite(numericShopId)) {
+        return NextResponse.json(
+          { error: "create_stripe_customer requires a numeric shopId" },
+          { status: 400 }
+        );
+      }
+      const owner = await db.collection("users").findOne(
+        { shopId, role: { $in: ["owner", "admin"] } },
+        { projection: { email: 1, emailLower: 1 } }
+      );
+      const ownerEmail: string | undefined = owner?.email || owner?.emailLower;
+      if (!ownerEmail) {
+        return NextResponse.json(
+          { error: "No owner/admin user found for this shop" },
+          { status: 400 }
+        );
+      }
+      try {
+        const result = await ensureStripeCustomer({
+          shopId: numericShopId,
+          ownerEmail,
+          createdVia: "platform_admin_manage_shop",
+          createdBy: session.email,
+        });
+        if (result.created) {
+          await db.collection("audit_logs").insertOne({
+            type: "shop_stripe_customer_created",
+            shopId,
+            shopName: shop.name,
+            stripeCustomerId: result.customerId,
+            ownerEmail,
+            adminEmail: session.email,
+            createdAt: new Date(),
+          });
+        }
+        return NextResponse.json({
+          ok: true,
+          customerId: result.customerId,
+          created: result.created,
+          message: result.created
+            ? `Created Stripe customer ${result.customerId}`
+            : `Stripe customer already exists (${result.customerId})`,
+        });
+      } catch (err: any) {
+        console.error(`[Platform Admin] ensure_stripe_customer failed for shop ${shopId}:`, err?.message);
+        return NextResponse.json(
+          { error: err?.message || "Failed to create Stripe customer" },
+          { status: 500 }
+        );
+      }
     }
 
     if (action === "resend_card_capture") {
