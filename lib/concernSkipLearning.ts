@@ -135,9 +135,17 @@ export async function recordRoundResults(opts: {
 }
 
 /**
- * Look up skip hints for `(shopId, symptomCategory)`. Falls back to the
- * global rollup for any normalized question with no per-shop history yet,
- * so brand-new shops still benefit from cross-shop patterns.
+ * Look up skip hints for `(shopId, symptomCategory)`. Reads ONLY this
+ * shop's own per-shop rollup — never the global one (Task #272). A shop
+ * with no history yet returns empty hints, so it behaves like the
+ * pre-#264 assistant rather than inheriting other shops' patterns. The
+ * global rollup keeps being written by `recordRoundResults` so the
+ * admin skip-stats view (Task #268) still works, it just no longer
+ * influences prompts.
+ *
+ * When `shopId` is null/missing (e.g. an unauthenticated or shop-less
+ * call path) we return empty hints rather than falling back to global,
+ * so cross-shop bleed-through is impossible.
  */
 export async function getSkipHints(opts: {
   db: Db;
@@ -148,49 +156,28 @@ export async function getSkipHints(opts: {
   const { db, symptomCategory } = opts;
   const minAsked = opts.minAsked ?? MIN_ASKED_FOR_HIGH_SKIP;
   const shopIdStr = opts.shopId == null ? null : String(opts.shopId);
+  if (shopIdStr == null) return { avoid: [], prefer: [] };
   const col = db.collection(SKIP_STATS_COLLECTION);
 
-  const shopDocs = shopIdStr
-    ? await col.find({ shopId: shopIdStr, symptomCategory }).toArray()
-    : [];
-  const globalDocs = await col.find({ shopId: null, symptomCategory }).toArray();
+  const shopDocs = await col.find({ shopId: shopIdStr, symptomCategory }).toArray();
 
-  const byNorm = new Map<string, { doc: any; fromGlobal: boolean }>();
-  for (const d of globalDocs) byNorm.set(d.normalizedQuestion, { doc: d, fromGlobal: true });
-  for (const d of shopDocs) byNorm.set(d.normalizedQuestion, { doc: d, fromGlobal: false });
-
-  const scored = Array.from(byNorm.values())
-    .map(({ doc: d, fromGlobal }) => {
+  const scored = shopDocs
+    .map((d: any) => {
       const asked = Number(d.asked || 0);
       const skipped = Number(d.skipped || 0);
       const rate = asked > 0 ? skipped / asked : 0;
-      // Legacy global docs written before Task #269 lack
-      // `contributingShopIds` entirely. Grandfather them in (treat the
-      // count as Infinity) so the guardrail doesn't retroactively
-      // suppress hints that were already in use — the quorum only
-      // gates docs written under the new schema.
-      const hasField = Array.isArray(d.contributingShopIds);
-      const distinctShops = hasField
-        ? d.contributingShopIds.length
-        : Number.POSITIVE_INFINITY;
       return {
         question: String(d.lastSampleText || d.normalizedQuestion),
         normalized: String(d.normalizedQuestion),
         asked,
         skipped,
         rate,
-        fromGlobal,
-        distinctShops,
       };
     })
     .filter((x) => x.asked >= minAsked);
 
   const avoid = scored
     .filter((x) => x.rate >= HIGH_SKIP_RATE)
-    // Global-only entries need a quorum of distinct contributing shops, so
-    // one outlier shop's quirky skip habits can't poison the avoid list for
-    // every other shop (Task #269). Per-shop entries are unaffected.
-    .filter((x) => !x.fromGlobal || x.distinctShops >= MIN_DISTINCT_SHOPS_FOR_GLOBAL_SKIP)
     .sort((a, b) => b.rate - a.rate || b.asked - a.asked)
     .slice(0, MAX_HINTS_PER_LIST);
 
