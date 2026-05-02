@@ -374,6 +374,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
               <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />
               <NavLink href="/platform-admin/partner-keys" icon={KeyRound} label="Partner Keys" />
               <NavLink href="/platform-admin/job-analytics" icon={BarChart3} label="Job Analytics" />
+              <NavLink href="/platform-admin/vhi-analytics" icon={BarChart3} label="VHI Analytics" />
               <NavLink href="/platform-admin/render" icon={FileText} label="Render Logs" />
               <NavLink href="/platform-admin/logs" icon={ScrollText} label="Production Logs" />
 
