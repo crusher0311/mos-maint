@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X, Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock, CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle, Mail, CreditCard, ShieldCheck, ShieldAlert, Flag } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  Building2, Search, RefreshCw, LogIn, Loader2, RotateCcw, Plus, Settings, X,
+  Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock,
+  CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle,
+  Mail, CreditCard, ShieldCheck, ShieldAlert, Flag,
+  MoreHorizontal, Users, Car, TrendingUp, Sparkles,
+} from "lucide-react";
 import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
 
 interface ShopBilling {
@@ -68,12 +74,8 @@ interface IntegrationDetails {
     phone: string | null;
     timeZone: string | null;
   } | null;
-  carfax?: {
-    locationId: string;
-  } | null;
-  tekmetric?: {
-    shopId: string | number;
-  } | null;
+  carfax?: { locationId: string } | null;
+  tekmetric?: { shopId: string | number } | null;
 }
 
 interface CardCaptureEmailEntry {
@@ -192,9 +194,7 @@ function describeCardCaptureSource(entry: CardCaptureEmailEntry): string {
 }
 
 function buildCardCaptureHistoryTitle(history: CardCaptureEmailEntry[] | undefined): string {
-  if (!history || history.length === 0) {
-    return "No card-capture emails sent yet";
-  }
+  if (!history || history.length === 0) return "No card-capture emails sent yet";
   const lines = history.map((e) => {
     const when = e.sentAt ? new Date(e.sentAt).toLocaleString() : "unknown time";
     const who = e.recipient || "unknown recipient";
@@ -202,6 +202,17 @@ function buildCardCaptureHistoryTitle(history: CardCaptureEmailEntry[] | undefin
   });
   return `Card-capture email history (most recent first):\n${lines.join("\n")}`;
 }
+
+const isActiveOrTrial = (shop: Shop): boolean => {
+  if (shop.isLocked) return false;
+  const status = shop.billing.status;
+  return status === "active" || status === "trial";
+};
+
+const isDetectDogFounderActive = (shop: Shop): boolean =>
+  shop.billing.plan === "detect_dog_founder" && shop.billing.status === "active";
+
+type KpiFilter = "none" | "activeOrTrial" | "detectDogFounder";
 
 export default function PlatformShopsPage() {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -219,6 +230,7 @@ export default function PlatformShopsPage() {
   const [vinInput, setVinInput] = useState("");
   const [modalAction, setModalAction] = useState<"setLimit" | "addViews" | "resetLimit" | "manageFeatures" | null>(null);
   const [expandedShop, setExpandedShop] = useState<string | null>(null);
+  const [openMenuShopId, setOpenMenuShopId] = useState<string | null>(null);
   const [featureEdits, setFeatureEdits] = useState<ShopFeatures>({});
   const [billingEdits, setBillingEdits] = useState<{ plan: string; status: string }>({ plan: "trial", status: "trial" });
   const [groupByEnterprise, setGroupByEnterprise] = useState(false);
@@ -242,6 +254,7 @@ export default function PlatformShopsPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [bulkApproveConfirmOpen, setBulkApproveConfirmOpen] = useState(false);
   const [bulkApproveSubmitting, setBulkApproveSubmitting] = useState(false);
+  const [kpiFilter, setKpiFilter] = useState<KpiFilter>("none");
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkSending, setBulkSending] = useState(false);
   type BulkResult = {
@@ -269,14 +282,8 @@ export default function PlatformShopsPage() {
     vinLimit: "10",
     trialDays: "14",
     features: {
-      maintenance: true,
-      job_lookup: false,
-      common_failures: false,
-      oil_sticker: false,
-      keytags: false,
-      auto_booking: false,
-      part_xref: false,
-      labor_rates: false,
+      maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false,
+      keytags: false, auto_booking: false, part_xref: false, labor_rates: false,
     } as ShopFeatures,
   });
   const [createLoading, setCreateLoading] = useState(false);
@@ -581,48 +588,20 @@ export default function PlatformShopsPage() {
     }
   };
 
-  const triggerBackfill = async (shopId: number | string, action: "resume" | "reset") => {
-    const numericShopId = typeof shopId === 'string' ? parseInt(shopId) : shopId;
-    setActionLoading(`${shopId}-backfill`);
-    try {
-      const res = await fetch("/api/platform-admin/backfill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shopId: numericShopId, action }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        alert(data.message);
-        loadShops();
-      } else {
-        alert(data.error || "Backfill action failed");
-      }
-    } catch (err) {
-      console.error("Backfill error:", err);
-      alert("Backfill action failed");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const openFeatureModal = (shop: Shop) => {
     setSelectedShop(shop);
-    
-    // Convert enabledFeatures to object format if it's an array
     let features: ShopFeatures = {};
     if (Array.isArray(shop.enabledFeatures)) {
-      // Convert array format to object format
       shop.enabledFeatures.forEach((f: string) => {
         features[f as keyof ShopFeatures] = true;
       });
     } else if (shop.enabledFeatures && typeof shop.enabledFeatures === 'object') {
       features = shop.enabledFeatures;
     }
-    
     setFeatureEdits(features);
-    setBillingEdits({ 
-      plan: shop.billing.plan || "trial", 
-      status: shop.billing.status || "trial" 
+    setBillingEdits({
+      plan: shop.billing.plan || "trial",
+      status: shop.billing.status || "trial",
     });
     setVinInput(String(shop.billing.vinLimit || 10));
     setModalAction("manageFeatures");
@@ -674,18 +653,26 @@ export default function PlatformShopsPage() {
     }
   };
 
-  // Sync the create-shop form's trialDays to the platform default
-  // whenever it loads or changes, so the configured billing setting is
-  // honored on first open instead of the hardcoded "14".
   useEffect(() => {
     setCreateShopData((prev) =>
       prev.trialDays === String(defaultTrialDays) ? prev : { ...prev, trialDays: String(defaultTrialDays) },
     );
   }, [defaultTrialDays]);
 
+  // KPI numbers
+  const activeOrTrialShops = shops.filter(isActiveOrTrial);
+  const activeCount = activeOrTrialShops.filter((s) => s.billing.status === "active").length;
+  const trialingCount = activeOrTrialShops.filter((s) => s.billing.status === "trial").length;
+  const detectDogFounderShops = shops.filter(isDetectDogFounderActive);
+
   const searchLower = search.toLowerCase();
   const now = Date.now();
   const filteredShops = shops
+    .filter((shop) => {
+      if (kpiFilter === "activeOrTrial") return isActiveOrTrial(shop);
+      if (kpiFilter === "detectDogFounder") return isDetectDogFounderActive(shop);
+      return true;
+    })
     .filter(shop =>
       shop.name?.toLowerCase().includes(searchLower) ||
       (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
@@ -718,11 +705,7 @@ export default function PlatformShopsPage() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  
-  // Shops eligible for bulk card-capture: trial shops with no card on file
-  // (regardless of trial filter, but constrained to whatever the admin has
-  // already narrowed to via search + trial filter so they only nudge the
-  // cohort they're looking at).
+
   const bulkEligibleShops = filteredShops.filter(
     (s) => !!s.trial?.endsAt && !s.cardOnFile,
   );
@@ -734,21 +717,14 @@ export default function PlatformShopsPage() {
     (s) => (s.reviewStatus || "approved") === "pending",
   );
 
-  // Group shops by enterprise if enabled
-  const groupedShops = groupByEnterprise 
+  const groupedShops = groupByEnterprise
     ? (() => {
-        const groups: { enterprise: string | null; shops: Shop[] }[] = [];
         const enterpriseMap = new Map<string | null, Shop[]>();
-        
         filteredShops.forEach(shop => {
           const key = shop.enterpriseId || null;
-          if (!enterpriseMap.has(key)) {
-            enterpriseMap.set(key, []);
-          }
+          if (!enterpriseMap.has(key)) enterpriseMap.set(key, []);
           enterpriseMap.get(key)!.push(shop);
         });
-        
-        // Sort: enterprises first (alphabetically), then standalone shops
         const enterpriseKeys = Array.from(enterpriseMap.keys()).sort((a, b) => {
           if (a === null) return 1;
           if (b === null) return -1;
@@ -756,7 +732,7 @@ export default function PlatformShopsPage() {
           const nameB = enterpriseMap.get(b)?.[0]?.enterpriseName || '';
           return nameA.localeCompare(nameB);
         });
-        
+        const groups: { enterprise: string | null; shops: Shop[] }[] = [];
         enterpriseKeys.forEach(key => {
           const shopsInGroup = enterpriseMap.get(key)!;
           groups.push({
@@ -764,7 +740,6 @@ export default function PlatformShopsPage() {
             shops: shopsInGroup.sort((a, b) => (a.locationIdentifier || a.name).localeCompare(b.locationIdentifier || b.name))
           });
         });
-        
         return groups;
       })()
     : null;
@@ -774,11 +749,52 @@ export default function PlatformShopsPage() {
       <div className="p-8">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="h-24 bg-gray-200 rounded-xl"></div>
           <div className="h-64 bg-gray-200 rounded-lg"></div>
         </div>
       </div>
     );
   }
+
+  const toggleKpi = (next: KpiFilter) => {
+    setKpiFilter((current) => (current === next ? "none" : next));
+  };
+
+  const rowProps = {
+    actionLoading,
+    impersonating,
+    expandedShop,
+    setExpandedShop,
+    openMenuShopId,
+    setOpenMenuShopId,
+    accessShop,
+    openFeatureModal,
+    toggleLock,
+    deleteShop,
+    resendCardCaptureEmail,
+    triggerApproveReview: (shop: Shop) => {
+      setReviewNotesInput("");
+      setReviewDialog({ shop, mode: "approve" });
+    },
+    triggerFlagReview: (shop: Shop) => {
+      setReviewNotesInput(shop.reviewNotes || "");
+      setReviewDialog({ shop, mode: "flag" });
+    },
+    triggerExtendTrial: (shop: Shop) => { setExtendTrialShop(shop); setExtendTrialDays("14"); },
+    triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => {
+      setSelectedShop(shop);
+      setModalAction(action);
+      if (action === "addViews") setVinInput("10");
+      else if (action === "setLimit") setVinInput(String(shop.billing.vinLimit));
+    },
+    triggerResetViews: (shop: Shop) => {
+      if (confirm(`Reset all viewed VINs for ${shop.name}? This will start their trial fresh.`)) {
+        vinAction(shop.shopId, "resetViews");
+      }
+    },
+  };
+
+  const colSpan = 6;
 
   return (
     <div className="p-8 space-y-6">
@@ -832,6 +848,28 @@ export default function PlatformShopsPage() {
             Create Shop
           </button>
         </div>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <KpiCard
+          icon={<TrendingUp className="w-5 h-5 text-green-600" />}
+          iconBg="bg-green-100"
+          label="Total Shops Active/Trial"
+          value={activeOrTrialShops.length}
+          subtitle={`${activeCount} active · ${trialingCount} in trial`}
+          active={kpiFilter === "activeOrTrial"}
+          onClick={() => toggleKpi("activeOrTrial")}
+        />
+        <KpiCard
+          icon={<Sparkles className="w-5 h-5 text-amber-600" />}
+          iconBg="bg-amber-100"
+          label="Detect Dog Founder Active Subscriptions"
+          value={detectDogFounderShops.length}
+          subtitle={detectDogFounderShops.length === 1 ? "1 paid founder shop" : `${detectDogFounderShops.length} paid founder shops`}
+          active={kpiFilter === "detectDogFounder"}
+          onClick={() => toggleKpi("detectDogFounder")}
+        />
       </div>
 
       <div className="flex flex-wrap gap-4 items-center">
@@ -902,11 +940,7 @@ export default function PlatformShopsPage() {
             title="Resend the card-capture email to every filtered trial shop without a card on file"
             className="flex items-center gap-2 px-3 py-2 text-sm bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg disabled:opacity-50"
           >
-            {bulkSending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Mail className="w-4 h-4" />
-            )}
+            {bulkSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
             Resend card-capture to {bulkEligibleShops.length} shop{bulkEligibleShops.length === 1 ? "" : "s"}
           </button>
         )}
@@ -939,29 +973,25 @@ export default function PlatformShopsPage() {
         <table className="w-full min-w-[1000px]">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Shop</th>
-              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">ID</th>
-              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Users</th>
-              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Vehicles</th>
-              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">VIN Usage</th>
-              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Stickers</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Integrations</th>
-              <th className="text-center px-4 py-3 text-sm font-medium text-gray-600">Backfill</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Created</th>
-              <th className="text-right px-4 py-3 text-sm font-medium text-gray-600">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Shop</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Usage</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Integrations</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Backfill</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Created</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredShops.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                  {search ? "No shops match your search" : "No shops yet"}
+                <td colSpan={colSpan} className="px-4 py-8 text-center text-gray-500">
+                  {search || kpiFilter !== "none" || trialFilter !== "all" ? "No shops match your filters" : "No shops yet"}
                 </td>
               </tr>
             ) : groupByEnterprise && groupedShops ? (
               groupedShops.flatMap((group, groupIndex) => [
                 <tr key={`group-${groupIndex}`} className="bg-gray-100">
-                  <td colSpan={9} className="px-4 py-2">
+                  <td colSpan={colSpan} className="px-4 py-2">
                     <div className="flex items-center gap-2 font-medium text-gray-700">
                       <Building2 className="w-4 h-4" />
                       {group.enterprise || "Standalone Shops"}
@@ -969,743 +999,15 @@ export default function PlatformShopsPage() {
                     </div>
                   </td>
                 </tr>,
-                ...group.shops.flatMap((shop) => [
-                <tr key={`${shop._id}-row`} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-[rgba(60,129,195,0.15)]"}`}>
-                        {shop.isLocked ? (
-                          <Lock className="w-4 h-4 text-red-600" />
-                        ) : (
-                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-[#3c81c3]"}`} />
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
-                          {shop.locationIdentifier && (
-                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
-                          )}
-                          {shop.isLocked && (
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
-                          )}
-                          <span className={`px-1.5 py-0.5 text-xs rounded ${planColors[shop.billing.plan] || planColors.trial}`}>
-                            {planLabels[shop.billing.plan] || shop.billing.plan}
-                          </span>
-                          {typeof shop.billing.stripeSubscriptionAmount === "number" && shop.billing.stripeSubscriptionAmount > 0 && (
-                            <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
-                              ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
-                            </span>
-                          )}
-                          {shop.trial?.endsAt && (
-                            <TrialBadge trial={shop.trial} />
-                          )}
-                          {shop.cardOnFile ? (
-                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded inline-flex items-center gap-1" title="Payment method on file">
-                              <CreditCard className="w-3 h-3" /> Card on file
-                            </span>
-                          ) : shop.trial?.endsAt ? (
-                            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded inline-flex items-center gap-1" title="No payment method on file yet">
-                              <CreditCard className="w-3 h-3" /> No card
-                            </span>
-                          ) : null}
-                          {shop.trial?.endsAt && (
-                            <button
-                              onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
-                              className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded"
-                              title="Extend trial"
-                            >
-                              Extend
-                            </button>
-                          )}
-                          <ReviewBadges shop={shop} />
-                        </div>
-                        {shop.enterpriseName && !groupByEnterprise && (
-                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">{shop.shopId}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="text-center">
-                        <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : shop.billing.isPaid ? "text-green-600" : "text-gray-900"}`}>
-                          {shop.billing.vinViewCount} / {shop.billing.vinLimit}
-                          {shop.billing.isPaid && <span className="ml-1 text-green-500 text-xs">(Paid)</span>}
-                        </div>
-                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-[#3c81c3]"}`}
-                            style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5">
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
-                          title="Add VINs"
-                          className="p-1 text-green-600 hover:bg-green-50 rounded"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
-                          title="Set Custom Limit"
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
-                          title="Reset to Default Limit"
-                          className="p-1 text-gray-500 hover:bg-gray-50 rounded"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { if(confirm(`Reset all viewed VINs for ${shop.name}? This will start their trial fresh.`)) vinAction(shop.shopId, "resetViews"); }}
-                            title="Reset Viewed VINs (Start Fresh)"
-                            disabled={actionLoading === `${shop.shopId}-resetViews`}
-                            className="p-1 text-orange-600 hover:bg-orange-50 rounded disabled:opacity-50"
-                          >
-                            {actionLoading === `${shop.shopId}-resetViews` ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <RotateCcw className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="text-sm">
-                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
-                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
-                    </div>
-                    <div className="text-xs text-gray-500">this month / total</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {shop.integrations?.length > 0 ? (
-                      <button
-                        onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
-                        className="flex items-center gap-1 text-left hover:bg-gray-50 rounded px-1 -mx-1"
-                      >
-                        <div className="flex gap-1 flex-wrap items-center">
-                          {shop.integrations.map(int => {
-                            const iconMap: Record<string, string> = {
-                              "Protractor": "/protractor-icon.png",
-                              "Tekmetric": "/tekmetric-logo.png",
-                              "CARFAX": "/icons/carfax.png",
-                              "AutoFlow": "/icons/autoflow.png",
-                              "Shop-Ware": "/logos/shopware.png",
-                            };
-                            const icon = iconMap[int];
-                            return icon ? (
-                              <img 
-                                key={int}
-                                src={icon}
-                                alt={int}
-                                title={int}
-                                className="w-6 h-6 rounded object-contain"
-                              />
-                            ) : (
-                              <span key={int} className={`px-2 py-0.5 text-xs rounded font-medium ${
-                                int === "AutoVitals" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"
-                              }`}>
-                                {int}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        {expandedShop === shop._id ? (
-                          <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        )}
-                      </button>
-                    ) : (
-                      <span className="text-gray-400 text-sm">None</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {shop.backfill ? (
-                      shop.backfill.status === "completed" ? (
-                        <div className="flex items-center justify-center gap-1" title={`Completed: ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          <span className="text-xs text-green-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "active" ? (
-                        <div className="flex items-center justify-center gap-1" title={`Active: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleTimeString() : 'unknown'}`}>
-                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                          <span className="text-xs text-blue-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "stale" ? (
-                        <div className="flex items-center justify-center gap-1" title={`Stale (no activity in 5+ min): ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleString() : 'unknown'}`}>
-                          <AlertCircle className="w-4 h-4 text-orange-500" />
-                          <span className="text-xs text-orange-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "error" ? (
-                        <div className="flex items-center justify-center gap-1" title={`Error: ${shop.backfill.lastError || 'Unknown error'}. Last run: ${shop.backfill.lastErrorAt ? new Date(shop.backfill.lastErrorAt).toLocaleString() : 'unknown'}`}>
-                          <XCircle className="w-4 h-4 text-red-500" />
-                          <span className="text-xs text-red-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1" title={`Pending: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
-                          <Pause className="w-4 h-4 text-amber-500" />
-                          <span className="text-xs text-amber-600">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      )
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-sm">
-                    {new Date(shop.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openFeatureModal(shop)}
-                        disabled={actionLoading !== null}
-                        title="Manage billing & features"
-                        className="p-1.5 text-[#3c81c3] hover:bg-[rgba(60,129,195,0.1)] rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
-                      {(shop.reviewStatus || "approved") !== "approved" && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setReviewNotesInput("");
-                              setReviewDialog({ shop, mode: "approve" });
-                            }}
-                            disabled={actionLoading !== null}
-                            title="Approve shop (re-enables transactional email)"
-                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
-                          >
-                            {actionLoading === `${shop.shopId}-review-approve` ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <ShieldCheck className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setReviewNotesInput(shop.reviewNotes || "");
-                              setReviewDialog({ shop, mode: "flag" });
-                            }}
-                            disabled={actionLoading !== null}
-                            title="Flag shop with notes (keeps email suppressed)"
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                          >
-                            {actionLoading === `${shop.shopId}-review-flag` ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Flag className="w-4 h-4" />
-                            )}
-                          </button>
-                        </>
-                      )}
-                      {shop.trial?.endsAt && (() => {
-                        const lastEmail = shop.lastCardCaptureEmail || null;
-                        const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
-                        const sentMs = lastEmail?.sentAt ? Date.now() - new Date(lastEmail.sentAt).getTime() : null;
-                        const isRecent = sentMs !== null && sentMs < 24 * 60 * 60 * 1000;
-                        const baseTitle = shop.cardOnFile
-                          ? "Resend card-capture email (card already on file)"
-                          : "Resend card-capture email to owner";
-                        const historyTitle = buildCardCaptureHistoryTitle(shop.cardCaptureEmailHistory);
-                        const lastLine = lastEmail
-                          ? `Last sent ${sentAgo} to ${lastEmail.recipient || "unknown"} via ${describeCardCaptureSource(lastEmail)}`
-                          : "No card-capture emails sent yet";
-                        return (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => resendCardCaptureEmail(shop)}
-                              disabled={actionLoading !== null}
-                              title={`${baseTitle}\n\n${lastLine}\n\n${historyTitle}`}
-                              className={`relative p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                                shop.cardOnFile
-                                  ? "text-gray-500 hover:bg-gray-50"
-                                  : "text-amber-600 hover:bg-amber-50"
-                              }`}
-                            >
-                              {actionLoading === `${shop.shopId}-resend-card` ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Mail className="w-4 h-4" />
-                              )}
-                              {isRecent && (
-                                <span
-                                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
-                                  aria-hidden="true"
-                                />
-                              )}
-                            </button>
-                            {sentAgo && (
-                              <span
-                                className={`text-[11px] leading-tight ${isRecent ? "text-emerald-700" : "text-gray-500"} flex flex-col max-w-[140px]`}
-                                title={`${lastLine}\n\n${historyTitle}`}
-                              >
-                                <span className="whitespace-nowrap">Sent {sentAgo}</span>
-                                {lastEmail?.recipient && (
-                                  <span className="truncate text-gray-500">
-                                    to {lastEmail.recipient}
-                                    {lastEmail.source === "admin" ? " · admin" : " · cron"}
-                                  </span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      <button
-                        onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
-                        disabled={actionLoading !== null}
-                        title={shop.isLocked ? "Unlock shop" : "Lock shop"}
-                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                          shop.isLocked 
-                            ? "text-green-600 hover:bg-green-50" 
-                            : "text-orange-600 hover:bg-orange-50"
-                        }`}
-                      >
-                        {actionLoading === `${shop.shopId}-lock` || actionLoading === `${shop.shopId}-unlock` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : shop.isLocked ? (
-                          <Unlock className="w-4 h-4" />
-                        ) : (
-                          <Lock className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => deleteShop(shop)}
-                        disabled={actionLoading !== null}
-                        title="Delete shop permanently"
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {actionLoading === `${shop.shopId}-delete` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => accessShop(shop.shopId)}
-                        disabled={impersonating !== null || shop.isLocked}
-                        title={shop.isLocked ? "Shop is locked" : "Access this shop"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[rgba(60,129,195,0.75)] text-white text-sm font-medium rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {impersonating === shop.shopId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <LogIn className="w-4 h-4" />
-                        )}
-                        Access
-                      </button>
-                    </div>
-                  </td>
-                </tr>,
-                expandedShop === shop._id && shop.integrationDetails ? (
-                  <tr key={`${shop._id}-expanded`} className="bg-blue-50">
-                    <td colSpan={9} className="px-4 py-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {shop.integrationDetails.protractor && (
-                          <div className="bg-white rounded-lg p-4 border border-blue-200">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">Protractor</span>
-                              <span className="text-xs text-gray-500">
-                                Connected {new Date(shop.integrationDetails.protractor.configuredAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            {shop.integrationDetails.protractor.locationName && (
-                              <div className="font-medium text-gray-900 mb-2">
-                                {shop.integrationDetails.protractor.locationName}
-                                {shop.integrationDetails.protractor.shortName && (
-                                  <span className="text-gray-500 font-normal"> ({shop.integrationDetails.protractor.shortName})</span>
-                                )}
-                              </div>
-                            )}
-                            {shop.integrationDetails.protractor.address && (
-                              <div className="flex items-start gap-2 text-sm text-gray-600 mb-1">
-                                <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                                <span>{shop.integrationDetails.protractor.address}</span>
-                              </div>
-                            )}
-                            {shop.integrationDetails.protractor.phone && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                                <Phone className="w-4 h-4 flex-shrink-0" />
-                                <span>{shop.integrationDetails.protractor.phone}</span>
-                              </div>
-                            )}
-                            {shop.integrationDetails.protractor.timeZone && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Clock className="w-4 h-4 flex-shrink-0" />
-                                <span>{shop.integrationDetails.protractor.timeZone}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {shop.integrationDetails.carfax && (
-                          <div className="bg-white rounded-lg p-4 border border-blue-200">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium">CARFAX</span>
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Location ID:</span> {shop.integrationDetails.carfax.locationId}
-                            </div>
-                          </div>
-                        )}
-                        {shop.integrationDetails.tekmetric && (
-                          <div className="bg-white rounded-lg p-4 border border-blue-200">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded font-medium">Tekmetric</span>
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Shop ID:</span> {shop.integrationDetails.tekmetric.shopId}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : null,
-              ])
+                ...group.shops.map((shop) => (
+                  <ShopRow key={shop._id} shop={shop} hideEnterpriseLine {...rowProps} />
+                )),
               ])
             ) : (
-              filteredShops.flatMap((shop) => [
-                <tr key={`${shop._id}-row-flat`} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-[rgba(60,129,195,0.15)]"}`}>
-                        {shop.isLocked ? (
-                          <Lock className="w-4 h-4 text-red-600" />
-                        ) : (
-                          <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-[#3c81c3]"}`} />
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>{shop.name}</span>
-                          {shop.locationIdentifier && (
-                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{shop.locationIdentifier}</span>
-                          )}
-                          {shop.isLocked && (
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded">Locked</span>
-                          )}
-                          <span className={`px-1.5 py-0.5 text-xs rounded ${planColors[shop.billing.plan] || planColors.trial}`}>
-                            {planLabels[shop.billing.plan] || shop.billing.plan}
-                          </span>
-                          {typeof shop.billing.stripeSubscriptionAmount === "number" && shop.billing.stripeSubscriptionAmount > 0 && (
-                            <span className="text-xs text-gray-500" title={shop.billing.stripeProductName || undefined}>
-                              ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
-                            </span>
-                          )}
-                          {shop.trial?.endsAt && (
-                            <TrialBadge trial={shop.trial} />
-                          )}
-                          {shop.cardOnFile ? (
-                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded inline-flex items-center gap-1" title="Payment method on file">
-                              <CreditCard className="w-3 h-3" /> Card on file
-                            </span>
-                          ) : shop.trial?.endsAt ? (
-                            <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded inline-flex items-center gap-1" title="No payment method on file yet">
-                              <CreditCard className="w-3 h-3" /> No card
-                            </span>
-                          ) : null}
-                          {shop.trial?.endsAt && (
-                            <button
-                              onClick={() => { setExtendTrialShop(shop); setExtendTrialDays("14"); }}
-                              className="px-1.5 py-0.5 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 rounded"
-                              title="Extend trial"
-                            >
-                              Extend
-                            </button>
-                          )}
-                          <ReviewBadges shop={shop} />
-                        </div>
-                        {shop.enterpriseName && (
-                          <div className="text-xs text-gray-500">{shop.enterpriseName}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">{shop.shopId}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{shop.userCount}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{shop.vehicleCount}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="text-center">
-                        <div className={`text-sm font-medium ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "text-red-600" : shop.billing.isPaid ? "text-green-600" : "text-gray-900"}`}>
-                          {shop.billing.vinViewCount} / {shop.billing.vinLimit}
-                          {shop.billing.isPaid && <span className="ml-1 text-green-500 text-xs">(Paid)</span>}
-                        </div>
-                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${shop.billing.vinViewCount >= shop.billing.vinLimit ? "bg-red-500" : shop.billing.isPaid ? "bg-green-500" : "bg-[#3c81c3]"}`}
-                            style={{ width: `${Math.min(100, (shop.billing.vinViewCount / shop.billing.vinLimit) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5">
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("addViews"); setVinInput("10"); }}
-                          title="Add VINs"
-                          className="p-1 text-green-600 hover:bg-green-50 rounded"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("setLimit"); setVinInput(String(shop.billing.vinLimit)); }}
-                          title="Set Custom Limit"
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedShop(shop); setModalAction("resetLimit"); }}
-                          title="Reset to Default"
-                          className="p-1 text-orange-600 hover:bg-orange-50 rounded"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="text-sm">
-                      <span className="font-medium text-gray-900">{shop.stickerCountThisMonth || 0}</span>
-                      <span className="text-gray-400 text-xs ml-1">/ {shop.stickerCount || 0}</span>
-                    </div>
-                    <div className="text-xs text-gray-500">this month / total</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {shop.integrations.map(int => {
-                        const iconMap: Record<string, string> = {
-                          "Protractor": "/protractor-icon.png",
-                          "Tekmetric": "/tekmetric-logo.png",
-                          "CARFAX": "/icons/carfax.png",
-                          "AutoFlow": "/icons/autoflow.png",
-                          "Shop-Ware": "/logos/shopware.png",
-                        };
-                        const icon = iconMap[int];
-                        return icon ? (
-                          <img 
-                            key={int}
-                            src={icon}
-                            alt={int}
-                            title={int}
-                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
-                            className={`w-6 h-6 rounded object-contain ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
-                          />
-                        ) : (
-                          <span 
-                            key={int} 
-                            onClick={shop.integrationDetails ? () => setExpandedShop(expandedShop === shop._id ? null : shop._id) : undefined}
-                            className={`px-2 py-0.5 text-xs rounded ${
-                              int === "AutoVitals" ? "bg-orange-100 text-orange-700" :
-                              "bg-gray-100 text-gray-700"
-                            } ${shop.integrationDetails ? "cursor-pointer hover:opacity-80" : ""}`}
-                          >
-                            {int}
-                          </span>
-                        );
-                      })}
-                      {shop.integrations.length === 0 && (
-                        <span className="text-gray-400 text-sm">None</span>
-                      )}
-                      {shop.integrationDetails && (
-                        <button
-                          onClick={() => setExpandedShop(expandedShop === shop._id ? null : shop._id)}
-                          className="p-0.5 text-gray-400 hover:text-gray-600"
-                        >
-                          {expandedShop === shop._id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {shop.backfill ? (
-                      shop.backfill.status === "completed" ? (
-                        <div className="flex items-center justify-center gap-1 text-green-600" title={`Completed: ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed (${shop.backfill.source || 'unknown'})`}>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "active" ? (
-                        <div className="flex items-center justify-center gap-1 text-blue-600" title={`Active: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Processing: ${shop.backfill.currentChunkDate ? new Date(shop.backfill.currentChunkDate).toLocaleDateString() : 'starting'}. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleTimeString() : 'unknown'}`}>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "stale" ? (
-                        <div className="flex items-center justify-center gap-1 text-orange-600" title={`Stale (no activity in 5+ min): ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last activity: ${shop.backfill.lastActivityAt ? new Date(shop.backfill.lastActivityAt).toLocaleString() : 'unknown'}`}>
-                          <AlertCircle className="w-4 h-4" />
-                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : shop.backfill.status === "error" ? (
-                        <div className="flex items-center justify-center gap-1 text-red-600" title={`Error: ${shop.backfill.lastError || 'Unknown error'}. Last run: ${shop.backfill.lastErrorAt ? new Date(shop.backfill.lastErrorAt).toLocaleString() : 'unknown'}`}>
-                          <XCircle className="w-4 h-4" />
-                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1 text-amber-600" title={`Pending: ${shop.backfill.processedCount.toLocaleString()} WOs processed, ${shop.backfill.totalJobsIndexed.toLocaleString()} jobs indexed. Last run: ${shop.backfill.lastAttemptedAt ? new Date(shop.backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
-                          <Pause className="w-4 h-4" />
-                          <span className="text-xs">{shop.backfill.totalJobsIndexed.toLocaleString()}</span>
-                        </div>
-                      )
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-sm">
-                    {new Date(shop.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openFeatureModal(shop)}
-                        disabled={actionLoading !== null}
-                        title="Manage billing & features"
-                        className="p-1.5 text-[#3c81c3] hover:bg-[rgba(60,129,195,0.1)] rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
-                      {(shop.reviewStatus || "approved") !== "approved" && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setReviewNotesInput("");
-                              setReviewDialog({ shop, mode: "approve" });
-                            }}
-                            disabled={actionLoading !== null}
-                            title="Approve shop (re-enables transactional email)"
-                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
-                          >
-                            {actionLoading === `${shop.shopId}-review-approve` ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <ShieldCheck className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setReviewNotesInput(shop.reviewNotes || "");
-                              setReviewDialog({ shop, mode: "flag" });
-                            }}
-                            disabled={actionLoading !== null}
-                            title="Flag shop with notes (keeps email suppressed)"
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                          >
-                            {actionLoading === `${shop.shopId}-review-flag` ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Flag className="w-4 h-4" />
-                            )}
-                          </button>
-                        </>
-                      )}
-                      {shop.trial?.endsAt && (() => {
-                        const lastEmail = shop.lastCardCaptureEmail || null;
-                        const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
-                        const sentMs = lastEmail?.sentAt ? Date.now() - new Date(lastEmail.sentAt).getTime() : null;
-                        const isRecent = sentMs !== null && sentMs < 24 * 60 * 60 * 1000;
-                        const baseTitle = shop.cardOnFile
-                          ? "Resend card-capture email (card already on file)"
-                          : "Resend card-capture email to owner";
-                        const historyTitle = buildCardCaptureHistoryTitle(shop.cardCaptureEmailHistory);
-                        const lastLine = lastEmail
-                          ? `Last sent ${sentAgo} to ${lastEmail.recipient || "unknown"} via ${describeCardCaptureSource(lastEmail)}`
-                          : "No card-capture emails sent yet";
-                        return (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => resendCardCaptureEmail(shop)}
-                              disabled={actionLoading !== null}
-                              title={`${baseTitle}\n\n${lastLine}\n\n${historyTitle}`}
-                              className={`relative p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                                shop.cardOnFile
-                                  ? "text-gray-500 hover:bg-gray-50"
-                                  : "text-amber-600 hover:bg-amber-50"
-                              }`}
-                            >
-                              {actionLoading === `${shop.shopId}-resend-card` ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Mail className="w-4 h-4" />
-                              )}
-                              {isRecent && (
-                                <span
-                                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
-                                  aria-hidden="true"
-                                />
-                              )}
-                            </button>
-                            {sentAgo && (
-                              <span
-                                className={`text-[11px] leading-tight ${isRecent ? "text-emerald-700" : "text-gray-500"} flex flex-col max-w-[140px]`}
-                                title={`${lastLine}\n\n${historyTitle}`}
-                              >
-                                <span className="whitespace-nowrap">Sent {sentAgo}</span>
-                                {lastEmail?.recipient && (
-                                  <span className="truncate text-gray-500">
-                                    to {lastEmail.recipient}
-                                    {lastEmail.source === "admin" ? " · admin" : " · cron"}
-                                  </span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      <button
-                        onClick={() => toggleLock(shop.shopId, !!shop.isLocked)}
-                        disabled={actionLoading !== null}
-                        title={shop.isLocked ? "Unlock shop" : "Lock shop"}
-                        className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                          shop.isLocked 
-                            ? "text-green-600 hover:bg-green-50" 
-                            : "text-orange-600 hover:bg-orange-50"
-                        }`}
-                      >
-                        {actionLoading === `${shop.shopId}-lock` || actionLoading === `${shop.shopId}-unlock` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : shop.isLocked ? (
-                          <Unlock className="w-4 h-4" />
-                        ) : (
-                          <Lock className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => deleteShop(shop)}
-                        disabled={actionLoading !== null}
-                        title="Delete shop permanently"
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {actionLoading === `${shop.shopId}-delete` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => accessShop(shop.shopId)}
-                        disabled={impersonating !== null || shop.isLocked}
-                        title={shop.isLocked ? "Shop is locked" : "Access this shop"}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[rgba(60,129,195,0.75)] text-white text-sm font-medium rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {impersonating === shop.shopId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <LogIn className="w-4 h-4" />
-                        )}
-                        Access
-                      </button>
-                    </div>
-                  </td>
-                </tr>,
-              ])
+              filteredShops.map((shop) => (
+                <ShopRow key={shop._id} shop={shop} {...rowProps} />
+              ))
+
             )}
           </tbody>
         </table>
@@ -1722,7 +1024,7 @@ export default function PlatformShopsPage() {
               {modalAction === "addViews" ? "Add VINs" : modalAction === "resetLimit" ? "Reset to Default" : "Set VIN Limit"}
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              {modalAction === "addViews" 
+              {modalAction === "addViews"
                 ? `Add extra VINs to ${selectedShop.name}'s trial allowance`
                 : modalAction === "resetLimit"
                 ? `Reset ${selectedShop.name} to use the default trial limit (${defaultVinLimit} VINs)`
@@ -1787,7 +1089,7 @@ export default function PlatformShopsPage() {
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Manage Shop Settings</h3>
             <p className="text-sm text-gray-500 mb-4">{selectedShop.name} (ID: {selectedShop.shopId})</p>
-            
+
             <div className="space-y-6">
               <div>
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Billing Plan</h4>
@@ -1802,14 +1104,9 @@ export default function PlatformShopsPage() {
                         if (newPlan === "demo") {
                           setVinInput("999999");
                           setFeatureEdits({
-                            maintenance: true,
-                            job_lookup: true,
-                            common_failures: true,
-                            oil_sticker: true,
-                            keytags: true,
-                            auto_booking: true,
-                            part_xref: true,
-                            labor_rates: true,
+                            maintenance: true, job_lookup: true, common_failures: true,
+                            oil_sticker: true, keytags: true, auto_booking: true,
+                            part_xref: true, labor_rates: true,
                           });
                         }
                       }}
@@ -2409,11 +1706,508 @@ function BulkApproveConfirmDialog({
   );
 }
 
+function KpiCard({
+  icon, iconBg, label, value, subtitle, active, onClick,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  value: number;
+  subtitle?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`text-left bg-white rounded-xl p-5 border shadow-sm transition-all ${
+        active
+          ? "border-[#3c81c3] ring-2 ring-[#3c81c3]/30"
+          : "border-gray-200 hover:border-gray-300 hover:shadow"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${iconBg}`}>{icon}</div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-500 truncate">{label}</p>
+          <p className="text-2xl font-bold text-gray-900">{value.toLocaleString()}</p>
+          {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {active && (
+          <span className="text-[10px] font-semibold text-[#3c81c3] uppercase tracking-wide">
+            Filtering
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+interface ShopRowProps {
+  shop: Shop;
+  hideEnterpriseLine?: boolean;
+  actionLoading: string | null;
+  impersonating: number | null;
+  expandedShop: string | null;
+  setExpandedShop: (id: string | null) => void;
+  openMenuShopId: string | null;
+  setOpenMenuShopId: (id: string | null) => void;
+  accessShop: (shopId: number | string) => void;
+  openFeatureModal: (shop: Shop) => void;
+  toggleLock: (shopId: number | string, isLocked: boolean) => void;
+  deleteShop: (shop: Shop) => void;
+  resendCardCaptureEmail: (shop: Shop) => void;
+  triggerExtendTrial: (shop: Shop) => void;
+  triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => void;
+  triggerResetViews: (shop: Shop) => void;
+  triggerApproveReview: (shop: Shop) => void;
+  triggerFlagReview: (shop: Shop) => void;
+}
+
+function ShopRow(props: ShopRowProps) {
+  const {
+    shop, hideEnterpriseLine, actionLoading, impersonating, expandedShop, setExpandedShop,
+    openMenuShopId, setOpenMenuShopId, accessShop, openFeatureModal,
+    toggleLock, deleteShop, resendCardCaptureEmail, triggerExtendTrial,
+    triggerVinModal, triggerResetViews, triggerApproveReview, triggerFlagReview,
+  } = props;
+  const reviewStatus = (shop.reviewStatus || "approved") as ShopReviewStatus;
+  const needsReview = reviewStatus !== "approved";
+
+  const isExpanded = expandedShop === shop._id;
+  const stickerThisMonth = shop.stickerCountThisMonth || 0;
+  const stickerTotal = shop.stickerCount || 0;
+  const usagePct = Math.min(100, (shop.billing.vinViewCount / Math.max(1, shop.billing.vinLimit)) * 100);
+
+  const lastEmail = shop.lastCardCaptureEmail || null;
+  const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
+
+  return (
+    <>
+      <tr className="hover:bg-gray-50 align-top">
+        {/* Shop cell */}
+        <td className="px-4 py-3">
+          <div className="flex items-start gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+              shop.isLocked ? "bg-red-100" : shop.enterpriseId ? "bg-blue-100" : "bg-[rgba(60,129,195,0.15)]"
+            }`}>
+              {shop.isLocked ? (
+                <Lock className="w-4 h-4 text-red-600" />
+              ) : (
+                <Building2 className={`w-4 h-4 ${shop.enterpriseId ? "text-blue-600" : "text-[#3c81c3]"}`} />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`font-medium text-sm break-words ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>
+                  {shop.name}
+                </span>
+                {shop.locationIdentifier && (
+                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded font-medium">
+                    {shop.locationIdentifier}
+                  </span>
+                )}
+                {shop.isLocked && (
+                  <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[11px] rounded font-medium">
+                    Locked
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                <span className={`px-1.5 py-0.5 text-[11px] rounded font-medium ${planColors[shop.billing.plan] || planColors.trial}`}>
+                  {planLabels[shop.billing.plan] || shop.billing.plan}
+                </span>
+                {typeof shop.billing.stripeSubscriptionAmount === "number" && shop.billing.stripeSubscriptionAmount > 0 && (
+                  <span className="text-[11px] text-gray-500" title={shop.billing.stripeProductName || undefined}>
+                    ${(shop.billing.stripeSubscriptionAmount / 100).toFixed(2)}/mo
+                  </span>
+                )}
+                {shop.trial?.endsAt && <TrialBadge trial={shop.trial} />}
+                {shop.cardOnFile ? (
+                  <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] rounded font-medium inline-flex items-center gap-1" title="Payment method on file">
+                    <CreditCard className="w-3 h-3" /> Card
+                  </span>
+                ) : shop.trial?.endsAt ? (
+                  <span className="px-1.5 py-0.5 bg-orange-50 text-orange-700 text-[11px] rounded font-medium inline-flex items-center gap-1" title="No payment method on file yet">
+                    <CreditCard className="w-3 h-3" /> No card
+                  </span>
+                ) : null}
+                <ReviewBadges shop={shop} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                <span>ID {shop.shopId}</span>
+                <span className="text-gray-300">·</span>
+                <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{shop.userCount}</span>
+                <span className="text-gray-300">·</span>
+                <span className="inline-flex items-center gap-1"><Car className="w-3 h-3" />{shop.vehicleCount.toLocaleString()}</span>
+                {shop.enterpriseName && !hideEnterpriseLine && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <span className="break-words">{shop.enterpriseName}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </td>
+
+        {/* Usage cell */}
+        <td className="px-4 py-3">
+          <div className="space-y-1.5">
+            <div>
+              <div className={`text-sm font-medium ${
+                shop.billing.vinViewCount >= shop.billing.vinLimit
+                  ? "text-red-600"
+                  : shop.billing.isPaid ? "text-green-600" : "text-gray-900"
+              }`}>
+                {shop.billing.vinViewCount} / {shop.billing.vinLimit} VINs
+                {shop.billing.isPaid && <span className="ml-1 text-green-500 text-[11px]">(Paid)</span>}
+              </div>
+              <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1">
+                <div
+                  className={`h-full transition-all ${
+                    shop.billing.vinViewCount >= shop.billing.vinLimit
+                      ? "bg-red-500"
+                      : shop.billing.isPaid ? "bg-green-500" : "bg-[#3c81c3]"
+                  }`}
+                  style={{ width: `${usagePct}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-[11px] text-gray-500">
+              <span className="text-gray-700 font-medium">{stickerThisMonth}</span> stickers this month
+              <span className="text-gray-400"> · {stickerTotal.toLocaleString()} total</span>
+            </div>
+          </div>
+        </td>
+
+        {/* Integrations cell */}
+        <td className="px-4 py-3">
+          {shop.integrations?.length > 0 ? (
+            <button
+              onClick={() => setExpandedShop(isExpanded ? null : shop._id)}
+              className="flex items-center gap-1 text-left hover:bg-gray-50 rounded px-1 -mx-1"
+            >
+              <div className="flex gap-1 flex-wrap items-center">
+                {shop.integrations.map(int => {
+                  const iconMap: Record<string, string> = {
+                    "Protractor": "/protractor-icon.png",
+                    "Tekmetric": "/tekmetric-logo.png",
+                    "CARFAX": "/icons/carfax.png",
+                    "AutoFlow": "/icons/autoflow.png",
+                    "Shop-Ware": "/logos/shopware.png",
+                  };
+                  const icon = iconMap[int];
+                  return icon ? (
+                    <img
+                      key={int}
+                      src={icon}
+                      alt={int}
+                      title={int}
+                      className="w-6 h-6 rounded object-contain"
+                    />
+                  ) : (
+                    <span key={int} className={`px-2 py-0.5 text-[11px] rounded font-medium ${
+                      int === "AutoVitals" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"
+                    }`}>
+                      {int}
+                    </span>
+                  );
+                })}
+              </div>
+              {shop.integrationDetails && (
+                isExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                )
+              )}
+            </button>
+          ) : (
+            <span className="text-gray-400 text-sm">None</span>
+          )}
+        </td>
+
+        {/* Backfill cell */}
+        <td className="px-4 py-3 text-center">
+          <BackfillCell backfill={shop.backfill || null} />
+        </td>
+
+        {/* Created cell */}
+        <td className="px-4 py-3 text-gray-600 text-sm whitespace-nowrap">
+          {new Date(shop.createdAt).toLocaleDateString()}
+        </td>
+
+        {/* Actions cell */}
+        <td className="px-4 py-3 text-right">
+          <div className="flex items-center justify-end gap-1.5">
+            {sentAgo && shop.trial?.endsAt && (
+              <span className="text-[11px] text-gray-500 hidden xl:inline" title={`Card-capture last sent ${sentAgo}`}>
+                Email {sentAgo}
+              </span>
+            )}
+            {needsReview && (
+              <>
+                <button
+                  onClick={() => triggerApproveReview(shop)}
+                  disabled={actionLoading !== null}
+                  title="Approve shop (re-enables transactional email)"
+                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
+                >
+                  {actionLoading === `${shop.shopId}-review-approve` ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4" />
+                  )}
+                </button>
+                <button
+                  onClick={() => triggerFlagReview(shop)}
+                  disabled={actionLoading !== null}
+                  title="Flag shop with notes (keeps email suppressed)"
+                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                >
+                  {actionLoading === `${shop.shopId}-review-flag` ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Flag className="w-4 h-4" />
+                  )}
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => openFeatureModal(shop)}
+              disabled={actionLoading !== null}
+              title="Manage billing & features"
+              className="p-1.5 text-gray-500 hover:text-[#3c81c3] hover:bg-[rgba(60,129,195,0.1)] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => accessShop(shop.shopId)}
+              disabled={impersonating !== null || shop.isLocked}
+              title={shop.isLocked ? "Shop is locked" : "Access this shop"}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[rgba(60,129,195,0.85)] text-white text-sm font-medium rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {impersonating === shop.shopId ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4" />
+              )}
+              Impersonate
+            </button>
+            <ShopRowMenu
+              shop={shop}
+              isOpen={openMenuShopId === shop._id}
+              setOpen={(open) => setOpenMenuShopId(open ? shop._id : null)}
+              actionLoading={actionLoading}
+              triggerVinModal={triggerVinModal}
+              triggerResetViews={triggerResetViews}
+              triggerExtendTrial={triggerExtendTrial}
+              resendCardCaptureEmail={resendCardCaptureEmail}
+              toggleLock={toggleLock}
+              deleteShop={deleteShop}
+            />
+          </div>
+        </td>
+      </tr>
+      {isExpanded && shop.integrationDetails && (
+        <tr className="bg-blue-50">
+          <td colSpan={6} className="px-4 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {shop.integrationDetails.protractor && (
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">Protractor</span>
+                    <span className="text-xs text-gray-500">
+                      Connected {new Date(shop.integrationDetails.protractor.configuredAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {shop.integrationDetails.protractor.locationName && (
+                    <div className="font-medium text-gray-900 mb-2">
+                      {shop.integrationDetails.protractor.locationName}
+                      {shop.integrationDetails.protractor.shortName && (
+                        <span className="text-gray-500 font-normal"> ({shop.integrationDetails.protractor.shortName})</span>
+                      )}
+                    </div>
+                  )}
+                  {shop.integrationDetails.protractor.address && (
+                    <div className="flex items-start gap-2 text-sm text-gray-600 mb-1">
+                      <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>{shop.integrationDetails.protractor.address}</span>
+                    </div>
+                  )}
+                  {shop.integrationDetails.protractor.phone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                      <Phone className="w-4 h-4 flex-shrink-0" />
+                      <span>{shop.integrationDetails.protractor.phone}</span>
+                    </div>
+                  )}
+                  {shop.integrationDetails.protractor.timeZone && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="w-4 h-4 flex-shrink-0" />
+                      <span>{shop.integrationDetails.protractor.timeZone}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {shop.integrationDetails.carfax && (
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium">CARFAX</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Location ID:</span> {shop.integrationDetails.carfax.locationId}
+                  </div>
+                </div>
+              )}
+              {shop.integrationDetails.tekmetric && (
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded font-medium">Tekmetric</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Shop ID:</span> {shop.integrationDetails.tekmetric.shopId}
+                  </div>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ShopRowMenu({
+  shop, isOpen, setOpen, actionLoading,
+  triggerVinModal, triggerResetViews, triggerExtendTrial,
+  resendCardCaptureEmail, toggleLock, deleteShop,
+}: {
+  shop: Shop;
+  isOpen: boolean;
+  setOpen: (open: boolean) => void;
+  actionLoading: string | null;
+  triggerVinModal: (shop: Shop, action: "addViews" | "setLimit" | "resetLimit") => void;
+  triggerResetViews: (shop: Shop) => void;
+  triggerExtendTrial: (shop: Shop) => void;
+  resendCardCaptureEmail: (shop: Shop) => void;
+  toggleLock: (shopId: number | string, isLocked: boolean) => void;
+  deleteShop: (shop: Shop) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen, setOpen]);
+
+  const close = () => setOpen(false);
+
+  const item = (icon: React.ReactNode, label: string, onClick: () => void, danger = false) => (
+    <button
+      onClick={() => { close(); onClick(); }}
+      disabled={actionLoading !== null}
+      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors disabled:opacity-50 ${
+        danger ? "text-red-600 hover:bg-red-50" : "text-gray-700 hover:bg-gray-50"
+      }`}
+    >
+      <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!isOpen)}
+        title="More actions"
+        className={`p-1.5 rounded-lg transition-colors ${isOpen ? "bg-gray-100 text-gray-700" : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"}`}
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+          {item(<Plus className="w-4 h-4 text-green-600" />, "Add VINs", () => triggerVinModal(shop, "addViews"))}
+          {item(<Settings className="w-4 h-4 text-blue-600" />, "Set custom VIN limit", () => triggerVinModal(shop, "setLimit"))}
+          {item(<X className="w-4 h-4 text-gray-500" />, "Reset VIN limit", () => triggerVinModal(shop, "resetLimit"))}
+          {item(<RotateCcw className="w-4 h-4 text-orange-600" />, "Reset viewed VINs", () => triggerResetViews(shop))}
+          {shop.trial?.endsAt && (
+            <>
+              <div className="border-t border-gray-100 my-1" />
+              {item(<Clock className="w-4 h-4 text-blue-600" />, "Extend trial", () => triggerExtendTrial(shop))}
+              {item(
+                <Mail className={`w-4 h-4 ${shop.cardOnFile ? "text-gray-500" : "text-amber-600"}`} />,
+                "Resend card-capture email",
+                () => resendCardCaptureEmail(shop),
+              )}
+            </>
+          )}
+          <div className="border-t border-gray-100 my-1" />
+          {item(
+            shop.isLocked ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-600" />,
+            shop.isLocked ? "Unlock shop" : "Lock shop",
+            () => toggleLock(shop.shopId, !!shop.isLocked),
+          )}
+          {item(<Trash2 className="w-4 h-4" />, "Delete shop", () => deleteShop(shop), true)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BackfillCell({ backfill }: { backfill: BackfillStatus | null }) {
+  if (!backfill) return <span className="text-gray-300">—</span>;
+  const count = backfill.totalJobsIndexed.toLocaleString();
+  if (backfill.status === "completed") {
+    return (
+      <div className="flex items-center justify-center gap-1 text-green-600" title={`Completed: ${count} jobs indexed (${backfill.source || 'unknown'})`}>
+        <CheckCircle2 className="w-4 h-4" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
+  if (backfill.status === "active") {
+    return (
+      <div className="flex items-center justify-center gap-1 text-blue-600" title={`Active: ${backfill.processedCount.toLocaleString()} WOs processed, ${count} jobs indexed. Processing: ${backfill.currentChunkDate ? new Date(backfill.currentChunkDate).toLocaleDateString() : 'starting'}. Last activity: ${backfill.lastActivityAt ? new Date(backfill.lastActivityAt).toLocaleTimeString() : 'unknown'}`}>
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
+  if (backfill.status === "stale") {
+    return (
+      <div className="flex items-center justify-center gap-1 text-orange-600" title={`Stale (no activity in 5+ min): ${backfill.processedCount.toLocaleString()} WOs processed, ${count} jobs indexed. Last activity: ${backfill.lastActivityAt ? new Date(backfill.lastActivityAt).toLocaleString() : 'unknown'}`}>
+        <AlertCircle className="w-4 h-4" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
+  if (backfill.status === "error") {
+    return (
+      <div className="flex items-center justify-center gap-1 text-red-600" title={`Error: ${backfill.lastError || 'Unknown error'}. Last run: ${backfill.lastErrorAt ? new Date(backfill.lastErrorAt).toLocaleString() : 'unknown'}`}>
+        <XCircle className="w-4 h-4" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-center gap-1 text-amber-600" title={`Pending: ${backfill.processedCount.toLocaleString()} WOs processed, ${count} jobs indexed. Last run: ${backfill.lastAttemptedAt ? new Date(backfill.lastAttemptedAt).toLocaleString() : 'never'}`}>
+      <Pause className="w-4 h-4" />
+      <span className="text-xs">{count}</span>
+    </div>
+  );
+}
+
 function BulkCardCaptureConfirmDialog({
-  shops,
-  sending,
-  onCancel,
-  onConfirm,
+  shops, sending, onCancel, onConfirm,
 }: {
   shops: Shop[];
   sending: boolean;
@@ -2425,9 +2219,7 @@ function BulkCardCaptureConfirmDialog({
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={() => {
-        if (!sending) onCancel();
-      }}
+      onClick={() => { if (!sending) onCancel(); }}
     >
       <div
         className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl"
@@ -2481,8 +2273,7 @@ function BulkCardCaptureConfirmDialog({
 }
 
 function BulkCardCaptureResultsDialog({
-  results,
-  onClose,
+  results, onClose,
 }: {
   results: {
     requestedCount: number;
@@ -2557,12 +2348,10 @@ function TrialBadge({ trial }: { trial: ShopTrial }) {
     : urgent
     ? "bg-amber-100 text-amber-800"
     : "bg-yellow-50 text-yellow-800";
-  const label = expired
-    ? "Trial ended"
-    : `${daysLeft}d left`;
+  const label = expired ? "Trial ended" : `${daysLeft}d left`;
   const tip = `Trial ends ${new Date(trial.endsAt).toLocaleDateString()}${trial.days ? ` (${trial.days}-day trial)` : ""}`;
   return (
-    <span className={`px-1.5 py-0.5 text-xs rounded ${cls}`} title={tip}>
+    <span className={`px-1.5 py-0.5 text-[11px] rounded font-medium ${cls}`} title={tip}>
       {label}
     </span>
   );
