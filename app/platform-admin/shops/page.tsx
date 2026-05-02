@@ -191,6 +191,22 @@ export default function PlatformShopsPage() {
   const isSortBy = (v: string): v is SortBy => (SORT_OPTIONS as readonly string[]).includes(v);
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkSending, setBulkSending] = useState(false);
+  type BulkResult = {
+    shopId: number | string;
+    shopName?: string;
+    ownerEmail?: string;
+    ok: boolean;
+    mode?: "reminder" | "suspended";
+    error?: string;
+  };
+  const [bulkResults, setBulkResults] = useState<{
+    requestedCount: number;
+    succeeded: number;
+    failed: number;
+    results: BulkResult[];
+  } | null>(null);
   const [showCreateShop, setShowCreateShop] = useState(false);
   const [createShopData, setCreateShopData] = useState({
     shopName: "",
@@ -319,6 +335,35 @@ export default function PlatformShopsPage() {
       alert("Action failed");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const sendBulkCardCapture = async (shopIds: (number | string)[]) => {
+    setBulkSending(true);
+    try {
+      const res = await fetch("/api/platform-admin/shops/bulk-card-capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopIds }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setBulkResults({
+          requestedCount: data.requestedCount,
+          succeeded: data.succeeded,
+          failed: data.failed,
+          results: data.results || [],
+        });
+        setBulkConfirmOpen(false);
+        loadShops();
+      } else {
+        alert(data.error || "Bulk send failed");
+      }
+    } catch (err) {
+      console.error("Bulk card-capture error:", err);
+      alert("Bulk send failed");
+    } finally {
+      setBulkSending(false);
     }
   };
 
@@ -549,6 +594,14 @@ export default function PlatformShopsPage() {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   
+  // Shops eligible for bulk card-capture: trial shops with no card on file
+  // (regardless of trial filter, but constrained to whatever the admin has
+  // already narrowed to via search + trial filter so they only nudge the
+  // cohort they're looking at).
+  const bulkEligibleShops = filteredShops.filter(
+    (s) => !!s.trial?.endsAt && !s.cardOnFile,
+  );
+
   // Group shops by enterprise if enabled
   const groupedShops = groupByEnterprise 
     ? (() => {
@@ -678,6 +731,21 @@ export default function PlatformShopsPage() {
             <option value="no_card">No card on file</option>
           </select>
         </div>
+        {bulkEligibleShops.length > 0 && (
+          <button
+            onClick={() => setBulkConfirmOpen(true)}
+            disabled={bulkSending}
+            title="Resend the card-capture email to every filtered trial shop without a card on file"
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg disabled:opacity-50"
+          >
+            {bulkSending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Mail className="w-4 h-4" />
+            )}
+            Resend card-capture to {bulkEligibleShops.length} shop{bulkEligibleShops.length === 1 ? "" : "s"}
+          </button>
+        )}
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500 whitespace-nowrap">Sort</label>
           <select
@@ -1866,6 +1934,160 @@ export default function PlatformShopsPage() {
           </div>
         </div>
       )}
+
+      {bulkConfirmOpen && (
+        <BulkCardCaptureConfirmDialog
+          shops={bulkEligibleShops}
+          sending={bulkSending}
+          onCancel={() => setBulkConfirmOpen(false)}
+          onConfirm={() => sendBulkCardCapture(bulkEligibleShops.map((s) => s.shopId))}
+        />
+      )}
+
+      {bulkResults && (
+        <BulkCardCaptureResultsDialog
+          results={bulkResults}
+          onClose={() => setBulkResults(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function BulkCardCaptureConfirmDialog({
+  shops,
+  sending,
+  onCancel,
+  onConfirm,
+}: {
+  shops: Shop[];
+  sending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const sample = shops.slice(0, 5);
+  const remaining = shops.length - sample.length;
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={() => {
+        if (!sending) onCancel();
+      }}
+    >
+      <div
+        className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Resend card-capture email to {shops.length} shop{shops.length === 1 ? "" : "s"}
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Each shop&apos;s owner will get a fresh Stripe card-setup link. Sends are
+          rate-limited and you&apos;ll get a per-shop summary when finished.
+        </p>
+        <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4 max-h-64 overflow-y-auto">
+          {sample.map((s) => (
+            <div key={String(s.shopId)} className="px-3 py-2 text-sm flex items-center justify-between">
+              <span className="font-medium text-gray-800 truncate mr-2">{s.name}</span>
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                ID {s.shopId}
+                {s.trial?.daysLeft !== undefined && s.trial?.daysLeft !== null
+                  ? ` · ${s.trial.daysLeft}d left`
+                  : ""}
+              </span>
+            </div>
+          ))}
+          {remaining > 0 && (
+            <div className="px-3 py-2 text-xs text-gray-500 italic">
+              …and {remaining} more
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={sending}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={sending}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {sending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {sending ? "Sending…" : `Send ${shops.length} email${shops.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkCardCaptureResultsDialog({
+  results,
+  onClose,
+}: {
+  results: {
+    requestedCount: number;
+    succeeded: number;
+    failed: number;
+    results: {
+      shopId: number | string;
+      shopName?: string;
+      ownerEmail?: string;
+      ok: boolean;
+      mode?: "reminder" | "suspended";
+      error?: string;
+    }[];
+  };
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Bulk card-capture results</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          {results.succeeded} sent, {results.failed} failed (out of {results.requestedCount}).
+        </p>
+        <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4">
+          {results.results.map((r) => (
+            <div key={String(r.shopId)} className="px-3 py-2 text-sm flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-gray-800 truncate">
+                  {r.shopName || `Shop ${r.shopId}`}
+                  <span className="ml-2 text-xs text-gray-500">ID {r.shopId}</span>
+                </div>
+                {r.ownerEmail && (
+                  <div className="text-xs text-gray-500 truncate">{r.ownerEmail}</div>
+                )}
+                {!r.ok && r.error && (
+                  <div className="text-xs text-red-600 mt-0.5">{r.error}</div>
+                )}
+              </div>
+              <span
+                className={`px-2 py-0.5 text-xs rounded whitespace-nowrap ${
+                  r.ok ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {r.ok ? (r.mode === "suspended" ? "Sent (suspended)" : "Sent") : "Failed"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-[#3c81c3] text-white rounded-lg hover:bg-[#2d6da8]"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

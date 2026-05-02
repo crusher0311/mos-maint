@@ -8,12 +8,7 @@ import {
   type BillingPlan,
   type BillingStatus
 } from "@/lib/featureResolver";
-import {
-  sendEmail,
-  makeTrialReminderEmail,
-  makeTrialSuspendedEmail,
-} from "@/lib/email";
-import { createCardSetupSession } from "@/lib/stripe";
+import { resendCardCaptureForShop } from "@/lib/card-capture-resend";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -184,90 +179,23 @@ export async function PATCH(
     }
 
     if (action === "resend_card_capture") {
-      const owner = await db.collection("users").findOne(
-        { shopId, role: { $in: ["owner", "admin"] } },
-        { projection: { email: 1, emailLower: 1 } },
-      );
-      const ownerEmail = owner?.email || owner?.emailLower;
-      if (!ownerEmail) {
-        return NextResponse.json(
-          { error: "No owner/admin user found for this shop to email" },
-          { status: 400 },
-        );
-      }
-
-      const numericShopId =
-        typeof shopId === "number" ? shopId : Number(shopId);
-      if (!Number.isFinite(numericShopId)) {
-        return NextResponse.json(
-          { error: "resend_card_capture requires a numeric shopId" },
-          { status: 400 },
-        );
-      }
-
-      let setupSession: Awaited<ReturnType<typeof createCardSetupSession>>;
-      try {
-        setupSession = await createCardSetupSession({
-          shopId: numericShopId,
-          ownerEmail,
-          returnTo: "/dashboard/settings/billing",
-          purpose: "trial_card_capture",
-          createdVia: "platform_admin_resend_card_capture",
-        });
-      } catch (err: any) {
-        console.error(
-          `[Platform Admin] Failed to create Stripe setup session for shop ${shopId}:`,
-          err?.message,
-        );
-        return NextResponse.json(
-          { error: err?.message || "Failed to create Stripe card setup session" },
-          { status: 500 },
-        );
-      }
-
-      const trialEndsAtRaw = shop.trial?.endsAt || shop.trialEndsAt || null;
-      const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;
-      const now = new Date();
-
-      let msg;
-      let mode: "reminder" | "suspended";
-      if (trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
-        const daysLeft = Math.max(
-          1,
-          Math.ceil((trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
-        );
-        msg = makeTrialReminderEmail(shop.name, daysLeft, trialEndsAt, setupSession.url);
-        mode = "reminder";
-      } else {
-        msg = makeTrialSuspendedEmail(shop.name, setupSession.url, true);
-        mode = "suspended";
-      }
-
-      try {
-        await sendEmail({ to: ownerEmail, ...msg });
-      } catch (err: any) {
-        console.error(`[Platform Admin] Failed to send card-capture email for shop ${shopId}:`, err?.message);
-        return NextResponse.json(
-          { error: err?.message || "Failed to send email" },
-          { status: 500 },
-        );
-      }
-
-      await db.collection("audit_logs").insertOne({
-        type: "shop_card_capture_email_resent",
+      const result = await resendCardCaptureForShop({
+        db,
         shopId,
-        shopName: shop.name,
-        ownerEmail,
-        mode,
-        stripeCheckoutSessionId: setupSession.sessionId,
-        stripeCustomerId: setupSession.customerId,
         adminEmail: session.email,
-        createdAt: now,
       });
-
+      if (!result.ok) {
+        const status =
+          result.error === "Shop not found"
+            ? 404
+            : result.error?.includes("owner") || result.error?.includes("numeric")
+              ? 400
+              : 500;
+        return NextResponse.json({ error: result.error }, { status });
+      }
       return NextResponse.json({
         ok: true,
-        message: `Card-capture email sent to ${ownerEmail}`,
+        message: `Card-capture email sent to ${result.ownerEmail}`,
       });
     }
 
