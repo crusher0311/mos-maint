@@ -432,10 +432,72 @@ export async function POST(req: NextRequest) {
       console.log(`[PlanBuild] Shop ${shopId} VIN ${vin}: ${unmatchedJobNames.length} unmatched job names: ${unmatchedJobNames.slice(0, 10).join(" | ")}`);
     }
 
+    // Resolve the latest RO number for this VIN so the Autoflow DVI fetch
+    // below can fire regardless of which SMS is primary. Order: Protractor,
+    // Tekmetric, Shop-Ware, then Autoflow events as a final fallback.
     let latestRoNumber: string | null = null;
     if (protractorWOs.length > 0) {
       const wo = protractorWOs[0];
       latestRoNumber = wo.workOrderNumber || wo.WorkOrderNumber || wo.data?.WorkOrderNumber || null;
+    }
+    if (!latestRoNumber && tekmetricWOs.length > 0) {
+      const wo = tekmetricWOs[0] as any;
+      const candidate =
+        wo.workOrderNumber ??
+        wo.repairOrderNumber ??
+        wo.data?.repairOrderNumber ??
+        wo.workOrderId ??
+        null;
+      latestRoNumber = candidate != null ? String(candidate) : null;
+    }
+    if (!latestRoNumber) {
+      try {
+        const shopwareRos = await db.collection("shopware_repair_orders").find({
+          mosShopId: { $in: [Number(shopId), String(shopId)] },
+          vin: vinUpper,
+        }).sort({ syncedAt: -1, updatedAt: -1 }).limit(1).toArray();
+        if (shopwareRos.length > 0 && shopwareRos[0].number != null) {
+          latestRoNumber = String(shopwareRos[0].number);
+        }
+      } catch (swErr: any) {
+        console.warn(`[PlanBuild] Shop-Ware RO lookup failed for ${vinUpper}: ${swErr.message}`);
+      }
+    }
+    if (!latestRoNumber) {
+      try {
+        const eventRos = await db.collection("events").aggregate([
+          {
+            $match: {
+              $and: [
+                { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+                { provider: "autoflow" },
+                {
+                  $expr: {
+                    $eq: [
+                      { $toUpper: { $ifNull: ["$vehicleVin", { $ifNull: ["$vin", "$payload.vehicle.vin"] }] } },
+                      vinUpper,
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              roNumber: { $ifNull: ["$payload.ticket.invoice", { $ifNull: ["$payload.ticket.id", "$roNumber"] }] },
+            },
+          },
+          { $match: { roNumber: { $ne: null } } },
+          { $sort: { receivedAt: -1, createdAt: -1 } },
+          { $limit: 1 },
+          { $project: { roNumber: 1 } },
+        ]).toArray();
+        if (eventRos[0]?.roNumber != null) {
+          latestRoNumber = String(eventRos[0].roNumber);
+        }
+      } catch (afErr: any) {
+        console.warn(`[PlanBuild] Autoflow events RO fallback failed for ${vinUpper}: ${afErr.message}`);
+      }
     }
 
     const [carfaxResult, protractorVehicleResult, avInspectionResult] = await Promise.all([

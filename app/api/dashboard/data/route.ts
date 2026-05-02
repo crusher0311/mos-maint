@@ -6,6 +6,7 @@ import { getFeatureEntitlements, FeatureKey } from "@/lib/featureResolver";
 import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
 import { fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { Db } from "mongodb";
+import { mergeAutoflowIntoPrimary } from "@/lib/dashboard/autoflow-merge";
 
 async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
   const noMileageVins = rows
@@ -117,7 +118,6 @@ export async function GET(request: NextRequest) {
     // Check shop SMS configuration to skip unnecessary queries
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
-    const isProtractorPrimary = !!shopConfig?.protractor?.configured;
     const isShopWareConfigured = !!(shopConfig?.shopware?.tenantId);
 
     // If showing archived vehicles, fetch from vehicles collection directly
@@ -433,7 +433,7 @@ export async function GET(request: NextRequest) {
         } 
       },
     ]).toArray();
-    } // End of if (!isProtractorPrimary)
+    } // End of if (isAutoFlowConfigured)
 
     // Fetch shop preferences for workflow stage filtering
     const shopPrefs = await db.collection("shops").findOne(
@@ -491,6 +491,43 @@ export async function GET(request: NextRequest) {
         }
       },
       { $unwind: { path: "$vehicle", preserveNullAndEmptyArrays: true } },
+      // Join Autoflow DVI by RO number, with VIN fallback. The $match
+      // intentionally pins shopId to this tenant — dvi_results stores
+      // shopId as either string or number across legacy docs, so allow
+      // both forms but never cross tenants.
+      {
+        $lookup: {
+          from: "dvi_results",
+          let: {
+            ro: { $toString: "$workOrderNumber" },
+            vinUp: { $toUpper: "$vin" },
+            shopIdNum: Number(user.shopId),
+            shopIdStr: String(user.shopId),
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $or: [
+                      { $eq: ["$shopId", "$$shopIdNum"] },
+                      { $eq: ["$shopId", "$$shopIdStr"] },
+                    ]},
+                    { $or: [
+                      { $eq: [{ $toString: "$roNumber" }, "$$ro"] },
+                      { $eq: [{ $toUpper: { $ifNull: ["$vin", ""] } }, "$$vinUp"] },
+                    ]},
+                  ],
+                },
+              },
+            },
+            { $sort: { fetchedAt: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 1 } },
+          ],
+          as: "autoflowDvi",
+        },
+      },
       {
         $project: {
           _id: 0,
@@ -519,7 +556,7 @@ export async function GET(request: NextRequest) {
           },
           displayRo: "$workOrderNumber",
           workOrderGuid: "$workOrderGuid",
-          dviDone: { $literal: false },
+          dviDone: { $gt: [{ $size: "$autoflowDvi" }, 0] },
           source: { $literal: "protractor" },
           af: {
             status: { $ifNull: ["$workflowStage", "In Progress"] },
@@ -565,6 +602,41 @@ export async function GET(request: NextRequest) {
         $match: tekmetricMatch
       },
       { $sort: { fetchedAt: -1 } },
+      // Join Autoflow DVI by RO number, with VIN fallback. shopId is pinned
+      // to this tenant to prevent cross-tenant DVI leakage.
+      {
+        $lookup: {
+          from: "dvi_results",
+          let: {
+            ro: { $toString: { $ifNull: ["$workOrderNumber", "$repairOrderNumber"] } },
+            vinUp: { $toUpper: { $ifNull: ["$vin", ""] } },
+            shopIdNum: Number(user.shopId),
+            shopIdStr: String(user.shopId),
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $or: [
+                      { $eq: ["$shopId", "$$shopIdNum"] },
+                      { $eq: ["$shopId", "$$shopIdStr"] },
+                    ]},
+                    { $or: [
+                      { $eq: [{ $toString: "$roNumber" }, "$$ro"] },
+                      { $eq: [{ $toUpper: { $ifNull: ["$vin", ""] } }, "$$vinUp"] },
+                    ]},
+                  ],
+                },
+              },
+            },
+            { $sort: { fetchedAt: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 1 } },
+          ],
+          as: "autoflowDvi",
+        },
+      },
       {
         $project: {
           _id: 0,
@@ -585,18 +657,24 @@ export async function GET(request: NextRequest) {
           workOrderId: "$workOrderId",
           dviDone: {
             $cond: {
-              if: { $eq: ["$dviDone", true] },
+              if: { $gt: [{ $size: "$autoflowDvi" }, 0] },
               then: true,
               else: {
                 $cond: {
-                  if: {
-                    $and: [
-                      { $ifNull: ["$label", false] },
-                      { $regexMatch: { input: { $ifNull: ["$label", ""] }, regex: /insp|dvi|multi.?point|courtesy.check|complimentary.check/i } }
-                    ]
-                  },
+                  if: { $eq: ["$dviDone", true] },
                   then: true,
-                  else: false
+                  else: {
+                    $cond: {
+                      if: {
+                        $and: [
+                          { $ifNull: ["$label", false] },
+                          { $regexMatch: { input: { $ifNull: ["$label", ""] }, regex: /insp|dvi|multi.?point|courtesy.check|complimentary.check/i } }
+                        ]
+                      },
+                      then: true,
+                      else: false
+                    }
+                  }
                 }
               }
             }
@@ -646,6 +724,41 @@ export async function GET(request: NextRequest) {
       shopwareRows = await db.collection("shopware_repair_orders").aggregate([
         { $match: shopwareMatch },
         { $sort: { syncedAt: -1 } },
+        // Join Autoflow DVI by RO number, with VIN fallback. shopId is
+        // pinned to this tenant to prevent cross-tenant DVI leakage.
+        {
+          $lookup: {
+            from: "dvi_results",
+            let: {
+              ro: { $toString: { $ifNull: ["$number", ""] } },
+              vinUp: { $toUpper: { $ifNull: ["$vin", ""] } },
+              shopIdNum: Number(user.shopId),
+              shopIdStr: String(user.shopId),
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $or: [
+                        { $eq: ["$shopId", "$$shopIdNum"] },
+                        { $eq: ["$shopId", "$$shopIdStr"] },
+                      ]},
+                      { $or: [
+                        { $eq: [{ $toString: "$roNumber" }, "$$ro"] },
+                        { $eq: [{ $toUpper: { $ifNull: ["$vin", ""] } }, "$$vinUp"] },
+                      ]},
+                    ],
+                  },
+                },
+              },
+              { $sort: { fetchedAt: -1 } },
+              { $limit: 1 },
+              { $project: { _id: 1 } },
+            ],
+            as: "autoflowDvi",
+          },
+        },
         {
           $project: {
             _id: 0,
@@ -666,7 +779,7 @@ export async function GET(request: NextRequest) {
             },
             displayRo: { $toString: { $ifNull: ["$number", ""] } },
             roId: "$roId",
-            dviDone: { $literal: false },
+            dviDone: { $gt: [{ $size: "$autoflowDvi" }, 0] },
             source: { $literal: "shopware" },
             displayStatus: {
               $ifNull: ["$raw.label.text", { $ifNull: ["$state", "Open"] }],
@@ -719,24 +832,14 @@ export async function GET(request: NextRequest) {
       },
     }));
 
-    // Combine all rows - each work order shows as its own row (no VIN deduplication)
-    const seenWorkOrders = new Set<string>();
-    let allRows: any[] = [];
-    
-    // When Protractor is primary, use Protractor rows (which have workflowStage as status)
-    // When only AutoFlow is configured, use AutoFlow rows directly
-    // Note: Protractor workflowStage is more granular than AutoFlow status (e.g., "InspectionInProgress" vs "Open")
-    const rowSources = isProtractorPrimary 
-      ? [...protractorRows, ...tekmetricRows, ...shopwareRows]
-      : [...autoflowRows, ...protractorRows, ...tekmetricRows, ...shopwareRows];
-    
-    for (const row of rowSources) {
-      const woKey = `${row.source || 'unknown'}-${row.displayRo || row.workOrderGuid || row.displayVin}`;
-      if (!seenWorkOrders.has(woKey)) {
-        seenWorkOrders.add(woKey);
-        allRows.push(row);
-      }
-    }
+    // Combine all rows. Autoflow is folded into matching primary-SMS rows
+    // by VIN; rows with no primary match are emitted standalone. See
+    // `lib/dashboard/autoflow-merge.ts` for the rules and the smoke test.
+    const merged = mergeAutoflowIntoPrimary(
+      [...protractorRows, ...tekmetricRows, ...shopwareRows],
+      autoflowRows
+    );
+    let allRows: any[] = merged.rows;
 
     // Add manual vehicles (only if VIN not already present from SMS sources)
     const smsVins = new Set(allRows.map((r: any) => r.displayVin));

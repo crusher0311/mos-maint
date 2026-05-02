@@ -224,6 +224,71 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Additive Autoflow DVI lookup. When the primary provider is anything
+    // other than Autoflow itself, also surface a matching Autoflow DVI
+    // summary so the extension popup shows DVI signal regardless of which
+    // SMS owns the RO. Backward-compatible: response gains an optional
+    // `autoflowDvi` field; existing fields are unchanged.
+    let autoflowDvi:
+      | {
+          roNumber: string | null;
+          vin: string | null;
+          mileage: number | null;
+          advisor: string | null;
+          technician: string | null;
+          sheetName: string | null;
+          timestamp: string | null;
+          pdfUrl: string | null;
+          shopUrl: string | null;
+          customerUrl: string | null;
+          categoryCount: number;
+          findingCount: number;
+          completed: boolean;
+        }
+      | null = null;
+    if (resolvedProvider !== "autoflow") {
+      try {
+        const vinForLookup = (vin || vinHint || "").toUpperCase();
+        const dviQuery: any = {
+          shopId: { $in: [mosShopId, String(mosShopId), Number(mosShopId)] },
+          $or: [
+            { roNumber: String(roId) },
+            { roNumber: roId },
+          ],
+        };
+        if (vinForLookup) {
+          dviQuery.$or.push({ vin: vinForLookup });
+        }
+        const dviDoc = await db.collection("dvi_results").findOne(dviQuery, {
+          sort: { fetchedAt: -1 },
+        });
+        if (dviDoc) {
+          const cats = Array.isArray(dviDoc.categories) ? dviDoc.categories : [];
+          let findingCount = 0;
+          for (const c of cats) {
+            if (Array.isArray(c?.items)) findingCount += c.items.length;
+          }
+          autoflowDvi = {
+            roNumber: dviDoc.roNumber ? String(dviDoc.roNumber) : null,
+            vin: dviDoc.vin ?? null,
+            mileage: dviDoc.mileage ?? null,
+            advisor: dviDoc.advisor ?? null,
+            technician: dviDoc.technician ?? null,
+            sheetName: dviDoc.sheetName ?? null,
+            timestamp: dviDoc.timestamp ?? null,
+            pdfUrl: dviDoc.pdfUrl ?? null,
+            shopUrl: dviDoc.shopUrl ?? null,
+            customerUrl: dviDoc.customerUrl ?? null,
+            categoryCount: cats.length,
+            findingCount,
+            completed: !!dviDoc.ok,
+          };
+        }
+      } catch (e: any) {
+        console.warn(`[ro-context] Autoflow DVI lookup failed:`, e.message);
+      }
+    }
+
     let vehicleDisplay: string | null = null;
     if (vehicleYear && vehicleMake && vehicleModel) {
       vehicleDisplay = `${vehicleYear} ${vehicleMake} ${vehicleModel}`;
@@ -267,6 +332,7 @@ export async function GET(request: NextRequest) {
             : null,
         vehicleDisplay,
         provider: resolvedProvider,
+        autoflowDvi,
       },
       { headers: corsHeaders }
     );

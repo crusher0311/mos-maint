@@ -166,6 +166,116 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     if (isDviEvent && roNumber != null) {
       const dvi = await fetchDviByInvoice(Number(shop.shopId), String(roNumber));
       await upsertDviSnapshot(Number(shop.shopId), String(roNumber), dvi);
+
+      // Cross-reference this DVI back to the matching primary-SMS work order
+      // so downstream joins are cheap and we can flag mismatches (a DVI for
+      // an RO we have no record of) for diagnostics. Reconciliation key is
+      // shopId + RO number, with VIN fallback when RO numbers don't line up
+      // (Autoflow sometimes carries the invoice number while the primary
+      // system carries a different work-order number).
+      try {
+        const sId = Number(shop.shopId);
+        const sIds: any[] = [sId, String(sId)];
+        const roStr = String(roNumber);
+        const vinForXref =
+          (dvi as any)?.vin?.toUpperCase() || resolveVin(payload) || null;
+        const vinOr = vinForXref ? [{ vin: vinForXref }] : [];
+
+        const [tekWo, protWo, swRo] = await Promise.all([
+          db.collection("tekmetric_work_orders").findOne(
+            {
+              shopId: { $in: sIds },
+              $or: [
+                { workOrderNumber: roStr },
+                { repairOrderNumber: roStr },
+                ...vinOr,
+              ],
+            },
+            { projection: { workOrderId: 1, workOrderNumber: 1, repairOrderNumber: 1, vin: 1 } }
+          ),
+          db.collection("protractor_work_orders").findOne(
+            {
+              shopId: { $in: sIds },
+              $or: [
+                { workOrderNumber: roStr },
+                { "data.WorkOrderNumber": roStr },
+                ...vinOr,
+              ],
+            },
+            { projection: { workOrderGuid: 1, workOrderNumber: 1, vin: 1 } }
+          ),
+          db.collection("shopware_repair_orders").findOne(
+            {
+              mosShopId: { $in: sIds },
+              $or: [
+                { number: roStr },
+                { number: Number(roStr) },
+                ...vinOr,
+              ],
+            },
+            { projection: { roId: 1, number: 1, vin: 1 } }
+          ),
+        ]);
+
+        const xref: Record<string, any> = {};
+        if (tekWo) {
+          xref.tekmetric = {
+            workOrderId: tekWo.workOrderId ?? null,
+            workOrderNumber: tekWo.workOrderNumber ?? tekWo.repairOrderNumber ?? null,
+            matchedBy: String(tekWo.workOrderNumber ?? tekWo.repairOrderNumber ?? "") === roStr ? "ro" : "vin",
+          };
+        }
+        if (protWo) {
+          xref.protractor = {
+            workOrderGuid: protWo.workOrderGuid ?? null,
+            workOrderNumber: protWo.workOrderNumber ?? null,
+            matchedBy: String(protWo.workOrderNumber ?? "") === roStr ? "ro" : "vin",
+          };
+        }
+        if (swRo) {
+          xref.shopware = {
+            roId: swRo.roId ?? null,
+            number: swRo.number ?? null,
+            matchedBy: String(swRo.number ?? "") === roStr ? "ro" : "vin",
+          };
+        }
+
+        const matched = Object.keys(xref).length > 0;
+        // Normalize shopId/roNumber forms so the cross-reference always
+        // lands on the snapshot we just upserted, even if a future caller
+        // stores `shopId` as a string or `roNumber` as a number.
+        const updateRes = await db.collection("dvi_results").updateOne(
+          {
+            shopId: { $in: sIds },
+            $or: [
+              { roNumber: roStr },
+              { roNumber: Number(roStr) },
+            ],
+          },
+          {
+            $set: {
+              primaryRefs: xref,
+              primaryMatched: matched,
+              primaryMatchedAt: new Date(),
+            },
+          }
+        );
+        if (updateRes.matchedCount === 0) {
+          console.warn(
+            `[autoflow-webhook] DVI cross-reference write missed dvi_results for shop ${sId} RO ${roStr} (snapshot may not have been written yet)`
+          );
+        }
+
+        if (!matched) {
+          console.log(
+            `[autoflow-webhook] DVI for shop ${sId} RO ${roStr} (VIN ${vinForXref || "?"}) has no matching Tekmetric/Protractor/Shop-Ware work order`
+          );
+        }
+      } catch (xerr: any) {
+        console.warn(
+          `[autoflow-webhook] DVI cross-reference failed for shop ${shop.shopId} RO ${roNumber}: ${xerr.message}`
+        );
+      }
     }
   } catch (e) {
     // Swallow normalization errors; raw event is still stored for replay
