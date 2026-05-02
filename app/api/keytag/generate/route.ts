@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
+import { pngBufferToSizedPdfBuffer } from "@/lib/sticker-pdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,10 @@ interface KeytagRequest {
   mileage: string | number;
   previewConfig?: KeytagConfig;
   designerLayout?: DesignerLayout;
+  // Output format. Defaults to PNG (existing desktop popup-print path). Set
+  // to "pdf" for the mobile print path so iOS Safari / AirPrint render the
+  // key tag at its true physical size instead of as a tiny image on letter.
+  format?: "png" | "pdf";
 }
 
 export async function POST(req: NextRequest) {
@@ -113,6 +118,30 @@ export async function POST(req: NextRequest) {
         paper.renderHeight,
         2
       );
+    }
+
+    // Mobile print path needs a real PDF whose page size matches the key
+    // tag, because iOS Safari ignores CSS `@page { size }` and AirPrint
+    // defaults to letter — which is what produced the tiny-image-on-big-page
+    // bug. PDFs *do* carry their own page size and AirPrint honors it.
+    if (body.format === "pdf") {
+      const pdfBuffer = await pngBufferToSizedPdfBuffer(
+        imageBuffer,
+        paper.widthIn,
+        paper.heightIn,
+      );
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          // `inline` so iOS opens the system PDF preview (with the AirPrint
+          // share button) instead of triggering a download.
+          'Content-Disposition': `inline; filename="keytag-${body.roNumber}.pdf"`,
+          'X-Keytag-Size': paper.id,
+          'X-Keytag-Width': `${paper.widthIn.toFixed(3)}in`,
+          'X-Keytag-Height': `${paper.heightIn.toFixed(3)}in`,
+          'X-Keytag-DPI': String(paper.dpi),
+        },
+      });
     }
 
     return new NextResponse(new Uint8Array(imageBuffer), {

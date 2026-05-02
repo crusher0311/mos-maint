@@ -11,6 +11,7 @@ import ConcernAssistantModal from "@/components/ConcernAssistantModal";
 import NewWorkOrderModal from "@/components/NewWorkOrderModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
+import { isMobilePrintBrowser, openMobilePlaceholderWindow, navigateWindowToPdfBlob } from "@/lib/print-mobile";
 import { getOELogoUrl } from "@/lib/oe-logos";
 
 function getRowMake(r: any): string | undefined {
@@ -329,6 +330,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vehicleMake?: string,
     vehicleModel?: string
   ) => {
+    // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
+    // tab synchronously off the user's tap (before any await), then
+    // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
+    const useMobilePdfPath = isMobilePrintBrowser();
+    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("sticker") : null;
+
     setPrintingSticker(vin);
     try {
       let stickerSize = '2x2';
@@ -360,6 +367,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           vehicleYear,
           vehicleMake,
           vehicleModel,
+          format: useMobilePdfPath ? 'pdf' : 'png',
         }),
       });
       
@@ -369,6 +377,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       
       const blob = await response.blob();
+
+      if (useMobilePdfPath) {
+        navigateWindowToPdfBlob(mobilePrintWindow, blob);
+        window.dispatchEvent(new CustomEvent("refreshBookingCount"));
+        return;
+      }
+
       const reader = new FileReader();
       
       reader.onloadend = () => {
@@ -440,6 +455,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print sticker:', error);
+      if (mobilePrintWindow && !mobilePrintWindow.closed) {
+        try { mobilePrintWindow.close(); } catch { /* ignore */ }
+      }
       alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
     } finally {
       setPrintingSticker(null);
@@ -453,6 +471,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     roNumber: string,
     mileage: number | null
   ) => {
+    // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
+    // tab synchronously off the user's tap (before any await), then
+    // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
+    const useMobilePdfPath = isMobilePrintBrowser();
+    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("key tag") : null;
+
     setPrintingKeytag(vin);
     try {
       const res = await fetch('/api/keytag/generate', {
@@ -464,6 +488,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           vin: vin || '',
           roNumber: roNumber || '',
           mileage: mileage ?? 0,
+          format: useMobilePdfPath ? 'pdf' : 'png',
         }),
       });
 
@@ -473,6 +498,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
 
       const blob = await res.blob();
+
+      if (useMobilePdfPath) {
+        navigateWindowToPdfBlob(mobilePrintWindow, blob);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
@@ -517,6 +548,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print keytag:', error);
+      if (mobilePrintWindow && !mobilePrintWindow.closed) {
+        try { mobilePrintWindow.close(); } catch { /* ignore */ }
+      }
       alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
     } finally {
       setPrintingKeytag(null);
@@ -535,7 +569,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       alert("Mileage is required to print a sticker");
       return;
     }
-    
+
+    // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
+    // tab synchronously off the user's tap (before any await), then
+    // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
+    const useMobilePdfPath = isMobilePrintBrowser();
+    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("sticker") : null;
+
     setPrintingSticker(vin);
     try {
       // Fetch shop sticker settings to get interval preferences and size
@@ -640,6 +680,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           vehicleYear,
           vehicleMake,
           vehicleModel,
+          format: useMobilePdfPath ? 'pdf' : 'png',
         }),
       });
       
@@ -650,6 +691,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       
       // Get the image blob and convert to data URL
       const blob = await response.blob();
+
+      if (useMobilePdfPath) {
+        navigateWindowToPdfBlob(mobilePrintWindow, blob);
+        window.dispatchEvent(new CustomEvent("refreshBookingCount"));
+        return;
+      }
+
       const reader = new FileReader();
       
       reader.onloadend = () => {
@@ -722,6 +770,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Failed to print sticker:', error);
+      if (mobilePrintWindow && !mobilePrintWindow.closed) {
+        try { mobilePrintWindow.close(); } catch { /* ignore */ }
+      }
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
     } finally {
       setPrintingSticker(null);
