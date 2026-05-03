@@ -1,0 +1,44 @@
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ cat > /tmp/check-drains.cjs <<'SCRIPT'
+const {MongoClient} = require('mongodb');
+const u = process.env.MONGODB_URI || `mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
+(async () => {
+  const c = new MongoClient(u);
+  await c.connect();
+  const d = c.db('mos-maintenance-mvp');
+  const lock = await d.collection('tekmetric_drain_lock').findOne({_id: 'global'});
+  const proLock = await d.collection('backfill_progress')
+    .find({inProgress: true})
+    .project({shopId: 1, lastActivityAt: 1, lastAttemptedAt: 1})
+    .toArray();
+  const now = Date.now();
+  console.log('=== TEKMETRIC ===');
+  if (!lock) {
+    console.log('NO LOCK -- drain not running');
+  } else {
+    const ageS = Math.round((now - new Date(lock.lastRefreshAt).getTime()) / 1000);
+    console.log(`owner=${lock.owner} lastRefresh=${ageS}s ago expiresAt=${lock.expiresAt.toISOString()}`);
+    console.log(ageS < 90 ? '-> ALIVE' : '-> DEAD (>90s since last refresh)');
+node /tmp/check-drains.cjsp.shopId} lastActivity=${ageS}s ago ${ageS < 300 ? '(active)' : '(stale)'}`);
+node:internal/modules/cjs/loader:1404
+  throw err;
+  ^
+
+Error: Cannot find module 'mongodb'
+Require stack:
+- /tmp/check-drains.cjs
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+    at Function._load (node:internal/modules/cjs/loader:1211:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Module.require (node:internal/modules/cjs/loader:1487:12)
+    at require (node:internal/modules/helpers:135:16)
+    at Object.<anonymous> (/tmp/check-drains.cjs:1:23)
+    at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/tmp/check-drains.cjs' ]
+}
+
+Node.js v22.16.0
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ 
