@@ -78,6 +78,18 @@ interface CronLockEntry {
   expiresAt?: string;
 }
 
+interface CronJobHealth {
+  name: string;
+  schedule: string;
+  scheduleDescription: string;
+  intervalMs: number | null;
+  weekendOnly: boolean;
+  lastSuccessAt: string | null;
+  lastSuccessAgeMs: number | null;
+  staleThresholdMs: number | null;
+  stale: boolean;
+}
+
 interface CronStatusResponse {
   health: "ok" | "warn" | "fail";
   healthReason: string;
@@ -85,10 +97,24 @@ interface CronStatusResponse {
   sinceBootMs: number | null;
   bootHistory: CronBootEntry[];
   lastRuns: CronRunEntry[];
+  jobsHealth: CronJobHealth[];
+  staleJobs: CronJobHealth[];
   activeLocks: CronLockEntry[];
 }
 
-type TabType = "logs" | "api-usage" | "cron";
+interface MigrationEntity {
+  name: string;
+  state: "mongo-canonical" | "dual-write" | "supabase-canonical" | string;
+  notes?: string;
+}
+
+interface MigrationStatusResponse {
+  updatedAt: string | null;
+  notes: string | null;
+  entities: MigrationEntity[];
+}
+
+type TabType = "logs" | "api-usage" | "cron" | "migration";
 
 export default function ObservabilityPage() {
   const [activeTab, setActiveTab] = useState<TabType>("logs");
@@ -112,6 +138,10 @@ export default function ObservabilityPage() {
   const [cronStatus, setCronStatus] = useState<CronStatusResponse | null>(null);
   const [cronLoading, setCronLoading] = useState(false);
   const [cronError, setCronError] = useState<string | null>(null);
+
+  const [migrationStatus, setMigrationStatus] = useState<MigrationStatusResponse | null>(null);
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [migrationError, setMigrationError] = useState<string | null>(null);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -159,6 +189,24 @@ export default function ObservabilityPage() {
     }
   }, [hoursBack]);
 
+  const fetchMigrationStatus = useCallback(async () => {
+    setMigrationLoading(true);
+    setMigrationError(null);
+    try {
+      const response = await fetch(`/api/platform-admin/migration-status`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Failed (${response.status})`);
+      }
+      const data = (await response.json()) as MigrationStatusResponse;
+      setMigrationStatus(data);
+    } catch (err) {
+      setMigrationError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setMigrationLoading(false);
+    }
+  }, []);
+
   const fetchCronStatus = useCallback(async () => {
     setCronLoading(true);
     setCronError(null);
@@ -184,8 +232,10 @@ export default function ObservabilityPage() {
       fetchApiUsage();
     } else if (activeTab === "cron") {
       fetchCronStatus();
+    } else if (activeTab === "migration") {
+      fetchMigrationStatus();
     }
-  }, [activeTab, fetchLogs, fetchApiUsage, fetchCronStatus]);
+  }, [activeTab, fetchLogs, fetchApiUsage, fetchCronStatus, fetchMigrationStatus]);
 
   const getLevelColor = (level: string) => {
     switch (level.toLowerCase()) {
@@ -236,6 +286,16 @@ export default function ObservabilityPage() {
             }`}
           >
             Cron Scheduler
+          </button>
+          <button
+            onClick={() => setActiveTab("migration")}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === "migration"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Migration Status
           </button>
         </nav>
       </div>
@@ -605,6 +665,77 @@ export default function ObservabilityPage() {
                 )}
               </div>
 
+              {cronStatus.jobsHealth && cronStatus.jobsHealth.length > 0 && (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <div className="p-6 pb-2">
+                    <h3 className="text-lg font-semibold text-gray-900">Cron Health</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Last successful run per registered job, sourced from <code>cron_runs</code> (TTL-7d).
+                      Red badge = no success in 2× the schedule interval. Weekend-only boost jobs are
+                      silent Mon-Fri by design and never flag stale.
+                    </p>
+                  </div>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Success</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stale Threshold</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {cronStatus.jobsHealth.map((job) => (
+                        <tr key={job.name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{job.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 font-mono whitespace-nowrap">
+                            {job.schedule}
+                            <span className="block text-xs text-gray-400 font-sans">
+                              {job.scheduleDescription}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {job.lastSuccessAt ? (
+                              <>
+                                {new Date(job.lastSuccessAt).toLocaleString()}
+                                {typeof job.lastSuccessAgeMs === "number" && (
+                                  <span className="block text-xs text-gray-400">
+                                    {Math.round(job.lastSuccessAgeMs / 60000)} min ago
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-gray-400">never</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            {job.staleThresholdMs
+                              ? `${Math.round(job.staleThresholdMs / 60000)} min`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {job.weekendOnly ? (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700">
+                                WEEKEND-ONLY
+                              </span>
+                            ) : job.stale ? (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                STALE
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                OK
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="p-6 pb-2">
                   <h3 className="text-lg font-semibold text-gray-900">Last Job Runs</h3>
@@ -724,6 +855,84 @@ export default function ObservabilityPage() {
                     ))}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "migration" && (
+        <div>
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-gray-700">Dual-write migration map</h2>
+              <p className="text-xs text-gray-500">
+                Per-entity canonical-source state. Sourced from{" "}
+                <code>lib/migration/entity-map.json</code>, edited by the dual-write
+                retirement task as entities flip.
+              </p>
+            </div>
+            <button
+              onClick={fetchMigrationStatus}
+              disabled={migrationLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {migrationLoading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+
+          {migrationError && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+              <p className="text-red-800">{migrationError}</p>
+            </div>
+          )}
+
+          {migrationStatus && (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="p-6 pb-2 flex justify-between items-baseline">
+                <h3 className="text-lg font-semibold text-gray-900">Entities</h3>
+                {migrationStatus.updatedAt && (
+                  <span className="text-xs text-gray-500">
+                    Map updated: {migrationStatus.updatedAt}
+                  </span>
+                )}
+              </div>
+              {migrationStatus.notes && (
+                <p className="px-6 pb-2 text-xs text-gray-500">{migrationStatus.notes}</p>
+              )}
+              {migrationStatus.entities.length === 0 ? (
+                <div className="p-6 text-sm text-gray-500">No entities in map.</div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">State</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {migrationStatus.entities.map((ent) => (
+                      <tr key={ent.name} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{ent.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              ent.state === "supabase-canonical"
+                                ? "bg-green-100 text-green-800"
+                                : ent.state === "dual-write"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {ent.state}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{ent.notes || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           )}

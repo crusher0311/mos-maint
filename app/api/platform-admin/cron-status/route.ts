@@ -1,6 +1,28 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import path from "path";
+import { estimateScheduleInterval } from "@/lib/cron/schedule-interval";
+
+type CronJobDef = {
+  name: string;
+  schedule: string;
+  method?: string;
+  path: string;
+};
+
+// Use eval("require") so webpack doesn't try to statically resolve the .cjs
+// path at build time (mirrors the pattern in src/instrumentation.ts which
+// loads the same file). Cached on the module so we only pay the cost once.
+let cachedJobs: CronJobDef[] | null = null;
+function loadCronJobs(): CronJobDef[] {
+  if (cachedJobs) return cachedJobs;
+  const nodeRequire = eval("require") as NodeRequire;
+  const jobsPath = path.join(process.cwd(), "lib/cron/jobs.cjs");
+  const mod = nodeRequire(jobsPath) as { CRON_JOBS: CronJobDef[] };
+  cachedJobs = mod.CRON_JOBS;
+  return cachedJobs;
+}
 
 // The cron scheduler (lib/cron/scheduler.cjs) and the instrumentation hook
 // both write to the "mos" database (matching the existing cron_locks
@@ -55,6 +77,66 @@ export async function GET() {
       ? nowMs - new Date(lastBoot.bootedAt).getTime()
       : null;
 
+    // Pull the most recent successful run per job from cron_runs so we can
+    // compute staleness against the schedule interval. The status doc only
+    // tracks the *last* run (success or failure); we want the last *ok* one
+    // so a job that's been failing for two intervals also turns red.
+    const cronJobs = loadCronJobs();
+    const jobNames = cronJobs.map((j) => j.name);
+    const lastSuccessRows = await db
+      .collection("cron_runs")
+      .aggregate([
+        { $match: { jobName: { $in: jobNames }, ok: true } },
+        { $sort: { startedAt: -1 } },
+        {
+          $group: {
+            _id: "$jobName",
+            lastSuccessAt: { $first: "$startedAt" },
+            lastDurationMs: { $first: "$durationMs" },
+          },
+        },
+      ])
+      .toArray();
+    const lastSuccessByJob = new Map<string, Date>(
+      lastSuccessRows.map((r: any) => [r._id, new Date(r.lastSuccessAt)]),
+    );
+
+    const jobsHealth = cronJobs.map((job) => {
+      const interval = estimateScheduleInterval(job.schedule);
+      const lastSuccessAt = lastSuccessByJob.get(job.name) ?? null;
+      const lastSuccessAgeMs = lastSuccessAt
+        ? nowMs - lastSuccessAt.getTime()
+        : null;
+      const staleThresholdMs = interval.intervalMs
+        ? interval.intervalMs * 2
+        : null;
+
+      let stale = false;
+      if (interval.weekendOnly) {
+        // Weekend-only jobs are silent Mon-Fri by design — never flag stale.
+        stale = false;
+      } else if (staleThresholdMs && !lastSuccessAt) {
+        // Never seen a success — only flag once we've been booted long enough
+        // for one to plausibly have happened.
+        stale = sinceBootMs !== null && sinceBootMs > staleThresholdMs;
+      } else if (staleThresholdMs && lastSuccessAgeMs !== null) {
+        stale = lastSuccessAgeMs > staleThresholdMs;
+      }
+
+      return {
+        name: job.name,
+        schedule: job.schedule,
+        scheduleDescription: interval.description,
+        intervalMs: interval.intervalMs,
+        weekendOnly: interval.weekendOnly,
+        lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
+        lastSuccessAgeMs,
+        staleThresholdMs,
+        stale,
+      };
+    });
+    const staleJobs = jobsHealth.filter((j) => j.stale);
+
     let health: "ok" | "warn" | "fail" = "fail";
     let healthReason = "No scheduler boot record found";
     if (lastBoot) {
@@ -65,17 +147,16 @@ export async function GET() {
         health = "warn";
         healthReason = `Scheduler disabled: ${lastBoot.reason || "no reason given"}`;
       } else if (lastBoot.status === "running") {
-        const stale = lastRuns.find(
-          (r) =>
-            r.dt && now - new Date(r.dt).getTime() > 2 * oneHourMs && !r.ok,
-        );
         const everyJobFailed =
           lastRuns.length > 0 && lastRuns.every((r) => r.ok === false);
-        if (stale || everyJobFailed) {
+        if (staleJobs.length > 0) {
+          health = "fail";
+          healthReason = `${staleJobs.length} job(s) stale: ${staleJobs
+            .map((j) => j.name)
+            .join(", ")}`;
+        } else if (everyJobFailed) {
           health = "warn";
-          healthReason = stale
-            ? `Job ${stale.name} hasn't succeeded recently`
-            : "All recorded job runs are failing";
+          healthReason = "All recorded job runs are failing";
         } else {
           health = "ok";
           healthReason = bootedRecently
@@ -92,6 +173,8 @@ export async function GET() {
       sinceBootMs,
       bootHistory,
       lastRuns: lastRuns.sort((a, b) => a.name.localeCompare(b.name)),
+      jobsHealth: jobsHealth.sort((a, b) => a.name.localeCompare(b.name)),
+      staleJobs,
       activeLocks: locks.map((l: any) => ({
         jobName: l._id,
         instanceId: l.instanceId,

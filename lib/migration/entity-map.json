@@ -1,0 +1,15 @@
+{
+  "updatedAt": "2026-05-03",
+  "notes": "Per-entity dual-write migration state. Edited by the dual-write retirement task as entities flip. States: mongo-canonical | dual-write | supabase-canonical.",
+  "entities": [
+    { "name": "shops", "state": "dual-write", "notes": "Core shop directory" },
+    { "name": "users", "state": "dual-write", "notes": "Auth + RBAC identities" },
+    { "name": "tickets", "state": "supabase-canonical", "notes": "Support ticketing fully migrated" },
+    { "name": "notifications", "state": "mongo-canonical", "notes": "In-app notifications still Mongo-only" },
+    { "name": "work_orders", "state": "mongo-canonical", "notes": "Provider-sourced WO cache" },
+    { "name": "job_index", "state": "mongo-canonical", "notes": "Search/dedup index" },
+    { "name": "enhance_corrections", "state": "mongo-canonical", "notes": "Extension-written advisor corrections" },
+    { "name": "api_usage", "state": "mongo-canonical", "notes": "Provider request telemetry" },
+    { "name": "cron_runs", "state": "mongo-canonical", "notes": "Scheduler heartbeat (TTL-7d)" }
+  ]
+}
