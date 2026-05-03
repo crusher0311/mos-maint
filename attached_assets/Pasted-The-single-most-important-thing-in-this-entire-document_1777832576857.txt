@@ -1,0 +1,36 @@
+The single most important thing in this entire document
+Risk #9 in §5:
+
+PG writes are best-effort and swallow errors. When PG becomes canonical, failure semantics must flip — PG failure must fail the request before Mongo can be retired.
+
+This is not a Wave 3 task. It's a prerequisite to Wave 3. If you flip source of truth before fixing this, you will silently lose data with no alerts. This refactor in lib/supabase-dual-writer.ts needs to be its own isolated task done before any cutover begins on the dual-written entities.
+
+The 4 questions I'd resolve before starting Wave 0
+These open questions in §7 have the highest potential to derail the whole sequence:
+
+normalized_line_items / normalized_payments — are these live or dead on the PG side? If dead, drop the PG tables now and simplify Wave 3 significantly. If live, wire upsertLineItem into the ingestion path immediately so the PG side actually has data when you need it.
+platform_features / support_tickets / api_usage_logs — these are the three collections that exist in both DBs with unclear canonical ownership. The platform_features one is particularly dangerous because lib/featureResolver.ts reads Mongo at runtime while the admin UI writes PG. You could have an admin make a change and it silently never takes effect. This is a live bug, not just a migration risk.
+tekmetric_drain_lock — if you port this as-is to PG, you're building a distributed lock on a row table which is fragile. This is the right moment to replace it with pg_advisory_lock. Don't carry the Mongo pattern forward.
+workflow_runs — if something external writes this, you need to know before Wave 4 or you'll orphan a live integration.
+
+
+Wave sequencing looks right, with one adjustment
+The W0→W1→W2→W3→W4 order is sound. The one thing I'd add is a Wave 0.5 — a small sprint specifically to:
+
+Fix the dualWriteToSupabase failure semantics
+Resolve the three dual-canonical conflicts (platform_features, support_tickets, api_usage_logs)
+Wire upsertLineItem/upsertPayment into live ingestion or drop those PG tables
+
+Do that before Wave 1 even starts. It clears the landmines so every subsequent wave is clean.
+
+What's genuinely safe to start immediately
+Wave 0 orphan drops are zero-risk and will clean up the mental overhead. The confirmed orphans in §4.1 (webhook_events, oeschedules, the uppercase LKP_ variants, etc.) can go now. Just export a point-in-time backup first.
+
+What I'd tell Replit to do next
+Three tasks in order:
+
+Task: Resolve the three dual-canonical conflicts and answer the open questions in §7
+Task: Flip dualWriteToSupabase failure semantics (PG failure = request failure)
+Task: Wave 0 orphan drops
+
+Want me to draft the task specs for Replit for any of these?
