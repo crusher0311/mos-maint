@@ -1,0 +1,50 @@
+2026-05-03T18:57:49.826545353Z   ✓ STICKER_SIZE_INCHES has exactly the 5 supported sticker sizes
+2026-05-03T18:57:49.826596335Z   ✓ getStickerSizeInches("1.5x2.25") matches the inch matrix
+2026-05-03T18:57:49.826599725Z   ✓ getStickerSizeInches("2x2") matches the inch matrix
+2026-05-03T18:57:49.826605395Z   ✓ getStickerSizeInches("2x2.5") matches the inch matrix
+2026-05-03T18:57:49.826608035Z   ✓ getStickerSizeInches("2x3") matches the inch matrix
+2026-05-03T18:57:49.826613345Z   ✓ getStickerSizeInches("2x3.5") matches the inch matrix
+2026-05-03T18:57:49.826636016Z   ✓ getStickerSizeInches(unknown) falls back to 2x2.5
+2026-05-03T18:57:49.826703847Z   ✓ PDF_POINTS_PER_INCH === 72
+2026-05-03T18:57:49.828158213Z   ✓ QuickStickerModal contains a mobile-detection helper
+2026-05-03T18:57:49.828196884Z   ✓ QuickStickerModal sends `format: "pdf"` on the mobile path
+2026-05-03T18:57:49.828263975Z   ✗ QuickStickerModal opens the destination tab BEFORE awaiting the fetch (iOS gesture preservation)
+2026-05-03T18:57:49.828346467Z   ✓ QuickStickerModal carries the 'do not simplify back to @page' guard comment
+2026-05-03T18:57:49.828381678Z   ✓ QuickStickerModal handles popup-blocker fallback to PDF on desktop
+2026-05-03T18:57:49.829970957Z   ✓ Sticker generate route accepts a `format` field on the request
+2026-05-03T18:57:49.830017718Z   ✓ Sticker generate route returns application/pdf for format=pdf
+2026-05-03T18:57:49.830044809Z   ✓ Sticker generate route imports the sticker-pdf helper
+2026-05-03T18:57:49.845928357Z   ✓ [1.5x2.25] pngBufferToSizedPdfBuffer returns a non-empty Buffer
+2026-05-03T18:57:49.845947948Z   ✓ [1.5x2.25] PDF starts with %PDF- magic header
+2026-05-03T18:57:49.850227842Z   ✓ [1.5x2.25] reopened PDF has exactly 1 page
+2026-05-03T18:57:49.850293314Z   ✓ [1.5x2.25] PDF page width == 108pt (= 1.5in)
+2026-05-03T18:57:49.850297334Z   ✓ [1.5x2.25] PDF page height == 162pt (= 2.25in)
+2026-05-03T18:57:49.850301034Z   ✓ [1.5x2.25] PDF page is NOT letter-sized (would re-trigger the bug)
+2026-05-03T18:57:49.854447826Z   ✓ [2x2] pngBufferToSizedPdfBuffer returns a non-empty Buffer
+2026-05-03T18:57:49.854466696Z   ✓ [2x2] PDF starts with %PDF- magic header
+2026-05-03T18:57:49.856051505Z   ✓ [2x2] reopened PDF has exactly 1 page
+2026-05-03T18:57:49.856099106Z   ✓ [2x2] PDF page width == 144pt (= 2in)
+2026-05-03T18:57:49.856102766Z   ✓ [2x2] PDF page height == 144pt (= 2in)
+2026-05-03T18:57:49.856125557Z   ✓ [2x2] PDF page is NOT letter-sized (would re-trigger the bug)
+2026-05-03T18:57:49.860446802Z   ✓ [2x2.5] pngBufferToSizedPdfBuffer returns a non-empty Buffer
+2026-05-03T18:57:49.860455672Z   ✓ [2x2.5] PDF starts with %PDF- magic header
+2026-05-03T18:57:49.861473737Z   ✓ [2x2.5] reopened PDF has exactly 1 page
+2026-05-03T18:57:49.861486558Z   ✓ [2x2.5] PDF page width == 144pt (= 2in)
+2026-05-03T18:57:49.861489318Z   ✓ [2x2.5] PDF page height == 180pt (= 2.5in)
+2026-05-03T18:57:49.861512229Z   ✓ [2x2.5] PDF page is NOT letter-sized (would re-trigger the bug)
+2026-05-03T18:57:49.863813015Z   ✓ [2x3] pngBufferToSizedPdfBuffer returns a non-empty Buffer
+2026-05-03T18:57:49.863866176Z   ✓ [2x3] PDF starts with %PDF- magic header
+2026-05-03T18:57:49.864923462Z   ✓ [2x3] reopened PDF has exactly 1 page
+2026-05-03T18:57:49.864963523Z   ✓ [2x3] PDF page width == 144pt (= 2in)
+2026-05-03T18:57:49.864966893Z   ✓ [2x3] PDF page height == 216pt (= 3in)
+2026-05-03T18:57:49.864979263Z   ✓ [2x3] PDF page is NOT letter-sized (would re-trigger the bug)
+2026-05-03T18:57:49.867868164Z   ✓ [2x3.5] pngBufferToSizedPdfBuffer returns a non-empty Buffer
+2026-05-03T18:57:49.867879974Z   ✓ [2x3.5] PDF starts with %PDF- magic header
+2026-05-03T18:57:49.869095004Z   ✓ [2x3.5] reopened PDF has exactly 1 page
+2026-05-03T18:57:49.869101344Z   ✓ [2x3.5] PDF page width == 144pt (= 2in)
+2026-05-03T18:57:49.869107044Z   ✓ [2x3.5] PDF page height == 252pt (= 3.5in)
+2026-05-03T18:57:49.869109904Z   ✓ [2x3.5] PDF page is NOT letter-sized (would re-trigger the bug)
+2026-05-03T18:57:49.869239718Z 
+2026-05-03T18:57:49.869246778Z 1 Task #219 regression check(s) failed.
+2026-05-03T18:57:49.964772384Z ==> Build failed 😞
+2026-05-03T18:57:49.964804344Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

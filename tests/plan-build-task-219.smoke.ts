@@ -209,7 +209,7 @@ ok(
     const handlePrintIdx = modalSrc.indexOf("function handlePrint");
     if (handlePrintIdx < 0) return false;
     const after = modalSrc.slice(handlePrintIdx);
-    const openIdx = after.indexOf("mobilePrintWindow = window.open");
+    const openIdx = after.indexOf("placeholderWindow: Window | null = window.open");
     const awaitFetchIdx = after.indexOf('await fetch("/api/sticker/generate"');
     return openIdx > -1 && awaitFetchIdx > -1 && openIdx < awaitFetchIdx;
   })(),
