@@ -60,44 +60,24 @@ export async function POST(req: NextRequest) {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
 
-    const rescueRoverEnabled = process.env.RESCUE_ROVER_ENABLED === "true";
+    twiml.say(
+      { voice: "Polly.Matthew" },
+      "Thank you for calling. We are connecting your call now."
+    );
 
-    if (rescueRoverEnabled) {
-      twiml.say(
-        { voice: "Polly.Matthew" },
-        "Thank you for calling. Please hold while we connect you."
-      );
-
-      const statusCallbackUrl = `${config.baseUrl}/api/webhooks/twilio/voice/status`;
-
+    const forwardTo = process.env.CALL_FORWARD_NUMBER;
+    if (forwardTo) {
+      twiml.dial({
+        callerId: callerNumber,
+        action: `${config.baseUrl}/api/webhooks/twilio/voicemail?shopId=${shopId}&conversationId=${conversation.id}`,
+        timeout: 25,
+      }).number(forwardTo);
+    } else {
       twiml.dial({
         callerId: calledNumber,
         action: `${config.baseUrl}/api/webhooks/twilio/voicemail?shopId=${shopId}&conversationId=${conversation.id}`,
-        timeout: 20,
-      }).client(
-        { statusCallback: statusCallbackUrl, statusCallbackEvent: "initiated ringing answered completed" },
-        process.env.RESCUE_ROVER_CLIENT_IDENTITY || "rescue-rover"
-      );
-    } else {
-      twiml.say(
-        { voice: "Polly.Matthew" },
-        "Thank you for calling. We are connecting your call now."
-      );
-
-      const forwardTo = process.env.CALL_FORWARD_NUMBER;
-      if (forwardTo) {
-        twiml.dial({
-          callerId: callerNumber,
-          action: `${config.baseUrl}/api/webhooks/twilio/voicemail?shopId=${shopId}&conversationId=${conversation.id}`,
-          timeout: 25,
-        }).number(forwardTo);
-      } else {
-        twiml.dial({
-          callerId: calledNumber,
-          action: `${config.baseUrl}/api/webhooks/twilio/voicemail?shopId=${shopId}&conversationId=${conversation.id}`,
-          timeout: 25,
-        }).client("dashboard-user");
-      }
+        timeout: 25,
+      }).client("dashboard-user");
     }
 
     return new NextResponse(twiml.toString(), {

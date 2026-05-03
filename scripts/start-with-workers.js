@@ -114,23 +114,6 @@ async function main() {
     }
   });
 
-  const RR_WS_PORT = process.env.RESCUE_ROVER_WS_PORT || '3002';
-  console.log(`[5/5] Starting Rescue Rover WebSocket Server on port ${RR_WS_PORT}...`);
-  const rescueRoverWs = spawn('npx', ['tsx', 'scripts/rescue-rover-ws-server.ts'], {
-    stdio: 'inherit',
-    env: { ...workerEnv, RESCUE_ROVER_WS_PORT: RR_WS_PORT }
-  });
-
-  rescueRoverWs.on('error', (err) => {
-    console.error('[Rescue Rover WS] Failed to start:', err);
-  });
-
-  rescueRoverWs.on('exit', (code, signal) => {
-    if (code !== 0 && code !== null) {
-      console.error(`[Rescue Rover WS] Exited with code ${code}, signal: ${signal}`);
-    }
-  });
-
   console.log('');
   console.log('='.repeat(60));
   console.log('All services started!');
@@ -138,7 +121,6 @@ async function main() {
   console.log('- Tekmetric Sync Worker (every 60s)');
   console.log('- Protractor Sync Worker DISABLED (daily cron + webhooks)');
   console.log('- Plan Prefetch Worker (every 30m)');
-  console.log('- Rescue Rover WebSocket Server on port ' + RR_WS_PORT);
   console.log('='.repeat(60));
 
   process.on('SIGTERM', () => {
@@ -146,7 +128,6 @@ async function main() {
     nextServer.kill('SIGTERM');
     tekmetricWorker.kill('SIGTERM');
     planPrefetchWorker.kill('SIGTERM');
-    rescueRoverWs.kill('SIGTERM');
     process.exit(0);
   });
 
@@ -155,7 +136,6 @@ async function main() {
     nextServer.kill('SIGINT');
     tekmetricWorker.kill('SIGINT');
     planPrefetchWorker.kill('SIGINT');
-    rescueRoverWs.kill('SIGINT');
     process.exit(0);
   });
 }

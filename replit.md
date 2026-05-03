@@ -7,13 +7,13 @@ MOS Maintenance MVP is an AI-enhanced automotive maintenance management system d
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
 ## System Architecture
-The application is built with Next.js 14.2.5, React 18, Next.js API Routes, and Tailwind CSS, primarily using TypeScript. It employs a dual-database strategy with Supabase PostgreSQL for core relational data (CRM, communications), and MongoDB Atlas for caching and legacy features.
+The application is built with Next.js 14.2.5, React 18, Next.js API Routes, and Tailwind CSS, primarily using TypeScript. It employs a dual-database strategy with Supabase PostgreSQL for core relational data (communications, normalized vehicle/work-order data, support tickets, sniffer/migration tooling), and MongoDB Atlas for caching and legacy features.
 
 **UI/UX Decisions:**
 The UI features a modern SaaS aesthetic with a dark sidebar, light content areas, and card-based layouts. Key features include a unified integrations page, tabbed vehicle detail views, visual data source badges, dedicated UIs for "My Oil Sticker" and "Quick Sticker," and a drag-and-drop visual designer for keytag printing.
 
 **Technical Implementations:**
-*   **Data Management**: Core CRM and communication data reside in Supabase PostgreSQL via Drizzle ORM. MongoDB Atlas is used for caching. Normalized data is dual-written to both databases.
+*   **Data Management**: Core communication data resides in Supabase PostgreSQL via Drizzle ORM. MongoDB Atlas is used for caching. Normalized data is dual-written to both databases.
 *   **Integration Mechanisms**: A modular integration layer supports various shop management systems using adapter and facade patterns, with Chrome extensions for enhanced functionality.
 *   **Authentication & Authorization**: Role-based access is implemented with bcrypt hashing and token-based authentication.
 *   **Billing & Licensing**: Stripe integration handles VIN-based billing, supports modular feature flags, and manages plan tiers.
@@ -32,18 +32,13 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **Common Maintenance Layer**: Industry-standard maintenance items are integrated into plans, respecting shop-specific overrides.
 *   **Service Key Matching**: A shared module for normalizing free-text service job names to canonical service keys.
 *   **Communications**: Twilio powers voice calling, SMS, voicemail recording, and caller ID lookup with conversation tracking.
-*   **Rescue Rover AI Voice Agent**: An AI-powered SaaS client support phone assistant using Twilio, Deepgram, and OpenAI GPT-4o.
-*   **Call Center Management**: Features include phone number management, agent groups, time tracking, a call activity dashboard, and canned message templates.
-*   **CRM Account Hierarchy**: A multi-tier CRM account hierarchy supporting Agencies, Parent Organizations, Accounts, and Locations with configurable RBAC and branding overrides.
-*   **CRM Contact Management**: A full contact management system for business contacts across the account hierarchy.
-*   **CRM Sales Pipeline & Marketing Engine**: Includes a Kanban-style deal board, configurable funnel stages, campaigns, coupons, specials, message templates, and pricing administration.
-*   **CRM Onboarding & Content System**: Provides a Trello-style onboarding board, tours, guides, banners, and content assignment.
+*   **Call Center Management**: Features include phone number management, time tracking, a call activity dashboard, and canned message templates.
 *   **Tekmetric Webhook Integration**: Robust webhook integration for Tekmetric events, including safety nets, HMAC verification, and auto-subscription.
 *   **Job Search Triple-Source**: Job search queries legacy MongoDB, normalized MongoDB, and Supabase PostgreSQL in parallel, with results deduplicated and scored.
 *   **In-Process Cron Scheduler**: A `node-cron` based scheduler runs inside the main web service, utilizing a Mongo-backed distributed lock for concurrency safety.
 *   **Tekmetric Migration Wizard**: A platform-admin tool within the Detect Dog Chrome extension for migrating Tekmetric open jobs, preserving data integrity and providing detailed audit logs.
 *   **Backfill Drain Workers**: Standalone Node scripts that walk every incomplete shop to completion in one long-running process, bypassing the cron's per-tick chunk budget and 300s ceiling. Two variants: (1) `npm run drain:tekmetric-backfill` imports `backfillShopChunk` from the route and loops chunks per shop; holds an exclusive Mongo lease (`tekmetric_drain_lock`, 5-min TTL with 60s refresh) so cron GET/POST handlers no-op while it runs, eliminating the cursor-clobber race. (2) `npm run drain:protractor-backfill` calls `runProtractorBackfill(shopId)` per shop (it self-recurses chunks to completion); no global lock needed because Protractor's per-shop atomic lock with 30-min stale-recovery already handles concurrent cron+drain safely. Both configurable via `DRAIN_PARALLELISM`, `DRAIN_HEARTBEAT_MS`, `DRAIN_SHOP_IDS`. Both load `server-only`-tainted modules through a require-hook stub at `scripts/_stubs/server-only-stub.cjs`.
-*   **CRM Subsystem Feature Flag**: The entire CRM subsystem (including Onboarding, Sales Pipeline, Marketing, and Pricing) is controlled by a `CRM_ENABLED` environment variable, allowing for soft-hiding UI and API routes without code removal.
+*   **CRM and Rescue Rover Extracted**: The CRM subsystem (Account Hierarchy, Contacts, Sales Pipeline, Marketing, Pricing, Onboarding board / tours / guides / banners / content assignments) and the Rescue Rover AI voice agent have been extracted to a separate Replit project. Their code (routes, repositories, schema, components, feature flag, and the rescue-rover WebSocket worker) and the supporting Postgres tables have been removed from this repo. The Mongo collections that previously backed Rescue Rover (`rescue_rover_calls`, `rescue_rover_transcripts`, `rescue_rover_events`) are also out of scope here and should be dropped as part of the new project's data migration.
 *   **Day-Based Trial with Card Capture**: When a platform admin creates a shop, a configurable trial window (default 14 days, max 365) is started and a Stripe customer is provisioned. The shop owner is prompted on first login to add a payment method via Stripe Checkout (`mode: setup`); a dashboard banner and modal track this state. Countdown surfaces in the dashboard layout and the billing settings page. A daily cron (`/api/cron/trial-check`) sends reminder emails on a platform-admin-tunable day schedule (defaults to 7/3/1) using subject/HTML/text templates that admins can edit from the billing settings page (`{{shopName}}`, `{{daysLeft}}`, `{{dayWord}}`, `{{trialEndsAt}}`, `{{addCardUrl}}` placeholders). On trial end the cron either auto-converts the shop to a paid subscription using the saved default payment method or locks/suspends the account and notifies the owner.
 
 ## Dev Server Notes
