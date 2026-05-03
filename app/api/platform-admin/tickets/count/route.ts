@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { countSupportTickets } from "@/lib/data/repositories/support-tickets";
 
 export async function GET() {
   try {
     await requirePlatformAdmin();
 
-    const db = await getDb();
-
-    const openCount = await db.collection("support_tickets").countDocuments({
-      status: { $in: ["open", "in_progress"] }
+    const openCount = await countSupportTickets({
+      status: { $in: ["open", "in_progress"] },
     });
 
     return NextResponse.json({
       ok: true,
-      openCount
+      openCount,
     });
   } catch (error: any) {
     if (error.message === "Unauthorized" || error.message === "Not a platform admin") {

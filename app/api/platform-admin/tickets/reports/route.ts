@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { listSupportTickets } from "@/lib/data/repositories/support-tickets";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,19 +9,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get("days") || "30");
 
-    const db = await getDb();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const tickets = await db.collection("support_tickets")
-      .find({ createdAt: { $gte: startDate } })
-      .toArray();
+    const tickets = await listSupportTickets({ createdAt: { $gte: startDate } });
 
     const statusCounts = {
       open: 0,
       inProgress: 0,
       resolved: 0,
-      closed: 0
+      closed: 0,
     };
 
     const byCategory: Record<string, number> = {};
@@ -43,18 +40,22 @@ export async function GET(request: NextRequest) {
       const pri = ticket.priority || "medium";
       byPriority[pri] = (byPriority[pri] || 0) + 1;
 
-      const dayKey = new Date(ticket.createdAt).toISOString().split("T")[0];
+      const dayKey = new Date(ticket.createdAt as Date).toISOString().split("T")[0];
       byDay[dayKey] = (byDay[dayKey] || 0) + 1;
 
-      const email = ticket.userEmail;
+      const email = ticket.userEmail as string;
       if (!byUser[email]) {
-        byUser[email] = { count: 0, shopName: ticket.shopName || null, locationIdentifier: ticket.locationIdentifier || null };
+        byUser[email] = {
+          count: 0,
+          shopName: ticket.shopName || null,
+          locationIdentifier: ticket.locationIdentifier || null,
+        };
       }
       byUser[email].count++;
 
       if ((ticket.status === "resolved" || ticket.status === "closed") && ticket.resolvedAt) {
-        const createdAt = new Date(ticket.createdAt).getTime();
-        const resolvedAt = new Date(ticket.resolvedAt).getTime();
+        const createdAt = new Date(ticket.createdAt as Date).getTime();
+        const resolvedAt = new Date(ticket.resolvedAt as Date).getTime();
         totalResolutionTime += (resolvedAt - createdAt) / (1000 * 60 * 60);
         resolvedCount++;
       }
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
       byCategory,
       byPriority,
       byDay: byDayArray,
-      topUsers
+      topUsers,
     };
 
     return NextResponse.json({ ok: true, stats });

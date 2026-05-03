@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
+import { updateSessionByToken } from "@/lib/data/repositories/sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,15 +22,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No session" }, { status: 401 });
   }
 
-  const db = await getDb();
-  const result = await db.collection("sessions").updateOne(
-    { token },
-    { $set: { shopId: Number(newShopId) } }
-  );
+  const result = await updateSessionByToken(token, {
+    $set: { shopId: Number(newShopId) },
+  });
 
-  return NextResponse.json({ 
-    ok: true, 
+  return NextResponse.json({
+    ok: true,
     modified: result.modifiedCount,
-    newShopId: Number(newShopId)
+    newShopId: Number(newShopId),
   });
 }

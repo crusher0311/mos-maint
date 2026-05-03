@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePlatformAdmin, getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { requirePlatformAdmin } from "@/lib/auth";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
 import { platformFeatures } from "@/lib/db/schema/platform-features";
 import { eq } from "drizzle-orm";
 import { ObjectId } from "mongodb";
+import {
+  deletePlatformFeatureById,
+  findHighestOrderedPlatformFeature,
+  findPlatformFeatureById,
+  findPlatformFeatureBySlug,
+  insertPlatformFeature,
+  listPlatformFeatures,
+  updatePlatformFeatureById,
+} from "@/lib/data/repositories/platform-features";
 
 export interface PlatformFeature {
   _id?: ObjectId;
@@ -28,15 +36,11 @@ export async function GET() {
   try {
     await requirePlatformAdmin();
 
-    const db = await getDb();
-    const features = await db.collection("platform_features")
-      .find({})
-      .sort({ order: 1 })
-      .toArray();
+    const features = await listPlatformFeatures({}, { sort: { order: 1 } });
 
     return NextResponse.json({
       ok: true,
-      features
+      features,
     });
   } catch (error: any) {
     console.error("Error fetching features:", error);
@@ -58,15 +62,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name and slug are required" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const existing = await db.collection("platform_features").findOne({ slug });
+    const existing = await findPlatformFeatureBySlug(slug);
     if (existing) {
       return NextResponse.json({ error: "A feature with this slug already exists" }, { status: 400 });
     }
 
-    const maxOrder = await db.collection("platform_features").findOne({}, { sort: { order: -1 } });
-    const newOrder = (maxOrder?.order || 0) + 1;
+    const maxOrder = await findHighestOrderedPlatformFeature();
+    const newOrder = ((maxOrder?.order as number | undefined) || 0) + 1;
 
     const feature: Omit<PlatformFeature, "_id"> = {
       order: newOrder,
@@ -82,10 +84,10 @@ export async function POST(request: NextRequest) {
       stripePriceId: stripePriceId || undefined,
       pricePerMonth: pricePerMonth || undefined,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
-    const result = await db.collection("platform_features").insertOne(feature);
+    const insertedId = await insertPlatformFeature(feature);
 
     try {
       const pg = getSupabaseDb();
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      feature: { ...feature, _id: result.insertedId }
+      feature: { ...feature, _id: insertedId },
     });
   } catch (error: any) {
     console.error("Error creating feature:", error);
@@ -125,13 +127,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Feature ID is required" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const existing = await db.collection("platform_features").findOne({ _id: new ObjectId(id) });
+    const existing = await findPlatformFeatureById(id);
     const oldSlug = existing?.slug;
 
     const updateFields: Record<string, any> = { updatedAt: new Date() };
-    
+
     const allowedFields = ["name", "slug", "description", "category", "status", "icon", "compatibleSMS", "includedInTiers", "order", "stripeProductId", "stripePriceId", "pricePerMonth"];
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
@@ -139,11 +139,7 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const result = await db.collection("platform_features").findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: updateFields },
-      { returnDocument: "after" }
-    );
+    const result = await updatePlatformFeatureById(id, { $set: updateFields });
 
     if (!result) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 });
@@ -170,7 +166,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      feature: result
+      feature: result,
     });
   } catch (error: any) {
     console.error("Error updating feature:", error);
@@ -196,10 +192,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Feature ID is required" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const feature = await db.collection("platform_features").findOne({ _id: new ObjectId(id) });
-    const result = await db.collection("platform_features").deleteOne({ _id: new ObjectId(id) });
+    const feature = await findPlatformFeatureById(id);
+    const result = await deletePlatformFeatureById(id);
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: "Feature not found" }, { status: 404 });

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getSessionById, linkSessionToTicket } from "@/lib/support-chat";
-import { getDb } from "@/lib/mongo";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
+import { insertSupportTicket } from "@/lib/data/repositories/support-tickets";
+import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -31,19 +32,18 @@ export async function POST(req: NextRequest) {
   const ticketSubject = subject || "Escalated from AI Chat Support";
   const ticketDescription = `This ticket was escalated from AI chat support.\n\n--- Chat History ---\n\n${chatHistory}`;
 
-  const db = await getDb();
   const now = new Date();
   const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
-  let shopName = null;
-  let locationIdentifier = null;
+  let shopName: string | null = null;
+  let locationIdentifier: string | null = null;
   if (session.shopId) {
-    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
-    shopName = shop?.name || null;
-    locationIdentifier = shop?.locationIdentifier || null;
+    const shop = await findShopByExactShopId(Number(session.shopId));
+    shopName = shop?.name ?? null;
+    locationIdentifier = shop?.locationIdentifier ?? null;
   }
 
-  const result = await db.collection("support_tickets").insertOne({
+  const insertedId = await insertSupportTicket({
     ticketNumber,
     userEmail: session.email,
     userName: session.email.split("@")[0],
@@ -58,10 +58,10 @@ export async function POST(req: NextRequest) {
     messages: [],
     createdAt: now,
     updatedAt: now,
-    escalatedFromChat: sessionId
+    escalatedFromChat: sessionId,
   });
 
-  const ticketId = result.insertedId.toString();
+  const ticketId = insertedId.toString();
   await linkSessionToTicket(sessionId, ticketId);
 
   const ticketEmail = makeTicketCreatedEmail(ticketNumber, ticketSubject, "general");

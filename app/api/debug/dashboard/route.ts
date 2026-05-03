@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import type { Filter } from "mongodb";
+import {
+  countCustomers,
+  findCustomers,
+  type CustomerDoc,
+} from "@/lib/data/repositories/customers";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +17,8 @@ export async function GET(req: NextRequest) {
 
   const shopIdNum = Number(shopParam);
   const shopIdStr = String(shopParam);
-  const db = await getDb();
 
-  // Wide filter:
-  // - shopId matches number OR string
-  // - exclude obvious closed/appointment
-  // - require either vehicle.vin OR lastVin
-  const filter = {
+  const filter: Filter<CustomerDoc> = {
     $and: [
       { $or: [{ shopId: shopIdNum }, { shopId: shopIdStr }] },
       { status: { $nin: ["closed", "Close", "CLOSED", "Appointment"] } },
@@ -31,23 +31,22 @@ export async function GET(req: NextRequest) {
     ],
   };
 
-  const projection = {
+  const projection: Record<string, 0 | 1> = {
     name: 1,
     status: 1,
     lastStatus: 1,
     lastTicketId: 1,
     updatedAt: 1,
     lastVin: 1,
-    vehicle: { year: 1, make: 1, model: 1, vin: 1, odometer: 1, license: 1 },
+    vehicle: 1,
   };
 
-  const coll = db.collection("customers");
-  const count = await coll.countDocuments(filter);
-  const sample = await coll
-    .find(filter, { projection })
-    .sort({ updatedAt: -1 })
-    .limit(10)
-    .toArray();
+  const count = await countCustomers(filter);
+  const sample = await findCustomers(filter, {
+    sort: { updatedAt: -1 },
+    limit: 10,
+    projection,
+  });
 
   return NextResponse.json({
     ok: true,

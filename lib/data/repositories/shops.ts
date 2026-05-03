@@ -11,8 +11,20 @@ const COLLECTION = "shops";
 
 export interface ShopDoc {
   shopId: number | string;
+  // Some legacy shop docs are keyed off `id` (the integer primary key
+  // from the originating system) instead of `shopId`. A handful of
+  // platform-admin code paths look up by that field.
+  id?: number;
   name?: string;
+  locationIdentifier?: string;
   [extra: string]: unknown;
+}
+
+export async function listShopsByLegacyIds(
+  ids: number[],
+  projection?: Record<string, 0 | 1>,
+): Promise<ShopDoc[]> {
+  return listShopsByQuery({ id: { $in: ids } }, projection);
 }
 
 function shopIdFilter(shopId: number | string): Filter<ShopDoc> {

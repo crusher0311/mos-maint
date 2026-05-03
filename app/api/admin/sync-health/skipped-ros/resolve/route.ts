@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { manuallyResolveSkippedRo } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
+import { insertAuditLog } from "@/lib/data/repositories/audit-logs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Single audit-log line per shop covering all archived RO ids + actor.
-      await db.collection("audit_logs").insertOne({
+      await insertAuditLog({
         type: "manual_skipped_ros_bulk_resolved",
         shopId,
         adminEmail: session.email,
@@ -77,7 +78,6 @@ export async function POST(req: NextRequest) {
         failures,
         remaining: lastRemaining,
         fullyRecovered,
-        createdAt: new Date(),
       });
 
       console.log(

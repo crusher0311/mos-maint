@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import {
+  aggregateAdminAuditLogs,
+  findRecentAdminAuditLogs,
+} from "@/lib/data/repositories/audit-logs";
 
 export const dynamic = "force-dynamic";
 
@@ -58,15 +61,12 @@ export async function GET(request: NextRequest) {
       baseMatch["details.summary.skipped"] = { $gt: 0 };
     }
 
-    const db = await getDb();
-    const coll = db.collection("admin_audit_logs");
-
     const failedExpr = { $ifNull: ["$details.summary.failed", 0] };
     const addedExpr = { $ifNull: ["$details.summary.added", 0] };
     const skippedExpr = { $ifNull: ["$details.summary.skipped", 0] };
 
     const [totalsAgg, byDayAgg, topShopsAgg, topAdvisorsAgg, recentLogs] = await Promise.all([
-      coll.aggregate([
+      aggregateAdminAuditLogs([
         { $match: baseMatch },
         {
           $group: {
@@ -95,8 +95,8 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-      ]).toArray(),
-      coll.aggregate([
+      ]),
+      aggregateAdminAuditLogs([
         { $match: baseMatch },
         {
           $group: {
@@ -109,8 +109,8 @@ export async function GET(request: NextRequest) {
           },
         },
         { $sort: { _id: -1 } },
-      ]).toArray(),
-      coll.aggregate([
+      ]),
+      aggregateAdminAuditLogs([
         { $match: baseMatch },
         {
           $group: {
@@ -122,8 +122,8 @@ export async function GET(request: NextRequest) {
         },
         { $sort: { count: -1 } },
         { $limit: 10 },
-      ]).toArray(),
-      coll.aggregate([
+      ]),
+      aggregateAdminAuditLogs([
         { $match: baseMatch },
         {
           $group: {
@@ -134,8 +134,8 @@ export async function GET(request: NextRequest) {
         },
         { $sort: { count: -1 } },
         { $limit: 10 },
-      ]).toArray(),
-      coll.find(baseMatch).sort({ createdAt: -1 }).limit(200).toArray(),
+      ]),
+      findRecentAdminAuditLogs(baseMatch, 200),
     ]);
 
     const byDay = byDayAgg.map((d: any) => ({
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
       failed: u.failed || 0,
     }));
 
-    const t = totalsAgg[0] || {};
+    const t = (totalsAgg[0] || {}) as any;
     const totalAttempts = t.totalAttempts || 0;
     const attemptsWithFailure = t.attemptsWithFailure || 0;
     const attemptsAllSkipped = t.attemptsAllSkipped || 0;

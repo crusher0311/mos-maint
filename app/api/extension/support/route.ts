@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
-import { getDb } from "@/lib/mongo";
+import { insertSupportTicket } from "@/lib/data/repositories/support-tickets";
+import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 import {
   getOrCreateSession,
   addMessageToSession,
@@ -155,19 +156,18 @@ async function handleEscalate(user: any, body: any) {
   const ticketSubject = subject || "Escalated from AI Chat Support (Extension)";
   const ticketDescription = `This ticket was escalated from AI chat support via the Chrome extension.\n\n--- Chat History ---\n\n${chatHistory}`;
 
-  const db = await getDb();
   const now = new Date();
   const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
-  let shopName = null;
-  let locationIdentifier = null;
+  let shopName: string | null = null;
+  let locationIdentifier: string | null = null;
   if (user.shopId) {
-    const shop = await db.collection("shops").findOne({ shopId: user.shopId });
-    shopName = shop?.name || null;
-    locationIdentifier = shop?.locationIdentifier || null;
+    const shop = await findShopByExactShopId(Number(user.shopId));
+    shopName = shop?.name ?? null;
+    locationIdentifier = shop?.locationIdentifier ?? null;
   }
 
-  const result = await db.collection("support_tickets").insertOne({
+  const insertedId = await insertSupportTicket({
     ticketNumber,
     userEmail: user.email,
     userName: user.email.split("@")[0],
@@ -186,7 +186,7 @@ async function handleEscalate(user: any, body: any) {
     source: "extension",
   });
 
-  const ticketId = result.insertedId.toString();
+  const ticketId = insertedId.toString();
   await linkSessionToTicket(sessionId, ticketId);
 
   try {
@@ -263,17 +263,16 @@ async function handleTicket(user: any, body: any) {
     );
   }
 
-  const db = await getDb();
   const now = new Date();
   const ticketNumber = `TKT-${Date.now().toString(36).toUpperCase()}`;
 
-  let shopId = user.shopId || null;
-  let shopName = null;
-  let locationIdentifier = null;
+  const shopId = user.shopId || null;
+  let shopName: string | null = null;
+  let locationIdentifier: string | null = null;
   if (shopId) {
-    const shop = await db.collection("shops").findOne({ shopId });
-    shopName = shop?.name || null;
-    locationIdentifier = shop?.locationIdentifier || null;
+    const shop = await findShopByExactShopId(Number(shopId));
+    shopName = shop?.name ?? null;
+    locationIdentifier = shop?.locationIdentifier ?? null;
   }
 
   const ticket = {
@@ -306,7 +305,7 @@ async function handleTicket(user: any, body: any) {
     source: "extension",
   };
 
-  await db.collection("support_tickets").insertOne(ticket);
+  await insertSupportTicket(ticket);
 
   try {
     const categoryLabels: Record<string, string> = {

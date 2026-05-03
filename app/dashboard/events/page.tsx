@@ -1,6 +1,6 @@
 // app/dashboard/events/page.tsx
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { listRecentEvents } from "@/lib/data/repositories/events";
 
 export const dynamic = "force-dynamic";
 
@@ -76,24 +76,16 @@ function buildPreview(payload: any): string {
 export default async function EventsPage() {
   const sess = await requireSession();
 
-const db = await getDb();
-
 // Configurable limit:
 // - DEFAULT_EVENTS_LIMIT=0  → no limit (show all)
 // - DEFAULT_EVENTS_LIMIT>0  → use that number (clamped to 500)
 const raw = Number(process.env.DEFAULT_EVENTS_LIMIT ?? '0');
 const limit = Number.isFinite(raw) && raw >= 0 ? Math.min(raw, 500) : 0;
 
-const cursor = db
-  .collection("events")
-  .find({ provider: "autoflow", shopId: sess.shopId })
-  .sort({ receivedAt: -1 });
-
-if (limit > 0) {
-  cursor.limit(limit);
-}
-
-const docs = (await cursor.toArray()) as EventDoc[];
+const docs = (await listRecentEvents(
+  { provider: "autoflow", shopId: sess.shopId },
+  limit > 0 ? { limit } : {},
+)) as unknown as EventDoc[];
 
   const items: EventRow[] = docs.map((d) => {
     let payload = d.payload;

@@ -5,6 +5,7 @@ import {
   resendCardCaptureForShop,
   type CardCaptureResult,
 } from "@/lib/card-capture-resend";
+import { insertAuditLog } from "@/lib/data/repositories/audit-logs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
     const succeeded = results.filter((r) => r.ok).length;
     const failed = results.length - succeeded;
 
-    await db.collection("audit_logs").insertOne({
+    await insertAuditLog({
       type: "shop_card_capture_email_bulk_resent",
       adminEmail: session.email,
       requestedCount: shopIds.length,
@@ -122,7 +123,6 @@ export async function POST(req: NextRequest) {
       })),
       startedAt,
       finishedAt: new Date(),
-      createdAt: new Date(),
     });
 
     return NextResponse.json({

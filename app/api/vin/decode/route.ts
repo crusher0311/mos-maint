@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/mongo";
 import { decodeVinLocal } from "@/lib/integrations/dataone-local";
+import { findActiveSessionByToken } from "@/lib/data/repositories/sessions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-    const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: new Date() } });
+    const sess = await findActiveSessionByToken(sid);
     if (!sess) {
       return NextResponse.json({ error: "Session expired" }, { status: 401 });
     }

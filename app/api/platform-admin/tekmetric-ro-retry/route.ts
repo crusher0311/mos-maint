@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { runRetry } from "@/app/api/cron/tekmetric-ro-retry/route";
 import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
+import { insertAuditLog } from "@/lib/data/repositories/audit-logs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       const apiCalls = apiCallCounter.count;
       const duration = Date.now() - startTime;
 
-      await db.collection("audit_logs").insertOne({
+      await insertAuditLog({
         type: "manual_ro_retry_all_triggered",
         adminEmail: session.email,
         shopsConsidered: summary.shopsConsidered,
@@ -46,7 +47,6 @@ export async function POST(req: NextRequest) {
         totalRecovered: summary.totalRecovered,
         totalStillFailing: summary.totalStillFailing,
         totalPermanentlyFailed: summary.totalPermanentlyFailed,
-        createdAt: new Date(),
       });
 
       console.log(

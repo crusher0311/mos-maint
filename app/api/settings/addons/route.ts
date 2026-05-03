@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { listPlatformFeatures } from "@/lib/data/repositories/platform-features";
 
 export interface FeatureAddon {
   slug: string;
@@ -21,14 +21,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
+    const platformFeatures = await listPlatformFeatures(
+      { status: "active", category: { $in: ["core", "addon"] } },
+      { sort: { order: 1 } },
+    );
 
-    const platformFeatures = await db.collection("platform_features")
-      .find({ status: "active", category: { $in: ["core", "addon"] } })
-      .sort({ order: 1 })
-      .toArray();
-
-    const featureAddons: FeatureAddon[] = platformFeatures.map(f => ({
+    const featureAddons: FeatureAddon[] = platformFeatures.map((f: any) => ({
       slug: f.slug,
       name: f.name,
       description: f.description,

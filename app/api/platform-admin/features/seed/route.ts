@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import {
+  countPlatformFeatures,
+  insertPlatformFeatures,
+} from "@/lib/data/repositories/platform-features";
 
 const DEFAULT_FEATURES = [
   // CORE FEATURES - Can be purchased individually or as add-ons to other core features
@@ -151,13 +154,11 @@ export async function POST() {
   try {
     await requirePlatformAdmin();
 
-    const db = await getDb();
-    
-    const existingCount = await db.collection("platform_features").countDocuments();
+    const existingCount = await countPlatformFeatures();
     if (existingCount > 0) {
-      return NextResponse.json({ 
-        ok: false, 
-        error: "Features already exist. Delete all features first to reseed." 
+      return NextResponse.json({
+        ok: false,
+        error: "Features already exist. Delete all features first to reseed.",
       }, { status: 400 });
     }
 
@@ -165,14 +166,14 @@ export async function POST() {
     const featuresWithTimestamps = DEFAULT_FEATURES.map(f => ({
       ...f,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     }));
 
-    await db.collection("platform_features").insertMany(featuresWithTimestamps);
+    await insertPlatformFeatures(featuresWithTimestamps);
 
     return NextResponse.json({
       ok: true,
-      message: `Seeded ${DEFAULT_FEATURES.length} features`
+      message: `Seeded ${DEFAULT_FEATURES.length} features`,
     });
   } catch (error: any) {
     console.error("Error seeding features:", error);

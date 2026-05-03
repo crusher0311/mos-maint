@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { createNotificationsForUsers } from "@/lib/notifications";
 import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
 import { sendEmail } from "@/lib/email";
+import {
+  findOneAndUpdateSupportTicketById,
+  findSupportTicketById,
+} from "@/lib/data/repositories/support-tickets";
 
 export async function GET(
   request: NextRequest,
@@ -22,12 +25,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const ticket = await db.collection("support_tickets").findOne({
-      _id: new ObjectId(ticketId),
-      userEmail: session.email
-    });
+    const ticket = await findSupportTicketById(ticketId, { userEmail: session.email });
 
     if (!ticket) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -65,12 +63,7 @@ export async function POST(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const ticket = await db.collection("support_tickets").findOne({
-      _id: new ObjectId(ticketId),
-      userEmail: session.email
-    });
+    const ticket = await findSupportTicketById(ticketId, { userEmail: session.email });
 
     if (!ticket) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -80,8 +73,8 @@ export async function POST(
       return NextResponse.json({ error: "Cannot reply to a closed ticket" }, { status: 400 });
     }
 
-    const result = await db.collection("support_tickets").findOneAndUpdate(
-      { _id: new ObjectId(ticketId), userEmail: session.email },
+    const result = await findOneAndUpdateSupportTicketById(
+      ticketId,
       {
         $set: { updatedAt: new Date() },
         $push: {
@@ -91,11 +84,11 @@ export async function POST(
             fromEmail: session.email,
             fromName: session.name || session.email.split("@")[0],
             message,
-            createdAt: new Date()
-          }
-        }
+            createdAt: new Date(),
+          },
+        },
       },
-      { returnDocument: "after" }
+      { userEmail: session.email },
     );
 
     try {

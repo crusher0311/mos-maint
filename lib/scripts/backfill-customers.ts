@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 
-import { getDb } from "@/lib/mongo";
+import { streamEvents } from "@/lib/data/repositories/events";
 import { upsertCustomerFromAutoflow } from "@/lib/models/customers";
 
 // Prefer .env.local, fall back to .env
@@ -84,15 +84,13 @@ type PassResult = {
 };
 
 async function runOnce(args: Args, sinceExclusive: Date | null): Promise<PassResult> {
-  const db = await getDb();
-
   // Build query
   const q: any = { provider: "autoflow" };
   if (args.shop != null) q.shopId = args.shop;
   if (sinceExclusive) q.receivedAt = { $gt: sinceExclusive };
 
   // Stream newest first
-  const cursor = db.collection("events").find(q).sort({ receivedAt: -1 });
+  const cursor = await streamEvents(q, { receivedAt: -1 });
 
   let scanned = 0;
   let upserts = 0;

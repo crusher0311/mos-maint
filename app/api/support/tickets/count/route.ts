@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { countSupportTickets } from "@/lib/data/repositories/support-tickets";
 
 export async function GET() {
   try {
@@ -9,16 +9,14 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
-
-    const openCount = await db.collection("support_tickets").countDocuments({
+    const openCount = await countSupportTickets({
       userEmail: session.email,
-      status: { $in: ["open", "in_progress"] }
+      status: { $in: ["open", "in_progress"] },
     });
 
     return NextResponse.json({
       ok: true,
-      openCount
+      openCount,
     });
   } catch (error: any) {
     return NextResponse.json({ error: "Failed to get count" }, { status: 500 });

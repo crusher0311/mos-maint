@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
+import {
+  deleteSupportTicketById,
+  findSupportTicketById,
+} from "@/lib/data/repositories/support-tickets";
 
 export async function GET(
   request: NextRequest,
@@ -16,11 +19,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const ticket = await db.collection("support_tickets").findOne({
-      _id: new ObjectId(ticketId)
-    });
+    const ticket = await findSupportTicketById(ticketId);
 
     if (!ticket) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -28,7 +27,7 @@ export async function GET(
 
     return NextResponse.json({
       ok: true,
-      ticket
+      ticket,
     });
   } catch (error: any) {
     console.error("Error fetching ticket:", error);
@@ -52,11 +51,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-
-    const result = await db.collection("support_tickets").deleteOne({
-      _id: new ObjectId(ticketId)
-    });
+    const result = await deleteSupportTicketById(ticketId);
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -64,7 +59,7 @@ export async function DELETE(
 
     return NextResponse.json({
       ok: true,
-      message: "Ticket deleted"
+      message: "Ticket deleted",
     });
   } catch (error: any) {
     console.error("Error deleting ticket:", error);

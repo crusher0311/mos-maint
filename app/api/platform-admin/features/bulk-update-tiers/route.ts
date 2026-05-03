@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
 import { platformFeatures } from "@/lib/db/schema/platform-features";
 import { eq } from "drizzle-orm";
 import { ObjectId } from "mongodb";
+import {
+  bulkWritePlatformFeatures,
+  findPlatformFeaturesByIds,
+} from "@/lib/data/repositories/platform-features";
 
 export const runtime = "nodejs";
 
@@ -35,9 +38,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid updates format" }, { status: 400 });
     }
 
-    const db = await getDb();
-    const collection = db.collection("platform_features");
-
     const validUpdates = updates.filter((update: { id: string; includedInTiers: string[] }) => {
       if (!update.id || !isValidObjectId(update.id)) {
         return false;
@@ -61,12 +61,13 @@ export async function POST(req: NextRequest) {
       },
     }));
 
-    const result = await collection.bulkWrite(bulkOps);
+    const result = await bulkWritePlatformFeatures(bulkOps);
 
     try {
       const pg = getSupabaseDb();
-      const mongoIds = validUpdates.map((u: any) => new ObjectId(u.id));
-      const mongoDocs = await collection.find({ _id: { $in: mongoIds } }).toArray();
+      const mongoDocs = await findPlatformFeaturesByIds(
+        validUpdates.map((u: any) => u.id),
+      );
       for (const doc of mongoDocs) {
         if (doc.slug) {
           await pg.update(platformFeatures)
@@ -78,10 +79,10 @@ export async function POST(req: NextRequest) {
       console.warn("[Platform Features] Supabase bulk-update dual-write failed:", err.message);
     }
 
-    return NextResponse.json({ 
-      ok: true, 
+    return NextResponse.json({
+      ok: true,
       message: "Features updated successfully",
-      modified: result.modifiedCount
+      modified: result.modifiedCount,
     });
   } catch (err) {
     console.error("Error bulk updating feature tiers:", err);
