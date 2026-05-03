@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getRepairOrder, getVehicle, getCustomer } from "@/lib/integrations/shopware/client";
 import {
   transformRepairOrder,
@@ -7,9 +6,22 @@ import {
   transformCustomer,
 } from "@/lib/integrations/shopware/transform";
 import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
-import { computeJobHash } from "@/lib/job-index";
-import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
-import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
+import { extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
+import { findShopByQuery } from "@/lib/data/repositories/shops";
+import {
+  fireVhiOnWorkOrderClose,
+  fireVhiOnWorkOrderCreate,
+  insertWebhookLog,
+  markRepairOrderDeleted,
+  markWebhookFailed,
+  markWebhookProcessed,
+  prefetchPlanIfNeeded,
+  touchDashboardUpdate,
+  upsertCustomer,
+  upsertRepairOrder,
+  upsertShopwareJobIndexEntries,
+  upsertVehicle,
+} from "@/lib/data/repositories/shopware-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,20 +34,19 @@ function verifySecret(req: NextRequest): boolean {
 }
 
 async function findShopByTenant(tenantId: number, roShopId?: number) {
-  const db = await getDb();
-  const query: any = { "shopware.tenantId": tenantId };
+  const projection: Record<string, 0 | 1> = {
+    shopId: 1,
+    name: 1,
+    "shopware.swShopId": 1,
+  };
+  const query: Record<string, unknown> = { "shopware.tenantId": tenantId };
   if (roShopId) {
     query["shopware.swShopId"] = roShopId;
   }
-  const shop = await db.collection("shops").findOne(query, {
-    projection: { shopId: 1, name: 1, "shopware.swShopId": 1 },
-  });
+  const shop = await findShopByQuery(query, projection);
   if (shop) return shop;
   if (roShopId) {
-    return db.collection("shops").findOne(
-      { "shopware.tenantId": tenantId },
-      { projection: { shopId: 1, name: 1, "shopware.swShopId": 1 } }
-    );
+    return findShopByQuery({ "shopware.tenantId": tenantId }, projection);
   }
   return null;
 }
@@ -102,8 +113,6 @@ async function handleRepairOrderEvent(
   roId: number,
   rawData: any
 ) {
-  const db = await getDb();
-
   const roShopId: number | undefined = rawData?.shop_id ?? undefined;
   const shop = await findShopByTenant(tenantId, roShopId);
   if (!shop) {
@@ -114,10 +123,7 @@ async function handleRepairOrderEvent(
   const mosShopId = Number(shop.shopId);
 
   if (event === "repair_order.deleted") {
-    await db.collection("shopware_repair_orders").updateMany(
-      { mosShopId, roId },
-      { $set: { deleted: true, deletedAt: new Date(), deletedViaWebhook: true } }
-    );
+    await markRepairOrderDeleted(mosShopId, roId);
     console.log(`[SW Webhook] Marked RO ${roId} as deleted for shop ${mosShopId}`);
     return;
   }
@@ -140,24 +146,18 @@ async function handleRepairOrderEvent(
 
       if (rawData && (rawData.id || rawData.number)) {
         console.log(`[SW Webhook] Using webhook payload as fallback for RO ${roId}`);
-        await db.collection("shopware_repair_orders").updateOne(
-          { mosShopId, roId },
-          {
-            $set: {
-              mosShopId,
-              roId,
-              tenantId,
-              state: rawData.state ?? null,
-              vin: rawData.vehicle?.vin?.toUpperCase() ?? rawData.vin?.toUpperCase() ?? null,
-              number: rawData.number ?? null,
-              updatedAt: new Date(),
-              syncedAt: new Date(),
-              partialFromWebhook: true,
-              fetchError: err.message,
-            },
-          },
-          { upsert: true }
-        );
+        await upsertRepairOrder(mosShopId, roId, {
+          mosShopId,
+          roId,
+          tenantId,
+          state: rawData.state ?? null,
+          vin: rawData.vehicle?.vin?.toUpperCase() ?? rawData.vin?.toUpperCase() ?? null,
+          number: rawData.number ?? null,
+          updatedAt: new Date(),
+          syncedAt: new Date(),
+          partialFromWebhook: true,
+          fetchError: err.message,
+        });
         console.log(`[SW Webhook] Stored partial RO ${roId} from webhook payload for shop ${mosShopId}`);
       }
       return;
@@ -168,42 +168,32 @@ async function handleRepairOrderEvent(
 
   const normalized = transformRepairOrder(ro);
 
-  await db.collection("shopware_repair_orders").updateOne(
-    { mosShopId, roId },
-    {
-      $set: {
-        mosShopId,
-        roId,
-        tenantId,
-        swShopId: ro.shop_id,
-        number: ro.number,
-        state: ro.state,
-        vin: ro.vehicle?.vin?.toUpperCase() ?? null,
-        customerId: ro.customer_id,
-        vehicleId: ro.vehicle_id,
-        customerName: ro.customer
-          ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
-          : null,
-        vehicleYear: ro.vehicle?.year ? parseInt(ro.vehicle.year, 10) : null,
-        vehicleMake: ro.vehicle?.make ?? null,
-        vehicleModel: ro.vehicle?.model ?? null,
-        odometer: ro.odometer ?? null,
-        serviceCount: ro.services?.length ?? 0,
-        createdAt: ro.created_at ? new Date(ro.created_at) : null,
-        updatedAt: ro.updated_at ? new Date(ro.updated_at) : null,
-        closedAt: ro.closed_at ? new Date(ro.closed_at) : null,
-        raw: ro,
-        syncedAt: new Date(),
-      },
-    },
-    { upsert: true }
-  );
+  await upsertRepairOrder(mosShopId, roId, {
+    mosShopId,
+    roId,
+    tenantId,
+    swShopId: ro.shop_id,
+    number: ro.number,
+    state: ro.state,
+    vin: ro.vehicle?.vin?.toUpperCase() ?? null,
+    customerId: ro.customer_id,
+    vehicleId: ro.vehicle_id,
+    customerName: ro.customer
+      ? `${ro.customer.first_name ?? ""} ${ro.customer.last_name ?? ""}`.trim()
+      : null,
+    vehicleYear: ro.vehicle?.year ? parseInt(ro.vehicle.year, 10) : null,
+    vehicleMake: ro.vehicle?.make ?? null,
+    vehicleModel: ro.vehicle?.model ?? null,
+    odometer: ro.odometer ?? null,
+    serviceCount: ro.services?.length ?? 0,
+    createdAt: ro.created_at ? new Date(ro.created_at) : null,
+    updatedAt: ro.updated_at ? new Date(ro.updated_at) : null,
+    closedAt: ro.closed_at ? new Date(ro.closed_at) : null,
+    raw: ro,
+    syncedAt: new Date(),
+  });
 
-  await db.collection("dashboard_updates").updateOne(
-    { _id: "lastUpdate" } as any,
-    { $set: { timestamp: Date.now() } },
-    { upsert: true }
-  );
+  await touchDashboardUpdate();
 
   console.log(`[SW Webhook] Upserted RO ${roId} (${ro.number}) for shop ${mosShopId} — state: ${ro.state}`);
 
@@ -213,14 +203,12 @@ async function handleRepairOrderEvent(
   if (vin && vin.length === 17 && odometer && odometer > 0) {
     setImmediate(async () => {
       try {
-        const pfDb = await getDb();
-        const alreadyCached = await isPlanPrefetched(pfDb, vin, mosShopId);
-        if (!alreadyCached) {
-          console.log(`[SW Webhook] Prefetching plan for ${vin} at ${odometer} mi (RO ${roId})`);
-          const result = await prefetchPlanData(pfDb, mosShopId, vin, odometer);
-          console.log(`[SW Webhook] Prefetch complete for ${vin} in ${result.duration}ms`);
-        } else {
+        const result = await prefetchPlanIfNeeded(mosShopId, vin, odometer);
+        if (result.cached) {
           console.log(`[SW Webhook] Plan already cached for ${vin}, skipping prefetch`);
+        } else {
+          console.log(`[SW Webhook] Prefetching plan for ${vin} at ${odometer} mi (RO ${roId})`);
+          console.log(`[SW Webhook] Prefetch complete for ${vin} in ${result.duration}ms`);
         }
       } catch (err: any) {
         console.warn(`[SW Webhook] Prefetch failed for ${vin}:`, err.message);
@@ -232,8 +220,7 @@ async function handleRepairOrderEvent(
   const isInvoiced = ro.state === "invoice" || Boolean(ro.closed_at);
 
   if (!isInvoiced && vin && vin.length === 17 && odometer && odometer > 0) {
-    const swDb = await getDb();
-    triggerVhiOnWorkOrderCreate(swDb, {
+    fireVhiOnWorkOrderCreate({
       vin,
       shopId: mosShopId,
       provider: "shopware",
@@ -248,29 +235,7 @@ async function handleRepairOrderEvent(
   if (isInvoiced && ro.vehicle?.vin) {
     try {
       const entries = extractShopwareJobIndex(mosShopId, ro, tenantId);
-      let indexed = 0;
-      let skipped = 0;
-
-      for (const entry of entries) {
-        const contentHash = computeJobHash(entry as any);
-        const filter = {
-          shopId: mosShopId,
-          provider: "shopware",
-          workOrderId: entry.workOrderId,
-          servicePackageId: entry.servicePackageId,
-        };
-        const existing = await db.collection("job_index").findOne(filter);
-        if (existing?.contentHash === contentHash) {
-          skipped++;
-          continue;
-        }
-        await db.collection("job_index").updateOne(
-          filter,
-          { $set: { ...entry, contentHash } },
-          { upsert: true }
-        );
-        indexed++;
-      }
+      const { indexed, skipped } = await upsertShopwareJobIndexEntries(entries);
 
       if (indexed > 0) {
         console.log(
@@ -282,7 +247,7 @@ async function handleRepairOrderEvent(
     }
 
     const authorizedJobs = extractAuthorizedJobsFromShopWareRo(ro);
-    triggerVhiOnWorkOrderClose(db, {
+    fireVhiOnWorkOrderClose({
       vin: ro.vehicle?.vin?.toUpperCase(),
       shopId: mosShopId,
       provider: "shopware",
@@ -307,26 +272,19 @@ async function handleVehicleEvent(tenantId: number, vehicleId: number, rawData: 
       : await getVehicle(tenantId, vehicleId, mosShopId);
 
     const normalized = transformVehicle(vehicle);
-    const db = await getDb();
 
-    await db.collection("shopware_vehicles").updateOne(
-      { mosShopId, vehicleId },
-      {
-        $set: {
-          mosShopId,
-          vehicleId,
-          tenantId,
-          vin: normalized.vin?.toUpperCase() ?? null,
-          year: normalized.year ?? null,
-          make: normalized.make ?? null,
-          model: normalized.model ?? null,
-          licensePlate: normalized.licensePlate ?? null,
-          updatedAt: new Date(),
-          raw: vehicle,
-        },
-      },
-      { upsert: true }
-    );
+    await upsertVehicle(mosShopId, vehicleId, {
+      mosShopId,
+      vehicleId,
+      tenantId,
+      vin: normalized.vin?.toUpperCase() ?? null,
+      year: normalized.year ?? null,
+      make: normalized.make ?? null,
+      model: normalized.model ?? null,
+      licensePlate: normalized.licensePlate ?? null,
+      updatedAt: new Date(),
+      raw: vehicle,
+    });
 
     console.log(`[SW Webhook] Updated vehicle ${vehicleId} (${normalized.vin ?? "no VIN"}) for shop ${mosShopId}`);
   } catch (err: any) {
@@ -345,25 +303,18 @@ async function handleCustomerEvent(tenantId: number, customerId: number, rawData
       : await getCustomer(tenantId, customerId, mosShopId);
 
     const normalized = transformCustomer(customer);
-    const db = await getDb();
 
-    await db.collection("shopware_customers").updateOne(
-      { mosShopId, customerId },
-      {
-        $set: {
-          mosShopId,
-          customerId,
-          tenantId,
-          firstName: normalized.firstName ?? null,
-          lastName: normalized.lastName ?? null,
-          email: normalized.email ?? null,
-          phone: normalized.phone ?? null,
-          updatedAt: new Date(),
-          raw: customer,
-        },
-      },
-      { upsert: true }
-    );
+    await upsertCustomer(mosShopId, customerId, {
+      mosShopId,
+      customerId,
+      tenantId,
+      firstName: normalized.firstName ?? null,
+      lastName: normalized.lastName ?? null,
+      email: normalized.email ?? null,
+      phone: normalized.phone ?? null,
+      updatedAt: new Date(),
+      raw: customer,
+    });
 
     console.log(`[SW Webhook] Updated customer ${customerId} for shop ${mosShopId}`);
   } catch (err: any) {
@@ -393,9 +344,7 @@ export async function POST(req: NextRequest) {
   const resourceId: number = payload?.id;
   const resourceData = payload?.data ?? null;
 
-  const db = await getDb();
-
-  const logEntry = {
+  const swLogId = await insertWebhookLog({
     provider: "shopware",
     webhookId,
     event,
@@ -406,13 +355,9 @@ export async function POST(req: NextRequest) {
     raw,
     receivedAt: new Date(),
     processed: false,
-    processedAt: null as Date | null,
-    processingError: null as string | null,
-  };
-
-  await db.collection("events").insertOne({ ...logEntry });
-  const swLog = await db.collection("shopware_webhook_logs").insertOne({ ...logEntry });
-  const swLogId = swLog.insertedId;
+    processedAt: null,
+    processingError: null,
+  });
 
   console.log(`[SW Webhook] Received ${event} for tenant ${tenantId} resource ${resourceId} (log ${swLogId})`);
 
@@ -428,16 +373,10 @@ export async function POST(req: NextRequest) {
         console.log(`[SW Webhook] Unhandled event type: ${event}`);
       }
 
-      await db.collection("shopware_webhook_logs").updateOne(
-        { _id: swLogId },
-        { $set: { processed: true, processedAt: new Date() } }
-      );
+      await markWebhookProcessed(swLogId);
     } catch (err: any) {
       console.error("[SW Webhook] Async processing error:", err.message);
-      await db.collection("shopware_webhook_logs").updateOne(
-        { _id: swLogId },
-        { $set: { processed: false, processedAt: new Date(), processingError: err.message } }
-      ).catch(() => {});
+      await markWebhookFailed(swLogId, err.message);
     }
   });
 

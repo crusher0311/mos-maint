@@ -10,7 +10,7 @@ import { getDb } from "@/lib/data/db";
 const USAGE_COLLECTION = "api_usage";
 const RATE_LIMIT_COLLECTION = "api_rate_limits";
 
-export interface ApiUsageRecord {
+export interface ApiUsageRecord extends Document {
   _id?: ObjectId;
   provider: string;
   shopId?: number | null;
@@ -19,14 +19,16 @@ export interface ApiUsageRecord {
   method: string;
   statusCode: number;
   isError: boolean;
+  isRateLimited?: boolean;
   errorMessage?: string;
   errorCode?: string;
   latencyMs: number;
   requestId?: string;
   sourceWorker?: string;
   timestamp: Date;
-  [extra: string]: unknown;
 }
+
+type UsageFilter = Filter<Document>;
 
 export interface RateLimitRecord {
   _id: string;
@@ -35,9 +37,9 @@ export interface RateLimitRecord {
   expiresAt?: Date;
 }
 
-async function usageCollection(): Promise<Collection<ApiUsageRecord>> {
+async function usageCollection(): Promise<Collection<Document>> {
   const db = await getDb();
-  return db.collection<ApiUsageRecord>(USAGE_COLLECTION);
+  return db.collection<Document>(USAGE_COLLECTION);
 }
 
 async function rateLimitCollection(): Promise<Collection<RateLimitRecord>> {
@@ -45,10 +47,10 @@ async function rateLimitCollection(): Promise<Collection<RateLimitRecord>> {
   return db.collection<RateLimitRecord>(RATE_LIMIT_COLLECTION);
 }
 
-export async function insertUsageRecords(records: ApiUsageRecord[]): Promise<void> {
+export async function insertUsageRecords(records: Document[]): Promise<void> {
   if (records.length === 0) return;
   const col = await usageCollection();
-  await col.insertMany(records);
+  await col.insertMany(records.map((r) => ({ ...r })));
 }
 
 export interface RateLimitClaimResult {
@@ -76,7 +78,7 @@ export async function releaseRateLimitSlot(key: string): Promise<void> {
   await col.updateOne({ _id: key }, { $inc: { count: -1 } });
 }
 
-export async function countUsage(filter: Filter<ApiUsageRecord>): Promise<number> {
+export async function countUsage(filter: UsageFilter): Promise<number> {
   const col = await usageCollection();
   return col.countDocuments(filter);
 }
@@ -87,10 +89,10 @@ export async function aggregateUsage<T = Document>(pipeline: Document[]): Promis
 }
 
 export async function findOneUsage(
-  filter: Filter<ApiUsageRecord>,
+  filter: UsageFilter,
 ): Promise<ApiUsageRecord | null> {
   const col = await usageCollection();
-  return col.findOne(filter);
+  return (await col.findOne(filter)) as ApiUsageRecord | null;
 }
 
 export interface FindUsageOptions {
@@ -100,7 +102,7 @@ export interface FindUsageOptions {
 }
 
 export async function findUsage(
-  filter: Filter<ApiUsageRecord>,
+  filter: UsageFilter,
   opts: FindUsageOptions = {},
 ): Promise<ApiUsageRecord[]> {
   const col = await usageCollection();
@@ -108,5 +110,16 @@ export async function findUsage(
   if (opts.sort) cursor.sort(opts.sort);
   if (opts.limit) cursor.limit(opts.limit);
   if (opts.projection) cursor.project(opts.projection);
-  return cursor.toArray() as Promise<ApiUsageRecord[]>;
+  return (await cursor.toArray()) as ApiUsageRecord[];
+}
+
+export async function ensureApiUsageIndexes(): Promise<void> {
+  const col = await usageCollection();
+  await Promise.all([
+    col.createIndex({ provider: 1, timestamp: -1 }),
+    col.createIndex({ provider: 1, isError: 1, timestamp: -1 }),
+    col.createIndex({ provider: 1, shopId: 1, timestamp: -1 }),
+    col.createIndex({ requestId: 1 }, { sparse: true }),
+    col.createIndex({ timestamp: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 }),
+  ]);
 }

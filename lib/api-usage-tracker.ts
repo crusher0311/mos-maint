@@ -1,5 +1,15 @@
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
+import {
+  aggregateUsage,
+  claimRateLimitSlot,
+  countUsage,
+  ensureApiUsageIndexes as ensureApiUsageIndexesRepo,
+  findOneUsage,
+  findUsage,
+  insertUsageRecords,
+  releaseRateLimitSlot,
+} from "@/lib/data/repositories/api-usage";
+import { listShopsByQuery } from "@/lib/data/repositories/shops";
 
 export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode' | 'render' | 'shopware';
 
@@ -93,18 +103,16 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   }
 };
 
-const COLLECTION_NAME = 'api_usage';
-const RATE_LIMIT_COLLECTION = 'api_rate_limits';
-
 let inMemoryBuffer: ApiUsageRecord[] = [];
 let lastFlush = Date.now();
 const FLUSH_INTERVAL_MS = 10000;
 
-const circuitBreakerState: Record<ApiProvider, {
+type CircuitBreakerEntry = {
   consecutiveFailures: number;
   openUntil: number;
   isOpen: boolean;
-}> = {} as any;
+};
+const circuitBreakerState: Partial<Record<ApiProvider, CircuitBreakerEntry>> = {};
 
 function getMinuteBucket(date: Date): string {
   const d = new Date(date);
@@ -177,44 +185,24 @@ export async function acquireDistributedRateLimitSlot(
     console.log(`[CircuitBreaker] ${provider} circuit open, skipping request (${Math.round(remainingMs/1000)}s remaining)`);
     return { acquired: false, waitedMs: 0, currentCount: limitPerMinute, circuitOpen: true };
   }
-  
-  const db = await getDb();
-  const collection = db.collection(RATE_LIMIT_COLLECTION);
-  
+
   let totalWaitedMs = 0;
   const baseWaitMs = 2000;
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const now = new Date();
     const minuteBucket = getMinuteBucket(now);
     const key = `${provider}:${minuteBucket}`;
-    
-    const result = await collection.findOneAndUpdate(
-      { _id: key as any },
-      { 
-        $inc: { count: 1 },
-        $setOnInsert: { 
-          createdAt: now,
-          expiresAt: new Date(now.getTime() + 120000)
-        }
-      },
-      { 
-        upsert: true, 
-        returnDocument: 'after'
-      }
-    );
-    
-    const currentCount = result?.count || 1;
-    
+
+    const claim = await claimRateLimitSlot(key, new Date(now.getTime() + 120000));
+    const currentCount = claim.count;
+
     if (currentCount <= limitPerMinute) {
       recordRateLimitSuccess(provider);
       return { acquired: true, waitedMs: totalWaitedMs, currentCount };
     }
-    
-    await collection.updateOne(
-      { _id: key as any },
-      { $inc: { count: -1 } }
-    );
+
+    await releaseRateLimitSlot(key);
     
     const exponentialWait = baseWaitMs * Math.pow(2, attempt);
     const jitter = Math.random() * 1000;
@@ -292,8 +280,7 @@ async function flushToDb(): Promise<void> {
   lastFlush = Date.now();
 
   try {
-    const db = await getDb();
-    await db.collection(COLLECTION_NAME).insertMany(toFlush);
+    await insertUsageRecords(toFlush);
   } catch (err) {
     console.error("[ApiUsageTracker] Failed to flush:", err);
     inMemoryBuffer = [...toFlush, ...inMemoryBuffer];
@@ -316,7 +303,6 @@ export interface ProviderStats {
 }
 
 export async function getApiUsageStats(provider?: ApiProvider): Promise<ProviderStats[]> {
-  const db = await getDb();
   const now = new Date();
   
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
@@ -334,21 +320,21 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
     const inMemory60Min = inMemoryBuffer.filter(r => r.provider === p && r.timestamp >= sixtyMinutesAgo).length;
 
     const [currentMinute, last5Minutes, last60Minutes, errorCount, rateLimitCount, avgLatency, topShops] = await Promise.all([
-      db.collection(COLLECTION_NAME).countDocuments({ provider: p, timestamp: { $gte: oneMinuteAgo } }),
-      db.collection(COLLECTION_NAME).countDocuments({ provider: p, timestamp: { $gte: fiveMinutesAgo } }),
-      db.collection(COLLECTION_NAME).countDocuments({ provider: p, timestamp: { $gte: sixtyMinutesAgo } }),
-      db.collection(COLLECTION_NAME).countDocuments({ provider: p, isError: true, timestamp: { $gte: sixtyMinutesAgo } }),
-      db.collection(COLLECTION_NAME).countDocuments({ provider: p, isRateLimited: true, timestamp: { $gte: sixtyMinutesAgo } }),
-      db.collection(COLLECTION_NAME).aggregate([
+      countUsage({ provider: p, timestamp: { $gte: oneMinuteAgo } }),
+      countUsage({ provider: p, timestamp: { $gte: fiveMinutesAgo } }),
+      countUsage({ provider: p, timestamp: { $gte: sixtyMinutesAgo } }),
+      countUsage({ provider: p, isError: true, timestamp: { $gte: sixtyMinutesAgo } }),
+      countUsage({ provider: p, isRateLimited: true, timestamp: { $gte: sixtyMinutesAgo } }),
+      aggregateUsage<{ avg: number }>([
         { $match: { provider: p, timestamp: { $gte: sixtyMinutesAgo } } },
         { $group: { _id: null, avg: { $avg: "$latencyMs" } } }
-      ]).toArray(),
-      db.collection(COLLECTION_NAME).aggregate([
+      ]),
+      aggregateUsage<{ _id: number; count: number }>([
         { $match: { provider: p, timestamp: { $gte: sixtyMinutesAgo }, shopId: { $exists: true } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 5 }
-      ]).toArray()
+      ])
     ]);
 
     const totalCurrentMinute = currentMinute + inMemoryCurrent;
@@ -410,16 +396,16 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
     // Look up shops by multiple possible ID fields:
     // - shopId: MOS internal ID (used by Protractor)
     // - tekmetric.shopId or tekmetricShopId: Tekmetric's shop ID
-    const shops = await db.collection("shops").find(
-      { 
+    const shops = await listShopsByQuery(
+      {
         $or: [
           { shopId: { $in: shopIdArray } },
           { "tekmetric.shopId": { $in: shopIdArray } },
-          { tekmetricShopId: { $in: shopIdArray } }
-        ]
+          { tekmetricShopId: { $in: shopIdArray } },
+        ],
       },
-      { projection: { shopId: 1, name: 1, locationIdentifier: 1, "tekmetric.shopId": 1, tekmetricShopId: 1 } }
-    ).toArray();
+      { shopId: 1, name: 1, locationIdentifier: 1, "tekmetric.shopId": 1, tekmetricShopId: 1 },
+    );
     
     const shopNameMap = new Map<number, string>();
     for (const shop of shops) {
@@ -456,21 +442,20 @@ export async function getHourlyUsage(provider: ApiProvider, hours: number = 24):
   errors: number;
   avgLatencyMs: number;
 }[]> {
-  const db = await getDb();
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-  const hourly = await db.collection(COLLECTION_NAME).aggregate([
+  const hourly = await aggregateUsage<{ _id: string; count: number; errors: number; avgLatency: number }>([
     { $match: { provider, timestamp: { $gte: since } } },
-    { 
-      $group: { 
+    {
+      $group: {
         _id: { $dateToString: { format: "%Y-%m-%dT%H:00:00Z", date: "$timestamp" } },
         count: { $sum: 1 },
         errors: { $sum: { $cond: ["$isError", 1, 0] } },
         avgLatency: { $avg: "$latencyMs" }
-      } 
+      }
     },
     { $sort: { _id: 1 } }
-  ]).toArray();
+  ]);
 
   return hourly.map(h => ({
     hour: h._id,
@@ -526,24 +511,17 @@ export async function shouldThrottleProviderShared(provider: ApiProvider): Promi
   }
 
   try {
-    const db = await getDb();
     const now = new Date();
     const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
     const fiveSecondsAgo = new Date(now.getTime() - 5 * 1000);
 
     // Count requests in the last minute and last 5 seconds from DB
     const [minuteCount, recentCount] = await Promise.all([
-      config.rateLimit?.perMinute 
-        ? db.collection(COLLECTION_NAME).countDocuments({ 
-            provider, 
-            timestamp: { $gte: oneMinuteAgo } 
-          })
+      config.rateLimit?.perMinute
+        ? countUsage({ provider, timestamp: { $gte: oneMinuteAgo } })
         : Promise.resolve(0),
-      config.rateLimit?.perSecond 
-        ? db.collection(COLLECTION_NAME).countDocuments({ 
-            provider, 
-            timestamp: { $gte: fiveSecondsAgo } 
-          })
+      config.rateLimit?.perSecond
+        ? countUsage({ provider, timestamp: { $gte: fiveSecondsAgo } })
         : Promise.resolve(0)
     ]);
 
@@ -624,7 +602,6 @@ export async function getErrorDetails(query: DrillDownQuery): Promise<{
   hasMore: boolean;
   nextCursor?: string;
 }> {
-  const db = await getDb();
   const limit = Math.min(query.limit || 50, 100);
   const since = query.since || new Date(Date.now() - 60 * 60 * 1000);
 
@@ -647,12 +624,8 @@ export async function getErrorDetails(query: DrillDownQuery): Promise<{
   }
 
   const [errors, total] = await Promise.all([
-    db.collection(COLLECTION_NAME)
-      .find(findFilter)
-      .sort({ _id: -1 })
-      .limit(limit + 1)
-      .toArray(),
-    db.collection(COLLECTION_NAME).countDocuments(baseFilter)
+    findUsage(findFilter, { sort: { _id: -1 }, limit: limit + 1 }),
+    countUsage(baseFilter),
   ]);
 
   const hasMore = errors.length > limit;
@@ -692,7 +665,6 @@ export async function getShopRequests(
   nextCursor?: string;
   stats: { total: number; errors: number; avgLatency: number };
 }> {
-  const db = await getDb();
   const limit = Math.min(query.limit || 50, 100);
   const since = query.since || new Date(Date.now() - 60 * 60 * 1000);
 
@@ -713,23 +685,19 @@ export async function getShopRequests(
   }
 
   const [requests, total, statsResult] = await Promise.all([
-    db.collection(COLLECTION_NAME)
-      .find(findFilter)
-      .sort({ _id: -1 })
-      .limit(limit + 1)
-      .toArray(),
-    db.collection(COLLECTION_NAME).countDocuments(baseFilter),
-    db.collection(COLLECTION_NAME).aggregate([
+    findUsage(findFilter, { sort: { _id: -1 }, limit: limit + 1 }),
+    countUsage(baseFilter),
+    aggregateUsage<{ total: number; errors: number; avgLatency: number }>([
       { $match: baseFilter },
-      { 
-        $group: { 
-          _id: null, 
+      {
+        $group: {
+          _id: null,
           total: { $sum: 1 },
           errors: { $sum: { $cond: ["$isError", 1, 0] } },
           avgLatency: { $avg: "$latencyMs" }
-        } 
+        }
       }
-    ]).toArray()
+    ]),
   ]);
 
   const hasMore = requests.length > limit;
@@ -766,9 +734,8 @@ export async function getShopRequests(
 }
 
 export async function getRequestById(requestId: string): Promise<ErrorRecord | null> {
-  const db = await getDb();
-  const record = await db.collection(COLLECTION_NAME).findOne({ requestId });
-  
+  const record = await findOneUsage({ requestId });
+
   if (!record) return null;
 
   return {
@@ -792,25 +759,24 @@ export async function getErrorBreakdown(provider?: ApiProvider): Promise<{
   byStatusCode: { statusCode: number; count: number; label: string }[];
   byEndpoint: { endpoint: string; count: number }[];
 }> {
-  const db = await getDb();
   const since = new Date(Date.now() - 60 * 60 * 1000);
-  
+
   const filter: any = { isError: true, timestamp: { $gte: since } };
   if (provider) filter.provider = provider;
 
   const [byStatusCode, byEndpoint] = await Promise.all([
-    db.collection(COLLECTION_NAME).aggregate([
+    aggregateUsage<{ _id: number; count: number }>([
       { $match: filter },
       { $group: { _id: "$statusCode", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 }
-    ]).toArray(),
-    db.collection(COLLECTION_NAME).aggregate([
+    ]),
+    aggregateUsage<{ _id: string; count: number }>([
       { $match: filter },
       { $group: { _id: "$endpoint", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 }
-    ]).toArray()
+    ]),
   ]);
 
   const statusLabels: Record<number, string> = {
@@ -839,14 +805,5 @@ export async function getErrorBreakdown(provider?: ApiProvider): Promise<{
 }
 
 export async function ensureApiUsageIndexes(): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection(COLLECTION_NAME);
-  
-  await Promise.all([
-    collection.createIndex({ provider: 1, timestamp: -1 }),
-    collection.createIndex({ provider: 1, isError: 1, timestamp: -1 }),
-    collection.createIndex({ provider: 1, shopId: 1, timestamp: -1 }),
-    collection.createIndex({ requestId: 1 }, { sparse: true }),
-    collection.createIndex({ timestamp: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 })
-  ]);
+  await ensureApiUsageIndexesRepo();
 }
