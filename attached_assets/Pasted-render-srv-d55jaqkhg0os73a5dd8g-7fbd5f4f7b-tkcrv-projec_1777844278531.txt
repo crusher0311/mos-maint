@@ -1,0 +1,44 @@
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ # 1. Big picture — counts + per-shop Tekmetric progress
+node ./check-drains.cjs
+
+# 2. Is the Tekmetric drain process still alive?
+ps -ef | grep -E 'drain-tekmetric|drain-protractor' | grep -v grep
+
+# 3. Is the Tekmetric lock still being refreshed? (most reliable signal)
+node -e '
+const {MongoClient} = require("mongodb");
+const u = process.env.MONGODB_USERNAME, p = encodeURIComponent(process.env.MONGODB_PASSWORD);
+const c = new MongoClient(`mongodb+srv://${u}:${p}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp`);
+(async () => {
+  await c.connect();
+  const lock = await c.db("mos-maintenance-mvp").collection("tekmetric_drain_lock").findOne({_id: "global"});
+  if (!lock) { console.log("NO LOCK — drain is dead"); }
+  else {
+    const ageSec = (Date.now() - new Date(lock.lastRefreshAt).getTime())/1000;
+    const expiresInSec = (new Date(lock.expiresAt).getTime() - Date.now())/1000;
+    console.log(`owner=${lock.owner}`);
+    console.log(`lastRefresh=${ageSec.toFixed(0)}s ago  expiresIn=${expiresInSec.toFixed(0)}s`);
+    console.log(ageSec < 90 ? "ALIVE (refreshed within last 90s)" : expiresInSec < 0 ? "DEAD (expired)" : "STALE (no recent refresh, but not yet expired)");
+})();'t c.close();
+node:internal/modules/cjs/loader:1404
+  throw err;
+  ^
+
+Error: Cannot find module '/opt/render/project/src/check-drains.cjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+    at Function._load (node:internal/modules/cjs/loader:1211:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.16.0
+owner=drain-428-1777836098354-xewnhs
+lastRefresh=250s ago  expiresIn=50s
+STALE (no recent refresh, but not yet expired)
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ 
