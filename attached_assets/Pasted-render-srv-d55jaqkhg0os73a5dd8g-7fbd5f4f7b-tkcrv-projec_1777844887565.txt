@@ -1,0 +1,56 @@
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ cd ~/project/src
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ node ./scripts/clear-stale-drain-locks.mjs
+tekmetric_drain_lock: STALE (owner=drain-428-1777836098354-xewnhs expired 3.3min ago) — deleted 1
+backfill_progress: cleared inProgress on 1 stale shop(s) (13 live shop(s) untouched)
+  - shop=71 lastActivity=32.2min ago
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ nohup npx tsx scripts/drain-tekmetric-backfill.ts > /tmp/drain-tek.log 2>&1 & echo "Tek PID: $!"; nohup npx tsx scripts/drain-protractor-backfill.ts > /tmp/drain-pro.log 2>&1 & echo "Pro PID: $!"
+[1] 366
+Tek PID: 366
+[2] 367
+Pro PID: 367
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ node -e 'const{MongoClient}=require("mongodb");const c=new MongoClient(`mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp`);(async()=>{await c.connect();const l=await c.db("mos-maintenance-mvp").collection("tekmetric_drain_lock").findOne({_id:"global"});console.log(l?`owner=${l.owner} refresh=${((Date.now()-new Date(l.lastRefreshAt))/1000).toFixed(0)}s ago`:"NO LOCK");await c.close();})();'
+NO LOCK
+[1]-  Exit 1                  nohup npx tsx scripts/drain-tekmetric-backfill.ts > /tmp/drain-tek.log 2>&1
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ node -e 'const{MongoClient}=require("mongodb");const c=new MongoClient(`mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp`);(async()=>{await c.connect();const n=await c.db("mos-maintenance-mvp").collection("shops").countDocuments({"tekmetric.configured":true,"tekmetric.backfillCompleted":{$ne:true}});console.log(`incomplete: ${n}`);await c.close();})();'
+incomplete: 0
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ node -e 'const{MongoClient}=require("mongodb");const c=new MongoClient(`mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp`);(async()=>{await c.connect();const ds=await c.db("mos-maintenance-mvp").collection("backfill_progress").find({inProgress:true},{projection:{shopId:1,lastActivityAt:1}}).toArray();const live=ds.filter(d=>d.lastActivityAt&&Date.now()-new Date(d.lastActivityAt)<30*60*1000);console.log(`inProgress=${ds.length} live=${live.length}`);live.forEach(d=>console.log(`  shop=${d.shopId} age=${((Date.now()-new Date(d.lastActivityAt))/1000).toFixed(0)}s`));await c.close();})();'
+inProgress=13 live=13
+  shop=25 age=228s
+  shop=29 age=1603s
+  shop=35 age=995s
+  shop=51 age=703s
+  shop=67 age=1671s
+  shop=68 age=57s
+  shop=69 age=192s
+  shop=70 age=895s
+  shop=72 age=1277s
+  shop=50 age=1603s
+  shop=76 age=817s
+  shop=115 age=850s
+  shop=116 age=1033s
+render@srv-d55jaqkhg0os73a5dd8g-7fbd5f4f7b-tkcrv:~/project/src$ tail -f /tmp/drain-tek.log /tmp/drain-pro.log
+==> /tmp/drain-tek.log <==
+    at Object.transformer (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1465:32)
+    at Function._load (node:internal/modules/cjs/loader:1282:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Module.require (node:internal/modules/cjs/loader:1487:12)
+    at require (node:internal/modules/helpers:135:16)
+    at <anonymous> (/opt/render/project/src/lib/integrations/tekmetric/skipped-ro-resolution.ts:1:8)
+
+Node.js v22.16.0
+
+==> /tmp/drain-pro.log <==
+[2026-05-03T21:44:42.432Z] WAITING shop=72 cron-holds-lock waited=2.0min lockAge=19.3min
+[2026-05-03T21:44:42.438Z] WAITING shop=67 cron-holds-lock waited=2.0min lockAge=25.8min
+[2026-05-03T21:44:42.743Z] WAITING shop=76 cron-holds-lock waited=2.0min lockAge=11.6min
+[2026-05-03T21:45:12.142Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=2.5min
+[2026-05-03T21:45:42.142Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=3.0min
+[2026-05-03T21:46:12.142Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=3.5min
+[2026-05-03T21:46:42.143Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=4.0min
+[2026-05-03T21:46:42.668Z] WAITING shop=72 cron-holds-lock waited=4.0min lockAge=21.3min
+[2026-05-03T21:46:42.673Z] WAITING shop=67 cron-holds-lock waited=4.0min lockAge=27.8min
+[2026-05-03T21:46:42.979Z] WAITING shop=76 cron-holds-lock waited=4.0min lockAge=13.6min
+[2026-05-03T21:47:12.141Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=4.5min
+[2026-05-03T21:47:42.143Z] HEARTBEAT done=0/14 complete=0 error=0 lockWait=0 elapsed=5.0min

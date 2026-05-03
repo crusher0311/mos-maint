@@ -1,4 +1,9 @@
-import "server-only";
+// NOTE: do NOT add `import "server-only"` here. This module is also
+// imported by the standalone drain worker (scripts/drain-tekmetric-backfill.ts)
+// which runs under tsx (raw Node), where the server-only package throws
+// at import time. Server-only protection is already provided by the
+// route handlers that consume this module (Next.js will refuse to bundle
+// `mongodb` into client code regardless).
 import type { Db } from "mongodb";
 
 export type SkippedRoEntry = {
