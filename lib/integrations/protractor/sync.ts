@@ -398,7 +398,7 @@ async function backfillShopChunk(
           // populate this cache, so the very first chunk of a fresh-shop
           // backfill — and any verification rerun — can hit Mongo instead
           // of paying the per-invoice `/Invoice/{id}` API cost.
-          let fullInv = await getCachedProtractorInvoice(shopId, inv.ID).catch(
+          let fullInv = await getCachedProtractorInvoice(db, shopId, inv.ID).catch(
             (cacheErr: any) => {
               console.warn(
                 `[Backfill] Shop ${shopId}: invoice cache lookup failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
@@ -418,7 +418,7 @@ async function backfillShopChunk(
             fullInv = detailResult.invoice;
             // Warm the cache for next time. Stable post-invoice payloads
             // mean this upsert is safe and cheap.
-            await cacheProtractorInvoice(shopId, inv.ID, fullInv).catch(
+            await cacheProtractorInvoice(db, shopId, inv.ID, fullInv).catch(
               (cacheErr: any) => {
                 console.warn(
                   `[Backfill] Shop ${shopId}: invoice cache write failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`

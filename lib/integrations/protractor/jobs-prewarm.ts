@@ -214,7 +214,7 @@ export async function prewarmProtractorJobsCacheForOnboarding(
             );
             return;
           }
-          await cacheProtractorInvoice(shopId, invoiceId, detailResult.invoice);
+          await cacheProtractorInvoice(db, shopId, invoiceId, detailResult.invoice);
           result.invoicesCached++;
         } catch (err: any) {
           result.errors++;
