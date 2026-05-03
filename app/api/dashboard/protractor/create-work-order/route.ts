@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { createProtractorWorkOrder, upsertProtractorWorkOrderSnapshot } from "@/lib/integrations/protractor";
-import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
+import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
+import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,30 +48,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    try {
-      const config = await resolveProtractorConfig(shopId);
-      if (config.configured && result.workOrderId) {
-        const woResult = await protractorFetch<any>(
-          `/WorkOrder/${result.workOrderId}`,
-          config,
-          {},
-          0,
-          shopId
-        );
-        if (woResult.ok && woResult.data) {
-          await upsertProtractorWorkOrderSnapshot(shopId, woResult.data);
-          console.log(`[Create WO] Snapshotted WO ${result.workOrderNumber} to dashboard`);
-        }
-      }
-    } catch (snapErr: any) {
-      console.error("[Create WO] Snapshot error (non-fatal):", snapErr.message);
-    }
-
-    await db.collection("dashboard_updates").updateOne(
-      { _id: "lastUpdate" } as any,
-      { $set: { timestamp: Date.now() } },
-      { upsert: true }
-    );
+    await finalizeProtractorWorkOrderCreation(shopId, result.workOrderId, {
+      logPrefix: "[Create WO]",
+    });
 
     return NextResponse.json({
       ok: true,

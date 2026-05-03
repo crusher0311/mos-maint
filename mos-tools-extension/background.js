@@ -337,13 +337,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         const data = await res.json();
-        sendResponse({ success: true, features: data.features || {} });
+        // Mirror lib/extension-write-guard so the content script can hide
+        // the Create RO button for read-only users without an extra round
+        // trip. mosUser is populated at login time in chrome.storage.local.
+        const userRec = await new Promise(resolve =>
+          chrome.storage.local.get(['mosUser'], r => resolve(r.mosUser || null))
+        );
+        const READ_ONLY_ROLES = new Set(['viewer', 'read_only', 'readonly']);
+        const role = (userRec?.role || '').toString().toLowerCase();
+        const isAdmin = userRec?.role === 'platform_admin' || userRec?.isPlatformAdmin === true;
+        const canWrite = isAdmin || (!userRec?.readOnly && !READ_ONLY_ROLES.has(role));
+        sendResponse({
+          success: true,
+          features: data.features || {},
+          writeProvider: data.writeProvider || null,
+          integrations: data.integrations || [],
+          shopId: data.shopId || null,
+          canWrite,
+        });
       } catch (err) {
         console.warn("[MOS] Feature fetch error:", err.message);
         sendResponse({ success: false, features: {} });
       }
     })();
     return true;
+  }
+
+  // Open side panel and switch it to the Create RO view (Task #348).
+  if (message.action === "OPEN_CREATE_RO_PANEL") {
+    if (sender.tab?.id) {
+      chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
+        setTimeout(() => {
+          chrome.runtime.sendMessage({
+            action: "SWITCH_TO_CREATE_RO",
+            context: message.context || currentSmsContext,
+          }).catch(() => {});
+        }, 500);
+      }).catch(err => console.error("[MOS] Failed to open side panel:", err));
+    }
+    sendResponse({ success: true });
+    return false;
   }
 
   if (message.action === "ENHANCE_FINDINGS") {

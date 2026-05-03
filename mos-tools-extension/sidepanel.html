@@ -141,6 +141,13 @@
           </svg>
           <span>Print</span>
         </button>
+        <button class="tab-btn hidden" data-tab="create-ro" data-write-provider="protractor" title="Create RO in Protractor">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>Create RO</span>
+        </button>
         <button class="tab-btn" data-tab="specs" title="Vehicle Specs">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
@@ -658,6 +665,103 @@
           </div>
         </div>
 
+        <!-- Create RO tab (Protractor write provider) -->
+        <div id="tab-create-ro" class="tab-panel hidden">
+          <div class="create-ro-wrap">
+            <h3 class="create-ro-heading">Create Repair Order in Protractor</h3>
+
+            <!-- Step 1: Customer -->
+            <section class="create-ro-section" id="cro-customer-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">1</span>
+                <span class="create-ro-step-label">Customer</span>
+              </div>
+              <div id="cro-customer-picked" class="create-ro-picked hidden">
+                <span class="create-ro-picked-label" id="cro-customer-picked-label"></span>
+                <button id="cro-customer-change" class="create-ro-link-btn" type="button">Change</button>
+              </div>
+              <div id="cro-customer-search-wrap">
+                <div class="create-ro-search-row">
+                  <input type="text" id="cro-customer-search" class="input-modern" placeholder="Search by name, phone…" />
+                  <button id="cro-customer-search-btn" class="btn-primary create-ro-inline-btn" type="button">Search</button>
+                </div>
+                <ul id="cro-customer-results" class="create-ro-list hidden"></ul>
+                <p id="cro-customer-empty" class="create-ro-empty hidden">No matching customers.</p>
+                <p id="cro-customer-error" class="error-text hidden"></p>
+                <button id="cro-customer-new-toggle" class="create-ro-link-btn" type="button">+ Create new customer</button>
+                <div id="cro-customer-new-form" class="create-ro-form hidden">
+                  <div class="create-ro-form-row">
+                    <input type="text" id="cro-new-customer-first" class="input-modern" placeholder="First name *" />
+                    <input type="text" id="cro-new-customer-last" class="input-modern" placeholder="Last name *" />
+                  </div>
+                  <input type="text" id="cro-new-customer-phone" class="input-modern" placeholder="Phone" />
+                  <input type="email" id="cro-new-customer-email" class="input-modern" placeholder="Email" />
+                  <button id="cro-new-customer-save" class="btn-primary" type="button">Save customer</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Step 2: Vehicle -->
+            <section class="create-ro-section hidden" id="cro-vehicle-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">2</span>
+                <span class="create-ro-step-label">Vehicle</span>
+              </div>
+              <div id="cro-vehicle-picked" class="create-ro-picked hidden">
+                <span class="create-ro-picked-label" id="cro-vehicle-picked-label"></span>
+                <button id="cro-vehicle-change" class="create-ro-link-btn" type="button">Change</button>
+              </div>
+              <div id="cro-vehicle-pick-wrap">
+                <div id="cro-vehicle-loading" class="panel-loading hidden">
+                  <div class="spinner-small"></div>
+                  <span>Loading vehicles…</span>
+                </div>
+                <ul id="cro-vehicle-results" class="create-ro-list hidden"></ul>
+                <p id="cro-vehicle-empty" class="create-ro-empty hidden">No vehicles on file.</p>
+                <p id="cro-vehicle-error" class="error-text hidden"></p>
+                <button id="cro-vehicle-new-toggle" class="create-ro-link-btn" type="button">+ Create new vehicle</button>
+                <div id="cro-vehicle-new-form" class="create-ro-form hidden">
+                  <input type="text" id="cro-new-vehicle-vin" class="input-modern" placeholder="VIN" maxlength="17" />
+                  <div class="create-ro-form-row">
+                    <input type="number" id="cro-new-vehicle-year" class="input-modern" placeholder="Year" min="1900" max="2100" />
+                    <input type="text" id="cro-new-vehicle-make" class="input-modern" placeholder="Make" />
+                  </div>
+                  <input type="text" id="cro-new-vehicle-model" class="input-modern" placeholder="Model" />
+                  <input type="text" id="cro-new-vehicle-plate" class="input-modern" placeholder="License plate" />
+                  <button id="cro-new-vehicle-save" class="btn-primary" type="button">Save vehicle</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Step 3: Details -->
+            <section class="create-ro-section hidden" id="cro-details-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">3</span>
+                <span class="create-ro-step-label">Details</span>
+              </div>
+              <label class="create-ro-label" for="cro-concern">Customer concern</label>
+              <textarea id="cro-concern" class="input-modern" rows="3" placeholder="Customer's reported concern…"></textarea>
+              <label class="create-ro-label" for="cro-mileage">Mileage in</label>
+              <input type="number" id="cro-mileage" class="input-modern" placeholder="Mileage" min="0" />
+              <label class="create-ro-label" for="cro-note">Note (optional)</label>
+              <textarea id="cro-note" class="input-modern" rows="2" placeholder="Internal note…"></textarea>
+              <button id="cro-submit" class="btn-primary create-ro-submit" type="button">Create Repair Order</button>
+              <p id="cro-submit-error" class="error-text hidden"></p>
+            </section>
+
+            <!-- Result -->
+            <section class="create-ro-section hidden" id="cro-result-section">
+              <div class="create-ro-success">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#22c55e;">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <p class="create-ro-success-title">RO Created!</p>
+                <p class="create-ro-success-detail" id="cro-result-detail"></p>
+                <button id="cro-result-new" class="btn-primary" type="button">Create Another</button>
+              </div>
+            </section>
+          </div>
+        </div>
       </main>
       <div class="logout-footer">
         <button id="logout-btn" class="logout-footer-btn" title="Log out of Detect Dog">

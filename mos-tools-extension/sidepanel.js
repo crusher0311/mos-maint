@@ -45,6 +45,7 @@ function normalizeServiceSearch(rawName) {
 
 // ==================== STATE ====================
 let isAuthenticated = false;
+let currentUserCanWrite = true; // Conservative default; refined via GET_MOS_AUTH.
 let currentContext = null;
 let currentTab = 'plan';
 // Tabs the main extension actually renders. Used to sanitize a stored
@@ -472,6 +473,17 @@ function setupEventListeners() {
       }
       switchTab('sticker');
     }
+    if (message.action === 'SWITCH_TO_CREATE_RO') {
+      if (message.context) {
+        updateContext(message.context);
+      }
+      // Force the create-ro tab visible even before features have loaded —
+      // the click came from the AutoFlow Create RO button which already
+      // verified writeProvider === 'protractor'.
+      const btn = document.querySelector('.tab-btn[data-tab="create-ro"]');
+      if (btn) btn.classList.remove('hidden');
+      switchTab('create-ro');
+    }
     if (message.action === 'PLAN_REFRESH_NEEDED') {
       console.log('[MOS] Plan refresh triggered:', message.reason);
       loadPlan(true);
@@ -549,12 +561,18 @@ async function applyPlatformAdminVisibility() {
     document.querySelectorAll('[data-platform-admin-only="true"]').forEach(el => {
       el.classList.toggle('hidden', !isAdmin);
     });
+    // Mirror server-side checkExtensionWritePermission so read-only users
+    // never see the "Create RO" entry point client-side.
+    const READ_ONLY_ROLES = new Set(['viewer', 'read_only', 'readonly']);
+    const role = (u?.role || '').toString().toLowerCase();
+    currentUserCanWrite = isAdmin || (!u?.readOnly && !READ_ONLY_ROLES.has(role));
+    updateTabAccessibility();
   } catch (e) {
     console.warn('[MOS] platform-admin visibility check failed:', e);
   }
 }
 
-const RO_INDEPENDENT_TABS = ['rates', 'concern'];
+const RO_INDEPENDENT_TABS = ['rates', 'concern', 'create-ro'];
 
 function switchJobsSubTab(subtab) {
   const subBtns = document.querySelectorAll('#tab-jobs .sub-tab-btn');
@@ -588,6 +606,7 @@ function switchTab(tab) {
     'concern': 'concern_assistant',
     'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
+    'create-ro': null,
     'specs': null
   };
   const featureKey = featureMap[tab];
@@ -690,6 +709,8 @@ function switchTab(tab) {
     loadStickerConfig();
   } else if (tab === 'specs') {
     loadVehicleSpecs();
+  } else if (tab === 'create-ro') {
+    initCreateRoTab();
   }
 }
 
@@ -833,11 +854,19 @@ function updateTabAccessibility() {
     'concern': 'concern_assistant',
     'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
+    'create-ro': null,
     'specs': null
   };
 
   const isShopWare = currentContext?.provider === 'shopware';
+  const effectiveWriteProvider = currentContext?.writeProvider || resolvedWriteProvider || null;
   const hiddenForProvider = isShopWare ? ['jobs'] : [];
+  // Create RO is Protractor-write-only — keep it hidden everywhere else.
+  // Also hide it client-side for read-only users so they never see the
+  // entry point (server enforces a 403 as a defence in depth).
+  if (effectiveWriteProvider !== 'protractor' || !currentUserCanWrite) {
+    hiddenForProvider.push('create-ro');
+  }
   
   let firstAvailableTab = null;
   
@@ -4475,3 +4504,458 @@ initEstimateAssist();
 
 // ==================== Detect Dog: Shop Migration Wizard ====================
 // Platform-admin-only sidepanel UI that drives the server-side
+
+// ==================== CREATE RO (Protractor) — Task #348 ====================
+const createRoState = {
+  initialized: false,
+  customer: null,
+  vehicle: null,
+  submitting: false,
+};
+
+function escCro(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getCroEl(id) { return document.getElementById(id); }
+
+function setCroError(elId, msg) {
+  const el = getCroEl(elId);
+  if (!el) return;
+  if (msg) {
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  } else {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+}
+
+function resetCroState() {
+  createRoState.customer = null;
+  createRoState.vehicle = null;
+  createRoState.submitting = false;
+  ['cro-customer-results', 'cro-vehicle-results'].forEach(id => {
+    const el = getCroEl(id);
+    if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
+  });
+  ['cro-customer-empty', 'cro-vehicle-empty', 'cro-customer-error',
+   'cro-vehicle-error', 'cro-submit-error'].forEach(id => {
+    const el = getCroEl(id); if (el) el.classList.add('hidden');
+  });
+  ['cro-customer-search', 'cro-new-customer-first', 'cro-new-customer-last',
+   'cro-new-customer-phone', 'cro-new-customer-email', 'cro-new-vehicle-vin',
+   'cro-new-vehicle-year', 'cro-new-vehicle-make', 'cro-new-vehicle-model',
+   'cro-new-vehicle-plate', 'cro-concern', 'cro-mileage', 'cro-note'].forEach(id => {
+    const el = getCroEl(id); if (el) el.value = '';
+  });
+  ['cro-customer-new-form', 'cro-vehicle-new-form'].forEach(id => {
+    const el = getCroEl(id); if (el) el.classList.add('hidden');
+  });
+  getCroEl('cro-customer-picked')?.classList.add('hidden');
+  getCroEl('cro-vehicle-picked')?.classList.add('hidden');
+  getCroEl('cro-vehicle-section')?.classList.add('hidden');
+  getCroEl('cro-details-section')?.classList.add('hidden');
+  getCroEl('cro-result-section')?.classList.add('hidden');
+  getCroEl('cro-customer-section')?.classList.remove('hidden');
+  getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
+}
+
+function mosTelemetry(event, props) {
+  // Lightweight structured-log telemetry. Centralized so we can swap in a
+  // real analytics push later without changing call sites.
+  try {
+    console.log('[MOS Telemetry]', event, props || {});
+  } catch (_) { /* no-op */ }
+}
+
+function initCreateRoTab() {
+  if (!createRoState.initialized) {
+    bindCreateRoListeners();
+    createRoState.initialized = true;
+  }
+  resetCroState();
+  mosTelemetry('create_ro_panel_opened_sidepanel', {
+    shopId: getCroShopId(),
+    sourceProvider: currentContext?.provider || null,
+    writeProvider: currentContext?.writeProvider || resolvedWriteProvider || null,
+  });
+  // Pre-populate from current SMS context if present.
+  if (currentContext) {
+    if (currentContext.concern) {
+      const c = getCroEl('cro-concern');
+      if (c) c.value = currentContext.concern;
+    }
+    if (currentContext.mileage) {
+      const m = getCroEl('cro-mileage');
+      if (m) m.value = String(currentContext.mileage).replace(/[^\d]/g, '');
+    }
+    // Prefill the customer search box with the AutoFlow-detected name so
+    // advisors don't retype it. They still have to confirm the match.
+    const customerName = currentContext.customerName ||
+      (currentContext.customer && currentContext.customer.name) || '';
+    if (customerName) {
+      const search = getCroEl('cro-customer-search');
+      if (search) search.value = customerName;
+    }
+    // Prefill the new-vehicle VIN field so a one-click "Create new vehicle"
+    // doesn't lose the VIN we already detected on the AutoFlow page.
+    const vin = currentContext.vin || currentContext.vehicle?.vin || '';
+    if (vin) {
+      const vinEl = getCroEl('cro-new-vehicle-vin');
+      if (vinEl) vinEl.value = vin;
+    }
+  }
+}
+
+function bindCreateRoListeners() {
+  getCroEl('cro-customer-search-btn')?.addEventListener('click', handleCroCustomerSearch);
+  getCroEl('cro-customer-search')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleCroCustomerSearch();
+  });
+  getCroEl('cro-customer-new-toggle')?.addEventListener('click', () => {
+    getCroEl('cro-customer-new-form')?.classList.toggle('hidden');
+  });
+  getCroEl('cro-new-customer-save')?.addEventListener('click', handleCroCreateCustomer);
+  getCroEl('cro-customer-change')?.addEventListener('click', () => {
+    createRoState.customer = null;
+    createRoState.vehicle = null;
+    getCroEl('cro-customer-picked')?.classList.add('hidden');
+    getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
+    getCroEl('cro-vehicle-section')?.classList.add('hidden');
+    getCroEl('cro-details-section')?.classList.add('hidden');
+  });
+
+  getCroEl('cro-vehicle-new-toggle')?.addEventListener('click', () => {
+    getCroEl('cro-vehicle-new-form')?.classList.toggle('hidden');
+  });
+  getCroEl('cro-new-vehicle-save')?.addEventListener('click', handleCroCreateVehicle);
+  getCroEl('cro-vehicle-change')?.addEventListener('click', () => {
+    createRoState.vehicle = null;
+    getCroEl('cro-vehicle-picked')?.classList.add('hidden');
+    getCroEl('cro-vehicle-pick-wrap')?.classList.remove('hidden');
+    getCroEl('cro-details-section')?.classList.add('hidden');
+    if (createRoState.customer) loadCroVehicles(createRoState.customer.id);
+  });
+
+  getCroEl('cro-submit')?.addEventListener('click', handleCroSubmit);
+  getCroEl('cro-result-new')?.addEventListener('click', () => initCreateRoTab());
+}
+
+function getCroShopId() {
+  return currentContext?.shopId || resolvedMosShopId || null;
+}
+
+async function handleCroCustomerSearch() {
+  setCroError('cro-customer-error', '');
+  const q = (getCroEl('cro-customer-search')?.value || '').trim();
+  if (q.length < 2) {
+    setCroError('cro-customer-error', 'Type at least 2 characters.');
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) {
+    setCroError('cro-customer-error', 'No shop context available.');
+    return;
+  }
+  const listEl = getCroEl('cro-customer-results');
+  const emptyEl = getCroEl('cro-customer-empty');
+  listEl.innerHTML = '<li>Searching…</li>';
+  listEl.classList.remove('hidden');
+  emptyEl?.classList.add('hidden');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/protractor/contacts?shopId=${encodeURIComponent(shopId)}&q=${encodeURIComponent(q)}`
+    });
+    if (result?.error) throw new Error(result.error);
+    const contacts = result?.contacts || [];
+    if (!contacts.length) {
+      listEl.classList.add('hidden');
+      emptyEl?.classList.remove('hidden');
+      return;
+    }
+    listEl.innerHTML = contacts.slice(0, 30).map(c => {
+      const name = c.fileAs || `${c.firstName} ${c.lastName}`.trim() || '(no name)';
+      const meta = [c.phone, c.email].filter(Boolean).join(' · ');
+      return `<li data-cid="${escCro(c.id)}" data-name="${escCro(name)}">
+        <strong>${escCro(name)}</strong>
+        ${meta ? `<span class="ro-list-meta">${escCro(meta)}</span>` : ''}
+      </li>`;
+    }).join('');
+    listEl.querySelectorAll('li').forEach(li => {
+      li.addEventListener('click', () => {
+        selectCroCustomer({ id: li.dataset.cid, name: li.dataset.name });
+      });
+    });
+  } catch (err) {
+    console.error('[MOS] CRO customer search error:', err);
+    listEl.innerHTML = '';
+    listEl.classList.add('hidden');
+    setCroError('cro-customer-error', err.message || 'Search failed.');
+  }
+}
+
+async function handleCroCreateCustomer() {
+  setCroError('cro-customer-error', '');
+  const firstName = (getCroEl('cro-new-customer-first')?.value || '').trim();
+  const lastName = (getCroEl('cro-new-customer-last')?.value || '').trim();
+  const phone1 = (getCroEl('cro-new-customer-phone')?.value || '').trim();
+  const email = (getCroEl('cro-new-customer-email')?.value || '').trim();
+  if (!firstName || !lastName) {
+    setCroError('cro-customer-error', 'First and last name are required.');
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) { setCroError('cro-customer-error', 'No shop context.'); return; }
+  const btn = getCroEl('cro-new-customer-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/protractor/create-contact',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ shopId, firstName, lastName, phone1, email }),
+      }
+    });
+    if (!result?.success) throw new Error(result?.error || 'Create failed');
+    selectCroCustomer({
+      id: result.contactId,
+      name: `${firstName} ${lastName}`.trim(),
+    });
+  } catch (err) {
+    setCroError('cro-customer-error', err.message || 'Could not create customer.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save customer'; }
+  }
+}
+
+function selectCroCustomer(customer) {
+  createRoState.customer = customer;
+  createRoState.vehicle = null;
+  const picked = getCroEl('cro-customer-picked');
+  const label = getCroEl('cro-customer-picked-label');
+  if (label) label.textContent = '✓ ' + customer.name;
+  picked?.classList.remove('hidden');
+  getCroEl('cro-customer-search-wrap')?.classList.add('hidden');
+  getCroEl('cro-vehicle-section')?.classList.remove('hidden');
+  getCroEl('cro-vehicle-picked')?.classList.add('hidden');
+  loadCroVehicles(customer.id);
+}
+
+async function loadCroVehicles(ownerId) {
+  setCroError('cro-vehicle-error', '');
+  const loadingEl = getCroEl('cro-vehicle-loading');
+  const listEl = getCroEl('cro-vehicle-results');
+  const emptyEl = getCroEl('cro-vehicle-empty');
+  loadingEl?.classList.remove('hidden');
+  listEl?.classList.add('hidden');
+  emptyEl?.classList.add('hidden');
+  const shopId = getCroShopId();
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/protractor/vehicles?shopId=${encodeURIComponent(shopId)}&ownerId=${encodeURIComponent(ownerId)}`
+    });
+    if (result?.error) throw new Error(result.error);
+    const vehicles = result?.vehicles || [];
+    loadingEl?.classList.add('hidden');
+    if (!vehicles.length) {
+      emptyEl?.classList.remove('hidden');
+      // Auto-open new-vehicle form to reduce clicks.
+      getCroEl('cro-vehicle-new-form')?.classList.remove('hidden');
+      return;
+    }
+    listEl.innerHTML = vehicles.map(v => {
+      const display = [v.year, v.make, v.model].filter(Boolean).join(' ') || v.vin || '(vehicle)';
+      const meta = [v.vin && ('VIN ' + v.vin), v.plate].filter(Boolean).join(' · ');
+      return `<li data-vid="${escCro(v.id)}" data-display="${escCro(display)}">
+        <strong>${escCro(display)}</strong>
+        ${meta ? `<span class="ro-list-meta">${escCro(meta)}</span>` : ''}
+      </li>`;
+    }).join('');
+    listEl.classList.remove('hidden');
+    listEl.querySelectorAll('li').forEach(li => {
+      li.addEventListener('click', () => {
+        selectCroVehicle({ id: li.dataset.vid, display: li.dataset.display });
+      });
+    });
+  } catch (err) {
+    console.error('[MOS] CRO vehicle load error:', err);
+    loadingEl?.classList.add('hidden');
+    setCroError('cro-vehicle-error', err.message || 'Could not load vehicles.');
+  }
+}
+
+async function handleCroCreateVehicle() {
+  setCroError('cro-vehicle-error', '');
+  if (!createRoState.customer) {
+    setCroError('cro-vehicle-error', 'Pick a customer first.');
+    return;
+  }
+  const vin = (getCroEl('cro-new-vehicle-vin')?.value || '').trim();
+  const yearStr = (getCroEl('cro-new-vehicle-year')?.value || '').trim();
+  const make = (getCroEl('cro-new-vehicle-make')?.value || '').trim();
+  const model = (getCroEl('cro-new-vehicle-model')?.value || '').trim();
+  const plate = (getCroEl('cro-new-vehicle-plate')?.value || '').trim();
+  if (!vin && !(yearStr && make && model)) {
+    setCroError('cro-vehicle-error', 'Enter a VIN or year/make/model.');
+    return;
+  }
+  const shopId = getCroShopId();
+  const btn = getCroEl('cro-new-vehicle-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/protractor/create-vehicle',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId,
+          ownerId: createRoState.customer.id,
+          vin: vin || undefined,
+          year: yearStr ? Number(yearStr) : undefined,
+          make: make || undefined,
+          model: model || undefined,
+          licensePlate: plate || undefined,
+        }),
+      }
+    });
+    if (!result?.success) throw new Error(result?.error || 'Create failed');
+    const display = [yearStr, make, model].filter(Boolean).join(' ') || vin || 'New vehicle';
+    selectCroVehicle({ id: result.vehicleId, display });
+  } catch (err) {
+    setCroError('cro-vehicle-error', err.message || 'Could not create vehicle.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save vehicle'; }
+  }
+}
+
+function selectCroVehicle(vehicle) {
+  createRoState.vehicle = vehicle;
+  const picked = getCroEl('cro-vehicle-picked');
+  const label = getCroEl('cro-vehicle-picked-label');
+  if (label) label.textContent = '✓ ' + vehicle.display;
+  picked?.classList.remove('hidden');
+  getCroEl('cro-vehicle-pick-wrap')?.classList.add('hidden');
+  getCroEl('cro-details-section')?.classList.remove('hidden');
+}
+
+function renderCroSuccessLinks(result) {
+  // Inject a small links row underneath the success detail line. We render
+  // (a) "Open in Protractor" — using the tenant-agnostic portal URL, and
+  // (b) "Back to AutoFlow" — only when we still have an AutoFlow source URL
+  // in context. Either link is omitted when not actionable.
+  const host = getCroEl('cro-result-section');
+  if (!host) return;
+  let linksRow = host.querySelector('.create-ro-success-links');
+  if (linksRow) linksRow.remove();
+  linksRow = document.createElement('div');
+  linksRow.className = 'create-ro-success-links';
+  linksRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px;';
+
+  const protractorUrl = result?.portalUrl || 'https://app.protractor.com/';
+  const protractorLink = document.createElement('a');
+  protractorLink.href = protractorUrl;
+  protractorLink.target = '_blank';
+  protractorLink.rel = 'noopener noreferrer';
+  protractorLink.textContent = 'Open in Protractor';
+  protractorLink.style.cssText = 'font-size:12px;color:#2563eb;text-decoration:underline;';
+  linksRow.appendChild(protractorLink);
+
+  const autoflowUrl = currentContext?.url || currentContext?.ticketUrl || null;
+  const isAutoflow = currentContext?.provider === 'autoflow' && autoflowUrl;
+  if (isAutoflow) {
+    const afLink = document.createElement('a');
+    afLink.href = autoflowUrl;
+    afLink.target = '_blank';
+    afLink.rel = 'noopener noreferrer';
+    afLink.textContent = 'Back to AutoFlow';
+    afLink.style.cssText = 'font-size:12px;color:#2563eb;text-decoration:underline;';
+    linksRow.appendChild(afLink);
+  }
+
+  const successBox = host.querySelector('.create-ro-success');
+  const detail = getCroEl('cro-result-detail');
+  if (successBox && detail) {
+    detail.insertAdjacentElement('afterend', linksRow);
+  } else if (successBox) {
+    successBox.appendChild(linksRow);
+  }
+}
+
+async function handleCroSubmit() {
+  if (createRoState.submitting) return;
+  setCroError('cro-submit-error', '');
+  if (!createRoState.customer || !createRoState.vehicle) {
+    setCroError('cro-submit-error', 'Pick a customer and vehicle first.');
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) { setCroError('cro-submit-error', 'No shop context.'); return; }
+  const concern = (getCroEl('cro-concern')?.value || '').trim();
+  const note = (getCroEl('cro-note')?.value || '').trim();
+  const mileageStr = (getCroEl('cro-mileage')?.value || '').trim();
+  const mileage = mileageStr ? Number(mileageStr.replace(/[^\d]/g, '')) : undefined;
+
+  const btn = getCroEl('cro-submit');
+  createRoState.submitting = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  mosTelemetry('create_ro_submit_started', {
+    shopId,
+    sourceProvider: currentContext?.provider || null,
+    hasConcern: !!concern,
+    hasMileage: !!mileage,
+  });
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/protractor/create-work-order',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId,
+          contactId: createRoState.customer.id,
+          vehicleId: createRoState.vehicle.id,
+          concernText: concern || undefined,
+          note: note || undefined,
+          mileage,
+        }),
+      }
+    });
+    if (!result?.ok && !result?.success) throw new Error(result?.error || 'Create failed');
+    const detail = getCroEl('cro-result-detail');
+    if (detail) {
+      const num = result.workOrderNumber || result.workOrderId;
+      detail.textContent = num ? `RO #${num} created in Protractor.` : 'Work order created in Protractor.';
+    }
+    renderCroSuccessLinks(result);
+    getCroEl('cro-customer-section')?.classList.add('hidden');
+    getCroEl('cro-vehicle-section')?.classList.add('hidden');
+    getCroEl('cro-details-section')?.classList.add('hidden');
+    getCroEl('cro-result-section')?.classList.remove('hidden');
+    mosTelemetry('create_ro_succeeded', {
+      shopId,
+      workOrderId: result.workOrderId || null,
+      workOrderNumber: result.workOrderNumber || null,
+    });
+  } catch (err) {
+    console.error('[MOS] CRO submit error:', err);
+    setCroError('cro-submit-error', err.message || 'Could not create RO.');
+    mosTelemetry('create_ro_failed', {
+      shopId,
+      error: err?.message || 'unknown',
+    });
+  } finally {
+    createRoState.submitting = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Repair Order'; }
+  }
+}
