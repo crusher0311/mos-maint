@@ -368,6 +368,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose, crmEnabled 
                 </li>
               </CollapsibleSection>
 
+              <NavLink href="/platform-admin/billing" icon={CreditCard} label="Billing" />
               <NavLink href="/platform-admin/client-health" icon={HeartPulse} label="Client Health" />
               <NavLink href="/platform-admin/sync-health" icon={Activity} label="Sync Health" />
               <NavLink href="/platform-admin/concern-skip-stats" icon={MessageCircle} label="Concern Skip Stats" />
