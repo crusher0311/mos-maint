@@ -567,9 +567,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- MOS API Calls --------------------
   if (message.action === "MOS_API_REQUEST") {
-    handleMosApiRequest(message.endpoint, message.options)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+    (async () => {
+      // Tekmetric migration endpoints are super-admin (owner) only. The
+      // server enforces this too, but we short-circuit here so the wizard
+      // gets a clean "Not authorized" error instead of leaking a 403 from
+      // the API layer for non-owner platform admins.
+      const endpoint = String(message.endpoint || "");
+      if (endpoint.startsWith("/api/extension/tekmetric-migration/")) {
+        const { mosUser } = await chrome.storage.local.get('mosUser');
+        if (!isSuperAdminUser(mosUser)) {
+          sendResponse({ success: false, error: "Not authorized: super admin only" });
+          return;
+        }
+      }
+      try {
+        const result = await handleMosApiRequest(message.endpoint, message.options);
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 
@@ -967,6 +984,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------- API Sniffer (Platform Admin Only) --------------------
   function isPlatformAdminUser(user) {
     return user?.role === 'platform_admin' || user?.isPlatformAdmin === true;
+  }
+
+  // Super-admin (owner) check. Used to gate the Tekmetric Shop Migration
+  // wizard, which is intentionally narrower than platform_admin: only the
+  // emails in the server-side SUPER_ADMIN_EMAILS allowlist see it. The
+  // server is the real boundary (lib/tekmetric-migration/api-auth.ts);
+  // this helper just keeps client-side gating consistent.
+  function isSuperAdminUser(user) {
+    return user?.isSuperAdmin === true;
   }
 
   if (message.action === "SNIFFER_STATUS") {

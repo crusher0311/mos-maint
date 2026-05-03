@@ -529,9 +529,21 @@ async function applyPlatformAdminVisibility() {
     const auth = await sendMessage({ action: 'GET_MOS_AUTH' });
     const u = auth?.user;
     const isAdmin = u?.role === 'platform_admin' || u?.isPlatformAdmin === true;
+    const isSuper = u?.isSuperAdmin === true;
     document.querySelectorAll('[data-platform-admin-only="true"]').forEach(el => {
       el.classList.toggle('hidden', !isAdmin);
     });
+    // Super-admin-only gate (Migrate tab). Narrower than platform-admin:
+    // only the owner allowlist (lib/super-admins.ts) sees these elements.
+    document.querySelectorAll('[data-super-admin-only="true"]').forEach(el => {
+      el.classList.toggle('hidden', !isSuper);
+    });
+    // If a non-super-admin somehow has the Migrate tab cached as their
+    // current/default tab (e.g. they used to be on the allowlist), bounce
+    // them to a safe default so they don't sit on a hidden panel.
+    if (!isSuper && currentTab === 'migrate') {
+      switchTab('plan');
+    }
   } catch (e) {
     console.warn('[MOS Migrate] platform-admin visibility check failed:', e);
   }
@@ -825,9 +837,10 @@ function updateTabAccessibility() {
       btn.style.display = 'none';
       return;
     }
-    // Platform-admin-only tabs are gated by .hidden class via applyPlatformAdminVisibility().
-    // Don't reset their display; otherwise non-admin users would see the button.
-    if (btn.dataset.platformAdminOnly === 'true') {
+    // Platform-admin-only and super-admin-only tabs are gated by the
+    // .hidden class via applyPlatformAdminVisibility(). Don't reset their
+    // display here; otherwise non-admin users would see the button.
+    if (btn.dataset.platformAdminOnly === 'true' || btn.dataset.superAdminOnly === 'true') {
       return;
     }
     btn.style.display = '';

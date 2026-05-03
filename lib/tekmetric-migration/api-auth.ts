@@ -3,10 +3,13 @@
  *
  * The wizard lives inside the MOS extension sidepanel, so requests come
  * in over CORS with a Bearer extension token (NOT a session cookie).
- * Each route still requires platform-admin role.
+ * Each route requires super-admin (owner) access — i.e. an email in the
+ * SUPER_ADMIN_EMAILS allowlist (lib/super-admins.ts). This is narrower
+ * than platform_admin: regular platform admins are denied with 403.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken } from "@/lib/extension-auth";
+import { isSuperAdmin } from "@/lib/super-admins";
 
 export const tekMigCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,12 +58,14 @@ export async function requireMigAdmin(
     };
   }
   const user = auth.user as RawExtensionUser;
-  const isAdmin = user.role === "platform_admin" || user.isPlatformAdmin === true;
-  if (!isAdmin) {
+  // Migration is a super-admin-only tool (owner allowlist), not just any
+  // platform admin. The extension UI also gates the tab on isSuperAdmin,
+  // but this is the real security boundary — never trust the client gate.
+  if (!isSuperAdmin(user.email)) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Platform admin access required" },
+        { error: "Super admin access required" },
         { status: 403, headers: tekMigCorsHeaders },
       ),
     };

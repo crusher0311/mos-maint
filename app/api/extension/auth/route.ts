@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
+import { isSuperAdmin } from "@/lib/super-admins";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -209,6 +210,7 @@ export async function POST(request: NextRequest) {
         shopIds: allShopIds,
         role: user.role,
         isPlatformAdmin: user.isPlatformAdmin === true || user.role === 'platform_admin',
+        isSuperAdmin: isSuperAdmin(user.email),
         defaultExtensionTab: user.defaultExtensionTab || null,
         shopwareAddMode: effectiveSwMode
       },
