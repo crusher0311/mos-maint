@@ -10,9 +10,29 @@ import type {
   BackfillOptions,
   BackfillResult,
 } from '@/lib/integrations/core/types';
+import { findShopByShopId } from '@/lib/data/repositories/shops';
 import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection } from './client';
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
 import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
+
+interface ProtractorShopDoc {
+  shopId: number | string;
+  preferences?: {
+    distanceUnit?: 'miles' | 'kilometers';
+  };
+}
+
+/**
+ * Task #337: Protractor returns odometer values in whatever unit the shop
+ * operates in. Look up the shop's distance preference so the normalized
+ * `mileageUnit` field is honest (kilometers for Canadian shops) instead of
+ * being hardcoded to "miles". Mirrors `getMileageUnit` in the Tekmetric
+ * adapter (task #333).
+ */
+async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
+  const shop = await findShopByShopId<ProtractorShopDoc>(shopId, { "preferences.distanceUnit": 1 });
+  return shop?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
+}
 
 export class ProtractorAdapter implements IIntegrationAdapter {
   provider = 'protractor' as const;
@@ -52,19 +72,22 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: 'Protractor not configured for this shop' };
     }
 
-    const result = await protractorFetch<ProtractorVehicle>(
-      `/ServiceItem/${vehicleId}`,
-      config,
-      {},
-      0,
-      shopId
-    );
+    const [result, mileageUnit] = await Promise.all([
+      protractorFetch<ProtractorVehicle>(
+        `/ServiceItem/${vehicleId}`,
+        config,
+        {},
+        0,
+        shopId
+      ),
+      getMileageUnit(shopId),
+    ]);
 
     if (!result.ok || !result.data) {
       return { ok: false, error: result.error || 'Vehicle not found' };
     }
 
-    return { ok: true, data: transformVehicle(result.data) };
+    return { ok: true, data: transformVehicle(result.data, { mileageUnit }) };
   }
 
   async getVehicleByVin(shopId: number, vin: string): Promise<Result<NormalizedVehicle>> {
@@ -73,13 +96,16 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: 'Protractor not configured for this shop' };
     }
 
-    const result = await protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
-      `/ServiceItem/Search/${encodeURIComponent(vin)}`,
-      config,
-      {},
-      0,
-      shopId
-    );
+    const [result, mileageUnit] = await Promise.all([
+      protractorFetch<{ ItemCollection?: ProtractorVehicle[] }>(
+        `/ServiceItem/Search/${encodeURIComponent(vin)}`,
+        config,
+        {},
+        0,
+        shopId
+      ),
+      getMileageUnit(shopId),
+    ]);
 
     if (!result.ok) {
       return { ok: false, error: result.error || 'Search failed' };
@@ -92,7 +118,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: 'Vehicle not found' };
     }
 
-    return { ok: true, data: transformVehicle(match) };
+    return { ok: true, data: transformVehicle(match, { mileageUnit }) };
   }
 
   async getWorkOrder(shopId: number, workOrderId: string): Promise<Result<NormalizedWorkOrder>> {
@@ -101,19 +127,22 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: 'Protractor not configured for this shop' };
     }
 
-    const result = await protractorFetch<ProtractorWorkOrder>(
-      `/WorkOrder/${workOrderId}`,
-      config,
-      {},
-      0,
-      shopId
-    );
+    const [result, mileageUnit] = await Promise.all([
+      protractorFetch<ProtractorWorkOrder>(
+        `/WorkOrder/${workOrderId}`,
+        config,
+        {},
+        0,
+        shopId
+      ),
+      getMileageUnit(shopId),
+    ]);
 
     if (!result.ok || !result.data) {
       return { ok: false, error: result.error || 'Work order not found' };
     }
 
-    return { ok: true, data: transformWorkOrder(result.data) };
+    return { ok: true, data: transformWorkOrder(result.data, { mileageUnit }) };
   }
 
   async getWorkOrders(shopId: number, options?: WorkOrderQuery): Promise<Result<NormalizedWorkOrder[]>> {
@@ -122,6 +151,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: 'Protractor not configured for this shop' };
     }
 
+    const mileageUnit = await getMileageUnit(shopId);
     const allWorkOrders: NormalizedWorkOrder[] = [];
     const pageSize = options?.limit || 100;
     let skip = options?.offset || 0;
@@ -152,7 +182,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       }
 
       const pageItems = result.data?.ItemCollection || [];
-      allWorkOrders.push(...pageItems.map(transformWorkOrder));
+      allWorkOrders.push(...pageItems.map(item => transformWorkOrder(item, { mileageUnit })));
 
       if (pageItems.length < pageSize) {
         hasMore = false;

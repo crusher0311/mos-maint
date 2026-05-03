@@ -17,7 +17,21 @@ import type {
   ProtractorDeferredWork,
 } from './client';
 
-export function transformVehicle(raw: ProtractorVehicle): NormalizedVehicle {
+export interface ProtractorTransformOptions {
+  /**
+   * Task #337: Protractor stores odometer values in whatever unit the shop
+   * operates in (miles for US shops, kilometers for Canadian shops). The
+   * `mileageUnit` field on the normalized record must reflect that or
+   * downstream code mistakes a Canadian shop's km values for miles and
+   * applies a second conversion. Mirrors the Tekmetric fix from task #333.
+   */
+  mileageUnit?: 'miles' | 'kilometers';
+}
+
+export function transformVehicle(
+  raw: ProtractorVehicle,
+  options?: ProtractorTransformOptions,
+): NormalizedVehicle {
   return {
     id: raw.ID,
     vin: raw.VIN,
@@ -28,7 +42,7 @@ export function transformVehicle(raw: ProtractorVehicle): NormalizedVehicle {
     engine: raw.Engine,
     transmission: raw.Transmission,
     mileage: raw.Odometer,
-    mileageUnit: 'miles',
+    mileageUnit: options?.mileageUnit ?? 'miles',
     licensePlate: raw.LicensePlate,
     color: raw.Color,
     customerId: raw.OwnerID,
@@ -104,9 +118,13 @@ export function transformServiceJob(raw: ProtractorServicePackage): NormalizedSe
   };
 }
 
-export function transformWorkOrder(raw: ProtractorWorkOrder): NormalizedWorkOrder {
-  const vehicle = raw.ServiceItem ? transformVehicle(raw.ServiceItem) : {
+export function transformWorkOrder(
+  raw: ProtractorWorkOrder,
+  options?: ProtractorTransformOptions,
+): NormalizedWorkOrder {
+  const vehicle = raw.ServiceItem ? transformVehicle(raw.ServiceItem, options) : {
     id: raw.ServiceItemID || '',
+    mileageUnit: options?.mileageUnit ?? 'miles',
     sourceId: raw.ServiceItemID || '',
     sourceSystem: 'protractor' as const,
   };
