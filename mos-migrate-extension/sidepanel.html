@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOS Migrate (Owner Only)</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Loading state -->
+    <div id="loading-state" class="state-container">
+      <div class="spinner"></div>
+      <p>Loading...</p>
+    </div>
+
+    <!-- Login state -->
+    <div id="login-state" class="state-container hidden">
+      <div class="logo">
+        <h1>MOS Migrate</h1>
+        <p class="logo-sub">Owner-only Tekmetric Shop Migration</p>
+      </div>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required placeholder="owner@mos.tools">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label for="api-url">API URL</label>
+          <input type="url" id="api-url" name="apiUrl" value="https://mos.tools" placeholder="https://mos.tools">
+        </div>
+        <div class="form-group remember-me-group">
+          <label class="remember-me-label">
+            <input type="checkbox" id="remember-me" name="rememberMe" checked>
+            <span>Remember me</span>
+          </label>
+        </div>
+        <button type="submit" class="btn-primary">Sign In</button>
+        <p id="login-error" class="error-text hidden"></p>
+      </form>
+    </div>
+
+    <!-- Denied state (non-super-admin login) -->
+    <div id="denied-state" class="state-container hidden">
+      <h2 class="denied-title">Owner only</h2>
+      <p class="denied-text">This extension is for the MOS owner only. Your account is not authorized.</p>
+      <button id="denied-logout" class="btn-secondary">Sign in as a different user</button>
+    </div>
+
+    <!-- Main app state: the migration wizard -->
+    <div id="main-state" class="hidden">
+      <div class="migrate-header-bar">
+        <div>
+          <strong>MOS Migrate</strong>
+          <span id="signed-in-as" class="signed-in-as"></span>
+        </div>
+        <button id="logout-btn" class="logout-footer-btn" title="Log out">Log out</button>
+      </div>
+
+      <div class="migrate-wizard">
+        <div class="migrate-header">
+          <h3>Tekmetric Shop Migration</h3>
+          <p class="migrate-sub">Dump open ROs from a source shop and load them into a destination shop. Dry-run by default; you must confirm before any writes.</p>
+        </div>
+
+        <!-- Step 1: pick shops + token status -->
+        <section id="migrate-step-1" class="migrate-step">
+          <h4>1. Source &amp; destination shops</h4>
+          <div class="migrate-row">
+            <label>Source Tekmetric shop
+              <select id="migrate-source-shop" class="migrate-shop-select">
+                <option value="">— pick a shop —</option>
+              </select>
+            </label>
+            <span class="migrate-badge" id="migrate-source-badge">— no token —</span>
+          </div>
+          <div class="migrate-row">
+            <label>Destination Tekmetric shop
+              <select id="migrate-dest-shop" class="migrate-shop-select">
+                <option value="">— pick a shop —</option>
+              </select>
+            </label>
+            <span class="migrate-badge" id="migrate-dest-badge">— no token —</span>
+          </div>
+          <p class="migrate-hint">Only Tekmetric shops you have access to are listed. Open each shop's Tekmetric tab once with this extension installed to cache its <code>x-auth-token</code> server-side.</p>
+          <div class="migrate-actions">
+            <button id="migrate-refresh-tokens" class="btn-secondary">Recheck tokens</button>
+            <button id="migrate-start-run" class="btn-primary">Start migration run</button>
+          </div>
+          <div id="migrate-existing-runs" class="migrate-existing"></div>
+        </section>
+
+        <!-- Step 2: dump preview -->
+        <section id="migrate-step-2" class="migrate-step hidden">
+          <h4>2. Dump source shop</h4>
+          <p>Run id <code id="migrate-run-id">—</code></p>
+          <button id="migrate-run-dump" class="btn-primary">Run dump</button>
+          <div id="migrate-dump-status" class="migrate-status"></div>
+          <div id="migrate-dump-preview"></div>
+        </section>
+
+        <!-- Step 3: load-core dry-run + confirm -->
+        <section id="migrate-step-3" class="migrate-step hidden">
+          <h4>3. Plan &amp; load core ROs</h4>
+          <label class="migrate-toggle">
+            <input type="checkbox" id="migrate-loadcore-direct-ids" />
+            Use source IDs directly (Tekmetric account-transfer mode)
+          </label>
+          <p class="migrate-sub">Default is cross-shop dedup by VIN / phone / email. Only enable direct-ID mode when source &amp; dest are linked under one Tekmetric account and IDs are guaranteed to match.</p>
+          <button id="migrate-loadcore-dry" class="btn-secondary">Re-plan dry-run</button>
+          <button id="migrate-loadcore-confirm" class="btn-danger">Confirm &amp; load</button>
+          <div id="migrate-loadcore-status" class="migrate-status"></div>
+          <div id="migrate-loadcore-preview"></div>
+        </section>
+
+        <!-- Step 4: needs-override sub-list -->
+        <section id="migrate-step-4" class="migrate-step hidden">
+          <h4>4. Needs override</h4>
+          <p class="migrate-sub">These ROs need a destination customer + vehicle picked manually.</p>
+          <div id="migrate-overrides-list"></div>
+        </section>
+
+        <!-- Step 5: load-extras (inspections + photos) -->
+        <section id="migrate-step-5" class="migrate-step hidden">
+          <h4>5. Inspections &amp; photos</h4>
+          <button id="migrate-extras-dry" class="btn-secondary">Dry-run</button>
+          <button id="migrate-extras-confirm" class="btn-danger">Confirm &amp; copy</button>
+          <div id="migrate-extras-status" class="migrate-status"></div>
+          <div id="migrate-extras-preview"></div>
+        </section>
+
+        <section class="migrate-step">
+          <h4>Recent activity</h4>
+          <div id="migrate-audit-log" class="migrate-audit"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

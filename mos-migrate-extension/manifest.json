@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "MOS Migrate (Owner Only)",
+  "version": "1.0.0",
+  "description": "Owner-only Tekmetric Shop Migration wizard for MOS Tools. Sideloaded; not for shop users.",
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "https://shop.tekmetric.com/*",
+    "https://sandbox.tekmetric.com/*",
+    "https://cba.tekmetric.com/*",
+    "https://mos.tools/*",
+    "https://*.mos.tools/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "MOS Migrate (Owner Only)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
