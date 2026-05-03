@@ -1,0 +1,50 @@
+2026-05-03T18:59:03.24966076Z clientIP="74.220.48.243" requestID="6fb521b8-1b56-4efe" responseTimeMS=4 responseBytes=237 userAgent="node"
+2026-05-03T18:59:03.540253823Z clientIP="74.220.48.243" requestID="5fd4d38e-cea9-4d84" responseTimeMS=4 responseBytes=237 userAgent="node"
+2026-05-03T18:59:03.652031701Z [Cron] Shop 110: Aggregated 50 unique VINs
+2026-05-03T18:59:03.667599038Z clientIP="74.220.48.243" requestID="000cd19c-cbc9-40da" responseTimeMS=3 responseBytes=237 userAgent="node"
+2026-05-03T18:59:03.67944105Z [Cron] Shop 110: 50 valid VINs after filter
+2026-05-03T18:59:03.71160196Z [Cron] Shop 111 (tek: 17779): Found 24 work orders in tekmetric_work_orders
+2026-05-03T18:59:03.770553576Z [Cron] Shop 111: Aggregated 22 unique VINs
+2026-05-03T18:59:03.784059336Z [Cron] Shop 111: 18 valid VINs after filter
+2026-05-03T18:59:03.785623505Z clientIP="74.220.48.243" requestID="4e9f18a4-4dc1-490e" responseTimeMS=3 responseBytes=237 userAgent="node"
+2026-05-03T18:59:03.829958092Z [Cron] Shop 112 (tek: 18008): Found 51 work orders in tekmetric_work_orders
+2026-05-03T18:59:03.889293537Z [Cron] Shop 112: Aggregated 50 unique VINs
+2026-05-03T18:59:03.905511552Z clientIP="74.220.48.243" requestID="ed257e1f-4643-43d5" responseTimeMS=3 responseBytes=237 userAgent="node"
+2026-05-03T18:59:03.907769683Z [Cron] Shop 112: 50 valid VINs after filter
+2026-05-03T18:59:03.948977898Z [Cron] Shop 117 (tek: 4346): Found 0 work orders in tekmetric_work_orders
+2026-05-03T18:59:04.009151471Z [Cron] Shop 117: Aggregated 0 unique VINs
+2026-05-03T18:59:04.009166001Z [Cron] Shop 117: 0 valid VINs after filter
+2026-05-03T18:59:04.069367624Z [Cron] Shop 118 (tek: 16012): Found 21 work orders in tekmetric_work_orders
+2026-05-03T18:59:04.130076988Z [Cron] Shop 118: Aggregated 21 unique VINs
+2026-05-03T18:59:04.130095048Z [Cron] Shop 118: 20 valid VINs after filter
+2026-05-03T18:59:04.130100628Z [Cron] Triggered plan pre-generation for 42/43 Tekmetric shops with vehicles
+2026-05-03T18:59:04.131089489Z [2026-05-03T18:57:46.293Z] Sync complete: 1 synced, 43 shops, 70654ms
+2026-05-03T18:59:04.143699131Z clientIP="74.220.48.243" requestID="1cb5389c-2f67-4694" responseTimeMS=3 responseBytes=237 userAgent="node"
+2026-05-03T18:59:07.978401483Z clientIP="208.181.178.94" requestID="31864bed-fce6-4588" responseTimeMS=181 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-03T18:59:07.985553116Z clientIP="208.181.178.94" requestID="9e45209d-623c-4c5c" responseTimeMS=189 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-03T18:59:08.181604486Z clientIP="208.181.178.94" requestID="260fb346-29ce-4e45" responseTimeMS=180 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-03T18:59:08.192994252Z clientIP="208.181.178.94" requestID="f9fd202d-be5b-4ae2" responseTimeMS=188 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-03T18:59:10.030851571Z [2026-05-03T18:59:10.030Z] Running Tekmetric sync...
+2026-05-03T18:59:13.909398947Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:04.760Z)
+2026-05-03T18:59:14.895466421Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:05.776Z)
+2026-05-03T18:59:16.044330436Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:06.742Z)
+2026-05-03T18:59:22.32026586Z [Backfill] Shop 114: 0 invoices pace=DAYTIME tz=America/Chicago hour=13 conc=3 chunkDays=60 maxPages=50 
+2026-05-03T18:59:22.379063954Z [Backfill] Shop 114 chunk 15: 2023-05-19 to 2023-07-18: 0 invoices
+2026-05-03T18:59:22.707043201Z [Backfill] Shop 114: Resuming from 2023-05-19 (logicVersion=4)
+2026-05-03T18:59:22.707067082Z [Backfill] Shop 114: 2023-03-20 to 2023-05-19 (60 days)
+2026-05-03T18:59:29.036577514Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:09.357Z)
+2026-05-03T18:59:29.979722432Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:10.324Z)
+2026-05-03T18:59:30.62798161Z [RateLimit] protractor at 302/300, waiting 2754ms (attempt 1/8, exponential backoff)
+2026-05-03T18:59:30.810419568Z [RateLimit] protractor at 302/300, waiting 2609ms (attempt 1/8, exponential backoff)
+2026-05-03T18:59:30.997459609Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:11.319Z)
+2026-05-03T18:59:31.009032001Z [RateLimit] protractor at 301/300, waiting 2748ms (attempt 1/8, exponential backoff)
+2026-05-03T18:59:33.49745385Z [RateLimit] protractor at 301/300, waiting 4103ms (attempt 2/8, exponential backoff)
+2026-05-03T18:59:33.534083754Z [RateLimit] protractor at 302/300, waiting 4063ms (attempt 2/8, exponential backoff)
+2026-05-03T18:59:33.805081802Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:13.875Z)
+2026-05-03T18:59:33.872215529Z [RateLimit] protractor at 301/300, waiting 4027ms (attempt 2/8, exponential backoff)
+2026-05-03T18:59:34.808904579Z [Tekmetric Incremental] Shop 73: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:14.878Z)
+2026-05-03T18:59:35.822410883Z [Tekmetric Incremental] Shop 74: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:15.889Z)
+2026-05-03T18:59:37.711519938Z [RateLimit] protractor at 301/300, waiting 8924ms (attempt 3/8, exponential backoff)
+2026-05-03T18:59:37.714187984Z [RateLimit] protractor at 302/300, waiting 8575ms (attempt 3/8, exponential backoff)
+2026-05-03T18:59:38.014374773Z [RateLimit] protractor at 301/300, waiting 8384ms (attempt 3/8, exponential backoff)
+2026-05-03T18:59:38.622745598Z [Tekmetric Incremental] Shop 75: Fetched page 0, got 0 ROs (updated since 2026-05-03T18:58:18.455Z)
