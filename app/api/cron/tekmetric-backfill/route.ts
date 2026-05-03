@@ -17,8 +17,25 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // Process multiple shops per run to clear the long tail of stalled shops.
 // Concurrency is capped per shop in `getPaceConfig` so the global API
 // fan-out stays well under the 600 req/min Tekmetric quota.
-const MAX_SHOPS_PER_RUN = 5;
+//
+// Bumped 5→10 (and the slot splits 2/3 → 4/6 below) to double per-tick
+// shop coverage. Combined with the 15-min weekend cadence in
+// lib/cron/jobs.cjs this is ~8x throughput vs. the original
+// hourly/5-shop config. Wall-clock ceiling: 10 shops / 3-parallel pool
+// × ~5 min/chunk ≈ 17 min, comfortably under the 25-min timeoutMs.
+const MAX_SHOPS_PER_RUN = 10;
 const SHOP_PARALLELISM = 3;
+// Shops created within this many days are eligible for the every-5-min
+// `fastpath=newShops` cycle. Env-tunable so we can dial the "new shop
+// honeymoon" window without a redeploy.
+const NEW_SHOP_FASTPATH_DAYS = Math.max(
+  1,
+  Number(process.env.TEKMETRIC_NEW_SHOP_FASTPATH_DAYS) || 14,
+);
+// Smaller per-tick budget for fastpath so it stays light (it fires 3x
+// as often as the weekend boost) and keeps the focus on the handful
+// of shops that are genuinely brand-new.
+const FASTPATH_MAX_SHOPS_PER_RUN = 3;
 const YEARS_TO_BACKFILL = 5;
 // If a shop's lastError was set more than this many hours ago, clear it
 // before the next run so a transient failure can't permanently freeze the
@@ -45,8 +62,8 @@ const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
 // bucket from starving the other. With 19 never-started shops and an
 // MAX_SHOPS_PER_RUN of 5, an unsplit budget meant the long-stalled
 // (32, 36, 37, ...) bucket waited 4+ runs to even be eligible.
-const NEVER_STARTED_SLOTS_PER_RUN = 2;
-const STALLED_SLOTS_PER_RUN = 3;
+const NEVER_STARTED_SLOTS_PER_RUN = 4;
+const STALLED_SLOTS_PER_RUN = 6;
 // Per-chunk metrics rolling window. Each chunk records wall-clock + cache
 // hit rates + 429 backoff so the admin sync-health view can compute
 // median/p95 chunk duration per shop without grepping cron logs. 25 entries
@@ -1251,12 +1268,49 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const shopsToProcess = await getShopsNeedingBackfill(db);
+    // Fastpath mode: when invoked as `?fastpath=newShops` (the
+    // every-5-min cron), restrict the queue to shops created in the
+    // last NEW_SHOP_FASTPATH_DAYS days so freshly onboarded clients
+    // see their data populate quickly without waiting for the normal
+    // queue rotation.
+    const url = new URL(req.url);
+    const fastpath = url.searchParams.get("fastpath");
+    const isFastpath = fastpath === "newShops";
+    const effectiveMaxShops = isFastpath
+      ? FASTPATH_MAX_SHOPS_PER_RUN
+      : MAX_SHOPS_PER_RUN;
+
+    let shopsToProcess = await getShopsNeedingBackfill(db);
+
+    if (isFastpath) {
+      const cutoff = new Date(
+        Date.now() - NEW_SHOP_FASTPATH_DAYS * 24 * 60 * 60 * 1000,
+      );
+      const newShopIds = new Set<number>(
+        (
+          await db
+            .collection("shops")
+            .find(
+              { createdAt: { $gte: cutoff } },
+              { projection: { shopId: 1 } },
+            )
+            .toArray()
+        ).map((s: any) => Number(s.shopId)),
+      );
+      shopsToProcess = shopsToProcess.filter((s) =>
+        newShopIds.has(Number(s.shopId)),
+      );
+      console.log(
+        `[Tekmetric Backfill] fastpath=newShops: ${shopsToProcess.length} shop(s) created in last ${NEW_SHOP_FASTPATH_DAYS}d`,
+      );
+    }
 
     if (shopsToProcess.length === 0) {
       return NextResponse.json({
         ok: true,
-        message: "All Tekmetric shops have completed backfill",
+        message: isFastpath
+          ? `No new shops (created in last ${NEW_SHOP_FASTPATH_DAYS}d) need backfill`
+          : "All Tekmetric shops have completed backfill",
         shopsRemaining: 0,
         staleSweep,
         duration: `${Date.now() - startTime}ms`
@@ -1278,14 +1332,14 @@ export async function GET(req: NextRequest) {
     // If one bucket is short (e.g. all never-started shops have already
     // moved into the stalled bucket), give the remaining slots to the
     // other bucket so we never under-utilize the budget.
-    if (selectedShops.length < MAX_SHOPS_PER_RUN) {
-      const remaining = MAX_SHOPS_PER_RUN - selectedShops.length;
+    if (selectedShops.length < effectiveMaxShops) {
+      const remaining = effectiveMaxShops - selectedShops.length;
       const extras = (selectedNeverStarted.length < NEVER_STARTED_SLOTS_PER_RUN
         ? stalledQueue.slice(STALLED_SLOTS_PER_RUN, STALLED_SLOTS_PER_RUN + remaining)
         : neverStartedQueue.slice(NEVER_STARTED_SLOTS_PER_RUN, NEVER_STARTED_SLOTS_PER_RUN + remaining));
       selectedShops = [...selectedShops, ...extras];
     }
-    selectedShops = selectedShops.slice(0, MAX_SHOPS_PER_RUN);
+    selectedShops = selectedShops.slice(0, effectiveMaxShops);
 
     // Process shops in parallel up to SHOP_PARALLELISM. Per-shop concurrency
     // is already throttled by the pace config and the central Tekmetric
