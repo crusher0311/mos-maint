@@ -1,0 +1,50 @@
+2026-05-03T01:40:29.395916845Z [Cron]   • shopware-enrich              15 * * * *      GET   /api/cron/shopware-enrich
+2026-05-03T01:40:29.398935384Z [Cron]   • backfill-reconcile           30 * * * *      GET   /api/cron/backfill-reconcile
+2026-05-03T01:40:29.401165611Z [Cron]   • log-sync                     */15 * * * *    GET   /api/cron/log-sync
+2026-05-03T01:40:29.40355605Z [Cron]   • dashboard-refresh            */10 * * * *    GET   /api/cron/dashboard-refresh
+2026-05-03T01:40:29.405834047Z [Cron]   • daily-grace-check            0 8 * * *       GET   /api/cron/daily-grace-check
+2026-05-03T01:40:29.408478631Z [Cron]   • backfill-chunk-speed-health  0 7 * * *       GET   /api/cron/backfill-chunk-speed-health
+2026-05-03T01:40:29.411156404Z [Cron]   • data-quality                 0 2 * * *       POST  /api/cron/data-quality
+2026-05-03T01:40:29.413565854Z [Cron]   • daily-all                    0 4 * * *       GET   /api/cron/daily-all
+2026-05-03T01:40:29.413582884Z [Cron] 15 jobs registered and scheduled
+2026-05-03T01:40:29.413589354Z [Cron] 5 jobs skipped due to PAUSE_TEKMETRIC_CRON: tekmetric-incremental-sync, tekmetric-backfill, tekmetric-webhook-health, tekmetric-ro-retry, tekmetric-backfill-health
+2026-05-03T01:40:29.549452385Z  ✓ Ready in 665ms
+2026-05-03T01:40:30.844931027Z [Startup] Waiting for server... (attempt 1/30)
+2026-05-03T01:40:30.948618913Z [Startup] Server is ready! (status: 401)
+2026-05-03T01:40:30.949488147Z [2/3] Starting Tekmetric Sync Worker...
+2026-05-03T01:40:30.951134034Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-05-03T01:40:30.951144674Z [4/5] Starting Plan Prefetch Worker...
+2026-05-03T01:40:30.95274233Z [5/5] Starting Rescue Rover WebSocket Server on port 3002...
+2026-05-03T01:40:30.954081692Z 
+2026-05-03T01:40:30.954100632Z ============================================================
+2026-05-03T01:40:30.954156583Z All services started!
+2026-05-03T01:40:30.954217194Z - Next.js server on port 10000
+2026-05-03T01:40:30.954272745Z - Tekmetric Sync Worker (every 60s)
+2026-05-03T01:40:30.954282345Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-03T01:40:30.954365736Z - Plan Prefetch Worker (every 30m)
+2026-05-03T01:40:30.954498099Z - Rescue Rover WebSocket Server on port 3002
+2026-05-03T01:40:30.95457472Z ============================================================
+2026-05-03T01:40:34.267242104Z Tekmetric Incremental Sync Worker started
+2026-05-03T01:40:34.267266114Z Base sync interval: 60 seconds
+2026-05-03T01:40:34.267283415Z Max retries: 3
+2026-05-03T01:40:34.267287355Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-05-03T01:40:34.267293275Z 
+2026-05-03T01:40:34.349893245Z [PlanPrefetch] Script loaded
+2026-05-03T01:40:34.350027617Z [PlanPrefetch] Worker starting...
+2026-05-03T01:40:34.350032688Z [PlanPrefetch] Will run every 30 minutes
+2026-05-03T01:40:34.350040258Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-05-03T01:40:37.473124132Z [RescueRover WS] WebSocket server listening on port 3002
+2026-05-03T01:40:37.473174532Z [RescueRover WS] Twilio media stream endpoint: ws://0.0.0.0:3002/ws/twilio-media
+2026-05-03T01:40:46.382517083Z [DataOne] Keep-alive started (every 240s)
+2026-05-03T01:40:49.274458046Z [2026-05-03T01:40:49.273Z] Running Tekmetric sync...
+2026-05-03T01:40:53.392921013Z [Tekmetric Incremental] Shop 28: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:26.363Z)
+2026-05-03T01:40:54.310416574Z [Tekmetric Incremental] Shop 32: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:27.358Z)
+2026-05-03T01:40:55.302083218Z [Tekmetric Incremental] Shop 36: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:28.357Z)
+2026-05-03T01:40:58.149527524Z [Tekmetric Incremental] Shop 37: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:41.323Z)
+2026-05-03T01:40:59.11445902Z [Tekmetric Incremental] Shop 54: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:32.126Z)
+2026-05-03T01:41:00.119002084Z [Tekmetric Incremental] Shop 57: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:33.125Z)
+2026-05-03T01:41:02.433834821Z [PlanCache] HIT: 5NPD84LF9KH420508 cached 231m ago, 134348 miles
+2026-05-03T01:41:02.956769751Z [Tekmetric Incremental] Shop 63: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:43.904Z)
+2026-05-03T01:41:03.935449693Z [Tekmetric Incremental] Shop 73: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:44.895Z)
+2026-05-03T01:41:04.918552837Z [Tekmetric Incremental] Shop 74: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:45.896Z)
+2026-05-03T01:41:07.726470825Z [Tekmetric Incremental] Shop 75: Fetched page 0, got 0 ROs (updated since 2026-05-03T01:38:48.667Z)
