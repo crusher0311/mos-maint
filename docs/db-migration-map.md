@@ -5,6 +5,8 @@
 **Sources:** walked `lib/db/schema/` (Postgres / Drizzle), every `db.collection(...)` call site (Mongo), `lib/supabase-dual-writer.ts`, `lib/normalized-ingestion.ts`, and the cron / webhook entry points listed in task #296.
 **Companion script:** `scripts/backfill-mongo-to-supabase.ts` is the only end-to-end Mongo→PG backfill tool today and only handles the 6 normalized collections.
 
+**Wave 0 status (2026-05-03, task #341):** complete. All nine confirmed-orphan collections in §4.1 (`webhook_events`, `serviceevents`, `vehicleschedules`, `inspectionfindings`, `analyses`, `oeschedules`, `LKP_VIN_MAINTENANCE`, `LKP_YMM_MAINTENANCE`, `DEF_MAINTENANCE_EVENT`) were re-grepped against the live tree and confirmed orphaned, then verified absent from the production Mongo cluster (already gone — likely dropped during the original DataOne retirement). Five §4.2 "verify before dropping" candidates turned out to still have live callers and were reclassified instead of dropped: `password_resets` → W3, `services_by_ymm` → W2, `tickets` → W3, `shop_users` → W4, `workflow_runs` → W2. Snapshot + decision log: `docs/audits/2026-05-03-wave0-mongo-orphan-drop.md`.
+
 Legend for "Source of truth":
 - **Mongo** — Mongo is canonical; Postgres copy (if any) is a downstream mirror.
 - **Postgres** — Postgres is canonical; Mongo copy (if any) is legacy.
@@ -98,14 +100,14 @@ Grouped by domain. "PG plan" calls out the wave each one belongs to.
 | `shops` | Mongo | `lib/shops.ts`, `lib/auth.ts`, `lib/stripe.ts`, `lib/featureResolver.ts`, virtually every cron + API route, all integration adapters | `lib/shops.ts`, `app/api/stripe/webhook/route.ts`, `app/api/settings/{autoflow,shopware,protractor,billing}/route.ts`, `app/api/enterprise/shops/route.ts`, `app/api/sticker/settings/route.ts`, `app/api/internal/backfill-labor-rates/route.ts` | Highest fan-in entity in the system. **W4.** |
 | `users` | Mongo | `lib/auth.ts`, `app/api/user/**`, `app/api/settings/users/**`, `app/api/enterprise/users/**`, `app/api/platform-admin/users/route.ts` | `app/api/stripe/webhook/route.ts`, `app/api/settings/users/[userId]/route.ts`, `app/api/enterprise/{users,shops}/route.ts`, `app/api/auth/complete-setup/route.ts` | **W4.** |
 | `sessions` | Mongo | `lib/auth.ts`, `app/api/settings/shopware/{,webhook/}route.ts` | `app/api/auth/login/route.ts`, `app/api/user/switch-shop/route.ts`, `app/api/enterprise/users/route.ts` | **W4.** Cross-DB risk: every authenticated request reads this from Mongo before any PG read. |
-| `shop_users` | Mongo | `app/api/platform-admin/tickets/route.ts` | (writes via `users`) | Likely orphan view — verify and drop. **W0?** |
+| `shop_users` | Mongo | `app/api/platform-admin/tickets/route.ts` | (writes via `users`) | Re-verified 2026-05-03 (task #341): live reader still joins on this for ticket-notification routing. Reclassified **W4** (joined to `users`/`tickets`). |
 | `enterprise_accounts` | Mongo | `lib/enterprise.ts`, `app/api/enterprise/{billing,users}/route.ts` | `app/api/enterprise/{billing,mappings}/route.ts` | **W4** (joined to shops). |
 | `platform_admins` | Mongo | `lib/super-admins.ts`, `app/api/platform-admin/**` | `scripts/seed-platform-admin.ts`, `scripts/set-platform-admin.ts` | **W4.** |
 | `platform_settings` | Mongo | `lib/stripe.ts`, `app/api/platform-admin/{billing,settings}/route.ts` | `lib/stripe.ts`, `app/api/platform-admin/settings/route.ts`, `app/api/admin/billing/settings/route.ts` | **W3.** |
 | `platform_plans` | Mongo | `app/api/stripe/plans/route.ts` | `app/api/platform-admin/plans/seed/route.ts` | **W2.** Small, rarely written. |
 | `platform_features` | Mongo (canonical), PG twin exists | `lib/featureResolver.ts`, `app/api/features/route.ts`, `app/api/stripe/plans/route.ts`, `app/api/platform-admin/features/route.ts` | `app/api/platform-admin/features/{,seed,reorder}/route.ts` | **Cross-DB conflict** — see §5. |
 | `shop_features` | Mongo | `lib/features.ts` | `lib/features.ts` | **W3.** Per-shop feature overrides. |
-| `pending_signups`, `setup_tokens`, `password_reset_tokens`, `password_resets` | Mongo | auth flows | auth flows | **W3** (auth-adjacent). `password_resets` is legacy index-only — probably W0. |
+| `pending_signups`, `setup_tokens`, `password_reset_tokens`, `password_resets` | Mongo | auth flows | auth flows | **W3** (auth-adjacent). `password_resets` re-verified 2026-05-03 (task #341): empty in prod but `app/api/admin/db-indexes/route.ts` still ensures `token` unique + `expiresAt` TTL indexes on it, so it can't be dropped without first retiring those index ensures. Stays **W3**. |
 
 ### 3.2 Billing / Stripe (W3)
 
@@ -140,7 +142,8 @@ These are per-integration mirrors of remote SMS data. They feed `normalized_inge
 | --- | --- | --- | --- |
 | `dataone_cache` | `lib/integrations/dataone-api.ts` | same | Hot lookup. |
 | `dataone_lkp_squish_maintenance`, `dataone_oe`, `def_maintenance_event`, `lkp_ymm_maintenance_interval` | `lib/integrations/dataone-local.ts`, `lib/evidence.ts` | `scripts/dataone-import.ts` (and parallel `scripts/dataone-postgres-import.ts` already exists for PG side) | **W1.** Read-mostly reference data. PG migration largely done by ETL script. |
-| `LKP_VIN_MAINTENANCE`, `LKP_YMM_MAINTENANCE`, `DEF_MAINTENANCE_EVENT`, `services_by_ymm`, `serviceevents`, `vehicleschedules`, `inspectionfindings`, `analyses`, `oeschedules` | only `_archive/**` | only `_archive/**` | **W0 — orphans.** Safe to drop. |
+| `LKP_VIN_MAINTENANCE`, `LKP_YMM_MAINTENANCE`, `DEF_MAINTENANCE_EVENT`, `serviceevents`, `vehicleschedules`, `inspectionfindings`, `analyses`, `oeschedules` | only `_archive/**` | only `_archive/**` | **DROPPED 2026-05-03** (task #341). Re-grep confirmed only docs/_archive references; production cluster verified absent (already gone, likely from original DataOne retirement). |
+| `services_by_ymm` | `routes/maintenance.js`, `routes/vin-maintenance.js`, `routes/vin-next-due.js` (legacy Express server) | (none in repo) | Re-verified 2026-05-03 (task #341): *not* an orphan — `server.js` mounts these Express routers. Reclassified **W2** (retire the legacy Express server first, then drop). Production collection currently absent. |
 | `oem_schedules` | `app/api/autovitals/extension/vehicle-data/route.ts` | `lib/integrations/carfax.ts` | **W2.** |
 | `oem_carfax_mappings` | `app/api/extension/plan/route.ts`, `app/api/platform-admin/service-mappings/route.ts` | `app/api/platform-admin/service-mappings/route.ts` | **W2.** Small mapping table. |
 | `carfax_reports`, `carfax_history`, `carfax_cache` | `lib/integrations/carfax.ts`, `lib/evidence.ts` | same + `app/api/carfax/debug/[vin]/route.ts` | **W3.** |
@@ -193,10 +196,10 @@ These are per-integration mirrors of remote SMS data. They feed `normalized_inge
 | `system_announcements` | `lib/announcements.ts`, `app/api/announcements/active/route.ts`, `app/api/admin/announcements/route.ts` | same | **W1.** |
 | `support_tickets` (Mongo) | `app/api/support/tickets/**` | same | **Conflict with PG `support_tickets`.** See §5. |
 | `support_chat_sessions` | `lib/support-chat.ts` | same | **W2.** |
-| `tickets` | `app/api/support/tickets/route.ts` (legacy read), `lib/integrations/dvi.ts` writes | mostly orphan | Possibly **W0**. |
+| `tickets` | `app/api/vehicles/[vin]/refresh/route.ts:67` | `lib/integrations/dvi.ts:282` | Re-verified 2026-05-03 (task #341): *not* an orphan — DVI integration writes RO-tracking docs here keyed by VIN, and the vehicle-refresh route reads them. Distinct from PG `support_tickets`. Production has 1 doc. Reclassified **W3** (active integration data). |
 | `events` | `lib/evidence.ts` reads, `lib/integrations/{tekmetric,protractor}/adapter.ts` writes | same | Audit timeline used by VHI / evidence. **W3.** |
-| `webhook_events` | only `_archive/**` | only `_archive/**` | **W0 — orphan.** |
-| `workflow_runs` | `app/api/workflows/runs/route.ts` only | (no writer found in app code) | Likely **W0** unless external writer exists. |
+| `webhook_events` | only `_archive/**` | only `_archive/**` | **DROPPED 2026-05-03** (task #341). Re-grep clean, production cluster verified absent. |
+| `workflow_runs` | `app/api/workflows/runs/route.ts` only | (no writer found in app code) | Re-verified 2026-05-03 (task #341): *not* an orphan — live reader returns workflow runs in the dashboard. No in-repo writer found, but external writer presumed (open-question §7 #4). Reclassified **W2** (drop blocked on confirming external writers). Production collection currently absent. |
 | `ratelimits` | `lib/rate.ts` | same | **W1.** Could be Redis instead of PG. |
 | `counters` | `lib/ids.ts`, `app/api/platform-admin/shops/route.ts`, `app/api/enterprise/shops/route.ts` | same | ID generation. **W3** — needs an atomic increment story in PG (`SERIAL`/sequence). |
 | `sticker_generations`, `sticker_qr_scans`, `shop_media` | sticker routes | sticker routes | **W2.** |
@@ -207,25 +210,25 @@ These are per-integration mirrors of remote SMS data. They feed `normalized_inge
 
 ### 4.1 Mongo collections with no live readers in `app/`, `lib/`, or `scripts/` (only `_archive/` references)
 
-These are safe to drop after a final point-in-time export.
+Wave 0 cleanup ran 2026-05-03 (task #341). Status per collection:
 
-- `webhook_events`
-- `oeschedules`
-- `services_by_ymm`
-- `vehicleschedules`
-- `serviceevents`
-- `inspectionfindings` (writer is in `_archive`; live writer in `lib/integrations/dvi.ts` may have been retired — verify)
-- `analyses`
-- `LKP_VIN_MAINTENANCE` (uppercase variant — modern code uses `lkp_ymm_maintenance_interval`)
-- `LKP_YMM_MAINTENANCE`
-- `DEF_MAINTENANCE_EVENT` (uppercase variant)
-- `password_resets` (legacy; `password_reset_tokens` is the live one)
+- `webhook_events` — **DROPPED 2026-05-03** (production cluster verified absent at snapshot time).
+- `oeschedules` — **DROPPED 2026-05-03** (verified absent).
+- `vehicleschedules` — **DROPPED 2026-05-03** (verified absent).
+- `serviceevents` — **DROPPED 2026-05-03** (verified absent).
+- `inspectionfindings` — **DROPPED 2026-05-03** (re-grep confirmed `lib/integrations/dvi.ts` only writes `tickets`, not `inspectionfindings`; production verified absent).
+- `analyses` — **DROPPED 2026-05-03** (verified absent).
+- `LKP_VIN_MAINTENANCE` — **DROPPED 2026-05-03** (uppercase Mongo variant; script references are CSV/Postgres only; production verified absent).
+- `LKP_YMM_MAINTENANCE` — **DROPPED 2026-05-03** (verified absent).
+- `DEF_MAINTENANCE_EVENT` — **DROPPED 2026-05-03** (verified absent).
+- `services_by_ymm` — **RECLASSIFIED → W2 (2026-05-03)**: `routes/{maintenance,vin-maintenance,vin-next-due}.js` (mounted by `server.js`) still read this. Retire the legacy Express server before dropping. Production collection currently absent.
+- `password_resets` — **RECLASSIFIED → W3 (2026-05-03)**: `app/api/admin/db-indexes/route.ts` still ensures `token` unique + `expiresAt` TTL indexes. Production collection currently empty (count=0). Drop after retiring the index-ensure caller.
 
 ### 4.2 Likely orphans (verify before dropping)
 
-- `shop_users` — only one reader, no writer.
-- `workflow_runs` — only a reader, no writer in the searched paths.
-- `tickets` — superseded by `support_tickets`.
+- `shop_users` — **RECLASSIFIED → W4 (2026-05-03, task #341)**: live reader `app/api/platform-admin/tickets/route.ts:315` joins on this. Drop after `tickets`/`users` migrate.
+- `workflow_runs` — **RECLASSIFIED → W2 (2026-05-03, task #341)**: live reader exists; no in-repo writer. Drop blocked on confirming external writers (open-question §7 #4). Production currently absent.
+- `tickets` — **RECLASSIFIED → W3 (2026-05-03, task #341)**: live writer in `lib/integrations/dvi.ts:282`, live reader in `app/api/vehicles/[vin]/refresh/route.ts:67`. Distinct from PG `support_tickets`. Production has 1 doc.
 - `jobs` — only one reader/writer pair, possibly debug-only.
 - `tekmetric_repair_orders` — appears redundant with `tekmetric_work_orders`.
 - `protractor_invoices` — overlaps `protractor_invoice_cache`.
