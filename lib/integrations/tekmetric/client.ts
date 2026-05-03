@@ -86,11 +86,126 @@ function compute429Backoff(attempt: number, retryAfterHeader: string | null): nu
   return Math.min(exponential + jitter, MAX_BACKOFF_MS);
 }
 
+// Conservative cap on how far back Tekmetric will accept `updatedDateStart`
+// for a given shop's token. The Tekmetric docs don't publish a hard number
+// and it appears to vary per token (shop #33 hit a 400 for ~6mo back), so
+// we default to 365d and let ops tighten/loosen via env without a redeploy.
+// The clamp-and-retry path uses this as the "safe bound" to fall back to
+// when the API rejects our requested start date as out of range.
+const TEKMETRIC_MAX_HISTORY_DAYS = Math.max(
+  1,
+  Number(process.env.TEKMETRIC_MAX_HISTORY_DAYS) || 365,
+);
+
+// Heuristics for "this 400 looks like a history-window / date-range
+// rejection that a clamp-and-retry can recover from". We deliberately
+// match liberally on a handful of phrasings rather than the exact
+// wording of any one Tekmetric error response: their error bodies are
+// not contractual, and a fresh phrasing shouldn't crash the sync.
+const HISTORY_WINDOW_ERROR_PATTERNS: RegExp[] = [
+  /updatedDateStart/i,
+  /date\s*range/i,
+  /allowed\s*range/i,
+  /allowed\s*window/i,
+  /history\s*window/i,
+  /history\s*limit/i,
+  /out\s*of\s*range/i,
+  /too\s*far\s*back/i,
+  /before\s*allowed/i,
+  /maximum\s*lookback/i,
+];
+
+function isHistoryWindowErrorBody(body: string | null): boolean {
+  if (!body) return false;
+  return HISTORY_WINDOW_ERROR_PATTERNS.some(p => p.test(body));
+}
+
+function pickStringField(obj: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function parseTekmetricErrorReason(body: string | null): string {
+  if (!body) return '';
+  const trimmed = body.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const reason = pickStringField(parsed as Record<string, unknown>, [
+        'message',
+        'error_description',
+        'error',
+        'detail',
+      ]);
+      if (reason) return reason;
+    }
+  } catch {
+    // Not JSON — fall through and return the raw body.
+  }
+  return trimmed;
+}
+
+function truncateForTracking(s: string, max = 500): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 3) + '...';
+}
+
+/**
+ * Rewrite an endpoint's `updatedDateStart` query param to the safe
+ * `now - TEKMETRIC_MAX_HISTORY_DAYS` bound. Returns `null` when the
+ * endpoint has no such param, the existing value can't be parsed, or
+ * the existing value is already within the safe window (i.e. clamping
+ * wouldn't change anything, so retrying would be pointless).
+ *
+ * Format-preserving: if the original was `YYYY-MM-DD` we return
+ * `YYYY-MM-DD`; if it was a full ISO timestamp we return a full ISO
+ * timestamp. This keeps the post-clamp URL byte-identical to what the
+ * caller would have produced if it had asked for the safe date itself,
+ * which matters because Tekmetric's per-format validation is the
+ * suspected root cause for some shops.
+ */
+export function clampUpdatedDateStartInEndpoint(endpoint: string): string | null {
+  const qIdx = endpoint.indexOf('?');
+  if (qIdx === -1) return null;
+  const path = endpoint.slice(0, qIdx);
+  const query = endpoint.slice(qIdx + 1);
+
+  const params = new URLSearchParams(query);
+  const current = params.get('updatedDateStart');
+  if (!current) return null;
+
+  const currentDate = new Date(current);
+  if (isNaN(currentDate.getTime())) return null;
+
+  const safeCutoff = new Date(Date.now() - TEKMETRIC_MAX_HISTORY_DAYS * 24 * 60 * 60 * 1000);
+  if (currentDate.getTime() >= safeCutoff.getTime()) {
+    // Already within (or newer than) the safe window — clamping wouldn't
+    // change the value, so retrying would just hit the same 400.
+    return null;
+  }
+
+  const isDateOnly = !current.includes('T');
+  const clampedValue = isDateOnly
+    ? safeCutoff.toISOString().split('T')[0]
+    : safeCutoff.toISOString();
+  params.set('updatedDateStart', clampedValue);
+
+  return `${path}?${params.toString()}`;
+}
+
 export async function tekmetricRequest<T = any>(
-  endpoint: string, 
-  options: RequestInit = {}, 
-  shopId?: number, 
-  authRetry = false
+  endpoint: string,
+  options: RequestInit = {},
+  shopId?: number,
+  authRetry = false,
+  // True when this call is the post-clamp retry of a history-window 400.
+  // Prevents an infinite clamp loop if the post-clamp request also 400s
+  // (e.g. token doesn't accept any history at all).
+  historyClampRetry = false,
 ): Promise<T> {
   const method = options.method || 'GET';
 
@@ -122,16 +237,17 @@ export async function tekmetricRequest<T = any>(
 
       statusCode = response.status;
       const latencyMs = Date.now() - startTime;
-      trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
 
       if (response.status === 401 && !authRetry) {
+        trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
         console.log('[Tekmetric] Received 401, refreshing token and retrying...');
         clearCachedToken();
         await refreshToken();
-        return tekmetricRequest<T>(endpoint, options, shopId, true);
+        return tekmetricRequest<T>(endpoint, options, shopId, true, historyClampRetry);
       }
 
       if (response.status === 429 && attempt <= MAX_429_RETRIES) {
+        trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
@@ -143,14 +259,47 @@ export async function tekmetricRequest<T = any>(
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Tekmetric API error ${response.status}: ${errorText}`);
+        const reason = parseTekmetricErrorReason(errorText) || `HTTP ${response.status}`;
+
+        // Clamp-and-retry for history-window 400s. Generic so any shop
+        // whose token rejects a too-far-back `updatedDateStart` recovers
+        // automatically — not just shop #33 (task #280).
+        if (
+          response.status === 400 &&
+          !historyClampRetry &&
+          isHistoryWindowErrorBody(errorText)
+        ) {
+          const clamped = clampUpdatedDateStartInEndpoint(endpoint);
+          if (clamped) {
+            console.warn(
+              `[Tekmetric] history-window 400 on ${endpoint}; clamping updatedDateStart to last ${TEKMETRIC_MAX_HISTORY_DAYS}d and retrying once. Tekmetric said: ${truncateForTracking(reason, 200)}`,
+            );
+            trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId, {
+              errorMessage: truncateForTracking(`history-window clamp-retry: ${reason}`),
+            }).catch(() => {});
+            return tekmetricRequest<T>(clamped, options, shopId, authRetry, true);
+          }
+        }
+
+        // Non-recoverable 4xx/5xx — capture the response body in both
+        // the analytics row (so it shows up in API traffic / sync health
+        // as a meaningful reason) and the thrown error (so the
+        // incremental-sync `lastError` field carries the actual
+        // Tekmetric message instead of just "Tekmetric API error 400").
+        trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId, {
+          errorMessage: truncateForTracking(reason),
+        }).catch(() => {});
+        throw new Error(`Tekmetric API error ${response.status} on ${endpoint}: ${reason}`);
       }
 
+      trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
       return response.json();
     } catch (err: any) {
       if (!statusCode) {
         const latencyMs = Date.now() - startTime;
-        trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId).catch(() => {});
+        trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId, {
+          errorMessage: truncateForTracking(err?.message || String(err)),
+        }).catch(() => {});
       }
       throw err;
     }
