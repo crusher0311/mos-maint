@@ -369,6 +369,7 @@ async function main() {
 
   const outcomes: ShopOutcome[] = [];
   let heartbeat: NodeJS.Timeout | null = null;
+  const startedAt = Date.now();
 
   try {
     const jobs = await loadIncompleteShops();
@@ -380,7 +381,6 @@ async function main() {
       process.exit(0);
     }
 
-    const startedAt = Date.now();
     heartbeat = startHeartbeat(
       () =>
         `done=${outcomes.length}/${jobs.length} ` +
