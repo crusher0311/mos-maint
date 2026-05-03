@@ -1250,6 +1250,27 @@ export async function GET(req: NextRequest) {
   }
 
   const db = await getDb();
+
+  // Drain-mode lock: when scripts/drain-tekmetric-backfill.ts is running
+  // it holds an exclusive lease on the backfill so its in-process chunk
+  // calls don't race the cron's writes to `tekmetric_backfill_progress`
+  // (cursor regressions, clobbered skip windows, double-counted totals).
+  // Lease has a TTL — a crashed drain won't lock cron out forever.
+  const drainLock = await db.collection("tekmetric_drain_lock").findOne({ _id: "global" as any });
+  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "drain_in_progress",
+      drainLock: {
+        owner: drainLock.owner || "unknown",
+        acquiredAt: drainLock.acquiredAt,
+        expiresAt: drainLock.expiresAt,
+      },
+      message: "Tekmetric backfill drain worker holds an exclusive lease; this cron tick is a no-op.",
+    });
+  }
+
   const startTime = Date.now();
 
   // Wrap the whole backfill cycle in an AsyncLocalStorage scope so the
@@ -1433,6 +1454,25 @@ export async function POST(req: NextRequest) {
   }
 
   const db = await getDb();
+
+  // Drain-mode lock — see GET handler for rationale. Same gate applied to
+  // the manual POST trigger (used by wave1-backfill.ts and admin-clicked
+  // single-shop kicks) so nothing races the drain worker.
+  const drainLock = await db.collection("tekmetric_drain_lock").findOne({ _id: "global" as any });
+  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "drain_in_progress",
+      drainLock: {
+        owner: drainLock.owner || "unknown",
+        acquiredAt: drainLock.acquiredAt,
+        expiresAt: drainLock.expiresAt,
+      },
+      message: "Tekmetric backfill drain worker holds an exclusive lease; this manual trigger is a no-op.",
+    });
+  }
+
   const startTime = Date.now();
 
   // Wrap the full backfill in an AsyncLocalStorage scope so the

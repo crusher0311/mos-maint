@@ -61,7 +61,8 @@
     "db:migrate:crm": "tsx scripts/apply-crm-migration.ts",
     "db:migrate:normalized": "tsx scripts/apply-normalized-migration.ts",
     "db:studio": "npx drizzle-kit studio",
-    "start:rescue-rover-ws": "tsx scripts/rescue-rover-ws-server.ts"
+    "start:rescue-rover-ws": "tsx scripts/rescue-rover-ws-server.ts",
+    "drain:tekmetric-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
