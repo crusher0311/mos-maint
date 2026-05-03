@@ -249,7 +249,32 @@ export default function VehicleDetailClient({
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoDecoded | null>(null);
   const [specsLoading, setSpecsLoading] = useState(false);
   const defaultUnitDisplay: UnitDisplay = distanceUnit === "kilometers" ? "metric" : "imperial";
-  const [specsUnitDisplay, setSpecsUnitDisplay] = useState<UnitDisplay>(defaultUnitDisplay);
+  const specsUnitStorageKey = shopId ? `specsUnitDisplay:${shopId}` : "specsUnitDisplay";
+  const [specsUnitDisplay, setSpecsUnitDisplayState] = useState<UnitDisplay>(defaultUnitDisplay);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem(specsUnitStorageKey);
+      if (saved === "imperial" || saved === "metric" || saved === "both") {
+        setSpecsUnitDisplayState(saved);
+      } else {
+        setSpecsUnitDisplayState(defaultUnitDisplay);
+      }
+    } catch {
+      // localStorage may be unavailable (private mode, etc.) – fall back to default
+    }
+  }, [specsUnitStorageKey, defaultUnitDisplay]);
+
+  const setSpecsUnitDisplay = useCallback((value: UnitDisplay) => {
+    setSpecsUnitDisplayState(value);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(specsUnitStorageKey, value);
+    } catch {
+      // ignore persistence errors
+    }
+  }, [specsUnitStorageKey]);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
