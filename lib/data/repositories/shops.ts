@@ -24,20 +24,22 @@ async function collection(): Promise<Collection<ShopDoc>> {
   return db.collection<ShopDoc>(COLLECTION);
 }
 
-export async function findShopByShopId(
+export async function findShopByShopId<T extends ShopDoc = ShopDoc>(
   shopId: number | string,
   projection?: Record<string, 0 | 1>,
-): Promise<ShopDoc | null> {
+): Promise<T | null> {
   const col = await collection();
-  return col.findOne(shopIdFilter(shopId), projection ? { projection } : undefined);
+  const doc = await col.findOne(shopIdFilter(shopId), projection ? { projection } : undefined);
+  return (doc as T | null) ?? null;
 }
 
-export async function findShopByExactShopId(
+export async function findShopByExactShopId<T extends ShopDoc = ShopDoc>(
   shopId: number,
   projection?: Record<string, 0 | 1>,
-): Promise<ShopDoc | null> {
+): Promise<T | null> {
   const col = await collection();
-  return col.findOne({ shopId }, projection ? { projection } : undefined);
+  const doc = await col.findOne({ shopId }, projection ? { projection } : undefined);
+  return (doc as T | null) ?? null;
 }
 
 export async function findShopByQuery(

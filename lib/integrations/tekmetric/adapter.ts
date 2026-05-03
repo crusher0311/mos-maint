@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/mongo';
+import { findShopByShopId } from '@/lib/data/repositories/shops';
 import type { 
   IIntegrationAdapter, 
   IntegrationConfig,
@@ -23,31 +23,32 @@ import {
 } from './client';
 import { transformVehicle, transformRepairOrder, transformCannedJob } from './transform';
 
+interface TekmetricShopDoc {
+  shopId: number | string;
+  tekmetric?: {
+    shopId?: number;
+  };
+}
+
+async function getTekmetricShopId(shopId: number): Promise<number | null> {
+  const shop = await findShopByShopId<TekmetricShopDoc>(shopId, { "tekmetric.shopId": 1 });
+  return shop?.tekmetric?.shopId ?? null;
+}
+
 export class TekmetricAdapter implements IIntegrationAdapter {
   provider = 'tekmetric' as const;
   priority = 10;
 
   async isConfigured(shopId: number): Promise<boolean> {
     if (!isConfigured()) return false;
-    
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    return Boolean(shop?.tekmetric?.shopId);
+    return Boolean(await getTekmetricShopId(shopId));
   }
 
   async getConfig(shopId: number): Promise<IntegrationConfig | null> {
     if (!await this.isConfigured(shopId)) return null;
-    
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric": 1 } }
-    );
-    
+
+    const shop = await findShopByShopId<TekmetricShopDoc>(shopId, { tekmetric: 1 });
+
     return {
       provider: 'tekmetric',
       configured: true,
@@ -59,17 +60,11 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   }
 
   async testConnection(shopId: number): Promise<Result<{ message: string }>> {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = await getTekmetricShopId(shopId);
     if (!tekmetricShopId) {
       return { ok: false, error: 'Tekmetric shop ID not configured' };
     }
-    
+
     const result = await testTekmetricConnection(tekmetricShopId);
     if (!result.ok) {
       return { ok: false, error: result.error || 'Connection test failed' };
@@ -87,25 +82,19 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   }
 
   async getVehicleByVin(shopId: number, vin: string): Promise<Result<NormalizedVehicle>> {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = await getTekmetricShopId(shopId);
     if (!tekmetricShopId) {
       return { ok: false, error: 'Tekmetric shop ID not configured' };
     }
-    
+
     try {
       const result = await searchVehiclesByVin(tekmetricShopId, vin);
       const match = result.content?.find(v => v.vin?.toUpperCase() === vin.toUpperCase());
-      
+
       if (!match) {
         return { ok: false, error: 'Vehicle not found' };
       }
-      
+
       return { ok: true, data: transformVehicle(match) };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Search failed' };
@@ -123,24 +112,18 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   }
 
   async getWorkOrders(shopId: number, options?: WorkOrderQuery): Promise<Result<NormalizedWorkOrder[]>> {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = await getTekmetricShopId(shopId);
     if (!tekmetricShopId) {
       return { ok: false, error: 'Tekmetric shop ID not configured' };
     }
-    
+
     try {
       const allWorkOrders: NormalizedWorkOrder[] = [];
       let page = 0;
       const size = options?.limit || 100;
       let hasMore = true;
       const maxPages = 50;
-      
+
       while (hasMore && page < maxPages) {
         const result = await getRepairOrders(tekmetricShopId, {
           page,
@@ -150,18 +133,18 @@ export class TekmetricAdapter implements IIntegrationAdapter {
           updatedAfter: options?.fromDate,
           updatedBefore: options?.toDate,
         });
-        
+
         for (const ro of result.content) {
           allWorkOrders.push(transformRepairOrder(ro));
         }
-        
+
         if (result.last || result.content.length < size) {
           hasMore = false;
         } else {
           page++;
         }
       }
-      
+
       return { ok: true, data: allWorkOrders };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Failed to fetch work orders' };
@@ -169,34 +152,28 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   }
 
   async getCannedJobs(shopId: number): Promise<Result<CannedJob[]>> {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = await getTekmetricShopId(shopId);
     if (!tekmetricShopId) {
       return { ok: false, error: 'Tekmetric shop ID not configured' };
     }
-    
+
     try {
       const allJobs: CannedJob[] = [];
       let page = 0;
       let hasMore = true;
       const maxPages = 50;
-      
+
       while (hasMore && page < maxPages) {
         const result = await getTekmetricCannedJobs(tekmetricShopId, { page, size: 100 });
         allJobs.push(...result.content.map(transformCannedJob));
-        
+
         if (result.last || result.content.length < 100) {
           hasMore = false;
         } else {
           page++;
         }
       }
-      
+
       return { ok: true, data: allJobs };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Failed to fetch canned jobs' };
@@ -204,17 +181,11 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   }
 
   async runIncrementalSync(shopId: number): Promise<SyncResult> {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { "tekmetric.shopId": 1 } }
-    );
-    
-    const tekmetricShopId = shop?.tekmetric?.shopId;
+    const tekmetricShopId = await getTekmetricShopId(shopId);
     if (!tekmetricShopId) {
       return { ok: false, recordsProcessed: 0, error: 'Tekmetric shop ID not configured' };
     }
-    
+
     try {
       const { runIncrementalSyncCycle } = await import('@/lib/integrations/tekmetric/incremental-sync');
       const result = await runIncrementalSyncCycle();

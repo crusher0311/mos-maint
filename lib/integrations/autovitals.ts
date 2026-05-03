@@ -1,4 +1,17 @@
-import { getDb } from "../mongo";
+import { findShopByExactShopId } from "@/lib/data/repositories/shops";
+import {
+  upsertAutoVitalsVehicle,
+  findAutoVitalsVehicleByVin,
+  findAutoVitalsVehicleByVinCaseInsensitive,
+} from "@/lib/data/repositories/autovitals-vehicles";
+import {
+  upsertAutoVitalsAppointment,
+  findLatestAppointmentForVehicle,
+} from "@/lib/data/repositories/autovitals-appointments";
+import {
+  upsertAutoVitalsInspection,
+  findAutoVitalsInspection,
+} from "@/lib/data/repositories/autovitals-inspections";
 
 export interface AutoVitalsConfig {
   shopId: number;
@@ -400,94 +413,53 @@ export async function cacheAutoVitalsVehicle(
   vehicle: AutoVitalsVehicle,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_vehicles");
-
-  await collection.updateOne(
-    { vehicleId: vehicle.vehicleId, shopId },
-    {
-      $set: {
-        ...vehicle,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await upsertAutoVitalsVehicle(vehicle, shopId);
 }
 
 export async function cacheAutoVitalsAppointment(
   appointment: AutoVitalsAppointment,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_appointments");
-
-  await collection.updateOne(
-    { appointmentId: appointment.appointmentId, shopId },
-    {
-      $set: {
-        ...appointment,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await upsertAutoVitalsAppointment(appointment, shopId);
 }
 
 export async function cacheAutoVitalsInspection(
   inspection: AutoVitalsInspectionResult,
   shopId: string
 ): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_inspections");
-
-  await collection.updateOne(
-    { appointmentId: inspection.appointmentId, shopId },
-    {
-      $set: {
-        ...inspection,
-        shopId,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        createdAt: new Date(),
-      }
-    },
-    { upsert: true }
-  );
+  await upsertAutoVitalsInspection(inspection, shopId);
 }
 
 export async function getCachedAutoVitalsVehicleByVin(
   vin: string,
   shopId: string
 ): Promise<AutoVitalsVehicle | null> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_vehicles");
-  return collection.findOne({ vin, shopId }) as Promise<AutoVitalsVehicle | null>;
+  const cached = await findAutoVitalsVehicleByVin(vin, shopId);
+  return cached as AutoVitalsVehicle | null;
 }
 
 export async function getCachedAutoVitalsInspection(
   appointmentId: number,
   shopId: string
 ): Promise<AutoVitalsInspectionResult | null> {
-  const db = await getDb();
-  const collection = db.collection("autovitals_inspections");
-  return collection.findOne({ appointmentId, shopId }) as Promise<AutoVitalsInspectionResult | null>;
+  const cached = await findAutoVitalsInspection(appointmentId, shopId);
+  return cached as AutoVitalsInspectionResult | null;
+}
+
+interface AutoVitalsShopDoc {
+  shopId: number | string;
+  autovitals?: {
+    shopId: number;
+    userId?: number;
+    sessionCookie?: string;
+    jwtToken?: string;
+  };
 }
 
 export async function getShopAutoVitalsConfig(shopId: string | number): Promise<AutoVitalsConfig | null> {
-  const db = await getDb();
   const numericShopId = typeof shopId === 'string' ? parseInt(shopId, 10) : shopId;
-  const shop = await db.collection("shops").findOne({ shopId: numericShopId });
-  
+  const shop = await findShopByExactShopId<AutoVitalsShopDoc>(numericShopId);
+
   if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
     return null;
   }
@@ -592,9 +564,8 @@ export async function loginWithCodes(
 export async function resolveAutoVitalsConfig(
   shopId: number
 ): Promise<{ configured: boolean; config?: AutoVitalsConfig }> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId });
-  
+  const shop = await findShopByExactShopId<AutoVitalsShopDoc>(shopId);
+
   if (!shop?.autovitals?.shopId || !shop?.autovitals?.sessionCookie) {
     return { configured: false };
   }
@@ -615,35 +586,31 @@ export async function fetchAutoVitalsInspectionByVin(
   vin: string,
   ttlMs: number = 6 * 60 * 60 * 1000
 ): Promise<{ ok: true; inspection: AutoVitalsInspectionResult; items: AutoVitalsInspectionItem[] } | { ok: false; error: string }> {
-  const db = await getDb();
   const shopIdStr = String(shopId);
   const vinUpper = vin.toUpperCase();
-  
+
   // First check cache for recent inspection by VIN
-  const cachedVehicle = await db.collection("autovitals_vehicles").findOne({
-    shopId: shopIdStr,
-    vin: { $regex: new RegExp(`^${vinUpper}$`, 'i') }
-  });
-  
+  const cachedVehicle = await findAutoVitalsVehicleByVinCaseInsensitive(vinUpper, shopIdStr);
+
   if (!cachedVehicle?.vehicleId) {
     return { ok: false, error: "Vehicle not found in AutoVitals cache. Run sync first." };
   }
-  
+
   // Find the most recent appointment for this vehicle
-  const cachedAppointment = await db.collection("autovitals_appointments").findOne(
-    { shopId: shopIdStr, vehicleId: cachedVehicle.vehicleId },
-    { sort: { updatedAt: -1 } }
+  const cachedAppointment = await findLatestAppointmentForVehicle(
+    shopIdStr,
+    cachedVehicle.vehicleId,
   );
-  
+
   if (!cachedAppointment?.appointmentId) {
     return { ok: false, error: "No appointment found for this vehicle in AutoVitals." };
   }
-  
+
   // Check cache for inspection
-  const cachedInspection = await db.collection("autovitals_inspections").findOne({
-    shopId: shopIdStr,
-    appointmentId: cachedAppointment.appointmentId
-  });
+  const cachedInspection = await findAutoVitalsInspection(
+    cachedAppointment.appointmentId,
+    shopIdStr,
+  );
   
   const cacheAge = cachedInspection?.updatedAt 
     ? Date.now() - new Date(cachedInspection.updatedAt).getTime() 
