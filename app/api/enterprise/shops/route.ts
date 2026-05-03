@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
 import { ObjectId } from "mongodb";
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
       });
       
       if (!existingUser) {
-        await db.collection("users").insertOne({
+        const newUserDoc = {
           email: user.email,
           name: user.name,
           passwordHash: user.passwordHash,
@@ -191,7 +192,9 @@ export async function POST(req: NextRequest) {
           shopId,
           createdAt: new Date(),
           updatedAt: new Date()
-        });
+        };
+        assertNoLegacyPasswordField(newUserDoc);
+        await db.collection("users").insertOne(newUserDoc);
       }
     }
 

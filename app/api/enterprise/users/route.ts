@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -136,7 +137,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "User not found in enterprise" }, { status: 404 });
       }
 
-      await db.collection("users").insertOne({
+      const newUserDoc = {
         email: email.toLowerCase(),
         name: sourceUser.name,
         role: sourceUser.role,
@@ -144,7 +145,9 @@ export async function POST(req: Request) {
         passwordHash: sourceUser.passwordHash,
         createdAt: new Date(),
         grantedBy: session.email,
-      });
+      };
+      assertNoLegacyPasswordField(newUserDoc);
+      await db.collection("users").insertOne(newUserDoc);
 
       return NextResponse.json({
         ok: true,

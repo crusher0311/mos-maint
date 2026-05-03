@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import {
   sendEmail,
   makeWelcomeEmail,
@@ -285,6 +286,7 @@ export async function POST(req: NextRequest) {
             updatedAt: now,
           };
           
+          assertNoLegacyPasswordField(userDoc);
           await db.collection("users").insertOne(userDoc);
           console.log(`[Stripe] Created user ${pending.adminEmail} for shop ${shopId}`);
           
@@ -469,6 +471,7 @@ export async function POST(req: NextRequest) {
             };
 
             await db.collection("shops").insertOne(shopDoc);
+            assertNoLegacyPasswordField(userDoc);
             await db.collection("users").insertOne(userDoc);
             await db.collection("crm_provisions").insertOne({
               stripeSessionId: (session as any).id,

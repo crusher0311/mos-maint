@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sessionCookieOptions } from "@/lib/auth";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     // create user
     const now2 = new Date();
-    const insert = await users.insertOne({
+    const newUserDoc = {
       shopId,
       email,
       emailLower: email,
@@ -62,7 +63,9 @@ export async function POST(req: NextRequest) {
       passwordHash,
       createdAt: now2,
       updatedAt: now2,
-    });
+    };
+    assertNoLegacyPasswordField(newUserDoc);
+    const insert = await users.insertOne(newUserDoc);
 
     // single-use token: remove after success
     await setup.deleteOne({ _id: invite._id });

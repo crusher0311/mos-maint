@@ -18,16 +18,23 @@ async function seedPlatformAdmin() {
       console.log("Platform admin already exists, updating password...");
     }
     
-    const hashedPassword = await bcrypt.hash(password, 12);
-    
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // task #309: write the bcrypt hash under `passwordHash` (the field the
+    // login routes actually read). The legacy `password` field name is
+    // explicitly unset so reruns of this script can't leave a row carrying
+    // both keys — that drift is what task #307 caught in production.
     await db.collection("platform_admins").updateOne(
       { email },
       {
         $set: {
           email,
-          password: hashedPassword,
+          passwordHash,
           isPlatformAdmin: true,
           updatedAt: new Date(),
+        },
+        $unset: {
+          password: "",
         },
         $setOnInsert: {
           createdAt: new Date(),

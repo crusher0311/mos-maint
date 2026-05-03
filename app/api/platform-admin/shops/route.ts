@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings } from "@/lib/stripe";
@@ -583,6 +584,7 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     };
 
+    assertNoLegacyPasswordField(userDoc);
     await db.collection("users").insertOne(userDoc);
 
     await db.collection("audit_logs").insertOne({
