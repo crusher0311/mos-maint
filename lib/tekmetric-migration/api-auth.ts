@@ -11,6 +11,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken } from "@/lib/extension-auth";
 import { isSuperAdmin } from "@/lib/super-admins";
 
+// Test seam: smoke tests swap these out so we can exercise the gate
+// (super-admin email → ok, platform-admin-but-not-allowlisted → 403,
+// regular user → 403, missing/invalid token → 401) without standing up
+// a real Mongo + token row. See tests/tekmetric-migration-api-auth.smoke.ts.
+export const __deps = {
+  validateExtensionToken,
+  isSuperAdmin,
+};
+
 export const tekMigCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -47,7 +56,7 @@ interface RawExtensionUser {
 export async function requireMigAdmin(
   request: NextRequest,
 ): Promise<MigAuthOk | MigAuthFail> {
-  const auth = await validateExtensionToken(request);
+  const auth = await __deps.validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return {
       ok: false,
@@ -61,7 +70,7 @@ export async function requireMigAdmin(
   // Migration is a super-admin-only tool (owner allowlist), not just any
   // platform admin. The extension UI also gates the tab on isSuperAdmin,
   // but this is the real security boundary — never trust the client gate.
-  if (!isSuperAdmin(user.email)) {
+  if (!__deps.isSuperAdmin(user.email)) {
     return {
       ok: false,
       response: NextResponse.json(
