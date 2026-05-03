@@ -20,6 +20,7 @@ import {
   XCircle,
   Ban
 } from "lucide-react";
+import { formatGallonsDual, formatPoundsDual } from "@/lib/unit-format";
 
 interface DeclinedService {
   serviceKey: string;
@@ -1052,43 +1053,43 @@ export default function VehicleDetailClient({
                         {specsData.weightsAndCapacities.fuelTankCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Fuel Tank</div>
-                            <div className="font-semibold text-gray-900">{specsData.weightsAndCapacities.fuelTankCapacity} gal</div>
+                            <div className="font-semibold text-gray-900">{formatGallonsDual(specsData.weightsAndCapacities.fuelTankCapacity)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.baseTowingCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Base Towing</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.baseTowingCapacity).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.baseTowingCapacity)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.maxTowingCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Max Towing</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.maxTowingCapacity).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.maxTowingCapacity)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.maxPayload && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Max Payload</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.maxPayload).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.maxPayload)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.curbWeight && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Curb Weight</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.curbWeight).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.curbWeight)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.gvwr && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">GVWR</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.gvwr).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.gvwr)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.gcwr && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">GCWR</div>
-                            <div className="font-semibold text-gray-900">{Number(specsData.weightsAndCapacities.gcwr).toLocaleString()} lbs</div>
+                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.gcwr)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.tonnage && (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getVehicleSpecsLocal, decodeVinLocal } from "@/lib/integrations/dataone-local";
+import { deriveFuelTypeLabel } from "@/lib/fuel-type-label";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,14 @@ export async function GET(
       transmission: decodeResult.decoded.trans_name,
       transType: decodeResult.decoded.trans_type,
       driveType: decodeResult.decoded.drive_type,
-      fuelType: decodeResult.decoded.fuel_type,
+      fuelType: deriveFuelTypeLabel({
+        fuelType: decodeResult.decoded.fuel_type,
+        engineName: decodeResult.decoded.engine_name,
+        engineInduction: decodeResult.decoded.engine_induction,
+        engineAspiration: decodeResult.decoded.engine_aspiration,
+        trim: decodeResult.decoded.trim,
+        model: decodeResult.decoded.model,
+      }),
       bodyType: decodeResult.decoded.body_type,
       doors: decodeResult.decoded.doors,
       wheelbase: decodeResult.decoded.wheelbase,

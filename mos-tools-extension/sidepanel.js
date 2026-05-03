@@ -3159,6 +3159,33 @@ function showNotification(message, type = 'info') {
 // ==================== VEHICLE SPECS ====================
 let specsCache = {};
 
+// Mirror of lib/unit-format.ts so the extension renders dual imperial/metric
+// values consistently with the dashboard Specs tab (task #321).
+const GAL_TO_L = 3.785411784;
+const LBS_TO_KG = 0.45359237;
+
+function _toNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatGallonsDual(value) {
+  const n = _toNum(value);
+  if (n === null) return '';
+  const liters = n * GAL_TO_L;
+  const galStr = Number(n.toFixed(1)).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const lStr = Number(liters.toFixed(1)).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return `${galStr} gal / ${lStr} L`;
+}
+
+function formatPoundsDual(value) {
+  const n = _toNum(value);
+  if (n === null) return '';
+  const kg = n * LBS_TO_KG;
+  return `${Math.round(n).toLocaleString()} lbs / ${Math.round(kg).toLocaleString()} kg`;
+}
+
 async function loadVehicleSpecs() {
   const specsLoading = document.getElementById('specs-loading');
   const specsEmpty = document.getElementById('specs-empty');
@@ -3322,13 +3349,13 @@ function renderSpecs(data) {
 
   if (g.weightsAndCapacities && Object.keys(g.weightsAndCapacities).length > 0) {
     const items = [];
-    if (g.weightsAndCapacities.fuelTankCapacity) items.push({ label: 'Fuel Tank', value: g.weightsAndCapacities.fuelTankCapacity + ' gal' });
-    if (g.weightsAndCapacities.curbWeight) items.push({ label: 'Curb Weight', value: g.weightsAndCapacities.curbWeight + ' lbs' });
-    if (g.weightsAndCapacities.gvwr) items.push({ label: 'GVWR', value: g.weightsAndCapacities.gvwr + ' lbs' });
-    if (g.weightsAndCapacities.gcwr) items.push({ label: 'GCWR', value: g.weightsAndCapacities.gcwr + ' lbs' });
-    if (g.weightsAndCapacities.baseTowingCapacity) items.push({ label: 'Base Towing', value: g.weightsAndCapacities.baseTowingCapacity + ' lbs' });
-    if (g.weightsAndCapacities.maxTowingCapacity) items.push({ label: 'Max Towing', value: g.weightsAndCapacities.maxTowingCapacity + ' lbs' });
-    if (g.weightsAndCapacities.maxPayload) items.push({ label: 'Max Payload', value: g.weightsAndCapacities.maxPayload + ' lbs' });
+    if (g.weightsAndCapacities.fuelTankCapacity) items.push({ label: 'Fuel Tank', value: formatGallonsDual(g.weightsAndCapacities.fuelTankCapacity) });
+    if (g.weightsAndCapacities.curbWeight) items.push({ label: 'Curb Weight', value: formatPoundsDual(g.weightsAndCapacities.curbWeight) });
+    if (g.weightsAndCapacities.gvwr) items.push({ label: 'GVWR', value: formatPoundsDual(g.weightsAndCapacities.gvwr) });
+    if (g.weightsAndCapacities.gcwr) items.push({ label: 'GCWR', value: formatPoundsDual(g.weightsAndCapacities.gcwr) });
+    if (g.weightsAndCapacities.baseTowingCapacity) items.push({ label: 'Base Towing', value: formatPoundsDual(g.weightsAndCapacities.baseTowingCapacity) });
+    if (g.weightsAndCapacities.maxTowingCapacity) items.push({ label: 'Max Towing', value: formatPoundsDual(g.weightsAndCapacities.maxTowingCapacity) });
+    if (g.weightsAndCapacities.maxPayload) items.push({ label: 'Max Payload', value: formatPoundsDual(g.weightsAndCapacities.maxPayload) });
     if (g.weightsAndCapacities.tonnage) items.push({ label: 'Tonnage', value: g.weightsAndCapacities.tonnage });
     if (items.length > 0) html += renderSpecsSection('Weights & Capacities', items, 'weight');
   }
