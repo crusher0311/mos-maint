@@ -342,6 +342,33 @@ body {
 .create-ro-submit {
   margin-top: 6px;
 }
+.create-ro-jobs-selected {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.create-ro-jobs-selected-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: #075985;
+  margin-bottom: 4px;
+}
+.create-ro-jobs-selected-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.create-ro-jobs-selected-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--gray-700, #374151);
+  gap: 8px;
+}
 .create-ro-success {
   text-align: center;
   padding: 8px;

@@ -4511,6 +4511,10 @@ const createRoState = {
   customer: null,
   vehicle: null,
   submitting: false,
+  cannedJobs: [],
+  cannedJobsLoaded: false,
+  cannedJobsLoading: false,
+  selectedJobs: [], // [{key, title, code, deferredId, source}]
 };
 
 function escCro(str) {
@@ -4541,6 +4545,19 @@ function resetCroState() {
   createRoState.customer = null;
   createRoState.vehicle = null;
   createRoState.submitting = false;
+  createRoState.cannedJobs = [];
+  createRoState.cannedJobsLoaded = false;
+  createRoState.cannedJobsLoading = false;
+  createRoState.selectedJobs = [];
+  const jobsSearch = getCroEl('cro-jobs-search');
+  if (jobsSearch) jobsSearch.value = '';
+  getCroEl('cro-jobs-section')?.classList.add('hidden');
+  getCroEl('cro-jobs-list')?.classList.add('hidden');
+  getCroEl('cro-jobs-empty')?.classList.add('hidden');
+  getCroEl('cro-jobs-loading')?.classList.add('hidden');
+  getCroEl('cro-jobs-error')?.classList.add('hidden');
+  const sel = getCroEl('cro-jobs-selected');
+  if (sel) { sel.innerHTML = ''; sel.classList.add('hidden'); }
   ['cro-customer-results', 'cro-vehicle-results'].forEach(id => {
     const el = getCroEl(id);
     if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
@@ -4626,9 +4643,12 @@ function bindCreateRoListeners() {
   getCroEl('cro-customer-change')?.addEventListener('click', () => {
     createRoState.customer = null;
     createRoState.vehicle = null;
+    createRoState.selectedJobs = [];
+    renderCroSelectedJobs();
     getCroEl('cro-customer-picked')?.classList.add('hidden');
     getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
     getCroEl('cro-vehicle-section')?.classList.add('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
   });
 
@@ -4640,9 +4660,17 @@ function bindCreateRoListeners() {
     createRoState.vehicle = null;
     getCroEl('cro-vehicle-picked')?.classList.add('hidden');
     getCroEl('cro-vehicle-pick-wrap')?.classList.remove('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
     if (createRoState.customer) loadCroVehicles(createRoState.customer.id);
   });
+
+  const jobsSearchEl = getCroEl('cro-jobs-search');
+  if (jobsSearchEl) {
+    jobsSearchEl.addEventListener('input', () => {
+      renderCroJobs(filterCroCannedJobs(jobsSearchEl.value));
+    });
+  }
 
   getCroEl('cro-submit')?.addEventListener('click', handleCroSubmit);
   getCroEl('cro-result-new')?.addEventListener('click', () => initCreateRoTab());
@@ -4846,7 +4874,140 @@ function selectCroVehicle(vehicle) {
   if (label) label.textContent = '✓ ' + vehicle.display;
   picked?.classList.remove('hidden');
   getCroEl('cro-vehicle-pick-wrap')?.classList.add('hidden');
+  getCroEl('cro-jobs-section')?.classList.remove('hidden');
   getCroEl('cro-details-section')?.classList.remove('hidden');
+  loadCroCannedJobs();
+}
+
+async function loadCroCannedJobs() {
+  if (createRoState.cannedJobsLoaded || createRoState.cannedJobsLoading) {
+    renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) return;
+  setCroError('cro-jobs-error', '');
+  createRoState.cannedJobsLoading = true;
+  getCroEl('cro-jobs-loading')?.classList.remove('hidden');
+  getCroEl('cro-jobs-empty')?.classList.add('hidden');
+  getCroEl('cro-jobs-list')?.classList.add('hidden');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/canned-jobs?shopId=${encodeURIComponent(shopId)}&provider=protractor`,
+    });
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || 'Failed to load canned jobs');
+    }
+    createRoState.cannedJobs = result?.jobs || [];
+    createRoState.cannedJobsLoaded = true;
+    renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+  } catch (err) {
+    console.error('[MOS] CRO canned jobs load error:', err);
+    setCroError('cro-jobs-error', err.message || 'Could not load canned jobs.');
+  } finally {
+    createRoState.cannedJobsLoading = false;
+    getCroEl('cro-jobs-loading')?.classList.add('hidden');
+  }
+}
+
+function filterCroCannedJobs(term) {
+  const t = (term || '').toLowerCase().trim();
+  if (!t) return createRoState.cannedJobs;
+  const words = t.split(/\s+/).filter(w => w.length > 1);
+  return createRoState.cannedJobs.filter(j => {
+    const name = (j.name || '').toLowerCase();
+    const desc = (j.description || '').toLowerCase();
+    const combined = name + ' ' + desc;
+    if (name.includes(t) || desc.includes(t)) return true;
+    return words.length > 0 && words.every(w => combined.includes(w));
+  });
+}
+
+function cannedJobKey(job) {
+  return String(job.id || job.tekmetricId || job.code || job.name || '');
+}
+
+function renderCroJobs(jobs) {
+  const listEl = getCroEl('cro-jobs-list');
+  const emptyEl = getCroEl('cro-jobs-empty');
+  if (!listEl) return;
+  if (!jobs || jobs.length === 0) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
+    return;
+  }
+  emptyEl?.classList.add('hidden');
+  const selectedKeys = new Set(createRoState.selectedJobs.map(j => j.key));
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = jobs.slice(0, 100).map((job, idx) => {
+    const key = cannedJobKey(job);
+    const added = selectedKeys.has(key);
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escCro(job.name || '(unnamed job)')}</div>
+            ${job.description ? `<div class="job-meta">${escCro(job.description)}</div>` : ''}
+          </div>
+          <button class="btn-add cro-job-add-btn" data-job-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+  listEl.querySelectorAll('.cro-job-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.jobIdx);
+      const job = jobs[idx];
+      if (job) addCroJob(job);
+    });
+  });
+}
+
+function addCroJob(job) {
+  const key = cannedJobKey(job);
+  if (!key || createRoState.selectedJobs.some(j => j.key === key)) return;
+  createRoState.selectedJobs.push({
+    key,
+    title: job.name || job.title || 'Job',
+    code: job.code ? String(job.code) : undefined,
+    deferredId: job.id ? String(job.id) : undefined,
+    source: 'canned',
+  });
+  renderCroSelectedJobs();
+  renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+}
+
+function removeCroJob(key) {
+  createRoState.selectedJobs = createRoState.selectedJobs.filter(j => j.key !== key);
+  renderCroSelectedJobs();
+  renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+}
+
+function renderCroSelectedJobs() {
+  const sel = getCroEl('cro-jobs-selected');
+  if (!sel) return;
+  if (createRoState.selectedJobs.length === 0) {
+    sel.innerHTML = '';
+    sel.classList.add('hidden');
+    return;
+  }
+  sel.classList.remove('hidden');
+  sel.innerHTML = `
+    <div class="create-ro-jobs-selected-head">Selected jobs (${createRoState.selectedJobs.length})</div>
+    <ul class="create-ro-jobs-selected-list">
+      ${createRoState.selectedJobs.map(j => `
+        <li>
+          <span>${escCro(j.title)}</span>
+          <button class="create-ro-link-btn cro-job-remove-btn" data-key="${escCro(j.key)}" type="button">Remove</button>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+  sel.querySelectorAll('.cro-job-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeCroJob(btn.dataset.key));
+  });
 }
 
 function renderCroSuccessLinks(result) {
@@ -4914,6 +5075,7 @@ async function handleCroSubmit() {
     sourceProvider: currentContext?.provider || null,
     hasConcern: !!concern,
     hasMileage: !!mileage,
+    jobCount: createRoState.selectedJobs.length,
   });
   try {
     const result = await sendMessage({
@@ -4928,6 +5090,14 @@ async function handleCroSubmit() {
           concernText: concern || undefined,
           note: note || undefined,
           mileage,
+          servicePackages: createRoState.selectedJobs.length > 0
+            ? createRoState.selectedJobs.map(j => ({
+                title: j.title,
+                source: 'canned',
+                code: j.code || undefined,
+                deferredId: j.deferredId || undefined,
+              }))
+            : undefined,
         }),
       }
     });
@@ -4940,6 +5110,7 @@ async function handleCroSubmit() {
     renderCroSuccessLinks(result);
     getCroEl('cro-customer-section')?.classList.add('hidden');
     getCroEl('cro-vehicle-section')?.classList.add('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
     getCroEl('cro-result-section')?.classList.remove('hidden');
     mosTelemetry('create_ro_succeeded', {

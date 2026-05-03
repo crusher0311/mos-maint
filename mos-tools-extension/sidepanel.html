@@ -733,10 +733,29 @@
               </div>
             </section>
 
-            <!-- Step 3: Details -->
-            <section class="create-ro-section hidden" id="cro-details-section">
+            <!-- Step 3: Jobs (optional) -->
+            <section class="create-ro-section hidden" id="cro-jobs-section">
               <div class="create-ro-section-head">
                 <span class="create-ro-step-num">3</span>
+                <span class="create-ro-step-label">Jobs (optional)</span>
+              </div>
+              <div id="cro-jobs-selected" class="create-ro-jobs-selected hidden"></div>
+              <div class="canned-search-container">
+                <input type="text" id="cro-jobs-search" class="search-input" placeholder="Search canned jobs to add…" />
+              </div>
+              <div id="cro-jobs-loading" class="panel-loading hidden">
+                <div class="spinner-small"></div>
+                <span>Loading canned jobs…</span>
+              </div>
+              <p id="cro-jobs-empty" class="create-ro-empty hidden">No canned jobs found.</p>
+              <ul id="cro-jobs-list" class="job-list hidden"></ul>
+              <p id="cro-jobs-error" class="error-text hidden"></p>
+            </section>
+
+            <!-- Step 4: Details -->
+            <section class="create-ro-section hidden" id="cro-details-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">4</span>
                 <span class="create-ro-step-label">Details</span>
               </div>
               <label class="create-ro-label" for="cro-concern">Customer concern</label>
