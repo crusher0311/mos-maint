@@ -90,14 +90,19 @@ export function inferSymptomCategory(concern: string): string {
  */
 export async function recordRoundResults(opts: {
   db: Db;
-  shopId: string | number | null;
+  /**
+   * Canonical internal shop ID. Task #300 renamed this from `shopId` (which
+   * was historically the raw provider/SMS shop ID) so the rollup stays
+   * stable when a shop's upstream Tekmetric/Protractor ID changes.
+   */
+  mosShopId: number | string | null;
   symptomCategory: string;
   results: RoundResult[];
 }): Promise<void> {
   const { db, results, symptomCategory } = opts;
   if (!results?.length) return;
 
-  const shopIdStr = opts.shopId == null ? null : String(opts.shopId);
+  const mosShopIdStr = opts.mosShopId == null ? null : String(opts.mosShopId);
   const col = db.collection(SKIP_STATS_COLLECTION);
 
   for (const r of results) {
@@ -105,17 +110,14 @@ export async function recordRoundResults(opts: {
     if (!normalized) continue;
     const inc = { asked: 1, skipped: r.answered ? 0 : 1, answered: r.answered ? 1 : 0 };
 
-    for (const scope of [shopIdStr, null]) {
-      // Track which shops have actually contributed to the global rollup
-      // so `getSkipHints` can require a quorum of distinct shops before
-      // surfacing a question as a global "avoid". Without this, one shop's
-      // idiosyncratic skip can drag a useful question into the avoid list
-      // for every other shop (Task #269).
-      const trackShop = scope === null && shopIdStr != null;
+    for (const scope of [mosShopIdStr, null]) {
+      const trackShop = scope === null && mosShopIdStr != null;
       const update: Record<string, any> = {
         $inc: inc,
         $set: { lastUpdated: new Date(), lastSampleText: r.question },
         $setOnInsert: {
+          mosShopId: scope,
+          // shopId duplicated for backwards-compat with pre-Task-#300 docs.
           shopId: scope,
           symptomCategory,
           normalizedQuestion: normalized,
@@ -123,10 +125,10 @@ export async function recordRoundResults(opts: {
         },
       };
       if (trackShop) {
-        update.$addToSet = { contributingShopIds: shopIdStr };
+        update.$addToSet = { contributingShopIds: mosShopIdStr };
       }
       await col.updateOne(
-        { shopId: scope, symptomCategory, normalizedQuestion: normalized },
+        { mosShopId: scope, symptomCategory, normalizedQuestion: normalized },
         update,
         { upsert: true },
       );
@@ -149,17 +151,27 @@ export async function recordRoundResults(opts: {
  */
 export async function getSkipHints(opts: {
   db: Db;
-  shopId: string | number | null;
+  /**
+   * Canonical internal shop ID (Task #300). Reads prefer the new
+   * `mosShopId` field, falling back to the legacy `shopId` field for
+   * documents written before the migration / backfill.
+   */
+  mosShopId: number | string | null;
   symptomCategory: string;
   minAsked?: number;
 }): Promise<SkipHints> {
   const { db, symptomCategory } = opts;
   const minAsked = opts.minAsked ?? MIN_ASKED_FOR_HIGH_SKIP;
-  const shopIdStr = opts.shopId == null ? null : String(opts.shopId);
-  if (shopIdStr == null) return { avoid: [], prefer: [] };
+  const mosShopIdStr = opts.mosShopId == null ? null : String(opts.mosShopId);
+  if (mosShopIdStr == null) return { avoid: [], prefer: [] };
   const col = db.collection(SKIP_STATS_COLLECTION);
 
-  const shopDocs = await col.find({ shopId: shopIdStr, symptomCategory }).toArray();
+  const shopDocs = await col
+    .find({
+      symptomCategory,
+      $or: [{ mosShopId: mosShopIdStr }, { shopId: mosShopIdStr }],
+    })
+    .toArray();
 
   const scored = shopDocs
     .map((d: any) => {

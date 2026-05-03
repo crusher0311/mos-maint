@@ -133,13 +133,15 @@ export async function POST(request: NextRequest) {
     if (shopId) {
       try {
         const pgDb = getSupabaseDb();
+        // Task #300: keyed on the canonical mosShopId resolved at the
+        // boundary by guardExtensionShopRequest.
         const corrections = await pgDb
           .select({
             aiSuggested: enhanceCorrections.aiSuggested,
             advisorWrote: enhanceCorrections.advisorWrote,
           })
           .from(enhanceCorrections)
-          .where(eq(enhanceCorrections.shopId, String(shopId)))
+          .where(eq(enhanceCorrections.mosShopId, guard.mosShopId))
           .orderBy(desc(enhanceCorrections.createdAt))
           .limit(20);
 

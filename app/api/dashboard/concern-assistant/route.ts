@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       const db = await getDb();
       const symptomCategory = inferSymptomCategory(concern);
       const effectiveShopId = shopId || String(session.shopId);
-      const hints = await getSkipHints({ db, shopId: effectiveShopId, symptomCategory });
+      const hints = await getSkipHints({ db, mosShopId: effectiveShopId, symptomCategory });
       const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
       const hintsBlock = renderHintsForPrompt(hints);
 
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
       const conversation = {
         userId: session.email,
-        shopId: effectiveShopId,
+        mosShopId: effectiveShopId,
         vin: vin || null,
         vehicleDisplay: vehicleDisplay || null,
         concern,
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
         if (cleanResults.length) {
           await recordRoundResults({
             db,
-            shopId: effectiveShopId,
+            mosShopId: effectiveShopId,
             symptomCategory,
             results: cleanResults,
           });
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const hints = await getSkipHints({ db, shopId: effectiveShopId, symptomCategory });
+      const hints = await getSkipHints({ db, mosShopId: effectiveShopId, symptomCategory });
       const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
       const hintsBlock = renderHintsForPrompt(hints);
 
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
         if (cleanResults.length) {
           await recordRoundResults({
             db: db2,
-            shopId: effectiveShopId,
+            mosShopId: effectiveShopId,
             symptomCategory,
             results: cleanResults,
           });

@@ -64,6 +64,20 @@
       "when": 1778803200000,
       "tag": "0008_drop_crm_and_rescue_rover",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778889600000,
+      "tag": "0009_enhance_corrections_mos_shop_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778889601000,
+      "tag": "0010_drop_enhance_corrections_legacy_shop_id",
+      "breakpoints": true
     }
   ]
 }

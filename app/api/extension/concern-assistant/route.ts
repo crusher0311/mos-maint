@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
-import { checkShopFeatureGate } from "@/lib/extension-route-guard";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
@@ -14,6 +13,7 @@ import {
   renderHintsForPrompt,
   type RoundResult,
 } from "@/lib/concernSkipLearning";
+import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,12 +74,33 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const shopId = searchParams.get("shopId");
+    const rawShopId = searchParams.get("shopId");
+    const provider = searchParams.get("provider");
     const limit = parseInt(searchParams.get("limit") || "20");
 
     const db = await getDb();
-    const filter: any = { userId: auth.user._id?.toString() || auth.user.id?.toString() };
-    if (shopId) filter.shopId = shopId;
+    const userId = auth.user._id?.toString() || auth.user.id?.toString();
+    const filter: any = { userId };
+
+    if (rawShopId) {
+      // Resolve raw provider shopId to canonical mosShopId at the boundary
+      // (Task #300). Reads prefer mosShopId, fall back to legacy shopId for
+      // docs written before the dual-write/backfill rolled out.
+      const guard = await guardExtensionShopRequest(request, {
+        smsShopId: rawShopId,
+        provider,
+        requiredFeatures: ["concern_assistant"],
+        featureLabel: "Concern Assistant",
+        corsHeaders,
+      });
+      if (!guard.ok) return guard.response;
+      filter.$or = [
+        { mosShopId: guard.mosShopId },
+        { mosShopId: String(guard.mosShopId) },
+        { shopId: rawShopId },
+        { shopId: Number(rawShopId) },
+      ];
+    }
 
     const conversations = await db.collection("concern_conversations")
       .find(filter)
@@ -96,47 +117,38 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await validateExtensionToken(request);
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
-    }
-
     const body = await request.json();
     const { action } = body;
 
-    // Feature gate: concern_assistant. shopId is REQUIRED so the gate cannot
-    // be bypassed by omitting it. Also enforce caller owns that shop.
     if (!body.shopId) {
       return NextResponse.json(
         { error: "shopId is required" },
         { status: 400, headers: corsHeaders }
       );
     }
-    const isPlatformAdmin = auth.user.role === "platform_admin";
-    const userShopIds = getUserShopIds(auth.user);
-    if (!isPlatformAdmin && !userShopIds.includes(String(body.shopId))) {
-      return NextResponse.json(
-        { error: "Unauthorized shop access" },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-    {
-      const denied = await checkShopFeatureGate(Number(body.shopId), ["concern_assistant"], {
-        isPlatformAdmin,
-        featureLabel: "Concern Assistant",
-        corsHeaders,
-      });
-      if (denied) return denied;
-    }
+
+    // Single shop-resolution boundary (Task #300): the extension keeps
+    // sending the raw provider shopId, but the server resolves it to the
+    // canonical mosShopId exactly once at the edge. Auth, ownership, and
+    // feature-gate checks all live inside the guard.
+    const guard = await guardExtensionShopRequest(request, {
+      smsShopId: body.shopId,
+      provider: body.provider,
+      requiredFeatures: ["concern_assistant"],
+      featureLabel: "Concern Assistant",
+      corsHeaders,
+    });
+    if (!guard.ok) return guard.response;
+    const mosShopId = guard.mosShopId;
+    const auth = { user: guard.user };
 
     {
       const blocked = await enforceAiBudget({
-        shopId: Number(body.shopId),
+        shopId: mosShopId,
         route: "/api/extension/concern-assistant",
-        isPlatformAdmin,
+        isPlatformAdmin: guard.isPlatformAdmin,
       });
       if (blocked) {
-        // Re-emit with CORS headers so the extension can read it.
         const data = await blocked.json();
         return NextResponse.json(data, {
           status: blocked.status,
@@ -150,13 +162,13 @@ export async function POST(request: NextRequest) {
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
 
     if (action === "followup") {
-      const { concern, shopId, vin, vehicleDisplay } = body;
+      const { concern, vin, vehicleDisplay } = body;
       if (!concern) {
         return NextResponse.json({ error: "Concern text is required" }, { status: 400, headers: corsHeaders });
       }
 
       const symptomCategory = inferSymptomCategory(concern);
-      const hints = await getSkipHints({ db, shopId: shopId || null, symptomCategory });
+      const hints = await getSkipHints({ db, mosShopId, symptomCategory });
       const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
       const hintsBlock = renderHintsForPrompt(hints);
 
@@ -174,7 +186,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:followup", completion, elapsed);
+      trackOpenAiCall(mosShopId, "/api/extension/concern-assistant:followup", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -184,7 +196,11 @@ export async function POST(request: NextRequest) {
 
       const conversation = {
         userId,
-        shopId: shopId || null,
+        // Task #300: mosShopId is the canonical shop key; shopId (raw) is
+        // kept on the document so the backfill / read-fallback can still
+        // identify pre-migration history.
+        mosShopId,
+        shopId: body.shopId || null,
         vin: vin || null,
         vehicleDisplay: vehicleDisplay || null,
         concern,
@@ -206,7 +222,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "review") {
-      const { concern, answeredQuestions, conversationId, roundResults, shopId } = body;
+      const { concern, answeredQuestions, conversationId, roundResults } = body;
       if (!concern || !answeredQuestions?.length) {
         return NextResponse.json({ error: "Concern and answered questions required" }, { status: 400, headers: corsHeaders });
       }
@@ -220,7 +236,7 @@ export async function POST(request: NextRequest) {
         if (cleanResults.length) {
           await recordRoundResults({
             db,
-            shopId: shopId || null,
+            mosShopId,
             symptomCategory,
             results: cleanResults,
           });
@@ -232,7 +248,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const hints = await getSkipHints({ db, shopId: shopId || null, symptomCategory });
+      const hints = await getSkipHints({ db, mosShopId, symptomCategory });
       const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
       const hintsBlock = renderHintsForPrompt(hints);
 
@@ -250,7 +266,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:review", completion, elapsed);
+      trackOpenAiCall(mosShopId, "/api/extension/concern-assistant:review", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
       const questions = responseText
@@ -272,7 +288,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "cleanup") {
-      const { conversationText, conversationId, concern, exchanges, roundResults, shopId } = body;
+      const { conversationText, conversationId, concern, exchanges, roundResults } = body;
       if (!conversationText) {
         return NextResponse.json({ error: "Conversation text required" }, { status: 400, headers: corsHeaders });
       }
@@ -285,7 +301,7 @@ export async function POST(request: NextRequest) {
         if (cleanResults.length) {
           await recordRoundResults({
             db,
-            shopId: shopId || null,
+            mosShopId,
             symptomCategory,
             results: cleanResults,
           });
@@ -311,7 +327,7 @@ export async function POST(request: NextRequest) {
       });
 
       const elapsed = Date.now() - startTime;
-      trackOpenAiCall(Number(body.shopId), "/api/extension/concern-assistant:cleanup", completion, elapsed);
+      trackOpenAiCall(mosShopId, "/api/extension/concern-assistant:cleanup", completion, elapsed);
 
       const cleanedText = completion.choices[0]?.message?.content?.trim() || conversationText;
 

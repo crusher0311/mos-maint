@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
-import { checkShopFeatureGate } from "@/lib/extension-route-guard";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { getDb } from "@/lib/mongo";
 
@@ -18,13 +17,8 @@ const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await validateExtensionToken(request);
-    if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
-    }
-
     const body = await request.json();
-    const { shopId, workOrderId, contactId, serviceItemId, concernText } = body;
+    const { shopId, workOrderId, contactId, serviceItemId, concernText, provider } = body;
 
     if (!shopId) {
       return NextResponse.json({ error: "shopId is required" }, { status: 400, headers: corsHeaders });
@@ -33,24 +27,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "concernText is required" }, { status: 400, headers: corsHeaders });
     }
 
-    // Cross-shop access check + feature gate. Without these, any valid
-    // extension token could write a concern to another shop's Protractor RO.
-    const isPlatformAdmin = auth.user.role === "platform_admin";
-    const userShopIds = getUserShopIds(auth.user);
-    if (!isPlatformAdmin && !userShopIds.includes(String(shopId))) {
-      return NextResponse.json(
-        { error: "Unauthorized shop access" },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-    {
-      const denied = await checkShopFeatureGate(Number(shopId), ["concern_assistant"], {
-        isPlatformAdmin,
-        featureLabel: "Concern Assistant",
-        corsHeaders,
-      });
-      if (denied) return denied;
-    }
+    // Single shop-resolution boundary (Task #300). The feature gate, owner
+    // check, and mosShopId resolution all happen here so downstream Mongo
+    // updates can key on the canonical mosShopId.
+    const guard = await guardExtensionShopRequest(request, {
+      smsShopId: shopId,
+      provider: provider || "protractor",
+      requiredFeatures: ["concern_assistant"],
+      featureLabel: "Concern Assistant",
+      corsHeaders,
+    });
+    if (!guard.ok) return guard.response;
+    const auth = { user: guard.user };
+    const mosShopId = guard.mosShopId;
 
     const config = await resolveProtractorConfig(shopId);
     if (!config.configured) {
@@ -141,8 +130,22 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
+    // Task #300: scope injection-tracking to this shop too. Filter by either
+    // the canonical mosShopId (new docs) or the legacy raw shopId / null
+    // (pre-migration docs that were never tagged).
     await db.collection("concern_conversations").updateMany(
-      { userId, status: "completed", injectedAt: { $exists: false } },
+      {
+        userId,
+        status: "completed",
+        injectedAt: { $exists: false },
+        $or: [
+          { mosShopId },
+          { mosShopId: String(mosShopId) },
+          { shopId: String(shopId) },
+          { shopId: Number(shopId) },
+          { shopId: null, mosShopId: { $exists: false } },
+        ],
+      },
       {
         $set: {
           injectedAt: new Date(),

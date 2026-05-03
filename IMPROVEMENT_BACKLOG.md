@@ -162,26 +162,85 @@ restoring it clears the badge automatically.
 
 ---
 
-### [ ] 6. Normalize how we identify shops everywhere
-**Why now:** `enhance_corrections.shopId` is keyed by the raw SMS shop ID
-(Tekmetric/Protractor's number). If a shop migrates providers or their
-upstream ID changes, their learned advisor corrections vanish silently. Same
-fragility likely exists in other extension-written tables.
+### [x] 6. Normalize how we identify shops everywhere (Task #300, 2026-05-03)
+**Audit result.** Every extension route that takes a shop ID from request
+input was reviewed for the table(s) it writes:
 
-**Proposed approach:**
-1. Audit every table that stores a shop ID written from the extension. List
-   which use `mosShopId` vs raw provider ID.
-2. For each that uses raw provider ID, add a `mosShopId` column, dual-write,
-   then backfill, then read from the new column, then drop the old.
-3. The extension can keep sending the SMS shop ID at the boundary; the
-   server resolves once and writes only `mosShopId`.
+| Table (collection) | Storage | Prior key | Status |
+|---|---|---|---|
+| `enhance_corrections` | Postgres + Mongo | raw provider `shop_id` | **Fixed** — see below |
+| `concern_conversations` | Mongo | raw provider `shopId` | **Fixed** — see below |
+| `concern_question_stats` | Mongo | raw provider `shopId` | **Fixed** — see below |
+| `tekmetric_canned_jobs_cache` | Mongo | tekmetric `shopId` | Cache only (1 h TTL); leave |
+| `protractor_canned_jobs_cache` | Mongo | `mosShopId` | Already correct |
+| `maintenance_analysis_cache` | Mongo | `mosShopId` | Already correct |
+| `extension_prefetch_locks` | Mongo | `mosShopId` | Already correct |
+| `sticker_generations` | Mongo | `mosShopId` | Already correct |
+| `tekmetric_work_orders` writes (`/inspections`, `/ro-context`) | Mongo | tekmetric `shopId` | Out of scope (sync-owned table) |
+| `sniffer_sessions` | Postgres | does not store shop ID | n/a |
 
-**Files likely touched:** `lib/db/schema/enhance-corrections.ts`,
-`app/api/extension/enhance-corrections/route.ts`,
-`app/api/extension/enhance-findings/route.ts`, plus whatever the audit reveals.
+**Shipped for `enhance_corrections`:**
+- `lib/db/schema/enhance-corrections.ts`: added nullable `mos_shop_id`
+  integer column + index; doc-comment names this the canonical key.
+- `drizzle/0009_enhance_corrections_mos_shop_id.sql` adds the column and
+  index; journal updated.
+- Boundary helper: `app/api/extension/enhance-corrections/route.ts` now
+  routes both POST and GET through `guardExtensionShopRequest` (the
+  existing helper that resolves the wire-format shop ID to the canonical
+  `mosShopId` exactly once at the edge). `enhance-findings` already used
+  the guard; its read query was switched too.
+- Dual-write: writes populate both `shop_id` (legacy) and `mos_shop_id`.
+- Read switch: `enhance-corrections.GET` and `enhance-findings` shop-style
+  examples lookup both prefer `mos_shop_id`, falling back to `shop_id`
+  for unmigrated history.
+- Backfill: `scripts/backfill-enhance-corrections-mos-shop-id.ts` resolves
+  every distinct legacy `shop_id` via Mongo's `shops` collection
+  (matching the runtime guard's resolution) and bulk-updates rows. Pure
+  SQL can't do this because the registry lives in Mongo. Idempotent;
+  supports `--dry-run`.
+- Regression test: `tests/enhance-corrections-mos-shop-id.smoke.ts`
+  (npm: `test:enhance-corrections-mos-shop-id`, also wired into
+  `test:smoke`) writes a correction under one upstream Tekmetric ID,
+  "renames" the upstream ID, and asserts the GET still finds the row.
 
-**Acceptance:** Renaming a shop's Tekmetric ID in a test environment doesn't
-lose its corrections / sniffer sessions / etc.
+**Shipped for `concern_conversations` + `concern_question_stats`:**
+- `app/api/extension/concern-assistant/route.ts` (POST + GET) and
+  `app/api/extension/concern-assistant/inject-protractor/route.ts` now
+  route through `guardExtensionShopRequest` to resolve the canonical
+  `mosShopId` once at the boundary.
+- Conversation inserts dual-write `mosShopId` (canonical) and `shopId`
+  (legacy raw provider ID, kept so the backfill can identify pre-migration
+  history). GET history reads prefer `mosShopId`, falling back to `shopId`.
+- `lib/concernSkipLearning.ts`: `recordRoundResults` and `getSkipHints`
+  now take `mosShopId`. Writes set both `mosShopId` and `shopId`. Reads
+  match `{ $or: [{ mosShopId }, { shopId }] }` so per-shop skip stats
+  written before the migration still surface.
+- `app/api/dashboard/concern-assistant/route.ts` updated to pass
+  `mosShopId` to those helpers and store `mosShopId` on its inserts.
+- Backfill: `scripts/backfill-concern-conversations-mos-shop-id.ts`
+  (also handles `concern_question_stats`). Idempotent; supports
+  `--dry-run`. Mirrors the enhance_corrections backfill — resolves each
+  distinct legacy `shopId` via the Mongo `shops` collection.
+- Regression test: `tests/concern-conversations-mos-shop-id.smoke.ts`
+  (npm: `test:concern-conversations-mos-shop-id`, wired into
+  `test:smoke`) covers the POST-then-GET-after-rename round trip and
+  the legacy-shopId skip-stat fallback.
+
+**Shipped for the `enhance_corrections` legacy-column drop:**
+- `drizzle/0010_drop_enhance_corrections_legacy_shop_id.sql`: drops
+  `shop_id` and its index, makes `mos_shop_id` NOT NULL. Begins with a
+  `DO $$` block that raises if any row still has `mos_shop_id IS NULL`,
+  forcing the operator to run the backfill first.
+- Schema: `lib/db/schema/enhance-corrections.ts` no longer declares
+  `shopId`; `mosShopId` is required.
+- `app/api/extension/enhance-corrections/route.ts` and
+  `app/api/extension/enhance-findings/route.ts` no longer write or read
+  the legacy column (no fallback `or(eq(shopId, …))`). Mongo dual-write
+  also drops the legacy `shopId` field.
+
+**Deploy order:** apply 0009 → run
+`npm run backfill:enhance-corrections-mos-shop-id` and
+`npm run backfill:concern-conversations-mos-shop-id` → apply 0010.
 
 ---
 

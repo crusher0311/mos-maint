@@ -43,7 +43,7 @@ async function main() {
   const fake = makeFakeDb({
     concern_question_stats: [
       {
-        shopId: null,
+        mosShopId: null,
         symptomCategory: "BRAKES",
         normalizedQuestion: "are any warning lights on",
         lastSampleText: "Are any warning lights on?",
@@ -66,7 +66,7 @@ async function main() {
 
   const newShopHints = await getSkipHints({
     db: fake.db as any,
-    shopId: 9999,
+    mosShopId: 9999,
     symptomCategory: "BRAKES",
   });
   ok(
@@ -87,7 +87,7 @@ async function main() {
   section("getSkipHints — own shop history still surfaces");
   const ownShopHints = await getSkipHints({
     db: fake.db as any,
-    shopId: 42,
+    mosShopId: 42,
     symptomCategory: "BRAKES",
   });
   ok(
@@ -98,7 +98,7 @@ async function main() {
   section("getSkipHints — null shopId returns empty");
   const nullHints = await getSkipHints({
     db: fake.db as any,
-    shopId: null,
+    mosShopId: null,
     symptomCategory: "BRAKES",
   });
   ok("null shopId yields empty avoid", nullHints.avoid.length === 0);
@@ -108,7 +108,7 @@ async function main() {
   const recFake = makeFakeDb({});
   await recordRoundResults({
     db: recFake.db as any,
-    shopId: 7,
+    mosShopId: 7,
     symptomCategory: "BRAKES",
     results: [
       { question: "Does the brake pedal feel different?", answered: false },
