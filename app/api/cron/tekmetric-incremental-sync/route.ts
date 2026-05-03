@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/tekmetric-incremental-sync";
+import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getDb } from "@/lib/mongo";
 import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
 

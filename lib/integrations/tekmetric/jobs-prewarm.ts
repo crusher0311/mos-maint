@@ -1,10 +1,10 @@
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders, type TekmetricJob } from "@/lib/tekmetric";
-import { maybeAlertOnPrewarmAnomalies } from "@/lib/tekmetric-jobs-prewarm-alerter";
+import { getRepairOrders, type TekmetricJob } from ".";
+import { maybeAlertOnPrewarmAnomalies } from "./jobs-prewarm-alerter";
 import {
   bulkCacheJobs,
   bulkFetchJobsByShopWindow,
-} from "@/lib/tekmetric-bulk-jobs";
+} from "./bulk-jobs";
 
 // Terminal RO statuses whose `/jobs` payloads are stable after the fact —
 // the same set the backfill consumer treats as cacheable. Anything else

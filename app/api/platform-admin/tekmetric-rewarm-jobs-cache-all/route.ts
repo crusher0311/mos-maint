@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import {
   prewarmTekmetricJobsCacheForOnboarding,
   PrewarmJobsCacheResult,
-} from "@/lib/tekmetric-jobs-prewarm";
+} from "@/lib/integrations/tekmetric/jobs-prewarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { reindexFromStoredData } from "@/lib/tekmetric-job-index";
+import { reindexFromStoredData } from "@/lib/integrations/tekmetric/job-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

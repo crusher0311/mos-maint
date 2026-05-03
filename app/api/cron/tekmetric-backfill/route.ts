@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
-import { createIngestionService } from "@/lib/normalized-ingestion";
+import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking } from "@/lib/integrations/tekmetric/client";
-import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/tekmetric-incremental-sync";
+import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
-import { archiveResolvedSkippedRos } from "@/lib/tekmetric-skipped-ro-resolution";
-import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/tekmetric-bulk-jobs";
+import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
+import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

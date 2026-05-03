@@ -28,7 +28,7 @@ import {
   getCustomer,
   getVehicle,
   type TekmetricAppointment,
-} from '@/lib/tekmetric';
+} from '@/lib/integrations/tekmetric';
 
 interface Args {
   src: number;

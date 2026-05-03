@@ -15,7 +15,7 @@ import type {
   ProtractorServicePackageLine,
   ProtractorCannedJob,
   ProtractorDeferredWork,
-} from './types';
+} from './client';
 
 export function transformVehicle(raw: ProtractorVehicle): NormalizedVehicle {
   return {

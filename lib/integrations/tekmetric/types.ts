@@ -185,24 +185,35 @@ export interface PaginatedResponse<T> {
 export interface TekmetricAppointment {
   id: number;
   shopId: number;
-  customerId?: number;
-  vehicleId?: number;
+  customerId: number;
+  vehicleId: number;
   repairOrderId?: number;
   startTime: string;
   endTime: string;
-  type: string;
-  status: string;
+  title?: string;
+  note?: string;
   notes?: string;
+  color?: string;
+  type?: string;
+  status?: string;
+  appointmentType?: string;
   createdDate?: string;
   updatedDate?: string;
 }
 
 export interface CreateAppointmentParams {
   shopId: number;
-  customerId?: number;
-  vehicleId?: number;
+  customerId: number;
+  vehicleId: number;
   startTime: string;
   endTime: string;
-  type: 'DROP_OFF' | 'WAITER' | 'PICKUP';
-  notes?: string;
+  title?: string;
+  description?: string;
+  color?: string;
+  dropoffTime?: string;
+  pickupTime?: string;
+  rideOption?: "LOANER" | "RIDE" | "NONE";
+  status?: "NONE" | "ARRIVED" | "NO_SHOW" | "CANCELLED";
+  appointmentOption?: "STAY" | "DROP" | "TOW";
+  appointmentOptionId?: number;
 }

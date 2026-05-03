@@ -8,7 +8,7 @@
  */
 import * as fs from "fs";
 import { getDb } from "@/lib/mongo";
-import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 
 const STATUS = "/tmp/bf/wave1.json";
 const BASE_URL =

@@ -448,7 +448,7 @@ async function pushAppointmentToSMS(
   // Try Tekmetric first if available
   if (hasTekmetric) {
     try {
-      const { createAppointment } = await import("@/lib/tekmetric");
+      const { createAppointment } = await import("@/lib/integrations/tekmetric");
       const tekmetricShopId = Number(shop.tekmetric.shopId);
       
       // Find both customer and vehicle IDs from cached data
@@ -474,7 +474,7 @@ async function pushAppointmentToSMS(
         
         if (!vYear && !vMake && !vModel && tekmetricVehicleId) {
           try {
-            const { getVehicle } = await import("@/lib/tekmetric");
+            const { getVehicle } = await import("@/lib/integrations/tekmetric");
             const vData = await getVehicle(tekmetricVehicleId, tekmetricShopId);
             if (vData) {
               vYear = vData.year;
@@ -646,7 +646,7 @@ export async function findTekmetricCustomerAndVehicle(
   // Fallback: Try API for vehicle if still missing
   if (!vehicleId && vin) {
     try {
-      const { getVehicles } = await import("@/lib/tekmetric");
+      const { getVehicles } = await import("@/lib/integrations/tekmetric");
       const result = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
       
       if (result.content && result.content.length > 0) {

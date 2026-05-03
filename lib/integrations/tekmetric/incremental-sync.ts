@@ -7,8 +7,8 @@ import {
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
-} from "@/lib/tekmetric";
-import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
+} from ".";
+import { getRepairOrderInspectionsWithXAuth } from "./client";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
@@ -452,7 +452,7 @@ async function upsertWorkOrder(
 
   if (isTerminal && !existing?.jobsIndexed) {
     try {
-      const { indexTekmetricWorkOrderJobs } = await import("@/lib/tekmetric-job-index");
+      const { indexTekmetricWorkOrderJobs } = await import("./job-index");
       const jobsIndexed = await indexTekmetricWorkOrderJobs(
         shopId,
         tekmetricShopId,

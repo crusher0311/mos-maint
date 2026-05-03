@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/protractor-jobs-prewarm";
+import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

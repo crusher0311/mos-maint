@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
-import { createIngestionService } from "@/lib/normalized-ingestion";
+import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import {
   tekmetricRequest as centralTekmetricRequest,
   runWithTekmetricApiCallTracking,

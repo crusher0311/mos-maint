@@ -2,8 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
-import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
-import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/protractor-jobs-prewarm";
+import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
+import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 import crypto from "crypto";
 
 export const runtime = "nodejs";

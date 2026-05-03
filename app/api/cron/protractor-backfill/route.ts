@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findAndResumeStaleBackfills, runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { findAndResumeStaleBackfills, runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";

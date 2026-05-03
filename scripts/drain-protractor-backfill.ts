@@ -26,7 +26,7 @@
  */
 
 import { getDb } from "@/lib/mongo";
-import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 
 const PARALLELISM = Math.max(1, Number(process.env.DRAIN_PARALLELISM) || 3);
 const HEARTBEAT_MS = Math.max(

@@ -216,7 +216,7 @@ export class TekmetricAdapter implements IIntegrationAdapter {
     }
     
     try {
-      const { runIncrementalSyncCycle } = await import('@/lib/tekmetric-incremental-sync');
+      const { runIncrementalSyncCycle } = await import('@/lib/integrations/tekmetric/incremental-sync');
       const result = await runIncrementalSyncCycle();
       const totalSynced = result.results.reduce((acc, r) => acc + (r.synced || 0), 0);
       return {

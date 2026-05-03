@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { validateShopAccess } from "@/lib/tekmetric";
-import { syncSingleShop } from "@/lib/tekmetric-sync";
-import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/tekmetric-jobs-prewarm";
+import { validateShopAccess } from "@/lib/integrations/tekmetric";
+import { syncSingleShop } from "@/lib/integrations/tekmetric/sync";
+import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/integrations/tekmetric/jobs-prewarm";
 
 async function triggerJobHistoryBackfill(shopId: number, tekmetricShopId: number) {
   try {

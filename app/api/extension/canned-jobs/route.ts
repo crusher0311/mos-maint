@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
-import { getCannedJobs } from "@/lib/tekmetric";
+import { getCannedJobs } from "@/lib/integrations/tekmetric";
 import { protractorAdapter } from "@/lib/integrations/protractor/adapter";
 
 const corsHeaders = {

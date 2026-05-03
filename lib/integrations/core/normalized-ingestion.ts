@@ -20,7 +20,7 @@ import {
   SoftDelete,
   AuditEntry,
   NORMALIZED_COLLECTIONS,
-} from './normalized-schema';
+} from '@/lib/normalized-schema';
 import {
   getAdapter,
   generateContentHash,
@@ -28,9 +28,9 @@ import {
   createProvenance,
   createSoftDelete,
   INormalizedAdapter,
-} from './normalized-adapters';
-import { updateRepairPattern } from './repair-patterns';
-import { SupabaseDualWriter } from './supabase-dual-writer';
+} from './normalized-adapter';
+import { updateRepairPattern } from '@/lib/repair-patterns';
+import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 
 // =============================================================================
 // TYPES

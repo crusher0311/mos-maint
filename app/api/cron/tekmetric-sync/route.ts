@@ -7,13 +7,13 @@ import {
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
-} from "@/lib/tekmetric";
+} from "@/lib/integrations/tekmetric";
 import { runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, flattenInspectionTasks } from "@/lib/integrations/tekmetric/client";
 import { 
   indexTekmetricWorkOrderJobs, 
   checkAndRunBackfillForNewShops 
-} from "@/lib/tekmetric-job-index";
-import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+} from "@/lib/integrations/tekmetric/job-index";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

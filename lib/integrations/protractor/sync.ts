@@ -7,9 +7,9 @@ import {
   runWithProtractorBackoffTracking,
   getCachedProtractorInvoice,
   cacheProtractorInvoice,
-} from "@/lib/integrations/protractor";
+} from "./client";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
-import { createIngestionService } from "@/lib/normalized-ingestion";
+import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import pLimit from "p-limit";
 

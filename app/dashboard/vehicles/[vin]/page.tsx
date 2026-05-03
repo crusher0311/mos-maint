@@ -5,7 +5,7 @@ import Link from "next/link";
 import { fetchDviWithCache, resolveAutoflowConfig } from "@/lib/integrations/autoflow";
 import { fetchCarfaxWithCache, resolveCarfaxConfig } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached, getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
-import { searchVehiclesByVin, getRepairOrders } from "@/lib/tekmetric";
+import { searchVehiclesByVin, getRepairOrders } from "@/lib/integrations/tekmetric";
 import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices, fetchWorkOrdersForVehicle as fetchProtractorWorkOrders } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";

@@ -42,7 +42,7 @@ import {
   type TekmetricCustomer,
   type TekmetricVehicle,
   type CreateAppointmentParams,
-} from '@/lib/tekmetric';
+} from '@/lib/integrations/tekmetric';
 
 // ---------- args ----------
 

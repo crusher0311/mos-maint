@@ -24,7 +24,7 @@ import { getDb } from "../lib/mongo";
 // way to safely call Tekmetric from anywhere in this codebase — raw fetch
 // bypasses the in-process rate limiter and causes 429 storms.
 import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
-import { getValidToken } from "@/lib/tekmetric-auth";
+import { getValidToken } from "@/lib/integrations/tekmetric/auth";
 
 type Args = {
   shop?: number;

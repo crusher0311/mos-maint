@@ -12,7 +12,7 @@ import type {
 } from '@/lib/integrations/core/types';
 import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection } from './client';
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
-import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './types';
+import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
 
 export class ProtractorAdapter implements IIntegrationAdapter {
   provider = 'protractor' as const;
@@ -236,7 +236,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
 
   async runBackfill(shopId: number, options?: BackfillOptions): Promise<BackfillResult> {
     try {
-      const { runProtractorBackfill } = await import('@/lib/integrations/protractor-backfill');
+      const { runProtractorBackfill } = await import('@/lib/integrations/protractor/sync');
       const result = await runProtractorBackfill(shopId);
       return {
         ok: !result.error,

@@ -18,7 +18,7 @@ import {
   upsertJobIndexEntries,
   updatePartCrossReferences,
 } from "@/lib/job-index";
-import { runProtractorBackfill } from "@/lib/integrations/protractor-backfill";
+import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";

@@ -391,7 +391,7 @@ async function resolveBookingDataServerSide(
   const STRATEGY2_TIMEOUT_MS = 5000;
   if (tekmetricShopId && vin && (!result.vehicleId || !result.customerName)) {
     const strategy2 = (async () => {
-      const { getVehicles, getCustomer } = await import("@/lib/tekmetric");
+      const { getVehicles, getCustomer } = await import("@/lib/integrations/tekmetric");
       const vehicleResult = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
 
       if (!vehicleResult.content || vehicleResult.content.length === 0) return false;

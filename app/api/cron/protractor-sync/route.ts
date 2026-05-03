@@ -19,7 +19,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
-import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";

@@ -1,4 +1,4 @@
-import { getJobsByShopWindow, type TekmetricJob } from "@/lib/tekmetric";
+import { getJobsByShopWindow, type TekmetricJob } from ".";
 
 // Global kill-switch for the bulk shop-level /jobs path (task #146).
 // When set to "false" via env, ALL shops fall back to the legacy per-RO

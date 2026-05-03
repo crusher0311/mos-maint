@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { getTekmetricUsageStats, getUsageWarningLevel } from "@/lib/tekmetric-usage-tracker";
+import { getTekmetricUsageStats, getUsageWarningLevel } from "@/lib/integrations/tekmetric/usage-tracker";
 
 export const dynamic = "force-dynamic";
 

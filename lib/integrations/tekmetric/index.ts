@@ -1,9 +1,9 @@
 export * from './types';
-export * from './auth';
 export * from './client';
-export * from './probe';
+export * from './api';
 export * from './transform';
-export { TekmetricAdapter, tekmetricAdapter } from './adapter';
+export * from './adapter';
+export { tekmetricAdapter } from './adapter';
 
 import { integrationRegistry } from '@/lib/integrations/core/facade';
 import { tekmetricAdapter } from './adapter';

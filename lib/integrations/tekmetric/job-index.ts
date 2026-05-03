@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/mongo";
-import { getJobs, getVehicle, getRepairOrders } from "@/lib/tekmetric";
+import { getJobs, getVehicle, getRepairOrders } from ".";
 
 type TekmetricJobWithDetails = {
   id: number;

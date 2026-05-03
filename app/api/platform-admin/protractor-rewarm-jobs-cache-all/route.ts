@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import {
   prewarmProtractorJobsCacheForOnboarding,
   PrewarmProtractorJobsCacheResult,
-} from "@/lib/protractor-jobs-prewarm";
+} from "@/lib/integrations/protractor/jobs-prewarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

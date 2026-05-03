@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/tekmetric-jobs-prewarm";
+import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/integrations/tekmetric/jobs-prewarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

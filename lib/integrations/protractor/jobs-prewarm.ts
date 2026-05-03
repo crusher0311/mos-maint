@@ -5,7 +5,7 @@ import {
   protractorFetch,
   fetchInvoiceById,
   cacheProtractorInvoice,
-} from "@/lib/integrations/protractor";
+} from "./client";
 import { maybeAlertOnPrewarmAnomalies } from "@/lib/jobs-prewarm-alerter";
 
 // Onboarding pre-warm scope. The first Protractor backfill chunk is the

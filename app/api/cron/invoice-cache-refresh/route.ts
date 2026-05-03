@@ -36,7 +36,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/protractor-jobs-prewarm";
+import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 import { prewarmShopWareJobsCacheForOnboarding } from "@/lib/shopware-jobs-prewarm";
 
 export const runtime = "nodejs";

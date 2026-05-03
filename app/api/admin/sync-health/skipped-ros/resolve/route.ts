@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { manuallyResolveSkippedRo } from "@/lib/tekmetric-skipped-ro-resolution";
+import { manuallyResolveSkippedRo } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

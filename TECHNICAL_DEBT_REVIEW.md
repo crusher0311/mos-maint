@@ -357,21 +357,29 @@ These can be done immediately without full refactoring:
 
 ## Appendix: File Inventory
 
-### Current Integration Files to Refactor
+### Integration Files Refactored (Task #303 — DONE)
 
-| File | Lines | Action |
-|------|-------|--------|
-| `lib/integrations/protractor.ts` | 2,671 | Split into module |
-| `lib/integrations/protractor-backfill.ts` | 501 | Move to protractor/sync.ts |
-| `lib/tekmetric.ts` | 558 | Move to tekmetric/ |
-| `lib/tekmetric-auth.ts` | 168 | Move to tekmetric/auth.ts |
-| `lib/tekmetric-sync.ts` | 127 | Move to tekmetric/sync.ts |
-| `lib/tekmetric-incremental-sync.ts` | 435 | Move to tekmetric/sync.ts |
-| `lib/tekmetric-job-index.ts` | 384 | Move to tekmetric/job-index.ts |
-| `lib/tekmetric-usage-tracker.ts` | 154 | Consolidate with api-usage-tracker |
-| `lib/integrations/autoflow.ts` | 360 | Move to autoflow/ |
-| `lib/normalized-adapters.ts` | 1,204 | Split per integration |
-| `lib/normalized-ingestion.ts` | 1,330 | Split per integration |
+| Original file | Lines | Outcome |
+|---|---|---|
+| `lib/integrations/protractor.ts` | 3,950 | Absorbed into `lib/integrations/protractor/client.ts`. Original deleted. |
+| `lib/integrations/protractor-backfill.ts` | 501 | Moved to `lib/integrations/protractor/sync.ts`. Original deleted. |
+| `lib/integrations/protractor-legacy.ts` | 6 | Re-export shim deleted; consumers import from `@/lib/integrations/protractor`. |
+| `lib/protractor-jobs-prewarm.ts` | 329 | Moved to `lib/integrations/protractor/jobs-prewarm.ts`. Original deleted. |
+| `lib/tekmetric.ts` | 587 | Unique surface moved to `lib/integrations/tekmetric/api.ts` (overlapping methods already in `client.ts`). Original deleted. |
+| `lib/tekmetric-auth.ts` | 167 | Canonical `lib/integrations/tekmetric/auth.ts` (already present and slightly newer) is used by all callers. Original deleted. |
+| `lib/tekmetric-sync.ts` | 127 | Moved to `lib/integrations/tekmetric/sync.ts`. |
+| `lib/tekmetric-incremental-sync.ts` | 458 | Moved to `lib/integrations/tekmetric/incremental-sync.ts`. |
+| `lib/tekmetric-job-index.ts` | 384 | Moved to `lib/integrations/tekmetric/job-index.ts`. |
+| `lib/tekmetric-usage-tracker.ts` | 154 | Moved to `lib/integrations/tekmetric/usage-tracker.ts`. (Cross-cutting consolidation with `api-usage-tracker` deferred — out of scope for #303.) |
+| `lib/tekmetric-bulk-jobs.ts` | — | Moved to `lib/integrations/tekmetric/bulk-jobs.ts`. |
+| `lib/tekmetric-jobs-prewarm.ts` | — | Moved to `lib/integrations/tekmetric/jobs-prewarm.ts`. |
+| `lib/tekmetric-jobs-prewarm-alerter.ts` | — | Moved to `lib/integrations/tekmetric/jobs-prewarm-alerter.ts`. |
+| `lib/tekmetric-skipped-ro-resolution.ts` | — | Moved to `lib/integrations/tekmetric/skipped-ro-resolution.ts`. |
+| `lib/tekmetric-webhook-subscribe.ts` | — | Moved to `lib/integrations/tekmetric/webhook-subscribe.ts`. |
+| `lib/integrations/autoflow.ts` | 371 | Replaced slim `lib/integrations/autoflow/client.ts` (snapshot/cache funcs preserved). Original deleted. |
+| `lib/autoflow.ts` | 16 | Unused stub deleted (no importers). |
+| `lib/normalized-adapters.ts` | 1,235 | Split into `lib/integrations/core/normalized-adapter.ts` (interface, helpers, factory), `lib/integrations/protractor/normalized-adapter.ts` (`ProtractorAdapter` class), and `lib/integrations/tekmetric/normalized-adapter.ts` (`TekmetricAdapter` class). Original deleted. |
+| `lib/normalized-ingestion.ts` | 1,458 | Moved as-is to `lib/integrations/core/normalized-ingestion.ts`. The `NormalizedIngestionService` class is provider-polymorphic via `getAdapter`, so a per-provider split was not meaningful. |
 
 ### Files to Keep As-Is
 

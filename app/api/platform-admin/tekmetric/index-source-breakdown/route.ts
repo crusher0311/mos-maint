@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { getIndexSourceBreakdown } from "@/lib/tekmetric-job-index";
+import { getIndexSourceBreakdown } from "@/lib/integrations/tekmetric/job-index";
 
 export const dynamic = "force-dynamic";
 

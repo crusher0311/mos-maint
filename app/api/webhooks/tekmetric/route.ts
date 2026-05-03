@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { indexTekmetricWorkOrderJobs } from "@/lib/tekmetric-job-index";
-import { getVehicle, getCustomer } from "@/lib/tekmetric";
+import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
+import { getVehicle, getCustomer } from "@/lib/integrations/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
-import { NormalizedIngestionService } from "@/lib/normalized-ingestion";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import type { Db } from "mongodb";
 

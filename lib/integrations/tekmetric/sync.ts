@@ -6,7 +6,7 @@ import {
   TekmetricRepairOrderFull,
   TekmetricVehicle,
   TekmetricCustomer
-} from "@/lib/tekmetric";
+} from ".";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 

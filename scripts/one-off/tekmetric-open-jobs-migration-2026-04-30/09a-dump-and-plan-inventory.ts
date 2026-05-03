@@ -29,7 +29,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { getInventory, type TekmetricInventoryPart } from '@/lib/tekmetric';
+import { getInventory, type TekmetricInventoryPart } from '@/lib/integrations/tekmetric';
 
 interface ShopPair {
   src: number;

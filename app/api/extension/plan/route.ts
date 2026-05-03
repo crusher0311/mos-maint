@@ -1105,7 +1105,7 @@ export async function GET(request: NextRequest) {
 
           if (!roVin && liveData.vehicleId) {
             try {
-              const { getCachedVehicle, cacheVehicle } = await import("@/lib/tekmetric-incremental-sync");
+              const { getCachedVehicle, cacheVehicle } = await import("@/lib/integrations/tekmetric/incremental-sync");
               const vehicleId = Number(liveData.vehicleId);
               const cachedVeh = await getCachedVehicle(db, vehicleId);
               if (cachedVeh) {
@@ -1397,7 +1397,7 @@ export async function GET(request: NextRequest) {
             customerName = data.customer.name;
           } else if (data.customerId) {
             try {
-              const { getCachedCustomer, cacheCustomer } = await import("@/lib/tekmetric-incremental-sync");
+              const { getCachedCustomer, cacheCustomer } = await import("@/lib/integrations/tekmetric/incremental-sync");
               const customerId = Number(data.customerId);
               const cachedCust = await getCachedCustomer(db, customerId);
               if (cachedCust) {
