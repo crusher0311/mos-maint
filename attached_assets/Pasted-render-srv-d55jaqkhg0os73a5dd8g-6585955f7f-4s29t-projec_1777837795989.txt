@@ -1,0 +1,68 @@
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ cat > ./clear-stale-protractor.cjs <<'EOF_CLEAR'
+const { MongoClient } = require('mongodb');
+const u = process.env.MONGODB_URI || `mongodb+srv://${process.env.MONGODB_USERNAME}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
+(async () => {
+  const c = new MongoClient(u);
+  await c.connect();
+  const d = c.db('mos-maintenance-mvp');
+  const cutoff = new Date(Date.now() - 5 * 60 * 1000);
+  const r = await d.collection('backfill_progress').updateMany(
+    { inProgress: true, lastActivityAt: { $lt: cutoff } },
+    { $set: { inProgress: false } }
+  );
+  console.log('cleared stale inProgress on ' + r.modifiedCount + ' shops (lastActivity > 5min ago)');
+  await c.close();
+})();
+EOF_CLEAR
+node ./clear-stale-protractor.cjs
+cleared stale inProgress on 3 shops (lastActivity > 5min ago)
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ nohup bash -c 'DRAIN_PARALLELISM=3 npm run drain:tekmetric-backfill' > /tmp/drain-tek.log 2>&1 &
+disown
+tail -f /tmp/drain-tek.log
+[1] 569
+nohup: ignoring input
+
+> mos-maintenance-mvp@1.8.0 drain:tekmetric-backfill
+> NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts
+
+[2026-05-03T19:48:11.976Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-03T19:48:11.977Z] parallelism=3 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-593-1777837691976-yu2mio shopIdFilter=ALL_INCOMPLETE
+[2026-05-03T19:48:12.630Z] FATAL: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+MongoServerError: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+    at Connection.sendCommand (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:558:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Connection.command (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:632:22)
+    at async Server.command (/opt/render/project/src/node_modules/mongodb/src/sdam/server.ts:350:21)
+    at async tryOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:289:24)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:119:12)
+    at async Collection.findOneAndUpdate (/opt/render/project/src/node_modules/mongodb/src/collection.ts:1035:12)
+    at async acquireDrainLock (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:84:18)
+    at async main (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:363:3) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    ok: 0,
+    errmsg: 'Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }',
+    code: 11000,
+    codeName: 'DuplicateKey',
+    keyPattern: { _id: 1 },
+    keyValue: { _id: 'global' },
+    '$clusterTime': {
+      clusterTime: new Timestamp({ t: 1777837692, i: 41 }),
+      signature: [Object]
+    },
+    operationTime: new Timestamp({ t: 1777837692, i: 41 })
+  },
+  ok: 0,
+  code: 11000,
+  codeName: 'DuplicateKey',
+  keyPattern: { _id: 1 },
+  keyValue: { _id: 'global' },
+  '$clusterTime': {
+    clusterTime: new Timestamp({ t: 1777837692, i: 41 }),
+    signature: {
+      hash: Binary.createFromBase64('P7Tuy22lYC2jYJeA23ZqU3tQXfw=', 0),
+      keyId: new Long('7581182958992621569')
+    }
+  },
+  operationTime: new Timestamp({ t: 1777837692, i: 41 })
+}
