@@ -466,11 +466,20 @@ function injectPrintButton() {
   // Strategy 1: AutoFlow DVI action bar — find the existing PDF / QC /
   // "Text & Email" / "Report Complete" buttons and drop in alongside
   // them. These are typically anchors or buttons whose visible text is
-  // a known label.
-  const KNOWN_LABELS = ['PDF', 'QC', 'Text & Email', 'Report Complete', 'Re-Push', 'Sheets'];
+  // a known label. List has grown as we've onboarded tenants whose DVI
+  // layouts use slightly different button labels.
+  const KNOWN_LABELS = [
+    'PDF', 'QC', 'Text & Email', 'Text and Email', 'Report Complete',
+    'Re-Push', 'Re Push', 'RePush', 'Sheets', 'Print PDF', 'Print Report',
+    'Email Report', 'Email PDF', 'Send Report', 'Send PDF',
+    'Customer Report', 'Tech Report', 'Inspection Report',
+    'Print Inspection', 'Print DVI', 'Print Ticket', 'Print Invoice',
+    'Print Estimate', 'Print Work Order', 'Print', 'Print Sticker',
+  ];
   const candidates = Array.from(document.querySelectorAll('a, button'));
   for (const label of KNOWN_LABELS) {
     const hit = candidates.find(el => {
+      if (el.id === 'mos-print-btn-af') return false;
       const t = (el.textContent || '').trim();
       return t === label || t.startsWith(label + ' ') || t.startsWith(label + '(');
     });
@@ -481,25 +490,100 @@ function injectPrintButton() {
     }
   }
 
-  // Strategy 2: AutoFlow DVI submit/print toolbar containers
+  // Strategy 2: AutoFlow DVI / ticket submit/print toolbar containers.
+  // Broadened to cover customized layouts reported by users — kept narrow
+  // to known toolbar / action-bar class shapes so we don't latch onto
+  // random divs.
   if (!target) {
-    const bar = document.querySelector(
-      '.btn-toolbar, .dvi-actions, .dvi_actions, .action-buttons, ' +
-      '[class*="dvi-toolbar"], [class*="dvi_toolbar"]'
-    );
-    if (bar) { target = bar; placement = 'append'; }
+    const toolbarSelectors = [
+      '.btn-toolbar',
+      '.dvi-actions', '.dvi_actions',
+      '.dvi-action-bar', '.dvi_action_bar',
+      '.dvi-toolbar', '.dvi_toolbar',
+      '.dvi-header .actions', '.dvi-header .pull-right',
+      '.dvi-footer .actions', '.dvi-footer .pull-right',
+      '.inspection-actions', '.inspection_actions',
+      '.inspection-toolbar', '.inspection_toolbar',
+      '.inspection-header .actions', '.inspection-header .pull-right',
+      '.ticket-actions', '.ticket_actions',
+      '.ticket-toolbar', '.ticket_toolbar',
+      '.ticket-header .actions', '.ticket-header .pull-right',
+      '.invoice-actions', '.invoice_actions',
+      '.invoice-toolbar', '.invoice_toolbar',
+      '.action-buttons', '.action-bar', '.action-bar .actions',
+      '.report-actions', '.report-toolbar',
+      '.print-actions', '.print-toolbar',
+      '.page-header .actions', '.page-header .pull-right',
+      '.page-header .btn-group', '.page-header__actions',
+      '.content-header .actions', '.content-header .pull-right',
+      '.toolbar .actions', '.toolbar',
+      "[class*='dvi-toolbar']", "[class*='dvi_toolbar']",
+      "[class*='dviToolbar']",
+      "[class*='inspection-toolbar']", "[class*='inspectionToolbar']",
+      "[class*='ticket-toolbar']", "[class*='ticketToolbar']",
+      "[class*='ActionBar']", "[class*='actionBar']",
+      "[class*='HeaderActions']", "[class*='headerActions']",
+      "[data-testid='dvi-actions']",
+      "[data-testid='inspection-actions']",
+      "[data-testid='ticket-actions']",
+    ];
+    for (const sel of toolbarSelectors) {
+      const el = document.querySelector(sel);
+      if (el) { target = el; placement = 'append'; break; }
+    }
   }
 
   // Strategy 3: standalone DVI viewer — look for a print-related anchor
+  // whose text contains "Print" (covers "Print", "Print PDF", etc).
   if (!target) {
-    const printish = candidates.find(el => /^\s*Print\s*$/i.test(el.textContent || ''));
+    const printish = candidates.find(el => {
+      if (el.id === 'mos-print-btn-af') return false;
+      const t = (el.textContent || '').trim();
+      return /^\s*Print\b/i.test(t) && t.length < 40;
+    });
     if (printish && printish.parentElement) {
       target = printish;
       placement = 'after';
     }
   }
 
-  if (!target) return; // try again on next tick
+  // Strategy 4: floating fallback. If no in-page anchor matched, pin the
+  // button to the bottom-right of the viewport so the print action is
+  // always reachable on customized DVI / ticket layouts. We log once per
+  // path so we can grow the anchor list from real telemetry later.
+  if (!target) {
+    const nowKey = window.location.pathname;
+    if (window.__mosPrintNoAnchorLogged !== nowKey) {
+      window.__mosPrintNoAnchorLogged = nowKey;
+      console.log(
+        '[MOS Telemetry]',
+        'print_button_no_anchor',
+        { path: nowKey, host: window.location.host, fallback: 'floating' }
+      );
+    }
+    const btn = createPrintButton();
+    btn.dataset.mosFloating = '1';
+    Object.assign(btn.style, {
+      position: 'fixed',
+      right: '20px',
+      bottom: '80px',
+      marginLeft: '0',
+      zIndex: '999998',
+      padding: '6px',
+      background: '#ffffff',
+      border: '1px solid rgba(0,0,0,0.12)',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+    });
+    document.body.appendChild(btn);
+    printButtonInjected = true;
+    lastInjectedUrl = window.location.href;
+    console.log(
+      '[MOS Telemetry]',
+      'print_button_injected',
+      { strategy: 'floating', path: window.location.pathname }
+    );
+    return;
+  }
 
   const btn = createPrintButton();
   if (placement === 'after') {
