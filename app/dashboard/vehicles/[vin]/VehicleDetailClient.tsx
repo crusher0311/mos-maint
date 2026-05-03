@@ -20,7 +20,7 @@ import {
   XCircle,
   Ban
 } from "lucide-react";
-import { formatGallonsDual, formatPoundsDual } from "@/lib/unit-format";
+import { formatGallons, formatPounds, type UnitDisplay } from "@/lib/unit-format";
 
 interface DeclinedService {
   serviceKey: string;
@@ -150,6 +150,7 @@ interface VehicleDetailClientProps {
   tekmetricConnected?: boolean;
   protractorConnected?: boolean;
   shopId?: string;
+  distanceUnit?: "miles" | "kilometers";
 }
 
 type TabId = "oe" | "dvi" | "carfax" | "specs";
@@ -238,7 +239,8 @@ export default function VehicleDetailClient({
   carfaxCfg,
   tekmetricConnected = false,
   protractorConnected = false,
-  shopId
+  shopId,
+  distanceUnit = "miles"
 }: VehicleDetailClientProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as TabId | null;
@@ -246,6 +248,8 @@ export default function VehicleDetailClient({
   const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoDecoded | null>(null);
   const [specsLoading, setSpecsLoading] = useState(false);
+  const defaultUnitDisplay: UnitDisplay = distanceUnit === "kilometers" ? "metric" : "imperial";
+  const [specsUnitDisplay, setSpecsUnitDisplay] = useState<UnitDisplay>(defaultUnitDisplay);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -1044,52 +1048,73 @@ export default function VehicleDetailClient({
 
                   {specsData && Object.keys(specsData.weightsAndCapacities).length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                      <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
+                      <div className="px-6 py-4 border-b border-gray-200 bg-blue-50 flex items-center justify-between gap-4 flex-wrap">
                         <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                           <span>⚖️</span> Weights & Capacities
                         </h3>
+                        <div className="inline-flex rounded-lg border border-gray-300 bg-white text-xs print:hidden" role="group" aria-label="Unit display">
+                          {([
+                            { value: "imperial", label: "Imperial" },
+                            { value: "metric", label: "Metric" },
+                            { value: "both", label: "Both" },
+                          ] as { value: UnitDisplay; label: string }[]).map((opt, i, arr) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setSpecsUnitDisplay(opt.value)}
+                              aria-pressed={specsUnitDisplay === opt.value}
+                              className={`px-3 py-1 transition-colors ${
+                                specsUnitDisplay === opt.value
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-white text-gray-700 hover:bg-gray-50"
+                              } ${i > 0 ? "border-l border-gray-300" : ""} ${i === 0 ? "rounded-l-lg" : ""} ${i === arr.length - 1 ? "rounded-r-lg" : ""}`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
                         {specsData.weightsAndCapacities.fuelTankCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Fuel Tank</div>
-                            <div className="font-semibold text-gray-900">{formatGallonsDual(specsData.weightsAndCapacities.fuelTankCapacity)}</div>
+                            <div className="font-semibold text-gray-900">{formatGallons(specsData.weightsAndCapacities.fuelTankCapacity, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.baseTowingCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Base Towing</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.baseTowingCapacity)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.baseTowingCapacity, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.maxTowingCapacity && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Max Towing</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.maxTowingCapacity)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.maxTowingCapacity, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.maxPayload && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Max Payload</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.maxPayload)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.maxPayload, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.curbWeight && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">Curb Weight</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.curbWeight)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.curbWeight, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.gvwr && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">GVWR</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.gvwr)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.gvwr, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.gcwr && (
                           <div>
                             <div className="text-xs text-gray-500 uppercase">GCWR</div>
-                            <div className="font-semibold text-gray-900">{formatPoundsDual(specsData.weightsAndCapacities.gcwr)}</div>
+                            <div className="font-semibold text-gray-900">{formatPounds(specsData.weightsAndCapacities.gcwr, specsUnitDisplay)}</div>
                           </div>
                         )}
                         {specsData.weightsAndCapacities.tonnage && (

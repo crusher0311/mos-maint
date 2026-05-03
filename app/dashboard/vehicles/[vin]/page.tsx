@@ -632,6 +632,14 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const shop = await db.collection("shops").findOne({});
   const tekmetricConnected = !!shop?.tekmetric?.shopId;
 
+  // Resolve shop preference for distance/units (used as default for the Specs tab unit display)
+  const shopWithPrefs = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { preferences: 1 } }
+  );
+  const distanceUnit: "miles" | "kilometers" =
+    shopWithPrefs?.preferences?.distanceUnit === "kilometers" ? "kilometers" : "miles";
+
   // Protractor inspections (DVI data from AutoVitals pushed to Protractor)
   let protractorDvi: any = null;
   const protractorCfg = await resolveProtractorConfig(shopId);
@@ -697,6 +705,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       tekmetricConnected={tekmetricConnected}
       protractorConnected={protractorCfg.configured}
       shopId={String(shopId)}
+      distanceUnit={distanceUnit}
     />
   );
 }

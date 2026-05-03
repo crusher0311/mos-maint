@@ -1,6 +1,8 @@
 export const GAL_TO_L = 3.785411784;
 export const LBS_TO_KG = 0.45359237;
 
+export type UnitDisplay = "imperial" | "metric" | "both";
+
 function toNum(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
@@ -19,16 +21,28 @@ function fmtDecimal(n: number, decimals: number): string {
   });
 }
 
-export function formatGallonsDual(value: unknown): string | null {
+export function formatGallons(value: unknown, mode: UnitDisplay = "both"): string | null {
   const n = toNum(value);
   if (n === null) return null;
   const liters = n * GAL_TO_L;
+  if (mode === "imperial") return `${fmtDecimal(n, 1)} gal`;
+  if (mode === "metric") return `${fmtDecimal(liters, 1)} L`;
   return `${fmtDecimal(n, 1)} gal / ${fmtDecimal(liters, 1)} L`;
 }
 
-export function formatPoundsDual(value: unknown): string | null {
+export function formatPounds(value: unknown, mode: UnitDisplay = "both"): string | null {
   const n = toNum(value);
   if (n === null) return null;
   const kg = n * LBS_TO_KG;
+  if (mode === "imperial") return `${fmtInt(n)} lbs`;
+  if (mode === "metric") return `${fmtInt(kg)} kg`;
   return `${fmtInt(n)} lbs / ${fmtInt(kg)} kg`;
+}
+
+export function formatGallonsDual(value: unknown): string | null {
+  return formatGallons(value, "both");
+}
+
+export function formatPoundsDual(value: unknown): string | null {
+  return formatPounds(value, "both");
 }
