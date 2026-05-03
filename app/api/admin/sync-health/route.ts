@@ -220,6 +220,7 @@ export async function GET() {
       shopwareShopDocs,
       chunkSpeedAlertDocs,
       tekmetricCatchupRunDocs,
+      tekmetricEligibleShopDocs,
     ] = await Promise.all([
       db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db.collection("backfill_progress").find({}).toArray(),
@@ -328,13 +329,40 @@ export async function GET() {
       // doc per run with the SUMMARY block contents + filters used + a
       // suggested re-run command. Surfaced here so on-call can pull up the
       // last few catch-ups from the UI without grepping a multi-hour log.
-      // We pull the most-recent 5 — enough for "what did the last
-      // overnight run cover and what still needs follow-up?" without
-      // bloating the JSON payload.
+      // Pull the most-recent 10 runs: the first 5 feed the visible
+      // "Tekmetric catch-up runs" section below; all 10 form the
+      // coverage window that powers the new catch-up-coverage card so
+      // on-call can see which Tekmetric shops haven't been touched by
+      // the recent overnight runs (task #287). Mirrors the
+      // `coverage` default in /api/cron/catchup-status.
       db.collection("tekmetric_catchup_runs")
         .find({})
         .sort({ startedAt: -1 })
-        .limit(5)
+        .limit(10)
+        .toArray(),
+      // Tekmetric-eligible shops for the catch-up coverage join. Same
+      // OR-filter as /api/cron/catchup-status so the totals on the
+      // sync-health card line up with what that endpoint returns. Kept
+      // separate from `tekmetricShopDocs` (which intentionally restricts
+      // to `tekmetric.shopId` for the inspections / prewarm overlays)
+      // because legacy `tekmetricShopId` shops should still count toward
+      // coverage.
+      db.collection("shops")
+        .find({
+          $or: [
+            { "tekmetric.shopId": { $exists: true, $ne: null } },
+            { tekmetricShopId: { $exists: true, $ne: null } },
+          ],
+        })
+        .project({
+          shopId: 1,
+          name: 1,
+          locationIdentifier: 1,
+          "tekmetric.shopId": 1,
+          tekmetricShopId: 1,
+          tekmetricBackfillComplete: 1,
+          _id: 0,
+        })
         .toArray(),
     ]);
 
@@ -368,7 +396,7 @@ export async function GET() {
     // BSON Date objects, and missing/legacy fields are defaulted to safe
     // empty values so an old record from before the script change can still
     // be displayed without crashing the view.
-    const tekmetricCatchupRuns = (tekmetricCatchupRunDocs as any[]).map((d) => {
+    const tekmetricCatchupRuns = (tekmetricCatchupRunDocs as any[]).slice(0, 5).map((d) => {
       const startedAt = d?.startedAt ? safeIso(d.startedAt) : null;
       const finishedAt = d?.finishedAt ? safeIso(d.finishedAt) : null;
       return {
@@ -400,6 +428,112 @@ export async function GET() {
         suggestedRerunCommand: d?.suggestedRerunCommand || null,
       };
     });
+
+    // Catch-up coverage (task #287). Mirrors the per-shop join performed by
+    // /api/cron/catchup-status: walk the most-recent N catch-up runs and
+    // tally, for each Tekmetric-eligible shop, how many of those runs
+    // included it and when it was last touched. The cron-style endpoint is
+    // gated on CRON_SECRET, so on-call needs the same data exposed in the
+    // browser-facing platform-admin Sync Health page. Window matches the
+    // endpoint's default of 10 runs.
+    const COVERAGE_WINDOW_RUNS = 10;
+    const tekmetricBackfillCompleteByShop = new Map<number, boolean>();
+    for (const p of tekmetricBackfillProgress as any[]) {
+      tekmetricBackfillCompleteByShop.set(Number(p.shopId), !!p.completed);
+    }
+    const catchupCoverageMap = new Map<
+      number,
+      { lastSeenAt: Date | null; runsCovered: number; lastOutcome: string | null }
+    >();
+    const catchupCoverageWindow = (tekmetricCatchupRunDocs as any[]).slice(
+      0,
+      COVERAGE_WINDOW_RUNS,
+    );
+    for (const run of catchupCoverageWindow) {
+      const ts: Date | null = run?.startedAt || run?.createdAt || null;
+      const results: any[] = Array.isArray(run?.results) ? run.results : [];
+      // Older catch-up runs (pre-task-#181 schema change) don't have a
+      // per-shop `results` array — they only persisted bucketed shop ID
+      // lists. Fall back to those buckets so coverage history doesn't
+      // drop to zero just because the renderer is looking back further
+      // than the new schema's existed.
+      const fallbackIds: number[] = results.length === 0
+        ? Array.from(
+            new Set([
+              ...((Array.isArray(run?.completedShopIds) ? run.completedShopIds : []) as number[]),
+              ...((Array.isArray(run?.recoveredShopIds) ? run.recoveredShopIds : []) as number[]),
+              ...((Array.isArray(run?.dryRunShopIds) ? run.dryRunShopIds : []) as number[]),
+              ...((Array.isArray(run?.needsFollowup)
+                ? run.needsFollowup.map((n: any) => Number(n?.shopId))
+                : []) as number[]),
+            ]),
+          ).filter((n) => Number.isFinite(n))
+        : [];
+      const iter: { sid: number; outcome: string | null }[] = results.length > 0
+        ? results.map((r: any) => ({
+            sid: Number(r?.shopId),
+            outcome: r?.outcome ?? null,
+          }))
+        : fallbackIds.map((sid) => ({ sid, outcome: null }));
+      for (const { sid, outcome } of iter) {
+        if (!Number.isFinite(sid)) continue;
+        const existing = catchupCoverageMap.get(sid);
+        if (existing) {
+          existing.runsCovered += 1;
+          if (ts && (!existing.lastSeenAt || ts > existing.lastSeenAt)) {
+            existing.lastSeenAt = ts;
+            existing.lastOutcome = outcome ?? existing.lastOutcome;
+          }
+        } else {
+          catchupCoverageMap.set(sid, {
+            lastSeenAt: ts,
+            runsCovered: 1,
+            lastOutcome: outcome ?? null,
+          });
+        }
+      }
+    }
+    const tekmetricCatchupCoverageShops = (tekmetricEligibleShopDocs as any[])
+      .map((s: any) => {
+        const sid = Number(s.shopId);
+        const cov = catchupCoverageMap.get(sid);
+        const tekShopId = s?.tekmetric?.shopId ?? s?.tekmetricShopId ?? null;
+        const complete =
+          s.tekmetricBackfillComplete === true ||
+          tekmetricBackfillCompleteByShop.get(sid) === true;
+        return {
+          shopId: sid,
+          name: s.name || s.locationIdentifier || `Shop ${sid}`,
+          tekmetricShopId: tekShopId,
+          complete,
+          lastCoveredByCatchupAt: cov?.lastSeenAt
+            ? safeIso(cov.lastSeenAt)
+            : null,
+          catchupRunsCovered: cov?.runsCovered || 0,
+          lastCatchupOutcome: cov?.lastOutcome || null,
+        };
+      })
+      // Worst-coverage first: shops never covered float to the top, then
+      // shops covered the fewest times, then by shopId so the order is
+      // stable across loads.
+      .sort((a: any, b: any) => {
+        if (a.catchupRunsCovered !== b.catchupRunsCovered) {
+          return a.catchupRunsCovered - b.catchupRunsCovered;
+        }
+        return a.shopId - b.shopId;
+      });
+    const tekmetricCatchupCoverage = {
+      coverageWindowRuns: catchupCoverageWindow.length,
+      windowRunLimit: COVERAGE_WINDOW_RUNS,
+      tekShopsTotal: tekmetricCatchupCoverageShops.length,
+      // Match /api/cron/catchup-status semantics: "uncovered" only
+      // counts incomplete shops, since completed shops legitimately
+      // don't need catch-up runs anymore.
+      uncoveredShopCount: tekmetricCatchupCoverageShops.filter(
+        (s: any) => s.catchupRunsCovered === 0 && !s.complete,
+      ).length,
+      shops: tekmetricCatchupCoverageShops,
+    };
 
     const tekmetricShopsComplete = tekmetricBackfillProgress.filter((p: any) => p.completed).length;
     const tekmetricShopsTotal = tekmetricBackfillProgress.length;
@@ -896,6 +1030,11 @@ export async function GET() {
           // from the UI instead of grepping a log.
           catchupRuns: tekmetricCatchupRuns,
           catchupRunCount: tekmetricCatchupRuns.length,
+          // Per-shop catch-up coverage over the last N runs (task #287).
+          // Same shape & semantics as /api/cron/catchup-status so on-call
+          // gets identical numbers in the browser without needing the
+          // CRON_SECRET-gated endpoint.
+          catchupCoverage: tekmetricCatchupCoverage,
         },
         protractor: {
           complete: protractorShopsComplete,
