@@ -123,16 +123,34 @@ export class SupabaseDualWriter {
   }
 
   async upsertWorkOrder(doc: any): Promise<void> {
+    // Supabase normalized_work_orders requires work_order_number, vehicle_id,
+    // and vehicle (jsonb) NOT NULL — none have a column default. Some upstream
+    // ROs (mostly Protractor invoices with no attached vehicle) arrive with
+    // these fields blank, which previously caused the entire dual-write to
+    // crash with pgCode 23502 and abort the work-order mirror. Skip those
+    // rows with a warning so Mongo continues to be the source of truth and
+    // the rest of the dual-write pipeline keeps flowing.
+    const missing: string[] = [];
+    if (!doc.workOrderNumber) missing.push("workOrderNumber");
+    if (!doc.vehicleId) missing.push("vehicleId");
+    if (!doc.vehicle) missing.push("vehicle");
+    if (missing.length > 0) {
+      console.log(
+        `[DualWrite] Skipping work_order ${doc._id} (shop ${doc.shopId}) — missing required Supabase fields: ${missing.join(", ")}`
+      );
+      return;
+    }
+
     const row = {
       id: doc._id,
       shopId: doc.shopId,
       enterpriseId: doc.enterpriseId || null,
-      workOrderNumber: doc.workOrderNumber || null,
+      workOrderNumber: doc.workOrderNumber,
       workOrderType: doc.workOrderType || "repair",
       status: doc.status || "closed",
-      vehicleId: doc.vehicleId || null,
+      vehicleId: doc.vehicleId,
       customerId: doc.customerId || null,
-      vehicle: doc.vehicle || null,
+      vehicle: doc.vehicle,
       customer: doc.customer || null,
       odometerIn: doc.odometerIn || null,
       odometerOut: doc.odometerOut || null,
