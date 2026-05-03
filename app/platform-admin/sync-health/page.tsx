@@ -3639,6 +3639,16 @@ export default function SyncHealthPage() {
               <BookOpen className="w-3 h-3" />
               How to run this
             </a>
+            <a
+              href="/platform-admin/runbooks/backfill-drain"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-full"
+              title="Nuclear option: full drain of incomplete Tekmetric and Protractor backfills from prod Render Shell"
+            >
+              <BookOpen className="w-3 h-3" />
+              Drain runbook (nuclear)
+            </a>
             <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded-full">
               last {list.length} run{list.length === 1 ? "" : "s"}
             </span>
