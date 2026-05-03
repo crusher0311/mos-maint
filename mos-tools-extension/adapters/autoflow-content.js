@@ -613,19 +613,44 @@ function injectCreateRoButton() {
     return;
   }
 
-  // Strategy 1: a top-level page header / nav action area.
+  // Strategy 1: a top-level page header / nav action area. This list has
+  // grown organically as we've onboarded tenants whose dashboards don't
+  // match the original two heuristics; keep additions narrowly-scoped to
+  // headers/toolbars so we don't latch onto random divs.
   const headerCandidates = [
     "header .actions",
     "header .header-actions",
     ".page-header .actions",
     ".page-header .btn-group",
+    ".page-header .pull-right",
+    ".page-header__actions",
     ".navbar .navbar-right",
     ".navbar .navbar-nav.ml-auto",
     ".navbar-nav.ml-auto",
+    ".navbar .nav.navbar-nav.navbar-right",
     ".dashboard-header .actions",
+    ".dashboard-header .pull-right",
+    ".dashboard-toolbar",
+    ".dashboard-toolbar .actions",
     ".main-header .actions",
+    ".main-header .pull-right",
+    ".content-header .pull-right",
+    ".content-header .actions",
     ".toolbar .actions",
     ".btn-toolbar",
+    ".workflow-header .actions",
+    ".workflow-toolbar",
+    ".board-header .actions",
+    ".board-toolbar",
+    ".tickets-header .actions",
+    ".tickets-toolbar",
+    ".action-bar",
+    ".action-bar .actions",
+    "[class*='HeaderActions']",
+    "[class*='headerActions']",
+    "[class*='PageHeader'] [class*='actions']",
+    "[data-testid='page-header-actions']",
+    "[data-testid='dashboard-actions']",
   ];
   let target = null;
   let placement = "append";
@@ -646,12 +671,22 @@ function injectCreateRoButton() {
       "Add Ticket",
       "New Inspection",
       "New Invoice",
+      "New RO",
+      "Create RO",
+      "Add RO",
+      "New Estimate",
+      "Create Estimate",
+      "New Work Order",
       "Add",
+      "+ Ticket",
+      "+ Invoice",
+      "+ Inspection",
     ];
     const candidates = Array.from(document.querySelectorAll("a, button"));
     for (const label of KNOWN_LABELS) {
       const hit = candidates.find((el) => {
         const t = (el.textContent || "").trim();
+        if (el.id === "mos-create-ro-btn-af") return false;
         return t === label || t.startsWith(label + " ");
       });
       if (hit && hit.parentElement) {
@@ -662,19 +697,39 @@ function injectCreateRoButton() {
     }
   }
 
+  // Strategy 3: floating fallback. If no in-page anchor matched, pin the
+  // button to the bottom-right of the viewport so it's always reachable
+  // on customized dashboards. We log once per path so we still get the
+  // telemetry signal to add a proper anchor later.
   if (!target) {
-    // No anchor matched — log once per page-load so we have something to
-    // grep for when adding new layouts. Throttled to avoid log spam from
-    // the MutationObserver firing every render.
     const nowKey = window.location.pathname;
     if (window.__mosCreateRoNoAnchorLogged !== nowKey) {
       window.__mosCreateRoNoAnchorLogged = nowKey;
       console.log(
         "[MOS Telemetry]",
         "create_ro_button_no_anchor",
-        { path: nowKey, host: window.location.host }
+        { path: nowKey, host: window.location.host, fallback: "floating" }
       );
     }
+    const btn = createCreateRoButton();
+    btn.dataset.mosFloating = "1";
+    Object.assign(btn.style, {
+      position: "fixed",
+      right: "20px",
+      bottom: "20px",
+      marginLeft: "0",
+      zIndex: "999998",
+      padding: "10px 16px",
+      fontSize: "14px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+    });
+    document.body.appendChild(btn);
+    createRoButtonInjected = true;
+    console.log(
+      "[MOS Telemetry]",
+      "create_ro_button_injected",
+      { strategy: "floating", path: window.location.pathname }
+    );
     return;
   }
 
