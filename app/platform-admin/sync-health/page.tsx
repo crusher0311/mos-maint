@@ -138,6 +138,18 @@ interface ChunkSpeedShop {
   } | null;
 }
 
+interface InspectionsTokenHealthShop {
+  shopId: number;
+  tekmetricShopId: number | null;
+  status: 'unauthorized' | 'ok';
+  tokenFingerprint: string | null;
+  shortCircuitedAt: string | null;
+  shortCircuitExpiresAt: string | null;
+  skippedRoCount: number;
+  consecutive401s: number;
+  updatedAt: string | null;
+}
+
 interface JobsCachePrewarmShop {
   shopId: number;
   // Tekmetric-only — undefined for Shop-Ware. The renderer doesn't
@@ -213,6 +225,12 @@ interface ProviderBackfill {
   jobsCachePrewarmMissingCount?: number;
   jobsCachePrewarmCappedCount?: number;
   jobsCachePrewarmErrorsCount?: number;
+  // Tekmetric-only: inspections-endpoint x-auth-token health (task #279).
+  // Lists shops whose internal inspections endpoint is currently 401-
+  // short-circuited along with how many ROs were skipped this window.
+  inspectionsTokenHealth?: InspectionsTokenHealthShop[];
+  inspectionsTokenUnauthorizedShopCount?: number;
+  inspectionsRosSkippedTotal?: number;
   // Protractor-only: per-shop invoice-cache pre-warm overlay.
   invoiceCachePrewarm?: ProtractorInvoiceCachePrewarmShop[];
   invoiceCachePrewarmShopCount?: number;
@@ -3248,6 +3266,93 @@ export default function SyncHealthPage() {
   // command) into `tekmetric_catchup_runs` after each invocation; this
   // section renders the most-recent few so on-call doesn't have to grep
   // a multi-hour log to remember what the last run covered.
+  const renderInspectionsTokenHealthSection = (
+    shops: InspectionsTokenHealthShop[] | undefined,
+    skippedTotal: number | undefined,
+  ) => {
+    const list = shops || [];
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-rose-600" />
+            <h2 className="font-semibold text-gray-900">
+              Tekmetric inspections token health
+            </h2>
+            <span className="px-2 py-0.5 text-xs bg-rose-100 text-rose-700 rounded-full">
+              {list.length} unauthorized shop{list.length === 1 ? "" : "s"}
+            </span>
+            {(skippedTotal ?? 0) > 0 && (
+              <span
+                className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full"
+                title="Total ROs whose inspections fetch was skipped this window across unauthorized shops"
+              >
+                {skippedTotal} ROs skipped
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 max-w-md">
+            Shops whose internal inspections endpoint
+            (<code className="font-mono">/shop/&#123;id&#125;/repair-orders/[ro]/inspections</code>)
+            tripped the 401 short-circuit. Sync continues with empty
+            inspections for these shops; subsequent calls in the same window
+            are skipped instead of re-spamming the API traffic page.
+          </p>
+        </div>
+
+        {list.length === 0 ? (
+          <div className="p-6 flex items-center justify-center gap-2 text-gray-500">
+            <CheckCircle2 className="w-5 h-5 text-green-500" />
+            All shops&apos; inspections tokens are healthy.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-600 uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Shop</th>
+                  <th className="px-4 py-2 text-left">Tek shop ID</th>
+                  <th className="px-4 py-2 text-left">Token</th>
+                  <th className="px-4 py-2 text-right">Skipped ROs</th>
+                  <th className="px-4 py-2 text-right">Consecutive 401s</th>
+                  <th className="px-4 py-2 text-left">Short-circuited at</th>
+                  <th className="px-4 py-2 text-left">Expires</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {list.map((s) => (
+                  <tr key={s.shopId} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-900">
+                      {s.shopId}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {s.tekmetricShopId ?? "—"}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-600">
+                      {s.tokenFingerprint || "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold text-amber-700">
+                      {s.skippedRoCount}
+                    </td>
+                    <td className="px-4 py-2 text-right text-rose-700">
+                      {s.consecutive401s}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {formatDateTime(s.shortCircuitedAt)}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">
+                      {formatDateTime(s.shortCircuitExpiresAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderCatchupRunsSection = (runs: CatchupRun[] | undefined) => {
     const list = runs || [];
     const newest = list[0] || null;
@@ -3662,6 +3767,11 @@ export default function SyncHealthPage() {
           </div>
         </div>
       </div>
+
+      {renderInspectionsTokenHealthSection(
+        tek?.inspectionsTokenHealth,
+        tek?.inspectionsRosSkippedTotal,
+      )}
 
       {renderCatchupRunsSection(tek?.catchupRuns)}
 

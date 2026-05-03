@@ -274,6 +274,13 @@ export async function GET() {
             shopId: 1,
             "tekmetric.shopId": 1,
             "tekmetric.jobsCachePrewarm": 1,
+            // Inspections-endpoint x-auth-token health (task #279). Stamped
+            // by lib/integrations/tekmetric/client.ts when a shop trips the
+            // 401 short-circuit on the internal inspections endpoint, and
+            // cleared on the next successful 200. Surfaced here so admins
+            // can see "shop X's inspections token is broken — N ROs skipped
+            // this cycle" without trawling the API traffic page.
+            "tekmetric.inspectionsTokenHealth": 1,
             _id: 0,
           },
         },
@@ -594,6 +601,35 @@ export async function GET() {
         record: s?.tekmetric?.jobsCachePrewarm || null,
       });
     }
+
+    // Inspections-endpoint token health overlay (task #279). The doc is
+    // stamped by `getRepairOrderInspectionsWithXAuth` when a shop trips the
+    // 401 short-circuit and cleared on the next 200. We only surface
+    // currently-unauthorized shops so the panel auto-clears once the token
+    // is fixed.
+    const tekmetricInspectionsTokenHealth = (tekmetricShopDocs as any[])
+      .map((s: any) => {
+        const h = s?.tekmetric?.inspectionsTokenHealth;
+        if (!h || h.status !== 'unauthorized') return null;
+        return {
+          shopId: s.shopId,
+          tekmetricShopId: s?.tekmetric?.shopId ?? null,
+          status: h.status,
+          tokenFingerprint: h.tokenFingerprint || null,
+          shortCircuitedAt: h.shortCircuitedAt || null,
+          shortCircuitExpiresAt: h.shortCircuitExpiresAt || null,
+          skippedRoCount: h.skippedRoCount ?? 0,
+          consecutive401s: h.consecutive401s ?? 0,
+          updatedAt: h.updatedAt || null,
+        };
+      })
+      .filter((x: any) => x !== null);
+    const tekmetricInspectionsTokenUnauthorizedShopCount =
+      tekmetricInspectionsTokenHealth.length;
+    const tekmetricInspectionsRosSkippedTotal = tekmetricInspectionsTokenHealth.reduce(
+      (sum: number, h: any) => sum + (h.skippedRoCount || 0),
+      0,
+    );
     const tekmetricJobsCachePrewarm = tekmetricBackfillProgress
       .map((p: any) => {
         const entry = tekmetricPrewarmByShopId.get(String(p.shopId));
@@ -845,6 +881,14 @@ export async function GET() {
           jobsCachePrewarmMissingCount: tekmetricJobsCachePrewarmMissingCount,
           jobsCachePrewarmCappedCount: tekmetricJobsCachePrewarmCappedCount,
           jobsCachePrewarmErrorsCount: tekmetricJobsCachePrewarmErrorsCount,
+          // Inspections-endpoint x-auth-token health (task #279). Lists
+          // shops whose inspections token is currently 401-short-circuited
+          // along with the count of ROs whose inspections fetch was
+          // suppressed for the window. Empty when all shops are healthy.
+          inspectionsTokenHealth: tekmetricInspectionsTokenHealth,
+          inspectionsTokenUnauthorizedShopCount:
+            tekmetricInspectionsTokenUnauthorizedShopCount,
+          inspectionsRosSkippedTotal: tekmetricInspectionsRosSkippedTotal,
           // Persisted catch-up run summaries (task #181). The
           // `scripts/tekmetric-catchup.mjs` runner writes one record per
           // run into `tekmetric_catchup_runs`; we expose the most-recent

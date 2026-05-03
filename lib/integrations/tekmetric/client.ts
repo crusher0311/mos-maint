@@ -413,6 +413,127 @@ export async function getRepairOrderInspections(
   return [];
 }
 
+// Per-(shop+token) health tracker for the internal inspections endpoint. The
+// inspections endpoint authenticates against a separate `x-auth-token` (not
+// the bearer token used by the public Tekmetric API), so a missing/invalid
+// token causes every RO in a sync cycle to 401 individually — drowning the
+// API traffic page in hundreds of duplicate 401 rows for the same shop and
+// retrying ROs we already know will fail.
+//
+// Once a shop has returned 401 from the inspections endpoint
+// `INSPECTIONS_401_THRESHOLD` times in a row on a given token, we
+// short-circuit further calls for the rest of the window: subsequent calls
+// return [] immediately without hitting Tekmetric and without recording per-
+// RO traffic rows. We also dedupe ROs that already 401'd within the window
+// so the same RO isn't re-attempted in a single sync cycle.
+//
+// Sync-side behaviour is unchanged: callers always see an empty inspections
+// array and continue, mirroring the current "401 = no inspections" semantic.
+const INSPECTIONS_401_THRESHOLD = 3;
+const INSPECTIONS_HEALTH_TTL_MS = 30 * 60 * 1000;
+
+interface InspectionsHealthState {
+  tokenFingerprint: string;
+  consecutive401s: number;
+  shortCircuitedAt: number | null;
+  shortCircuitExpiresAt: number | null;
+  skippedRoIds: Set<number>;
+  failed401RoIds: Set<number>;
+  recorded401TrafficCount: number;
+  persistedAt: number | null;
+}
+
+const inspectionsHealthByShop = new Map<number, InspectionsHealthState>();
+
+function fingerprintToken(token: string): string {
+  if (!token) return '';
+  if (token.length <= 8) return token;
+  return `…${token.slice(-8)}`;
+}
+
+function freshInspectionsHealth(tokenFingerprint: string): InspectionsHealthState {
+  return {
+    tokenFingerprint,
+    consecutive401s: 0,
+    shortCircuitedAt: null,
+    shortCircuitExpiresAt: null,
+    skippedRoIds: new Set<number>(),
+    failed401RoIds: new Set<number>(),
+    recorded401TrafficCount: 0,
+    persistedAt: null,
+  };
+}
+
+function getInspectionsHealth(tekmetricShopId: number, tokenFingerprint: string): InspectionsHealthState {
+  const existing = inspectionsHealthByShop.get(tekmetricShopId);
+  const now = Date.now();
+  if (
+    !existing ||
+    existing.tokenFingerprint !== tokenFingerprint ||
+    (existing.shortCircuitExpiresAt !== null && now > existing.shortCircuitExpiresAt)
+  ) {
+    const fresh = freshInspectionsHealth(tokenFingerprint);
+    inspectionsHealthByShop.set(tekmetricShopId, fresh);
+    return fresh;
+  }
+  return existing;
+}
+
+async function persistInspectionsTokenHealth(
+  tekmetricShopId: number,
+  state: InspectionsHealthState,
+  status: 'short_circuited' | 'recovered',
+): Promise<void> {
+  try {
+    const { getDb } = await import('@/lib/mongo');
+    const db = await getDb();
+    if (status === 'short_circuited') {
+      await db.collection('shops').updateOne(
+        { 'tekmetric.shopId': tekmetricShopId },
+        {
+          $set: {
+            'tekmetric.inspectionsTokenHealth': {
+              status: 'unauthorized',
+              tokenFingerprint: state.tokenFingerprint,
+              shortCircuitedAt: state.shortCircuitedAt ? new Date(state.shortCircuitedAt) : new Date(),
+              shortCircuitExpiresAt: state.shortCircuitExpiresAt ? new Date(state.shortCircuitExpiresAt) : null,
+              skippedRoCount: state.skippedRoIds.size,
+              consecutive401s: state.consecutive401s,
+              updatedAt: new Date(),
+            },
+          },
+        },
+      );
+    } else {
+      await db.collection('shops').updateOne(
+        { 'tekmetric.shopId': tekmetricShopId },
+        {
+          $set: {
+            'tekmetric.inspectionsTokenHealth': {
+              status: 'ok',
+              tokenFingerprint: state.tokenFingerprint,
+              recoveredAt: new Date(),
+              updatedAt: new Date(),
+            },
+          },
+        },
+      );
+    }
+    state.persistedAt = Date.now();
+  } catch (err: any) {
+    console.warn(`[Tekmetric] Failed to persist inspections token health for shop ${tekmetricShopId}: ${err?.message || err}`);
+  }
+}
+
+function periodicallyPersistSkipCount(tekmetricShopId: number, state: InspectionsHealthState): void {
+  // Refresh `skippedRoCount` on the persisted health doc so the sync-health
+  // view reflects the live count of suppressed ROs as the cycle progresses.
+  // Throttled to once every 60s to avoid hammering Mongo from the sync loop.
+  const now = Date.now();
+  if (state.persistedAt && now - state.persistedAt < 60_000) return;
+  void persistInspectionsTokenHealth(tekmetricShopId, state, 'short_circuited');
+}
+
 export async function getRepairOrderInspectionsWithXAuth(
   repairOrderId: number, 
   tekmetricShopId: number,
@@ -421,9 +542,29 @@ export async function getRepairOrderInspectionsWithXAuth(
   if (!tekmetricShopId || !xAuthToken) {
     return [];
   }
-  
+
+  const tokenFingerprint = fingerprintToken(xAuthToken);
+  const health = getInspectionsHealth(tekmetricShopId, tokenFingerprint);
+
+  // Short-circuit: token is known-bad for this shop in the current window.
+  // Skip the API call entirely and don't record per-RO traffic noise.
+  if (health.shortCircuitExpiresAt !== null && Date.now() < health.shortCircuitExpiresAt) {
+    health.skippedRoIds.add(repairOrderId);
+    periodicallyPersistSkipCount(tekmetricShopId, health);
+    return [];
+  }
+
+  // Same RO already 401'd within this window — don't retry it for the cycle.
+  if (health.failed401RoIds.has(repairOrderId)) {
+    health.skippedRoIds.add(repairOrderId);
+    return [];
+  }
+
   const url = `${TEKMETRIC_INTERNAL_BASE_URL}/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
-  const endpointPath = `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
+  const fullEndpointPath = `/shop/${tekmetricShopId}/repair-orders/${repairOrderId}/inspections`;
+  // Collapsed endpoint identifier used for 401 records so the API traffic
+  // page groups them into a single per-shop row instead of one row per RO.
+  const collapsedEndpointPath = `/shop/${tekmetricShopId}/repair-orders/[ro]/inspections`;
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
     try {
@@ -445,9 +586,9 @@ export async function getRepairOrderInspectionsWithXAuth(
       });
 
       const latencyMs = Date.now() - startTime;
-      trackApiRequest('tekmetric', endpointPath, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
 
       if (response.status === 429 && attempt <= MAX_429_RETRIES) {
+        trackApiRequest('tekmetric', fullEndpointPath, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
         const retryAfter = response.headers.get('Retry-After');
         const backoffMs = compute429Backoff(attempt, retryAfter);
         console.warn(`[Tekmetric] 429 on inspection fetch RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
@@ -457,11 +598,64 @@ export async function getRepairOrderInspectionsWithXAuth(
         continue;
       }
 
+      if (response.status === 401) {
+        health.consecutive401s++;
+        health.failed401RoIds.add(repairOrderId);
+        health.skippedRoIds.add(repairOrderId);
+
+        // Record the first 401 with the collapsed endpoint so admins still
+        // see "shop X inspections endpoint is 401'ing" once on the API
+        // traffic page. Subsequent 401s in the same window are suppressed.
+        if (health.recorded401TrafficCount === 0) {
+          health.recorded401TrafficCount++;
+          trackApiRequest('tekmetric', collapsedEndpointPath, 'GET', 401, latencyMs, tekmetricShopId).catch(() => {});
+        }
+
+        if (
+          health.consecutive401s >= INSPECTIONS_401_THRESHOLD &&
+          health.shortCircuitedAt === null
+        ) {
+          const now = Date.now();
+          health.shortCircuitedAt = now;
+          health.shortCircuitExpiresAt = now + INSPECTIONS_HEALTH_TTL_MS;
+          console.warn(
+            `[Tekmetric] Inspections endpoint short-circuited for shop ${tekmetricShopId} ` +
+            `after ${health.consecutive401s} consecutive 401s on token ${tokenFingerprint}. ` +
+            `Skipping inspections fetch for ${Math.round(INSPECTIONS_HEALTH_TTL_MS / 60_000)}m.`,
+          );
+          void persistInspectionsTokenHealth(tekmetricShopId, health, 'short_circuited');
+        }
+        return [];
+      }
+
+      // Any other response (success or non-401 error) is recorded normally
+      // with the full per-RO endpoint, matching prior behaviour.
+      trackApiRequest('tekmetric', fullEndpointPath, 'GET', response.status, latencyMs, tekmetricShopId).catch(() => {});
+
       if (!response.ok) {
-        if (response.status !== 401 && response.status !== 403) {
+        if (response.status !== 403) {
           console.warn(`[Tekmetric] Inspection fetch failed for RO ${repairOrderId}: ${response.status}`);
         }
         return [];
+      }
+
+      // Recovery: a 200 means the token works again. Clear any prior
+      // short-circuit / counters and persist the recovered state so admins
+      // see the badge clear in the Sync Health view.
+      const wasShortCircuited = health.shortCircuitedAt !== null;
+      const had401s = health.consecutive401s > 0;
+      if (had401s || wasShortCircuited) {
+        if (wasShortCircuited) {
+          console.log(
+            `[Tekmetric] Inspections endpoint recovered for shop ${tekmetricShopId} ` +
+            `on token ${tokenFingerprint} after ${health.skippedRoIds.size} skipped RO(s).`,
+          );
+        }
+        const fresh = freshInspectionsHealth(tokenFingerprint);
+        inspectionsHealthByShop.set(tekmetricShopId, fresh);
+        if (wasShortCircuited) {
+          void persistInspectionsTokenHealth(tekmetricShopId, fresh, 'recovered');
+        }
       }
 
       return response.json();
@@ -473,6 +667,38 @@ export async function getRepairOrderInspectionsWithXAuth(
 
   console.warn(`[Tekmetric] Inspection fetch RO ${repairOrderId} exceeded ${MAX_429_RETRIES} retries`);
   return [];
+}
+
+/**
+ * Test-only / admin helper to inspect the in-memory inspections-token health
+ * for a given Tekmetric shop. Returns a snapshot, not the live Set objects,
+ * so callers can't mutate internal state.
+ */
+export function _peekInspectionsHealth(tekmetricShopId: number): {
+  tokenFingerprint: string;
+  consecutive401s: number;
+  shortCircuited: boolean;
+  shortCircuitedAt: number | null;
+  shortCircuitExpiresAt: number | null;
+  skippedRoCount: number;
+  recorded401TrafficCount: number;
+} | null {
+  const s = inspectionsHealthByShop.get(tekmetricShopId);
+  if (!s) return null;
+  return {
+    tokenFingerprint: s.tokenFingerprint,
+    consecutive401s: s.consecutive401s,
+    shortCircuited: s.shortCircuitedAt !== null && Date.now() < (s.shortCircuitExpiresAt ?? 0),
+    shortCircuitedAt: s.shortCircuitedAt,
+    shortCircuitExpiresAt: s.shortCircuitExpiresAt,
+    skippedRoCount: s.skippedRoIds.size,
+    recorded401TrafficCount: s.recorded401TrafficCount,
+  };
+}
+
+/** Test-only helper to clear the in-memory health map. */
+export function _resetInspectionsHealthForTests(): void {
+  inspectionsHealthByShop.clear();
 }
 
 export function mapInspectionRatingToStatus(code: string): 'good' | 'bad' | 'marginal' | 'not_inspected' {
