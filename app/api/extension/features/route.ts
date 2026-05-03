@@ -81,11 +81,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Task #340: surface the shop's distance preference so the side-panel
+    // renderer can label hardcoded "mi" strings (mileage chip, last-done
+    // tooltips, interval/dueAt/overdue text) in the right unit before the
+    // plan response arrives.
+    const shopDoc = shopResult?.shopDoc as any;
+    const distanceUnit: "miles" | "kilometers" =
+      (shopDoc?.preferences?.distanceUnit ?? shopDoc?.settings?.distanceUnit) === "kilometers"
+        ? "kilometers"
+        : "miles";
+
     return NextResponse.json({ 
       features: entitlements.effectiveFeatures,
       shopId: mosShopId,
       integrations,
       writeProvider,
+      distanceUnit,
       billing: {
         plan: entitlements.billing.plan,
         status: entitlements.billing.status

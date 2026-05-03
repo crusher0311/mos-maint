@@ -3,6 +3,7 @@ import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
+import { getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,6 +116,16 @@ export async function POST(request: NextRequest) {
     }, { headers: corsHeaders });
   }
 
+  // Task #340: localize fallback "miles" wording in coach recommendations so
+  // Canadian shops don't see mismatched units alongside km headlines.
+  const shopDistanceUnit: DistanceUnit =
+    ((guard.shopDoc as any)?.preferences?.distanceUnit
+      ?? (guard.shopDoc as any)?.settings?.distanceUnit
+      ?? "miles") === "kilometers"
+      ? "kilometers"
+      : "miles";
+  const distLabelFull = getDistanceLabelFull(shopDistanceUnit);
+
   const vhiByKey: Record<string, { status: string; item: any }> = {};
 
   for (const item of vhi.buckets.overdue || []) {
@@ -179,7 +190,9 @@ export async function POST(request: NextRequest) {
         dueAtDate: vhiItem.item.dueAtDate ?? null,
         milesToGo: vhiItem.item.milesToGo ?? null,
       },
-      resolvedMileage || null
+      resolvedMileage || null,
+      undefined,
+      shopDistanceUnit
     );
     match.progress = progress;
 
@@ -209,7 +222,7 @@ export async function POST(request: NextRequest) {
         // Fallback when axis math couldn't be computed
         const overBy = match.milesUntilDue ? Math.abs(match.milesUntilDue) : null;
         match.recommendation = overBy
-          ? `OVERDUE by ${overBy.toLocaleString()} miles — recommend immediate service`
+          ? `OVERDUE by ${overBy.toLocaleString()} ${distLabelFull} — recommend immediate service`
           : `OVERDUE — recommend immediate service`;
       }
     } else if (vhiItem.status === "due_soon") {
@@ -231,13 +244,13 @@ export async function POST(request: NextRequest) {
       } else {
         const remaining = match.milesUntilDue || null;
         match.recommendation = remaining
-          ? `Due soon — ${remaining.toLocaleString()} miles remaining`
+          ? `Due soon — ${remaining.toLocaleString()} ${distLabelFull} remaining`
           : `Due soon — recommend scheduling service`;
       }
     } else if (vhiItem.status === "upcoming") {
       const remaining = match.milesUntilDue || null;
       match.recommendation = remaining
-        ? `OK — next service in ${remaining.toLocaleString()} miles`
+        ? `OK — next service in ${remaining.toLocaleString()} ${distLabelFull}`
         : `OK — not yet due`;
     }
 
@@ -259,6 +272,7 @@ export async function POST(request: NextRequest) {
     vehicle: vhi.vehicle,
     score: vhi.score,
     currentMiles: resolvedMileage,
+    distanceUnit: shopDistanceUnit,
     summary: {
       totalTasks: inspectionTasks.length,
       matched: matched.length,

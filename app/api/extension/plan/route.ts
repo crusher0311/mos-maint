@@ -515,7 +515,7 @@ export function convertCachedPlanItemForSidePanel(
   const est = computeEstimatedDate(item.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, existingDueDate);
   let daysToGo = est.daysToGo;
   estimatedDueDate = est.estimatedDueDate;
-  const progress = computeIntervalProgress(item, cachedCurrentMiles || null);
+  const progress = computeIntervalProgress(item, cachedCurrentMiles || null, undefined, distanceUnit);
   return {
     service: item.title || item.key,
     name: item.title || item.key,
@@ -1966,7 +1966,9 @@ export async function GET(request: NextRequest) {
             dueAtDate: rec.dueAtDate ?? null,
             milesToGo: rec.milesToGo ?? null,
           },
-          mileage || null
+          mileage || null,
+          undefined,
+          shopDistanceUnit
         );
         const nameForCheck = { serviceKey: rec.serviceKey || "", key: rec.key || "", title: rec.service || rec.name || "" };
         const recBucket: "overdue" | "dueSoon" | "upcoming" | "complimentary" =
@@ -1984,7 +1986,7 @@ export async function GET(request: NextRequest) {
           estimatedDueDate: itemEstDate,
           interval: rec.interval,
           intervalMonths: rec.intervalMonths,
-          intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} mi`,
+          intervalText: rec.intervalText || `OEM: ${(rec.interval || 0).toLocaleString()} ${getDistanceLabel(shopDistanceUnit)}`,
           intervalSource: rec.intervalSource || 'oem',
           source: rec.source || "oe",
           lastPerformedBy: rec.lastPerformedBy || rec.last?.source || null,

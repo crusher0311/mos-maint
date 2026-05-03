@@ -3,6 +3,7 @@ import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { SERVICE_KEY_DISPLAY_NAMES, toKeyFromName } from "@/lib/service-keys";
 import { getDb } from "@/lib/mongo";
+import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +73,7 @@ function buildProposedItem(
   status: "overdue" | "due_soon",
   currentMiles: number,
   cannedJobByKey: Map<string, any>,
+  distanceUnit: DistanceUnit = "miles",
 ): ProposedItem | null {
   const serviceKey = item?.serviceKey;
   if (!serviceKey) return null;
@@ -79,26 +81,28 @@ function buildProposedItem(
   const displayName = SERVICE_KEY_DISPLAY_NAMES[serviceKey] || item.title || serviceKey;
   const tag = markerTagFor(serviceKey);
   const milesUntilDue = item.dueAtMiles != null ? item.dueAtMiles - currentMiles : null;
+  const distLabel = getDistanceLabel(distanceUnit);
+  const distLabelFull = getDistanceLabelFull(distanceUnit);
 
   let concernText: string;
   let noteText: string;
   if (status === "overdue") {
     const overBy = milesUntilDue != null ? Math.abs(milesUntilDue) : null;
     concernText = overBy
-      ? `${tag} ${displayName} — OVERDUE by ${overBy.toLocaleString()} miles. Recommend immediate service.`
+      ? `${tag} ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
       : `${tag} ${displayName} — OVERDUE. Recommend immediate service.`;
-    noteText = `Auto-suggested from VHI (overdue${overBy ? ` by ${overBy.toLocaleString()} mi` : ""}).`;
+    noteText = `Auto-suggested from VHI (overdue${overBy ? ` by ${overBy.toLocaleString()} ${distLabel}` : ""}).`;
   } else {
     const remaining = milesUntilDue && milesUntilDue > 0 ? milesUntilDue : null;
     concernText = remaining
-      ? `${tag} ${displayName} — due soon, ${remaining.toLocaleString()} miles remaining.`
+      ? `${tag} ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
       : `${tag} ${displayName} — due soon, recommend scheduling service.`;
-    noteText = `Auto-suggested from VHI (due soon${remaining ? `, ${remaining.toLocaleString()} mi remaining` : ""}).`;
+    noteText = `Auto-suggested from VHI (due soon${remaining ? `, ${remaining.toLocaleString()} ${distLabel} remaining` : ""}).`;
   }
 
   if (item.last?.date) {
     let lastStr = ` Last: ${item.last.date}`;
-    if (item.last.miles) lastStr += ` at ${Number(item.last.miles).toLocaleString()} mi`;
+    if (item.last.miles) lastStr += ` at ${Number(item.last.miles).toLocaleString()} ${distLabel}`;
     lastStr += ".";
     concernText += lastStr;
   }
@@ -234,13 +238,22 @@ export async function POST(request: NextRequest) {
     guard.shopDoc,
   );
 
+  // Task #340: localize "mi"/"miles" in user-facing concern + note text so
+  // Canadian shops see km labels everywhere, matching the plan endpoint.
+  const shopDistanceUnit: DistanceUnit =
+    ((guard.shopDoc as any)?.preferences?.distanceUnit
+      ?? (guard.shopDoc as any)?.settings?.distanceUnit
+      ?? "miles") === "kilometers"
+      ? "kilometers"
+      : "miles";
+
   const proposed: ProposedItem[] = [];
   for (const item of vhi.buckets.overdue || []) {
-    const p = buildProposedItem(item, "overdue", resolvedMileage, cannedJobByKey);
+    const p = buildProposedItem(item, "overdue", resolvedMileage, cannedJobByKey, shopDistanceUnit);
     if (p) proposed.push(p);
   }
   for (const item of vhi.buckets.dueSoon || []) {
-    const p = buildProposedItem(item, "due_soon", resolvedMileage, cannedJobByKey);
+    const p = buildProposedItem(item, "due_soon", resolvedMileage, cannedJobByKey, shopDistanceUnit);
     if (p) proposed.push(p);
   }
 

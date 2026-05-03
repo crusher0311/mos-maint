@@ -81,6 +81,14 @@ let shopFeatures = {
 let mosShops = [];
 let resolvedMosShopId = null;
 let resolvedWriteProvider = null;
+// Task #340: track the shop's distance preference so every "mi"/"km" label in
+// the side panel (mileage chip, tooltips, last-done, interval/dueAt/overdue
+// text) reflects the shop's units. Defaults to miles until the features or
+// plan response confirms otherwise.
+let shopDistanceUnit = 'miles';
+function getDistLabel() {
+  return shopDistanceUnit === 'kilometers' ? 'km' : 'mi';
+}
 let concernState = {
   concern: '',
   conversationId: null,
@@ -733,13 +741,13 @@ function updateContext(context) {
       elements.roDisplay.textContent = `${roLabel} #${context.roNumber || context.roId}`;
       
       if (context.mileage) {
-        elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} mi`;
+        elements.mileageDisplay.textContent = `${context.mileage.toLocaleString()} ${getDistLabel()}`;
         elements.mileageDisplay.classList.remove('hidden');
         if (context.mileageEstimated) {
           elements.mileageDisplay.classList.add('mileage-estimated');
           const details = context.mileageEstimateDetails;
           elements.mileageDisplay.title = details
-            ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
+            ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} ${getDistLabel()} on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} ${getDistLabel()}/day`
             : 'Estimated from CARFAX service history';
         } else {
           elements.mileageDisplay.classList.remove('mileage-estimated');
@@ -789,6 +797,12 @@ async function fetchShopFeatures() {
     
     if (result && result.features) {
       shopFeatures = result.features;
+      // Task #340: pick up shop distance preference early so the mileage
+      // chip and any tooltips that fire before the plan response use the
+      // right unit.
+      if (result.distanceUnit === 'kilometers' || result.distanceUnit === 'miles') {
+        shopDistanceUnit = result.distanceUnit;
+      }
       updateTabAccessibility();
       
       if (result.shopId && currentContext) {
@@ -1023,8 +1037,14 @@ function renderPlan(data) {
     }
   }
   console.log('[MOS] Plan response mileage:', data.mileage, 'estimated:', data.mileageEstimated, 'fromCache:', data.fromDashboardCache);
+  // Task #340: prefer the plan response's distance unit for downstream labels;
+  // it's the most authoritative because the plan endpoint already converted
+  // intervals/dueAt to shop units.
+  if (data.distanceUnit === 'kilometers' || data.distanceUnit === 'miles') {
+    shopDistanceUnit = data.distanceUnit;
+  }
   if (data.mileage) {
-    elements.mileageDisplay.textContent = `${data.mileage.toLocaleString()} mi`;
+    elements.mileageDisplay.textContent = `${data.mileage.toLocaleString()} ${getDistLabel()}`;
     elements.mileageDisplay.classList.remove('hidden');
     if (currentContext) {
       currentContext.mileage = data.mileage;
@@ -1035,7 +1055,7 @@ function renderPlan(data) {
       elements.mileageDisplay.classList.add('mileage-estimated');
       const details = data.mileageEstimateDetails;
       elements.mileageDisplay.title = details
-        ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} mi on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} mi/day`
+        ? `Estimated from CARFAX (${details.dataPoints} data points)\nLast recorded: ${details.lastRecordedMileage.toLocaleString()} ${getDistLabel()} on ${details.lastRecordedDate}\nAvg: ${details.milesPerDay} ${getDistLabel()}/day`
         : 'Estimated from CARFAX service history';
     } else {
       elements.mileageDisplay.classList.remove('mileage-estimated');
@@ -1264,7 +1284,7 @@ function formatLastDone(last, currentMileage) {
   
   let text = 'Last done';
   if (last.miles) {
-    text += ` at ${last.miles.toLocaleString()} mi`;
+    text += ` at ${last.miles.toLocaleString()} ${getDistLabel()}`;
   }
   if (last.date) {
     const date = new Date(last.date);
@@ -1306,7 +1326,7 @@ function getOverdueText(item, type) {
   }
   if (type === 'overdue' && item.milesToGo != null && item.milesToGo < 0) {
     const overdue = Math.abs(item.milesToGo);
-    return `<span class="overdue-amount">${overdue.toLocaleString()} mi overdue</span>`;
+    return `<span class="overdue-amount">${overdue.toLocaleString()} ${getDistLabel()} overdue</span>`;
   }
   return '';
 }
@@ -1360,11 +1380,11 @@ function createServiceItemHTML(item, type) {
   
   // Interval info (OEM or Shop)
   const intervalText = item.intervalText || 
-    (item.interval ? `OEM: ${item.interval.toLocaleString()} mi` : '');
+    (item.interval ? `OEM: ${item.interval.toLocaleString()} ${getDistLabel()}` : '');
   const isShopInterval = item.intervalSource === 'shop' || item.usingShopInterval;
   
   // Due at and overdue info
-  const dueAtText = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} mi` : '';
+  const dueAtText = item.dueAt ? `Due at ${item.dueAt.toLocaleString()} ${getDistLabel()}` : '';
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")

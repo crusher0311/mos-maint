@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
+import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,6 +99,17 @@ export async function POST(request: NextRequest) {
     if (item.serviceKey) vhiByKey[item.serviceKey] = { status: "ok", item };
   }
 
+  // Task #340: respect shop distance preference in DVI finding text so the
+  // tech sees "km" / "kilometers" (not "mi") for Canadian shops.
+  const shopDistanceUnit: DistanceUnit =
+    ((guard.shopDoc as any)?.preferences?.distanceUnit
+      ?? (guard.shopDoc as any)?.settings?.distanceUnit
+      ?? "miles") === "kilometers"
+      ? "kilometers"
+      : "miles";
+  const distLabel = getDistanceLabel(shopDistanceUnit);
+  const distLabelFull = getDistanceLabelFull(shopDistanceUnit);
+
   const updates: TaskUpdate[] = [];
   let skippedCount = 0;
 
@@ -133,11 +145,11 @@ export async function POST(request: NextRequest) {
       rating = RATINGS.RQRSATTN;
       const overBy = milesUntilDue ? Math.abs(milesUntilDue) : null;
       finding = overBy
-        ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} miles. Recommend immediate service.`
+        ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
         : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`;
       if (vhiItem.item.lastDate) {
         finding += ` Last performed: ${vhiItem.item.lastDate}`;
-        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} mi`;
+        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }
       confidence = "high";
@@ -145,11 +157,11 @@ export async function POST(request: NextRequest) {
       rating = RATINGS.MAYRQRATTN;
       const remaining = milesUntilDue || null;
       finding = remaining
-        ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} miles remaining.`
+        ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
         : `[VHI] ${displayName} — due soon, recommend scheduling service.`;
       if (vhiItem.item.lastDate) {
         finding += ` Last: ${vhiItem.item.lastDate}`;
-        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} mi`;
+        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }
       confidence = "high";
@@ -157,7 +169,7 @@ export async function POST(request: NextRequest) {
       rating = RATINGS.CHCKD;
       const remaining = milesUntilDue || null;
       finding = remaining && remaining > 0
-        ? `[VHI] ${displayName} — OK. Next service in ${remaining.toLocaleString()} miles.`
+        ? `[VHI] ${displayName} — OK. Next service in ${remaining.toLocaleString()} ${distLabelFull}.`
         : `[VHI] ${displayName} — OK.`;
       confidence = "medium";
     }

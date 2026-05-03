@@ -59,6 +59,17 @@ function fmtMiles(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
+/**
+ * Task #340: distance-axis labels honor the shop's preferred unit. Pre-#340
+ * this module hardcoded "mi" everywhere, so Canadian shops saw "1,247 mi
+ * over" alongside km plan rows. Callers thread `distanceUnit` through so the
+ * headlines say "km" for metric shops.
+ */
+type DistanceUnitLabel = "miles" | "kilometers";
+function distLabel(unit: DistanceUnitLabel): string {
+  return unit === "kilometers" ? "km" : "mi";
+}
+
 /** Mirrors fmtTime() in IntervalProgressRow.tsx — keep in sync. */
 function fmtTime(months: number): string {
   const abs = Math.abs(months);
@@ -88,10 +99,12 @@ function toDate(d: Date | string | null | undefined): Date | null {
 export function computeIntervalProgress(
   item: ProgressInput,
   currentMiles: number | null,
-  today: Date = new Date()
+  today: Date = new Date(),
+  distanceUnit: DistanceUnitLabel = "miles"
 ): IntervalProgress {
   let miles: IntervalProgressAxis = { ...EMPTY_AXIS };
   let time: IntervalProgressAxis = { ...EMPTY_AXIS };
+  const dl = distLabel(distanceUnit);
 
   // ---- mileage axis ----
   if (item.intervalMiles && item.intervalMiles > 0 && currentMiles != null) {
@@ -122,13 +135,13 @@ export function computeIntervalProgress(
       let headline: string;
       if (remaining < 0) {
         status = "overdue";
-        headline = `${fmtMiles(-remaining)} mi over`;
+        headline = `${fmtMiles(-remaining)} ${dl} over`;
       } else if (remaining <= interval * 0.1 || remaining <= 1000) {
         status = "soon";
-        headline = `${fmtMiles(remaining)} mi left`;
+        headline = `${fmtMiles(remaining)} ${dl} left`;
       } else {
         status = "ok";
-        headline = `${fmtMiles(remaining)} mi left`;
+        headline = `${fmtMiles(remaining)} ${dl} left`;
       }
 
       miles = { used, interval, percent, remaining, status, headline };
@@ -140,13 +153,13 @@ export function computeIntervalProgress(
     let headline: string;
     if (remaining < 0) {
       status = "overdue";
-      headline = `${fmtMiles(-remaining)} mi over`;
+      headline = `${fmtMiles(-remaining)} ${dl} over`;
     } else if (remaining <= 1000) {
       status = "soon";
-      headline = `${fmtMiles(remaining)} mi left`;
+      headline = `${fmtMiles(remaining)} ${dl} left`;
     } else {
       status = "ok";
-      headline = `${fmtMiles(remaining)} mi left`;
+      headline = `${fmtMiles(remaining)} ${dl} left`;
     }
     miles = {
       used: null,

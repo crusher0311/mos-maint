@@ -192,7 +192,10 @@ function createCoachPanel(data) {
     const parts = [data.vehicle.year, data.vehicle.make, data.vehicle.model].filter(Boolean);
     let vehicleText = parts.join(" ");
     if (data.currentMiles) {
-      vehicleText += ` · ${Number(data.currentMiles).toLocaleString()} mi`;
+      // Task #340: respect the shop's distance preference reported by the
+      // /api/extension/vhi-coach response so km shops don't see "mi".
+      const distLabel = data.distanceUnit === 'kilometers' ? 'km' : 'mi';
+      vehicleText += ` · ${Number(data.currentMiles).toLocaleString()} ${distLabel}`;
     }
     vBar.textContent = vehicleText;
     panel.appendChild(vBar);
@@ -305,7 +308,10 @@ function createTaskRow(task) {
     const lastInfo = document.createElement("div");
     applyStyles(lastInfo, COACH_STYLES.taskDetail);
     const parts = [];
-    if (task.lastPerformedMiles) parts.push(`Last: ${Number(task.lastPerformedMiles).toLocaleString()} mi`);
+    if (task.lastPerformedMiles) {
+      const distLabel = coachData?.distanceUnit === 'kilometers' ? 'km' : 'mi';
+      parts.push(`Last: ${Number(task.lastPerformedMiles).toLocaleString()} ${distLabel}`);
+    }
     if (task.lastPerformedDate) {
       const d = new Date(task.lastPerformedDate);
       if (!isNaN(d.getTime())) parts.push(d.toLocaleDateString());
