@@ -9,6 +9,7 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
 import { buildReportUrl } from "@/lib/report-share";
+import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
 import {
   classifyEngineRisk,
   loadEngineRiskOverrides,
@@ -39,7 +40,15 @@ export const __deps = {
  * predate this version are treated as stale so existing installs pick up
  * the new chip without manual reload.
  */
-const ANALYSIS_CACHE_SCHEMA_VERSION = 2;
+// Task #336: bumped from 2 → 3 so existing Canadian-shop installs whose
+// recommendations were computed in raw miles are treated as stale and
+// rebuilt under shop unit (km) on next view.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 3;
+
+// Task #336: OEM data from DataOne is always in real miles. Convert to
+// shop unit (km for Canadian shops) at intake so the on-demand analyzer
+// matches the cached_plans path produced by lib/plan-build/triage.ts.
+const MILES_TO_KM = 1.60934;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,10 +69,17 @@ function isInspectItem(serviceName: string): boolean {
          name.includes('visual check');
 }
 
-function formatIntervalText(intervalMiles: number, intervalMonths?: number): string {
+function formatIntervalText(
+  intervalMiles: number,
+  intervalMonths?: number,
+  // Task #336: caller-controlled label so Canadian shops see "5,000 km"
+  // instead of "5,000 mi". `intervalMiles` is already in shop unit at the
+  // call site (cached plan items + on-demand analyzer both store shop unit).
+  distanceUnit: DistanceUnit = "miles",
+): string {
   const parts: string[] = [];
   if (intervalMiles) {
-    parts.push(`${intervalMiles.toLocaleString()} mi`);
+    parts.push(`${intervalMiles.toLocaleString()} ${getDistanceLabel(distanceUnit)}`);
   }
   if (intervalMonths) {
     parts.push(`${intervalMonths}mo`);
@@ -333,7 +349,10 @@ async function backgroundPrefetchShopPlans(
   currentVin: string,
   showInspectItems: boolean,
   shopIntervals: ShopIntervals,
-  intervalApplyMode: string = "always"
+  intervalApplyMode: string = "always",
+  // Task #336: forwarded so prefetched analyses for Canadian shops are
+  // computed in km and don't get rebuilt under the wrong unit on first view.
+  distanceUnit: DistanceUnit = "miles",
 ) {
   if (shopPrefetchInProgress.has(mosShopId)) {
     return;
@@ -441,7 +460,7 @@ async function backgroundPrefetchShopPlans(
       await Promise.allSettled(
         batch.map(async (v) => {
           try {
-            await runOnDemandAnalysis(mosShopId, v.vin, v.mileage, showInspectItems, shopIntervals, null, undefined, undefined, intervalApplyMode);
+            await runOnDemandAnalysis(mosShopId, v.vin, v.mileage, showInspectItems, shopIntervals, null, undefined, undefined, intervalApplyMode, [], [], distanceUnit);
             built++;
             console.log(`[Extension Prefetch] Shop ${mosShopId}: Built plan for ${v.vin} (${built}/${vehiclesToPrefetch.length})`);
           } catch (e: any) {
@@ -480,9 +499,15 @@ export function convertCachedPlanItemForSidePanel(
     cachedCurrentMiles: number;
     currentRoAuthorizedJobs: string[];
     currentRoAllJobs: string[];
+    /**
+     * Task #336: shop's preferred distance unit. Cached plan items store
+     * intervalMiles / dueAtMiles in shop unit (post-#333 + #336), so we
+     * only need this here to label them ("5,000 km" vs "5,000 mi").
+     */
+    distanceUnit?: DistanceUnit;
   },
 ) {
-  const { cachedCurrentMiles, currentRoAuthorizedJobs, currentRoAllJobs } = opts;
+  const { cachedCurrentMiles, currentRoAuthorizedJobs, currentRoAllJobs, distanceUnit = "miles" } = opts;
   let estimatedDueDate: string | null = null;
   const existingDueDate = item.daysToGo != null && item.daysToGo > 0
     ? new Date(Date.now() + item.daysToGo * 86400000).toISOString()
@@ -498,7 +523,7 @@ export function convertCachedPlanItemForSidePanel(
     interval: item.intervalMiles,
     intervalMiles: item.intervalMiles,
     intervalMonths: item.intervalMonths,
-    intervalText: `${item.usingShopInterval ? 'Shop' : 'OEM'}: ${formatIntervalText(item.intervalMiles, item.intervalMonths)}`,
+    intervalText: `${item.usingShopInterval ? 'Shop' : 'OEM'}: ${formatIntervalText(item.intervalMiles, item.intervalMonths, distanceUnit)}`,
     intervalSource: item.usingShopInterval ? 'shop' : 'oem',
     dueAt: item.dueAtMiles,
     dueMileage: item.dueAtMiles,
@@ -557,15 +582,28 @@ export async function runOnDemandAnalysis(
   dviFindings?: Array<{ name?: string; status?: string | number; source?: string }>,
   intervalApplyMode: string = "always",
   currentRoAuthorizedJobs: string[] = [],
-  currentRoAllJobs: string[] = []
+  currentRoAllJobs: string[] = [],
+  // Task #336: shop's preferred distance unit. Converts OEM miles → km
+  // for Canadian shops at intake so anchors against the (already-shop-unit)
+  // odometer + last-performed mileage produce correct dueAt + milesToGo.
+  distanceUnit: DistanceUnit = "miles",
 ) {
+  const isMetricShop = distanceUnit === "kilometers";
+  const oemToShopMiles = (mi: number | null | undefined): number => {
+    if (mi == null || mi <= 0) return 0;
+    return isMetricShop ? Math.round(mi * MILES_TO_KM) : mi;
+  };
+  const distLabel = getDistanceLabel(distanceUnit);
   // Resolve via __deps so the Task #196 smoke test can swap in fake-mongo.
   const db = await __deps.getDb();
   
   const currentMileage = mileage || 0;
-  console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage}, showInspect=${showInspectItems}`);
-  
-  const SOON_MILES = 3000; // Same as dashboard
+  console.log(`[Extension] Running analysis for VIN ${vin}, shop ${shopId}, mileage ${currentMileage} ${distLabel}, showInspect=${showInspectItems}`);
+
+  // Task #336: SOON window is compared against milesToGo, which is now
+  // in shop unit. Convert the 3,000-mi default to km for metric shops so
+  // the "due_soon" band keeps representing roughly the same drive time.
+  const SOON_MILES = oemToShopMiles(3000);
   const recommendations: any[] = [];
 
   // Task #175: declared at function scope so the post-OEM "Safety Check —
@@ -649,7 +687,10 @@ export async function runOnDemandAnalysis(
       let skippedExcluded = 0;
       
       for (const item of oemResult.items) {
-        const oemIntervalMiles = item.miles || 0;
+        // Task #336: OEM `item.miles` is real miles. Convert to shop unit
+        // before mixing with `currentMileage` / `lastPerformed.mileage`
+        // (which are already in shop unit for Canadian shops).
+        const oemIntervalMiles = oemToShopMiles(item.miles);
         const oemIntervalMonths = item.months || null;
         
         // Skip items with no mileage AND no month interval
@@ -743,7 +784,7 @@ export async function runOnDemandAnalysis(
         
         // Format interval text based on source
         const sourceLabel = intervalSource === 'shop' ? 'Shop' : 'OEM';
-        const intervalText = `${sourceLabel}: ${formatIntervalText(intervalMiles, intervalMonths || undefined)}`;
+        const intervalText = `${sourceLabel}: ${formatIntervalText(intervalMiles, intervalMonths || undefined, distanceUnit)}`;
         
         const estResult = computeEstimatedDate(milesToGo, intervalMiles, intervalMonths, lastPerformed.date, null);
         const daysToGo = estResult.daysToGo;
@@ -757,14 +798,19 @@ export async function runOnDemandAnalysis(
         let engineRiskReason: string | null = null;
         if (
           serviceKey === "oil" &&
-          engineRisk?.flagged &&
-          intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+          engineRisk?.flagged
         ) {
-          engineRiskFlag = true;
-          const reasons = engineRisk.reasons.length > 0
-            ? engineRisk.reasons.join("; ")
-            : "Engine flagged for shorter oil intervals.";
-          engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} mi.`;
+          // Task #336: intervalMiles is now in shop unit. Compare against
+          // the fixed real-mile threshold by converting back to miles for
+          // the gate; surface the user-facing value in shop unit.
+          const intervalRealMiles = isMetricShop ? intervalMiles / MILES_TO_KM : intervalMiles;
+          if (intervalRealMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES) {
+            engineRiskFlag = true;
+            const reasons = engineRisk.reasons.length > 0
+              ? engineRisk.reasons.join("; ")
+              : "Engine flagged for shorter oil intervals.";
+            engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} ${distLabel}.`;
+          }
         }
 
         // Track the most recent oil-change record so the safety-check row
@@ -898,7 +944,9 @@ export async function runOnDemandAnalysis(
     r.serviceKey === SAFETY_CHECK_OIL_LEVEL_KEY ||
     (r.service || "").toLowerCase() === SAFETY_CHECK_OIL_LEVEL_TITLE.toLowerCase()
   )) {
-    const safetyIntervalMiles = SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
+    // Task #336: convert the 3,000-mi safety interval to shop unit so it
+    // can be added to anchorMiles / currentMileage (already shop unit).
+    const safetyIntervalMiles = oemToShopMiles(SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES);
     const anchorMiles = (oilLastForSafety?.mileage && oilLastForSafety.mileage > 0)
       ? oilLastForSafety.mileage
       : (currentMileage > 0 ? currentMileage : null);
@@ -913,7 +961,7 @@ export async function runOnDemandAnalysis(
     const reasons = engineRisk.reasons.length > 0
       ? engineRisk.reasons.join("; ")
       : "Engine flagged for shorter oil intervals.";
-    const safetyReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} mi.`;
+    const safetyReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} ${distLabel}.`;
 
     recommendations.push({
       service: SAFETY_CHECK_OIL_LEVEL_TITLE,
@@ -922,7 +970,7 @@ export async function runOnDemandAnalysis(
       dueMileage: safetyDueMileage,
       interval: safetyIntervalMiles,
       intervalMonths: null,
-      intervalText: `OEM: ${safetyIntervalMiles.toLocaleString()} mi`,
+      intervalText: `OEM: ${safetyIntervalMiles.toLocaleString()} ${distLabel}`,
       intervalSource: "oem",
       lastPerformedBy: oilLastForSafety?.source ?? null,
       lastPerformedMileage: oilLastForSafety?.mileage ?? null,
@@ -1063,6 +1111,15 @@ export async function GET(request: NextRequest) {
     
     // Get shop preferences - showInspectItems defaults to true if not set
     const showInspectItems = shopDoc?.preferences?.showInspectItems !== false;
+
+    // Task #336: shop's preferred distance unit. Canonical path is
+    // `preferences.distanceUnit` (matches dashboard + tekmetric adapter +
+    // settings route); fall back to legacy `settings.distanceUnit` so
+    // older shop docs still work, then default to miles.
+    const shopDistanceUnit: DistanceUnit =
+      ((shopDoc as any)?.preferences?.distanceUnit
+        ?? (shopDoc as any)?.settings?.distanceUnit
+        ?? "miles") as DistanceUnit;
     
     const rawIntervals: ShopIntervals = shopDoc?.maintenance?.intervals || {};
     const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
@@ -1463,7 +1520,9 @@ export async function GET(request: NextRequest) {
     }
 
     // First try to use the dashboard's cached plan for consistency
-    const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage) : null;
+    // Task #336: pass shop unit so a stale cache built before the unit
+    // flip (e.g. shop switched mi→km) is rejected as mismatched and rebuilt.
+    const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage, shopDistanceUnit) : null;
 
     let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string; finding?: string }> = [];
     if (provider === "tekmetric" && roId) {
@@ -1532,6 +1591,8 @@ export async function GET(request: NextRequest) {
           cachedCurrentMiles,
           currentRoAuthorizedJobs,
           currentRoAllJobs,
+          // Task #336: render "5,000 km" / "5,000 mi" to match shop preference.
+          distanceUnit: shopDistanceUnit,
         });
 
       const currentMiles = mileage || cachedPlan.plan.currentMiles || 0;
@@ -1661,7 +1722,7 @@ export async function GET(request: NextRequest) {
         console.log(`[Extension] DVI overlay on cached plan: ${dviMap.size + unmappedDvi.length} findings, ${usedDviKeys.size} matched, ${dviMap.size - usedDviKeys.size + unmappedDvi.length} standalone`);
       }
 
-      backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
+      backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode, shopDistanceUnit)
         .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
       const cachedVehicle = cachedPlan.plan.vehicle || vehicle || {};
@@ -1825,7 +1886,11 @@ export async function GET(request: NextRequest) {
           tekDviFindings.length > 0 ? tekDviFindings : undefined,
           intervalApplyMode,
           currentRoAuthorizedJobs,
-          currentRoAllJobs
+          currentRoAllJobs,
+          // Task #336: forwarded so OEM intervals are converted to the
+          // shop's unit (km for Canadian shops) before being persisted to
+          // maintenance_analysis_cache + rendered in the side panel.
+          shopDistanceUnit
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
@@ -1960,7 +2025,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode)
+    backgroundPrefetchShopPlans(mosShopId, vin, showInspectItems, shopIntervals, intervalApplyMode, shopDistanceUnit)
       .catch(e => console.error('[Extension Prefetch] Unhandled:', e.message));
 
     const authorizedJobsHash = currentRoAuthorizedJobs.length > 0

@@ -30,9 +30,20 @@ import {
   SAFETY_CHECK_OIL_LEVEL_KEY,
   type EngineRiskResult,
 } from "@/lib/engine-risk";
+import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
 
 export const DEFAULT_SOON_MILES = 1000;
 export const DEFAULT_SOON_DAYS = 30;
+
+/**
+ * Task #336: distance values stored on TriagedItem are kept in the shop's
+ * preferred unit (km for Canadian shops, miles otherwise). OEM intervals
+ * from DataOne are always real miles; convert exactly once at intake here
+ * so downstream arithmetic, cached_plans storage, and the extension /
+ * partner API consumers all agree. Mirrors the inline triage in
+ * `app/dashboard/vehicles/[vin]/plan/page.tsx`.
+ */
+const MILES_TO_KM = 1.60934;
 
 export function parseCarfaxDate(d?: string | null): Date | null {
   if (!d) return null;
@@ -308,6 +319,7 @@ export function triage({
   vehicleTransType = null,
   engineRisk = null,
   oilDutyPreference = "severe",
+  distanceUnit = "miles",
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -328,7 +340,22 @@ export function triage({
   engineRisk?: EngineRiskResult | null;
   /** Task #166: per-vehicle Normal/Severe duty preference for oil row. */
   oilDutyPreference?: "normal" | "severe";
+  /**
+   * Task #336: shop's preferred distance unit. OEM intervals from
+   * DataOne are always real miles, but `currentMiles`, the shop history
+   * and CARFAX odometers passed in here are already in shop unit (km
+   * for Canadian shops). Convert OEM miles into shop unit at intake so
+   * downstream arithmetic, the cached_plans payload, and the
+   * extension/partner-API consumers all share one unit.
+   */
+  distanceUnit?: DistanceUnit;
 }): Buckets {
+  const isMetricShop = distanceUnit === "kilometers";
+  const oemToShopMiles = (mi: number | null | undefined): number | null => {
+    if (mi == null) return null;
+    return isMetricShop ? Math.round(mi * MILES_TO_KM) : mi;
+  };
+  const distLabel = getDistanceLabel(distanceUnit);
   const earliestDate = vehicleYear
     ? new Date(vehicleYear, 0, 1)
     : new Date(today.getTime() - 20 * 365 * 24 * 60 * 60 * 1000);
@@ -487,18 +514,22 @@ export function triage({
     // Falls back to the existing collapsed value when DataOne does not
     // expose duty-tagged variants for this vehicle.
     let intervalSchedule: "severe" | "normal" | null = null;
-    let oemMiles: number | null = o.miles ?? null;
+    // Task #336: OEM miles → shop unit at intake. Shop overrides below
+    // are already entered in shop unit, so we leave those alone.
+    let oemMiles: number | null = oemToShopMiles(o.miles ?? null);
     let oemMonths: number | null = o.months ?? null;
+    const dutyMilesNormal = oemToShopMiles(o.intervalMilesNormal ?? null);
+    const dutyMilesSevere = oemToShopMiles(o.intervalMilesSevere ?? null);
     if (serviceKey === "oil") {
-      if (oilDutyPreference === "normal" && o.intervalMilesNormal != null) {
-        oemMiles = o.intervalMilesNormal;
+      if (oilDutyPreference === "normal" && dutyMilesNormal != null) {
+        oemMiles = dutyMilesNormal;
         intervalSchedule = "normal";
-      } else if (o.intervalMilesSevere != null) {
-        oemMiles = o.intervalMilesSevere;
+      } else if (dutyMilesSevere != null) {
+        oemMiles = dutyMilesSevere;
         intervalSchedule = "severe";
-      } else if (o.intervalMilesNormal != null) {
+      } else if (dutyMilesNormal != null) {
         // Severe was preferred but unavailable — fall back to Normal.
-        oemMiles = o.intervalMilesNormal;
+        oemMiles = dutyMilesNormal;
         intervalSchedule = "normal";
       }
       if (oilDutyPreference === "normal" && o.intervalMonthsNormal != null) {
@@ -537,10 +568,13 @@ export function triage({
         intervals: o.intervals ?? [],
       })
     ) {
-      intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
+      // Task #336: keep the lifetime-fluid default in shop unit so the
+      // anchor + cached_plans payload stays consistent with km shops.
+      const lifetimeShopMiles = oemToShopMiles(LIFETIME_FLUID_DEFAULT_MILES) ?? LIFETIME_FLUID_DEFAULT_MILES;
+      intervalMiles = lifetimeShopMiles;
       intervalMonths = null;
       recommendedDefault = true;
-      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${lifetimeShopMiles.toLocaleString()} ${distLabel}.`;
     }
 
     // Task #198: an OEM "Inspect …" row on a known fluid (no matching
@@ -562,7 +596,7 @@ export function triage({
     ) {
       inspectOnly = true;
       const intervalText = intervalMiles && intervalMiles > 0
-        ? `every ${intervalMiles.toLocaleString()} mi`
+        ? `every ${intervalMiles.toLocaleString()} ${distLabel}`
         : (intervalMonths && intervalMonths > 0 ? `every ${intervalMonths} mo` : "per OEM schedule");
       inspectOnlyReason = `OEM only schedules an inspection (not a replacement) ${intervalText}. Have your technician check the fluid's condition; replacement is at the technician's discretion.`;
     }
@@ -631,12 +665,18 @@ export function triage({
     if (
       serviceKey === "oil" &&
       engineRisk?.flagged &&
-      intervalMiles != null &&
-      intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+      intervalMiles != null
     ) {
-      engineRiskFlag = true;
-      const reasons = engineRisk.reasons.length > 0 ? engineRisk.reasons.join("; ") : "Engine flagged for shorter oil intervals.";
-      engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} mi.`;
+      // Task #336: intervalMiles is now in shop unit. The risk threshold is
+      // a fixed real-mile constant, so compare in real miles by converting
+      // back to miles for the gate. The user-facing reason still shows the
+      // shop-unit value to match the rest of the plan row.
+      const intervalRealMiles = isMetricShop ? intervalMiles / MILES_TO_KM : intervalMiles;
+      if (intervalRealMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES) {
+        engineRiskFlag = true;
+        const reasons = engineRisk.reasons.length > 0 ? engineRisk.reasons.join("; ") : "Engine flagged for shorter oil intervals.";
+        engineRiskReason = `${reasons} Active OEM interval is ${intervalMiles.toLocaleString()} ${distLabel}.`;
+      }
     }
 
     triaged.push({
@@ -667,9 +707,11 @@ export function triage({
       engineRiskFlag: engineRiskFlag || undefined,
       engineRiskReason: engineRiskReason ?? undefined,
       intervalSchedule: serviceKey === "oil" ? intervalSchedule : null,
-      intervalMilesNormal: serviceKey === "oil" ? (o.intervalMilesNormal ?? null) : null,
+      // Task #336: persist duty-cycle intervals in shop unit so the
+      // dashboard / extension toggle shows km for Canadian shops.
+      intervalMilesNormal: serviceKey === "oil" ? dutyMilesNormal : null,
       intervalMonthsNormal: serviceKey === "oil" ? (o.intervalMonthsNormal ?? null) : null,
-      intervalMilesSevere: serviceKey === "oil" ? (o.intervalMilesSevere ?? null) : null,
+      intervalMilesSevere: serviceKey === "oil" ? dutyMilesSevere : null,
       intervalMonthsSevere: serviceKey === "oil" ? (o.intervalMonthsSevere ?? null) : null,
     });
   }
@@ -680,7 +722,9 @@ export function triage({
   // (recommendedDefault) and only added once per plan.
   if (engineRisk?.flagged && !usedServiceKeys.has(SAFETY_CHECK_OIL_LEVEL_KEY)) {
     const oilLast = lastMap.get("oil") ?? null;
-    const safetyIntervalMiles = SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
+    // Task #336: convert the 3,000-mi safety interval into the shop's unit
+    // before adding it to anchorMiles / currentMiles (which are in shop unit).
+    const safetyIntervalMiles = oemToShopMiles(SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES) ?? SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
     let safetyDueAtMiles: number | null = null;
     let safetyNeverDone = false;
 
@@ -701,7 +745,7 @@ export function triage({
     const safetyDaysToGo = safetyDueAtDate != null ? Math.ceil((safetyDueAtDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
     const reasons = engineRisk.reasons.length > 0 ? engineRisk.reasons.join("; ") : "Engine flagged for shorter oil intervals.";
-    const safetyRecommendedReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} mi.`;
+    const safetyRecommendedReason = `${reasons} Recommended every ${safetyIntervalMiles.toLocaleString()} ${distLabel}.`;
 
     triaged.push({
       key: `safety_check_${SAFETY_CHECK_OIL_LEVEL_KEY}`,
@@ -795,7 +839,11 @@ export function triage({
     const last = lastMap.get(cm.serviceKey) ?? null;
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
-    const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : cm.miles;
+    // Task #336: COMMON_MAINTENANCE.miles are real miles; convert to shop
+    // unit so the anchor + cached_plans payload stays in km for Canadian
+    // shops. Shop overrides are already in shop unit.
+    const cmMilesShop = oemToShopMiles(cm.miles);
+    const intervalMiles = usingShopInterval && shopOverride.miles != null ? shopOverride.miles : cmMilesShop;
     const intervalMonths = usingShopInterval && shopOverride.months != null ? shopOverride.months : cm.months;
 
     let dueAtMiles: number | null = null;

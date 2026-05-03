@@ -104,7 +104,12 @@ export async function POST(req: NextRequest) {
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
     const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
-    const distanceUnit = (shopDoc?.settings?.distanceUnit ?? "miles") as "miles" | "kilometers";
+    // Task #336: align with the dashboard + extension which both read
+    // `preferences.distanceUnit`. Old `settings.distanceUnit` kept as a
+    // legacy fallback so any pre-migration shop docs still resolve.
+    const distanceUnit = (shopDoc?.preferences?.distanceUnit
+      ?? shopDoc?.settings?.distanceUnit
+      ?? "miles") as "miles" | "kilometers";
     const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
     const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
@@ -818,6 +823,9 @@ export async function POST(req: NextRequest) {
       vehicleTransType,
       engineRisk,
       oilDutyPreference,
+      // Task #336: pass shop unit so OEM intervals are converted to km
+      // for Canadian shops before being persisted to cached_plans.
+      distanceUnit,
     });
 
     const isInspectItem = (item: TriagedItem) => {
