@@ -38,6 +38,7 @@ async function findShopByTenant(tenantId: number, roShopId?: number) {
     shopId: 1,
     name: 1,
     "shopware.swShopId": 1,
+    "preferences.distanceUnit": 1,
   };
   const query: Record<string, unknown> = { "shopware.tenantId": tenantId };
   if (roShopId) {
@@ -121,6 +122,8 @@ async function handleRepairOrderEvent(
   }
 
   const mosShopId = Number(shop.shopId);
+  const mileageUnit: 'miles' | 'kilometers' =
+    (shop as any)?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
 
   if (event === "repair_order.deleted") {
     await markRepairOrderDeleted(mosShopId, roId);
@@ -166,7 +169,7 @@ async function handleRepairOrderEvent(
 
   if (!ro) return;
 
-  const normalized = transformRepairOrder(ro);
+  const normalized = transformRepairOrder(ro, { mileageUnit });
 
   await upsertRepairOrder(mosShopId, roId, {
     mosShopId,
@@ -265,13 +268,15 @@ async function handleVehicleEvent(tenantId: number, vehicleId: number, rawData: 
   const shop = await findShopByTenant(tenantId);
   if (!shop) return;
   const mosShopId = Number(shop.shopId);
+  const mileageUnit: 'miles' | 'kilometers' =
+    (shop as any)?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
 
   try {
     const vehicle = rawData?.vin
       ? rawData
       : await getVehicle(tenantId, vehicleId, mosShopId);
 
-    const normalized = transformVehicle(vehicle);
+    const normalized = transformVehicle(vehicle, undefined, { mileageUnit });
 
     await upsertVehicle(mosShopId, vehicleId, {
       mosShopId,

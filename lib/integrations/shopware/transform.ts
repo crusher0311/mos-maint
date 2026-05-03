@@ -16,7 +16,15 @@ import type {
   ShopWarePastRecommendation,
 } from './types';
 
-export function transformVehicle(raw: ShopWareVehicle, customerId?: number): NormalizedVehicle {
+export interface ShopWareTransformOptions {
+  mileageUnit?: 'miles' | 'kilometers';
+}
+
+export function transformVehicle(
+  raw: ShopWareVehicle,
+  customerId?: number,
+  options?: ShopWareTransformOptions
+): NormalizedVehicle {
   return {
     id: String(raw.id),
     vin: raw.vin ?? undefined,
@@ -28,6 +36,7 @@ export function transformVehicle(raw: ShopWareVehicle, customerId?: number): Nor
     licensePlate: raw.plate ?? undefined,
     color: raw.color ?? undefined,
     customerId: customerId ? String(customerId) : raw.customer_ids?.[0] ? String(raw.customer_ids[0]) : undefined,
+    mileageUnit: options?.mileageUnit ?? 'miles',
     sourceId: String(raw.id),
     sourceSystem: 'shopware',
   };
@@ -123,12 +132,16 @@ export function transformService(raw: ShopWareService): NormalizedServiceJob {
   };
 }
 
-export function transformRepairOrder(raw: ShopWareRepairOrder): NormalizedWorkOrder {
+export function transformRepairOrder(
+  raw: ShopWareRepairOrder,
+  options?: ShopWareTransformOptions
+): NormalizedWorkOrder {
   const vehicle: NormalizedVehicle = raw.vehicle
-    ? transformVehicle(raw.vehicle, raw.customer_id ?? undefined)
+    ? transformVehicle(raw.vehicle, raw.customer_id ?? undefined, options)
     : {
         id: String(raw.vehicle_id ?? ''),
         mileage: raw.odometer ?? undefined,
+        mileageUnit: options?.mileageUnit ?? 'miles',
         sourceId: String(raw.vehicle_id ?? ''),
         sourceSystem: 'shopware',
       };

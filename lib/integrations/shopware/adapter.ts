@@ -41,6 +41,19 @@ async function getSwConfig(shopId: number): Promise<{ tenantId: number; swShopId
   return { tenantId: cfg.tenantId, swShopId: cfg.swShopId };
 }
 
+async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
+  try {
+    const db = await getDb();
+    const shop = await db.collection('shops').findOne(
+      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+      { projection: { 'preferences.distanceUnit': 1 } }
+    );
+    return shop?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
+  } catch {
+    return 'miles';
+  }
+}
+
 export class ShopWareAdapter implements IIntegrationAdapter {
   provider = 'shopware' as const;
   priority = 10;
@@ -76,44 +89,44 @@ export class ShopWareAdapter implements IIntegrationAdapter {
   }
 
   async getVehicle(shopId: number, vehicleId: string): Promise<Result<NormalizedVehicle>> {
-    const cfg = await getSwConfig(shopId);
+    const [cfg, mileageUnit] = await Promise.all([getSwConfig(shopId), getMileageUnit(shopId)]);
     if (!cfg) return { ok: false, error: 'Shop-Ware not configured' };
 
     try {
       const vehicle = await getSwVehicle(cfg.tenantId, parseInt(vehicleId, 10), shopId);
-      return { ok: true, data: transformVehicle(vehicle) };
+      return { ok: true, data: transformVehicle(vehicle, undefined, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? 'Vehicle not found' };
     }
   }
 
   async getVehicleByVin(shopId: number, vin: string): Promise<Result<NormalizedVehicle>> {
-    const cfg = await getSwConfig(shopId);
+    const [cfg, mileageUnit] = await Promise.all([getSwConfig(shopId), getMileageUnit(shopId)]);
     if (!cfg) return { ok: false, error: 'Shop-Ware not configured' };
 
     try {
       const matches = await searchVehiclesByVin(cfg.tenantId, vin, shopId);
       if (!matches.length) return { ok: false, error: 'Vehicle not found' };
-      return { ok: true, data: transformVehicle(matches[0]) };
+      return { ok: true, data: transformVehicle(matches[0], undefined, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? 'Search failed' };
     }
   }
 
   async getWorkOrder(shopId: number, workOrderId: string): Promise<Result<NormalizedWorkOrder>> {
-    const cfg = await getSwConfig(shopId);
+    const [cfg, mileageUnit] = await Promise.all([getSwConfig(shopId), getMileageUnit(shopId)]);
     if (!cfg) return { ok: false, error: 'Shop-Ware not configured' };
 
     try {
       const ro = await getRepairOrder(cfg.tenantId, parseInt(workOrderId, 10), shopId);
-      return { ok: true, data: transformRepairOrder(ro) };
+      return { ok: true, data: transformRepairOrder(ro, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? 'Work order not found' };
     }
   }
 
   async getWorkOrders(shopId: number, options?: WorkOrderQuery): Promise<Result<NormalizedWorkOrder[]>> {
-    const cfg = await getSwConfig(shopId);
+    const [cfg, mileageUnit] = await Promise.all([getSwConfig(shopId), getMileageUnit(shopId)]);
     if (!cfg) return { ok: false, error: 'Shop-Ware not configured' };
 
     try {
@@ -124,7 +137,7 @@ export class ShopWareAdapter implements IIntegrationAdapter {
         customer_id: options?.customerId ? parseInt(options.customerId, 10) : undefined,
       });
 
-      return { ok: true, data: ros.map(transformRepairOrder) };
+      return { ok: true, data: ros.map((ro) => transformRepairOrder(ro, { mileageUnit })) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? 'Failed to fetch work orders' };
     }
