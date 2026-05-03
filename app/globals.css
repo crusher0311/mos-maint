@@ -61,4 +61,28 @@
   .backdrop-blur {
     backdrop-filter: none !important;
   }
+
+  /* Defeat the dashboard layout's fixed-viewport scroll containers so
+     long reports paginate across multiple pages instead of being clipped
+     to the first viewport with an embedded scroll bar. */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .h-screen {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  @page {
+    margin: 0.5in;
+  }
 }

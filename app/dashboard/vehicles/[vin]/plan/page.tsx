@@ -2165,8 +2165,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
   return (
     <PlanTrialGate vin={vin}>
       <>
-      {/* Sticky summary header - no nested overflow wrapper, uses dashboard layout's scroll */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm">
+      {/* Sticky summary header - no nested overflow wrapper, uses dashboard layout's scroll.
+          Hidden in print so the dedicated print-only header below is the single
+          vehicle header that reaches the PDF. */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm print:hidden">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3">
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
@@ -2201,12 +2203,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           ? `Projected to check-in ${mileageEstimateDetails.projectedToDate || 'date'}\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
                           : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
                         : undefined}
-                    >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
+                    >{fmtMiles(currentMiles)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
                   )}
                   {mpdBlended != null && <> • <span
                       className="font-bold italic cursor-help border-b border-dashed border-neutral-400"
                       title={`Estimated driving rate based on CARFAX service history`}
-                    >~{(distanceUnit === "kilometers" ? mpdBlended * MILES_TO_KM : mpdBlended).toFixed(1)} {distLabel}/day</span></>}
+                    >~{mpdBlended.toFixed(1)} {distLabel}/day</span></>}
                 </div>
               </div>
             </div>
@@ -2301,7 +2303,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     ? `Projected to check-in ${mileageEstimateDetails.projectedToDate || 'date'}\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\n+ ${mileageEstimateDetails.milesPerDay} mi/day × ${mileageEstimateDetails.daysSinceRecorded} days`
                     : `Estimated from CARFAX (${mileageEstimateDetails.dataPoints} data points)\nLast recorded: ${mileageEstimateDetails.lastRecordedMileage.toLocaleString()} mi on ${mileageEstimateDetails.lastRecordedDate}\nAvg: ${mileageEstimateDetails.milesPerDay} mi/day`
                   : undefined}
-              >{fmtDistance(currentMiles, distanceUnit)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
+              >{fmtMiles(currentMiles)} {distLabel}{mileageEstimated ? ' (est.)' : ''}</span></>
             )}
           </div>
         </div>
