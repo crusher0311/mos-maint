@@ -18,13 +18,16 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // Concurrency is capped per shop in `getPaceConfig` so the global API
 // fan-out stays well under the 600 req/min Tekmetric quota.
 //
-// Bumped 5→10 (and the slot splits 2/3 → 4/6 below) to double per-tick
-// shop coverage. Combined with the 15-min weekend cadence in
-// lib/cron/jobs.cjs this is ~8x throughput vs. the original
-// hourly/5-shop config. Wall-clock ceiling: 10 shops / 3-parallel pool
-// × ~5 min/chunk ≈ 17 min, comfortably under the 25-min timeoutMs.
-const MAX_SHOPS_PER_RUN = 10;
-const SHOP_PARALLELISM = 3;
+// Bumped 5→10→15 (and slot splits 2/3 → 4/6 → 6/9 below) after the
+// Render Pro upgrade gave us 4GB / 2 CPUs of headroom. Parallelism
+// also bumped 3→5 so wall-clock stays bounded: 15 shops / 5-parallel
+// × ~5 min/chunk ≈ 15 min, well under the 25-min timeoutMs.
+// Combined with the 15-min weekend cadence in lib/cron/jobs.cjs this
+// is ~12x throughput vs. the original hourly/5-shop config. The
+// 5 RPS local rate-limit cap in lib/integrations/tekmetric/client.ts
+// remains the ultimate API throttle.
+const MAX_SHOPS_PER_RUN = 15;
+const SHOP_PARALLELISM = 5;
 // Shops created within this many days are eligible for the every-5-min
 // `fastpath=newShops` cycle. Env-tunable so we can dial the "new shop
 // honeymoon" window without a redeploy.
@@ -62,8 +65,8 @@ const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
 // bucket from starving the other. With 19 never-started shops and an
 // MAX_SHOPS_PER_RUN of 5, an unsplit budget meant the long-stalled
 // (32, 36, 37, ...) bucket waited 4+ runs to even be eligible.
-const NEVER_STARTED_SLOTS_PER_RUN = 4;
-const STALLED_SLOTS_PER_RUN = 6;
+const NEVER_STARTED_SLOTS_PER_RUN = 6;
+const STALLED_SLOTS_PER_RUN = 9;
 // Per-chunk metrics rolling window. Each chunk records wall-clock + cache
 // hit rates + 429 backoff so the admin sync-health view can compute
 // median/p95 chunk duration per shop without grepping cron logs. 25 entries
