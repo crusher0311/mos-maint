@@ -1,0 +1,83 @@
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ ^[[200~DRAIN_PARALLELISM=3 npm run drain:tekmetric-backfill~
+bash: $'\E[200~DRAIN_PARALLELISM=3': command not found
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ DRAIN_PARALLELISM=3 npm run drain:tekmetric-backfill
+
+> mos-maintenance-mvp@1.8.0 drain:tekmetric-backfill
+> NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts
+
+[2026-05-03T19:14:37.136Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-03T19:14:37.137Z] parallelism=3 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-298-1777835677136-yqj1i2 shopIdFilter=ALL_INCOMPLETE
+[2026-05-03T19:14:37.809Z] FATAL: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+MongoServerError: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+    at Connection.sendCommand (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:558:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Connection.command (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:632:22)
+    at async Server.command (/opt/render/project/src/node_modules/mongodb/src/sdam/server.ts:350:21)
+    at async tryOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:289:24)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:119:12)
+    at async Collection.findOneAndUpdate (/opt/render/project/src/node_modules/mongodb/src/collection.ts:1035:12)
+    at async acquireDrainLock (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:84:18)
+    at async main (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:363:3) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    ok: 0,
+    errmsg: 'Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }',
+    code: 11000,
+    codeName: 'DuplicateKey',
+    keyPattern: { _id: 1 },
+    keyValue: { _id: 'global' },
+    '$clusterTime': {
+      clusterTime: new Timestamp({ t: 1777835677, i: 12 }),
+      signature: [Object]
+    },
+    operationTime: new Timestamp({ t: 1777835677, i: 12 })
+  },
+  ok: 0,
+  code: 11000,
+  codeName: 'DuplicateKey',
+  keyPattern: { _id: 1 },
+  keyValue: { _id: 'global' },
+  '$clusterTime': {
+    clusterTime: new Timestamp({ t: 1777835677, i: 12 }),
+    signature: {
+      hash: Binary.createFromBase64('RrK/757ajR0tD9VrVzkXB6Zs+48=', 0),
+      keyId: new Long('7581182958992621569')
+    }
+  },
+  operationTime: new Timestamp({ t: 1777835677, i: 12 })
+}
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ mongosh "$MONGODB_URI" --eval 'db.tekmetric_drain_lock.deleteMany({})'
+bash: mongosh: command not found
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ node -e "const {MongoClient}=require('mongodb');const u=process.env.MONGODB_URI||\`mongodb+srv://\${process.env.MONGODB_USERNAME}:\${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority\`;(async()=>{const c=new MongoClient(u);await c.connect();const d=c.db('mos-maintenance-mvp');const t=await d.collection('tekmetric_drain_lock').deleteMany({});const p=await d.collection('protractor_backfill_locks').deleteMany({});console.log('tekmetric:',t.deletedCount,'protractor:',p.deletedCount);await c.close();})()"
+tekmetric: 1 protractor: 0
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ node -e "const {MongoClient}=require('mongodb');const u=process.env.MONGODB_URI||\`mongodb+srv://\${process.env.MONGODB_USERNAME}:\${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority\`;(async()=>{const c=new MongoClient(u);await c.connect();const d=c.db('mos-maintenance-mvp');const r=await d.collection('backfill_progress').updateMany({inProgress:true},{\$set:{inProgress:false,lastActivityAt:new Date(0)}});console.log('cleared inProgress on',r.modifiedCount,'shops');await c.close();})()"
+cleared inProgress on 15 shops
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ DRAIN_PARALLELISM=3 npm run drain:tekmetric-backfill
+
+> mos-maintenance-mvp@1.8.0 drain:tekmetric-backfill
+> NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts
+
+[2026-05-03T19:21:38.354Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-03T19:21:38.355Z] parallelism=3 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-428-1777836098354-xewnhs shopIdFilter=ALL_INCOMPLETE
+[2026-05-03T19:21:39.031Z] Lock acquired owner=drain-428-1777836098354-xewnhs expiresAt=2026-05-03T19:26:38.964Z
+[2026-05-03T19:21:41.390Z] Found 25 incomplete shops to drain
+[2026-05-03T19:21:41.390Z] START shop=86 (Access Automotive) tek=1714
+[2026-05-03T19:21:41.393Z] START shop=84 (EC Auto Repair) tek=33
+[2026-05-03T19:21:41.393Z] START shop=54 (Demore's Automotive) tek=275
+[Tekmetric Backfill] Shop 84: 2023-02-18 to 2023-05-19 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 86: 2022-08-22 to 2022-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 54: 2023-11-15 to 2024-02-13 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 84 page 1/6: 100 ROs
+[Tekmetric Backfill] Shop 86 page 1/6: 100 ROs
+[Tekmetric Backfill] Shop 54 page 1/18: 100 ROs
+[Tekmetric] Inspections endpoint short-circuited for shop 1714 after 3 consecutive 401s on token …y5AbJw9E. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 84 page 2/6: 100 ROs
+[Tekmetric Backfill] Shop 54 page 2/18: 100 ROs
+[Tekmetric Backfill] Shop 86 page 2/6: 100 ROs
+[Tekmetric Backfill] Shop 84 page 3/6: 100 ROs
+[Tekmetric Backfill] Shop 54 page 3/18: 100 ROs
+[2026-05-03T19:22:11.390Z] HEARTBEAT done=0/25 complete=0 error=0 elapsed=0.5min
+[Tekmetric Backfill] Shop 84 page 4/6: 100 ROs
+[Tekmetric Backfill] Shop 54 page 4/18: 100 ROs
+[Tekmetric Backfill] Shop 84 page 5/6: 100 ROs
+[Tekmetric Ba
