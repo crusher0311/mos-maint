@@ -1,8 +1,8 @@
 // lib/features.ts
 // Modular feature toggle system for à la carte feature management
 
-import { getDb } from "@/lib/mongo";
 import "@/lib/sms-adapters/protractor-adapter";
+import * as repo from "@/lib/data/repositories/shop-features";
 
 export type FeatureId = 
   | "maintenance"      // OEM schedules, recommendations, DVI insights
@@ -118,8 +118,7 @@ export function getAllFeatureIds(): FeatureId[] {
 }
 
 export async function getShopFeatures(shopId: number): Promise<ShopFeatures | null> {
-  const db = await getDb();
-  return db.collection<ShopFeatures>("shop_features").findOne({ shopId });
+  return repo.findByShopId<ShopFeatures>(shopId);
 }
 
 export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
@@ -145,52 +144,15 @@ export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
 }
 
 export async function enableFeature(shopId: number, featureId: FeatureId): Promise<void> {
-  const db = await getDb();
-  await db.collection<ShopFeatures>("shop_features").updateOne(
-    { shopId },
-    {
-      $addToSet: { enabledFeatures: featureId },
-      $set: { updatedAt: new Date() },
-      $setOnInsert: {
-        shopId,
-        featureSettings: {},
-        subscriptions: [],
-        createdAt: new Date(),
-      },
-    },
-    { upsert: true }
-  );
+  await repo.addEnabledFeature(shopId, featureId);
 }
 
 export async function disableFeature(shopId: number, featureId: FeatureId): Promise<void> {
-  const db = await getDb();
-  await db.collection<ShopFeatures>("shop_features").updateOne(
-    { shopId },
-    {
-      $pull: { enabledFeatures: featureId },
-      $set: { updatedAt: new Date() },
-    }
-  );
+  await repo.removeEnabledFeature(shopId, featureId);
 }
 
 export async function setShopFeatures(shopId: number, featureIds: FeatureId[]): Promise<void> {
-  const db = await getDb();
-  await db.collection<ShopFeatures>("shop_features").updateOne(
-    { shopId },
-    {
-      $set: { 
-        enabledFeatures: featureIds,
-        updatedAt: new Date(),
-      },
-      $setOnInsert: {
-        shopId,
-        featureSettings: {},
-        subscriptions: [],
-        createdAt: new Date(),
-      },
-    },
-    { upsert: true }
-  );
+  await repo.setEnabledFeatures(shopId, featureIds);
 }
 
 export async function getFeatureSettings<T = Record<string, any>>(
@@ -207,16 +169,7 @@ export async function setFeatureSettings(
   featureId: FeatureId, 
   settings: Record<string, any>
 ): Promise<void> {
-  const db = await getDb();
-  await db.collection<ShopFeatures>("shop_features").updateOne(
-    { shopId },
-    {
-      $set: { 
-        [`featureSettings.${featureId}`]: settings,
-        updatedAt: new Date(),
-      },
-    }
-  );
+  await repo.setFeatureSettings(shopId, featureId, settings);
 }
 
 export function getFeatureConfig(featureId: FeatureId): FeatureConfig | undefined {
@@ -224,8 +177,6 @@ export function getFeatureConfig(featureId: FeatureId): FeatureConfig | undefine
 }
 
 export async function ensureFeatureIndexes(): Promise<void> {
-  const db = await getDb();
-  const collection = db.collection("shop_features");
-  await collection.createIndex({ shopId: 1 }, { unique: true });
+  await repo.ensureIndexes();
   console.log("[Features] Database indexes created");
 }

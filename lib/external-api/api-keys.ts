@@ -1,5 +1,5 @@
-import { getDb } from "@/lib/mongo";
 import { randomBytes, createHash } from "crypto";
+import * as repo from "@/lib/data/repositories/api-keys";
 
 export type RateLimitTier = "standard" | "professional" | "enterprise";
 
@@ -37,6 +37,7 @@ export interface ApiKey {
   rateLimit: number;
   rateLimitTier?: RateLimitTier;
   isActive: boolean;
+  revoked?: boolean;
   lastUsedAt?: Date;
   usageCount: number;
   createdAt: Date;
@@ -113,20 +114,18 @@ export async function generateApiKey(
     expiresAt?: Date;
   }
 ): Promise<{ key: string; keyPrefix: string; keyId: string }> {
-  const db = await getDb();
-  
   const permValidation = validatePermissions(permissions);
   if (!permValidation.valid) {
     throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
   }
-  
+
   const rawKey = `mos_${randomBytes(32).toString("hex")}`;
   const keyPrefix = rawKey.substring(0, 12);
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
-  
+
   const tier = options?.rateLimitTier || "standard";
   const rateLimit = options?.rateLimit || getRateLimitFromTier(tier);
-  
+
   const apiKey: ApiKey = {
     shopId,
     keyHash,
@@ -141,14 +140,10 @@ export async function generateApiKey(
     createdBy,
     expiresAt: options?.expiresAt,
   };
-  
-  const result = await db.collection("api_keys").insertOne(apiKey);
-  
-  return {
-    key: rawKey,
-    keyPrefix,
-    keyId: result.insertedId.toString(),
-  };
+
+  const keyId = await repo.insertApiKey(apiKey);
+
+  return { key: rawKey, keyPrefix, keyId };
 }
 
 export async function generatePartnerApiKey(
@@ -162,8 +157,6 @@ export async function generatePartnerApiKey(
     expiresAt?: Date;
   }
 ): Promise<{ key: string; keyPrefix: string; keyId: string }> {
-  const db = await getDb();
-
   const permValidation = validatePermissions(permissions);
   if (!permValidation.valid) {
     throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
@@ -194,56 +187,42 @@ export async function generatePartnerApiKey(
     partnerName,
   };
 
-  const result = await db.collection("api_keys").insertOne(apiKey);
+  const keyId = await repo.insertApiKey(apiKey);
 
-  return {
-    key: rawKey,
-    keyPrefix,
-    keyId: result.insertedId.toString(),
-  };
+  return { key: rawKey, keyPrefix, keyId };
 }
 
 export async function validateApiKey(
   rawKey: string
 ): Promise<{ valid: boolean; apiKey?: ApiKey; error?: string }> {
-  const db = await getDb();
-  
   if (!rawKey || !rawKey.startsWith("mos_")) {
     return { valid: false, error: "Invalid API key format" };
   }
-  
+
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
-  
-  const apiKey = await db.collection("api_keys").findOne({ keyHash }) as ApiKey | null;
-  
+  const apiKey = (await repo.findApiKeyByHash(keyHash)) as ApiKey | null;
+
   if (!apiKey) {
     return { valid: false, error: "API key not found" };
   }
-  
+
   if (!apiKey.isActive) {
     return { valid: false, error: "API key is disabled" };
   }
 
-  if ((apiKey as any).revoked) {
+  if (apiKey.revoked) {
     return { valid: false, error: "API key has been revoked" };
   }
-  
+
   if (apiKey.expiresAt && new Date() > new Date(apiKey.expiresAt)) {
     return { valid: false, error: "API key has expired" };
   }
-  
+
   return { valid: true, apiKey };
 }
 
 export async function updateApiKeyUsage(keyHash: string): Promise<void> {
-  const db = await getDb();
-  await db.collection("api_keys").updateOne(
-    { keyHash },
-    { 
-      $set: { lastUsedAt: new Date() },
-      $inc: { usageCount: 1 }
-    }
-  );
+  await repo.recordApiKeyUsage(keyHash);
 }
 
 export async function checkPermission(
@@ -257,62 +236,39 @@ export async function checkPermission(
 }
 
 export async function revokeApiKey(keyId: string): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
-  
-  const result = await db.collection("api_keys").updateOne(
-    { _id: new ObjectId(keyId) },
-    { $set: { isActive: false } }
-  );
-  
-  return result.modifiedCount > 0;
+  return repo.deactivateApiKey(keyId);
 }
 
 export async function getApiKeysForShop(shopId: number): Promise<ApiKey[]> {
-  const db = await getDb();
-  
-  const keys = await db.collection("api_keys")
-    .find({ shopId })
-    .sort({ createdAt: -1 })
-    .toArray();
-  
+  const keys = await repo.listApiKeysForShop(shopId);
   return keys as unknown as ApiKey[];
 }
 
 export async function logApiUsage(log: ApiKeyUsageLog): Promise<void> {
-  const db = await getDb();
-  await db.collection("api_usage_logs").insertOne(log);
+  await repo.logApiUsage(log);
 }
 
 export async function checkRateLimit(
   keyHash: string,
   rateLimit: number
 ): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
-  const db = await getDb();
-  
   const windowStart = new Date();
   windowStart.setMinutes(windowStart.getMinutes() - 1);
-  
-  const count = await db.collection("api_usage_logs").countDocuments({
-    keyHash,
-    timestamp: { $gte: windowStart }
-  });
-  
+
+  const count = await repo.countApiUsageInWindow(keyHash, windowStart);
+
   const resetAt = new Date();
   resetAt.setMinutes(resetAt.getMinutes() + 1);
-  
+
   return {
     allowed: count < rateLimit,
     remaining: Math.max(0, rateLimit - count),
-    resetAt
+    resetAt,
   };
 }
 
 export async function getApiKeyById(keyId: string): Promise<ApiKey | null> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
-  
-  const key = await db.collection("api_keys").findOne({ _id: new ObjectId(keyId) });
+  const key = await repo.findApiKeyById(keyId);
   return key as ApiKey | null;
 }
 
@@ -320,17 +276,8 @@ export async function updateApiKey(
   keyId: string,
   updates: Partial<Pick<ApiKey, "name" | "permissions" | "rateLimit" | "rateLimitTier" | "isActive" | "expiresAt">>
 ): Promise<boolean> {
-  const db = await getDb();
-  const { ObjectId } = await import("mongodb");
-  
   if (updates.rateLimitTier && !updates.rateLimit) {
     updates.rateLimit = getRateLimitFromTier(updates.rateLimitTier);
   }
-  
-  const result = await db.collection("api_keys").updateOne(
-    { _id: new ObjectId(keyId) },
-    { $set: updates }
-  );
-  
-  return result.modifiedCount > 0;
+  return repo.updateApiKey(keyId, updates);
 }

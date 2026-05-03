@@ -1,6 +1,8 @@
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import { createNotificationsForUsers } from "@/lib/notifications";
+import * as repo from "@/lib/data/repositories/announcements";
+import * as usersRepo from "@/lib/data/repositories/users";
+import * as shopsRepo from "@/lib/data/repositories/shops";
 
 export type AnnouncementPriority = "info" | "warning" | "critical";
 export type AnnouncementStatus = "draft" | "sent" | "scheduled";
@@ -44,16 +46,14 @@ export interface AnnouncementRecipient {
 }
 
 export async function createAnnouncement(
-  announcement: Omit<Announcement, "_id" | "createdAt" | "stats">
+  announcement: Omit<Announcement, "_id" | "createdAt" | "stats">,
 ): Promise<ObjectId | null> {
   try {
-    const db = await getDb();
-    const result = await db.collection("system_announcements").insertOne({
+    return await repo.insertAnnouncement({
       ...announcement,
       createdAt: new Date(),
       stats: { totalRecipients: 0, emailsSent: 0, inAppSent: 0 },
     });
-    return result.insertedId;
   } catch (error) {
     console.error("Error creating announcement:", error);
     return null;
@@ -62,19 +62,12 @@ export async function createAnnouncement(
 
 export async function getAnnouncements(
   limit: number = 50,
-  status?: AnnouncementStatus
+  status?: AnnouncementStatus,
 ): Promise<Announcement[]> {
   try {
-    const db = await getDb();
     const query: Record<string, unknown> = {};
     if (status) query.status = status;
-
-    return (await db
-      .collection("system_announcements")
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray()) as Announcement[];
+    return (await repo.listAnnouncements(limit, query)) as Announcement[];
   } catch (error) {
     console.error("Error fetching announcements:", error);
     return [];
@@ -83,10 +76,7 @@ export async function getAnnouncements(
 
 export async function getAnnouncementById(id: string): Promise<Announcement | null> {
   try {
-    const db = await getDb();
-    return (await db
-      .collection("system_announcements")
-      .findOne({ _id: new ObjectId(id) })) as Announcement | null;
+    return (await repo.findAnnouncementById(id)) as Announcement | null;
   } catch (error) {
     console.error("Error fetching announcement:", error);
     return null;
@@ -95,16 +85,13 @@ export async function getAnnouncementById(id: string): Promise<Announcement | nu
 
 export async function getTargetedUsers(target: AnnouncementTarget): Promise<AnnouncementRecipient[]> {
   try {
-    const db = await getDb();
     const recipients: AnnouncementRecipient[] = [];
 
     if (target.type === "all") {
-      const users = await db
-        .collection("users")
-        .find({ email: { $exists: true } })
-        .project({ email: 1, shopId: 1 })
-        .toArray();
-
+      const users = await usersRepo.listUsers(
+        { email: { $exists: true } },
+        { email: 1, shopId: 1 },
+      );
       for (const user of users) {
         recipients.push({
           email: user.email,
@@ -113,15 +100,10 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         });
       }
     } else if (target.type === "shops" && target.shopIds?.length) {
-      const users = await db
-        .collection("users")
-        .find({
-          shopId: { $in: target.shopIds },
-          email: { $exists: true },
-        })
-        .project({ email: 1, shopId: 1 })
-        .toArray();
-
+      const users = await usersRepo.listUsers(
+        { shopId: { $in: target.shopIds }, email: { $exists: true } },
+        { email: 1, shopId: 1 },
+      );
       for (const user of users) {
         recipients.push({
           email: user.email,
@@ -130,15 +112,10 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         });
       }
     } else if (target.type === "roles" && target.roles?.length) {
-      const users = await db
-        .collection("users")
-        .find({
-          role: { $in: target.roles },
-          email: { $exists: true },
-        })
-        .project({ email: 1, shopId: 1, role: 1 })
-        .toArray();
-
+      const users = await usersRepo.listUsers(
+        { role: { $in: target.roles }, email: { $exists: true } },
+        { email: 1, shopId: 1, role: 1 },
+      );
       for (const user of users) {
         recipients.push({
           email: user.email,
@@ -163,25 +140,19 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         return {};
       });
 
-      const shops = await db
-        .collection("shops")
-        .find({ $or: integrationQueries })
-        .project({ shopId: 1, name: 1 })
-        .toArray();
+      const shops = await shopsRepo.listShopsByQuery(
+        { $or: integrationQueries },
+        { shopId: 1, name: 1 },
+      );
 
       const shopIds = shops.map((s) => s.shopId);
       const shopNameMap = new Map(shops.map((s) => [s.shopId, s.name]));
 
       if (shopIds.length > 0) {
-        const users = await db
-          .collection("users")
-          .find({
-            shopId: { $in: shopIds },
-            email: { $exists: true },
-          })
-          .project({ email: 1, shopId: 1 })
-          .toArray();
-
+        const users = await usersRepo.listUsers(
+          { shopId: { $in: shopIds }, email: { $exists: true } },
+          { email: 1, shopId: 1 },
+        );
         for (const user of users) {
           recipients.push({
             email: user.email,
@@ -194,7 +165,7 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
     }
 
     const uniqueRecipients = Array.from(
-      new Map(recipients.map((r) => [r.userId, r])).values()
+      new Map(recipients.map((r) => [r.userId, r])).values(),
     );
 
     return uniqueRecipients;
@@ -205,10 +176,9 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
 }
 
 export async function sendAnnouncement(
-  announcementId: string
+  announcementId: string,
 ): Promise<{ success: boolean; stats?: Announcement["stats"]; error?: string }> {
   try {
-    const db = await getDb();
     const announcement = await getAnnouncementById(announcementId);
 
     if (!announcement) {
@@ -248,7 +218,7 @@ export async function sendAnnouncement(
         recipients.map((r) => r.email),
         announcement.title,
         announcement.message,
-        announcement.priority
+        announcement.priority,
       );
     }
 
@@ -258,16 +228,13 @@ export async function sendAnnouncement(
       emailsSent,
     };
 
-    await db.collection("system_announcements").updateOne(
-      { _id: new ObjectId(announcementId) },
-      {
-        $set: {
-          status: "sent",
-          sentAt: new Date(),
-          stats,
-        },
-      }
-    );
+    await repo.updateAnnouncementById(announcementId, {
+      $set: {
+        status: "sent",
+        sentAt: new Date(),
+        stats,
+      },
+    });
 
     return { success: true, stats };
   } catch (error) {
@@ -278,18 +245,15 @@ export async function sendAnnouncement(
 
 export async function getActiveAnnouncements(userId: string): Promise<Announcement[]> {
   try {
-    const db = await getDb();
     const now = new Date();
-
-    return (await db
-      .collection("system_announcements")
-      .find({
+    return (await repo.listAnnouncements(
+      5,
+      {
         status: "sent",
         $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }],
-      })
-      .sort({ sentAt: -1 })
-      .limit(5)
-      .toArray()) as Announcement[];
+      },
+      { sentAt: -1 },
+    )) as Announcement[];
   } catch (error) {
     console.error("Error fetching active announcements:", error);
     return [];
@@ -298,11 +262,7 @@ export async function getActiveAnnouncements(userId: string): Promise<Announceme
 
 export async function deleteAnnouncement(id: string): Promise<boolean> {
   try {
-    const db = await getDb();
-    const result = await db
-      .collection("system_announcements")
-      .deleteOne({ _id: new ObjectId(id) });
-    return result.deletedCount > 0;
+    return await repo.deleteAnnouncementById(id);
   } catch (error) {
     console.error("Error deleting announcement:", error);
     return false;

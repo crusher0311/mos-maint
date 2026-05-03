@@ -1,5 +1,6 @@
-import { getDb } from "./mongo";
 import { ObjectId } from "mongodb";
+import * as repo from "@/lib/data/repositories/enterprise";
+import * as shopsRepo from "@/lib/data/repositories/shops";
 
 export interface EnterpriseAccount {
   _id?: ObjectId;
@@ -59,20 +60,14 @@ export interface RevenueAttributionDaily {
 }
 
 export async function getEnterpriseById(enterpriseId: ObjectId | string) {
-  const db = await getDb();
-  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
-  return db.collection<EnterpriseAccount>("enterprise_accounts").findOne({ _id: id });
+  return (await repo.findEnterpriseById(enterpriseId)) as EnterpriseAccount | null;
 }
 
 export async function getEnterpriseByShopId(shopId: number) {
-  const db = await getDb();
-  return db.collection<EnterpriseAccount>("enterprise_accounts").findOne({ 
-    shopIds: { $in: [Number(shopId), String(shopId)] as any[] }
-  });
+  return (await repo.findEnterpriseByShopId(shopId)) as EnterpriseAccount | null;
 }
 
 export async function createEnterprise(name: string, shopIds: number[]) {
-  const db = await getDb();
   const now = new Date();
   const doc: EnterpriseAccount = {
     name,
@@ -80,69 +75,54 @@ export async function createEnterprise(name: string, shopIds: number[]) {
     createdAt: now,
     updatedAt: now,
   };
-  const result = await db.collection<EnterpriseAccount>("enterprise_accounts").insertOne(doc);
-  return { ...doc, _id: result.insertedId };
+  const insertedId = await repo.insertEnterprise(doc);
+  return { ...doc, _id: insertedId };
 }
 
 export async function addShopToEnterprise(enterpriseId: ObjectId | string, shopId: number) {
-  const db = await getDb();
-  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
-  return db.collection("enterprise_accounts").updateOne(
-    { _id: id },
-    { 
-      $addToSet: { shopIds: shopId },
-      $set: { updatedAt: new Date() }
-    }
-  );
+  return repo.addShopToEnterprise(enterpriseId, shopId);
 }
 
 export async function removeShopFromEnterprise(enterpriseId: ObjectId | string, shopId: number) {
-  const db = await getDb();
-  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
-  return db.collection("enterprise_accounts").updateOne(
-    { _id: id },
-    { 
-      $pull: { shopIds: shopId } as any,
-      $set: { updatedAt: new Date() }
-    }
-  );
+  return repo.removeShopFromEnterprise(enterpriseId, shopId);
 }
 
 export async function logRecommendationEvent(event: Omit<RecommendationEvent, "_id" | "createdAt">) {
-  const db = await getDb();
   const doc: RecommendationEvent = {
     ...event,
     createdAt: new Date(),
   };
-  
+
   if (event.shopId) {
     const enterprise = await getEnterpriseByShopId(event.shopId);
     if (enterprise?._id) {
       doc.enterpriseId = enterprise._id;
     }
   }
-  
-  return db.collection<RecommendationEvent>("recommendation_events").insertOne(doc);
+
+  // Preserve the prior insertOne() return shape so callers that
+  // inspect `.insertedId` / `.acknowledged` keep working.
+  const insertedId = await repo.insertRecommendationEvent(doc);
+  return { acknowledged: true, insertedId };
 }
 
-export async function getEnterpriseAnalytics(enterpriseId: ObjectId | string, startDate?: Date, endDate?: Date) {
-  const db = await getDb();
-  const id = typeof enterpriseId === "string" ? new ObjectId(enterpriseId) : enterpriseId;
-  
-  const enterprise = await getEnterpriseById(id);
+export async function getEnterpriseAnalytics(
+  enterpriseId: ObjectId | string,
+  startDate?: Date,
+  endDate?: Date,
+) {
+  const enterprise = await getEnterpriseById(enterpriseId);
   if (!enterprise) return null;
-  
+
   const dateFilter: any = {};
   if (startDate) dateFilter.$gte = startDate;
   if (endDate) dateFilter.$lte = endDate;
-  
-  const matchStage: any = { 
-    shopId: { $in: enterprise.shopIds }
-  };
+
+  const matchStage: any = { shopId: { $in: enterprise.shopIds } };
   if (startDate || endDate) {
     matchStage.createdAt = dateFilter;
   }
-  
+
   const pipeline = [
     { $match: matchStage },
     {
@@ -150,13 +130,13 @@ export async function getEnterpriseAnalytics(enterpriseId: ObjectId | string, st
         _id: {
           shopId: "$shopId",
           eventType: "$eventType",
-          recommendationType: "$recommendationType"
+          recommendationType: "$recommendationType",
         },
         count: { $sum: 1 },
         totalRevenue: { $sum: { $ifNull: ["$totalPrice", 0] } },
         laborRevenue: { $sum: { $ifNull: ["$laborPrice", 0] } },
-        partsRevenue: { $sum: { $ifNull: ["$partsPrice", 0] } }
-      }
+        partsRevenue: { $sum: { $ifNull: ["$partsPrice", 0] } },
+      },
     },
     {
       $group: {
@@ -168,51 +148,50 @@ export async function getEnterpriseAnalytics(enterpriseId: ObjectId | string, st
             count: "$count",
             totalRevenue: "$totalRevenue",
             laborRevenue: "$laborRevenue",
-            partsRevenue: "$partsRevenue"
-          }
+            partsRevenue: "$partsRevenue",
+          },
         },
         totalJobs: { $sum: "$count" },
-        totalRevenue: { $sum: "$totalRevenue" }
-      }
-    }
+        totalRevenue: { $sum: "$totalRevenue" },
+      },
+    },
   ];
-  
-  const results = await db.collection<RecommendationEvent>("recommendation_events")
-    .aggregate(pipeline)
-    .toArray();
-  
-  const shops = await db.collection("shops")
-    .find({ shopId: { $in: enterprise.shopIds } })
-    .toArray();
-  
-  const shopMap = new Map(shops.map(s => [s.shopId, s.name]));
-  
+
+  const results = await repo.aggregateRecommendationEvents(pipeline);
+
+  const shops = await shopsRepo.listShopsByShopIds(enterprise.shopIds);
+
+  const shopMap = new Map(shops.map((s) => [s.shopId, s.name]));
+
   let totalJobsAdded = 0;
   let totalJobsSold = 0;
   let totalRevenue = 0;
-  
+
   const shopBreakdown = results.map((r: any) => {
-    const added = r.events.filter((e: any) => e.eventType === "recommendation_added")
+    const added = r.events
+      .filter((e: any) => e.eventType === "recommendation_added")
       .reduce((sum: number, e: any) => sum + e.count, 0);
-    const sold = r.events.filter((e: any) => e.eventType === "recommendation_sold")
+    const sold = r.events
+      .filter((e: any) => e.eventType === "recommendation_sold")
       .reduce((sum: number, e: any) => sum + e.count, 0);
-    const revenue = r.events.filter((e: any) => e.eventType === "recommendation_sold")
+    const revenue = r.events
+      .filter((e: any) => e.eventType === "recommendation_sold")
       .reduce((sum: number, e: any) => sum + e.totalRevenue, 0);
-    
+
     totalJobsAdded += added;
     totalJobsSold += sold;
     totalRevenue += revenue;
-    
+
     return {
       shopId: r._id,
       shopName: shopMap.get(r._id) || `Shop ${r._id}`,
       jobsAdded: added,
       jobsSold: sold,
       revenue: revenue,
-      events: r.events
+      events: r.events,
     };
   });
-  
+
   for (const shopId of enterprise.shopIds) {
     if (!shopBreakdown.find((s: any) => s.shopId === shopId)) {
       shopBreakdown.push({
@@ -221,37 +200,34 @@ export async function getEnterpriseAnalytics(enterpriseId: ObjectId | string, st
         jobsAdded: 0,
         jobsSold: 0,
         revenue: 0,
-        events: []
+        events: [],
       });
     }
   }
-  
+
   shopBreakdown.sort((a: any, b: any) => b.revenue - a.revenue);
-  
+
   return {
     enterprise: {
       id: enterprise._id,
       name: enterprise.name,
-      shopCount: enterprise.shopIds.length
+      shopCount: enterprise.shopIds.length,
     },
     summary: {
       totalJobsAdded,
       totalJobsSold,
       totalRevenue,
-      avgRevenuePerShop: enterprise.shopIds.length > 0 ? totalRevenue / enterprise.shopIds.length : 0
+      avgRevenuePerShop:
+        enterprise.shopIds.length > 0 ? totalRevenue / enterprise.shopIds.length : 0,
     },
-    shopBreakdown
+    shopBreakdown,
   };
 }
 
 export async function getShopsForEnterprise(enterpriseId: ObjectId | string) {
-  const db = await getDb();
   const enterprise = await getEnterpriseById(enterpriseId);
   if (!enterprise) return [];
-  
-  return db.collection("shops")
-    .find({ shopId: { $in: enterprise.shopIds } })
-    .toArray();
+  return shopsRepo.listShopsByShopIds(enterprise.shopIds);
 }
 
 export async function attributeRevenueFromWorkOrder(
@@ -268,42 +244,39 @@ export async function attributeRevenueFromWorkOrder(
     otherTotal: number;
     total: number;
   }>,
-  provider: "protractor" | "tekmetric" = "protractor"
+  provider: "protractor" | "tekmetric" = "protractor",
 ) {
-  const db = await getDb();
-  
-  const addedEvents = await db.collection<RecommendationEvent>("recommendation_events")
-    .find({
-      shopId,
-      workOrderId: String(workOrderId),
-      eventType: "recommendation_added"
-    })
-    .toArray();
-  
+  const addedEvents = (await repo.listRecommendationEvents({
+    shopId,
+    workOrderId: String(workOrderId),
+    eventType: "recommendation_added",
+  })) as RecommendationEvent[];
+
   if (addedEvents.length === 0) {
     return { matched: 0, revenue: 0 };
   }
-  
+
   let matched = 0;
   let totalRevenue = 0;
-  
+
   for (const event of addedEvents) {
     const eventCode = (event.serviceCode || "").toLowerCase();
-    const matchedPkg = packageSummaries.find(pkg => 
-      pkg.code.toLowerCase() === eventCode ||
-      pkg.id === event.serviceCode ||
-      (pkg.templateId && pkg.templateId.toLowerCase() === eventCode) ||
-      pkg.title.toLowerCase() === (event.serviceName || "").toLowerCase()
+    const matchedPkg = packageSummaries.find(
+      (pkg) =>
+        pkg.code.toLowerCase() === eventCode ||
+        pkg.id === event.serviceCode ||
+        (pkg.templateId && pkg.templateId.toLowerCase() === eventCode) ||
+        pkg.title.toLowerCase() === (event.serviceName || "").toLowerCase(),
     );
-    
+
     if (matchedPkg) {
-      const alreadySold = await db.collection<RecommendationEvent>("recommendation_events").findOne({
+      const alreadySold = await repo.findRecommendationEvent({
         shopId,
         workOrderId: String(workOrderId),
         serviceCode: event.serviceCode,
-        eventType: "recommendation_sold"
+        eventType: "recommendation_sold",
       });
-      
+
       if (!alreadySold) {
         await logRecommendationEvent({
           shopId,
@@ -318,12 +291,12 @@ export async function attributeRevenueFromWorkOrder(
           partsPrice: matchedPkg.partsTotal,
           totalPrice: matchedPkg.total,
         });
-        
+
         matched++;
         totalRevenue += matchedPkg.total;
       }
     }
   }
-  
+
   return { matched, revenue: totalRevenue };
 }

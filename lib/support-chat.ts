@@ -1,7 +1,7 @@
-import { getDb } from "./mongo";
 import { ObjectId } from "mongodb";
-import { searchArticles, incrementViewCounts, KnowledgeArticle } from "./knowledge-base";
 import OpenAI from "openai";
+import { searchArticles, incrementViewCounts, KnowledgeArticle } from "./knowledge-base";
+import * as repo from "@/lib/data/repositories/support-chat-sessions";
 
 const openai = new OpenAI();
 
@@ -24,82 +24,76 @@ export interface ChatSession {
   escalatedToTicket?: string;
 }
 
+const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export async function getOrCreateSession(userEmail: string, shopId: number): Promise<ChatSession> {
-  const db = await getDb();
-  const sessionId = `${userEmail}-${shopId}-${Date.now()}`;
-  
-  const existingSession = await db.collection<ChatSession>("support_chat_sessions")
-    .findOne({ 
-      userEmail, 
-      shopId, 
-      resolved: false,
-      updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-    });
-  
-  if (existingSession) {
-    return existingSession;
-  }
-  
+  const existing = (await repo.findActiveSessionForUser(
+    userEmail,
+    shopId,
+    ACTIVE_WINDOW_MS,
+  )) as ChatSession | null;
+  if (existing) return existing;
+
   const newSession: ChatSession = {
-    sessionId,
+    sessionId: `${userEmail}-${shopId}-${Date.now()}`,
     userEmail,
     shopId,
     messages: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-    resolved: false
+    resolved: false,
   };
-  
-  const result = await db.collection("support_chat_sessions").insertOne(newSession);
-  return { ...newSession, _id: result.insertedId };
+
+  const insertedId = await repo.insertSession(newSession);
+  return { ...newSession, _id: insertedId };
 }
 
 export async function getSessionById(sessionId: string): Promise<ChatSession | null> {
-  const db = await getDb();
-  return db.collection<ChatSession>("support_chat_sessions").findOne({ sessionId });
+  return (await repo.findSessionBySessionId(sessionId)) as ChatSession | null;
 }
 
 export async function addMessageToSession(sessionId: string, message: ChatMessage): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { 
-      $push: { messages: message as any },
-      $set: { updatedAt: new Date() }
-    }
-  );
+  await repo.pushMessage(sessionId, message);
 }
 
 export async function generateAIResponse(
-  userMessage: string, 
+  userMessage: string,
   sessionHistory: ChatMessage[],
-  userEmail: string
+  userEmail: string,
 ): Promise<{ response: string; articleIds: string[] }> {
   const relevantArticles = await searchArticles(userMessage, 5);
-  
-  const knowledgeContext = relevantArticles.length > 0
-    ? relevantArticles.map((article, i) => 
-        `--- Article ${i + 1}: "${article.title}" [Category: ${article.category}] ---\nProblem: ${article.problem}\nSolution: ${article.solution}\nTags: ${article.tags.join(", ")}`
-      ).join("\n\n")
-    : "";
-  
-  const conversationHistory = sessionHistory.slice(-8).map(msg => ({
+
+  const knowledgeContext =
+    relevantArticles.length > 0
+      ? relevantArticles
+          .map(
+            (article, i) =>
+              `--- Article ${i + 1}: "${article.title}" [Category: ${article.category}] ---\nProblem: ${article.problem}\nSolution: ${article.solution}\nTags: ${article.tags.join(", ")}`,
+          )
+          .join("\n\n")
+      : "";
+
+  const conversationHistory = sessionHistory.slice(-8).map((msg) => ({
     role: msg.role as "user" | "assistant",
-    content: msg.content
+    content: msg.content,
   }));
-  
+
   conversationHistory.push({ role: "user", content: userMessage });
-  
+
   const systemPrompt = `You are the AI support assistant for MOS Maintenance (also known as "My Oil Sticker"), an automotive maintenance management platform used by auto repair shops. You help service advisors, shop owners, and technicians get the most out of the platform.
 
-${relevantArticles.length > 0 ? `KNOWLEDGE BASE ARTICLES (use these as your primary source of truth):
+${
+  relevantArticles.length > 0
+    ? `KNOWLEDGE BASE ARTICLES (use these as your primary source of truth):
 ${knowledgeContext}
 
 CITATION RULES:
 - When your answer comes from a knowledge base article, naturally weave the information into your response
 - If the article has specific steps, present them as a numbered list
 - If multiple articles are relevant, combine their information coherently
-- Prefer knowledge base information over general knowledge` : "No knowledge base articles matched this question."}
+- Prefer knowledge base information over general knowledge`
+    : "No knowledge base articles matched this question."
+}
 
 RESPONSE GUIDELINES:
 1. Be friendly, professional, and concise — these are busy auto shop professionals
@@ -124,55 +118,41 @@ Keep responses under 200 words unless detailed steps are needed. Always be helpf
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...conversationHistory
-      ],
+      messages: [{ role: "system", content: systemPrompt }, ...conversationHistory],
       max_tokens: 600,
-      temperature: 0.5
+      temperature: 0.5,
     });
 
-    const response = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response. Would you like to create a support ticket?";
-    
-    const articleIds = relevantArticles.map(a => a._id!.toString());
-    
+    const response =
+      completion.choices[0]?.message?.content ||
+      "I'm sorry, I couldn't generate a response. Would you like to create a support ticket?";
+
+    const articleIds = relevantArticles.map((a) => a._id!.toString());
+
     if (articleIds.length > 0) {
-      incrementViewCounts(articleIds).catch(err => 
-        console.error("[Support Chat] Failed to increment view counts:", err)
+      incrementViewCounts(articleIds).catch((err) =>
+        console.error("[Support Chat] Failed to increment view counts:", err),
       );
     }
-    
+
     return { response, articleIds };
   } catch (error) {
     console.error("AI chat error:", error);
     return {
       response: "I'm having trouble connecting right now. Would you like to create a support ticket instead?",
-      articleIds: []
+      articleIds: [],
     };
   }
 }
 
 export async function markSessionResolved(sessionId: string): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { $set: { resolved: true, updatedAt: new Date() } }
-  );
+  await repo.setResolved(sessionId);
 }
 
 export async function linkSessionToTicket(sessionId: string, ticketId: string): Promise<void> {
-  const db = await getDb();
-  await db.collection("support_chat_sessions").updateOne(
-    { sessionId },
-    { $set: { escalatedToTicket: ticketId, updatedAt: new Date() } }
-  );
+  await repo.setEscalatedTicket(sessionId, ticketId);
 }
 
 export async function getUserSessions(userEmail: string, limit: number = 10): Promise<ChatSession[]> {
-  const db = await getDb();
-  return db.collection<ChatSession>("support_chat_sessions")
-    .find({ userEmail })
-    .sort({ updatedAt: -1 })
-    .limit(limit)
-    .toArray();
+  return (await repo.listForUser(userEmail, limit)) as ChatSession[];
 }
