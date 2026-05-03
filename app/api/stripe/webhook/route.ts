@@ -26,6 +26,14 @@ import bcrypt from "bcryptjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
+ * Production callers go through the real getDb() unchanged.
+ */
+export const __deps: { getDb: typeof getDb } = {
+  getDb,
+};
+
 async function resolveShopId(
   db: any,
   metadata: Record<string, string> | null | undefined,
@@ -113,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const db = await getDb();
+  const db = await __deps.getDb();
   
   const existingEvent = await db.collection("stripe_webhook_events").findOne({
     eventId: event.id,

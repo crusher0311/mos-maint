@@ -6,6 +6,14 @@ export type ShopLookupResult = {
   provider: 'tekmetric' | 'protractor' | 'shopware' | 'autoflow';
 } | null;
 
+/**
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
+ * Production callers go through the real getDb() unchanged.
+ */
+export const __deps: { getDb: typeof getDb } = {
+  getDb,
+};
+
 export async function findShopBySmsId(
   smsShopId: string,
   options: {
@@ -14,7 +22,7 @@ export async function findShopBySmsId(
     providerHint?: string;
   } = {}
 ): Promise<ShopLookupResult> {
-  const db = await getDb();
+  const db = await __deps.getDb();
   const { userShopIds = [], isPlatformAdmin = false, providerHint } = options;
   
   const tekShopIdNum = parseInt(smsShopId);

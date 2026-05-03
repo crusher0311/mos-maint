@@ -2,6 +2,18 @@ import { getDb } from "@/lib/mongo";
 import { getCachedPlan, invalidateCachedPlan, type CachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
 
+/**
+ * Test seam: tests can override these to inject a fake DB / cached plan / build
+ * trigger. Production callers go through the real implementations unchanged.
+ */
+export const __deps = {
+  getDb,
+  getCachedPlan,
+  invalidateCachedPlan,
+  triggerPlanBuild: (shopId: number, vin: string, mileage: number) =>
+    triggerPlanBuild(shopId, vin, mileage),
+};
+
 export type VhiRebuildFailedStage =
   | "triggerPlanBuild"
   | "cacheReadAfterBuild";
@@ -123,18 +135,18 @@ export async function rebuildVhi(
   mileage: number,
   options: { invalidateFirst?: boolean } = {}
 ): Promise<VhiRebuildResult> {
-  const db = await getDb();
+  const db = await __deps.getDb();
   const vinUpper = vin.toUpperCase();
 
   if (options.invalidateFirst) {
-    await invalidateCachedPlan(db, vinUpper, shopId);
+    await __deps.invalidateCachedPlan(db, vinUpper, shopId);
   }
 
-  let cached = await getCachedPlan(db, vinUpper, shopId, mileage);
+  let cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
 
   if (!cached) {
     console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build...`);
-    const built = await triggerPlanBuild(shopId, vinUpper, mileage);
+    const built = await __deps.triggerPlanBuild(shopId, vinUpper, mileage);
 
     if (!built.ok) {
       return {
@@ -150,7 +162,7 @@ export async function rebuildVhi(
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
-    cached = await getCachedPlan(db, vinUpper, shopId, mileage);
+    cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
 
     if (!cached) {
       return {

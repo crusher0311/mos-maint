@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import type { Db } from "mongodb";
 import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
 import { getVehicle, getCustomer } from "@/lib/integrations/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
-import type { Db } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
+ * Production callers go through the real getDb() unchanged.
+ */
+export const __deps: { getDb: typeof getDb } = {
+  getDb,
+};
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
 
@@ -153,6 +161,10 @@ function captureHeaders(req: NextRequest): Record<string, string> {
  *
  * Returns null if OK, or an error string for a 401 response.
  */
+export function __verifySignature(rawBody: string, req: NextRequest): string | null {
+  return verifySignature(rawBody, req);
+}
+
 function verifySignature(rawBody: string, req: NextRequest): string | null {
   const secret = process.env.TEKMETRIC_WEBHOOK_SIGNING_SECRET;
   if (!secret) return null; // verification disabled
@@ -208,7 +220,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid_json", detail: err?.message }, { status: 400 });
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
 
     const isForwarded = req.headers.get("x-webhook-forward") === "true";
     const sourceHost = req.headers.get("host") || "";

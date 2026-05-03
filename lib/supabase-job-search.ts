@@ -117,60 +117,62 @@ export async function searchSupabaseServiceJobs(
       }
     }
 
-    return filtered.map(sj => {
-      const vehicle = sj.woVehicle as any;
-      const prov = sj.provenance as any;
-      const rawLines = lineItemsByJob.get(sj.id) || [];
-
-      return {
-        _id: sj.id,
-        shopId: sj.shopId,
-        vin: vehicle?.vin,
-        vehicle: {
-          vin: vehicle?.vin,
-          year: vehicle?.year,
-          make: vehicle?.make,
-          model: vehicle?.model,
-          engine: vehicle?.engineDescription || vehicle?.engine,
-        },
-        job: {
-          title: sj.title,
-          description: sj.description,
-          name: sj.cannedJobName || sj.title,
-          keywords: [],
-          totals: {
-            laborAmount: parseFloat(String(sj.laborTotal)) || 0,
-            partsAmount: parseFloat(String(sj.partsTotal)) || 0,
-            totalAmount: parseFloat(String(sj.total)) || 0,
-            laborHours: parseFloat(String(sj.laborHoursBilled || sj.laborHoursActual || 0)) || 0,
-          },
-        },
-        lines: rawLines.map(li => ({
-          lineType: li.lineType,
-          description: li.partDescription,
-          partNumber: li.partNumber,
-          manufacturer: li.partManufacturer,
-          quantity: parseFloat(String(li.quantity)) || 1,
-          unitPrice: parseFloat(String(li.unitPrice)) || 0,
-          extendedPrice: parseFloat(String(li.extendedPrice)) || 0,
-          cost: parseFloat(String(li.unitCost)) || 0,
-          hours: parseFloat(String(li.laborHours)) || 0,
-        })),
-        totals: {
-          laborAmount: parseFloat(String(sj.laborTotal)) || 0,
-          partsAmount: parseFloat(String(sj.partsTotal)) || 0,
-          totalAmount: parseFloat(String(sj.total)) || 0,
-          laborHours: parseFloat(String(sj.laborHoursBilled || sj.laborHoursActual || 0)) || 0,
-        },
-        performedAt: sj.woCompletedDate || sj.woClosedDate || sj.createdAt,
-        workOrderId: sj.workOrderId,
-        workOrderNumber: sj.woNumber,
-        sourceSystem: prov?.sourceSystem || "unknown",
-        dataSource: "supabase",
-      };
-    });
+    return filtered.map(sj => mapServiceJobToCanonicalResult(sj, lineItemsByJob.get(sj.id) || []));
   } catch (err) {
     console.log("[Supabase Job Search] Error:", (err as Error).message);
     return [];
   }
+}
+
+/**
+ * Pure mapper: turns a raw normalized_service_jobs row (joined with its
+ * work order) plus its line items into the canonical job-search result shape
+ * the dashboard consumes. Exported for snapshot testing — keep this in sync
+ * with `app/api/jobs/search` consumers when the canonical shape evolves.
+ */
+export function mapServiceJobToCanonicalResult(sj: any, rawLines: any[]) {
+  const vehicle = sj.woVehicle as any;
+  const prov = sj.provenance as any;
+  const totals = {
+    laborAmount: parseFloat(String(sj.laborTotal)) || 0,
+    partsAmount: parseFloat(String(sj.partsTotal)) || 0,
+    totalAmount: parseFloat(String(sj.total)) || 0,
+    laborHours: parseFloat(String(sj.laborHoursBilled || sj.laborHoursActual || 0)) || 0,
+  };
+  return {
+    _id: sj.id,
+    shopId: sj.shopId,
+    vin: vehicle?.vin,
+    vehicle: {
+      vin: vehicle?.vin,
+      year: vehicle?.year,
+      make: vehicle?.make,
+      model: vehicle?.model,
+      engine: vehicle?.engineDescription || vehicle?.engine,
+    },
+    job: {
+      title: sj.title,
+      description: sj.description,
+      name: sj.cannedJobName || sj.title,
+      keywords: [],
+      totals,
+    },
+    lines: (rawLines || []).map((li: any) => ({
+      lineType: li.lineType,
+      description: li.partDescription,
+      partNumber: li.partNumber,
+      manufacturer: li.partManufacturer,
+      quantity: parseFloat(String(li.quantity)) || 1,
+      unitPrice: parseFloat(String(li.unitPrice)) || 0,
+      extendedPrice: parseFloat(String(li.extendedPrice)) || 0,
+      cost: parseFloat(String(li.unitCost)) || 0,
+      hours: parseFloat(String(li.laborHours)) || 0,
+    })),
+    totals,
+    performedAt: sj.woCompletedDate || sj.woClosedDate || sj.createdAt,
+    workOrderId: sj.workOrderId,
+    workOrderNumber: sj.woNumber,
+    sourceSystem: prov?.sourceSystem || "unknown",
+    dataSource: "supabase" as const,
+  };
 }
