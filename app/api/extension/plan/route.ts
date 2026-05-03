@@ -1218,6 +1218,40 @@ export async function GET(request: NextRequest) {
             console.error(`[Extension] Shop-Ware API fetch failed:`, e.message);
           }
         }
+      } else if (provider === "autoflow") {
+        // Autoflow has no native work_orders table in our DB. Source VIN +
+        // mileage from the dvi_results collection (the AutoFlow content
+        // script + DVI ingest writes to it), mirroring the resolution
+        // already used in app/api/extension/ro-context/route.ts so the VHI
+        // panel and the RO header agree on the vehicle.
+        const dvi = await db.collection("dvi_results").findOne({
+          shopId: { $in: [mosShopId, String(mosShopId)] },
+          roNumber: { $in: [roId, String(roId)] },
+        });
+        console.log(`[Extension] Autoflow DVI lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!dvi}`);
+        if (dvi) {
+          vin = vin || (dvi.vin ? String(dvi.vin).toUpperCase() : null);
+          mileage = mileage || dvi.mileage || null;
+          repairOrderNumber = dvi.roNumber ? String(dvi.roNumber) : null;
+          customerName = dvi.customerName || null;
+          currentRoDate = dvi.updatedAt ? new Date(dvi.updatedAt)
+            : (dvi.createdAt ? new Date(dvi.createdAt) : null);
+        }
+        // Enrich missing fields from the customers collection if the VIN
+        // is known but the DVI row was sparse.
+        if (vin && (!customerName || !mileage)) {
+          const customer = await db.collection("customers").findOne({
+            shopId: { $in: [mosShopId, Number(mosShopId)] },
+            "vehicle.vin": vin,
+          });
+          if (customer) {
+            customerName = customerName || customer.name || null;
+            if (!mileage) mileage = customer.vehicle?.odometer || null;
+          }
+        }
+        // Suppress the generic work_orders fallthrough below: AutoFlow has
+        // no entries there and its VIN/mileage are already populated.
+        workOrder = null;
       } else {
         workOrder = await db.collection("work_orders").findOne({
           shopId: mosShopId,
