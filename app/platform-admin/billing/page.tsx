@@ -34,7 +34,15 @@ interface ShopBilling {
   stripeSubscriptionAmount?: number | null;
   stripeProductName?: string | null;
   invoiceMonthlyAmount?: number | null;
+  invoiceAudit?: InvoiceAuditEntry[];
   createdAt?: string;
+}
+
+interface InvoiceAuditEntry {
+  performedBy: string | null;
+  invoiceMonthlyAmount: number | null;
+  status: string | null;
+  createdAt: string;
 }
 
 interface BillingSummary {
@@ -477,9 +485,17 @@ export default function PlatformBillingPage() {
                             </button>
                           </div>
                           {shop.plan === "appfueled_invoice" && typeof shop.invoiceMonthlyAmount === "number" ? (
-                            <span className="text-xs text-emerald-700">
-                              ${(shop.invoiceMonthlyAmount / 100).toFixed(2)}/mo · Invoiced
-                            </span>
+                            <>
+                              <span className="text-xs text-emerald-700">
+                                ${(shop.invoiceMonthlyAmount / 100).toFixed(2)}/mo · Invoiced
+                              </span>
+                              {shop.invoiceAudit && shop.invoiceAudit.length > 0 && (
+                                <span className="text-xs text-gray-500">
+                                  Set by {shop.invoiceAudit[0].performedBy || "unknown"} on{" "}
+                                  {new Date(shop.invoiceAudit[0].createdAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </>
                           ) : shop.stripeSubscriptionAmount ? (
                             <span className="text-xs text-gray-500">
                               ${(shop.stripeSubscriptionAmount / 100).toFixed(2)}/mo
@@ -602,6 +618,34 @@ export default function PlatformBillingPage() {
                     </select>
                   </div>
                 </div>
+
+                {linkPlan === "appfueled_invoice" && linkShop?.invoiceAudit && linkShop.invoiceAudit.length > 0 && (
+                  <div className="border border-gray-200 rounded-lg">
+                    <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                      <h4 className="text-sm font-medium text-gray-700">AppFueled Invoice History</h4>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                      {linkShop.invoiceAudit.map((entry, idx) => (
+                        <div key={idx} className="px-3 py-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-900">
+                              {typeof entry.invoiceMonthlyAmount === "number"
+                                ? `$${(entry.invoiceMonthlyAmount / 100).toFixed(2)}/mo`
+                                : "—"}
+                            </span>
+                            <span className="text-gray-500">
+                              {new Date(entry.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-gray-600 mt-0.5">
+                            By {entry.performedBy || "unknown"}
+                            {entry.status && <span className="text-gray-400"> · {entry.status}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {linkPlan === "appfueled_invoice" && (
                   <div>

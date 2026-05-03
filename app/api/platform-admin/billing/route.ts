@@ -19,7 +19,7 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [shops, recentPayments, enterprises, billingSettings] = await Promise.all([
+    const [shops, recentPayments, enterprises, billingSettings, invoiceAuditLogs] = await Promise.all([
       db.collection("shops").find().project({
         shopId: 1,
         name: 1,
@@ -37,7 +37,27 @@ export async function GET() {
         .toArray(),
       db.collection("enterprise_accounts").find().project({ _id: 1, name: 1, shopIds: 1 }).toArray(),
       db.collection("platform_settings").findOne({ type: "billing" }),
+      db.collection("audit_logs")
+        .find({ type: "appfueled_invoice_set" })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray(),
     ]);
+
+    const invoiceAuditByShop = new Map<number, Array<{ performedBy: string | null; invoiceMonthlyAmount: number | null; status: string | null; createdAt: Date }>>();
+    for (const log of invoiceAuditLogs) {
+      const sid = Number(log.shopId);
+      if (!Number.isFinite(sid)) continue;
+      const entry = {
+        performedBy: log.performedBy ?? null,
+        invoiceMonthlyAmount: typeof log.invoiceMonthlyAmount === "number" ? log.invoiceMonthlyAmount : null,
+        status: log.status ?? null,
+        createdAt: log.createdAt,
+      };
+      const existing = invoiceAuditByShop.get(sid);
+      if (existing) existing.push(entry);
+      else invoiceAuditByShop.set(sid, [entry]);
+    }
 
     const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e.name]));
     
@@ -97,6 +117,8 @@ export async function GET() {
         paidShopsCount++;
       }
 
+      const invoiceAudit = invoiceAuditByShop.get(Number(shop.shopId)) || [];
+
       return {
         shopId: shop.shopId,
         name: shop.name || `Shop ${shop.shopId}`,
@@ -111,6 +133,7 @@ export async function GET() {
         stripeSubscriptionAmount: shop.stripeSubscriptionAmount || billing.stripeSubscriptionAmount || null,
         stripeProductName: billing.stripeProductName || null,
         invoiceMonthlyAmount,
+        invoiceAudit,
         createdAt: shop.createdAt,
       };
     });
