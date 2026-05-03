@@ -13,6 +13,7 @@ const PUBLIC_PATHS = new Set([
   "/api/auth/reset",
   "/api/auth/complete-setup",
   "/api/auth/setup",
+  "/api/platform-admin/login",
 ]);
 const SESSION_COOKIE = "session_token";
 const TEST_AUTH_HEADER = "x-test-auth";
