@@ -1,0 +1,966 @@
+tionTime":"0001-01-01T00:00:00","DeletionTimeSpecified":true,"LastModifiedTime":"2022-07-08T13:03:57.123-04:00","LastModifiedBy":"Pro_AB0012.Murrayville\\Administrator"},"ID":"128f754f-f7ab-4865-9a78-b09bf146938b","Rank":1,"Type":"Labor","Description":"Certified Technician","Quantity":0.2,"Unit":"","RateCode":"FixedTotal","Price":75,"PriceUnit":"","MinimumCharge":0,"Total":15,"Discount":0,"ExtendedTotal":15,"TotalCost":10,"OtherChargeCode":"*GP","Tags":"","Flag":"","Technician":{"ID":"9789ca32-53ed-4727-b025-2288f3b0ed03","Type":"","Name":"Don S.","EmployeeNumber":"","Email":""},"ServiceAdvisor":{"ID":"404448d8-9c99-48de-b722-2c35d7312dd3","Type":"","Name":"Scott W","EmployeeNumber":"","Email":""},"ServicePackageTemplateLineID":"05da3822-b062-462e-99e5-9c0ff7f92901","Warranty":""}]},"ServicePackageInspectionLines":{"ItemCollection":[]},"ServicePackageFooter":{"Title":"Please Note","Description":"Some wheels require lug nut re-torque.  Ask your Service Consultant for details.\r\nKeeping your tires properly inflated and rotated will assist in maximizing tire wear life and vehicle handling.  "},"URL":"","Flag":"","InspectionReferenceID":"00000000-0000-0000-0000-000000000000","ServicePackageTemplateID":"09027997-0730-4c95-bacf-25b618acb9d8","ServiceCategoryID":"178bf521-5703-48dd-a520-256a84e508f6","ContactID":"00000000-0000-0000-0000-000000000000","IsInvoicing":true}]},"Summary":{"PartsTotal":0,"LaborTotal":15,"SubletTotal":0,"NetTotal":15,"OtherCharges":{"ItemCollection":[{"ID":"bf51399b-5150-448a-9787-bc7abac0115e","Type":"OtherCharge","Code":"*","Name":"Shop Supplies","Value":0.75,"OtherChargeCode":"PG","Flag":""},{"ID":"cd183c97-e48c-46fc-be88-9be086e7da0b","Type":"Tax","Code":"G","Name":"Canadian Goods and Services Tax (GST)","Value":0.79,"OtherChargeCode":"","Flag":""},{"ID":"d44b587a-bdef-400d-99b0-06fbd82b7004","Type":"Tax","Code":"P","Name":"BC Provincial Sales Tax (PST)","Value":1.1,"OtherChargeCode":"","Flag":""}]},"OtherChargeTotal":0.75,"TaxTotal":1.89,"GrandTotal":17.64,"TotalOutstanding":0},"OtherChargeCode":"","Flag":"","WorkOrderFlags":"","Tags":"","Completed":false}},2026-05-03T16:39:45.345Z
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:39:51.644Z] HEARTBEAT done=0/13 complete=0 error=0 lockWait=0 elapsed=15.5min
+[Backfill] Shop 113: Normalized 67 WOs
+[Backfill] Shop 113: FULL — currentChunkEnd 2022-07-22 -> 2022-05-23
+[Backfill] Shop 113: chunk metrics duration=89790ms ros=67 invoiceCache=0/67 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 113 chunk 6: 2022-05-23 to 2022-07-22: 269 jobs, 0 vehicles fetched, 67 normalized, 60d chunk
+[Backfill] Shop 113: Resuming from 2022-05-23 (logicVersion=4)
+[Backfill] Shop 113: 2022-02-22 to 2022-05-23 (90 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 7: 2022-02-22 to 2022-05-23: 0 invoices
+[Backfill] Shop 113: Resuming from 2022-02-22 (logicVersion=4)
+[Backfill] Shop 113: 2021-12-24 to 2022-02-22 (60 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 8: 2021-12-24 to 2022-02-22: 0 invoices
+[Backfill] Shop 113: Resuming from 2021-12-24 (logicVersion=4)
+[Backfill] Shop 113: 2021-10-25 to 2021-12-24 (60 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 9: 2021-10-25 to 2021-12-24: 0 invoices
+[Backfill] Shop 113: Resuming from 2021-10-25 (logicVersion=4)
+[Backfill] Shop 113: 2021-08-26 to 2021-10-25 (60 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 10: 2021-08-26 to 2021-10-25: 0 invoices
+[Backfill] Shop 113: Resuming from 2021-08-26 (logicVersion=4)
+[Backfill] Shop 113: 2021-06-27 to 2021-08-26 (60 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 11: 2021-06-27 to 2021-08-26: 0 invoices
+[Backfill] Shop 113: Resuming from 2021-06-27 (logicVersion=4)
+[Backfill] Shop 113: 2021-05-03 to 2021-06-27 (60 days)
+[Backfill] Shop 113: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 113 chunk 12: 2021-05-03 to 2021-06-27: 0 invoices
+[Backfill] Shop 113: Run finished - 12 chunks, 3904 jobs indexed, complete: true
+[Backfill] Shop 113: FULLY COMPLETE!
+[2026-05-03T16:40:05.588Z] COMPLETE shop=113 (Precision / Grip / EV Lab) chunks=12 jobs=3904
+[2026-05-03T16:40:05.588Z] START shop=67 (Harrell's Tire and Auto)
+[Backfill] Shop 67: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:40:05.648Z] LOCKED shop=67 (Harrell's Tire and Auto) cron has lock — polling for release (attempt 1/8)
+[2026-05-03T16:40:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=16.0min
+[2026-05-03T16:40:23.612Z] WAITING shop=50 cron-holds-lock waited=16.0min lockAge=25.1min
+[RateLimit] protractor at 301/300, waiting 2194ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2844ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2173ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4551ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4746ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4182ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8935ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8425ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8463ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:40:51.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=16.5min
+[2026-05-03T16:41:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=17.0min
+[RateLimit] protractor at 301/300, waiting 2202ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2559ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2305ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4160ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4883ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4619ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8220ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8229ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8788ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:41:51.643Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=17.5min
+[2026-05-03T16:42:05.891Z] WAITING shop=67 cron-holds-lock waited=2.0min lockAge=7.1min
+[2026-05-03T16:42:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=18.0min
+[2026-05-03T16:42:23.854Z] WAITING shop=50 cron-holds-lock waited=18.0min lockAge=27.1min
+[RateLimit] protractor at 301/300, waiting 2908ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2319ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2432ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4166ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4135ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4245ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8997ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8862ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8114ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:42:51.643Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=18.5min
+[2026-05-03T16:43:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=19.0min
+[RateLimit] protractor at 301/300, waiting 2278ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2989ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2550ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4389ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4673ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4051ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8541ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8637ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8636ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:43:51.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=19.5min
+[2026-05-03T16:44:06.126Z] WAITING shop=67 cron-holds-lock waited=4.0min lockAge=9.1min
+[2026-05-03T16:44:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=20.0min
+[2026-05-03T16:44:24.088Z] WAITING shop=50 cron-holds-lock waited=20.0min lockAge=29.1min
+[RateLimit] protractor at 302/300, waiting 2193ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2141ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2251ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4033ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4791ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4286ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8099ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8993ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8602ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:44:51.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=20.5min
+[Backfill] Shop 71: 987 jobs, 0 unique vehicles to fetch (invoice cache: 0/1003 hit)
+[Backfill] Shop 71: Bulk wrote 987 jobs (0 new, 987 updated, 0 skipped)
+[2026-05-03T16:45:21.643Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=21.0min
+[Backfill] Starting inline backfill for shop 50
+[Backfill] Shop 50: Resuming from 2023-05-12 (logicVersion=4)
+[Backfill] Shop 50: 2023-03-28 to 2023-05-12 (45 days)
+[Backfill] Shop 50: 662 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T16:45:51.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=21.5min
+[Backfill] Shop 50: 2935 jobs, 0 unique vehicles to fetch (invoice cache: 662/662 hit)
+[Backfill] Shop 50: Bulk wrote 171 jobs (0 new, 171 updated, 2764 skipped)
+[2026-05-03T16:46:06.356Z] WAITING shop=67 cron-holds-lock waited=6.0min lockAge=11.1min
+[2026-05-03T16:46:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=22.0min
+[2026-05-03T16:46:51.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=22.5min
+[2026-05-03T16:47:21.643Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=23.0min
+[2026-05-03T16:47:51.643Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=23.5min
+[2026-05-03T16:48:06.588Z] WAITING shop=67 cron-holds-lock waited=8.0min lockAge=13.1min
+[2026-05-03T16:48:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=24.0min
+[2026-05-03T16:48:51.645Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=24.5min
+[2026-05-03T16:49:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=25.0min
+[2026-05-03T16:49:51.645Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=25.5min
+[2026-05-03T16:50:06.819Z] WAITING shop=67 cron-holds-lock waited=10.0min lockAge=15.1min
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2023-05-12 -> 2023-03-28
+[Backfill] Shop 50: chunk metrics duration=290509ms ros=662 invoiceCache=662/662 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 1: 2023-03-28 to 2023-05-12: 171 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[Backfill] Shop 50: Resuming from 2023-03-28 (logicVersion=4)
+[Backfill] Shop 50: 2023-02-11 to 2023-03-28 (45 days)
+[Backfill] Shop 50: 653 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T16:50:21.644Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=26.0min
+[RateLimit] protractor at 302/300, waiting 2270ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2592ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2913ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4494ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4566ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4434ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8206ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8176ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8245ms (attempt 3/8, exponential backoff)
+[2026-05-03T16:50:51.645Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=26.5min
+[RateLimit] protractor at 301/300, waiting 4500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:51:21.645Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=27.0min
+[RateLimit] protractor at 301/300, waiting 2784ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2965ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2474ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4236ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4714ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4883ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8741ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8490ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8198ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:51:51.646Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=27.5min
+[2026-05-03T16:52:07.056Z] WAITING shop=67 cron-holds-lock waited=12.0min lockAge=17.1min
+[2026-05-03T16:52:21.646Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=28.0min
+[RateLimit] protractor at 302/300, waiting 2823ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2552ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2513ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4950ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4090ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4113ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8058ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8843ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8629ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:52:51.647Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=28.5min
+[2026-05-03T16:53:21.648Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=29.0min
+[RateLimit] protractor at 302/300, waiting 2237ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2040ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2957ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4919ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4741ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4365ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8730ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8840ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8278ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:53:51.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=29.5min
+[2026-05-03T16:54:07.389Z] WAITING shop=67 cron-holds-lock waited=14.0min lockAge=19.1min
+[Backfill] Shop 71: Normalized 6 WOs
+[Backfill] Shop 71: FULL — currentChunkEnd 2021-10-14 -> 2021-09-14
+[Backfill] Shop 71: chunk metrics duration=1003231ms ros=1003 invoiceCache=0/1003 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 71 chunk 2: 2021-09-14 to 2021-10-14: 987 jobs, 0 vehicles fetched, 6 normalized, 30d chunk
+[Backfill] Shop 71: Resuming from 2021-09-14 (logicVersion=4)
+[Backfill] Shop 71: 2021-08-15 to 2021-09-14 (30 days)
+[Backfill] Shop 71: 866 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T16:54:21.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=30.0min
+[RateLimit] protractor at 301/300, waiting 2843ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2470ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2572ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4247ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4533ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4615ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8379ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8590ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8309ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:54:51.674Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=30.5min
+[Backfill] Shop 50: 3101 jobs, 0 unique vehicles to fetch (invoice cache: 0/653 hit)
+[Backfill] Shop 50: Bulk wrote 3101 jobs (0 new, 3101 updated, 0 skipped)
+[2026-05-03T16:55:21.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=31.0min
+[RateLimit] protractor at 301/300, waiting 2743ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2261ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2704ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4577ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4613ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4579ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8741ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8595ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8090ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:55:51.674Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=31.5min
+[2026-05-03T16:56:07.622Z] WAITING shop=67 cron-holds-lock waited=16.0min lockAge=21.1min
+[2026-05-03T16:56:21.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=32.0min
+[RateLimit] protractor at 301/300, waiting 2732ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2438ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2346ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4329ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4417ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4408ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8593ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8850ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8218ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:56:51.674Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=32.5min
+[2026-05-03T16:57:21.674Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=33.0min
+[RateLimit] protractor at 301/300, waiting 2864ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2325ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 2194ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4426ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4813ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4936ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8912ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8056ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8407ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:57:51.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=33.5min
+[2026-05-03T16:58:07.864Z] WAITING shop=67 cron-holds-lock waited=18.0min lockAge=23.1min
+[2026-05-03T16:58:21.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=34.0min
+[RateLimit] protractor at 301/300, waiting 2358ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2786ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2698ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4688ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4779ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4101ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8322ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8317ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8667ms (attempt 3/8, exponential backoff)
+[2026-05-03T16:58:51.675Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=34.5min
+[RateLimit] protractor at 301/300, waiting 6500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 6500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 5500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:59:21.676Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=35.0min
+[RateLimit] protractor at 301/300, waiting 2347ms (attempt 1/8, exponential backoff)
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2023-03-28 -> 2023-02-11
+[Backfill] Shop 50: chunk metrics duration=558082ms ros=653 invoiceCache=0/653 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 2: 2023-02-11 to 2023-03-28: 3101 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[RateLimit] protractor at 302/300, waiting 2854ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2899ms (attempt 1/8, exponential backoff)
+[Backfill] Shop 50: Resuming from 2023-02-11 (logicVersion=4)
+[Backfill] Shop 50: 2022-12-28 to 2023-02-11 (45 days)
+[RateLimit] protractor at 301/300, waiting 4382ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4547ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4973ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8190ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8815ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8055ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[2026-05-03T16:59:51.677Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=35.5min
+[2026-05-03T17:00:08.103Z] WAITING shop=67 cron-holds-lock waited=20.0min lockAge=25.1min
+[Backfill] Shop 50: 757 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T17:00:21.677Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=36.0min
+[RateLimit] protractor at 301/300, waiting 2872ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2204ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2662ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4241ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4573ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4892ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8235ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8896ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8663ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:00:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=36.5min
+[2026-05-03T17:01:21.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=37.0min
+[RateLimit] protractor at 301/300, waiting 2933ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2171ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2231ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4544ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4958ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4424ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8512ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8549ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8777ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:01:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=37.5min
+[Backfill] Shop 71: 864 jobs, 0 unique vehicles to fetch (invoice cache: 0/866 hit)
+[Backfill] Shop 71: Bulk wrote 864 jobs (0 new, 864 updated, 0 skipped)
+[2026-05-03T17:02:08.336Z] WAITING shop=67 cron-holds-lock waited=22.0min lockAge=27.1min
+[2026-05-03T17:02:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=38.0min
+[RateLimit] protractor at 301/300, waiting 2114ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2602ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2386ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4862ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4017ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4061ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8962ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8681ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 8590ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:02:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=38.5min
+[2026-05-03T17:03:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=39.0min
+[RateLimit] protractor at 301/300, waiting 2284ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2432ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2672ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4488ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4399ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4955ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8342ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8771ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8399ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 10500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:03:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=39.5min
+[2026-05-03T17:04:08.575Z] WAITING shop=67 cron-holds-lock waited=24.0min lockAge=1.4min
+[2026-05-03T17:04:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=40.0min
+[RateLimit] protractor at 302/300, waiting 2265ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2013ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2143ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4472ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4237ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4159ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8709ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8390ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8962ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:04:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=40.5min
+[2026-05-03T17:05:21.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=41.0min
+[RateLimit] protractor at 301/300, waiting 2835ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2520ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2289ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4418ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4603ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4889ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8708ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8437ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8924ms (attempt 3/8, exponential backoff)
+[2026-05-03T17:05:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=41.5min
+[RateLimit] protractor at 301/300, waiting 6500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 6500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 5500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:06:08.822Z] WAITING shop=67 cron-holds-lock waited=26.1min lockAge=3.4min
+[2026-05-03T17:06:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=42.0min
+[Backfill] Shop 50: 3099 jobs, 0 unique vehicles to fetch (invoice cache: 0/757 hit)
+[Backfill] Shop 50: Bulk wrote 3099 jobs (0 new, 3099 updated, 0 skipped)
+[2026-05-03T17:06:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=42.5min
+[2026-05-03T17:07:21.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=43.0min
+[2026-05-03T17:07:51.678Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=43.5min
+[2026-05-03T17:08:09.056Z] WAITING shop=67 cron-holds-lock waited=28.1min lockAge=5.4min
+[2026-05-03T17:08:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=44.0min
+[2026-05-03T17:08:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=44.5min
+[2026-05-03T17:09:21.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=45.0min
+[2026-05-03T17:09:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=45.5min
+[2026-05-03T17:10:09.330Z] WAITING shop=67 cron-holds-lock waited=30.1min lockAge=7.4min
+[2026-05-03T17:10:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=46.0min
+[2026-05-03T17:10:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=46.5min
+[2026-05-03T17:11:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=47.0min
+[2026-05-03T17:11:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=47.5min
+[2026-05-03T17:12:09.568Z] WAITING shop=67 cron-holds-lock waited=32.1min lockAge=9.4min
+[2026-05-03T17:12:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=48.0min
+[2026-05-03T17:12:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=48.5min
+[2026-05-03T17:13:21.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=49.0min
+[2026-05-03T17:13:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=49.5min
+[2026-05-03T17:14:09.808Z] WAITING shop=67 cron-holds-lock waited=34.1min lockAge=11.5min
+[2026-05-03T17:14:21.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=50.0min
+[2026-05-03T17:14:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=50.5min
+[2026-05-03T17:15:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=51.0min
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2023-02-11 -> 2022-12-28
+[Backfill] Shop 50: chunk metrics duration=948650ms ros=757 invoiceCache=0/757 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 3: 2022-12-28 to 2023-02-11: 3099 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[Backfill] Shop 50: Resuming from 2022-12-28 (logicVersion=4)
+[Backfill] Shop 50: 2022-11-13 to 2022-12-28 (45 days)
+[Backfill] Shop 50: 653 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 71: Normalized 3 WOs
+[Backfill] Shop 71: FULL — currentChunkEnd 2021-09-14 -> 2021-08-15
+[Backfill] Shop 71: chunk metrics duration=1279484ms ros=866 invoiceCache=0/866 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 71 chunk 3: 2021-08-15 to 2021-09-14: 864 jobs, 0 vehicles fetched, 3 normalized, 30d chunk
+[Backfill] Shop 71: Wall clock limit reached after 3 chunks
+[Backfill] Shop 71: Run finished - 3 chunks, 2753 jobs indexed, complete: false
+[Backfill] Shop 71: Not complete, starting next run immediately
+[Backfill] Starting inline backfill for shop 71
+[Backfill] Shop 71: Resuming from 2021-08-15 (logicVersion=4)
+[Backfill] Shop 71: 2021-07-16 to 2021-08-15 (30 days)
+[Backfill] Shop 71: 944 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[RateLimit] protractor at 301/300, waiting 2785ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2478ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2967ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4996ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4554ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4239ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8363ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8932ms (attempt 3/8, exponential backoff)
+[2026-05-03T17:15:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=51.5min
+[RateLimit] protractor at 301/300, waiting 8306ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 1500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:16:10.045Z] WAITING shop=67 cron-holds-lock waited=36.1min lockAge=13.5min
+[2026-05-03T17:16:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=52.0min
+[RateLimit] protractor at 301/300, waiting 2395ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2900ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2690ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4810ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4088ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4489ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8487ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8206ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8105ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:16:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=52.5min
+[2026-05-03T17:17:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=53.0min
+[RateLimit] protractor at 302/300, waiting 2799ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2996ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2528ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4591ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4930ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4054ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8192ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8023ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8522ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:17:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=53.5min
+[2026-05-03T17:18:10.277Z] WAITING shop=67 cron-holds-lock waited=38.1min lockAge=15.5min
+[2026-05-03T17:18:21.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=54.0min
+[RateLimit] protractor at 302/300, waiting 2295ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2834ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2459ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4439ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4171ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4579ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8130ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8503ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8988ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:18:51.680Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=54.5min
+[2026-05-03T17:19:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=55.0min
+[RateLimit] protractor at 302/300, waiting 2506ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2013ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2899ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4494ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4147ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4377ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8428ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8663ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8907ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:19:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=55.5min
+[2026-05-03T17:20:10.506Z] WAITING shop=67 cron-holds-lock waited=40.1min lockAge=17.5min
+[2026-05-03T17:20:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=56.0min
+[RateLimit] protractor at 301/300, waiting 2758ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2511ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2906ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4340ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4631ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4882ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8399ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8273ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8677ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:20:51.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=56.5min
+[2026-05-03T17:21:21.679Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=57.0min
+[RateLimit] protractor at 301/300, waiting 2935ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2670ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2435ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4502ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4933ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4026ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8014ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8542ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8885ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:21:51.683Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=57.5min
+[2026-05-03T17:22:10.733Z] WAITING shop=67 cron-holds-lock waited=42.1min lockAge=19.5min
+[2026-05-03T17:22:21.684Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=58.0min
+[RateLimit] protractor at 301/300, waiting 2749ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2026ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2327ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4437ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4006ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4073ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8779ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8977ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8757ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:22:51.683Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=58.5min
+[2026-05-03T17:23:21.683Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=59.0min
+[Backfill] Shop 50: 2168 jobs, 0 unique vehicles to fetch (invoice cache: 0/653 hit)
+[Backfill] Shop 50: Bulk wrote 2168 jobs (0 new, 2168 updated, 0 skipped)
+[RateLimit] protractor at 302/300, waiting 2696ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2236ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2987ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4030ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4924ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4391ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8204ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8148ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8855ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:23:51.683Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=59.5min
+[2026-05-03T17:24:10.959Z] WAITING shop=67 cron-holds-lock waited=44.1min lockAge=21.5min
+[2026-05-03T17:24:21.683Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=60.0min
+[RateLimit] protractor at 301/300, waiting 2827ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2868ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2092ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4533ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4539ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4378ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8754ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8147ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8950ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:24:51.684Z] HEARTBEAT done=1/13 complete=1 error=0 lockWait=0 elapsed=60.5min
+[2026-05-03T17:25:11.072Z] LOCK_WAIT_TIMEOUT shop=67 (Harrell's Tire and Auto) waited 45min
+[2026-05-03T17:25:11.072Z] START shop=72 (Harrell's Tire and Auto)
+[Backfill] Shop 72: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T17:25:11.130Z] LOCKED shop=72 (Harrell's Tire and Auto) cron has lock — polling for release (attempt 1/8)
+[2026-05-03T17:25:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=61.0min
+[RateLimit] protractor at 301/300, waiting 2180ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2667ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2525ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4458ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4139ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4403ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8746ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8615ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8740ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:25:51.683Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=61.5min
+[Backfill] Shop 71: 938 jobs, 0 unique vehicles to fetch (invoice cache: 0/944 hit)
+[Backfill] Shop 71: Bulk wrote 938 jobs (0 new, 938 updated, 0 skipped)
+[2026-05-03T17:26:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=62.0min
+[2026-05-03T17:26:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=62.5min
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2022-12-28 -> 2022-11-13
+[Backfill] Shop 50: chunk metrics duration=694138ms ros=653 invoiceCache=0/653 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 4: 2022-11-13 to 2022-12-28: 2168 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[Backfill] Shop 50: Wall clock limit reached after 4 chunks
+[Backfill] Shop 50: Run finished - 4 chunks, 8539 jobs indexed, complete: false
+[Backfill] Shop 50: Not complete, starting next run immediately
+[Backfill] Starting inline backfill for shop 50
+[Backfill] Shop 50: Resuming from 2022-11-13 (logicVersion=4)
+[Backfill] Shop 50: 2022-09-29 to 2022-11-13 (45 days)
+[RateLimit] protractor at 301/300, waiting 2145ms (attempt 1/8, exponential backoff)
+[Backfill] Shop 50: 627 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T17:27:11.362Z] WAITING shop=72 cron-holds-lock waited=2.0min lockAge=13.7min
+[2026-05-03T17:27:21.683Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=63.0min
+[RateLimit] protractor at 302/300, waiting 2446ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2590ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2473ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4774ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4808ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4054ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8786ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8511ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8216ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:27:51.683Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=63.5min
+[2026-05-03T17:28:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=64.0min
+[RateLimit] protractor at 302/300, waiting 2652ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2974ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2975ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4241ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4783ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4287ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8675ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8199ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8253ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:28:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=64.5min
+[2026-05-03T17:29:11.587Z] WAITING shop=72 cron-holds-lock waited=4.0min lockAge=15.7min
+[2026-05-03T17:29:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=65.0min
+[RateLimit] protractor at 301/300, waiting 2024ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2528ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2106ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4013ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4109ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4955ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8589ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8255ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8807ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:29:51.683Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=65.5min
+[2026-05-03T17:30:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=66.0min
+[RateLimit] protractor at 302/300, waiting 2978ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2120ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2342ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4988ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4457ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4312ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8382ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8695ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 8661ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:30:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=66.5min
+[Backfill] Shop 50: 2118 jobs, 0 unique vehicles to fetch (invoice cache: 0/627 hit)
+[2026-05-03T17:31:11.828Z] WAITING shop=72 cron-holds-lock waited=6.0min lockAge=17.7min
+[Backfill] Shop 50: Bulk wrote 2118 jobs (0 new, 2118 updated, 0 skipped)
+[2026-05-03T17:31:21.683Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=67.0min
+[2026-05-03T17:31:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=67.5min
+[2026-05-03T17:32:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=68.0min
+[2026-05-03T17:32:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=68.5min
+[2026-05-03T17:33:12.062Z] WAITING shop=72 cron-holds-lock waited=8.0min lockAge=19.7min
+[2026-05-03T17:33:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=69.0min
+[Backfill] Shop 71: Normalized 2 WOs
+[Backfill] Shop 71: FULL — currentChunkEnd 2021-08-15 -> 2021-07-16
+[Backfill] Shop 71: chunk metrics duration=1078174ms ros=944 invoiceCache=0/944 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 71 chunk 1: 2021-07-16 to 2021-08-15: 938 jobs, 0 vehicles fetched, 2 normalized, 30d chunk
+[Backfill] Shop 71: Resuming from 2021-07-16 (logicVersion=4)
+[Backfill] Shop 71: 2021-06-16 to 2021-07-16 (30 days)
+[Backfill] Shop 71: 1046 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[RateLimit] protractor at 301/300, waiting 2675ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2254ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2823ms (attempt 1/8, exponential backoff)
+[2026-05-03T17:33:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=69.5min
+[RateLimit] protractor at 301/300, waiting 4369ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4900ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4945ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4500ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2500ms (attempt 3/8, exponential backoff)
+[2026-05-03T17:34:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=70.0min
+[RateLimit] protractor at 301/300, waiting 2992ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2326ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2274ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4795ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4282ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4241ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8880ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8383ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8066ms (attempt 3/8, exponential backoff)
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2022-11-13 -> 2022-09-29
+[Backfill] Shop 50: chunk metrics duration=463825ms ros=627 invoiceCache=0/627 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 1: 2022-09-29 to 2022-11-13: 2118 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[Backfill] Shop 50: Resuming from 2022-09-29 (logicVersion=4)
+[Backfill] Shop 50: 2022-08-15 to 2022-09-29 (45 days)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 304/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:34:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=70.5min
+[Backfill] Shop 50: 698 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[2026-05-03T17:35:12.292Z] WAITING shop=72 cron-holds-lock waited=10.0min lockAge=21.7min
+[2026-05-03T17:35:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=71.0min
+[RateLimit] protractor at 301/300, waiting 2677ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2170ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2960ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4564ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4474ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4405ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8905ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8503ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8134ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:35:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=71.5min
+[2026-05-03T17:36:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=72.0min
+[RateLimit] protractor at 301/300, waiting 2020ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2520ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2301ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4789ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4456ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4133ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8371ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8319ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8451ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:36:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=72.5min
+[2026-05-03T17:37:12.522Z] WAITING shop=72 cron-holds-lock waited=12.0min lockAge=23.7min
+[2026-05-03T17:37:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=73.0min
+[RateLimit] protractor at 301/300, waiting 2199ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2873ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2898ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4165ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4790ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4185ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8948ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8470ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8150ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:37:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=73.5min
+[2026-05-03T17:38:21.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=74.0min
+[RateLimit] protractor at 301/300, waiting 2566ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2231ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2234ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4140ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4406ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4258ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8837ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8183ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8456ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:38:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=74.5min
+[2026-05-03T17:39:12.765Z] WAITING shop=72 cron-holds-lock waited=14.0min lockAge=25.7min
+[2026-05-03T17:39:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=75.0min
+[RateLimit] protractor at 301/300, waiting 2617ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2690ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2949ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4820ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4045ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4584ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8451ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8904ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8138ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:39:51.684Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=75.5min
+[2026-05-03T17:40:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=76.0min
+[RateLimit] protractor at 301/300, waiting 2853ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2305ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2130ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4300ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4748ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4649ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8621ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8343ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8662ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:40:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=76.5min
+[2026-05-03T17:41:13.002Z] WAITING shop=72 cron-holds-lock waited=16.0min lockAge=27.7min
+[2026-05-03T17:41:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=77.0min
+[RateLimit] protractor at 302/300, waiting 2401ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2531ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2646ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4637ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4300ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4694ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8947ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 8533ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8777ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:41:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=77.5min
+[2026-05-03T17:42:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=78.0min
+[RateLimit] protractor at 301/300, waiting 2671ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2228ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2071ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4648ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4112ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4595ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8655ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8116ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8331ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 15500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:42:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=78.5min
+[2026-05-03T17:43:13.236Z] WAITING shop=72 cron-holds-lock waited=18.0min lockAge=29.8min
+[2026-05-03T17:43:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=79.0min
+[RateLimit] protractor at 301/300, waiting 2293ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2053ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2082ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4778ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 303/300, waiting 4455ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4016ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8812ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8397ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8291ms (attempt 3/8, exponential backoff)
+[Backfill] Starting inline backfill for shop 72
+[Backfill] Shop 72: Resuming from 2023-08-15 (logicVersion=4)
+[Backfill] Shop 72: 2023-07-01 to 2023-08-15 (45 days)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:43:51.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=79.5min
+[Backfill] Shop 72: 844 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 50: 2267 jobs, 0 unique vehicles to fetch (invoice cache: 0/698 hit)
+[Backfill] Shop 50: Bulk wrote 2267 jobs (0 new, 2267 updated, 0 skipped)
+[2026-05-03T17:44:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=80.0min
+[RateLimit] protractor at 301/300, waiting 2015ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2531ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2199ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4659ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4668ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4961ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8643ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8212ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8791ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:44:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=80.5min
+[2026-05-03T17:45:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=81.0min
+[Backfill] Shop 71: 1034 jobs, 0 unique vehicles to fetch (invoice cache: 0/1046 hit)
+[Backfill] Shop 71: Bulk wrote 1034 jobs (0 new, 1034 updated, 0 skipped)
+[RateLimit] protractor at 301/300, waiting 2985ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2428ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2896ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4985ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4148ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4952ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8777ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8441ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8156ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:45:51.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=81.5min
+[2026-05-03T17:46:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=82.0min
+[RateLimit] protractor at 301/300, waiting 2159ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2522ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2334ms (attempt 1/8, exponential backoff)
+[DualWrite] Supabase write failed — entity: vehicle, id: 69602f29f304d5cccd39eae8, action: update, shop: 50, pgCode: 23505, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: Key (shop_id, vin)=(50, 3GNAL3E56CS609826) already exists., pgHint: null, causeMessage: duplicate key value violates unique constraint "nv_shop_id_vin_idx", error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, default, default, $8, $9, $10, $11, $12, $13, default, $14, default, default, $15, default, $16, $17, default, $18, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, default, default, default, default, default, default, default, $26, $27, $28, $29, $30, $31, default, $32, $33, $34, $35, $36) on conflict ("id") do update set "enterprise_id" = $37, "shop_id" = $38, "provenance" = $39, "soft_delete" = $40, "version" = $41, "vin" = $42, "year" = $43, "make" = $44, "model" = $45, "submodel" = $46, "trim" = $47, "body_style" = $48, "engine_description" = $49, "engine_cylinders" = $50, "fuel_type" = $51, "transmission" = $52, "drivetrain" = $53, "exterior_color" = $54, "license_plate" = $55, "license_plate_state" = $56, "is_fleet" = $57, "fleet_id" = $58, "current_odometer" = $59, "odometer_unit" = $60, "notes" = $61, "tags" = $62, "custom_fields" = $63, "customer_ids" = $64, "primary_customer_id" = $65, "last_service_date" = $66, "total_services_count" = $67, "total_services_amount" = $68, "raw_data" = $69, "updated_at" = $70
+params: 69602f29f304d5cccd39eae8,6951d7423dad382d3db382e4,50,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"00bba7cd-8f59-438e-8a6d-87280642363a","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"205352","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"688a828d-a395-40d8-aae1-563d82f3e571","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"212283","isPrimary":false}],"firstSeenAt":"2026-01-08T22:26:49.960Z","lastSeenAt":"2026-05-03T17:46:32.700Z","lastSyncedAt":"2026-05-03T17:46:32.700Z","syncRunId":"backfill-1777829681096","contentHash":"ed7c232ee0724bc3","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},4,3GNAL3E56CS609826,2012,Chevrolet,Captiva Sport,,,,V6 3.0L 182CID VIN 5,,,,,,,,false,,,miles,,[],{},[],,,0,0,{"enterpriseId":"6951d7423dad382d3db382e4","shopId":50,"vin":"3GNAL3E56CS609826","vinDecoded":false,"year":2012,"make":"Chevrolet","model":"Captiva Sport","engineDescription":"V6 3.0L 182CID VIN 5","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"69602f29f304d5cccd39eae8","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"00bba7cd-8f59-438e-8a6d-87280642363a","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"205352","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"688a828d-a395-40d8-aae1-563d82f3e571","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"212283","isPrimary":false}],"firstSeenAt":"2026-01-08T22:26:49.960Z","lastSeenAt":"2026-05-03T17:46:32.700Z","lastSyncedAt":"2026-05-03T17:46:32.700Z","syncRunId":"backfill-1777829681096","contentHash":"ed7c232ee0724bc3","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":4,"createdAt":"2026-01-08T22:26:49.960Z","updatedAt":"2026-05-03T17:46:32.760Z"},2026-01-08T22:26:49.960Z,2026-05-03T17:46:32.760Z,6951d7423dad382d3db382e4,50,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"00bba7cd-8f59-438e-8a6d-87280642363a","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"205352","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"688a828d-a395-40d8-aae1-563d82f3e571","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"212283","isPrimary":false}],"firstSeenAt":"2026-01-08T22:26:49.960Z","lastSeenAt":"2026-05-03T17:46:32.700Z","lastSyncedAt":"2026-05-03T17:46:32.700Z","syncRunId":"backfill-1777829681096","contentHash":"ed7c232ee0724bc3","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},4,3GNAL3E56CS609826,2012,Chevrolet,Captiva Sport,,,,V6 3.0L 182CID VIN 5,,,,,,,,false,,,miles,,[],{},[],,,0,0,{"enterpriseId":"6951d7423dad382d3db382e4","shopId":50,"vin":"3GNAL3E56CS609826","vinDecoded":false,"year":2012,"make":"Chevrolet","model":"Captiva Sport","engineDescription":"V6 3.0L 182CID VIN 5","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"69602f29f304d5cccd39eae8","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"00bba7cd-8f59-438e-8a6d-87280642363a","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"205352","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"688a828d-a395-40d8-aae1-563d82f3e571","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"212283","isPrimary":false}],"firstSeenAt":"2026-01-08T22:26:49.960Z","lastSeenAt":"2026-05-03T17:46:32.700Z","lastSyncedAt":"2026-05-03T17:46:32.700Z","syncRunId":"backfill-1777829681096","contentHash":"ed7c232ee0724bc3","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":4,"createdAt":"2026-01-08T22:26:49.960Z","updatedAt":"2026-05-03T17:46:32.760Z"},2026-05-03T17:46:32.760Z
+[RateLimit] protractor at 301/300, waiting 4739ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4641ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4000ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8249ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8277ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8695ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:46:51.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=82.5min
+[2026-05-03T17:47:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=83.0min
+[RateLimit] protractor at 301/300, waiting 2054ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2589ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2961ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4898ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4911ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4134ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8151ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 8109ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8678ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:47:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=83.5min
+[Backfill] Shop 72: 843 jobs, 0 unique vehicles to fetch (invoice cache: 367/844 hit)
+[Backfill] Shop 72: Bulk wrote 843 jobs (0 new, 843 updated, 0 skipped)
+[2026-05-03T17:48:21.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=84.0min
+[Backfill] Shop 50: Normalized 0 WOs
+[Backfill] Shop 50: FULL — currentChunkEnd 2022-09-29 -> 2022-08-15
+[Backfill] Shop 50: chunk metrics duration=828865ms ros=698 invoiceCache=0/698 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 50 chunk 2: 2022-08-15 to 2022-09-29: 2267 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+[Backfill] Shop 50: Resuming from 2022-08-15 (logicVersion=4)
+[Backfill] Shop 50: 2022-07-01 to 2022-08-15 (45 days)
+[Backfill] Shop 50: 613 invoices pace=DAYTIME tz=America/Chicago hour=12 conc=3 chunkDays=60 maxPages=50 
+[RateLimit] protractor at 302/300, waiting 2139ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 2911ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2404ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4873ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4335ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4305ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8283ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8532ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8461ms (attempt 3/8, exponential backoff)
+[2026-05-03T17:48:51.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=84.5min
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 3500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:49:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=85.0min
+[RateLimit] protractor at 301/300, waiting 2366ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2734ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2591ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4674ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4765ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4970ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8107ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8258ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8257ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 14500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 13500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:49:51.685Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=85.5min
+[2026-05-03T17:50:21.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=86.0min
+[RateLimit] protractor at 301/300, waiting 2546ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2968ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 2785ms (attempt 1/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4563ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 4440ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 302/300, waiting 4843ms (attempt 2/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8944ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8281ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 8386ms (attempt 3/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 12500ms (attempt 4/8, exponential backoff)
+[RateLimit] protractor at 301/300, waiting 11500ms (attempt 4/8, exponential backoff)
+[2026-05-03T17:50:51.686Z] HEARTBEAT done=2/13 complete=1 error=0 lockWait=1 elapsed=86.5min
