@@ -9,6 +9,7 @@ import {
   Building2, 
   RefreshCw, 
   Search,
+  Download,
   ExternalLink,
   AlertCircle,
   CheckCircle,
@@ -264,12 +265,22 @@ export default function PlatformBillingPage() {
             <h1 className="text-2xl font-bold text-gray-900">Billing Overview</h1>
             <p className="text-gray-600">Monitor subscriptions, revenue, and payment status</p>
           </div>
-          <button
-            onClick={loadBilling}
-            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/platform-admin/billing/export"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title="Download monthly revenue CSV (includes Stripe and AppFueled Invoice shops)"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </a>
+            <button
+              onClick={loadBilling}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {summary && (
