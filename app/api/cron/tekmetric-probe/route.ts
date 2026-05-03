@@ -94,18 +94,16 @@ export async function GET(req: NextRequest) {
   try {
     const db = await getDb();
 
-    // 1. Resolve the shop record. Match the OR-filter the cron and
-    //    catchup-status endpoints use so we find shops keyed under
-    //    either the new or legacy field.
+    // 1. Resolve the shop record. Shops are keyed by integer `shopId`,
+    //    NOT by MongoDB `_id` (which is an ObjectId). Match the
+    //    OR-filter the cron and catchup-status endpoints use so we
+    //    find shops keyed under either the new or legacy Tekmetric
+    //    field.
     const shop = await db.collection("shops").findOne({
-      $and: [
-        { _id: mosShopId as any },
-        {
-          $or: [
-            { "tekmetric.shopId": { $exists: true, $ne: null } },
-            { tekmetricShopId: { $exists: true, $ne: null } },
-          ],
-        },
+      shopId: mosShopId,
+      $or: [
+        { "tekmetric.shopId": { $exists: true, $ne: null } },
+        { tekmetricShopId: { $exists: true, $ne: null } },
       ],
     });
 
