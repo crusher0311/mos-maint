@@ -781,20 +781,106 @@ export default function SyncHealthPage() {
     return () => clearInterval(id);
   }, [runNowByShop]);
 
+  // Fetch each section in parallel from its dedicated sub-route and merge
+  // into `data` as each response arrives. The original single-endpoint
+  // version blew past the platform's request budget on prod and the page
+  // rendered as skeleton-forever (task #288). Splitting into 4 parallel
+  // requests means total wall-time is max(t1..t4) instead of sum, and
+  // sections show content as soon as their slice arrives instead of all-or-
+  // nothing. Each slice failure surfaces inline so a 500 on one provider
+  // doesn't blank the whole page.
   const load = async () => {
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch("/api/admin/sync-health");
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error || "Failed to load sync health");
+    setData({
+      backfill: {
+        tekmetric: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+        protractor: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+        shopware: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+      },
+      sync: { last24h: { total: 0, successRate: "N/A", avgDurationMs: 0 } },
+      errors: { unresolved: 0 },
+    });
+
+    const fetchSlice = async (
+      url: string,
+      apply: (json: any) => void,
+    ): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!res.ok) {
+          return { ok: false, error: json.error || `Failed (${res.status})` };
+        }
+        apply(json);
+        return { ok: true };
+      } catch (err: any) {
+        return { ok: false, error: err?.message || "Failed" };
       }
-      setData(json);
-    } catch (err: any) {
-      setError(err.message || "Failed to load sync health");
-    } finally {
+    };
+
+    const tasks = [
+      fetchSlice("/api/admin/sync-health", (json) =>
+        setData((d) => ({
+          ...(d ?? ({} as SyncHealthData)),
+          backfill:
+            d?.backfill ?? {
+              tekmetric: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+              protractor: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+              shopware: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+            },
+          sync: json.sync,
+          errors: json.errors,
+        })),
+      ),
+      fetchSlice("/api/admin/sync-health/tekmetric", (json) =>
+        setData((d) => ({
+          ...(d as SyncHealthData),
+          backfill: { ...(d as SyncHealthData).backfill, tekmetric: json },
+        })),
+      ),
+      fetchSlice("/api/admin/sync-health/protractor", (json) =>
+        setData((d) => ({
+          ...(d as SyncHealthData),
+          backfill: { ...(d as SyncHealthData).backfill, protractor: json },
+        })),
+      ),
+      fetchSlice("/api/admin/sync-health/shopware", (json) =>
+        setData((d) => ({
+          ...(d as SyncHealthData),
+          backfill: { ...(d as SyncHealthData).backfill, shopware: json },
+        })),
+      ),
+    ];
+
+    // Drop the universal skeleton as soon as any slice arrives — the rest
+    // of the page renders progressively as remaining slices come in. We
+    // intentionally don't await Promise.all before clearing `loading` so a
+    // single slow provider can't keep the whole page in skeleton state.
+    let cleared = false;
+    const clearLoadingOnce = () => {
+      if (cleared) return;
+      cleared = true;
       setLoading(false);
+    };
+
+    const results = await Promise.all(
+      tasks.map((p) => p.then((r) => (clearLoadingOnce(), r))),
+    );
+    clearLoadingOnce();
+
+    const failures = results.filter((r) => !r.ok);
+    if (failures.length === results.length) {
+      // All slices failed — fall back to a hard error state.
+      setError(failures[0].error || "Failed to load sync health");
+    } else if (failures.length > 0) {
+      // Partial failure — surface a non-fatal banner so on-call sees that
+      // some sections are stale rather than silently rendering "0".
+      setError(
+        `Some sections failed to load (${failures.length}/${results.length}): ${failures
+          .map((f) => f.error)
+          .join("; ")}`,
+      );
     }
   };
 
@@ -1582,7 +1668,7 @@ export default function SyncHealthPage() {
     }
   };
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="p-8">
         <div className="animate-pulse space-y-4">
@@ -1594,7 +1680,10 @@ export default function SyncHealthPage() {
     );
   }
 
-  if (error) {
+  // Hard-fail only when we have no data at all. With the per-section split
+  // (task #288) a single failing slice surfaces as a non-fatal banner above
+  // the rendered sections instead of blanking the page.
+  if (error && !data) {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
@@ -3730,12 +3819,28 @@ export default function SyncHealthPage() {
         </div>
         <button
           onClick={load}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+          disabled={loading}
+          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg disabled:opacity-50"
           title="Refresh"
         >
-          <RefreshCw className="w-5 h-5" />
+          {loading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-5 h-5" />
+          )}
         </button>
       </div>
+
+      {/* Partial-failure banner — surfaced when at least one section
+          slice loaded but at least one other failed (task #288). The
+          successful sections still render below; this just tells on-call
+          which slice is stale. */}
+      {error && data && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-sm flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
