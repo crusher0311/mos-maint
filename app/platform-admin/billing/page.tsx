@@ -150,7 +150,7 @@ export default function PlatformBillingPage() {
     const initialPaymentType: "stripe" | "invoice" =
       shop.paymentType === "invoice" || shop.plan === "appfueled_invoice" ? "invoice" : "stripe";
     setLinkPaymentType(initialPaymentType);
-    setLinkStatus(shop.status || "");
+    setLinkStatus(initialPaymentType === "invoice" ? "active" : (shop.status || ""));
     setLinkInvoiceAmount(
       initialPaymentType === "invoice" && typeof shop.invoiceMonthlyAmount === "number"
         ? (shop.invoiceMonthlyAmount / 100).toFixed(2)
@@ -585,7 +585,12 @@ export default function PlatformBillingPage() {
                   </label>
                   <select
                     value={linkPaymentType}
-                    onChange={(e) => setLinkPaymentType(e.target.value as "stripe" | "invoice")}
+                    onChange={(e) => {
+                      const next = e.target.value as "stripe" | "invoice";
+                      setLinkPaymentType(next);
+                      // AppFueled Invoice shops are always active.
+                      if (next === "invoice") setLinkStatus("active");
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
                   >
                     <option value="stripe">Stripe (auto-charge)</option>
@@ -643,9 +648,11 @@ export default function PlatformBillingPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
-                      value={linkStatus}
+                      value={linkPaymentType === "invoice" ? "active" : linkStatus}
                       onChange={(e) => setLinkStatus(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                      disabled={linkPaymentType === "invoice"}
+                      title={linkPaymentType === "invoice" ? "AppFueled Invoice shops are always active" : undefined}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                     >
                       <option value="">No change</option>
                       <option value="active">Active</option>

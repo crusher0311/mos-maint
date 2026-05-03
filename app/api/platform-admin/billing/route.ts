@@ -266,7 +266,9 @@ export async function PATCH(req: NextRequest) {
 
       updateFields["billing.plan"] = resolvedPlan;
       updateFields["billing.paymentType"] = "invoice";
-      updateFields["billing.status"] = status || "active";
+      // AppFueled Invoice shops are always considered active — they're billed
+      // out-of-band, so there's no Stripe state to derive past_due/canceled from.
+      updateFields["billing.status"] = "active";
       updateFields["billing.isPaid"] = true;
       updateFields["billing.invoiceMonthlyAmount"] = invoiceMonthlyAmountCents;
 
