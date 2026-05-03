@@ -313,14 +313,209 @@ function checkForContextChanges() {
 
 setTimeout(() => {
   checkForContextChanges();
-  contextCheckInterval = setInterval(checkForContextChanges, 2000);
+  checkAndInjectButton();
+  contextCheckInterval = setInterval(() => {
+    checkForContextChanges();
+    checkAndInjectButton();
+  }, 2000);
 }, 1000);
+
+// ==================== TOAST NOTIFICATIONS ====================
+function showToast(message, type = 'info') {
+  const existing = document.getElementById('mos-toast');
+  if (existing) existing.remove();
+  const colors = { success: '#22c55e', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
+  const toast = document.createElement('div');
+  toast.id = 'mos-toast';
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '20px', right: '20px',
+    backgroundColor: colors[type] || colors.info, color: 'white',
+    padding: '10px 16px', borderRadius: '8px', fontSize: '14px',
+    fontWeight: '500', zIndex: '999999',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)', maxWidth: '320px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  });
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ==================== PRINT BUTTON ====================
+let printButtonInjected = false;
+let lastInjectedUrl = null;
+
+function createPrintButton() {
+  const button = document.createElement('button');
+  button.id = 'mos-print-btn-af';
+  button.title = 'MOS Oil Sticker — Left-click: Print';
+  button.type = 'button';
+  const imgUrl = chrome.runtime.getURL('icons/mos-print-button.png');
+  button.innerHTML = `<img src="${imgUrl}" alt="MOS Print" style="height:26px;display:block;" />`;
+  Object.assign(button.style, {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    padding: '2px', background: 'transparent', border: 'none',
+    borderRadius: '4px', cursor: 'pointer', marginLeft: '6px',
+    verticalAlign: 'middle', transition: 'opacity 0.2s'
+  });
+  button.addEventListener('mouseenter', () => { button.style.opacity = '0.8'; });
+  button.addEventListener('mouseleave', () => { button.style.opacity = '1'; });
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ctx = detectContext();
+    if (!ctx.roId || !ctx.shopId) {
+      showToast('No work order detected on this page', 'error');
+      return;
+    }
+    showToast('Generating sticker...', 'info');
+    chrome.runtime.sendMessage(
+      { action: 'PRINT_STICKER_IMMEDIATE', context: ctx },
+      (response) => {
+        if (response?.success) {
+          printStickerFromContentScript(response.sticker);
+        } else {
+          showToast(response?.error || 'Failed to generate sticker', 'error');
+        }
+      }
+    );
+  });
+  return button;
+}
+
+function injectPrintButton() {
+  if (printButtonInjected && document.getElementById('mos-print-btn-af')) return;
+  if (document.getElementById('mos-print-btn-af')) {
+    printButtonInjected = true;
+    return;
+  }
+  const ctx = detectContext();
+  if (!ctx.roId) return;
+
+  let target = null;
+  let placement = 'after'; // 'after' | 'append'
+
+  // Strategy 1: AutoFlow DVI action bar — find the existing PDF / QC /
+  // "Text & Email" / "Report Complete" buttons and drop in alongside
+  // them. These are typically anchors or buttons whose visible text is
+  // a known label.
+  const KNOWN_LABELS = ['PDF', 'QC', 'Text & Email', 'Report Complete', 'Re-Push', 'Sheets'];
+  const candidates = Array.from(document.querySelectorAll('a, button'));
+  for (const label of KNOWN_LABELS) {
+    const hit = candidates.find(el => {
+      const t = (el.textContent || '').trim();
+      return t === label || t.startsWith(label + ' ') || t.startsWith(label + '(');
+    });
+    if (hit && hit.parentElement) {
+      target = hit;
+      placement = 'after';
+      break;
+    }
+  }
+
+  // Strategy 2: AutoFlow DVI submit/print toolbar containers
+  if (!target) {
+    const bar = document.querySelector(
+      '.btn-toolbar, .dvi-actions, .dvi_actions, .action-buttons, ' +
+      '[class*="dvi-toolbar"], [class*="dvi_toolbar"]'
+    );
+    if (bar) { target = bar; placement = 'append'; }
+  }
+
+  // Strategy 3: standalone DVI viewer — look for a print-related anchor
+  if (!target) {
+    const printish = candidates.find(el => /^\s*Print\s*$/i.test(el.textContent || ''));
+    if (printish && printish.parentElement) {
+      target = printish;
+      placement = 'after';
+    }
+  }
+
+  if (!target) return; // try again on next tick
+
+  const btn = createPrintButton();
+  if (placement === 'after') {
+    target.parentElement.insertBefore(btn, target.nextSibling);
+  } else {
+    target.appendChild(btn);
+  }
+  printButtonInjected = true;
+  lastInjectedUrl = window.location.href;
+  console.log('[MOS Tools] AutoFlow print button injected (strategy target=' +
+    (target.tagName || '?') + ', text="' + ((target.textContent || '').trim().slice(0, 40)) + '")');
+}
+
+function checkAndInjectButton() {
+  // Re-inject on URL change (AutoFlow uses traditional navigation but
+  // also some inline page swaps).
+  if (lastInjectedUrl && lastInjectedUrl !== window.location.href) {
+    printButtonInjected = false;
+    lastInjectedUrl = null;
+  }
+  // Drop the cached flag if the button got nuked from the DOM by a
+  // page re-render.
+  if (printButtonInjected && !document.getElementById('mos-print-btn-af')) {
+    printButtonInjected = false;
+  }
+  injectPrintButton();
+}
+
+function printStickerFromContentScript(sticker) {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html><head><title>Print Sticker</title><style>
+      @page { margin: 0; size: auto; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; }
+      img {
+        width: ${sticker.widthInches || '2in'};
+        height: ${sticker.heightInches || '2.5in'};
+        display: block;
+      }
+    </style></head>
+    <body><img id="sticker" src="${sticker.dataUrl}" /></body></html>
+  `);
+  doc.close();
+  const img = doc.getElementById('sticker');
+  const doPrint = () => {
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => iframe.remove(), 1000);
+    }, 100);
+  };
+  if (img.complete) doPrint();
+  else {
+    img.onload = doPrint;
+    img.onerror = () => {
+      showToast('Failed to load sticker image', 'error');
+      iframe.remove();
+    };
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GET_SMS_CONTEXT") {
     const context = detectContext();
     sendResponse(context);
     return true;
+  }
+  if (message.action === 'PRINT_STICKER_FROM_PANEL') {
+    if (message.sticker) {
+      printStickerFromContentScript(message.sticker);
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'No sticker data' });
+    }
+    return false;
+  }
+  if (message.action === 'SHOW_TOAST') {
+    showToast(message.message, message.type || 'info');
+    sendResponse({ success: true });
+    return false;
   }
   if (message.action === 'MOS_SNIFFER_STATE_UPDATE') {
     if (message.active) {
