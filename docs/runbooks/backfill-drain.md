@@ -237,6 +237,25 @@ Tekmetric only:
   years of history at 90-day chunks needs ~20 chunks; 200 is generous
   headroom.
 
+Protractor only:
+- `DRAIN_LOCK_POLL_MS=30000` — when the cron is holding a per-shop lock,
+  how often to recheck whether the cron has released it.
+- `DRAIN_LOCK_WAIT_MAX_MS=2700000` (45 min) — how long to keep waiting
+  on a single locked shop before giving up and moving on. The Protractor
+  cron's wall-clock cap inside `runProtractorBackfill` is 30 min, so 45
+  is enough headroom for a cron run + one retry attempt.
+
+### Why the Protractor drain has the lock-wait dance
+On weekends the Protractor cron fires every 15 minutes (Sat/Sun boost at
+:05/:20/:35/:50 UTC) and grabs the per-shop `backfill_progress` locks.
+Without the wait-and-retry, the drain would hit each locked shop, get
+`"Already in progress"` back from `runProtractorBackfill`, count it as
+an ERROR, and move on — leaving most of the work to the cron. With
+wait-and-retry, the drain politely waits for the cron's chunk run to
+finish, then takes over and drains the rest of that shop's history in
+one go. If the cron finishes the whole shop on its own, the drain logs
+`COMPLETED_BY_OTHER` and skips it.
+
 ## Relevant files
 - `scripts/drain-tekmetric-backfill.ts`
 - `scripts/drain-protractor-backfill.ts`

@@ -1,0 +1,129 @@
+render@srv-d55jaqkhg0os73a5dd8g-8586c4f5c6-58d4n:~/project/src$ npm run drain:protractor-backfill
+
+> mos-maintenance-mvp@1.8.0 drain:protractor-backfill
+> NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts
+
+[2026-05-03T16:04:32.281Z] ===== Protractor Backfill Drain Worker =====
+[2026-05-03T16:04:32.282Z] parallelism=3 heartbeatMs=30000 shopIdFilter=ALL_INCOMPLETE
+[2026-05-03T16:04:34.210Z] Found 15 incomplete Protractor shops to drain
+[2026-05-03T16:04:34.211Z] START shop=68 (Harrell's Tire and Auto)
+[2026-05-03T16:04:34.211Z] START shop=71 (Harrell's Tire and Auto)
+[2026-05-03T16:04:34.211Z] START shop=113 (Precision / Grip / EV Lab)
+[Backfill] Starting inline backfill for shop 68
+[Backfill] Shop 71: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:04:34.275Z] ERROR shop=71 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:04:34.275Z] START shop=67 (Harrell's Tire and Auto)
+[Backfill] Shop 113: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:04:34.276Z] ERROR shop=113 (Precision / Grip / EV Lab) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:04:34.276Z] START shop=66 (CAR Experts Protractor)
+[Backfill] Shop 67: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:04:34.348Z] ERROR shop=67 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:04:34.348Z] START shop=50 (Harrell's Tire and Auto)
+[Backfill] Starting inline backfill for shop 66
+[Backfill] Starting inline backfill for shop 50
+[Backfill] Shop 68: Resuming from 2021-06-07 (logicVersion=4)
+[Backfill] Shop 68: 2021-05-03 to 2021-06-07 (45 days)
+[Backfill] Shop 66: Resuming from 2023-07-30 (logicVersion=4)
+[Backfill] Shop 66: 2023-05-31 to 2023-07-30 (60 days)
+[Backfill] Shop 50: Resuming from 2023-08-10 (logicVersion=4)
+[Backfill] Shop 50: 2023-06-26 to 2023-08-10 (45 days)
+[Backfill] Shop 66: 110 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 68: 482 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66: 419 jobs, 0 unique vehicles to fetch (invoice cache: 110/110 hit)
+[Backfill] Shop 50: 739 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 68: 1158 jobs, 0 unique vehicles to fetch (invoice cache: 482/482 hit)
+[2026-05-03T16:05:04.211Z] HEARTBEAT done=0/15 complete=0 error=0 elapsed=0.5min
+[Backfill] Shop 66: Normalized 0 WOs
+[Backfill] Shop 66: FULL — currentChunkEnd 2023-07-30 -> 2023-05-31
+[Backfill] Shop 66: chunk metrics duration=32298ms ros=110 invoiceCache=110/110 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 66 chunk 1: 2023-05-31 to 2023-07-30: 0 jobs, 0 vehicles fetched, 0 normalized, 60d chunk
+[Backfill] Shop 66: Resuming from 2023-05-31 (logicVersion=4)
+[Backfill] Shop 66: 2023-03-02 to 2023-05-31 (90 days)
+[Backfill] Shop 66: 95 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 50: 3454 jobs, 0 unique vehicles to fetch (invoice cache: 739/739 hit)
+[Backfill] Shop 66: 401 jobs, 0 unique vehicles to fetch (invoice cache: 95/95 hit)
+[2026-05-03T16:05:34.211Z] HEARTBEAT done=0/15 complete=0 error=0 elapsed=1.0min
+[Backfill] Shop 66: Normalized 0 WOs
+[Backfill] Shop 66: FULL — currentChunkEnd 2023-05-31 -> 2023-03-02
+[Backfill] Shop 66: chunk metrics duration=30658ms ros=95 invoiceCache=95/95 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 66 chunk 2: 2023-03-02 to 2023-05-31: 0 jobs, 0 vehicles fetched, 0 normalized, 90d chunk
+[Backfill] Shop 66: Resuming from 2023-03-02 (logicVersion=4)
+[Backfill] Shop 66: 2022-12-02 to 2023-03-02 (90 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 3: 2022-12-02 to 2023-03-02: 0 invoices
+[Backfill] Shop 66: Resuming from 2022-12-02 (logicVersion=4)
+[Backfill] Shop 66: 2022-10-03 to 2022-12-02 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 4: 2022-10-03 to 2022-12-02: 0 invoices
+[Backfill] Shop 66: Resuming from 2022-10-03 (logicVersion=4)
+[Backfill] Shop 66: 2022-08-04 to 2022-10-03 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 5: 2022-08-04 to 2022-10-03: 0 invoices
+[Backfill] Shop 66: Resuming from 2022-08-04 (logicVersion=4)
+[Backfill] Shop 66: 2022-06-05 to 2022-08-04 (60 days)
+[Backfill] Shop 66: 8 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66: 56 jobs, 0 unique vehicles to fetch (invoice cache: 8/8 hit)
+[Backfill] Shop 66: Normalized 0 WOs
+[Backfill] Shop 66: FULL — currentChunkEnd 2022-08-04 -> 2022-06-05
+[Backfill] Shop 66: chunk metrics duration=2869ms ros=8 invoiceCache=8/8 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 66 chunk 6: 2022-06-05 to 2022-08-04: 0 jobs, 0 vehicles fetched, 0 normalized, 60d chunk
+[Backfill] Shop 66: Resuming from 2022-06-05 (logicVersion=4)
+[Backfill] Shop 66: 2022-03-07 to 2022-06-05 (90 days)
+[Backfill] Shop 66: 5 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66: 64 jobs, 0 unique vehicles to fetch (invoice cache: 5/5 hit)
+[Backfill] Shop 66: Normalized 0 WOs
+[Backfill] Shop 66: FULL — currentChunkEnd 2022-06-05 -> 2022-03-07
+[Backfill] Shop 66: chunk metrics duration=2008ms ros=5 invoiceCache=5/5 vehiclesCache=0/0 backoff=0ms
+[Backfill] Shop 66 chunk 7: 2022-03-07 to 2022-06-05: 0 jobs, 0 vehicles fetched, 0 normalized, 90d chunk
+[Backfill] Shop 66: Resuming from 2022-03-07 (logicVersion=4)
+[Backfill] Shop 66: 2021-12-07 to 2022-03-07 (90 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 8: 2021-12-07 to 2022-03-07: 0 invoices
+[Backfill] Shop 66: Resuming from 2021-12-07 (logicVersion=4)
+[Backfill] Shop 66: 2021-10-08 to 2021-12-07 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 9: 2021-10-08 to 2021-12-07: 0 invoices
+[Backfill] Shop 66: Resuming from 2021-10-08 (logicVersion=4)
+[Backfill] Shop 66: 2021-08-09 to 2021-10-08 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 10: 2021-08-09 to 2021-10-08: 0 invoices
+[Backfill] Shop 66: Resuming from 2021-08-09 (logicVersion=4)
+[Backfill] Shop 66: 2021-06-10 to 2021-08-09 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 11: 2021-06-10 to 2021-08-09: 0 invoices
+[Backfill] Shop 66: Resuming from 2021-06-10 (logicVersion=4)
+[Backfill] Shop 66: 2021-05-03 to 2021-06-10 (60 days)
+[Backfill] Shop 66: 0 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+[Backfill] Shop 66 chunk 12: 2021-05-03 to 2021-06-10: 0 invoices
+[Backfill] Shop 66: Run finished - 12 chunks, 0 jobs indexed, complete: true
+[Backfill] Shop 66: FULLY COMPLETE!
+[2026-05-03T16:05:48.252Z] COMPLETE shop=66 (CAR Experts Protractor) chunks=12 jobs=0
+[2026-05-03T16:05:48.252Z] START shop=72 (Harrell's Tire and Auto)
+[Backfill] Shop 72: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.310Z] ERROR shop=72 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.310Z] START shop=115 (Foreman Auto)
+[Backfill] Shop 115: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.367Z] ERROR shop=115 (Foreman Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.367Z] START shop=69 (Harrell's Tire and Auto)
+[Backfill] Shop 69: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.424Z] ERROR shop=69 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.425Z] START shop=35 (Precision Auto Service Ltd.)
+[Backfill] Shop 35: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.482Z] ERROR shop=35 (Precision Auto Service Ltd.) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.482Z] START shop=25 (Harrells Automotive)
+[Backfill] Shop 25: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.539Z] ERROR shop=25 (Harrells Automotive) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.539Z] START shop=29 (Harrell's Tire and Auto)
+[Backfill] Shop 29: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.596Z] ERROR shop=29 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.596Z] START shop=51 (Harrell's Tire and Auto)
+[Backfill] Shop 51: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.654Z] ERROR shop=51 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.654Z] START shop=116 (V&F Auto, Inc)
+[Backfill] Shop 116: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.711Z] ERROR shop=116 (V&F Auto, Inc) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:05:48.711Z] START shop=70 (Harrell's Tire and Auto)
+[Backfill] Shop 70: Skipping - another instance already in progress (lock is fresh)
+[2026-05-03T16:05:48.768Z] ERROR shop=70 (Harrell's Tire and Auto) chunks=0 jobs=0 err="Already in progress"
+[2026-05-03T16:06:04.210Z] HEARTBEAT done=0/15 complete=0 error=0 elapsed=1.5min
+[2026-05-03T16:06:34.210Z] HEARTBEAT done=0/15 complete=0 error=0 elapsed=2.0min
