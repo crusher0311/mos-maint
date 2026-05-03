@@ -15,7 +15,21 @@ import type {
   TekmetricCannedJob,
 } from './types';
 
-export function transformVehicle(raw: TekmetricVehicle): NormalizedVehicle {
+export interface TekmetricTransformOptions {
+  /**
+   * Task #333: Tekmetric stores odometer values in whatever unit the shop
+   * operates in (miles for US shops, kilometers for Canadian shops). The
+   * `mileageUnit` field on the normalized record must reflect that or
+   * downstream code mistakes a Canadian shop's km values for miles and
+   * applies a second conversion.
+   */
+  mileageUnit?: 'miles' | 'kilometers';
+}
+
+export function transformVehicle(
+  raw: TekmetricVehicle,
+  options?: TekmetricTransformOptions,
+): NormalizedVehicle {
   return {
     id: String(raw.id),
     vin: raw.vin,
@@ -26,7 +40,7 @@ export function transformVehicle(raw: TekmetricVehicle): NormalizedVehicle {
     engine: raw.engine,
     transmission: raw.transmission,
     mileage: raw.mileageIn || raw.mileageOut,
-    mileageUnit: 'miles',
+    mileageUnit: options?.mileageUnit ?? 'miles',
     licensePlate: raw.licensePlate,
     color: raw.color,
     customerId: String(raw.customerId),
@@ -95,10 +109,17 @@ export function transformJob(raw: TekmetricJob): NormalizedServiceJob {
   };
 }
 
-export function transformRepairOrder(raw: TekmetricRepairOrder, vehicle?: TekmetricVehicle, customer?: TekmetricCustomer, jobs?: TekmetricJob[]): NormalizedWorkOrder {
-  const normalizedVehicle = vehicle ? transformVehicle(vehicle) : {
+export function transformRepairOrder(
+  raw: TekmetricRepairOrder,
+  vehicle?: TekmetricVehicle,
+  customer?: TekmetricCustomer,
+  jobs?: TekmetricJob[],
+  options?: TekmetricTransformOptions,
+): NormalizedWorkOrder {
+  const normalizedVehicle = vehicle ? transformVehicle(vehicle, options) : {
     id: String(raw.vehicleId),
     mileage: raw.mileageIn || raw.mileageOut,
+    mileageUnit: options?.mileageUnit ?? 'miles',
     sourceId: String(raw.vehicleId),
     sourceSystem: 'tekmetric' as const,
   };
@@ -122,8 +143,11 @@ export function transformRepairOrder(raw: TekmetricRepairOrder, vehicle?: Tekmet
   };
 }
 
-export function transformRepairOrderFull(raw: TekmetricRepairOrderFull): NormalizedWorkOrder {
-  return transformRepairOrder(raw, raw.vehicle, raw.customer, raw.jobs);
+export function transformRepairOrderFull(
+  raw: TekmetricRepairOrderFull,
+  options?: TekmetricTransformOptions,
+): NormalizedWorkOrder {
+  return transformRepairOrder(raw, raw.vehicle, raw.customer, raw.jobs, options);
 }
 
 export function transformCannedJob(raw: TekmetricCannedJob): CannedJob {

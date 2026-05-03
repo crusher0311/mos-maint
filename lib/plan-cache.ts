@@ -18,8 +18,13 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  *    so OEM "Inspect …" rows on known fluids surface with a distinct
  *    "OEM: Inspect every X mi" chip and bypass the showInspectItems
  *    filter.
+ *  - v5 (May 2026, task 333): triage now stores every distance field
+ *    (`intervalMiles`, `dueAtMiles`, `milesToGo`, `last.miles`) in the
+ *    shop's local distance unit. Older cache entries mixed real miles
+ *    (OEM intervals) with shop-unit anchors and need to be discarded so
+ *    Kilometers-preference shops stop seeing 1.6× inflated values.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 4;
+export const PLAN_CACHE_SCHEMA_VERSION = 5;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -142,7 +147,11 @@ export async function getCachedPlan(
   db: Db, 
   vin: string, 
   shopId: number, 
-  currentMiles?: number | null
+  currentMiles?: number | null,
+  // Task #333: when a shop flips between miles and kilometers, the cached
+  // distance fields (now stored in shop unit) become wrong. Skip stale
+  // cache entries whose distanceUnit no longer matches the shop preference.
+  distanceUnit?: "miles" | "kilometers"
 ): Promise<CachedPlan | null> {
   const candidates = await db.collection("cached_plans")
     .find({
@@ -169,6 +178,11 @@ export async function getCachedPlan(
     // for natural cache expiry.
     if ((entry.schemaVersion ?? 1) < PLAN_CACHE_SCHEMA_VERSION) {
       console.log(`[PlanCache] SKIP: stale schema v${entry.schemaVersion ?? 1} (current v${PLAN_CACHE_SCHEMA_VERSION}) for ${vin}`);
+      continue;
+    }
+
+    if (distanceUnit && entry.plan?.distanceUnit && entry.plan.distanceUnit !== distanceUnit) {
+      console.log(`[PlanCache] SKIP: distanceUnit changed ${entry.plan.distanceUnit} -> ${distanceUnit} for ${vin}`);
       continue;
     }
 

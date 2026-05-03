@@ -28,11 +28,25 @@ interface TekmetricShopDoc {
   tekmetric?: {
     shopId?: number;
   };
+  preferences?: {
+    distanceUnit?: 'miles' | 'kilometers';
+  };
 }
 
 async function getTekmetricShopId(shopId: number): Promise<number | null> {
   const shop = await findShopByShopId<TekmetricShopDoc>(shopId, { "tekmetric.shopId": 1 });
   return shop?.tekmetric?.shopId ?? null;
+}
+
+/**
+ * Task #333: Tekmetric returns odometer values in whatever unit the shop
+ * operates in. Look up the shop's distance preference so the normalized
+ * `mileageUnit` field is honest (kilometers for Canadian shops) instead of
+ * being hardcoded to "miles".
+ */
+async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
+  const shop = await findShopByShopId<TekmetricShopDoc>(shopId, { "preferences.distanceUnit": 1 });
+  return shop?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
 }
 
 export class TekmetricAdapter implements IIntegrationAdapter {
@@ -74,8 +88,11 @@ export class TekmetricAdapter implements IIntegrationAdapter {
 
   async getVehicle(shopId: number, vehicleId: string): Promise<Result<NormalizedVehicle>> {
     try {
-      const vehicle = await getTekmetricVehicle(parseInt(vehicleId, 10), shopId);
-      return { ok: true, data: transformVehicle(vehicle) };
+      const [vehicle, mileageUnit] = await Promise.all([
+        getTekmetricVehicle(parseInt(vehicleId, 10), shopId),
+        getMileageUnit(shopId),
+      ]);
+      return { ok: true, data: transformVehicle(vehicle, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Vehicle not found' };
     }
@@ -88,14 +105,17 @@ export class TekmetricAdapter implements IIntegrationAdapter {
     }
 
     try {
-      const result = await searchVehiclesByVin(tekmetricShopId, vin);
+      const [result, mileageUnit] = await Promise.all([
+        searchVehiclesByVin(tekmetricShopId, vin),
+        getMileageUnit(shopId),
+      ]);
       const match = result.content?.find(v => v.vin?.toUpperCase() === vin.toUpperCase());
 
       if (!match) {
         return { ok: false, error: 'Vehicle not found' };
       }
 
-      return { ok: true, data: transformVehicle(match) };
+      return { ok: true, data: transformVehicle(match, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Search failed' };
     }
@@ -104,8 +124,11 @@ export class TekmetricAdapter implements IIntegrationAdapter {
   async getWorkOrder(shopId: number, workOrderId: string): Promise<Result<NormalizedWorkOrder>> {
     try {
       const ro = await getRepairOrder(parseInt(workOrderId, 10), shopId);
-      const jobs = await getJobs(ro.id, shopId);
-      return { ok: true, data: transformRepairOrder(ro, undefined, undefined, jobs.content) };
+      const [jobs, mileageUnit] = await Promise.all([
+        getJobs(ro.id, shopId),
+        getMileageUnit(shopId),
+      ]);
+      return { ok: true, data: transformRepairOrder(ro, undefined, undefined, jobs.content, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Work order not found' };
     }
@@ -118,6 +141,7 @@ export class TekmetricAdapter implements IIntegrationAdapter {
     }
 
     try {
+      const mileageUnit = await getMileageUnit(shopId);
       const allWorkOrders: NormalizedWorkOrder[] = [];
       let page = 0;
       const size = options?.limit || 100;
@@ -135,7 +159,7 @@ export class TekmetricAdapter implements IIntegrationAdapter {
         });
 
         for (const ro of result.content) {
-          allWorkOrders.push(transformRepairOrder(ro));
+          allWorkOrders.push(transformRepairOrder(ro, undefined, undefined, undefined, { mileageUnit }));
         }
 
         if (result.last || result.content.length < size) {

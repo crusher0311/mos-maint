@@ -62,11 +62,14 @@ export const dynamic = "force-dynamic";
 type DistanceUnit = "miles" | "kilometers";
 const MILES_TO_KM = 1.60934;
 
-function fmtDistance(m?: number | null, unit: DistanceUnit = "miles") {
+// Task #333: distance values flowing through the plan are now stored in the
+// shop's local unit (kilometers for Canadian shops, miles otherwise). OEM
+// `intervalMiles` is converted exactly once at intake inside `triage()`, so
+// the display layer just formats the number — no further conversion.
+function fmtDistance(m?: number | null, _unit: DistanceUnit = "miles") {
   if (m === 0) return "0";
   if (m == null) return "";
-  const value = unit === "kilometers" ? Math.round(m * MILES_TO_KM) : m;
-  return value.toLocaleString();
+  return m.toLocaleString();
 }
 
 function fmtMiles(m?: number | null) {
@@ -655,6 +658,7 @@ function triage({
   vehicleYear = null,
   engineRisk = null,
   oilDutyPreference = "severe",
+  distanceUnit = "miles",
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string; location?: string }>;
@@ -672,7 +676,20 @@ function triage({
   // Task #166: engine-aware oil interval inputs.
   engineRisk?: EngineRiskResult | null;
   oilDutyPreference?: "normal" | "severe";
+  // Task #333: shop's distance preference. OEM-sourced miles are converted to
+  // this unit at intake so all downstream arithmetic and storage is in shop
+  // units. Tekmetric/CARFAX odometer values are already in shop units.
+  distanceUnit?: DistanceUnit;
 }): Buckets {
+  // Task #333: convert an OEM "miles" value into the shop's distance unit
+  // exactly once, at intake. After this point, every miles-named field in a
+  // TriagedItem is in `distanceUnit`.
+  const isMetricShop = distanceUnit === "kilometers";
+  const oemToShopMiles = (mi: number | null | undefined): number | null => {
+    if (mi == null) return null;
+    return isMetricShop ? Math.round(mi * MILES_TO_KM) : mi;
+  };
+  const distLabelLocal = isMetricShop ? "km" : "mi";
   // Earliest possible date: January 1st of the vehicle's model year (or 20 years ago as fallback)
   const earliestDate = vehicleYear 
     ? new Date(vehicleYear, 0, 1) // Jan 1 of model year
@@ -839,8 +856,11 @@ function triage({
     // preference when the shop hasn't supplied a custom interval. Severe is
     // the safer default and matches OEM "Severe-duty" guidance.
     const isOilRow = serviceKey === "oil";
-    const dutyMilesNormal = o.intervalMilesNormal ?? null;
-    const dutyMilesSevere = o.intervalMilesSevere ?? null;
+    // Task #333: OEM duty intervals are in real miles. Convert to shop unit
+    // up-front so they can be combined with shop-unit anchors below without
+    // mixing units.
+    const dutyMilesNormal = oemToShopMiles(o.intervalMilesNormal ?? null);
+    const dutyMilesSevere = oemToShopMiles(o.intervalMilesSevere ?? null);
     const dutyMonthsNormal = o.intervalMonthsNormal ?? null;
     const dutyMonthsSevere = o.intervalMonthsSevere ?? null;
     const dutyMiles = oilDutyPreference === "normal"
@@ -850,18 +870,26 @@ function triage({
       ? (dutyMonthsNormal ?? dutyMonthsSevere ?? null)
       : (dutyMonthsSevere ?? dutyMonthsNormal ?? null);
 
+    // Shop overrides are entered in the shop's local unit, so they need no
+    // conversion. OEM `o.miles` is in real miles and must be converted.
     let intervalMiles = usingShopInterval && shopOverride.miles != null
       ? shopOverride.miles
-      : (isOilRow && dutyMiles != null ? dutyMiles : (o.miles ?? null));
+      : (isOilRow && dutyMiles != null ? dutyMiles : oemToShopMiles(o.miles ?? null));
     let intervalMonths = usingShopInterval && shopOverride.months != null
       ? shopOverride.months
       : (isOilRow && dutyMonths != null ? dutyMonths : (o.months ?? null));
 
+    // Engine-risk threshold is defined in miles; compare against the
+    // intervalMiles in its original (miles) form so metric shops aren't
+    // falsely flagged just because km values numerically exceed 7,500.
+    const intervalMilesForRiskCheck = intervalMiles == null
+      ? null
+      : (isMetricShop ? intervalMiles / MILES_TO_KM : intervalMiles);
     const oilEngineRiskFlag = !!(
       isOilRow &&
       engineRisk?.flagged &&
-      intervalMiles != null &&
-      intervalMiles >= OIL_INTERVAL_RISK_THRESHOLD_MILES
+      intervalMilesForRiskCheck != null &&
+      intervalMilesForRiskCheck >= OIL_INTERVAL_RISK_THRESHOLD_MILES
     );
     const oilEngineRiskReason = oilEngineRiskFlag
       ? (engineRisk?.reasons?.[0] ?? "Engine flagged for accelerated oil wear.")
@@ -894,10 +922,12 @@ function triage({
         intervals: o.intervals ?? [],
       })
     ) {
-      intervalMiles = LIFETIME_FLUID_DEFAULT_MILES;
+      // Task #333: store the default in shop unit so downstream arithmetic
+      // (anchor + interval) doesn't mix km and mi.
+      intervalMiles = oemToShopMiles(LIFETIME_FLUID_DEFAULT_MILES);
       intervalMonths = null;
       recommendedDefault = true;
-      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi.`;
+      recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${(intervalMiles ?? LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} ${distLabelLocal}.`;
     }
 
     // Task #198: surface OEM "Inspect …" rows on known fluids with the
@@ -913,7 +943,7 @@ function triage({
     ) {
       inspectOnly = true;
       const intervalText = intervalMiles && intervalMiles > 0
-        ? `every ${intervalMiles.toLocaleString()} mi`
+        ? `every ${intervalMiles.toLocaleString()} ${distLabelLocal}`
         : (intervalMonths && intervalMonths > 0 ? `every ${intervalMonths} mo` : "per OEM schedule");
       inspectOnlyReason = `OEM only schedules an inspection (not a replacement) ${intervalText}. Have your technician check the fluid's condition; replacement is at the technician's discretion.`;
     }
@@ -1039,10 +1069,13 @@ function triage({
   // synthetic intervals from running low between scheduled changes.
   const oilTriaged = triaged.find((t) => t.serviceKey === "oil");
   if (oilTriaged && !usedServiceKeys.has(SAFETY_CHECK_OIL_LEVEL_KEY)) {
+    // Task #333: convert the 3,000-mi safety interval into the shop's unit
+    // before adding it to oilLastMiles / currentMiles (which are in shop unit).
+    const safetyIntervalShop = oemToShopMiles(SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES) ?? SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES;
     const oilLastMiles = oilTriaged.last?.miles ?? null;
     const safetyDueAtMiles = oilLastMiles != null
-      ? oilLastMiles + SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES
-      : (currentMiles != null ? currentMiles + SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES : null);
+      ? oilLastMiles + safetyIntervalShop
+      : (currentMiles != null ? currentMiles + safetyIntervalShop : null);
     const safetyMilesToGo =
       currentMiles != null && safetyDueAtMiles != null
         ? safetyDueAtMiles - currentMiles
@@ -1052,7 +1085,7 @@ function triage({
       serviceKey: SAFETY_CHECK_OIL_LEVEL_KEY,
       title: SAFETY_CHECK_OIL_LEVEL_TITLE,
       category: "Safety Check",
-      intervalMiles: SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
+      intervalMiles: safetyIntervalShop,
       intervalMonths: null,
       last: oilTriaged.last,
       dueAtMiles: safetyDueAtMiles,
@@ -1334,7 +1367,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Early mileage check and cache lookup (skip cache if force refresh)
   const earlyMilesResult = await getLatestMilesForVin(db, vin);
   const earlyMiles = earlyMilesResult.miles;
-  const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles);
+  const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles, distanceUnit);
   const useCachedData = cachedPlan !== null;
   
   if (useCachedData) {
@@ -2031,6 +2064,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       vehicleYear: vehicle?.year ?? null,
       engineRisk,
       oilDutyPreference,
+      distanceUnit,
     });
 
     buckets = showInspectItems ? rawBuckets : {
@@ -2419,7 +2453,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
                             title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -2427,7 +2461,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
                             title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
                           >
-                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} ${distLabel}` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -2664,7 +2698,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
                             title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -2672,7 +2706,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
                             title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
                           >
-                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} ${distLabel}` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.carfaxMatch && (
@@ -2749,7 +2783,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
                         title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                       >
-                        OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                        OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
                       </span>
                     )}
                     {t.inspectOnly && (
@@ -2757,7 +2791,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
                         title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
                       >
-                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
+                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} ${distLabel}` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                       </span>
                     )}
                     {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -2947,7 +2981,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
                             title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                           >
-                            OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -2955,7 +2989,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
                             title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
                           >
-                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
+                            OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} ${distLabel}` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                           </span>
                         )}
                         {t.reason && !t.last?.miles && !t.recommendedDefault && (
@@ -3025,7 +3059,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
                         title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
                       >
-                        OEM lifetime fluid · Shop recommendation at {LIFETIME_FLUID_DEFAULT_MILES.toLocaleString()} mi
+                        OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
                       </span>
                     )}
                     {t.inspectOnly && (
@@ -3033,7 +3067,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         className="rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5"
                         title={t.inspectOnlyReason || "OEM only schedules an inspection (not a replacement) for this fluid."}
                       >
-                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} mi` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
+                        OEM: Inspect{t.intervalMiles ? ` every ${t.intervalMiles.toLocaleString()} ${distLabel}` : (t.intervalMonths ? ` every ${t.intervalMonths} mo` : "")}
                       </span>
                     )}
                     {(t.intervalMiles || t.intervalMonths) && (

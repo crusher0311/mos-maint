@@ -25,10 +25,14 @@ function isMetric(unit: DistanceUnit): boolean {
   return unit === "kilometers" || unit === "km";
 }
 
-function fmtDist(m: number | null | undefined, unit: DistanceUnit): string {
+// Task #333: distance values arriving here are already expressed in the
+// shop's local unit (the plan-page triage converts OEM-sourced miles to km
+// for Kilometers-preference shops). Don't apply a second miles→km
+// conversion — that's what was inflating the per-task progress bars and
+// the "X km left / over" headlines on Canadian shops by 1.6×.
+function fmtDist(m: number | null | undefined, _unit: DistanceUnit): string {
   if (m == null || !isFinite(m)) return "—";
-  const v = isMetric(unit) ? m * 1.60934 : m;
-  return Math.round(v).toLocaleString();
+  return Math.round(m).toLocaleString();
 }
 
 function distLabel(unit: DistanceUnit): string {
@@ -190,7 +194,7 @@ export function IntervalProgressRow({
       {milesPct != null || milesHeadline ? (
         <>
           <div className="flex items-center gap-2">
-            <span className="w-12 shrink-0 text-neutral-500">Miles</span>
+            <span className="w-12 shrink-0 text-neutral-500">{distLabel(distanceUnit) === "km" ? "Km" : "Miles"}</span>
             <div
               className={`relative h-2 flex-1 rounded-full overflow-hidden ${trackClass()}`}
               role="progressbar"
