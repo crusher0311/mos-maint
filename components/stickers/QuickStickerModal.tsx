@@ -146,28 +146,34 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     // CRITICAL: open the destination tab synchronously *off the user's tap*,
     // before any await. iOS Safari blocks `window.open` once a microtask
     // boundary has passed since the gesture, so opening it after `await fetch`
-    // is silently rejected. We open with a tiny "loading" placeholder, then
-    // navigate it to the PDF blob URL once the request comes back. Desktop
-    // still benefits from this — `window.open` after an await is also
-    // popup-blocked on some desktop Safari configs.
-    let mobilePrintWindow: Window | null = null;
-    if (useMobilePdfPath) {
-      mobilePrintWindow = window.open("", "_blank");
-      if (mobilePrintWindow) {
-        try {
-          mobilePrintWindow.document.open();
-          mobilePrintWindow.document.write(
-            '<!doctype html><html><head><meta charset="utf-8" /><title>Preparing sticker…</title>' +
-              '<meta name="viewport" content="width=device-width,initial-scale=1" />' +
-              '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;color:#374151}</style>' +
-              "</head><body>Preparing sticker for printing…</body></html>",
-          );
-          mobilePrintWindow.document.close();
-        } catch {
-          // Some browsers throw on document.write into a same-origin blank
-          // tab during navigation — non-fatal, the location swap below still
-          // works.
-        }
+    // is silently rejected. Desktop Chrome has the same problem with
+    // `printWindow.document.open()` / `document.write()` — the browser will
+    // open the tab but refuse to honor those writes once the user gesture is
+    // gone, leaving the popup stranded on `about:blank`. So we open the tab
+    // synchronously here for *both* paths, write a placeholder, then either
+    // navigate it (mobile PDF) or write the print HTML into it (desktop) once
+    // the API call returns.
+    // Note: do NOT use `noopener` here on desktop. `noopener` causes
+    // `window.open` to return `null`, which would leave us with no handle to
+    // write the sticker print HTML into — which is exactly the bug we are
+    // fixing. The popup is same-origin and we control its content, so this
+    // is safe.
+    const printWindowFeatures = useMobilePdfPath ? "" : "width=600,height=800";
+    const placeholderWindow: Window | null = window.open("", "_blank", printWindowFeatures);
+    if (placeholderWindow) {
+      try {
+        placeholderWindow.document.open();
+        placeholderWindow.document.write(
+          '<!doctype html><html><head><meta charset="utf-8" /><title>Preparing sticker…</title>' +
+            '<meta name="viewport" content="width=device-width,initial-scale=1" />' +
+            '<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;color:#374151}</style>' +
+            "</head><body>Preparing sticker for printing…</body></html>",
+        );
+        placeholderWindow.document.close();
+      } catch {
+        // Some browsers throw on document.write into a same-origin blank
+        // tab during navigation — non-fatal, the subsequent write/navigation
+        // below still works.
       }
     }
 
@@ -197,8 +203,8 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
 
       if (useMobilePdfPath) {
         const pdfUrl = URL.createObjectURL(blob);
-        if (mobilePrintWindow && !mobilePrintWindow.closed) {
-          mobilePrintWindow.location.href = pdfUrl;
+        if (placeholderWindow && !placeholderWindow.closed) {
+          placeholderWindow.location.href = pdfUrl;
         } else {
           // Popup was blocked (or never opened) — fall back to navigating
           // the current tab. AirPrint still picks up the PDF page size.
@@ -229,7 +235,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         };
         const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
 
-        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=600,height=800");
+        const printWindow = placeholderWindow && !placeholderWindow.closed ? placeholderWindow : null;
         if (!printWindow) {
           // Desktop popup blocked — fall back to the PDF path so the user
           // still gets a correctly-sized sticker instead of a dead button.
@@ -347,10 +353,10 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
       onClose();
     } catch (err) {
       console.error("Failed to generate sticker:", err);
-      // If we opened a placeholder mobile tab and the request blew up,
-      // close it so the user isn't stuck on "Preparing sticker…".
-      if (mobilePrintWindow && !mobilePrintWindow.closed) {
-        try { mobilePrintWindow.close(); } catch { /* ignore */ }
+      // If we opened a placeholder tab (mobile or desktop) and the request
+      // blew up, close it so the user isn't stuck on "Preparing sticker…".
+      if (placeholderWindow && !placeholderWindow.closed) {
+        try { placeholderWindow.close(); } catch { /* ignore */ }
       }
       setError("Failed to generate sticker. Please try again.");
     } finally {
