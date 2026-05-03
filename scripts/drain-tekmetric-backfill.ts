@@ -307,10 +307,10 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
 async function runWithParallelism<T>(
   items: T[],
   workers: number,
-  fn: (item: T) => Promise<ShopOutcome>
-): Promise<ShopOutcome[]> {
+  fn: (item: T) => Promise<ShopOutcome>,
+  results: ShopOutcome[]
+): Promise<void> {
   const queue = [...items];
-  const results: ShopOutcome[] = [];
 
   async function workerLoop(workerId: number) {
     while (queue.length > 0) {
@@ -331,7 +331,6 @@ async function runWithParallelism<T>(
   await Promise.all(
     Array.from({ length: workers }, (_, i) => workerLoop(i + 1))
   );
-  return results;
 }
 
 function startHeartbeat(getStats: () => string): NodeJS.Timeout {
@@ -368,7 +367,7 @@ async function main() {
     );
   }, LOCK_REFRESH_MS);
 
-  let outcomes: ShopOutcome[] = [];
+  const outcomes: ShopOutcome[] = [];
   let heartbeat: NodeJS.Timeout | null = null;
 
   try {
@@ -390,7 +389,7 @@ async function main() {
         `elapsed=${((Date.now() - startedAt) / 1000 / 60).toFixed(1)}min`
     );
 
-    outcomes = await runWithParallelism(jobs, PARALLELISM, drainShop);
+    await runWithParallelism(jobs, PARALLELISM, drainShop, outcomes);
   } finally {
     if (heartbeat) clearInterval(heartbeat);
     clearInterval(lockRefresher);
