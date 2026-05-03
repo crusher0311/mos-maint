@@ -44,12 +44,27 @@ async function main() {
     .toArray();
 
   const plaintextRecoverable: any[] = [];
+  const hashMisplaced: any[] = [];
   const noCredentials: any[] = [];
+  const strayPasswordOnHashedRow: any[] = [];
 
   for (const u of all) {
     const hashOk = looksLikeBcrypt(u.passwordHash) || looksLikeScrypt(u.passwordHash);
-    if (hashOk) continue;
-    // Anything past this point lacks a usable bcrypt/scrypt hash.
+    const passwordIsBcrypt = looksLikeBcrypt(u.password) || looksLikeScrypt(u.password);
+    if (hashOk) {
+      // Hash is fine; just flag any leftover `password` field so we can clear it.
+      if (typeof u.password === "string" && u.password.length > 0) {
+        strayPasswordOnHashedRow.push(u);
+      }
+      continue;
+    }
+    // Anything past this point lacks a usable bcrypt/scrypt hash in passwordHash.
+    if (passwordIsBcrypt) {
+      // The hash landed under the legacy `password` field instead of
+      // `passwordHash` (task #308). Move it; user keeps their existing password.
+      hashMisplaced.push(u);
+      continue;
+    }
     const plain = typeof u.password === "string" && u.password.length > 0 ? u.password : null;
     if (plain) {
       plaintextRecoverable.push(u);
@@ -63,24 +78,37 @@ async function main() {
     }
   }
 
-  const byShop = new Map<string, { recoverable: number; orphan: number }>();
-  function bump(sid: any, key: "recoverable" | "orphan") {
+  type Bucket = "recoverable" | "orphan" | "misplaced" | "stray";
+  const byShop = new Map<string, Record<Bucket, number>>();
+  function bump(sid: any, key: Bucket) {
     const k = String(sid ?? "(none)");
-    const cur = byShop.get(k) ?? { recoverable: 0, orphan: 0 };
+    const cur = byShop.get(k) ?? { recoverable: 0, orphan: 0, misplaced: 0, stray: 0 };
     cur[key] += 1;
     byShop.set(k, cur);
   }
   plaintextRecoverable.forEach((u) => bump(u.shopId, "recoverable"));
   noCredentials.forEach((u) => bump(u.shopId, "orphan"));
+  hashMisplaced.forEach((u) => bump(u.shopId, "misplaced"));
+  strayPasswordOnHashedRow.forEach((u) => bump(u.shopId, "stray"));
 
   console.log(`\nAudit: ${all.length} total users`);
   console.log(`  ${plaintextRecoverable.length} plaintext-recoverable`);
+  console.log(`  ${hashMisplaced.length} hash-in-wrong-field (task #308)`);
+  console.log(`  ${strayPasswordOnHashedRow.length} stray-password-on-hashed-row`);
   console.log(`  ${noCredentials.length} no-usable-credentials`);
   console.log(`\nPer-shop breakdown:`);
   const rows = Array.from(byShop.entries()).sort();
   for (const [sid, c] of rows) {
-    if (c.recoverable === 0 && c.orphan === 0) continue;
-    console.log(`  shop ${sid.padEnd(8)} recoverable=${c.recoverable} orphan=${c.orphan}`);
+    if (c.recoverable === 0 && c.orphan === 0 && c.misplaced === 0 && c.stray === 0) continue;
+    console.log(
+      `  shop ${sid.padEnd(8)} recoverable=${c.recoverable} misplaced=${c.misplaced} stray=${c.stray} orphan=${c.orphan}`,
+    );
+  }
+  if (hashMisplaced.length > 0) {
+    console.log(`\nHash-in-wrong-field rows:`);
+    for (const u of hashMisplaced) {
+      console.log(`  → ${u.email} (shop ${u.shopId ?? "(none)"})`);
+    }
   }
 
   if (!apply) {
@@ -98,6 +126,24 @@ async function main() {
     rehashed += 1;
   }
   console.log(`Rehashed ${rehashed} plaintext credential(s) into bcrypt.`);
+
+  let moved = 0;
+  for (const u of hashMisplaced) {
+    await users.updateOne(
+      { _id: u._id },
+      { $set: { passwordHash: String(u.password) }, $unset: { password: "" } },
+    );
+    moved += 1;
+    console.log(`  → moved hash to passwordHash: ${u.email} (shop ${u.shopId ?? "(none)"})`);
+  }
+  console.log(`Moved ${moved} misplaced hash(es) into passwordHash.`);
+
+  let cleared = 0;
+  for (const u of strayPasswordOnHashedRow) {
+    await users.updateOne({ _id: u._id }, { $unset: { password: "" } });
+    cleared += 1;
+  }
+  console.log(`Cleared ${cleared} stray password field(s) on already-hashed rows.`);
 
   let forcedReset = 0;
   for (const u of noCredentials) {
