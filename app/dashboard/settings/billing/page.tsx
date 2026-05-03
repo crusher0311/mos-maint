@@ -365,7 +365,7 @@ function BillingSettingsContent() {
   }
 
   const isPaid = billing?.status === "active" && billing?.plan !== "Free Trial";
-  const isInvoicePlan = billing?.planSlug === "appfueled_invoice";
+  const isInvoicePlan = (billing as any)?.paymentType === "invoice" || billing?.planSlug === "appfueled_invoice";
   const currentPlanIndex = plans.findIndex(p => p.slug === billing?.planSlug);
 
   const tabs = [

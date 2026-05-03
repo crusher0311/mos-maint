@@ -514,6 +514,15 @@ export async function POST(req: NextRequest) {
         
         if (resolved) {
           const { shopId, shop } = resolved;
+
+          // Skip Stripe-driven mutations for shops that are manually invoiced
+          // (paymentType="invoice"). They shouldn't be downgraded or have plan
+          // overwritten by stray subscription events.
+          if (shop?.billing?.paymentType === "invoice") {
+            console.log(`[Stripe] Shop ${shopId} is invoice-billed; ignoring subscription.updated event`);
+            break;
+          }
+
           const status = subscription.status === "active" ? "active" : subscription.status;
           const currentPeriodEnd = (subscription as any).current_period_end 
             ? new Date((subscription as any).current_period_end * 1000)
@@ -577,6 +586,10 @@ export async function POST(req: NextRequest) {
         const resolved = await resolveShopId(db, subscription.metadata, customerId);
         
         if (resolved) {
+          if (resolved.shop?.billing?.paymentType === "invoice") {
+            console.log(`[Stripe] Shop ${resolved.shopId} is invoice-billed; ignoring subscription.deleted event`);
+            break;
+          }
           await db.collection("shops").updateOne(
             { shopId: resolved.shopId },
             {
@@ -608,6 +621,10 @@ export async function POST(req: NextRequest) {
           
           if (resolved) {
             const { shopId, shop } = resolved;
+            if (shop?.billing?.paymentType === "invoice") {
+              console.log(`[Stripe] Shop ${shopId} is invoice-billed; ignoring invoice.payment_succeeded event`);
+              break;
+            }
             const wasInGracePeriod = shop?.billing?.status === "past_due" || shop?.billing?.status === "suspended";
             
             const updateData: Record<string, any> = {
@@ -715,6 +732,10 @@ export async function POST(req: NextRequest) {
           if (failResolved) {
             const shopId = failResolved.shopId;
             const shop = failResolved.shop;
+            if (shop?.billing?.paymentType === "invoice") {
+              console.log(`[Stripe] Shop ${shopId} is invoice-billed; ignoring invoice.payment_failed event`);
+              break;
+            }
             const now = new Date();
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
             const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;

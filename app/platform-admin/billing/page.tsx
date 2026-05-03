@@ -27,6 +27,7 @@ interface ShopBilling {
   locationIdentifier?: string | null;
   enterpriseName?: string | null;
   plan: string;
+  paymentType?: "stripe" | "invoice";
   status: string;
   isPaid: boolean;
   vinViewCount: number;
@@ -110,6 +111,7 @@ export default function PlatformBillingPage() {
   const [linkCustomerId, setLinkCustomerId] = useState("");
   const [linkSubId, setLinkSubId] = useState("");
   const [linkPlan, setLinkPlan] = useState("");
+  const [linkPaymentType, setLinkPaymentType] = useState<"stripe" | "invoice">("stripe");
   const [linkStatus, setLinkStatus] = useState("");
   const [linkInvoiceAmount, setLinkInvoiceAmount] = useState("");
   const [linkSaving, setLinkSaving] = useState(false);
@@ -141,10 +143,16 @@ export default function PlatformBillingPage() {
     setLinkShop(shop);
     setLinkCustomerId(shop.stripeCustomerId || "");
     setLinkSubId(shop.stripeSubscriptionId || "");
-    setLinkPlan(shop.plan || "");
+    // Drop the legacy "appfueled_invoice" plan value from the plan dropdown —
+    // payment method is now expressed via paymentType. Convert it to a sensible default.
+    const initialPlan = shop.plan === "appfueled_invoice" ? "" : (shop.plan || "");
+    setLinkPlan(initialPlan);
+    const initialPaymentType: "stripe" | "invoice" =
+      shop.paymentType === "invoice" || shop.plan === "appfueled_invoice" ? "invoice" : "stripe";
+    setLinkPaymentType(initialPaymentType);
     setLinkStatus(shop.status || "");
     setLinkInvoiceAmount(
-      shop.plan === "appfueled_invoice" && typeof shop.invoiceMonthlyAmount === "number"
+      initialPaymentType === "invoice" && typeof shop.invoiceMonthlyAmount === "number"
         ? (shop.invoiceMonthlyAmount / 100).toFixed(2)
         : ""
     );
@@ -156,6 +164,7 @@ export default function PlatformBillingPage() {
     setLinkCustomerId("");
     setLinkSubId("");
     setLinkPlan("");
+    setLinkPaymentType("stripe");
     setLinkStatus("");
     setLinkInvoiceAmount("");
     setLinkError("");
@@ -163,7 +172,7 @@ export default function PlatformBillingPage() {
 
   const saveLinkStripe = async () => {
     if (!linkShop) return;
-    const isInvoicePlan = linkPlan === "appfueled_invoice";
+    const isInvoicePlan = linkPaymentType === "invoice";
     let monthlyAmountNumber: number | undefined;
     if (isInvoicePlan) {
       const parsed = parseFloat(linkInvoiceAmount);
@@ -198,6 +207,7 @@ export default function PlatformBillingPage() {
           stripeCustomerId: linkCustomerId.trim() || undefined,
           stripeSubscriptionId: linkSubId.trim() || undefined,
           plan: linkPlan || undefined,
+          paymentType: linkPaymentType,
           status: linkStatus || undefined,
           monthlyAmount: monthlyAmountNumber,
         }),
@@ -495,7 +505,7 @@ export default function PlatformBillingPage() {
                               {!shop.stripeCustomerId && "Link"}
                             </button>
                           </div>
-                          {shop.plan === "appfueled_invoice" && typeof shop.invoiceMonthlyAmount === "number" ? (
+                          {(shop.paymentType === "invoice" || shop.plan === "appfueled_invoice") && typeof shop.invoiceMonthlyAmount === "number" ? (
                             <>
                               <span className="text-xs text-emerald-700">
                                 ${(shop.invoiceMonthlyAmount / 100).toFixed(2)}/mo · Invoiced
@@ -571,13 +581,30 @@ export default function PlatformBillingPage() {
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stripe Customer ID {linkPlan !== "appfueled_invoice" && <span className="text-red-500">*</span>}
+                    Payment Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={linkPaymentType}
+                    onChange={(e) => setLinkPaymentType(e.target.value as "stripe" | "invoice")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
+                  >
+                    <option value="stripe">Stripe (auto-charge)</option>
+                    <option value="invoice">AppFueled Invoice (manual)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Pick how this shop pays. Plan (below) is independent — e.g. Detect Dog – Founder + AppFueled Invoice.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stripe Customer ID {linkPaymentType !== "invoice" && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="text"
                     value={linkCustomerId}
                     onChange={(e) => setLinkCustomerId(e.target.value)}
-                    placeholder={linkPlan === "appfueled_invoice" ? "cus_... (optional for AppFueled Invoice)" : "cus_..."}
+                    placeholder={linkPaymentType === "invoice" ? "cus_... (optional for AppFueled Invoice)" : "cus_..."}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent text-sm"
                   />
                 </div>
@@ -608,8 +635,8 @@ export default function PlatformBillingPage() {
                       <option value="starter">Starter</option>
                       <option value="professional">Professional</option>
                       <option value="enterprise">Enterprise</option>
+                      <option value="detect_dog_founder">Detect Dog - Founder</option>
                       <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
-                      <option value="appfueled_invoice">AppFueled Invoice</option>
                       <option value="demo">Demo</option>
                     </select>
                   </div>
@@ -630,7 +657,7 @@ export default function PlatformBillingPage() {
                   </div>
                 </div>
 
-                {linkPlan === "appfueled_invoice" && linkShop?.invoiceAudit && linkShop.invoiceAudit.length > 0 && (
+                {linkPaymentType === "invoice" && linkShop?.invoiceAudit && linkShop.invoiceAudit.length > 0 && (
                   <div className="border border-gray-200 rounded-lg">
                     <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
                       <h4 className="text-sm font-medium text-gray-700">AppFueled Invoice History</h4>
@@ -658,7 +685,7 @@ export default function PlatformBillingPage() {
                   </div>
                 )}
 
-                {linkPlan === "appfueled_invoice" && (
+                {linkPaymentType === "invoice" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Monthly Amount (USD) <span className="text-red-500">*</span>
@@ -701,7 +728,7 @@ export default function PlatformBillingPage() {
                   disabled={linkSaving}
                   className="px-4 py-2 text-sm text-white bg-[#3c81c3] hover:bg-[#2d6ba3] rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {linkSaving ? "Saving..." : linkPlan === "appfueled_invoice" ? "Save" : "Link Stripe"}
+                  {linkSaving ? "Saving..." : linkPaymentType === "invoice" ? "Save" : "Link Stripe"}
                 </button>
               </div>
             </div>

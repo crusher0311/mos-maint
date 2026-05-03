@@ -105,8 +105,10 @@ export async function GET() {
       }
       
       const invoiceMonthlyAmount = typeof billing.invoiceMonthlyAmount === "number" ? billing.invoiceMonthlyAmount : null;
+      const paymentType: "stripe" | "invoice" =
+        billing.paymentType === "invoice" || plan === "appfueled_invoice" ? "invoice" : "stripe";
 
-      const subscriptionAmount = plan === "appfueled_invoice" && invoiceMonthlyAmount !== null
+      const subscriptionAmount = paymentType === "invoice" && invoiceMonthlyAmount !== null
         ? invoiceMonthlyAmount / 100
         : shop.stripeSubscriptionAmount
           ? shop.stripeSubscriptionAmount / 100
@@ -125,6 +127,7 @@ export async function GET() {
         locationIdentifier: shop.locationIdentifier,
         enterpriseName: shop.enterpriseId ? enterpriseMap.get(shop.enterpriseId.toString()) : null,
         plan,
+        paymentType,
         status,
         isPaid: billing.isPaid || false,
         vinViewCount: billing.vinViewCount || 0,
@@ -185,13 +188,18 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    const { shopId, stripeCustomerId, stripeSubscriptionId, plan, status, monthlyAmount } = await req.json();
+    const { shopId, stripeCustomerId, stripeSubscriptionId, plan, status, monthlyAmount, paymentType } = await req.json();
 
     if (!shopId) {
       return NextResponse.json({ error: "shopId is required" }, { status: 400 });
     }
 
-    const isInvoicePlan = plan === "appfueled_invoice";
+    if (paymentType && paymentType !== "stripe" && paymentType !== "invoice") {
+      return NextResponse.json({ error: "paymentType must be 'stripe' or 'invoice'" }, { status: 400 });
+    }
+
+    // Invoice billing is true if explicitly set OR (legacy) if plan==="appfueled_invoice"
+    const isInvoicePlan = paymentType === "invoice" || plan === "appfueled_invoice";
 
     if (!isInvoicePlan) {
       if (!stripeCustomerId) {
@@ -242,7 +250,22 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (isInvoicePlan) {
-      updateFields["billing.plan"] = "appfueled_invoice";
+      // New behavior: paymentType is independent of plan. Caller may now pass any
+      // valid plan (e.g. "detect_dog_founder") together with paymentType="invoice".
+      // For backwards compatibility, an explicit plan="appfueled_invoice" still works.
+      let resolvedPlan: string;
+      if (plan && plan !== "appfueled_invoice") {
+        resolvedPlan = plan;
+      } else if (shop.billing?.plan && shop.billing.plan !== "appfueled_invoice") {
+        resolvedPlan = shop.billing.plan;
+      } else {
+        // Legacy fallback — preserve old behavior when neither caller nor existing
+        // record names a real plan.
+        resolvedPlan = "appfueled_invoice";
+      }
+
+      updateFields["billing.plan"] = resolvedPlan;
+      updateFields["billing.paymentType"] = "invoice";
       updateFields["billing.status"] = status || "active";
       updateFields["billing.isPaid"] = true;
       updateFields["billing.invoiceMonthlyAmount"] = invoiceMonthlyAmountCents;
@@ -256,7 +279,8 @@ export async function PATCH(req: NextRequest) {
         type: "appfueled_invoice_set",
         shopId: Number(shopId),
         shopName: shop.name,
-        plan: "appfueled_invoice",
+        plan: resolvedPlan,
+        paymentType: "invoice",
         status: updateFields["billing.status"],
         invoiceMonthlyAmount: invoiceMonthlyAmountCents,
         performedBy: session.email,
@@ -264,6 +288,12 @@ export async function PATCH(req: NextRequest) {
       });
 
       return NextResponse.json({ ok: true });
+    }
+
+    // Non-invoice path: explicitly mark paymentType as "stripe" so future reads
+    // don't fall through to the legacy `plan === "appfueled_invoice"` check.
+    if (paymentType === "stripe" || (!paymentType && shop.billing?.paymentType === "invoice")) {
+      updateFields["billing.paymentType"] = "stripe";
     }
 
     let stripeSubData: any = null;

@@ -15,8 +15,8 @@ export async function GET() {
 
   const shop = await db.collection("shops").findOne({ shopId });
   const billing = shop?.billing || {};
-  const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || billing.plan === "appfueled_invoice";
-  const isInvoicePlan = billing.plan === "appfueled_invoice";
+  const isInvoicePlan = billing.paymentType === "invoice" || billing.plan === "appfueled_invoice";
+  const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || isInvoicePlan;
 
   const rawPendingPlanChange = billing.pendingPlanChange ?? shop?.pendingPlanChange;
   const pendingPlanChange = rawPendingPlanChange?.planId && rawPendingPlanChange?.effectiveDate
@@ -66,6 +66,7 @@ export async function GET() {
     return NextResponse.json({
       plan: planLabel,
       planSlug: billing.plan,
+      paymentType: isInvoicePlan ? "invoice" : "stripe",
       status: billing.status || "active",
       vehicleCount,
       vehicleLimit: null,
@@ -84,6 +85,7 @@ export async function GET() {
   return NextResponse.json({
     plan: trialBlock ? "Trial" : "Free Trial",
     planSlug: billing.plan,
+    paymentType: isInvoicePlan ? "invoice" : "stripe",
     status: "trial",
     vehicleCount: viewedVinCount,
     vehicleLimit: null,
