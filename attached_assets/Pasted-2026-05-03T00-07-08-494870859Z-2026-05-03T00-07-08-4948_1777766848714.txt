@@ -1,0 +1,50 @@
+2026-05-03T00:07:08.494870859Z 
+2026-05-03T00:07:08.494874799Z https://nextjs.org/docs/messages/module-not-found
+2026-05-03T00:07:08.4948785Z 
+2026-05-03T00:07:08.49488268Z Import trace for requested module:
+2026-05-03T00:07:08.49488664Z ./node_modules/mongodb/lib/client-side-encryption/auto_encrypter.js
+2026-05-03T00:07:08.49489051Z ./node_modules/mongodb/lib/index.js
+2026-05-03T00:07:08.49489438Z ./lib/mongo.ts
+2026-05-03T00:07:08.49489817Z ./lib/email.ts
+2026-05-03T00:07:08.49490204Z ./app/admin/billing/BillingSettingsForm.tsx
+2026-05-03T00:07:08.4949057Z 
+2026-05-03T00:07:08.494909521Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-03T00:07:08.494913551Z Module not found: Can't resolve 'fs/promises'
+2026-05-03T00:07:08.494917321Z 
+2026-05-03T00:07:08.494921191Z https://nextjs.org/docs/messages/module-not-found
+2026-05-03T00:07:08.494937062Z 
+2026-05-03T00:07:08.494939722Z Import trace for requested module:
+2026-05-03T00:07:08.494942192Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-03T00:07:08.494944622Z ./node_modules/mongodb/lib/index.js
+2026-05-03T00:07:08.494947132Z ./lib/mongo.ts
+2026-05-03T00:07:08.494949572Z ./lib/email.ts
+2026-05-03T00:07:08.494952142Z ./app/admin/billing/BillingSettingsForm.tsx
+2026-05-03T00:07:08.494954482Z 
+2026-05-03T00:07:08.494956912Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-03T00:07:08.494959422Z Module not found: Can't resolve 'net'
+2026-05-03T00:07:08.494961752Z 
+2026-05-03T00:07:08.494964123Z https://nextjs.org/docs/messages/module-not-found
+2026-05-03T00:07:08.494966483Z 
+2026-05-03T00:07:08.494968883Z Import trace for requested module:
+2026-05-03T00:07:08.494971373Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-03T00:07:08.494973833Z ./node_modules/mongodb/lib/index.js
+2026-05-03T00:07:08.494976253Z ./lib/mongo.ts
+2026-05-03T00:07:08.494978643Z ./lib/email.ts
+2026-05-03T00:07:08.494981053Z ./app/admin/billing/BillingSettingsForm.tsx
+2026-05-03T00:07:08.494983363Z 
+2026-05-03T00:07:08.494985763Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-03T00:07:08.494988223Z Module not found: Can't resolve 'tls'
+2026-05-03T00:07:08.494990503Z 
+2026-05-03T00:07:08.494992893Z https://nextjs.org/docs/messages/module-not-found
+2026-05-03T00:07:08.494995244Z 
+2026-05-03T00:07:08.494997594Z Import trace for requested module:
+2026-05-03T00:07:08.495000144Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-03T00:07:08.495002624Z ./node_modules/mongodb/lib/index.js
+2026-05-03T00:07:08.495005154Z ./lib/mongo.ts
+2026-05-03T00:07:08.495007704Z ./lib/email.ts
+2026-05-03T00:07:08.495010184Z ./app/admin/billing/BillingSettingsForm.tsx
+2026-05-03T00:07:08.495012514Z 
+2026-05-03T00:07:08.495509792Z 
+2026-05-03T00:07:08.495565454Z > Build failed because of webpack errors
+2026-05-03T00:07:08.781950749Z ==> Build failed 😞
+2026-05-03T00:07:08.78198714Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

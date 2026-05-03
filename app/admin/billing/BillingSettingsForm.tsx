@@ -7,7 +7,7 @@ import {
   DEFAULT_TRIAL_REMINDER_SUBJECT,
   DEFAULT_TRIAL_REMINDER_HTML,
   DEFAULT_TRIAL_REMINDER_TEXT,
-} from "@/lib/email";
+} from "@/lib/email-templates";
 
 type StripePrice = {
   id: string;
