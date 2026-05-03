@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
 import { isSuperAdmin } from "@/lib/super-admins";
+
+/**
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
+ * Kept narrowly typed (`() => Promise<Db>`) so production callers still
+ * get the real `Db` type and we don't leak `any` into the route.
+ */
+export const __deps: { getDb: () => Promise<Db> } = {
+  getDb: () => getDb(),
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     const usersCollection = db.collection("users");
 
     const candidates = await usersCollection.find({ 
@@ -64,7 +74,6 @@ export async function POST(request: NextRequest) {
 
     for (const candidate of candidates) {
       const dbHash = candidate.passwordHash;
-      const legacyPlain = candidate.password;
       let passOk = false;
 
       if (looksLikeBcrypt(dbHash)) {
@@ -78,16 +87,10 @@ export async function POST(request: NextRequest) {
             { $set: { passwordHash: newHash } }
           );
         }
-      } else if (legacyPlain) {
-        passOk = String(password) === String(legacyPlain);
-        if (passOk) {
-          const newHash = await bcrypt.hash(String(password), 12);
-          await usersCollection.updateOne(
-            { _id: candidate._id },
-            { $set: { passwordHash: newHash }, $unset: { password: "" } }
-          );
-        }
       }
+      // Plaintext-password fallback was removed (see task #302). Users whose
+      // row has no bcrypt/scrypt hash must reset their password — we no
+      // longer compare or silently rehash plaintext credentials.
 
       if (passOk) {
         user = candidate;

@@ -68,9 +68,11 @@ export async function POST(req: Request) {
     // Pick first user if multiple shops (user can switch via sidebar dropdown)
     const user = candidates[0];
 
-    // Password checks with graceful migration
+    // Password checks with graceful migration. The plaintext-password
+    // fallback was removed (see task #302); users whose row has no
+    // bcrypt/scrypt hash must reset their password rather than being
+    // silently rehashed from a plaintext column.
     const dbHash = user.passwordHash;
-    const legacyPlain = user.password; // legacy field (plaintext or other)
 
     let passOk = false;
 
@@ -85,16 +87,6 @@ export async function POST(req: Request) {
         await db.collection("users").updateOne(
           { _id: user._id },
           { $set: { passwordHash: newHash } }
-        );
-      }
-    } else if (legacyPlain) {
-      // Compare plaintext legacy; if ok, upgrade to bcrypt
-      passOk = String(password) === String(legacyPlain);
-      if (passOk) {
-        const newHash = await bcrypt.hash(String(password), 12);
-        await db.collection("users").updateOne(
-          { _id: user._id },
-          { $set: { passwordHash: newHash }, $unset: { password: "" } }
         );
       }
     }
