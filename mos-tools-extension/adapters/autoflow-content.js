@@ -688,6 +688,205 @@ function createCreateRoButton() {
   return button;
 }
 
+// ---------- Floating Create RO: dismiss + drag-to-corner persistence ----------
+// Per-host preferences live in localStorage so they're scoped to the
+// AutoFlow tenant. Two keys:
+//   mos.createRoFloating.dismissed = "1" when user closed the bubble
+//   mos.createRoFloating.corner    = "br" | "bl" | "tr" | "tl"
+const FLOATING_CORNERS = ["br", "bl", "tr", "tl"];
+const FLOATING_DISMISS_KEY = "mos.createRoFloating.dismissed";
+const FLOATING_CORNER_KEY = "mos.createRoFloating.corner";
+
+function isFloatingDismissed() {
+  try { return localStorage.getItem(FLOATING_DISMISS_KEY) === "1"; }
+  catch (e) { return false; }
+}
+function setFloatingDismissed(v) {
+  try {
+    if (v) localStorage.setItem(FLOATING_DISMISS_KEY, "1");
+    else localStorage.removeItem(FLOATING_DISMISS_KEY);
+  } catch (e) {}
+}
+function getFloatingCorner() {
+  try {
+    const v = localStorage.getItem(FLOATING_CORNER_KEY);
+    return FLOATING_CORNERS.includes(v) ? v : "br";
+  } catch (e) { return "br"; }
+}
+function setFloatingCorner(c) {
+  if (!FLOATING_CORNERS.includes(c)) return;
+  try { localStorage.setItem(FLOATING_CORNER_KEY, c); } catch (e) {}
+}
+function applyCornerStyles(wrap, corner) {
+  // Reset
+  wrap.style.top = "auto";
+  wrap.style.bottom = "auto";
+  wrap.style.left = "auto";
+  wrap.style.right = "auto";
+  const offset = "20px";
+  if (corner === "br") { wrap.style.bottom = offset; wrap.style.right = offset; }
+  else if (corner === "bl") { wrap.style.bottom = offset; wrap.style.left = offset; }
+  else if (corner === "tr") { wrap.style.top = offset; wrap.style.right = offset; }
+  else if (corner === "tl") { wrap.style.top = offset; wrap.style.left = offset; }
+}
+function nearestCorner(x, y) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const left = x < w / 2;
+  const top = y < h / 2;
+  return (top ? "t" : "b") + (left ? "l" : "r");
+}
+
+function createFloatingCreateRoWrap() {
+  const wrap = document.createElement("div");
+  wrap.id = "mos-create-ro-wrap-af";
+  wrap.dataset.mosFloating = "1";
+  Object.assign(wrap.style, {
+    position: "fixed",
+    zIndex: "999998",
+    display: "inline-flex",
+    alignItems: "center",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+    borderRadius: "6px",
+    background: "#2563eb",
+    userSelect: "none",
+  });
+  applyCornerStyles(wrap, getFloatingCorner());
+
+  // Drag handle (also acts as visual grip)
+  const handle = document.createElement("div");
+  handle.title = "Drag to move";
+  handle.setAttribute("aria-label", "Drag handle");
+  Object.assign(handle.style, {
+    cursor: "grab",
+    padding: "0 6px 0 8px",
+    color: "rgba(255,255,255,0.85)",
+    fontSize: "14px",
+    lineHeight: "1",
+    display: "inline-flex",
+    alignItems: "center",
+    height: "100%",
+  });
+  handle.innerHTML =
+    '<svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">' +
+    '<circle cx="2" cy="3" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="2" cy="13" r="1.3"/>' +
+    '<circle cx="8" cy="3" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="13" r="1.3"/>' +
+    "</svg>";
+
+  const btn = createCreateRoButton();
+  // Strip the inline button styling we don't want when wrapped.
+  btn.style.marginLeft = "0";
+  btn.style.boxShadow = "none";
+  btn.style.borderRadius = "0";
+  btn.style.padding = "10px 12px";
+  btn.style.fontSize = "14px";
+
+  // Dismiss (X) button
+  const close = document.createElement("button");
+  close.type = "button";
+  close.id = "mos-create-ro-dismiss-af";
+  close.title = "Hide Create RO button on this site";
+  close.setAttribute("aria-label", "Dismiss Create RO button");
+  Object.assign(close.style, {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "24px",
+    height: "24px",
+    margin: "0 6px 0 2px",
+    padding: "0",
+    background: "transparent",
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "16px",
+    lineHeight: "1",
+    opacity: "0.85",
+  });
+  close.textContent = "\u2715";
+  close.addEventListener("mouseenter", () => { close.style.opacity = "1"; close.style.background = "rgba(0,0,0,0.15)"; });
+  close.addEventListener("mouseleave", () => { close.style.opacity = "0.85"; close.style.background = "transparent"; });
+  close.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFloatingDismissed(true);
+    wrap.remove();
+    createRoButtonInjected = false;
+    console.log(
+      "[MOS Telemetry]",
+      "create_ro_button_dismissed",
+      { host: window.location.host, path: window.location.pathname }
+    );
+  });
+
+  wrap.appendChild(handle);
+  wrap.appendChild(btn);
+  wrap.appendChild(close);
+
+  // ----- Drag-to-snap behavior on the handle -----
+  let dragState = null;
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    dragState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+    handle.setPointerCapture(e.pointerId);
+    handle.style.cursor = "grabbing";
+    e.preventDefault();
+  };
+  const onPointerMove = (e) => {
+    if (!dragState) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    if (!dragState.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      dragState.moved = true;
+      // Switch to free-floating coords for live preview.
+      const rect = wrap.getBoundingClientRect();
+      wrap.style.top = rect.top + "px";
+      wrap.style.left = rect.left + "px";
+      wrap.style.right = "auto";
+      wrap.style.bottom = "auto";
+      wrap.style.transition = "none";
+      wrap.style.opacity = "0.85";
+    }
+    if (dragState.moved) {
+      const rect = wrap.getBoundingClientRect();
+      const newLeft = Math.max(0, Math.min(window.innerWidth - rect.width, e.clientX - rect.width / 2));
+      const newTop = Math.max(0, Math.min(window.innerHeight - rect.height, e.clientY - rect.height / 2));
+      wrap.style.left = newLeft + "px";
+      wrap.style.top = newTop + "px";
+    }
+  };
+  const onPointerUp = (e) => {
+    if (!dragState) return;
+    const moved = dragState.moved;
+    try { handle.releasePointerCapture(dragState.pointerId); } catch (_) {}
+    handle.style.cursor = "grab";
+    if (moved) {
+      const rect = wrap.getBoundingClientRect();
+      const corner = nearestCorner(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      setFloatingCorner(corner);
+      wrap.style.opacity = "1";
+      applyCornerStyles(wrap, corner);
+      console.log(
+        "[MOS Telemetry]",
+        "create_ro_button_moved",
+        { corner, host: window.location.host }
+      );
+    }
+    dragState = null;
+  };
+  handle.addEventListener("pointerdown", onPointerDown);
+  handle.addEventListener("pointermove", onPointerMove);
+  handle.addEventListener("pointerup", onPointerUp);
+  handle.addEventListener("pointercancel", onPointerUp);
+
+  return wrap;
+}
+
 function injectCreateRoButton() {
   if (cachedWriteProvider !== "protractor") return; // gate
   if (cachedCanWrite === false) return; // read-only user
@@ -782,10 +981,12 @@ function injectCreateRoButton() {
   }
 
   // Strategy 3: floating fallback. If no in-page anchor matched, pin the
-  // button to the bottom-right of the viewport so it's always reachable
-  // on customized dashboards. We log once per path so we still get the
-  // telemetry signal to add a proper anchor later.
+  // button to a viewport corner so it's always reachable on customized
+  // dashboards. Users can dismiss (X) or drag it to a different corner;
+  // both choices persist per host. We log once per path so we still get
+  // the telemetry signal to add a proper anchor later.
   if (!target) {
+    if (isFloatingDismissed()) return;
     const nowKey = window.location.pathname;
     if (window.__mosCreateRoNoAnchorLogged !== nowKey) {
       window.__mosCreateRoNoAnchorLogged = nowKey;
@@ -795,24 +996,13 @@ function injectCreateRoButton() {
         { path: nowKey, host: window.location.host, fallback: "floating" }
       );
     }
-    const btn = createCreateRoButton();
-    btn.dataset.mosFloating = "1";
-    Object.assign(btn.style, {
-      position: "fixed",
-      right: "20px",
-      bottom: "20px",
-      marginLeft: "0",
-      zIndex: "999998",
-      padding: "10px 16px",
-      fontSize: "14px",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
-    });
-    document.body.appendChild(btn);
+    const wrap = createFloatingCreateRoWrap();
+    document.body.appendChild(wrap);
     createRoButtonInjected = true;
     console.log(
       "[MOS Telemetry]",
       "create_ro_button_injected",
-      { strategy: "floating", path: window.location.pathname }
+      { strategy: "floating", corner: getFloatingCorner(), path: window.location.pathname }
     );
     return;
   }
@@ -831,6 +1021,13 @@ function injectCreateRoButton() {
   );
 }
 
+function removeStaleCreateRoButton() {
+  const wrap = document.getElementById("mos-create-ro-wrap-af");
+  if (wrap) wrap.remove();
+  const stale = document.getElementById("mos-create-ro-btn-af");
+  if (stale) stale.remove();
+}
+
 function checkAndInjectCreateRoButton() {
   // If the button was nuked by a re-render, drop the cached flag.
   if (createRoButtonInjected && !document.getElementById("mos-create-ro-btn-af")) {
@@ -844,15 +1041,13 @@ function checkAndInjectCreateRoButton() {
   if (cachedWriteProvider !== "protractor" || cachedCanWrite === false) {
     // Not a Protractor-paired shop, or user lacks write permission —
     // clean up any stale button.
-    const stale = document.getElementById("mos-create-ro-btn-af");
-    if (stale) stale.remove();
+    removeStaleCreateRoButton();
     createRoButtonInjected = false;
     return;
   }
   // If we're not on a dashboard view, don't inject (and tear down any stale).
   if (!isAutoflowDashboardView()) {
-    const stale = document.getElementById("mos-create-ro-btn-af");
-    if (stale) stale.remove();
+    removeStaleCreateRoButton();
     createRoButtonInjected = false;
     return;
   }
