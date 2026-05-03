@@ -1,16 +1,12 @@
 /**
  * Protractor Daily Sync Cron Job
- * 
+ *
  * SCHEDULE: Daily at 2:00 AM EST via external scheduler (e.g., Render cron)
- * 
+ *
  * This endpoint is called ONCE daily as a sanity check to catch any work orders
  * or vehicles that may have been missed by webhooks. Real-time updates are
  * handled by the Protractor webhook handler at /api/webhooks/protractor/[token].
- * 
- * The frequent sync worker (protractor-sync-worker.ts) has been DISABLED to
- * avoid excessive API requests (~170K+/day). This cron approach reduces
- * Protractor API usage by ~99%.
- * 
+ *
  * To manually trigger: GET /api/cron/protractor-sync with Authorization: Bearer {CRON_SECRET}
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -177,15 +173,6 @@ export const dynamic = "force-dynamic";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(req: NextRequest) {
-  // Check if Protractor sync is disabled (e.g., on Render where IP isn't whitelisted)
-  if (process.env.DISABLE_PROTRACTOR_SYNC === "true") {
-    return NextResponse.json({ 
-      ok: true, 
-      message: "Protractor sync disabled via DISABLE_PROTRACTOR_SYNC environment variable",
-      disabled: true 
-    });
-  }
-
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

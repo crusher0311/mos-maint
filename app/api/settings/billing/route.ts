@@ -15,7 +15,7 @@ export async function GET() {
 
   const shop = await db.collection("shops").findOne({ shopId });
   const billing = shop?.billing || {};
-  const isInvoicePlan = billing.paymentType === "invoice" || billing.plan === "appfueled_invoice";
+  const isInvoicePlan = billing.paymentType === "invoice";
   const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || isInvoicePlan;
 
   const rawPendingPlanChange = billing.pendingPlanChange ?? shop?.pendingPlanChange;

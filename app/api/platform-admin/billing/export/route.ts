@@ -80,7 +80,7 @@ export async function GET() {
         continue;
       }
 
-      const isInvoicePlan = billing.paymentType === "invoice" || plan === "appfueled_invoice";
+      const isInvoicePlan = billing.paymentType === "invoice";
       const invoiceMonthlyAmount = typeof billing.invoiceMonthlyAmount === "number" ? billing.invoiceMonthlyAmount : null;
 
       const stripeAmountCents =

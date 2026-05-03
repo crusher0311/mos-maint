@@ -429,7 +429,17 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     let finalError = localResult.error;
     let dataSource: "cache" | "api" = "cache";
     
-    if (localResult.ok && localResult.count > 0 && !hasUsableIntervals) {
+    // Both DataOne paths (local PostgreSQL + external HTTP API) are reachable;
+    // they're picked at runtime based on data quality (`hasUsableIntervals`),
+    // not by code-path branching. The external-API fallback is gated by a
+    // single env switch (`DATAONE_API_FALLBACK_ENABLED`, default ON) so on-call
+    // can disable the external dependency entirely without a code deploy if
+    // the upstream HTTP service degrades. When OFF, the cached path returns
+    // the local result as-is (which is what every other caller of
+    // `dataone-local` already does).
+    const apiFallbackEnabled = process.env.DATAONE_API_FALLBACK_ENABLED !== "false";
+
+    if (apiFallbackEnabled && localResult.ok && localResult.count > 0 && !hasUsableIntervals) {
       console.log(`[DataOne Cache] Local data has ${localResult.count} items but NO intervals, falling back to external API...`);
       try {
         const apiResult = await getMaintenanceSchedule(vin);

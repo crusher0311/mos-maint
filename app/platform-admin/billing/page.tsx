@@ -73,7 +73,6 @@ const planColors: Record<string, string> = {
   enterprise: "bg-green-100 text-green-700",
   detect_dog_founder: "bg-amber-100 text-amber-700",
   oil_sticker_legacy: "bg-purple-100 text-purple-700",
-  appfueled_invoice: "bg-emerald-100 text-emerald-700",
   demo: "bg-yellow-100 text-yellow-700",
   churned: "bg-red-100 text-red-700",
 };
@@ -85,7 +84,6 @@ const planLabels: Record<string, string> = {
   enterprise: "Enterprise",
   detect_dog_founder: "Detect Dog - Founder",
   oil_sticker_legacy: "Oil Sticker - Legacy",
-  appfueled_invoice: "AppFueled Invoice",
   demo: "Demo",
   churned: "Churned",
 };
@@ -143,12 +141,9 @@ export default function PlatformBillingPage() {
     setLinkShop(shop);
     setLinkCustomerId(shop.stripeCustomerId || "");
     setLinkSubId(shop.stripeSubscriptionId || "");
-    // Drop the legacy "appfueled_invoice" plan value from the plan dropdown —
-    // payment method is now expressed via paymentType. Convert it to a sensible default.
-    const initialPlan = shop.plan === "appfueled_invoice" ? "" : (shop.plan || "");
-    setLinkPlan(initialPlan);
+    setLinkPlan(shop.plan || "");
     const initialPaymentType: "stripe" | "invoice" =
-      shop.paymentType === "invoice" || shop.plan === "appfueled_invoice" ? "invoice" : "stripe";
+      shop.paymentType === "invoice" ? "invoice" : "stripe";
     setLinkPaymentType(initialPaymentType);
     setLinkStatus(initialPaymentType === "invoice" ? "active" : (shop.status || ""));
     setLinkInvoiceAmount(
@@ -424,7 +419,6 @@ export default function PlatformBillingPage() {
                 <option value="enterprise">Enterprise</option>
                 <option value="detect_dog_founder">Detect Dog - Founder</option>
                 <option value="oil_sticker_legacy">Oil Sticker - Legacy</option>
-                <option value="appfueled_invoice">AppFueled Invoice</option>
                 <option value="demo">Demo</option>
                 <option value="churned">Churned</option>
               </select>
@@ -505,7 +499,7 @@ export default function PlatformBillingPage() {
                               {!shop.stripeCustomerId && "Link"}
                             </button>
                           </div>
-                          {(shop.paymentType === "invoice" || shop.plan === "appfueled_invoice") && typeof shop.invoiceMonthlyAmount === "number" ? (
+                          {shop.paymentType === "invoice" && typeof shop.invoiceMonthlyAmount === "number" ? (
                             <>
                               <span className="text-xs text-emerald-700">
                                 ${(shop.invoiceMonthlyAmount / 100).toFixed(2)}/mo · Invoiced

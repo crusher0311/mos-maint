@@ -64,8 +64,7 @@ export async function GET() {
       const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || 
                      billing.plan === "starter" || billing.plan === "plus" || billing.plan === "elite" ||
                      billing.plan === "detect_dog_founder" ||
-                     billing.paymentType === "invoice" ||
-                     billing.plan === "appfueled_invoice";
+                     billing.paymentType === "invoice";
       
       let vehicleCount = 0;
       if (isPaid) {

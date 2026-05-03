@@ -38,7 +38,7 @@ export async function GET() {
       db.collection("enterprise_accounts").find().project({ _id: 1, name: 1, shopIds: 1 }).toArray(),
       db.collection("platform_settings").findOne({ type: "billing" }),
       db.collection("audit_logs")
-        .find({ type: "appfueled_invoice_set" })
+        .find({ type: { $in: ["invoice_billing_set", "appfueled_invoice_set"] } })
         .sort({ createdAt: -1 })
         .limit(500)
         .toArray(),
@@ -75,7 +75,6 @@ export async function GET() {
       enterprise: 0,
       detect_dog_founder: 0,
       oil_sticker_legacy: 0,
-      appfueled_invoice: 0,
       demo: 0,
       churned: 0,
     };
@@ -106,7 +105,7 @@ export async function GET() {
       
       const invoiceMonthlyAmount = typeof billing.invoiceMonthlyAmount === "number" ? billing.invoiceMonthlyAmount : null;
       const paymentType: "stripe" | "invoice" =
-        billing.paymentType === "invoice" || plan === "appfueled_invoice" ? "invoice" : "stripe";
+        billing.paymentType === "invoice" ? "invoice" : "stripe";
 
       const subscriptionAmount = paymentType === "invoice" && invoiceMonthlyAmount !== null
         ? invoiceMonthlyAmount / 100
@@ -142,7 +141,7 @@ export async function GET() {
     });
 
     shopBillingData.sort((a, b) => {
-      const order = ["enterprise", "professional", "detect_dog_founder", "appfueled_invoice", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
+      const order = ["enterprise", "professional", "detect_dog_founder", "starter", "oil_sticker_legacy", "demo", "trial", "churned"];
       return order.indexOf(a.plan) - order.indexOf(b.plan);
     });
 
@@ -175,7 +174,7 @@ export async function GET() {
   }
 }
 
-const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "detect_dog_founder", "demo", "churned", "oil_sticker_legacy", "appfueled_invoice"];
+const VALID_PLANS = ["trial", "starter", "professional", "enterprise", "detect_dog_founder", "demo", "churned", "oil_sticker_legacy"];
 const VALID_STATUSES = ["trial", "active", "past_due", "canceled", "paused"];
 
 export async function PATCH(req: NextRequest) {
@@ -198,8 +197,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "paymentType must be 'stripe' or 'invoice'" }, { status: 400 });
     }
 
-    // Invoice billing is true if explicitly set OR (legacy) if plan==="appfueled_invoice"
-    const isInvoicePlan = paymentType === "invoice" || plan === "appfueled_invoice";
+    const isInvoicePlan = paymentType === "invoice";
 
     if (!isInvoicePlan) {
       if (!stripeCustomerId) {
@@ -250,23 +248,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (isInvoicePlan) {
-      // New behavior: paymentType is independent of plan. Caller may now pass any
-      // valid plan (e.g. "detect_dog_founder") together with paymentType="invoice".
-      // For backwards compatibility, an explicit plan="appfueled_invoice" still works.
-      let resolvedPlan: string;
-      if (plan && plan !== "appfueled_invoice") {
-        resolvedPlan = plan;
-      } else if (shop.billing?.plan && shop.billing.plan !== "appfueled_invoice") {
-        resolvedPlan = shop.billing.plan;
-      } else {
-        // Legacy fallback — preserve old behavior when neither caller nor existing
-        // record names a real plan.
-        resolvedPlan = "appfueled_invoice";
-      }
+      // paymentType is independent of plan — caller passes any valid plan
+      // together with paymentType="invoice".
+      const resolvedPlan: string = plan || shop.billing?.plan || "starter";
 
       updateFields["billing.plan"] = resolvedPlan;
       updateFields["billing.paymentType"] = "invoice";
-      // AppFueled Invoice shops are always considered active — they're billed
+      // Invoice-billed shops are always considered active — they're billed
       // out-of-band, so there's no Stripe state to derive past_due/canceled from.
       updateFields["billing.status"] = "active";
       updateFields["billing.isPaid"] = true;
@@ -278,7 +266,7 @@ export async function PATCH(req: NextRequest) {
       );
 
       await db.collection("audit_logs").insertOne({
-        type: "appfueled_invoice_set",
+        type: "invoice_billing_set",
         shopId: Number(shopId),
         shopName: shop.name,
         plan: resolvedPlan,
@@ -292,8 +280,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Non-invoice path: explicitly mark paymentType as "stripe" so future reads
-    // don't fall through to the legacy `plan === "appfueled_invoice"` check.
+    // Non-invoice path: explicitly mark paymentType as "stripe".
     if (paymentType === "stripe" || (!paymentType && shop.billing?.paymentType === "invoice")) {
       updateFields["billing.paymentType"] = "stripe";
     }

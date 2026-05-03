@@ -78,7 +78,7 @@ The app uses these Replit workflows:
 |----------|---------|---------|
 | **MOS Maintenance MVP** | `npm run dev` | Main Next.js web server |
 | **Tekmetric Sync Worker** | `npx tsx scripts/tekmetric-sync-worker.ts` | Polls Tekmetric API for active ROs |
-| **Protractor Sync Worker** | `npx tsx scripts/protractor-sync-worker.ts` | Syncs Protractor shop data |
+| **Protractor Sync (cron)** | `GET /api/cron/protractor-sync` (daily 02:00 EST via external scheduler) | Daily sanity-check sync of Protractor shop data — real-time updates flow through `/api/webhooks/protractor/[token]` |
 | **Protractor Backfill Worker** | `npx tsx scripts/protractor-backfill-worker.ts` | Historical data backfill |
 
 #### Starting the App

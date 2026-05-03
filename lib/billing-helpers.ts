@@ -7,7 +7,6 @@ export type BillingLike = {
 export function isInvoiceBilled(billing: BillingLike): boolean {
   if (!billing) return false;
   if (billing.paymentType === "invoice") return true;
-  if (billing.plan === "appfueled_invoice") return true;
   return false;
 }
 
