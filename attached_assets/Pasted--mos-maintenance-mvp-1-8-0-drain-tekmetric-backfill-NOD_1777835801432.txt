@@ -1,0 +1,45 @@
+> mos-maintenance-mvp@1.8.0 drain:tekmetric-backfill
+> NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts
+
+[2026-05-03T19:14:37.136Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-03T19:14:37.137Z] parallelism=3 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-298-1777835677136-yqj1i2 shopIdFilter=ALL_INCOMPLETE
+[2026-05-03T19:14:37.809Z] FATAL: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+MongoServerError: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+    at Connection.sendCommand (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:558:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Connection.command (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:632:22)
+    at async Server.command (/opt/render/project/src/node_modules/mongodb/src/sdam/server.ts:350:21)
+    at async tryOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:289:24)
+    at async executeOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:119:12)
+    at async Collection.findOneAndUpdate (/opt/render/project/src/node_modules/mongodb/src/collection.ts:1035:12)
+    at async acquireDrainLock (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:84:18)
+    at async main (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:363:3) {
+  errorLabelSet: Set(0) {},
+  errorResponse: {
+    ok: 0,
+    errmsg: 'Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }',
+    code: 11000,
+    codeName: 'DuplicateKey',
+    keyPattern: { _id: 1 },
+    keyValue: { _id: 'global' },
+    '$clusterTime': {
+      clusterTime: new Timestamp({ t: 1777835677, i: 12 }),
+      signature: [Object]
+    },
+    operationTime: new Timestamp({ t: 1777835677, i: 12 })
+  },
+  ok: 0,
+  code: 11000,
+  codeName: 'DuplicateKey',
+  keyPattern: { _id: 1 },
+  keyValue: { _id: 'global' },
+  '$clusterTime': {
+    clusterTime: new Timestamp({ t: 1777835677, i: 12 }),
+    signature: {
+      hash: Binary.createFromBase64('RrK/757ajR0tD9VrVzkXB6Zs+48=', 0),
+      keyId: new Long('7581182958992621569')
+    }
+  },
+  operationTime: new Timestamp({ t: 1777835677, i: 12 })
+}
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ 
