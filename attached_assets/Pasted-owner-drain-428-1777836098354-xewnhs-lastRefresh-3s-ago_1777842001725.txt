@@ -1,0 +1,45 @@
+owner=drain-428-1777836098354-xewnhs lastRefresh=3s ago expiresAt=2026-05-03T21:04:39.052Z
+-> ALIVE
+=== TEKMETRIC SHOPS (incomplete) ===
+27 incomplete shops
+  shop=54 cursor=2023-05-19 jobs=96237 lastUpdate=unknown
+  shop=36 cursor=2024-05-13 jobs=243241 lastUpdate=unknown
+  shop=37 cursor=2024-08-11 jobs=338180 lastUpdate=unknown
+  shop=73 cursor=2024-11-09 jobs=45664 lastUpdate=unknown
+  shop=86 cursor=2025-01-11 jobs=35067 lastUpdate=unknown
+  shop=83 cursor=2025-02-03 jobs=6908 lastUpdate=unknown
+  shop=75 cursor=2025-08-06 jobs=20215 lastUpdate=unknown
+  shop=87 cursor=2025-08-06 jobs=10492 lastUpdate=unknown
+  shop=88 cursor=2025-08-06 jobs=2131 lastUpdate=unknown
+  shop=93 cursor=2025-08-06 jobs=8812 lastUpdate=unknown
+  shop=94 cursor=2025-08-06 jobs=3702 lastUpdate=unknown
+  shop=97 cursor=2025-08-06 jobs=3216 lastUpdate=unknown
+  shop=101 cursor=2025-08-06 jobs=32551 lastUpdate=unknown
+  shop=102 cursor=2025-08-06 jobs=9506 lastUpdate=unknown
+  shop=106 cursor=2025-10-29 jobs=1724 lastUpdate=unknown
+  shop=78 cursor=2025-11-04 jobs=2497 lastUpdate=unknown
+  shop=82 cursor=2025-11-04 jobs=32542 lastUpdate=unknown
+  shop=85 cursor=2025-11-04 jobs=30781 lastUpdate=unknown
+  shop=74 cursor=2025-11-21 jobs=47582 lastUpdate=unknown
+  shop=63 cursor=2025-11-23 jobs=21 lastUpdate=unknown
+  shop=28 cursor=2025-12-26 jobs=2545 lastUpdate=unknown
+  shop=90 cursor=2026-02-01 jobs=702 lastUpdate=unknown
+  shop=32 cursor=2026-02-02 jobs=438431 lastUpdate=unknown
+  shop=99 cursor=2026-02-02 jobs=24185 lastUpdate=unknown
+  shop=92 cursor=2026-02-05 jobs=3610 lastUpdate=unknown
+  shop=57 cursor=2026-02-23 jobs=11226 lastUpdate=unknown
+  shop=105 cursor=2026-04-14 jobs=8 lastUpdate=unknown
+=== PROTRACTOR ===
+11 shops marked inProgress
+  shop=25 lastActivity=205s ago (active)
+  shop=29 lastActivity=1481s ago (stale)
+  shop=35 lastActivity=1089s ago (stale)
+  shop=51 lastActivity=121s ago (active)
+  shop=67 lastActivity=673s ago (stale)
+  shop=68 lastActivity=581s ago (stale)
+  shop=69 lastActivity=28s ago (active)
+  shop=72 lastActivity=378s ago (stale)
+  shop=50 lastActivity=1481s ago (stale)
+  shop=76 lastActivity=442s ago (stale)
+  shop=115 lastActivity=115s ago (active)
+render@srv-d55jaqkhg0os73a5dd8g-6585955f7f-4s29t:~/project/src$ 
