@@ -3,16 +3,11 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
-import { searchNormalizedCollections } from "@/lib/normalized-job-search";
 import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
-import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, VehicleSpecs } from "@/lib/job-scoring";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 
 export const dynamic = "force-dynamic";
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -87,75 +82,29 @@ export async function GET(req: NextRequest) {
     });
   }
   
-  const shopIdVariants = searchShopIds.flatMap(id => [Number(id), String(id)]);
-  const matchStage: any = searchShopIds.length === 1 
-    ? { shopId: { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] } }
-    : { shopId: { $in: shopIdVariants } };
-  
-  const { coreTokens, allTokens } = buildSearchQuery(query);
-  
-  if (query) {
-    if (coreTokens.length > 0) {
-      matchStage["job.keywords"] = { $all: coreTokens };
-    } else if (allTokens.length > 0) {
-      matchStage["job.keywords"] = { $in: allTokens };
-    }
-  }
-  
-  if (vehicleMake) {
-    matchStage["vehicle.make"] = { $regex: new RegExp(escapeRegex(vehicleMake), "i") };
-  }
-  
-  if (strictModel && vehicleModel) {
-    matchStage["vehicle.model"] = { $regex: new RegExp(`^${escapeRegex(vehicleModel)}$`, "i") };
-  }
-  
+  const { coreTokens } = buildSearchQuery(query);
+
   // NOTE: When strictModel is false (default), model is NOT used as a hard filter -
   // it's used for scoring only. This allows "oil change on HHR" to find results
   // from other Chevrolet models (Trax, Cruze, etc.) when no exact HHR jobs exist.
   // When strictModel=true (used by New Work Order history tab), model IS a hard
   // filter so only jobs from the same vehicle model are shown.
 
-  const pipeline: any[] = [
-    { $match: matchStage },
-    { $sort: { performedAt: -1 } },
-    { $limit: limit * 5 },
-    { $project: {
-      shopId: 1,
-      vin: 1,
-      vehicle: 1,
-      job: 1,
-      lines: 1,
-      performedAt: 1,
-      workOrderId: 1,
-    }},
-  ];
+  // Job search reads exclusively from Supabase `normalized_service_jobs` (task #299).
+  // The legacy `job_index` (Mongo) and Mongo `normalized_*` aggregation arms have
+  // been retired here in favor of a single PG query via `searchSupabaseServiceJobs`.
+  const supabaseResults = await searchSupabaseServiceJobs(
+    searchShopIds,
+    coreTokens,
+    vehicleMake || undefined,
+    limit * 2,
+    vehicleModel || undefined,
+    strictModel,
+  );
 
-  const [jobIndexResults, normalizedResults, supabaseResults] = await Promise.all([
-    db.collection("job_index").aggregate(pipeline).toArray(),
-    searchNormalizedCollections(db, searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel),
-    searchSupabaseServiceJobs(searchShopIds, coreTokens, vehicleMake || undefined, limit * 2, vehicleModel || undefined, strictModel),
-  ]);
-  
   const seenKeys = new Set<string>();
   const jobs: any[] = [];
-  
-  for (const job of jobIndexResults) {
-    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      jobs.push({ ...job, dataSource: 'job_index' });
-    }
-  }
-  
-  for (const job of normalizedResults) {
-    const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      jobs.push({ ...job, dataSource: 'normalized' });
-    }
-  }
-  
+
   for (const job of supabaseResults) {
     const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}-pg`;
     if (!seenKeys.has(key)) {
@@ -163,8 +112,8 @@ export async function GET(req: NextRequest) {
       jobs.push(job);
     }
   }
-  
-  console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized_mongo, ${supabaseResults.length} from supabase`);
+
+  console.log(`[Jobs Search] Found ${supabaseResults.length} from supabase`);
   
   const vehicleVin = searchParams.get("vin");
 
@@ -258,8 +207,6 @@ export async function GET(req: NextRequest) {
     results,
     stats: {
       totalFound: jobs.length,
-      fromJobIndex: jobIndexResults.length,
-      fromNormalized: normalizedResults.length,
       fromSupabase: supabaseResults.length,
       gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
       belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,

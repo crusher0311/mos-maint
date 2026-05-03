@@ -5,7 +5,6 @@ import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { searchNormalizedCollections } from "@/lib/normalized-job-search";
 import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
 import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
 
@@ -31,10 +30,6 @@ const MODEL_VARIANTS: Record<string, string[]> = {
 function getModelVariants(model: string): string[] {
   const normalized = model.toUpperCase().trim();
   return MODEL_VARIANTS[normalized] || [normalized];
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function resolveVehicleContext(
@@ -246,63 +241,22 @@ export async function GET(request: NextRequest) {
     
     console.log(`[Jobs Search] Query: "${query}", Y/M/M/E: ${year}/${make}/${model}/${engine}, VIN: ${vin ? vin.slice(0, 8) + '...' : 'none'}, shopIds: ${searchShopIds.join(',')}`);
 
-    const jobsCollection = db.collection("job_index");
+    const { coreTokens } = buildSearchQuery(query);
 
-    const { coreTokens, allTokens } = buildSearchQuery(query);
-    
-    const matchStage: Record<string, any> = {};
-    
-    const shopIdVariants = searchShopIds.flatMap(id => [Number(id), String(id)]);
-    if (searchShopIds.length === 1) {
-      matchStage.shopId = { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] };
-    } else if (searchShopIds.length > 1) {
-      matchStage.shopId = { $in: shopIdVariants };
-    }
-    
-    if (coreTokens.length > 0) {
-      matchStage["job.keywords"] = { $all: coreTokens };
-    } else if (allTokens.length > 0) {
-      matchStage["job.keywords"] = { $in: allTokens };
-    } else {
-      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      matchStage["job.title"] = { $regex: escaped, $options: "i" };
-    }
-    
-    if (make) {
-      matchStage["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
-    }
-
-    const [jobIndexResults, normalizedResults, supabaseResults] = await Promise.all([
-      jobsCollection
-        .aggregate([
-          { $match: matchStage },
-          { $sort: { performedAt: -1 } },
-          { $limit: limit * 5 }
-        ], { maxTimeMS: 8000 })
-        .toArray(),
-      searchNormalizedCollections(db, searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined),
-      searchSupabaseServiceJobs(searchShopIds, coreTokens, make || undefined, limit * 2, model || undefined),
-    ]);
+    // Job search reads exclusively from Supabase `normalized_service_jobs` (task #299).
+    // The legacy Mongo `job_index` and Mongo `normalized_*` aggregation arms (and the
+    // Mongo title-regex fallback) have been retired here in favor of a single PG query.
+    const supabaseResults = await searchSupabaseServiceJobs(
+      searchShopIds,
+      coreTokens,
+      make || undefined,
+      limit * 2,
+      model || undefined,
+    );
 
     const seenKeys = new Set<string>();
-    let jobs: any[] = [];
-    
-    for (const job of jobIndexResults) {
-      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-legacy`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        jobs.push({ ...job, dataSource: 'job_index' });
-      }
-    }
-    
-    for (const job of normalizedResults) {
-      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        jobs.push({ ...job, dataSource: 'normalized' });
-      }
-    }
-    
+    const jobs: any[] = [];
+
     for (const job of supabaseResults) {
       const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}-pg`;
       if (!seenKeys.has(key)) {
@@ -311,30 +265,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[Jobs Search] Found ${jobIndexResults.length} from job_index, ${normalizedResults.length} from normalized_mongo, ${supabaseResults.length} from supabase`);
-
-    if (jobs.length === 0 && coreTokens.length > 0) {
-      const fallbackMatch: Record<string, any> = {};
-      if (searchShopIds.length === 1) {
-        fallbackMatch.shopId = { $in: [Number(searchShopIds[0]), String(searchShopIds[0])] };
-      } else if (searchShopIds.length > 1) {
-        fallbackMatch.shopId = { $in: shopIdVariants };
-      }
-      fallbackMatch["job.title"] = { $regex: coreTokens.map(escapeRegex).join(".*"), $options: "i" };
-      if (make) fallbackMatch["vehicle.make"] = { $regex: escapeRegex(make), $options: "i" };
-      jobs = await jobsCollection
-        .aggregate([
-          { $match: fallbackMatch },
-          { $sort: { performedAt: -1 } },
-          { $limit: limit * 3 }
-        ], { maxTimeMS: 5000 })
-        .toArray();
-      if (jobs.length > 0) {
-        console.log(`[Jobs Search] Fallback title search found ${jobs.length} candidates`);
-      }
-    }
-
-    console.log(`[Jobs Search] Found ${jobs.length} total candidates for scoring`);
+    console.log(`[Jobs Search] Found ${supabaseResults.length} from supabase (${jobs.length} total candidates for scoring)`);
 
     const { targetSpecs, jobSpecsMap } = await resolveDataOneSpecs(vin || null, jobs);
     
@@ -489,8 +420,6 @@ export async function GET(request: NextRequest) {
       dataOneEnhanced: !!targetSpecs,
       stats: {
         totalFound: jobs.length,
-        fromJobIndex: jobIndexResults.length,
-        fromNormalized: normalizedResults.length,
         fromSupabase: supabaseResults.length,
         gatesFailed: scoredJobs.filter(j => !j.gatePass).length,
         belowThreshold: scoredJobs.filter(j => j.gatePass && j.matchScore < 35).length,

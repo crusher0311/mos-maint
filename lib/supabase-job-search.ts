@@ -10,7 +10,14 @@ export async function searchSupabaseServiceJobs(
   vehicleModel?: string,
   strictModel: boolean = false,
 ): Promise<any[]> {
-  if (coreTokens.length === 0 || searchShopIds.length === 0) return [];
+  if (searchShopIds.length === 0) return [];
+
+  // Caller contract: at least one of `coreTokens` or `vehicleMake` must be
+  // provided. Returning `[]` for an unbounded query (no tokens AND no make)
+  // protects PG from a full-table scan over `normalized_service_jobs`. The
+  // dashboard route (`app/api/jobs/search`) explicitly accepts `q` OR `make`,
+  // so make-only searches must be preserved here — see task #299.
+  if (coreTokens.length === 0 && !vehicleMake) return [];
 
   try {
     const db = getDb();
