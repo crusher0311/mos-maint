@@ -12,14 +12,13 @@ export const dynamic = "force-dynamic";
  * session so it can be polled from a shell / CI / dev sandbox that can't
  * authenticate through the normal browser flow.
  *
- * Returns a single JSON snapshot suitable for answering "is catch-up
- * actually running on every shop?":
- *   - tekShops: every Tekmetric-enabled shop with backfill state + a
- *     `lastCoveredByCatchupAt` timestamp (when this shopId last appeared
- *     in a `tekmetric_catchup_runs.results[]` row).
- *   - catchupRuns: most-recent N catch-up run summaries.
- *   - uncoveredShops: tek shops never seen in the last N catch-up runs.
- *   - summary: counts for quick glance.
+ * Schema notes (matches `app/api/cron/tekmetric-backfill/route.ts`):
+ *   - Eligible shops: `shops` docs with either `tekmetric.shopId` or the
+ *     legacy `tekmetricShopId` set.
+ *   - Per-shop backfill state lives in `tekmetric_backfill_progress`
+ *     (collection), NOT embedded in the shop doc.
+ *   - Catch-up run summaries live in `tekmetric_catchup_runs` and are
+ *     written by `scripts/tekmetric-catchup.mjs`.
  */
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
@@ -41,19 +40,25 @@ export async function GET(req: NextRequest) {
   try {
     const db = await getDb();
 
-    const [tekShops, runs] = await Promise.all([
+    const [tekShops, progressRows, runs] = await Promise.all([
       db
         .collection("shops")
-        .find({ "integrations.tekmetric.enabled": true })
+        .find({
+          $or: [
+            { "tekmetric.shopId": { $exists: true, $ne: null } },
+            { tekmetricShopId: { $exists: true, $ne: null } },
+          ],
+        })
         .project({
           shopId: 1,
           name: 1,
-          "integrations.tekmetric.shopId": 1,
-          "integrations.tekmetric.lastSyncAt": 1,
-          "integrations.tekmetric.backfillState": 1,
-          "integrations.tekmetric.backfillProgress": 1,
+          locationIdentifier: 1,
+          "tekmetric.shopId": 1,
+          tekmetricShopId: 1,
+          tekmetricBackfillComplete: 1,
         })
         .toArray(),
+      db.collection("tekmetric_backfill_progress").find({}).toArray(),
       db
         .collection("tekmetric_catchup_runs")
         .find({})
@@ -62,9 +67,12 @@ export async function GET(req: NextRequest) {
         .toArray(),
     ]);
 
-    // Build a shopId -> { lastSeenAt, runsCovered } map from the catch-up
-    // runs window. The script writes one entry per shop into
-    // results[]; each entry carries shopId + outcome.
+    const progressByShop = new Map<number, any>();
+    for (const p of progressRows) {
+      progressByShop.set(Number(p.shopId), p);
+    }
+
+    // shopId -> coverage info from the recent catch-up runs window
     const coverageMap = new Map<
       number,
       { lastSeenAt: Date | null; runsCovered: number; lastOutcome: string | null }
@@ -94,28 +102,29 @@ export async function GET(req: NextRequest) {
     }
 
     const shopRows = tekShops.map((s: any) => {
-      const tek = s.integrations?.tekmetric || {};
-      const bf = tek.backfillState || {};
-      const bp = tek.backfillProgress || {};
+      const progress = progressByShop.get(Number(s.shopId)) || {};
       const cov = coverageMap.get(Number(s.shopId));
+      const complete =
+        s.tekmetricBackfillComplete === true || progress.completed === true || progress.complete === true;
       return {
         shopId: s.shopId,
-        name: s.name || `Shop ${s.shopId}`,
-        tekmetricShopId: tek.shopId ?? null,
-        complete: bf.complete === true || bp.complete === true,
-        lastRunAt: bf.lastRunAt || bp.lastRunAt || null,
-        lastCursorMoveAt: bf.lastCursorMoveAt || bp.lastCursorMoveAt || null,
-        currentChunkEnd: bf.currentChunkEnd || bp.currentChunkEnd || null,
-        lastError: bf.lastError || bp.lastError || null,
-        lastErrorAt: bf.lastErrorAt || bp.lastErrorAt || null,
+        name: s.name || s.locationIdentifier || `Shop ${s.shopId}`,
+        tekmetricShopId: s.tekmetric?.shopId ?? s.tekmetricShopId ?? null,
+        complete,
+        lastRunAt: progress.lastRunAt || null,
+        lastCursorMoveAt: progress.lastCursorMoveAt || null,
+        currentChunkEnd: progress.currentChunkEnd || null,
+        lastError: progress.lastError || null,
+        lastErrorAt: progress.lastErrorAt || null,
         lastCoveredByCatchupAt: cov?.lastSeenAt || null,
         catchupRunsCovered: cov?.runsCovered || 0,
         lastCatchupOutcome: cov?.lastOutcome || null,
       };
     });
 
-    const uncoveredShops = shopRows.filter(
-      (r) => !r.complete && r.catchupRunsCovered === 0,
+    const incompleteShops = shopRows.filter((r) => !r.complete);
+    const uncoveredShops = incompleteShops.filter(
+      (r) => r.catchupRunsCovered === 0,
     );
 
     const trimmedRuns = runs.map((r: any) => ({
@@ -139,7 +148,7 @@ export async function GET(req: NextRequest) {
       summary: {
         tekShopsTotal: shopRows.length,
         tekShopsComplete: shopRows.filter((r) => r.complete).length,
-        tekShopsIncomplete: shopRows.filter((r) => !r.complete).length,
+        tekShopsIncomplete: incompleteShops.length,
         tekShopsWithLastError: shopRows.filter((r) => !!r.lastError).length,
         catchupRunsReturned: trimmedRuns.length,
         coverageWindowRuns: coverageWindow.length,
