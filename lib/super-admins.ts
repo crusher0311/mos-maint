@@ -1,4 +1,6 @@
 import { getDb } from "@/lib/mongo";
+import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
+import { listPlatformAdminEmails } from "@/lib/data/repositories/pg/identity";
 
 // Fallback list in case database query fails
 export const SUPER_ADMIN_EMAILS = [
@@ -13,21 +15,25 @@ export function isSuperAdmin(email: string | undefined | null): boolean {
 
 export async function getPlatformAdminEmails(): Promise<string[]> {
   try {
-    const db = await getDb();
-    const platformAdmins = await db.collection("users")
-      .find({ isPlatformAdmin: true })
-      .project({ email: 1 })
-      .toArray();
-    
-    const emails = platformAdmins
-      .map(admin => admin.email?.toLowerCase())
-      .filter((email): email is string => Boolean(email));
-    
+    let emails: string[];
+    if (isIdentityPgCanonical()) {
+      // W4 cutover: read from Postgres `users.is_platform_admin`.
+      emails = (await listPlatformAdminEmails()).map((e) => e.toLowerCase());
+    } else {
+      const db = await getDb();
+      const platformAdmins = await db.collection("users")
+        .find({ isPlatformAdmin: true })
+        .project({ email: 1 })
+        .toArray();
+      emails = platformAdmins
+        .map((admin) => admin.email?.toLowerCase())
+        .filter((email): email is string => Boolean(email));
+    }
+
     if (emails.length === 0) {
       console.warn("[super-admins] No platform admins found in database, using fallback list");
       return SUPER_ADMIN_EMAILS;
     }
-    
     return emails;
   } catch (err) {
     console.error("[super-admins] Failed to fetch platform admins from database:", err);

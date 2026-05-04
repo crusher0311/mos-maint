@@ -6,6 +6,12 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
 import { MUST_CHANGE_PASSWORD_COOKIE } from "@/lib/must-change-password-cookie";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  clearMustChangePasswordByToken as pgClearMcpByToken,
+  deleteSessionsByUserIdExceptToken as pgDeleteOtherSessions,
+  updateUserPassword as pgUpdateUserPassword,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,6 +136,21 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // W4 cutover (#346): mirror the user-level password change AND
+    // the must-change-password clear into PG. Without this, a user
+    // whose PG row carries `must_change_password=true` (from
+    // pre-cutover backfill) would be permanently gated when PG is
+    // canonical, even after a successful password change.
+    await dualWritePgIdentity("users.update(change-password)", () =>
+      pgUpdateUserPassword(String(user._id), {
+        passwordHash,
+        mustChangePassword: false,
+        passwordChangedAt: now,
+        passwordResetByAdminAt: null,
+        passwordResetByAdminEmail: null,
+      }),
+    );
+
     // Clear the gating flag from the current session so the user can use
     // the app immediately, and revoke any other sessions they may have
     // (e.g. created with the temporary admin-chosen password elsewhere).
@@ -144,6 +165,16 @@ export async function POST(request: NextRequest) {
         userId: userObjectId,
         token: { $ne: session.token },
       });
+
+    // W4 cutover (#346): mirror the gate-clear + revoke into PG so
+    // the user isn't bounced back into the change-password flow on
+    // their next request and stale sessions can't be reused.
+    await dualWritePgIdentity("sessions.clearMcp(change-password)", () =>
+      pgClearMcpByToken(session.token),
+    );
+    await dualWritePgIdentity("sessions.deleteOthers(change-password)", () =>
+      pgDeleteOtherSessions(String(userObjectId), session.token),
+    );
 
     const wasAdminForced = !!user.mustChangePassword;
     if (wasAdminForced) {

@@ -5,6 +5,11 @@ import { ObjectId } from "mongodb";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  deleteSessionsByUserId as pgDeleteSessionsByUserId,
+  updateUserPassword as pgUpdateUserPassword,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,9 +110,26 @@ export async function POST(
       }
     );
 
+    // W4 cutover (#346): mirror the admin-forced password + MCP gate
+    // into PG so `getSession()` enforces the next-login change.
+    await dualWritePgIdentity("users.update(admin reset-password)", () =>
+      pgUpdateUserPassword(String(objectId), {
+        passwordHash,
+        mustChangePassword: true,
+        passwordResetByAdminAt: now,
+        passwordResetByAdminEmail: session.email,
+      }),
+    );
+
     const sessionsResult = await db
       .collection("sessions")
       .deleteMany({ userId: objectId });
+
+    // W4 cutover (#346): mirror revocation into PG so the user is
+    // truly logged out (PG-canonical reader can't see the stale row).
+    await dualWritePgIdentity("sessions.delete(admin reset-password)", () =>
+      pgDeleteSessionsByUserId(String(objectId)),
+    );
 
     const headerStore = await headers();
     await logAdminAction({

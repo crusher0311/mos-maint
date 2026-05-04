@@ -5,6 +5,17 @@ import {
   DEFAULT_TRIAL_REMINDER_HTML,
   DEFAULT_TRIAL_REMINDER_TEXT,
 } from "@/lib/email";
+import {
+  isIdentityPgCanonical,
+  shadowWriteMongoIdentity,
+} from "@/lib/db/wave4-write-mode";
+import {
+  getPlatformSetting,
+  upsertPlatformSetting,
+  findShopByMosShopId,
+  updateShopFields,
+  type MongoShapedShop,
+} from "@/lib/data/repositories/pg/identity";
 
 // Default schedule the trial-check cron has used historically. Admins can
 // override this list from the billing settings page.
@@ -152,9 +163,20 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = {
 
 export async function getBillingSettings(): Promise<BillingSettings> {
   try {
-    const db = await getDb();
-    const settings = await db.collection("platform_settings").findOne({ type: "billing" });
-    
+    // W4 cutover (#346): PG-canonical when the flag is on. Both
+    // branches return the same merged record shape (a partial
+    // BillingSettings payload) — Mongo just wraps it in the legacy
+    // `{ type, ...payload }` envelope.
+    let settings: Partial<BillingSettings> | null;
+    if (isIdentityPgCanonical()) {
+      settings = (await getPlatformSetting("billing")) as Partial<BillingSettings> | null;
+    } else {
+      const db = await getDb();
+      settings = (await db.collection("platform_settings").findOne({ type: "billing" })) as
+        | Partial<BillingSettings>
+        | null;
+    }
+
     if (!settings) {
       return DEFAULT_BILLING_SETTINGS;
     }
@@ -211,6 +233,21 @@ export async function getBillingSettings(): Promise<BillingSettings> {
 }
 
 export async function saveBillingSettings(settings: Partial<BillingSettings>): Promise<void> {
+  if (isIdentityPgCanonical()) {
+    // Merge over the existing payload to preserve fields the caller
+    // didn't specify (matches Mongo `$set` semantics).
+    const existing = (await getPlatformSetting("billing")) || {};
+    await upsertPlatformSetting("billing", { ...existing, ...settings });
+    await shadowWriteMongoIdentity("platform_settings.billing", async () => {
+      const m = await getDb();
+      await m.collection("platform_settings").updateOne(
+        { type: "billing" },
+        { $set: { ...settings, type: "billing", updatedAt: new Date() } },
+        { upsert: true }
+      );
+    });
+    return;
+  }
   const db = await getDb();
   await db.collection("platform_settings").updateOne(
     { type: "billing" },
@@ -272,8 +309,16 @@ export async function ensureStripeCustomer(opts: {
   createdVia?: string;
   createdBy?: string;
 }): Promise<{ customerId: string; created: boolean }> {
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: opts.shopId });
+  // W4 cutover (#346): PG-canonical shop read & write when on.
+  // Both branches surface the Mongo-shaped doc described by
+  // `MongoShapedShop`, so callers below read the same fields.
+  const pgCanonical = isIdentityPgCanonical();
+  const shop: MongoShapedShop | null = pgCanonical
+    ? await findShopByMosShopId(opts.shopId)
+    : (await (async () => {
+        const db = await getDb();
+        return db.collection("shops").findOne({ shopId: opts.shopId });
+      })()) as unknown as MongoShapedShop | null;
   if (!shop) throw new Error(`Shop not found: ${opts.shopId}`);
 
   const existing: string | undefined =
@@ -299,16 +344,37 @@ export async function ensureStripeCustomer(opts: {
     },
   });
 
-  await db.collection("shops").updateOne(
-    { shopId: opts.shopId },
-    {
-      $set: {
-        "billing.stripeCustomerId": customer.id,
-        stripeCustomerId: customer.id,
-        updatedAt: new Date(),
+  if (pgCanonical) {
+    await updateShopFields(opts.shopId, {
+      "billing.stripeCustomerId": customer.id,
+      stripeCustomerId: customer.id,
+    });
+    await shadowWriteMongoIdentity("shops.stripeCustomerId", async () => {
+      const m = await getDb();
+      await m.collection("shops").updateOne(
+        { shopId: opts.shopId },
+        {
+          $set: {
+            "billing.stripeCustomerId": customer.id,
+            stripeCustomerId: customer.id,
+            updatedAt: new Date(),
+          },
+        },
+      );
+    });
+  } else {
+    const db = await getDb();
+    await db.collection("shops").updateOne(
+      { shopId: opts.shopId },
+      {
+        $set: {
+          "billing.stripeCustomerId": customer.id,
+          stripeCustomerId: customer.id,
+          updatedAt: new Date(),
+        },
       },
-    },
-  );
+    );
+  }
 
   return { customerId: customer.id, created: true };
 }

@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { ObjectId } from "mongodb";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { deleteSessionsByShopId as pgDeleteSessionsByShopId } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 
@@ -173,6 +175,11 @@ export async function POST(req: Request) {
       await db.collection("sessions").deleteMany({
         shopId,
       });
+
+      // W4 cutover (#346): mirror revocation into PG.
+      await dualWritePgIdentity("sessions.delete(enterprise revoke)", () =>
+        pgDeleteSessionsByShopId(shopId),
+      );
 
       return NextResponse.json({
         ok: true,

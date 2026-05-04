@@ -4,6 +4,11 @@ import { sessionCookieOptions } from "@/lib/auth";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  insertSession as pgInsertSession,
+  insertUser as pgInsertUser,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +72,21 @@ export async function POST(req: NextRequest) {
     assertNoLegacyPasswordField(newUserDoc);
     const insert = await users.insertOne(newUserDoc);
 
+    // W4 cutover (#346): mirror the freshly-created user into PG so
+    // the session inserted below can resolve via getSession().
+    await dualWritePgIdentity("users.insert(complete-setup)", () =>
+      pgInsertUser({
+        id: String(insert.insertedId),
+        email,
+        emailLower: email,
+        passwordHash,
+        role,
+        shopId,
+        createdAt: now2,
+        updatedAt: now2,
+      }),
+    );
+
     // single-use token: remove after success
     await setup.deleteOne({ _id: invite._id });
 
@@ -81,6 +101,16 @@ export async function POST(req: NextRequest) {
       createdAt: now2,
       expiresAt,
     });
+
+    // W4 cutover (#346): mirror session into PG.
+    await dualWritePgIdentity("sessions.insert(complete-setup)", () =>
+      pgInsertSession({
+        token: sessionToken,
+        userId: String(insert.insertedId),
+        shopId,
+        expiresAt,
+      }),
+    );
 
     const res = NextResponse.json({ ok: true, redirect: "/dashboard", shopId, role });
     res.cookies.set("session_token", sessionToken, sessionCookieOptions(ttlDays * 24 * 60 * 60));

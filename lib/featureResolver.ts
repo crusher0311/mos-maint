@@ -2,6 +2,18 @@ import { getDb } from "./mongo";
 import { getDb as getPgDb } from "./db/drizzle";
 import { platformFeatures } from "./db/schema/platform-features";
 import { eq } from "drizzle-orm";
+import {
+  isIdentityPgCanonical,
+  shadowWriteMongoIdentity,
+} from "./db/wave4-write-mode";
+import {
+  findShopByMosShopId as pgFindShop,
+  findEnterpriseById as pgFindEnterprise,
+  updateShopFields as pgUpdateShopFields,
+  updateEnterpriseFeatureSettings as pgUpdateEnterpriseFeatures,
+  type MongoShapedShop,
+  type MongoShapedEnterprise,
+} from "./data/repositories/pg/identity";
 
 /**
  * Test seam: smoke tests can swap `__deps.getDb` / `__deps.getPgDb` to
@@ -190,21 +202,35 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
 }
 
 export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
-  const db = await __deps.getDb();
-
-  const shop = await db.collection("shops").findOne({ shopId });
-
-  if (!shop) {
-    return createDefaultEntitlements();
-  }
-
+  // W4 cutover (#346): PG-canonical shop + enterprise lookup when the
+  // flag is on. Both branches return Mongo-shaped docs; PG uses the
+  // typed `MongoShapedShop` / `MongoShapedEnterprise`.
+  let shop: MongoShapedShop | null;
   let enterpriseFeatures: Partial<FeatureSettings> = {};
-  if (shop.enterpriseId) {
-    const enterprise = await db.collection("enterprise_accounts").findOne({
-      _id: shop.enterpriseId
-    });
-    if (enterprise?.featureSettings) {
-      enterpriseFeatures = enterprise.featureSettings;
+  if (isIdentityPgCanonical()) {
+    shop = await pgFindShop(shopId);
+    if (!shop) return createDefaultEntitlements();
+    if (shop.enterpriseId) {
+      const enterprise: MongoShapedEnterprise | null = await pgFindEnterprise(
+        String(shop.enterpriseId),
+      );
+      if (enterprise?.featureSettings) {
+        enterpriseFeatures = enterprise.featureSettings as Partial<FeatureSettings>;
+      }
+    }
+  } else {
+    const db = await __deps.getDb();
+    shop = (await db.collection("shops").findOne({ shopId })) as unknown as
+      | MongoShapedShop
+      | null;
+    if (!shop) return createDefaultEntitlements();
+    if (shop.enterpriseId) {
+      const enterprise = await db.collection("enterprise_accounts").findOne({
+        _id: shop.enterpriseId
+      });
+      if (enterprise?.featureSettings) {
+        enterpriseFeatures = enterprise.featureSettings;
+      }
     }
   }
 
@@ -294,13 +320,25 @@ export async function updateShopFeatures(
   shopId: number,
   features: Partial<FeatureSettings>
 ): Promise<void> {
+  // W4 cutover (#346): write PG first, optional Mongo shadow.
+  if (isIdentityPgCanonical()) {
+    const shop: MongoShapedShop | null = await pgFindShop(shopId);
+    const existingFeatures = (shop?.enabledFeatures as Partial<FeatureSettings>) || {};
+    const mergedFeatures = { ...existingFeatures, ...features };
+    await pgUpdateShopFields(shopId, { enabledFeatures: mergedFeatures });
+    await shadowWriteMongoIdentity("shops.enabledFeatures", async () => {
+      const m = await __deps.getDb();
+      await m.collection("shops").updateOne(
+        { shopId },
+        { $set: { enabledFeatures: mergedFeatures, updatedAt: new Date() } },
+      );
+    });
+    return;
+  }
   const db = await __deps.getDb();
-
   const shop = await db.collection("shops").findOne({ shopId });
   const existingFeatures = shop?.enabledFeatures || {};
-
   const mergedFeatures = { ...existingFeatures, ...features };
-
   await db.collection("shops").updateOne(
     { shopId },
     { $set: { enabledFeatures: mergedFeatures, updatedAt: new Date() } }
@@ -311,12 +349,19 @@ export async function updateShopBilling(
   shopId: number,
   billing: Partial<ShopBilling>
 ): Promise<void> {
-  const db = await __deps.getDb();
-
   const updateFields: any = { updatedAt: new Date() };
   if (billing.plan !== undefined) updateFields["billing.plan"] = billing.plan;
   if (billing.status !== undefined) updateFields["billing.status"] = billing.status;
 
+  if (isIdentityPgCanonical()) {
+    await pgUpdateShopFields(shopId, updateFields);
+    await shadowWriteMongoIdentity("shops.billing", async () => {
+      const m = await __deps.getDb();
+      await m.collection("shops").updateOne({ shopId }, { $set: updateFields });
+    });
+    return;
+  }
+  const db = await __deps.getDb();
   await db.collection("shops").updateOne(
     { shopId },
     { $set: updateFields }
@@ -327,16 +372,28 @@ export async function updateEnterpriseFeatures(
   enterpriseId: string,
   features: Partial<FeatureSettings>
 ): Promise<void> {
+  if (isIdentityPgCanonical()) {
+    const enterprise: MongoShapedEnterprise | null = await pgFindEnterprise(enterpriseId);
+    const existingFeatures = (enterprise?.featureSettings as Partial<FeatureSettings>) || {};
+    const mergedFeatures = { ...existingFeatures, ...features };
+    await pgUpdateEnterpriseFeatures(enterpriseId, mergedFeatures as Record<string, unknown>);
+    await shadowWriteMongoIdentity("enterprise_accounts.featureSettings", async () => {
+      const m = await __deps.getDb();
+      const { ObjectId } = await import("mongodb");
+      await m.collection("enterprise_accounts").updateOne(
+        { _id: new ObjectId(enterpriseId) },
+        { $set: { featureSettings: mergedFeatures, updatedAt: new Date() } },
+      );
+    });
+    return;
+  }
   const db = await __deps.getDb();
   const { ObjectId } = await import("mongodb");
-
   const enterprise = await db.collection("enterprise_accounts").findOne({
     _id: new ObjectId(enterpriseId)
   });
   const existingFeatures = enterprise?.featureSettings || {};
-
   const mergedFeatures = { ...existingFeatures, ...features };
-
   await db.collection("enterprise_accounts").updateOne(
     { _id: new ObjectId(enterpriseId) },
     { $set: { featureSettings: mergedFeatures, updatedAt: new Date() } }

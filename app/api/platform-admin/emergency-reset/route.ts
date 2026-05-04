@@ -4,6 +4,11 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  deleteSessionsByUserId as pgDeleteSessionsByUserId,
+  updateUserPassword as pgUpdateUserPassword,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,7 +111,22 @@ export async function POST(req: NextRequest) {
       $unset: { password: "" },
     }
   );
+
+  // W4 cutover (#346): mirror the password update into PG so the user
+  // can actually log in against the PG-canonical reader after the reset.
+  await dualWritePgIdentity("users.update(emergency-reset)", () =>
+    pgUpdateUserPassword(String(user._id), {
+      passwordHash: hashed,
+      passwordChangedAt: new Date(),
+    }),
+  );
   await db.collection("sessions").deleteMany({ userId: user._id });
+
+  // W4 cutover (#346): mirror revocation into PG so the reset user
+  // can't reuse a stale session against the PG-canonical reader.
+  await dualWritePgIdentity("sessions.delete(emergency-reset)", () =>
+    pgDeleteSessionsByUserId(String(user._id)),
+  );
   const h = headers();
   await logAdminAction({
     action: "user_password_reset",

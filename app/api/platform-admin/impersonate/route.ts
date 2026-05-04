@@ -3,6 +3,8 @@ import { cookies, headers } from "next/headers";
 import crypto from "crypto";
 import { getSession, sessionCookieOptions, adminSessionCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertSession as pgInsertSession } from "@/lib/data/repositories/pg/identity";
 import { logAdminAction } from "@/lib/audit-log";
 
 export const runtime = "nodejs";
@@ -60,6 +62,18 @@ export async function POST(req: Request) {
       impersonatedBy: session.email,
       isImpersonation: true,
     });
+
+    // W4 cutover (#346): mirror impersonation session into PG.
+    await dualWritePgIdentity("sessions.insert(impersonate)", () =>
+      pgInsertSession({
+        token: newToken,
+        userId: String(targetUser._id),
+        shopId,
+        isImpersonation: true,
+        impersonatedBy: session.email,
+        expiresAt,
+      }),
+    );
 
     const headerStore = await headers();
     await logAdminAction({

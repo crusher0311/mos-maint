@@ -5,6 +5,8 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/mongo";
 import { sessionCookieOptions } from "@/lib/auth";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertSession as pgInsertSession } from "@/lib/data/repositories/pg/identity";
 import {
   MUST_CHANGE_PASSWORD_COOKIE,
   mustChangePasswordCookieOptions,
@@ -110,6 +112,19 @@ export async function POST(req: Request) {
       expiresAt,
       mustChangePassword,
     });
+
+    // W4 cutover (#346): when PG is canonical, the very next request
+    // hits `lib/auth.ts` → `pgFindActiveSession(token)`; the session
+    // must therefore be present in PG before this handler returns.
+    await dualWritePgIdentity("sessions.insert(login)", () =>
+      pgInsertSession({
+        token,
+        userId: String(user._id),
+        shopId: sessionShopId,
+        mustChangePassword,
+        expiresAt,
+      }),
+    );
 
     // ✅ Next.js 15: await cookies() before using it
     const store = await cookies();

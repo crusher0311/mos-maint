@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertSession as pgInsertSession } from "@/lib/data/repositories/pg/identity";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
@@ -76,6 +78,16 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
       expiresAt,
     });
+
+    // W4 cutover (#346): mirror into PG so getSession() can read it.
+    await dualWritePgIdentity("sessions.insert(platform-admin login)", () =>
+      pgInsertSession({
+        token,
+        userId: String(user._id),
+        shopId: typeof user.shopId === "number" ? user.shopId : null,
+        expiresAt,
+      }),
+    );
 
     const store = await cookies();
     store.set(SESSION_COOKIE, token, sessionCookieOptions());

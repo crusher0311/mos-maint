@@ -5,6 +5,14 @@ import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getTestAuthFromHeaders, isTestAuthEnabled } from "@/lib/test-auth";
+import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
+import {
+  findActiveSessionByToken as pgFindActiveSession,
+  findUserById as pgFindUserById,
+  findUserByExtensionToken as pgFindUserByExtensionToken,
+  type MongoShapedSession,
+  type MongoShapedUser,
+} from "@/lib/data/repositories/pg/identity";
 
 export const SESSION_COOKIE = "session_token";
 
@@ -82,10 +90,13 @@ export async function getSession(): Promise<SessionInfo | null> {
     if (authHeader?.toLowerCase().startsWith("bearer ext_")) {
       const extToken = authHeader.substring(7);
       try {
-        const db = await getDb();
-        const user = await db
-          .collection("users")
-          .findOne({ extensionToken: extToken });
+        // W4 cutover (#346): PG-canonical when the flag is on.
+        const user = isIdentityPgCanonical()
+          ? await pgFindUserByExtensionToken(extToken)
+          : await (async () => {
+              const db = await getDb();
+              return db.collection("users").findOne({ extensionToken: extToken });
+            })();
         if (user) {
           // Optional 30-day token age check (mirror lib/extension-auth.ts).
           const createdAt = user.extensionTokenCreatedAt
@@ -135,30 +146,50 @@ export async function getSession(): Promise<SessionInfo | null> {
     return devAutoLoginEnabled ? devSession : null;
   }
 
-  const db = await getDb();
-  const sess = await db.collection("sessions").findOne({
-    token,
-    expiresAt: { $gt: new Date() },
-  });
-  if (!sess) {
-    // Stale cookie (session wiped, expired, or container restart). In dev, fall back to auto-login
-    // so engineers don't have to manually clear cookies after every Mongo reset.
-    return devAutoLoginEnabled ? devSession : null;
-  }
-
-  const user = await db.collection("users").findOne(
-    { _id: sess.userId },
-    {
-      projection: {
-        email: 1,
-        role: 1,
-        isPlatformAdmin: 1,
-        mustChangePassword: 1,
-      },
+  // W4 cutover (#346): when IDENTITY_PG_CANONICAL=1, both the
+  // session and user lookups go to Postgres. The Mongo branch is
+  // retained verbatim for the pre-cutover and rollback windows.
+  // Both branches return the same Mongo-shaped doc; PG path uses
+  // typed interfaces from the identity repo, Mongo path gets the
+  // raw driver shape but is read with the same accessors below.
+  let sess:
+    | MongoShapedSession
+    | { token: string; userId: unknown; shopId?: number; mustChangePassword?: boolean; expiresAt: Date }
+    | null = null;
+  let user:
+    | MongoShapedUser
+    | { _id?: unknown; email?: string; role?: string; isPlatformAdmin?: boolean; mustChangePassword?: boolean }
+    | null = null;
+  if (isIdentityPgCanonical()) {
+    sess = await pgFindActiveSession(token);
+    if (!sess) return devAutoLoginEnabled ? devSession : null;
+    user = await pgFindUserById(String(sess.userId));
+    if (!user) return devAutoLoginEnabled ? devSession : null;
+  } else {
+    const db = await getDb();
+    sess = await db.collection("sessions").findOne({
+      token,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!sess) {
+      // Stale cookie (session wiped, expired, or container restart). In dev, fall back to auto-login
+      // so engineers don't have to manually clear cookies after every Mongo reset.
+      return devAutoLoginEnabled ? devSession : null;
     }
-  );
-  if (!user) {
-    return devAutoLoginEnabled ? devSession : null;
+    user = await db.collection("users").findOne(
+      { _id: sess.userId },
+      {
+        projection: {
+          email: 1,
+          role: 1,
+          isPlatformAdmin: 1,
+          mustChangePassword: 1,
+        },
+      }
+    );
+    if (!user) {
+      return devAutoLoginEnabled ? devSession : null;
+    }
   }
 
   // Either the session OR the user document carrying `mustChangePassword`

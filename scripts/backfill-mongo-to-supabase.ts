@@ -174,7 +174,14 @@ interface MirrorSpec {
    */
   shopFilterColumn?: string | null;
   /** Map a mongo doc into a row. May return null to skip the doc. */
-  extract: (doc: any) => ExtractedRow | null;
+  /**
+   * Map a mongo doc into one or more PG rows. May return null to skip
+   * the doc, a single row, or an array of rows (used by mirrors that
+   * explode a single Mongo document into N PG rows — e.g. shop_features
+   * which stores `enabledFeatures: string[]` in Mongo but is keyed on
+   * `(shop_id, feature_key)` in PG).
+   */
+  extract: (doc: any) => ExtractedRow | ExtractedRow[] | null;
 }
 
 /* ---------------------------- helpers ----------------------------------- */
@@ -1046,6 +1053,452 @@ const MIRRORS: MirrorSpec[] = [
       };
     },
   },
+
+  /* ================================================================== */
+  /* Wave 4 mirrors (task #346) — identity / sessions / billing /        */
+  /* settings. Run in dependency order via `--mirror=all-w4`:            */
+  /*   enterprise_accounts → shops → users → shop_features →             */
+  /*   platform_admins → platform_settings → platform_plans →            */
+  /*   pending_signups → setup_tokens → password_reset_tokens →          */
+  /*   sessions → shop_users → billing_settings → billing_status_log →   */
+  /*   stripe_events → stripe_webhook_events.                            */
+  /* ================================================================== */
+  {
+    key: "enterprise_accounts",
+    mongoName: "enterprise_accounts",
+    pgTableName: "enterprise_accounts",
+    naturalKey: ["id"],
+    shopFilterColumn: null,
+    extract: (d) => ({
+      values: {
+        id: String(d._id),
+        name: asStr(d.name) ?? "",
+        shop_ids: Array.isArray(d.shopIds) ? d.shopIds : [],
+        shared_mappings: d.sharedMappings ?? null,
+        shared_integrations: d.sharedIntegrations ?? null,
+        feature_settings: d.featureSettings ?? null,
+        created_at: asDate(d.createdAt) ?? new Date(),
+        updated_at: asDate(d.updatedAt) ?? new Date(),
+      },
+    }),
+  },
+  {
+    key: "shops",
+    mongoName: "shops",
+    pgTableName: "shops",
+    naturalKey: ["mos_shop_id"],
+    shopFilterColumn: "mos_shop_id",
+    buildFilter: (s) => (s != null ? { shopId: s } : {}),
+    extract: (d) => {
+      const sid = asInt(d.shopId);
+      if (sid == null) return null;
+      // Settings is the catch-all jsonb container; copy any per-integration
+      // sub-objects we're known to use into it so PG reads via
+      // shopRowToDoc() see them at the top level.
+      const settings: Record<string, unknown> = { ...(d.settings ?? {}) };
+      for (const k of [
+        "autoflow", "tekmetric", "protractor", "shopware",
+        "autovitals", "branding", "inspection", "preferences", "carfax",
+      ]) {
+        if (d[k] !== undefined) settings[k] = d[k];
+      }
+      return {
+        values: {
+          mos_shop_id: sid,
+          legacy_id: asInt(d.id),
+          name: asStr(d.name),
+          location_identifier: asStr(d.locationIdentifier),
+          enterprise_id: d.enterpriseId != null ? String(d.enterpriseId) : null,
+          enabled_features: d.enabledFeatures ?? null,
+          billing: d.billing ?? null,
+          billing_plan: asStr(d.billing?.plan),
+          billing_status: asStr(d.billing?.status),
+          stripe_customer_id:
+            asStr(d.billing?.stripeCustomerId) ?? asStr(d.stripeCustomerId),
+          settings,
+          sticker: d.sticker ?? null,
+          metadata: d.metadata ?? null,
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "users",
+    mongoName: "users",
+    pgTableName: "users",
+    naturalKey: ["id"],
+    shopFilterColumn: "shop_id",
+    buildFilter: (s) => (s != null ? { shopId: s } : {}),
+    extract: (d) => {
+      const email = asStr(d.email);
+      if (!email) return null;
+      return {
+        values: {
+          id: String(d._id),
+          email,
+          email_lower: email.toLowerCase(),
+          password_hash: asStr(d.passwordHash),
+          role: asStr(d.role) ?? "owner",
+          shop_id: asInt(d.shopId),
+          shop_ids: Array.isArray(d.shopIds) ? d.shopIds : [],
+          is_platform_admin: !!d.isPlatformAdmin,
+          must_change_password: !!d.mustChangePassword,
+          extension_token: asStr(d.extensionToken),
+          extension_token_created_at: asDate(d.extensionTokenCreatedAt),
+          profile: d.profile ?? null,
+          audit_meta: d.auditMeta ?? null,
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    // Mongo stores one doc per shop with `enabledFeatures: string[]`,
+    // `featureSettings: { [key]: settings }` and `subscriptions: [{
+    // featureId, ... }]`. PG (per W4 acceptance criteria) is keyed on
+    // `(shop_id, feature_key)`, so we explode the doc into one row per
+    // distinct feature_key — flipping `enabled` based on
+    // enabledFeatures membership and attaching the matching settings /
+    // subscription blobs.
+    key: "shop_features",
+    mongoName: "shop_features",
+    pgTableName: "shop_features",
+    naturalKey: ["shop_id", "feature_key"],
+    buildFilter: filterByShop,
+    extract: (d) => {
+      const sid = asInt(d.shopId);
+      if (sid == null) return null;
+      const enabledArr: string[] = Array.isArray(d.enabledFeatures)
+        ? d.enabledFeatures.map(String)
+        : [];
+      const settingsMap: Record<string, unknown> =
+        d.featureSettings && typeof d.featureSettings === "object"
+          ? (d.featureSettings as Record<string, unknown>)
+          : {};
+      const subsArr: any[] = Array.isArray(d.subscriptions) ? d.subscriptions : [];
+      const subsByKey = new Map<string, unknown>();
+      for (const s of subsArr) {
+        const fk = asStr(s?.featureId);
+        if (fk) subsByKey.set(fk, s);
+      }
+      const keys = new Set<string>([
+        ...enabledArr,
+        ...Object.keys(settingsMap),
+        ...subsByKey.keys(),
+      ]);
+      if (keys.size === 0) return null;
+      const createdAt = asDate(d.createdAt) ?? new Date();
+      const updatedAt = asDate(d.updatedAt) ?? new Date();
+      return Array.from(keys).map((featureKey) => ({
+        values: {
+          shop_id: sid,
+          feature_key: featureKey,
+          enabled: enabledArr.includes(featureKey),
+          settings: settingsMap[featureKey] ?? null,
+          subscription: subsByKey.get(featureKey) ?? null,
+          created_at: createdAt,
+          updated_at: updatedAt,
+        },
+      }));
+    },
+  },
+  {
+    key: "platform_admins",
+    mongoName: "platform_admins",
+    pgTableName: "platform_admins",
+    naturalKey: ["id"],
+    shopFilterColumn: null,
+    extract: (d) => {
+      const email = asStr(d.email);
+      if (!email) return null;
+      return {
+        values: {
+          id: String(d._id),
+          email,
+          email_lower: email.toLowerCase(),
+          password_hash: asStr(d.passwordHash),
+          role: asStr(d.role) ?? "platform_admin",
+          name: asStr(d.name),
+          metadata: d.metadata ?? null,
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "platform_settings",
+    mongoName: "platform_settings",
+    pgTableName: "platform_settings",
+    naturalKey: ["type"],
+    shopFilterColumn: null,
+    extract: (d) => {
+      const type = asStr(d.type);
+      if (!type) return null;
+      // Strip the discriminator/timestamps so payload mirrors the API shape.
+      const { _id, type: _t, updatedAt, ...payload } = d;
+      return {
+        values: {
+          type,
+          payload,
+          updated_at: asDate(updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "platform_plans",
+    mongoName: "platform_plans",
+    pgTableName: "platform_plans",
+    naturalKey: ["slug"],
+    shopFilterColumn: null,
+    extract: (d) => {
+      const slug = asStr(d.slug);
+      if (!slug) return null;
+      return {
+        values: {
+          slug,
+          name: asStr(d.name) ?? slug,
+          description: asStr(d.description),
+          stripe_product_id: asStr(d.stripeProductId),
+          stripe_price_id: asStr(d.stripePriceId),
+          price_per_month: d.pricePerMonth != null ? Number(d.pricePerMonth) : null,
+          included_vins: asInt(d.includedVins),
+          payload: d,
+          active: d.active !== false,
+          sort_order: asInt(d.sortOrder) ?? 0,
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "pending_signups",
+    mongoName: "pending_signups",
+    pgTableName: "pending_signups",
+    naturalKey: ["token"],
+    shopFilterColumn: null,
+    extract: (d) => {
+      const token = asStr(d.token);
+      const email = asStr(d.email);
+      const expiresAt = asDate(d.expiresAt);
+      if (!token || !email || !expiresAt) return null;
+      return {
+        values: {
+          token,
+          email,
+          email_lower: email.toLowerCase(),
+          payload: d.payload ?? d,
+          expires_at: expiresAt,
+          created_at: asDate(d.createdAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "setup_tokens",
+    mongoName: "setup_tokens",
+    pgTableName: "setup_tokens",
+    naturalKey: ["token"],
+    shopFilterColumn: "shop_id",
+    buildFilter: filterByShop,
+    extract: (d) => {
+      const token = asStr(d.token);
+      const email = asStr(d.email);
+      const expiresAt = asDate(d.expiresAt);
+      if (!token || !email || !expiresAt) return null;
+      return {
+        values: {
+          token,
+          email,
+          email_lower: email.toLowerCase(),
+          shop_id: asInt(d.shopId),
+          payload: d.payload ?? d,
+          consumed_at: asDate(d.consumedAt),
+          expires_at: expiresAt,
+          created_at: asDate(d.createdAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "password_reset_tokens",
+    mongoName: "password_reset_tokens",
+    pgTableName: "password_reset_tokens",
+    naturalKey: ["token"],
+    shopFilterColumn: null,
+    extract: (d) => {
+      const token = asStr(d.token);
+      const expiresAt = asDate(d.expiresAt);
+      if (!token || !expiresAt) return null;
+      const email = asStr(d.email);
+      return {
+        values: {
+          token,
+          user_id: d.userId != null ? String(d.userId) : null,
+          email,
+          email_lower: email ? email.toLowerCase() : null,
+          consumed_at: asDate(d.consumedAt),
+          expires_at: expiresAt,
+          created_at: asDate(d.createdAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "sessions",
+    mongoName: "sessions",
+    pgTableName: "sessions",
+    naturalKey: ["token"],
+    shopFilterColumn: "shop_id",
+    buildFilter: filterByShop,
+    extract: (d) => {
+      const token = asStr(d.token);
+      const userId = d.userId != null ? String(d.userId) : null;
+      const expiresAt = asDate(d.expiresAt);
+      if (!token || !userId || !expiresAt) return null;
+      return {
+        values: {
+          token,
+          user_id: userId,
+          shop_id: asInt(d.shopId),
+          is_impersonation: !!d.isImpersonation,
+          impersonated_by: d.impersonatedBy != null ? String(d.impersonatedBy) : null,
+          must_change_password: !!d.mustChangePassword,
+          expires_at: expiresAt,
+          created_at: asDate(d.createdAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "shop_users",
+    mongoName: "shop_users",
+    pgTableName: "shop_users",
+    naturalKey: ["shop_id", "user_id"],
+    buildFilter: filterByShop,
+    extract: (d) => {
+      const sid = asInt(d.shopId);
+      const uid = d.userId != null ? String(d.userId) : null;
+      if (sid == null || !uid) return null;
+      return {
+        values: {
+          shop_id: sid,
+          user_id: uid,
+          role: asStr(d.role),
+          created_at: asDate(d.createdAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "billing_settings",
+    mongoName: "billing_settings",
+    pgTableName: "billing_settings",
+    naturalKey: ["shop_id"],
+    buildFilter: filterByShop,
+    extract: (d) => {
+      const sid = asInt(d.shopId);
+      if (sid == null) return null;
+      const { _id, shopId, updatedAt, ...payload } = d;
+      return {
+        values: {
+          shop_id: sid,
+          payload,
+          updated_at: asDate(updatedAt) ?? new Date(),
+        },
+      };
+    },
+  },
+  {
+    key: "billing_status_log",
+    mongoName: "billing_status_log",
+    pgTableName: "billing_status_log",
+    refreshOnConflict: false,
+    shopFilterColumn: "shop_id",
+    buildFilter: filterByShop,
+    extract: (d) => ({
+      values: {
+        backfill_mongo_id: String(d._id),
+        shop_id: asInt(d.shopId),
+        from_status: asStr(d.fromStatus),
+        to_status: asStr(d.toStatus),
+        reason: asStr(d.reason),
+        actor: asStr(d.actor),
+        payload: d.payload ?? null,
+        created_at: asDate(d.createdAt) ?? new Date(),
+      },
+    }),
+  },
+  {
+    key: "stripe_events",
+    mongoName: "stripe_events",
+    pgTableName: "stripe_events",
+    naturalKey: ["id"],
+    refreshOnConflict: false,
+    shopFilterColumn: null,
+    extract: (d) => {
+      const id = asStr(d.id ?? d._id);
+      if (!id) return null;
+      return {
+        values: {
+          id,
+          type: asStr(d.type),
+          livemode: d.livemode != null ? !!d.livemode : null,
+          api_version: asStr(d.apiVersion ?? d.api_version),
+          payload: d.payload ?? d,
+          received_at: asDate(d.receivedAt) ?? asDate(d.createdAt) ?? new Date(),
+          processed_at: asDate(d.processedAt),
+        },
+      };
+    },
+  },
+  {
+    key: "stripe_webhook_events",
+    mongoName: "stripe_webhook_events",
+    pgTableName: "stripe_webhook_events",
+    naturalKey: ["id"],
+    refreshOnConflict: false,
+    shopFilterColumn: null,
+    extract: (d) => {
+      const id = asStr(d.id ?? d._id);
+      if (!id) return null;
+      return {
+        values: {
+          id,
+          type: asStr(d.type),
+          payload: d.payload ?? d,
+          received_at: asDate(d.receivedAt) ?? asDate(d.createdAt) ?? new Date(),
+          processed_at: asDate(d.processedAt),
+          error: asStr(d.error),
+        },
+      };
+    },
+  },
+];
+
+// Wave 4 mirror keys, in dependency-safe replay order.
+const W4_MIRROR_KEYS = [
+  "enterprise_accounts",
+  "shops",
+  "users",
+  "shop_features",
+  "platform_admins",
+  "platform_settings",
+  "platform_plans",
+  "pending_signups",
+  "setup_tokens",
+  "password_reset_tokens",
+  "sessions",
+  "shop_users",
+  "billing_settings",
+  "billing_status_log",
+  "stripe_events",
+  "stripe_webhook_events",
 ];
 
 const MIRROR_BY_KEY = new Map(MIRRORS.map((s) => [s.key, s]));
@@ -1401,10 +1854,14 @@ async function applyMirrorRow(
   spec: MirrorSpec,
   doc: Record<string, unknown>,
 ): Promise<"ok" | "skipped"> {
-  const row = spec.extract(doc);
-  if (!row) return "skipped";
-  const stmt = buildMirrorUpsertSql(spec, row);
-  await pg.execute(stmt);
+  const out = spec.extract(doc);
+  if (!out) return "skipped";
+  const rows = Array.isArray(out) ? out : [out];
+  if (rows.length === 0) return "skipped";
+  for (const row of rows) {
+    const stmt = buildMirrorUpsertSql(spec, row);
+    await pg.execute(stmt);
+  }
   return "ok";
 }
 
@@ -1584,17 +2041,19 @@ async function main(): Promise<void> {
   if (args.mirror) {
     const mirrorTargets: MirrorSpec[] =
       args.mirror === "all-w3b"
-        ? MIRRORS
-        : (() => {
-            const m = MIRROR_BY_KEY.get(args.mirror!);
-            if (!m) {
-              console.error(
-                `Unknown --mirror. Valid: ${MIRRORS.map((m) => m.key).join(", ")} (or 'all-w3b')`,
-              );
-              process.exit(1);
-            }
-            return [m];
-          })();
+        ? MIRRORS.filter((m) => !W4_MIRROR_KEYS.includes(m.key))
+        : args.mirror === "all-w4"
+          ? W4_MIRROR_KEYS.map((k) => MIRROR_BY_KEY.get(k)!).filter(Boolean)
+          : (() => {
+              const m = MIRROR_BY_KEY.get(args.mirror!);
+              if (!m) {
+                console.error(
+                  `Unknown --mirror. Valid: ${MIRRORS.map((m) => m.key).join(", ")} (or 'all-w3b', 'all-w4')`,
+                );
+                process.exit(1);
+              }
+              return [m];
+            })();
 
     logLine(
       `Mirror backfill plan: ${mirrorTargets.map((t) => t.key).join(" → ")}` +

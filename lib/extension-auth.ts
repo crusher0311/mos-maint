@@ -1,5 +1,14 @@
 import { NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
+import {
+  isIdentityPgCanonical,
+  shadowWriteMongoIdentity,
+} from "@/lib/db/wave4-write-mode";
+import {
+  findUserByExtensionToken,
+  updateUserExtensionTokenTimestamp,
+  type MongoShapedUser,
+} from "@/lib/data/repositories/pg/identity";
 
 export interface ExtensionAuthResult {
   user: any | null;
@@ -33,22 +42,28 @@ export async function validateExtensionToken(
     return { user: null, authorized: false, error: "Missing authorization" };
   }
 
-  let db;
+  // W4 cutover (#346): PG-canonical read when the flag is on.
+  // Both branches return Mongo-shaped user docs. PG path uses the
+  // typed `MongoShapedUser`; Mongo path is the raw driver shape and
+  // is read with the same accessors below.
+  const pgCanonical = isIdentityPgCanonical();
+  let db: Awaited<ReturnType<typeof getDb>> | null = null;
+  let user:
+    | MongoShapedUser
+    | { _id?: unknown; id?: unknown; extensionTokenCreatedAt?: Date; email?: string; shopId?: unknown }
+    | null = null;
   try {
-    db = await getDb();
-  } catch (err) {
-    console.error("[Extension Auth] Database connection failed:", err);
-    return { user: null, authorized: false, error: "Server error", serverError: true };
-  }
-
-  let user;
-  try {
-    user = await db.collection("users").findOne({ extensionToken: token });
+    if (pgCanonical) {
+      user = await findUserByExtensionToken(token);
+    } else {
+      db = await getDb();
+      user = await db.collection("users").findOne({ extensionToken: token });
+    }
   } catch (err) {
     console.error("[Extension Auth] Token lookup failed:", err);
     return { user: null, authorized: false, error: "Server error", serverError: true };
   }
-  
+
   if (!user) {
     console.log(`[Extension Auth] Token not found in DB, path=${request.nextUrl.pathname}`);
     return { user: null, authorized: false, error: "Invalid token" };
@@ -64,11 +79,27 @@ export async function validateExtensionToken(
     }
 
     if (tokenAge > TOKEN_REFRESH_THRESHOLD_MS) {
+      const ts = new Date();
       try {
-        await db.collection("users").updateOne(
-          { _id: user._id },
-          { $set: { extensionTokenCreatedAt: new Date() } }
-        );
+        if (pgCanonical) {
+          await updateUserExtensionTokenTimestamp(String(user.id ?? user._id), ts);
+          await shadowWriteMongoIdentity(
+            "users.extensionTokenCreatedAt",
+            async () => {
+              const m = await getDb();
+              await m.collection("users").updateOne(
+                { _id: user._id ?? user.id },
+                { $set: { extensionTokenCreatedAt: ts } },
+              );
+            },
+          );
+        } else {
+          if (!db) db = await getDb();
+          await db.collection("users").updateOne(
+            { _id: user._id },
+            { $set: { extensionTokenCreatedAt: ts } }
+          );
+        }
       } catch (err) {
         console.warn("[Extension Auth] Failed to refresh token timestamp:", err);
       }

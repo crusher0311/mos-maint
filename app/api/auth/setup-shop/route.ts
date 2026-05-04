@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  clearMustChangePasswordByUserId as pgClearMcpByUserId,
+  clearUserMustChangePassword as pgClearUserMcp,
+  updateUserPassword as pgUpdateUserPassword,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,10 +128,32 @@ export async function POST(req: NextRequest) {
       { userId: userDoc._id },
       { $unset: { mustChangePassword: "" } }
     );
+
+    // W4 cutover (#346): mirror session gate clear into PG.
+    await dualWritePgIdentity("sessions.clearMcp(setup-shop)", () =>
+      pgClearMcpByUserId(String(userDoc._id)),
+    );
     await db.collection("users").updateOne(
       { _id: userDoc._id },
       { $unset: { mustChangePassword: "" } }
     );
+
+    // W4 cutover (#346): mirror the USER-LEVEL gate clear into PG.
+    // If the user also supplied a new password, dual-write that too;
+    // otherwise just flip the flag so getSession() doesn't re-gate them.
+    if (userUpdate.passwordHash) {
+      await dualWritePgIdentity("users.update(setup-shop password)", () =>
+        pgUpdateUserPassword(String(userDoc._id), {
+          passwordHash: userUpdate.passwordHash!,
+          mustChangePassword: false,
+          passwordChangedAt: userUpdate.passwordChangedAt ?? new Date(),
+        }),
+      );
+    } else {
+      await dualWritePgIdentity("users.clearMcp(setup-shop)", () =>
+        pgClearUserMcp(String(userDoc._id)),
+      );
+    }
   }
 
   // Drop the middleware gating cookie too — the user just completed the

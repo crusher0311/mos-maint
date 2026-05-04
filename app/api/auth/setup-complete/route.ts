@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import crypto from "node:crypto";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  insertSession as pgInsertSession,
+  insertUser as pgInsertUser,
+} from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +56,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // W4 cutover (#346): the user was created by the Stripe webhook
+    // and may not have been picked up by the periodic delta backfill
+    // yet. Idempotent insert (ON CONFLICT DO NOTHING) ensures the
+    // session inserted below has a valid PG FK target.
+    await dualWritePgIdentity("users.insert(setup-complete)", () =>
+      pgInsertUser({
+        id: String(user._id),
+        email: String(user.email ?? user.emailLower ?? pending.adminEmail),
+        emailLower: String(user.emailLower ?? user.email ?? pending.adminEmail).toLowerCase(),
+        passwordHash: user.passwordHash,
+        role: user.role,
+        shopId,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }),
+    );
+
     const sessionId = crypto.randomBytes(24).toString("hex");
     const now = new Date();
     const ttlDays = 30;
@@ -63,6 +85,17 @@ export async function POST(req: NextRequest) {
       createdAt: now,
       expiresAt,
     });
+
+    // W4 cutover (#346): mirror into PG so the cookie lights up the
+    // user's first authenticated request.
+    await dualWritePgIdentity("sessions.insert(setup-complete)", () =>
+      pgInsertSession({
+        token: sessionId,
+        userId: String(user._id),
+        shopId,
+        expiresAt,
+      }),
+    );
 
     const res = NextResponse.json({ ok: true, shopId });
     

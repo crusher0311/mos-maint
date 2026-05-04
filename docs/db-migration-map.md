@@ -110,6 +110,28 @@ Grouped by domain. "PG plan" calls out the wave each one belongs to.
 
 ### 3.1 Identity / tenancy (W4 — last to migrate)
 
+> **W4 status (2026-05-04, task #346): schema-landed, central libs gated.**
+> Drizzle schema in `lib/db/schema/wave4.ts`; migration in
+> `drizzle/0015_wave4.sql`; PG read/write surface in
+> `lib/data/repositories/pg/identity.ts`; kill-switch in
+> `lib/db/wave4-write-mode.ts` (`IDENTITY_PG_CANONICAL`,
+> `WRITE_MONGO_IDENTITY`, default OFF/ON respectively).
+> Central libs **already dispatch** on the flag: `lib/auth.ts`,
+> `lib/extension-auth.ts`, `lib/super-admins.ts`, `lib/shops.ts`,
+> `lib/featureResolver.ts`, `lib/stripe.ts`. Backfill handled by
+> `tsx scripts/backfill-mongo-to-supabase.ts --mirror=all-w4` (16
+> mirrors, dependency-ordered). Cutover playbook: `docs/runbooks/db-w4-cutover.md`.
+> **Direct callsites that still write Mongo until refactored** (top by
+> reference count): `app/api/stripe/webhook` (23),
+> `app/api/settings/users/[userId]` (14),
+> `app/api/dashboard/enterprise-users` (13),
+> `app/api/platform-admin/shops/[shopId]` (12),
+> `app/api/auth/login` (8), `app/api/auth/signup` (7),
+> `app/api/admin-login` (6), `app/api/auth/reset-password` (5),
+> `app/api/billing/portal` (4), `app/api/platform-admin/plans` (4).
+> While `WRITE_MONGO_IDENTITY=1` these stay in Mongo and the post-window
+> backfill brings PG back in sync.
+
 | Collection | Source of truth | Readers | Writers | Notes |
 | --- | --- | --- | --- | --- |
 | `shops` | Mongo | `lib/shops.ts`, `lib/auth.ts`, `lib/stripe.ts`, `lib/featureResolver.ts`, virtually every cron + API route, all integration adapters | `lib/shops.ts`, `app/api/stripe/webhook/route.ts`, `app/api/settings/{autoflow,shopware,protractor,billing}/route.ts`, `app/api/enterprise/shops/route.ts`, `app/api/sticker/settings/route.ts`, `app/api/internal/backfill-labor-rates/route.ts` | Highest fan-in entity in the system. **W4.** |

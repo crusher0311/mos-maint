@@ -11,6 +11,8 @@ import {
 } from "@/lib/featureResolver";
 import { resendCardCaptureForShop } from "@/lib/card-capture-resend";
 import { ensureStripeCustomer } from "@/lib/stripe";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { deleteSessionsByShopId as pgDeleteSessionsByShopId } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -447,6 +449,12 @@ export async function DELETE(
     await db.collection("shops").deleteOne({ shopId });
     await db.collection("users").deleteMany({ shopId });
     await db.collection("sessions").deleteMany({ shopId });
+
+    // W4 cutover (#346): mirror revocation into PG so the deleted
+    // shop's sessions can't survive against the PG-canonical reader.
+    await dualWritePgIdentity("sessions.delete(shop-delete)", () =>
+      pgDeleteSessionsByShopId(shopId),
+    );
 
     await db.collection("audit_logs").insertOne({
       type: "shop_deleted",

@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  deleteSessionsByUserId as pgDeleteSessionsByUserId,
+  insertSession as pgInsertSession,
+  updateUserPassword as pgUpdateUserPassword,
+} from "@/lib/data/repositories/pg/identity";
 
 /**
  * POST /api/auth/reset
@@ -83,10 +89,26 @@ export async function POST(req: Request) {
       { $set: { passwordHash, updatedAt: now }, $unset: { password: "" } }
     );
 
+    // W4 cutover (#346): mirror the user-level password change into
+    // PG so the new session inserted below can authenticate against
+    // the PG-canonical reader without a backfill in between.
+    await dualWritePgIdentity("users.update(password-reset)", () =>
+      pgUpdateUserPassword(String(user._id), {
+        passwordHash,
+        passwordChangedAt: now,
+      }),
+    );
+
     // 7) Mark token as used
     await pwTokens.updateOne({ _id: t._id }, { $set: { usedAt: now } });
 
     await sessions.deleteMany({ userId: user._id });
+
+    // W4 cutover (#346): mirror revocation into PG before issuing
+    // the new session.
+    await dualWritePgIdentity("sessions.delete(reset)", () =>
+      pgDeleteSessionsByUserId(String(user._id)),
+    );
 
     const sessionToken = crypto.randomBytes(32).toString("hex");
     const sessionTtlDays = 30;
@@ -99,6 +121,17 @@ export async function POST(req: Request) {
       createdAt: now,
       expiresAt,
     });
+
+    // W4 cutover (#346): mirror new session into PG so the next
+    // request via the cookie can authenticate.
+    await dualWritePgIdentity("sessions.insert(reset)", () =>
+      pgInsertSession({
+        token: sessionToken,
+        userId: String(user._id),
+        shopId: Number(t.shopId),
+        expiresAt,
+      }),
+    );
 
     const res = NextResponse.json({ ok: true, shopId: Number(t.shopId) });
     res.headers.append(

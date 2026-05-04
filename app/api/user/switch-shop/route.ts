@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import crypto from "crypto";
 import { getSession, sessionCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertSession as pgInsertSession } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 
@@ -52,6 +54,17 @@ export async function POST(req: Request) {
       createdAt: new Date(),
       expiresAt,
     });
+
+    // W4 cutover (#346): mirror into PG so the next request resolves
+    // the new shop scope via getSession() correctly.
+    await dualWritePgIdentity("sessions.insert(switch-shop)", () =>
+      pgInsertSession({
+        token: newToken,
+        userId: String(userInShop._id),
+        shopId,
+        expiresAt,
+      }),
+    );
 
     const store = await cookies();
     store.set("session_token", newToken, sessionCookieOptions(60 * 60 * 24 * 30));
