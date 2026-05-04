@@ -167,6 +167,20 @@ export async function middleware(req: NextRequest) {
       return NextResponse.next();
     }
 
+    // Internal server-to-server callers (e.g. the VHI rebuild loop in
+    // lib/vhi-rebuild.ts -> /api/plan-build, and the cron-triggered
+    // /api/internal/* prefetch routes) authenticate with an
+    // x-internal-secret header instead of a session cookie. Let those
+    // through ONLY for routes that actually validate the secret in their
+    // handler — restricting the allow-list prevents this from becoming a
+    // global auth bypass for routes that rely on the middleware as their
+    // only line of defense (e.g. POST /api/shops).
+    const isInternalSecretRoute =
+      pathname === "/api/plan-build" || pathname.startsWith("/api/internal/");
+    if (isInternalSecretRoute && req.headers.get("x-internal-secret")) {
+      return NextResponse.next();
+    }
+
     // E2E Test Auth Bypass
     const testSecret = process.env.E2E_TEST_SECRET;
     if (testSecret && testSecret.length >= 16) {

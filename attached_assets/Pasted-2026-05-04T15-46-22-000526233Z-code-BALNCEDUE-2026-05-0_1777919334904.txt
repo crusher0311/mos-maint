@@ -1,0 +1,100 @@
+2026-05-04T15:46:22.000526233Z       "code": "BALNCEDUE",
+2026-05-04T15:46:22.000528713Z       "name": "Balance Due",
+2026-05-04T15:46:22.000531164Z       "status": {
+2026-05-04T15:46:22.000533714Z         "id": 3,
+2026-05-04T15:46:22.000536134Z         "code": "COMPLETE",
+2026-05-04T15:46:22.000538544Z         "name": "Complete",
+2026-05-04T15:46:22.000540964Z         "postedOrAccrecv": false
+2026-05-04T15:46:22.000543454Z       }
+2026-05-04T15:46:22.000545845Z     },
+2026-05-04T15:46:22.000548335Z     "color": "#232E32",
+2026-05-04T15:46:22.000550735Z     "repairOrderCustomLabel": {
+2026-05-04T15:46:22.000565416Z       "name": "COMPLETED"
+2026-05-04T15:46:22.000569696Z     },
+2026-05-04T15:46:22.000573456Z     "customerId": 105146040,
+2026-05-04T15:46:22.000577227Z     "technicianId": null,
+2026-05-04T15:46:22.000580907Z     "serviceWriterId": 279525,
+2026-05-04T15:46:22.000584647Z     "vehicleId": 153590649,
+2026-05-04T15:46:22.000588807Z     "milesIn": 97669,
+2026-05-04T15:46:22.000592377Z     "milesOut": 97669,
+2026-05-04T15:46:22.000595878Z     "keytag": null,
+2026-05-04T15:46:22.000599388Z     "completedDate": "2026-05-04T15:43:35Z",
+2026-05-04T15:46:22.000602538Z     "postedDate": null,
+2026-05-04T15:46:22.000605518Z     "laborSales": 16870,
+2026-05-04T15:46:22.000608499Z     "partsSales": 0,
+2026-05-04T15:46:22.000611559Z     "subletSales": 0,
+2026-05-04T15:46:22.000614609Z     "discountTotal": 3995,
+2026-05-04T15:46:22.000617809Z     "feeTotal": 850,
+2026-05-04T15:46:22.000620879Z     "taxes": 46,
+2026-05-04T15:46:22.0006239Z     "amountPaid": 0,
+2026-05-04T15:46:22.000627Z     "totalSales": 13771,
+2026-05-04T15:46:22.00063012Z     "jobs": [
+2026-05-04T15:46:22.000667573Z       {
+2026-05-04T15:46:22.000674673Z     
+2026-05-04T15:46:22.000679153Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #100290 completed by KMARTIN210@AOL.COM", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-05-04T15:46:22.000683583Z [Tekmetric Webhook] RO Update: #100290 (ID: 325498915), Status: Complete (COMPLETE)
+2026-05-04T15:46:22.061726735Z [Tekmetric Webhook NIS] shop=32 ro=326232236 → WO 1c/0u/0s, serviceJobs 0c/0u/0s/0e, lineItems 0c/0u/0s/0e, payments=0, inspections=0
+2026-05-04T15:46:22.063946962Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-04T15:46:22.229208064Z [Tekmetric Webhook] Upserted RO #100290: UPDATE status=Work-In-Progress, label=Work Not Started, odometer=97669, customer=unchanged, shop=89
+2026-05-04T15:46:22.229237206Z [VHI Trigger] Skipping duplicate create-build for create:JH4CU2F60EC004014:89
+2026-05-04T15:46:22.338869614Z [Tekmetric Webhook] Upserted RO #100290: UPDATE status=Complete, label=COMPLETED, odometer=97669, customer=unchanged, shop=89
+2026-05-04T15:46:22.338884585Z [VHI Trigger] Skipping duplicate create-build for create:JH4CU2F60EC004014:89
+2026-05-04T15:46:23.167307242Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #38569
+2026-05-04T15:46:23.303104904Z [Extension Auth] Token not found in DB, path=/api/extension/tek-endpoint-report
+2026-05-04T15:46:23.369747886Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #114009
+2026-05-04T15:46:23.536675757Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-04T15:46:23.855219678Z [Tekmetric Webhook NIS] shop=89 ro=325498915 → WO 0c/0u/1s, serviceJobs 0c/0u/2s/0e, lineItems 0c/0u/2s/0e, payments=0, inspections=0
+2026-05-04T15:46:24.043820514Z [Tekmetric Webhook NIS] shop=89 ro=325498915 → WO 0c/0u/1s, serviceJobs 0c/0u/2s/0e, lineItems 0c/0u/2s/0e, payments=0, inspections=0
+2026-05-04T15:46:24.605185781Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #38564
+2026-05-04T15:46:24.838724363Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #113953
+2026-05-04T15:46:25.118219267Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #38570
+2026-05-04T15:46:25.463752864Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #113841
+2026-05-04T15:46:25.70021399Z [Protractor Callback GET] Update WorkOrder dca06e42-a95b-446a-9ea6-19ec30572a29 for shop 51
+2026-05-04T15:46:25.817299772Z [Protractor Callback GET] Logged WorkOrder dca06e42-a95b-446a-9ea6-19ec30572a29 for shop 51
+2026-05-04T15:46:25.825069106Z [Extension Auth Token] Stored x-auth-token for shop 108 (tekmetric 5834) from info@autodynamicservices.com
+2026-05-04T15:46:25.964188847Z [Tekmetric Webhook] Received event: {
+2026-05-04T15:46:25.964207398Z   "data": {
+2026-05-04T15:46:25.964212838Z     "id": 326230066,
+2026-05-04T15:46:25.964218009Z     "repairOrderNumber": 33757,
+2026-05-04T15:46:25.964221839Z     "shopId": 4138,
+2026-05-04T15:46:25.964225759Z     "repairOrderStatus": {
+2026-05-04T15:46:25.96422971Z       "id": 2,
+2026-05-04T15:46:25.96423265Z       "code": "WORKINPROGRESS",
+2026-05-04T15:46:25.96423532Z       "name": "Work-In-Progress",
+2026-05-04T15:46:25.96423792Z       "postedOrAccrecv": false
+2026-05-04T15:46:25.96424041Z     },
+2026-05-04T15:46:25.964242931Z     "repairOrderLabel": {
+2026-05-04T15:46:25.964245391Z       "id": 12,
+2026-05-04T15:46:25.964247781Z       "code": "WORKNOTSTRTD",
+2026-05-04T15:46:25.964250211Z       "name": "Work Not Started",
+2026-05-04T15:46:25.964252601Z       "status": {
+2026-05-04T15:46:25.964255051Z         "id": 2,
+2026-05-04T15:46:25.964257532Z         "code": "WORKINPROGRESS",
+2026-05-04T15:46:25.964259972Z         "name": "Work-In-Progress",
+2026-05-04T15:46:25.964262402Z         "postedOrAccrecv": false
+2026-05-04T15:46:25.964264842Z       }
+2026-05-04T15:46:25.964267692Z     },
+2026-05-04T15:46:25.964271813Z     "color": "#1786E8",
+2026-05-04T15:46:25.964275953Z     "repairOrderCustomLabel": {
+2026-05-04T15:46:25.964280163Z       "name": "In-Progress"
+2026-05-04T15:46:25.964284153Z     },
+2026-05-04T15:46:25.964287914Z     "customerId": 106326670,
+2026-05-04T15:46:25.964291784Z     "technicianId": 236532,
+2026-05-04T15:46:25.964295424Z     "serviceWriterId": 294141,
+2026-05-04T15:46:25.964298814Z     "vehicleId": 153965481,
+2026-05-04T15:46:25.964302595Z     "milesIn": 11677,
+2026-05-04T15:46:25.964306225Z     "milesOut": 11677,
+2026-05-04T15:46:25.964309695Z     "keytag": null,
+2026-05-04T15:46:25.964313325Z     "completedDate": null,
+2026-05-04T15:46:25.964317205Z     "postedDate": null,
+2026-05-04T15:46:25.964321056Z     "laborSales": 2970,
+2026-05-04T15:46:25.964324756Z     "partsSales": 4459,
+2026-05-04T15:46:25.964327146Z     "subletSales": 0,
+2026-05-04T15:46:25.964329576Z     "discountTotal": 3432,
+2026-05-04T15:46:25.964331966Z     "feeTotal": 1077,
+2026-05-04T15:46:25.964334417Z     "taxes": 40,
+2026-05-04T15:46:25.964336777Z     "amountPaid": 0,
+2026-05-04T15:46:25.964339207Z     "totalSales": 5114,
+2026-05-04T15:46:25.964341647Z     
+2026-05-04T15:46:25.964345067Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #33757 status updated by pjnangauta@gmail.com", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-05-04T15:46:25.964348327Z [Tekmetric Webhook] RO Update: #33757 (ID: 326230066), Status: Work-In-Progress (WORKINPROGRESS)

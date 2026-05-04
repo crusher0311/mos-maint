@@ -170,31 +170,37 @@ function buildWhere(filter: Filter<EventDoc>): SQL | undefined {
 
   // Dotted JSON-path filters (e.g. "payload.ticket.roNumber"). Mongo
   // supports `{$exists: true, $ne: null|""}` on these; translate to
-  // PG `payload #>> ARRAY['ticket','roNumber'] IS NOT NULL` (and
-  // optionally `<> ''`). Postgres's `#>>` operator requires a
-  // text[] right-hand side — passing the array via the parameterized
-  // template binds it as a PG text[] (no string-curly path needed).
+  // PG `payload #>> '{ticket,roNumber}'::text[] IS NOT NULL` (and
+  // optionally `<> ''`). Bind the path as a single Postgres text-array
+  // literal — passing the JS array directly to drizzle's `dsql` would
+  // expand it as a tuple `($1, $2)` which Postgres can't cast to text[]
+  // ("cannot cast type record to text[]").
+  const toPgTextArrayLiteral = (segments: string[]): string =>
+    `{${segments
+      .map((s) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+      .join(",")}}`;
+
   for (const key of Object.keys(f)) {
     if (!key.startsWith("payload.")) continue;
     const segments = key.slice("payload.".length).split(".");
     if (segments.length === 0) continue;
-    const path = segments;
+    const pathLiteral = toPgTextArrayLiteral(segments);
     const op = f[key];
     if (op && typeof op === "object") {
       const o = op as Record<string, unknown>;
       if (o.$exists === true) {
-        clauses.push(dsql`${pgEvents.payload} #>> ${path}::text[] IS NOT NULL`);
+        clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] IS NOT NULL`);
       }
       if (o.$ne !== undefined) {
         const v = o.$ne;
         if (v === null) {
-          clauses.push(dsql`${pgEvents.payload} #>> ${path}::text[] IS NOT NULL`);
+          clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] IS NOT NULL`);
         } else {
-          clauses.push(dsql`${pgEvents.payload} #>> ${path}::text[] <> ${String(v)}`);
+          clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] <> ${String(v)}`);
         }
       }
     } else if (op !== undefined) {
-      clauses.push(dsql`${pgEvents.payload} #>> ${path}::text[] = ${String(op)}`);
+      clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] = ${String(op)}`);
     }
   }
 
