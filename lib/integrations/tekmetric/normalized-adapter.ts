@@ -304,6 +304,67 @@ export class TekmetricAdapter implements INormalizedAdapter {
     }));
   }
   
+  extractRawServiceJobsFromWorkOrder(sourceData: any): any[] {
+    const jobs = sourceData.jobs || [];
+    return Array.isArray(jobs) ? jobs : [];
+  }
+
+  /**
+   * Tekmetric exposes labor and parts as separate per-job arrays where the
+   * money amounts are in CENTS (`rate`, `cost`, `retail`). We collapse them
+   * into a single line-items list and normalize cents → dollars here so
+   * `mapLineItem` can stay generic. Each item carries a `_sourceId` of the
+   * form `labor-<id>` or `part-<id>` to keep the (already-disjoint) labor
+   * and parts ID namespaces explicitly separated for `ingestLineItem`'s
+   * dedupe key.
+   */
+  extractLineItemsFromServiceJob(job: any): any[] {
+    const out: any[] = [];
+    const labor = Array.isArray(job?.labor) ? job.labor : [];
+    for (let idx = 0; idx < labor.length; idx++) {
+      const l = labor[idx] || {};
+      const hours = parseNumber(l.hours) || 0;
+      const rateDollars = (parseNumber(l.rate) || 0) / 100;
+      out.push({
+        _sourceId: `labor-${l.id ?? idx}`,
+        id: l.id,
+        type: 'labor',
+        sortOrder: idx,
+        name: l.name || job.name,
+        description: l.name || job.name,
+        quantity: 1,
+        hours,
+        rate: rateDollars,
+        price: rateDollars,
+        cost: 0,
+        total: hours * rateDollars,
+      });
+    }
+    const parts = Array.isArray(job?.parts) ? job.parts : [];
+    for (let idx = 0; idx < parts.length; idx++) {
+      const p = parts[idx] || {};
+      const qty = parseNumber(p.quantity) || 1;
+      const retailDollars = (parseNumber(p.retail) || 0) / 100;
+      const costDollars = (parseNumber(p.cost) || 0) / 100;
+      out.push({
+        _sourceId: `part-${p.id ?? idx}`,
+        id: p.id,
+        type: 'part',
+        sortOrder: labor.length + idx,
+        name: p.name || p.description || '',
+        description: p.name || p.description || '',
+        partNumber: p.partNumber,
+        brand: p.brand,
+        manufacturer: p.brand,
+        quantity: qty,
+        price: retailDollars,
+        cost: costDollars,
+        total: qty * retailDollars,
+      });
+    }
+    return out;
+  }
+
   extractPaymentsFromWorkOrder(sourceData: any): any[] {
     const payments = sourceData.payments || [];
     return Array.isArray(payments) ? payments : [];

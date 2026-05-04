@@ -92,7 +92,7 @@ async function runWebhookNormalizedIngestion(
     );
     const result = await ingestionService.ingestWorkOrderBatchWithAllEntities([enriched]);
     console.log(
-      `[Tekmetric Webhook NIS] shop=${internalShopId} ro=${repairOrder.id} → WO ${result.workOrders.created}c/${result.workOrders.updated}u/${result.workOrders.skipped}s, payments=${result.payments.created}, inspections=${result.inspections.created}`
+      `[Tekmetric Webhook NIS] shop=${internalShopId} ro=${repairOrder.id} → WO ${result.workOrders.created}c/${result.workOrders.updated}u/${result.workOrders.skipped}s, serviceJobs ${result.serviceJobs.created}c/${result.serviceJobs.updated}u/${result.serviceJobs.skipped}s/${result.serviceJobs.errors}e, lineItems ${result.lineItems.created}c/${result.lineItems.updated}u/${result.lineItems.skipped}s/${result.lineItems.errors}e, payments=${result.payments.created}, inspections=${result.inspections.created}`
     );
   } catch (err: any) {
     console.error(`[Tekmetric Webhook NIS] error for RO ${repairOrder?.id}:`, err?.message);

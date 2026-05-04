@@ -709,6 +709,139 @@ export class NormalizedIngestionService {
   }
   
   // ---------------------------------------------------------------------------
+  // LINE ITEM INGESTION (standalone)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Writes a single normalized line item to Mongo and dual-writes to PG
+   * (`normalized_line_items`). Mirrors `ingestServiceJob`'s shape and dedupe
+   * key contract so that callers can iterate the raw per-job lines returned
+   * by `adapter.extractLineItemsFromServiceJob` and persist each one.
+   *
+   * Dedupe key: `sourceData.ID || sourceData.id || sourceData._sourceId`.
+   * Adapters MUST set one of these — Tekmetric uses synthetic
+   * `labor-<id>`/`part-<id>` to avoid cross-namespace collisions; Protractor
+   * falls back to `<servicePackageId>-<index>` when an explicit line ID
+   * isn't present. See `INormalizedAdapter.extractLineItemsFromServiceJob`.
+   */
+  async ingestLineItem(workOrderId: string, serviceJobId: string, sourceData: any): Promise<IngestionResult> {
+    try {
+      const mapped = this.adapter.mapLineItem(this.shopId, workOrderId, serviceJobId, sourceData);
+
+      const collection = this.db.collection<NormalizedLineItem>(NORMALIZED_COLLECTIONS.lineItems);
+
+      const sourceId = sourceData.ID || sourceData.id || sourceData._sourceId;
+      if (!sourceId) {
+        return {
+          success: false,
+          entityType: 'line_item',
+          action: 'error',
+          message: 'Line item has no ID',
+        };
+      }
+
+      const existingQuery = {
+        serviceJobId,
+        'provenance.sourceIds.idValue': String(sourceId),
+      };
+
+      const existing = await collection.findOne(existingQuery);
+
+      const contentHash = generateContentHash(mapped);
+
+      if (existing) {
+        if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          return {
+            success: true,
+            entityType: 'line_item',
+            entityId: existing._id,
+            action: 'skipped',
+            message: 'Content unchanged',
+            contentHash,
+          };
+        }
+
+        await collection.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              ...mapped,
+              updatedAt: new Date(),
+              version: existing.version + 1,
+            },
+          }
+        );
+
+        await this.dualWriteToSupabase('line_item', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertLineItem({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, serviceJobId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+
+        return {
+          success: true,
+          entityType: 'line_item',
+          entityId: existing._id,
+          action: 'updated',
+          contentHash,
+        };
+      }
+
+      const newId = generateEntityId();
+      const now = new Date();
+      const sourceIds = [{
+        system: this.adapter.sourceSystem,
+        idType: 'line_item_id',
+        idValue: String(sourceId),
+        isPrimary: true,
+      }];
+
+      const newLineItem: NormalizedLineItem = {
+        _id: newId,
+        ...mapped,
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        workOrderId,
+        serviceJobId,
+        provenance: createProvenance(this.adapter.sourceSystem, sourceIds, contentHash, this.options.syncRunId),
+        softDelete: createSoftDelete(),
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+        lineNumber: mapped.lineNumber || 0,
+        lineType: mapped.lineType || 'misc',
+        partDescription: mapped.partDescription || 'Unknown Item',
+        quantity: mapped.quantity || 1,
+        quantityUnit: mapped.quantityUnit || 'each',
+        unitCost: mapped.unitCost || 0,
+        unitPrice: mapped.unitPrice || 0,
+        extendedPrice: mapped.extendedPrice || 0,
+        taxable: mapped.taxable !== false,
+        customFields: {},
+      } as NormalizedLineItem;
+
+      await collection.insertOne(newLineItem);
+
+      await this.dualWriteToSupabase('line_item', newId, 'create', () =>
+        this.supabaseDualWriter!.upsertLineItem(newLineItem)
+      );
+
+      return {
+        success: true,
+        entityType: 'line_item',
+        entityId: newId,
+        action: 'created',
+        contentHash,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityType: 'line_item',
+        action: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // PAYMENT INGESTION
   // ---------------------------------------------------------------------------
   
@@ -1041,12 +1174,16 @@ export class NormalizedIngestionService {
   
   async ingestWorkOrderWithAllEntities(sourceData: any): Promise<{
     workOrder: IngestionResult;
+    serviceJobs: IngestionResult[];
+    lineItems: IngestionResult[];
     payments: IngestionResult[];
     inspections: IngestionResult[];
     recommendations: IngestionResult[];
   }> {
     const workOrderResult = await this.ingestWorkOrder(sourceData);
     
+    const serviceJobs: IngestionResult[] = [];
+    const lineItems: IngestionResult[] = [];
     const payments: IngestionResult[] = [];
     const inspections: IngestionResult[] = [];
     const recommendations: IngestionResult[] = [];
@@ -1061,7 +1198,29 @@ export class NormalizedIngestionService {
       }
       const vehicleDoc = await this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery);
       const vehicleId = vehicleDoc?._id ? String(vehicleDoc._id) : '';
-      
+
+      // Standalone service-job + line-item ingestion. This is the gap that
+      // task #360 closes: the work-order path used to only embed jobs into
+      // `normalized_work_orders.serviceJobs` (and `job_index`), which left
+      // PG `normalized_service_jobs` / `normalized_line_items` empty and
+      // forced job-search to fall back to Mongo (#359). We iterate the RAW
+      // per-source service jobs (the simplified embedded shape lacks the
+      // source ID and nested line items needed for dedupe + FK linkage),
+      // ingest each one, then walk its line items in the same order so
+      // `line_items.service_job_id` resolves correctly.
+      const rawServiceJobs = this.adapter.extractRawServiceJobsFromWorkOrder(sourceData);
+      for (const rawJob of rawServiceJobs) {
+        const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
+        serviceJobs.push(sjResult);
+        if (sjResult.success && sjResult.entityId) {
+          const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
+          for (const rawLine of rawLines) {
+            const liResult = await this.ingestLineItem(workOrderId, sjResult.entityId, rawLine);
+            lineItems.push(liResult);
+          }
+        }
+      }
+
       const paymentData = this.adapter.extractPaymentsFromWorkOrder(sourceData);
       for (const payment of paymentData) {
         const result = await this.ingestPayment(workOrderId, payment);
@@ -1083,6 +1242,8 @@ export class NormalizedIngestionService {
     
     return {
       workOrder: workOrderResult,
+      serviceJobs,
+      lineItems,
       payments,
       inspections,
       recommendations,
@@ -1119,14 +1280,46 @@ export class NormalizedIngestionService {
     };
   }
   
+  /**
+   * Public, typed replay path for the task #360 backfill (and any future
+   * backfills that need to populate `normalized_service_jobs` /
+   * `normalized_line_items` from an existing work order's raw payload
+   * without re-upserting the work order itself). Mirrors the inner loop of
+   * `ingestWorkOrderWithAllEntities` exactly so behavior stays in sync.
+   */
+  async replayServiceJobsAndLineItemsFromRawPayload(
+    workOrderId: string,
+    sourceData: any,
+  ): Promise<{ serviceJobs: IngestionResult[]; lineItems: IngestionResult[] }> {
+    const serviceJobs: IngestionResult[] = [];
+    const lineItems: IngestionResult[] = [];
+    const rawServiceJobs = this.adapter.extractRawServiceJobsFromWorkOrder(sourceData);
+    for (const rawJob of rawServiceJobs) {
+      const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
+      serviceJobs.push(sjResult);
+      if (sjResult.success && sjResult.entityId) {
+        const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
+        for (const rawLine of rawLines) {
+          const liResult = await this.ingestLineItem(workOrderId, sjResult.entityId, rawLine);
+          lineItems.push(liResult);
+        }
+      }
+    }
+    return { serviceJobs, lineItems };
+  }
+
   async ingestWorkOrderBatchWithAllEntities(workOrders: any[]): Promise<{
     workOrders: IngestionBatchResult;
+    serviceJobs: { created: number; updated: number; skipped: number; errors: number };
+    lineItems: { created: number; updated: number; skipped: number; errors: number };
     payments: { created: number; updated: number; skipped: number; errors: number };
     inspections: { created: number; updated: number; skipped: number; errors: number };
     recommendations: { created: number; updated: number; skipped: number; errors: number };
   }> {
     const workOrderResults: IngestionResult[] = [];
     let woCreated = 0, woUpdated = 0, woSkipped = 0, woErrors = 0;
+    let sjCreated = 0, sjUpdated = 0, sjSkipped = 0, sjErrors = 0;
+    let liCreated = 0, liUpdated = 0, liSkipped = 0, liErrors = 0;
     let payCreated = 0, payUpdated = 0, paySkipped = 0, payErrors = 0;
     let inspCreated = 0, inspUpdated = 0, inspSkipped = 0, inspErrors = 0;
     let recCreated = 0, recUpdated = 0, recSkipped = 0, recErrors = 0;
@@ -1141,7 +1334,25 @@ export class NormalizedIngestionService {
         case 'skipped': woSkipped++; break;
         case 'error': woErrors++; break;
       }
-      
+
+      for (const sj of result.serviceJobs) {
+        switch (sj.action) {
+          case 'created': sjCreated++; break;
+          case 'updated': sjUpdated++; break;
+          case 'skipped': sjSkipped++; break;
+          case 'error': sjErrors++; break;
+        }
+      }
+
+      for (const li of result.lineItems) {
+        switch (li.action) {
+          case 'created': liCreated++; break;
+          case 'updated': liUpdated++; break;
+          case 'skipped': liSkipped++; break;
+          case 'error': liErrors++; break;
+        }
+      }
+
       for (const pay of result.payments) {
         switch (pay.action) {
           case 'created': payCreated++; break;
@@ -1178,6 +1389,18 @@ export class NormalizedIngestionService {
         skipped: woSkipped,
         errors: woErrors,
         results: workOrderResults,
+      },
+      serviceJobs: {
+        created: sjCreated,
+        updated: sjUpdated,
+        skipped: sjSkipped,
+        errors: sjErrors,
+      },
+      lineItems: {
+        created: liCreated,
+        updated: liUpdated,
+        skipped: liSkipped,
+        errors: liErrors,
       },
       payments: {
         created: payCreated,

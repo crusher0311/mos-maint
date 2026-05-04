@@ -377,6 +377,29 @@ export class ProtractorAdapter implements INormalizedAdapter {
     });
   }
   
+  extractRawServiceJobsFromWorkOrder(sourceData: any): any[] {
+    const list =
+      sourceData.ServicePackages?.ItemCollection ||
+      sourceData.ServicePackages ||
+      [];
+    return Array.isArray(list) ? list : [];
+  }
+
+  extractLineItemsFromServiceJob(sp: any): any[] {
+    const lines =
+      sp?.ServicePackageLines?.ItemCollection ||
+      sp?.ServicePackageLines ||
+      [];
+    if (!Array.isArray(lines)) return [];
+    return lines.map((line: any, idx: number) => ({
+      ...line,
+      _sourceId:
+        line.ID || line.LineID ||
+        `${sp.ID || sp.ServicePackageHeader?.ID || 'sp'}-${idx}`,
+      Sequence: line.Sequence ?? idx,
+    }));
+  }
+
   extractPaymentsFromWorkOrder(sourceData: any): any[] {
     const payments = sourceData.Payments?.ItemCollection || sourceData.Payments || [];
     return Array.isArray(payments) ? payments : [];

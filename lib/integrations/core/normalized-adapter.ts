@@ -60,6 +60,24 @@ export interface INormalizedAdapter {
   extractVehicleFromWorkOrder(sourceData: any): Partial<NormalizedVehicle> | null;
   extractCustomerFromWorkOrder(sourceData: any): Partial<NormalizedCustomer> | null;
   extractServiceJobsFromWorkOrder(sourceData: any): Partial<NormalizedServiceJob>[];
+  /**
+   * Returns the RAW per-source service-job records (preserving the source ID
+   * and any nested line-item arrays). Unlike `extractServiceJobsFromWorkOrder`
+   * — which is used for the embedded snapshot in `normalized_work_orders` —
+   * this feeds `NormalizedIngestionService.ingestServiceJob` so a standalone
+   * row can be written to `normalized_service_jobs` (PG via dual-writer). The
+   * standalone path requires `sourceData.ID || sourceData.id` on each item to
+   * dedupe.
+   */
+  extractRawServiceJobsFromWorkOrder(sourceData: any): any[];
+  /**
+   * Returns the RAW per-source line items for a single raw service job (as
+   * returned by `extractRawServiceJobsFromWorkOrder`). Each item must carry
+   * either an `ID`/`id` or a synthetic `_sourceId` so `ingestLineItem` can
+   * dedupe. Adapters MAY normalize money amounts (e.g. cents → dollars) here
+   * so that the generic `mapLineItem` keeps a single contract.
+   */
+  extractLineItemsFromServiceJob(serviceJobSource: any): any[];
   extractPaymentsFromWorkOrder(sourceData: any): any[];
   extractInspectionsFromWorkOrder(sourceData: any): any[];
   extractRecommendationsFromWorkOrder(sourceData: any): any[];

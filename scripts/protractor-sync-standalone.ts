@@ -276,7 +276,7 @@ async function runProtractorSync(): Promise<{ ok: boolean; duration: string; sho
           );
           
           const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
-          console.log(`[Sync] Protractor normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}`);
+          console.log(`[Sync] Protractor normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, serviceJobs: ${result.serviceJobs.created}c/${result.serviceJobs.updated}u/${result.serviceJobs.skipped}s/${result.serviceJobs.errors}e, lineItems: ${result.lineItems.created}c/${result.lineItems.updated}u/${result.lineItems.skipped}s/${result.lineItems.errors}e`);
         }
       } catch (normErr: any) {
         console.log(`[Sync] Normalized ingestion error for shop ${shopId}:`, normErr.message);

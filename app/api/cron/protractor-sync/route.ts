@@ -442,7 +442,7 @@ export async function GET(req: NextRequest) {
             );
             
             const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
-            console.log(`[Cron] Protractor sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
+            console.log(`[Cron] Protractor sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, serviceJobs: ${result.serviceJobs.created}c/${result.serviceJobs.updated}u/${result.serviceJobs.skipped}s/${result.serviceJobs.errors}e, lineItems: ${result.lineItems.created}c/${result.lineItems.updated}u/${result.lineItems.skipped}s/${result.lineItems.errors}e, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
           }
         } catch (normErr: any) {
           console.log(`[Cron] Protractor sync normalized ingestion error for shop ${shopId}:`, normErr.message);
