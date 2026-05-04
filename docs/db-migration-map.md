@@ -55,18 +55,33 @@ These domains live in Postgres today. Most have **no Mongo twin** and need no mi
 
 ---
 
-## 2. Dual-written entities (Mongo + Postgres, today)
+## 2. Dual-written entities (Mongo + Postgres) — **W3a polarity flip landed (task #344, 2026-05-04)**
 
-The only dual-writer in the codebase is `lib/supabase-dual-writer.ts`, invoked from `lib/normalized-ingestion.ts` (the single ingestion service used by Tekmetric/Protractor/Shop-Ware sync + webhook paths). All 6 collections below are written to Mongo first, then mirrored to PG inside `dualWriteToSupabase(...)`. PG mirror failures are logged but **do not** fail the Mongo write.
+**Status as of W3a flip:** Postgres is now **canonical** for all six normalized
+entities. Each ingestion path writes PG first via
+`NormalizedIngestionService.dualWriteToSupabase(...)` (renamed in spirit to
+`writeToPgCanonical` — the JS method name is kept to keep call-site diffs
+small) which **awaits PG and re-throws on failure** — a Postgres outage now
+fails the ingestion request rather than silently dropping data. Mongo
+writes happen *after* the PG write and are gated behind the runtime
+kill-switch `WRITE_MONGO_NORMALIZED` (default ON for the W3a soak; flip to
+`"0"` after each per-entity 24–168 h soak passes — see §10). Mongo failures
+are logged but never thrown, so a Mongo outage cannot break ingestion.
 
-| Entity | Mongo collection | PG table | Source of truth (today) | Read paths | Write paths | Reconciliation strategy |
+The shadow flag is read on **every** write so it is a no-deploy kill switch
+in either direction (resume Mongo mirroring by unsetting it, halt by
+setting it to `"0"`). Mongo reads (change-detection `findOne` + downstream
+consumers) still go through Mongo during the soak — those move to PG in the
+W3a-followup task.
+
+| Entity | Mongo collection | PG table | Source of truth | Read paths | Write paths | Cutover status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Vehicle (normalized) | `normalized_vehicles` | `normalized_vehicles` | **Mongo** | Mongo: `app/api/estimate-assist/job-builder/route.ts`, `lib/integrations/autovitals.ts`. PG: `lib/supabase-job-search.ts` (the only job-search reader as of task #299). | Mongo+PG via `NormalizedIngestionService.ingestVehicle` (called from `lib/integrations/{tekmetric,protractor,shopware}/adapter.ts`, `lib/integrations/protractor-backfill.ts`, `lib/normalized-ingestion.ts` consumers). PG-only: `scripts/backfill-mongo-to-supabase.ts`. | Drift detection: row-count + sampled `provenance.contentHash` diff per shop. "Supabase wins" = re-run backfill script with `--collection=vehicles --reset` and accept PG state for in-flight rows; ingestion continues to write both until cutover. |
-| Customer (normalized) | `normalized_customers` | `normalized_customers` | **Mongo** | Mongo: `scripts/verify-normalized-data.ts`. PG: `lib/supabase-job-search.ts`. | Same path as vehicles (`ingestCustomer`). | Same as vehicles. |
-| Work order (normalized) | `normalized_work_orders` | `normalized_work_orders` | **Mongo** | Mongo: `scripts/repair-patterns-from-jobindex.ts`, `lib/integrations/autovitals.ts`. PG: `lib/supabase-job-search.ts`. | Same path (`ingestWorkOrder` — also embeds service jobs). Plus `scripts/fix-duplicate-source-ids.ts` (Mongo only). | Same. **Risk:** Protractor non-vehicle invoices fail PG NOT-NULL on `vehicle_id`; backfill script classifies as `data-quality skip`. Need a real fix before "PG wins". |
-| Service job (normalized) | `normalized_service_jobs` | `normalized_service_jobs` | **Mongo** (writes); **PG** (job-search reads, post task #299) | Mongo: `lib/estimate-assist/job-knowledge-base.ts`. PG: `lib/supabase-job-search.ts` is now the **sole** job-search reader for both `app/api/jobs/search/route.ts` and `app/api/extension/jobs/search/route.ts` — the Mongo `job_index` arm and the Mongo `normalized_*` aggregation arm have been retired (task #299, step 5). | Embedded in `ingestWorkOrder` via `dualWriteToSupabase('service_job', ...)`. | Same. **This is the highest-traffic dual-write entity** — every Tekmetric/Protractor RO sync produces N service jobs. **Job-search read parity now depends on the PG mirror; backfill must be current before this read cutover is considered safe.** |
-| Line item (normalized) | `normalized_line_items` | `normalized_line_items` | **Mongo** | Mongo: only `scripts/backfill-mongo-to-supabase.ts` (no production reader yet). PG: none. | Mongo: `ingestWorkOrder` writes embedded `lines[]` into the work_order doc; `normalized_line_items` Mongo collection is **rarely written separately**. PG: `SupabaseDualWriter.upsertLineItem` is wired but currently only invoked from the backfill script. | **Status: PG side is effectively orphaned right now.** Either (a) wire the live ingestion path to call `upsertLineItem`, or (b) drop the PG table from the dual-write list and make line items derive from `normalized_work_orders.rawData` on read. |
-| Payment (normalized) | `normalized_payments` | `normalized_payments` | **Mongo** | Mongo: `scripts/verify-normalized-data.ts`. PG: none. | Mongo+PG via `ingestPayment` (when adapter emits payments — currently Tekmetric only). | Low blast radius (no production reader on either side). Safe to cut over once a reader exists. |
+| Vehicle (normalized) | `normalized_vehicles` | `normalized_vehicles` | **Postgres** | Mongo: `app/api/estimate-assist/job-builder/route.ts`, `lib/integrations/autovitals.ts`. PG: `lib/supabase-job-search.ts` (sole job-search reader since task #299). | PG canonical via `ingestVehicle`; Mongo shadow gated on `WRITE_MONGO_NORMALIZED`. | **W3a code landed** — soak in progress. Mongo readers above need to be moved to PG before `WRITE_MONGO_NORMALIZED=0` is set. |
+| Customer (normalized) | `normalized_customers` | `normalized_customers` | **Postgres** | Mongo: `scripts/verify-normalized-data.ts`. PG: `lib/supabase-job-search.ts`. | PG canonical via `ingestCustomer`; Mongo shadow. | **W3a code landed.** |
+| Work order (normalized) | `normalized_work_orders` | `normalized_work_orders` | **Postgres** | Mongo: `scripts/repair-patterns-from-jobindex.ts`, `lib/integrations/autovitals.ts`. PG: `lib/supabase-job-search.ts`. | PG canonical via `ingestWorkOrder` (also embeds service jobs); Mongo shadow. | **W3a code landed.** Protractor non-vehicle invoice crash fixed: `vehicle_id` / `vehicle` are now nullable on `normalized_work_orders` (drizzle/0013_*). The dual-writer's defensive skip block was removed. |
+| Service job (normalized) | `normalized_service_jobs` | `normalized_service_jobs` | **Postgres** | Mongo: `lib/estimate-assist/job-knowledge-base.ts`. PG: `lib/supabase-job-search.ts` is the sole job-search reader (task #299, step 5). | PG canonical via embedded write inside `ingestWorkOrder`; Mongo shadow. | **W3a code landed.** Highest-traffic entity — soak window owns this risk. |
+| Line item (normalized) | `normalized_line_items` | `normalized_line_items` | **Postgres** | Mongo: only `scripts/backfill-mongo-to-supabase.ts`. PG: `lib/supabase-job-search.ts` joins on this for partNumber / labor breakouts. | `ingestLineItem` writes PG canonical first, Mongo shadow after — same polarity as the other five entities. The live work-order ingestion path doesn't yet *call* `ingestLineItem` (only `ingestWorkOrderTree` and `extractLineItemsFromExisting` do); the Tekmetric / Protractor / Shop-Ware adapters embed `lines[]` inside service jobs. | **Polarity flipped (task #344). Decision: keep the PG table.** Wiring `ingestLineItem` into the live single-WO ingestion path (`extractLineItemsFromServiceJob` in each adapter) is a separate W3a-followup, but the per-row write path itself is now PG-first. **Do not drop the table** — it powers the existing PG join. |
+| Payment (normalized) | `normalized_payments` | `normalized_payments` | **Postgres** | Mongo: `scripts/verify-normalized-data.ts`. PG: none today. | PG canonical via `ingestPayment` (Tekmetric only — Protractor / Shop-Ware adapters do not yet emit payments); Mongo shadow. | **W3a code landed.** Low blast radius. |
 
 **Cron / webhook entry points that drive these dual-writes** (matches task #296's "17 known dual-writing files"):
 - `app/api/cron/tekmetric-backfill/route.ts`
@@ -249,11 +264,11 @@ These are places where a single request or job needs both DBs. Each one is a har
 | 2 | `app/api/communications/**` (Twilio voice/SMS) | reads `shops`, `users` for tenancy | writes `conversations`, `phone_numbers`, `voicemails`, etc. | Live cross-DB write in the same handler. PG transaction cannot include Mongo's tenancy lookup. Acceptable as-is, but a transient Mongo outage already breaks PG-only call flows. |
 | 3 | `app/api/jobs/search/route.ts` & `app/api/extension/jobs/search/route.ts` | reads `shops` for tenancy/enterprise scoping; (Mongo `job_index` and Mongo `normalized_*` arms retired in task #299, step 5) | reads `normalized_service_jobs` (PG) via `lib/supabase-job-search.ts` | **Was** a triple-source fan-out; collapsed to PG-only on the read side. The cross-DB risk is now narrower: only the `shops` tenancy lookup remains on Mongo. **Open follow-up:** confirm PG mirror parity for `normalized_service_jobs` is acceptable in production — if shops report missing historical jobs after this cutover ships, re-run `scripts/backfill-mongo-to-supabase.ts` for service jobs before declaring victory. |
 | 4 | `app/api/extension/jobs/search/route.ts` (vehicle context) | reads `tekmetric_work_orders`, `tekmetric_repair_orders` | (none) | Only blocks extension job search if those collections move. **W3** ordering: keep these on Mongo until the rest of the extension flow is on PG. |
-| 5 | `lib/featureResolver.ts` | reads `platform_features`, `shop_features`, `shops` | (none) | But PG has a `platform_features` table written by `app/api/platform-admin/features/**`. **Drift risk: admin edits PG; runtime reads Mongo.** Fix: pick one, mirror-write the other until runtime is migrated. |
-| 6 | `lib/external-api/api-keys.ts` | reads/writes Mongo `api_usage_logs` | reads/writes PG `api_usage_logs` | Two different `api_usage_logs` stores, both written by the same module. Need to confirm whether they hold different shapes or one is dead. |
-| 7 | `app/api/support/tickets/**` | reads/writes `support_tickets` (Mongo) | PG `support_tickets` table exists in `lib/db/schema/support-tickets.ts` | Same name, both populated somewhere. Need to confirm canonical. |
+| 5 | `lib/featureResolver.ts` | (was) reads `platform_features` | PG `platform_features` written by `app/api/platform-admin/features/**` | **RESOLVED 2026-05-04 (task #344, W3a):** runtime now reads PG via Drizzle in `getPlanFeaturesFromDatabase`. Admin edits take effect immediately on the next request. Mongo `platform_features` is no longer read by application code; the collection is a candidate for Wave 0-style drop in a follow-up task. The Mongo `getDb` is still used for `shops` / `enterprise_accounts` lookups in the same file — those move in Wave 4. |
+| 6 | `lib/external-api/api-keys.ts` (Mongo `api_usage_logs`) **vs.** `lib/db/repositories/call-logs.ts` (PG `apiUsageLogs`) | Mongo `api_usage_logs` — partner-API key usage tracking | PG `api_usage_logs` — call-center / Rescue Rover per-call usage (separate domain) | **RECLASSIFIED 2026-05-04 (task #344): not a real cross-DB conflict — naming collision between two unrelated domains.** The Mongo `api_usage_logs` is written/read by `lib/api-usage-tracker.ts` + `lib/external-api/api-keys.ts` for partner-integration tracking. The PG `api_usage_logs` table is owned by the rescue-rover schema (see §1 last row + §EXCLUDED) and is written exclusively by `lib/db/repositories/call-logs.ts` with a different row shape. No code path writes both. Resolution: rename the PG table in a future Rescue Rover refactor (e.g. `rescue_rover_call_usage`) so the collision goes away; nothing migrates. |
+| 7 | `app/api/support/tickets/**` | (was) Mongo `support_tickets` canonical, PG `support_tickets` best-effort dual-write | PG `support_tickets` is now canonical for new ticket inserts | **CODE FLIPPED 2026-05-04 (task #344, W3a):** the `POST /api/support/tickets` handler now writes PG **first** with await + throw on failure; the Mongo insert continues for the duration of the soak so the existing readers (`lib/data/repositories/support-tickets.ts` and the Mongo `aggregate` in `app/api/platform-admin/client-health/route.ts`) keep working. **Operator follow-ups (own task):** rewrite the read-side repo against Drizzle (the Mongo repo's `$set`/`$push`/`aggregate`/regex `$or` surface is still in use by the platform-admin tickets routes), backfill historical Mongo tickets into PG, then delete the Mongo write. PG schema is already in place (`lib/db/schema/support-tickets.ts`). |
 | 8 | `app/api/stripe/webhook/route.ts` | writes `users`, `shops`, `pending_signups`, `audit_logs`, `stripe_webhook_events` | (none today) | If we move `shops` or `users` first, the Stripe webhook becomes a cross-DB transaction. Keep `shops`/`users` in W4 to avoid this. |
-| 9 | `lib/normalized-ingestion.ts` (`dualWriteToSupabase`) | writes Mongo (must succeed) | writes PG (best-effort, swallows errors) | Cutover risk: when PG becomes canonical, the failure semantics flip. The dual-writer must be reworked so PG failure fails the request before we can retire Mongo. This is the **single most important refactor** for the migration. |
+| 9 | `lib/integrations/core/normalized-ingestion.ts` (`dualWriteToSupabase`) | writes Mongo behind `WRITE_MONGO_NORMALIZED` (default ON during soak) | writes PG canonical (await + re-throw) | **RESOLVED 2026-05-04 (task #344, W3a):** polarity flipped. PG write happens first and re-throws on failure; Mongo write is a best-effort shadow gated on the runtime kill-switch. See §10 and §2. |
 | 10 | `lib/normalized-ingestion.ts` (`writeToJobIndex`, `writeToRepairPatterns`) | reads + writes `job_index`, `shop_repair_patterns` | (none — no PG mirror) | These are downstream Mongo writes that fan out from the same ingestion. Migrating `normalized_*` to PG without also migrating `job_index` will leave a stale Mongo derivative. |
 | 11 | `scripts/drain-tekmetric-backfill.ts` | acquires `tekmetric_drain_lock` in Mongo | writes via `backfillShopChunk` which touches PG (dual-write) | Single-DB lock guarding a multi-DB write. If Mongo goes down mid-drain, PG state is left ambiguous. |
 | 12 | `lib/auto-booking/scheduler.ts` | reads `protractor_vehicles`, `auto_booking_queue` | (none) | Self-contained on Mongo, but the booking decisions flow into webhooks that write `dashboard_updates` (Mongo) and indirectly trigger `normalized_ingestion` (dual-write). |
@@ -557,3 +572,154 @@ for risk (lowest first) and writer overlap:
 - Does **not** include a parity report script. The W1 pattern
   (`scripts/wave1-parity-report.ts`) will be cloned per sub-group when
   that sub-group's cutover task starts.
+
+---
+
+## 10. Wave 3a polarity-flip log (task #344, 2026-05-04)
+
+**Code-only PR.** This wave flips the source of truth for the six
+normalized entities from Mongo to Postgres in
+`lib/integrations/core/normalized-ingestion.ts`, fixes the long-standing
+Protractor `vehicle_id` NOT-NULL crash, and resolves the `platform_features`
+runtime drift bug. Real backfill, the per-entity soak windows, and the
+eventual deletion of `lib/supabase-dual-writer.ts` are operator follow-ups
+explicitly enumerated below.
+
+### 10.1 Per-entity status
+
+| Entity                | PG canonical | Mongo shadow (gated) | Mongo readers still live | Notes |
+|-----------------------|--------------|----------------------|--------------------------|-------|
+| `normalized_vehicles`     | yes | yes (`WRITE_MONGO_NORMALIZED!='0'`) | yes (see §2) | unchanged shape |
+| `normalized_customers`    | yes | yes | yes | unchanged shape |
+| `normalized_work_orders`  | yes | yes | yes | `vehicle_id` / `vehicle` nullable now (drizzle/0013_*) |
+| `normalized_service_jobs` | yes | yes | yes | embedded inside `ingestWorkOrder` |
+| `normalized_payments`     | yes | yes | yes | Tekmetric only emits payments today |
+| `normalized_line_items`   | yes (`ingestLineItem` flipped) | yes | n/a | per-row polarity flipped; live single-WO path doesn't yet call `ingestLineItem` — adapter wiring deferred (see §10.3 #4) |
+
+### 10.2 What changed in code
+
+1. **Polarity flip** — `NormalizedIngestionService.dualWriteToSupabase`
+   now awaits the PG write and **re-throws** on failure (the rich
+   `pgCode` / `pgConstraint` / `pgDetail` log line is preserved before
+   the rethrow, so on-call still gets the structured diagnostic).
+   All six `ingestX` methods (vehicle, customer, work_order,
+   service_job, **line_item**, payment) × two paths each (existing +
+   new) were reordered so PG writes happen before Mongo, and the
+   corresponding Mongo `insertOne` / `updateOne` calls (plus
+   `_stampIngestionVia`) are now wrapped in
+   `shadowWriteMongo(...)`. Failures from `shadowWriteMongo` are logged
+   but never thrown — Mongo is no longer canonical, so a transient
+   Mongo outage cannot break ingestion.
+
+   **Pre-existing init bug fixed in the same change**: the
+   `NormalizedIngestionService` constructor used
+   `require('./db/drizzle')`, which from `lib/integrations/core/`
+   resolves to a non-existent `lib/integrations/core/db/drizzle`. Every
+   construction silently fell into the catch and left
+   `supabaseDualWriter` null — so under the old "best-effort PG"
+   semantics, the PG mirror quietly never happened in production. The
+   `dualWriteToSupabase` swallow-on-error masked the breakage. After
+   the polarity flip this would crash every ingest, so the require
+   path is corrected to `'../../db/drizzle'` to match how every other
+   PG-using module imports the Drizzle client.
+2. **Kill switch** — `lib/integrations/core/normalized-write-mode.ts`
+   exports `shouldShadowWriteMongo()` which reads
+   `process.env.WRITE_MONGO_NORMALIZED` on every write. Default is ON
+   (anything other than the literal string `"0"` keeps shadow writes
+   alive). Operators flip it to `"0"` after the per-entity soak passes;
+   no deploy is required to halt or resume the Mongo mirror.
+3. **Protractor `vehicle_id` fix** — `lib/db/schema/normalized.ts`
+   drops `.notNull()` from `normalized_work_orders.vehicleId` and
+   `.vehicle`; `drizzle/0013_relax_normalized_work_order_vehicle.sql`
+   carries the `ALTER COLUMN … DROP NOT NULL` for both columns. The
+   defensive early-return block in
+   `lib/supabase-dual-writer.ts:upsertWorkOrder` (which silently
+   skipped Protractor invoices missing `vehicleId` / `vehicle`) is
+   removed; rows with a blank work order number now fall back to
+   `String(doc._id)` so they land and can be diagnosed downstream
+   instead of being dropped on the floor.
+4. **`platform_features` runtime cutover (§5 row #5)** —
+   `lib/featureResolver.ts:getPlanFeaturesFromDatabase` now reads
+   `platform_features` from PG via Drizzle. Admin edits in
+   `app/api/platform-admin/features/**` already wrote PG; before this
+   change the runtime read Mongo and admin edits silently failed to
+   take effect. `__deps` test seam now exposes both `getDb` (Mongo,
+   still used for `shops` / `enterprise_accounts` lookups in the same
+   file) and `getPgDb`.
+
+### 10.3 What this PR does **not** do — operator follow-ups
+
+The W3a code-flip is **necessary but not sufficient** to retire Mongo
+for these entities. The remaining work is operational and must be
+sequenced by an operator with production cluster access; none of it
+can be executed in an isolated task environment. Each item below
+should be its own follow-up task.
+
+1. **Backfill** — re-run
+   `pnpm tsx scripts/backfill-mongo-to-supabase.ts` end-to-end against
+   production for the six entities (`vehicles`, `customers`,
+   `work_orders`, `service_jobs`, `line_items`, `payments`). The
+   `normalized_line_items` table is included so the
+   `lib/supabase-job-search.ts` join keeps producing rows for
+   historical work orders.
+2. **Per-entity soak window (24–168 h)** — leave
+   `WRITE_MONGO_NORMALIZED` ON, watch the `[PgCanonical]` /
+   `[ShadowMongo]` log channels and a per-entity success/failure
+   metric. Sign off each entity individually, just like Wave 1
+   (§8.4.1).
+3. **Move Mongo readers to PG** — every reader still on Mongo
+   (enumerated per-entity in §2) must move to PG-via-Drizzle before
+   the operator sets `WRITE_MONGO_NORMALIZED=0`, otherwise readers
+   will go stale the moment shadow writes stop. The `ingestX`
+   methods themselves still read from Mongo for change-detection
+   (`existing = await collection.findOne(...)`) — that read also
+   needs to move to PG before shadow writes stop, or change-detection
+   silently degrades to "always update".
+4. **Wire `upsertLineItem` / `upsertPayment` into live ingestion** —
+   adapter-level work (`extractLineItemsFromServiceJob`) so that the
+   PG `normalized_line_items` join in `supabase-job-search.ts`
+   returns rows for new data, not just backfilled history. This is
+   the line-item decision recorded in §2: **keep the PG table, defer
+   the wiring**.
+5. **Retire `lib/supabase-dual-writer.ts`** — once every entity has
+   passed soak and `WRITE_MONGO_NORMALIZED=0` is the production
+   setting, rename `lib/supabase-dual-writer.ts` to a more honest name
+   (e.g. `lib/normalized-pg-writer.ts`) and delete its dead
+   `serializeProvenance` / `sanitizeForJson` Mongo-shape adapters that
+   exist only because the input was a Mongo-shaped doc.
+6. **Drop the `normalized_*` Mongo collections** — last, after the
+   readers in (3) are migrated and the soak in (2) passes. Use the
+   Wave 0 procedure (verify production absent, snapshot, drop).
+7. **§5 row #6 — `api_usage_logs`** — separate task. Needs
+   (a) a Drizzle repository for the existing PG `api_usage_logs`
+   table, (b) a backfill of historical Mongo logs, and (c) the
+   shape-divergence audit between the Mongo and PG records before one
+   can be declared canonical.
+8. **§5 row #7 — `support_tickets`** — separate task. Needs the full
+   `lib/data/repositories/support-tickets.ts` rewritten against
+   Drizzle (Mongo `$set`/`$push`/`aggregate`/regex `$or` translated
+   to SQL), 8 route handlers updated, ticket backfill, and per-route
+   soak. PG schema is already in place
+   (`lib/db/schema/support-tickets.ts`).
+
+### 10.4 Code review iteration 2 — additional items
+
+After the first code review pass flagged scope gaps, the following were added to the W3a code-flip PR:
+
+- **Line items (`ingestLineItem`)**: missed in the first pass; now flipped to PG-canonical-first with `shadowWriteMongo` gate, same pattern as the other five entities.
+- **Constructor init bug**: the long-standing `require('./db/drizzle')` typo (resolved to a non-existent `lib/integrations/core/db/drizzle`) was silently leaving the PG writer null. Pre-existing, but harmless under the swallow-on-error semantics; with the polarity flip it would have crashed every ingest. Corrected to `require('../../db/drizzle')`.
+- **`support_tickets` POST polarity**: `app/api/support/tickets/route.ts` now writes PG first with await + throw. Mongo write retained for read-side parity until the read-side repo is migrated.
+- **`api_usage_logs` reclassification**: confirmed naming collision between two unrelated domains (partner API keys in Mongo vs. Rescue Rover call usage in PG); not a real cross-DB conflict, no migration needed. §5 row #6 updated accordingly.
+- **Dual-writer file rename intent**: `lib/supabase-dual-writer.ts` now carries a header documenting that it is the PG-canonical writer for the six normalized entities (not a dual-writer) and that the rename to `lib/normalized-pg-writer.ts` ships in the W3a-followup so the polarity-flip diff stays reviewable.
+
+### 10.5 Items that physically require operator access (cannot complete in an isolated task env)
+
+The following items remain open by definition because they require either production cluster access, a multi-day soak window, or a backfill that this isolated task environment cannot perform. They are tracked as the W3a-followup task and must be completed before W3a is declared production-final:
+
+1. Run `scripts/backfill-mongo-to-supabase.ts` end-to-end against production for the six entities + line items.
+2. Per-entity 24–168 h soak with `WRITE_MONGO_NORMALIZED=1`; sign off each entity before flipping to `"0"`.
+3. Migrate Mongo readers (enumerated per-entity in §2) and the change-detection `findOne` in `ingestX` methods to PG-via-Drizzle.
+4. Wire `extractLineItemsFromServiceJob` in each adapter so `ingestLineItem` is called from the live single-WO path, not just from backfill.
+5. Rename `lib/supabase-dual-writer.ts` → `lib/normalized-pg-writer.ts` (class + import sites) and strip the dead Mongo-shape adapters once Mongo writes are off.
+6. Drop the `normalized_*` Mongo collections (Wave 0 procedure: verify production absent, snapshot, drop).
+7. Migrate the read-side `support_tickets` repo (`lib/data/repositories/support-tickets.ts` + `app/api/platform-admin/client-health/route.ts`) to Drizzle queries against `supportTickets`, backfill historical Mongo tickets, then remove the Mongo write from `POST /api/support/tickets`.

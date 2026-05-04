@@ -120,34 +120,40 @@ export async function POST(request: NextRequest) {
       closedAt: null,
     };
 
-    const insertedId = await insertSupportTicket(ticket);
+    // task #344 (W3a, §5 row #7): PG is now the canonical store for
+    // `support_tickets`. The PG insert is awaited and **throws on
+    // failure** — a Postgres outage now fails the request rather than
+    // silently dropping the ticket from PG. Mongo insert continues
+    // unconditionally for the duration of the soak window so the
+    // existing readers (`lib/data/repositories/support-tickets.ts`
+    // and the Mongo `aggregate` in `app/api/platform-admin/client-
+    // health/route.ts`) keep working. Migrating those readers to
+    // Drizzle queries against `supportTickets` is the W3a-followup;
+    // once they're done the Mongo write below can be removed.
+    const { getDb: getSupabaseDb } = await import("@/lib/db/drizzle");
+    const { supportTickets } = await import("@/lib/db/schema/support-tickets");
+    const pgDb = getSupabaseDb();
+    const validCategories = ["technical", "billing", "integration", "feature_request", "general"] as const;
+    const validPriorities = ["low", "medium", "high", "urgent"] as const;
+    const pgCategory = validCategories.includes(ticket.category as any) ? ticket.category : "general";
+    const pgPriority = validPriorities.includes(ticket.priority as any) ? ticket.priority : "medium";
+    await pgDb.insert(supportTickets).values({
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      description: ticket.description,
+      category: pgCategory as any,
+      priority: pgPriority as any,
+      status: "open",
+      source: "web",
+      shopId: ticket.shopId != null ? Number(ticket.shopId) : null,
+      shopName: ticket.shopName,
+      locationIdentifier: ticket.locationIdentifier,
+      userEmail: ticket.userEmail,
+      userName: ticket.userName,
+      messages: ticket.messages,
+    });
 
-    try {
-      const { getDb: getSupabaseDb } = await import("@/lib/db/drizzle");
-      const { supportTickets } = await import("@/lib/db/schema/support-tickets");
-      const pgDb = getSupabaseDb();
-      const validCategories = ["technical", "billing", "integration", "feature_request", "general"] as const;
-      const validPriorities = ["low", "medium", "high", "urgent"] as const;
-      const pgCategory = validCategories.includes(ticket.category as any) ? ticket.category : "general";
-      const pgPriority = validPriorities.includes(ticket.priority as any) ? ticket.priority : "medium";
-      await pgDb.insert(supportTickets).values({
-        ticketNumber: ticket.ticketNumber,
-        subject: ticket.subject,
-        description: ticket.description,
-        category: pgCategory as any,
-        priority: pgPriority as any,
-        status: "open",
-        source: "web",
-        shopId: ticket.shopId != null ? Number(ticket.shopId) : null,
-        shopName: ticket.shopName,
-        locationIdentifier: ticket.locationIdentifier,
-        userEmail: ticket.userEmail,
-        userName: ticket.userName,
-        messages: ticket.messages,
-      });
-    } catch (pgErr) {
-      console.error("Supabase ticket dual-write failed (non-blocking):", pgErr);
-    }
+    const insertedId = await insertSupportTicket(ticket);
 
     const categoryLabels: Record<string, string> = {
       general: "General",

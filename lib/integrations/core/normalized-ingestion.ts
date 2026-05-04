@@ -31,6 +31,7 @@ import {
 } from './normalized-adapter';
 import { updateRepairPattern } from '@/lib/repair-patterns';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
+import { shouldShadowWriteMongo } from './normalized-write-mode';
 
 // =============================================================================
 // TYPES
@@ -110,10 +111,17 @@ export class NormalizedIngestionService {
 
     if (this.options.dualWriteToSupabase) {
       try {
-        const { getDb: getPgDb } = require('./db/drizzle');
+        // task #344 (W3a): the previous `require('./db/drizzle')` resolved
+        // to `lib/integrations/core/db/drizzle`, which does not exist —
+        // every construction silently fell into the catch and left
+        // `supabaseDualWriter` null. Before the polarity flip that just
+        // meant PG mirroring quietly never happened; after the flip it
+        // would fail every ingest call. Use the correct path that the
+        // rest of the codebase imports from.
+        const { getDb: getPgDb } = require('../../db/drizzle');
         this.supabaseDualWriter = new SupabaseDualWriter(getPgDb());
       } catch (err) {
-        console.error('[DualWrite] Failed to initialize Supabase dual writer:', err instanceof Error ? err.message : err);
+        console.error('[PgCanonical] Failed to initialize Postgres writer:', err instanceof Error ? err.message : err);
       }
     }
   }
@@ -182,7 +190,11 @@ export class NormalizedIngestionService {
           sourceIds: this.mergeSourceIds(existing.provenance.sourceIds, sourceIds),
         };
         
-        await collection.updateOne(
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        await this.dualWriteToSupabase('vehicle', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertVehicle({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        await this.shadowWriteMongo('vehicle', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
@@ -192,11 +204,7 @@ export class NormalizedIngestionService {
               version: existing.version + 1,
             },
           }
-        );
-        
-        await this.dualWriteToSupabase('vehicle', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertVehicle({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
-        );
+        ));
         
         if (this.options.createAuditLog) {
           await this.createAuditEntry('vehicle', existing._id, 'update', mapped);
@@ -235,11 +243,11 @@ export class NormalizedIngestionService {
         totalServicesAmount: 0,
       } as NormalizedVehicle;
       
-      await collection.insertOne(newVehicle);
-      
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('vehicle', newId, 'create', () =>
         this.supabaseDualWriter!.upsertVehicle(newVehicle)
       );
+      await this.shadowWriteMongo('vehicle', () => collection.insertOne(newVehicle));
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('vehicle', newId, 'create', mapped);
@@ -303,7 +311,11 @@ export class NormalizedIngestionService {
           sourceIds: this.mergeSourceIds(existing.provenance.sourceIds, sourceIds),
         };
         
-        await collection.updateOne(
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        await this.dualWriteToSupabase('customer', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertCustomer({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        await this.shadowWriteMongo('customer', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
@@ -313,11 +325,7 @@ export class NormalizedIngestionService {
               version: existing.version + 1,
             },
           }
-        );
-        
-        await this.dualWriteToSupabase('customer', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertCustomer({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
-        );
+        ));
         
         if (this.options.createAuditLog) {
           await this.createAuditEntry('customer', existing._id, 'update', mapped);
@@ -360,11 +368,11 @@ export class NormalizedIngestionService {
         averageTicket: 0,
       } as NormalizedCustomer;
       
-      await collection.insertOne(newCustomer);
-      
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('customer', newId, 'create', () =>
         this.supabaseDualWriter!.upsertCustomer(newCustomer)
       );
+      await this.shadowWriteMongo('customer', () => collection.insertOne(newCustomer));
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('customer', newId, 'create', mapped);
@@ -457,34 +465,39 @@ export class NormalizedIngestionService {
           sourceIds: this.mergeSourceIds(existing.provenance.sourceIds, sourceIds),
         };
         
-        await collection.updateOne(
-          { _id: existing._id },
-          {
-            $set: {
-              ...mapped,
-              vehicleId: vehicleId || existing.vehicleId,
-              customerId: customerId || existing.customerId,
-              serviceJobs: serviceJobs as NormalizedServiceJob[],
-              provenance: updatedProvenance,
-              updatedAt: new Date(),
-              version: existing.version + 1,
-              rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
-            },
-          }
-        );
-        await this._stampIngestionVia(existing._id);
-        
-        if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
-          await this.writeToJobIndex(sourceData, serviceJobs);
-        }
-        
-        if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
-          await this.writeToRepairPatterns(sourceData, serviceJobs);
-        }
-        
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        // job_index / repair_patterns / audit are SEPARATE Mongo
+        // collections with their own future migrations — they continue
+        // to write regardless of the WRITE_MONGO_NORMALIZED flag.
         await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
           this.supabaseDualWriter!.upsertWorkOrder({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
         );
+        await this.shadowWriteMongo('work_order', async () => {
+          await collection.updateOne(
+            { _id: existing._id },
+            {
+              $set: {
+                ...mapped,
+                vehicleId: vehicleId || existing.vehicleId,
+                customerId: customerId || existing.customerId,
+                serviceJobs: serviceJobs as NormalizedServiceJob[],
+                provenance: updatedProvenance,
+                updatedAt: new Date(),
+                version: existing.version + 1,
+                rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
+              },
+            }
+          );
+          await this._stampIngestionVia(existing._id);
+        });
+
+        if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
+          await this.writeToJobIndex(sourceData, serviceJobs);
+        }
+
+        if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
+          await this.writeToRepairPatterns(sourceData, serviceJobs);
+        }
         
         if (this.options.createAuditLog) {
           await this.createAuditEntry('work_order', existing._id, 'update', mapped);
@@ -544,20 +557,22 @@ export class NormalizedIngestionService {
         rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
       } as NormalizedWorkOrder;
       
-      await collection.insertOne(newWorkOrder);
-      await this._stampIngestionVia(newId);
-      
-      if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
-        await this.writeToJobIndex(sourceData, serviceJobs);
-      }
-      
-      if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
-        await this.writeToRepairPatterns(sourceData, serviceJobs);
-      }
-      
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('work_order', newId, 'create', () =>
         this.supabaseDualWriter!.upsertWorkOrder(newWorkOrder)
       );
+      await this.shadowWriteMongo('work_order', async () => {
+        await collection.insertOne(newWorkOrder);
+        await this._stampIngestionVia(newId);
+      });
+
+      if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
+        await this.writeToJobIndex(sourceData, serviceJobs);
+      }
+
+      if (this.options.dualWriteToRepairPatterns && serviceJobs.length > 0) {
+        await this.writeToRepairPatterns(sourceData, serviceJobs);
+      }
       
       if (this.options.createAuditLog) {
         await this.createAuditEntry('work_order', newId, 'create', mapped);
@@ -621,7 +636,11 @@ export class NormalizedIngestionService {
           };
         }
         
-        await collection.updateOne(
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        await this.dualWriteToSupabase('service_job', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertServiceJob({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        await this.shadowWriteMongo('service_job', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
@@ -630,11 +649,7 @@ export class NormalizedIngestionService {
               version: existing.version + 1,
             },
           }
-        );
-        
-        await this.dualWriteToSupabase('service_job', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertServiceJob({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
-        );
+        ));
         
         return {
           success: true,
@@ -685,11 +700,11 @@ export class NormalizedIngestionService {
         customFields: {},
       } as NormalizedServiceJob;
       
-      await collection.insertOne(newServiceJob);
-      
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('service_job', newId, 'create', () =>
         this.supabaseDualWriter!.upsertServiceJob(newServiceJob)
       );
+      await this.shadowWriteMongo('service_job', () => collection.insertOne(newServiceJob));
       
       return {
         success: true,
@@ -761,7 +776,11 @@ export class NormalizedIngestionService {
           };
         }
 
-        await collection.updateOne(
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        await this.dualWriteToSupabase('line_item', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertLineItem({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, serviceJobId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        await this.shadowWriteMongo('line_item', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
@@ -770,11 +789,7 @@ export class NormalizedIngestionService {
               version: existing.version + 1,
             },
           }
-        );
-
-        await this.dualWriteToSupabase('line_item', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertLineItem({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, serviceJobId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
-        );
+        ));
 
         return {
           success: true,
@@ -818,11 +833,11 @@ export class NormalizedIngestionService {
         customFields: {},
       } as NormalizedLineItem;
 
-      await collection.insertOne(newLineItem);
-
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('line_item', newId, 'create', () =>
         this.supabaseDualWriter!.upsertLineItem(newLineItem)
       );
+      await this.shadowWriteMongo('line_item', () => collection.insertOne(newLineItem));
 
       return {
         success: true,
@@ -882,7 +897,11 @@ export class NormalizedIngestionService {
           };
         }
         
-        await collection.updateOne(
+        // task #344 (W3a): PG canonical first; Mongo shadow after.
+        await this.dualWriteToSupabase('payment', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertPayment({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        );
+        await this.shadowWriteMongo('payment', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
@@ -891,11 +910,7 @@ export class NormalizedIngestionService {
               version: existing.version + 1,
             },
           }
-        );
-        
-        await this.dualWriteToSupabase('payment', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertPayment({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
-        );
+        ));
         
         return {
           success: true,
@@ -932,11 +947,11 @@ export class NormalizedIngestionService {
         customFields: {},
       } as NormalizedPayment;
       
-      await collection.insertOne(newPayment);
-      
+      // task #344 (W3a): PG canonical first; Mongo shadow after.
       await this.dualWriteToSupabase('payment', newId, 'create', () =>
         this.supabaseDualWriter!.upsertPayment(newPayment)
       );
+      await this.shadowWriteMongo('payment', () => collection.insertOne(newPayment));
       
       return {
         success: true,
@@ -1553,13 +1568,29 @@ export class NormalizedIngestionService {
   // HELPER METHODS
   // ---------------------------------------------------------------------------
   
+  /**
+   * task #344 (W3a polarity flip): PG is now canonical for the six
+   * normalized entities. This helper awaits the PG write and **rethrows
+   * on failure** — the surrounding `ingestX` try/catch turns it into an
+   * `IngestionResult{ success:false, action:'error' }` so the caller
+   * sees the failure. The pre-existing rich pgCode/pgConstraint logging
+   * is preserved before the rethrow so on-call still gets the
+   * structured diagnostic.
+   *
+   * The legacy method name is retained so call-site diffs stay small;
+   * see `docs/db-migration-map.md` §10 for the cutover log.
+   */
   private async dualWriteToSupabase(
     entityType: string,
     entityId: string,
     action: string,
     upsertFn: () => Promise<void>
   ): Promise<void> {
-    if (!this.supabaseDualWriter) return;
+    if (!this.supabaseDualWriter) {
+      throw new Error(
+        `[PgCanonical] writer not initialized — cannot persist ${entityType} ${entityId} (shop ${this.shopId})`
+      );
+    }
     try {
       await upsertFn();
     } catch (err) {
@@ -1574,12 +1605,40 @@ export class NormalizedIngestionService {
       const causeMessage = cause?.message ?? null;
       const baseMessage = err instanceof Error ? err.message : String(err);
       console.error(
-        `[DualWrite] Supabase write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, ` +
+        `[PgCanonical] Postgres write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, ` +
         `pgCode: ${pgCode}, pgConstraint: ${pgConstraint}, pgColumn: ${pgColumn}, pgTable: ${pgTable}, ` +
         `pgDetail: ${pgDetail ? String(pgDetail).slice(0, 500) : null}, ` +
         `pgHint: ${pgHint ? String(pgHint).slice(0, 200) : null}, ` +
         `causeMessage: ${causeMessage ? String(causeMessage).slice(0, 300) : null}, ` +
         `error: ${baseMessage}`
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Shadow-Mongo wrapper for the W3a soak window. Calls the supplied fn
+   * iff `WRITE_MONGO_NORMALIZED !== '0'` (default ON during soak).
+   * Mongo failures are logged but never thrown — Mongo is no longer
+   * canonical, so a transient Mongo outage must not break ingestion.
+   *
+   * After the per-entity 24–168h soak passes, operators flip
+   * `WRITE_MONGO_NORMALIZED=0` and these calls become no-ops; the
+   * entire `lib/supabase-dual-writer.ts` file (renamed from its dual-
+   * write origins) and the surrounding Mongo plumbing get retired in
+   * the W3a-followup task.
+   */
+  private async shadowWriteMongo(
+    entityType: string,
+    fn: () => Promise<unknown>
+  ): Promise<void> {
+    if (!shouldShadowWriteMongo()) return;
+    try {
+      await fn();
+    } catch (err) {
+      const baseMessage = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[ShadowMongo] write failed (non-fatal) — entity: ${entityType}, shop: ${this.shopId}, error: ${baseMessage}`
       );
     }
   }

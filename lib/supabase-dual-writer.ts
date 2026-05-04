@@ -1,3 +1,25 @@
+/**
+ * **Pending rename: this file is the Postgres-canonical writer for the
+ * six normalized entities, not a dual-writer.**
+ *
+ * Historical name: `lib/supabase-dual-writer.ts` /
+ * `class SupabaseDualWriter` — kept as-is for the W3a code-flip
+ * (task #344) so call-site diffs stay small. After the per-entity
+ * soak windows pass and `WRITE_MONGO_NORMALIZED=0` is set in
+ * production, the W3a-followup task renames this file to
+ * `lib/normalized-pg-writer.ts` (and the class to
+ * `NormalizedPgWriter`), strips the dead Mongo-shape adapters
+ * (`serializeProvenance` / `sanitizeForJson`) that exist only because
+ * the input used to be a Mongo doc, and updates both importers
+ * (`lib/integrations/core/normalized-ingestion.ts`,
+ * `scripts/backfill-mongo-to-supabase.ts`).
+ *
+ * The rename is intentionally split out of the W3a polarity-flip PR
+ * because it touches every call site and would balloon the diff
+ * past what's safely reviewable for the canonical-write change.
+ *
+ * See `docs/db-migration-map.md` §10.3 #5.
+ */
 import { eq, and } from "drizzle-orm";
 import {
   normalizedVehicles,
@@ -123,34 +145,21 @@ export class SupabaseDualWriter {
   }
 
   async upsertWorkOrder(doc: any): Promise<void> {
-    // Supabase normalized_work_orders requires work_order_number, vehicle_id,
-    // and vehicle (jsonb) NOT NULL — none have a column default. Some upstream
-    // ROs (mostly Protractor invoices with no attached vehicle) arrive with
-    // these fields blank, which previously caused the entire dual-write to
-    // crash with pgCode 23502 and abort the work-order mirror. Skip those
-    // rows with a warning so Mongo continues to be the source of truth and
-    // the rest of the dual-write pipeline keeps flowing.
-    const missing: string[] = [];
-    if (!doc.workOrderNumber) missing.push("workOrderNumber");
-    if (!doc.vehicleId) missing.push("vehicleId");
-    if (!doc.vehicle) missing.push("vehicle");
-    if (missing.length > 0) {
-      console.log(
-        `[DualWrite] Skipping work_order ${doc._id} (shop ${doc.shopId}) — missing required Supabase fields: ${missing.join(", ")}`
-      );
-      return;
-    }
-
+    // task #344 (W3a): vehicle_id / vehicle are now nullable in PG
+    // (drizzle/0013_*) so Protractor invoices with no attached vehicle
+    // are accepted instead of being silently skipped. workOrderNumber
+    // is still required by the schema; if missing, fall back to the
+    // doc id so the row can land and be diagnosed downstream.
     const row = {
       id: doc._id,
       shopId: doc.shopId,
       enterpriseId: doc.enterpriseId || null,
-      workOrderNumber: doc.workOrderNumber,
+      workOrderNumber: doc.workOrderNumber || String(doc._id),
       workOrderType: doc.workOrderType || "repair",
       status: doc.status || "closed",
-      vehicleId: doc.vehicleId,
+      vehicleId: doc.vehicleId || null,
       customerId: doc.customerId || null,
-      vehicle: doc.vehicle,
+      vehicle: doc.vehicle || null,
       customer: doc.customer || null,
       odometerIn: doc.odometerIn || null,
       odometerOut: doc.odometerOut || null,

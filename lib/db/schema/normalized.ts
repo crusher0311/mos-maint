@@ -357,8 +357,13 @@ export const normalizedWorkOrders = pgTable("normalized_work_orders", {
   status: workOrderStatusEnum("status").notNull().default("draft"),
   statusHistory: jsonb("status_history").notNull().default(sql`'[]'::jsonb`),
 
-  vehicleId: text("vehicle_id").notNull(),
-  vehicle: jsonb("vehicle").notNull(),
+  // vehicle_id / vehicle were NOT NULL until task #344 (W3a). Protractor
+  // invoices can arrive with no vehicle attached — keeping the NOT NULL
+  // constraint crashed the work_order PG mirror with pgCode 23502 and
+  // (before the polarity flip) was masked by the dual-writer's
+  // best-effort try/catch. Now nullable; see drizzle/0013_*.
+  vehicleId: text("vehicle_id"),
+  vehicle: jsonb("vehicle"),
 
   customerId: text("customer_id"),
   customer: jsonb("customer"),

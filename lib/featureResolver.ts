@@ -1,11 +1,22 @@
 import { getDb } from "./mongo";
+import { getDb as getPgDb } from "./db/drizzle";
+import { platformFeatures } from "./db/schema/platform-features";
+import { eq } from "drizzle-orm";
 
 /**
- * Test seam: smoke tests can swap `__deps.getDb` to inject an in-memory
- * Mongo stand-in without touching production callers. Mirrors the
- * `__deps` pattern used by the cron route handlers under `app/api/cron/`.
+ * Test seam: smoke tests can swap `__deps.getDb` / `__deps.getPgDb` to
+ * inject in-memory stand-ins without touching production callers.
+ * Mirrors the `__deps` pattern used by the cron route handlers under
+ * `app/api/cron/`.
+ *
+ * task #344 (W3a, §5 row #5): runtime now reads `platform_features`
+ * from Postgres. The admin UI in `app/api/platform-admin/features/**`
+ * has always written PG; before this fix the runtime read Mongo, so
+ * admin edits silently failed to take effect. The Mongo `getDb` is
+ * still used by the shop / enterprise lookups in this file (those
+ * collections move in Wave 4).
  */
-export const __deps = { getDb };
+export const __deps = { getDb, getPgDb };
 
 export const FEATURE_KEYS = [
   "maintenance",
@@ -145,20 +156,26 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
     return buildAllFeaturesEnabled();
   }
   try {
-    const db = await __deps.getDb();
-    const platformFeatures = await db.collection("platform_features")
-      .find({ status: "active" })
-      .toArray();
+    // task #344 (W3a, §5 row #5): read PG, not Mongo. Admin writes
+    // already land in PG; this fixes the silent-no-op drift bug.
+    const db = __deps.getPgDb();
+    const rows = await db
+      .select({
+        slug: platformFeatures.slug,
+        includedInTiers: platformFeatures.includedInTiers,
+      })
+      .from(platformFeatures)
+      .where(eq(platformFeatures.status, "active"));
 
-    if (!platformFeatures || platformFeatures.length === 0) {
+    if (!rows || rows.length === 0) {
       return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
     }
 
     const tierSlug = plan === "professional" ? "elite" : plan;
     const enabled = new Set<FeatureKey>();
 
-    for (const pf of platformFeatures) {
-      const includedInTiers = pf.includedInTiers || [];
+    for (const pf of rows) {
+      const includedInTiers = (pf.includedInTiers as string[] | null) || [];
       const featureKey = FEATURE_SLUG_TO_KEY[pf.slug];
       if (featureKey && includedInTiers.includes(tierSlug)) {
         enabled.add(featureKey);
