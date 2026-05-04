@@ -723,3 +723,106 @@ The following items remain open by definition because they require either produc
 5. Rename `lib/supabase-dual-writer.ts` → `lib/normalized-pg-writer.ts` (class + import sites) and strip the dead Mongo-shape adapters once Mongo writes are off.
 6. Drop the `normalized_*` Mongo collections (Wave 0 procedure: verify production absent, snapshot, drop).
 7. Migrate the read-side `support_tickets` repo (`lib/data/repositories/support-tickets.ts` + `app/api/platform-admin/client-health/route.ts`) to Drizzle queries against `supportTickets`, backfill historical Mongo tickets, then remove the Mongo write from `POST /api/support/tickets`.
+
+## §11 Wave 3b — schema landing + small end-to-end items (2026-05-04)
+
+W3b is split between (a) the small/contained items that can flip end-to-end inside an isolated task environment (`counters`, `api_keys`, `events`) and (b) the wide raw-mirror surface (Tekmetric / Protractor / Shopware / Autoflow / Autovitals + plan caches + pre-normalized layer + carfax / job_index / sms_historical_work_orders) where the schema and backfill scaffolding ships now but per-integration soak + read switch + Mongo retirement is deferred to follow-up tasks per group.
+
+### 11.1 Schema landing — every W3b entity (date 2026-05-04)
+
+`lib/db/schema/wave3.ts` (~1209 lines) defines Drizzle tables for the entire W3b surface and is exported via `lib/db/schema/index.ts`. Drizzle migration mirror is `drizzle/0014_wave3.sql`.
+
+| Group | Tables | Status (2026-05-04) |
+| --- | --- | --- |
+| Counters | `pg_counters` | **End-to-end** (PG canonical, see §11.2). |
+| API keys | `pg_api_keys`, `external_api_usage_logs` | **End-to-end** (PG canonical, Mongo shadow gated, see §11.3). |
+| Events | `events` | **End-to-end** for write + most reads (PG canonical, see §11.4). `streamEvents`/`aggregateEvents` deferred. |
+| Tekmetric | `tekmetric_tokens`, `tekmetric_api_usage`, `tekmetric_work_orders`, `tekmetric_repair_orders`, `tekmetric_vehicles` | Schema landed. Backfill specs (work_orders / repair_orders / vehicles) wired. `tekmetric_tokens` deferred (encrypted columns; auth-library cutover). |
+| Protractor | `protractor_work_orders`, `protractor_invoices`, `protractor_invoice_cache`, `protractor_vehicles`, `protractor_canned_jobs`, `protractor_canned_jobs_cache`, `protractor_ro_cache`, `protractor_template_cache`, `protractor_service_items`, `protractor_deferred_work`, `protractor_callback_events` | Schema landed. Backfill specs for work_orders / invoices / vehicles / callback_events wired. Cache tables (rebuild-on-miss) skip backfill. |
+| Shopware | `shopware_repair_orders`, `shopware_vehicles`, `shopware_customers`, `shopware_backfill_progress`, `shopware_webhook_logs` | Schema landed. Backfill specs wired (mosShopId/roId natural keys). |
+| Autoflow | `autoflow_credentials`, `autoflow_dvi_items`, `autoflow_events`, `af_open` | Schema landed. Backfill specs for dvi_items / events / af_open wired. `autoflow_credentials` deferred (encrypted columns). |
+| Autovitals | `autovitals_vehicles`, `autovitals_appointments`, `autovitals_inspections`, `autovitals_imports` | Schema landed. Backfill specs for vehicles / imports wired. appointments / inspections deferred (~12 indexed domain fields each — needs per-integration extract). |
+| Pre-normalized | `pre_normalized_repair_orders`, `pre_normalized_vehicles`, `pre_normalized_customers`, `pre_normalized_manual_vehicles`, `dvi`, `dvi_results`, `canned_jobs`, `canned_job_applications` | Schema landed. Backfill specs wired. **Retirement strategy: prefer migrating readers to `normalized_*` (W3a output) instead of soaking the pre-normalized port.** Per-reader decision table — TODO. |
+| Plan caches | `plans`, `plan_cache`, `plan_prefetch_cache`, `recommendations` | Schema landed. Backfill specs for `plans` / `plan_cache` / `recommendations` wired. Caches: rebuild-on-miss is allowed; cutover does not require a long soak. |
+| Carfax | `carfax_reports`, `carfax_history`, `carfax_cache` | Schema landed. Backfill specs wired. |
+| Job index | `job_index`, `job_history`, `jobs` | Schema landed. Backfill specs wired. |
+| SMS history | `sms_historical_work_orders` | Schema landed. Backfill spec wired. |
+
+### 11.2 Counters — PG canonical end-to-end (2026-05-04)
+
+- `pg_counters(name text primary key, seq bigint not null default 0)` is the canonical writer.
+- `lib/data/repositories/pg-counters.ts` exposes `nextSeq` / `peekSeq` / `bumpSeq` (atomic `UPDATE … RETURNING seq` via `INSERT … ON CONFLICT … DO UPDATE`).
+- `lib/ids.ts` was rewritten to call `nextSeq` and shadow-write Mongo `counters` gated on `WRITE_MONGO_COUNTERS` (default ON for soak; flip OFF after verification).
+- The four shop-creation paths (`app/api/admin/shops/route.ts`, `app/api/enterprise/shops/route.ts`, `app/api/platform-admin/shops/route.ts`, `app/api/admin/db-indexes/route.ts`) seed PG from `max(shopId)` via `bumpSeq(floor=maxId)` so monotonicity holds across the cutover. The db-indexes admin route additionally bumps the underlying PG sequence on the legacy `shops_id_seq` so the next direct `INSERT` aligns.
+- **Soak**: leave `WRITE_MONGO_COUNTERS=1` for ≥168 h; verify Mongo `counters.shops.seq == pg_counters.seq` for the `shops` counter, then flip to `"0"`.
+
+### 11.3 API keys — PG canonical, Mongo shadow gated (2026-05-04)
+
+- `lib/data/repositories/api-keys.ts` rewritten against Drizzle — reads come from `pg_api_keys`, inserts mint a fresh ObjectId hex string (kept in PG `_id` for back-compat with Mongo readers under shadow), and `external_api_usage_logs` insert path mirrors the same.
+- Mongo shadow write gated on `WRITE_MONGO_API_KEYS`. Default ON for soak.
+- The Mongo-only consumers (`lib/external-api/api-keys.ts`, partner-keys admin route) keep their call signatures because the repository hides the storage swap.
+- **Soak**: leave `WRITE_MONGO_API_KEYS=1` for ≥168 h; spot-check that Mongo `api_keys` and `pg_api_keys` agree row-for-row on inserted records and revocations, then flip to `"0"`.
+
+### 11.4 Events — PG canonical, Mongo shadow gated (2026-05-04)
+
+- `lib/data/repositories/events.ts` rewritten against Drizzle for `recordEvent` and the list-recent reads used by `lib/evidence.ts`.
+- Mongo shadow write gated on `WRITE_MONGO_EVENTS`.
+- `streamEvents` / `aggregateEvents` (analytics paths) intentionally still query Mongo — moving these requires a SQL aggregation port that is non-trivial and is tracked as an explicit follow-up below.
+- **Soak**: leave `WRITE_MONGO_EVENTS=1` until the analytics paths are ported; then flip to `"0"` and remove the Mongo collection.
+
+### 11.5 Backfill scaffolding (`scripts/backfill-mongo-to-supabase.ts`)
+
+The script now has a `MirrorSpec` registry and `--mirror=<name>` flag in addition to the existing per-entity backfill modes. Each spec declares:
+
+- `mongoName` + `pgTableName` + optional `naturalKey: string[]` (for upserts) or implicit `backfill_mongo_id` uniqueness (for append-only mirrors).
+- `extract(d) -> {values}` mapping Mongo doc → PG row.
+- `buildFilter(shopId)` for per-shop filtering.
+
+The dispatcher routes to `backfillMirror` / `verifyMirror`, both built on the existing checkpoint and retry machinery used by the W3a entities. SQL is generated through Drizzle's `sql` template (`sql.join` + `sql.raw` for identifiers) — `ON CONFLICT (natural_key) DO UPDATE` for natural-key upserts, `ON CONFLICT (backfill_mongo_id) DO NOTHING` for append-only logs.
+
+**Verified-correct mirror specs (ready to run in follow-up soak)**: events, api_keys, external_api_usage_logs, tekmetric_work_orders / repair_orders / vehicles, protractor_work_orders / invoices / vehicles / callback_events, shopware_repair_orders / vehicles / customers / webhook_logs, autoflow_dvi_items / events / af_open, autovitals_vehicles / imports, pre_normalized_*, dvi / dvi_results / canned_jobs / canned_job_applications, plans / plan_cache / recommendations, carfax_reports / history / cache, job_index / job_history / jobs, sms_historical_work_orders.
+
+**Deferred to per-integration follow-up tasks** (require integration-specific knowledge beyond a generic mirror):
+
+- `tekmetric_tokens`, `autoflow_credentials` — encrypted column shapes; cutover should be done by the auth library, not a generic mirror.
+- `autovitals_appointments`, `autovitals_inspections` — schema indexes ~12 domain-specific fields each; needs per-integration extract function.
+
+### 11.6 Polarity-flip helpers
+
+- W3a established `lib/integrations/core/normalized-write-mode.ts` (`shouldShadowWriteMongo` family).
+- W3b adds `lib/db/wave3-write-mode.ts` mirroring the same pattern: `shouldShadowWriteMongoCounters`, `shouldShadowWriteMongoApiKeys`, `shouldShadowWriteMongoEvents`, plus a generic `shadowWriteMongo(env, fn)` wrapper.
+
+### 11.7 Drift docs — Mongo writes still live after W3b lands
+
+Downstream Wave 4 must not assume Mongo is read-only. The following Mongo collections still receive writes after this PR merges:
+
+| Mongo collection | Still written by | Gate |
+| --- | --- | --- |
+| `counters` | `lib/ids.ts` shadow path | `WRITE_MONGO_COUNTERS` (default ON) |
+| `api_keys`, `api_usage_logs` | `lib/data/repositories/api-keys.ts` shadow path | `WRITE_MONGO_API_KEYS` (default ON) |
+| `events` | `lib/data/repositories/events.ts` shadow path; `streamEvents`/`aggregateEvents` analytics path (canonical until ported) | `WRITE_MONGO_EVENTS` (default ON) |
+| `tekmetric_*` mirrors | live integration writers (not flipped) | n/a |
+| `protractor_*` mirrors | live integration writers (not flipped) | n/a |
+| `shopware_*` mirrors | live integration writers (not flipped) | n/a |
+| `autoflow_*`, `af_open` | live integration writers (not flipped) | n/a |
+| `autovitals_*` | live integration writers (not flipped) | n/a |
+| `pre_normalized_*`, `dvi`, `dvi_results`, `canned_jobs`, `canned_job_applications` | live ingestors (not flipped) | n/a |
+| `plans`, `plan_cache`, `plan_prefetch_cache`, `recommendations` | live planner writes (not flipped) | n/a |
+| `carfax_*`, `job_index`, `job_history`, `jobs`, `sms_historical_work_orders` | live writers (not flipped) | n/a |
+
+### 11.8 Operator-required follow-up enumeration (cannot complete in an isolated task env)
+
+The following items remain open by definition because they require either production cluster access, a multi-day soak window, or a backfill that an isolated task environment cannot perform. They are tracked as W3b-followup tasks per group:
+
+1. **Counters / api_keys / events soak**: leave shadow ON for ≥168 h, verify parity, then flip `WRITE_MONGO_COUNTERS` / `WRITE_MONGO_API_KEYS` / `WRITE_MONGO_EVENTS` to `"0"` and drop the Mongo collections.
+2. **Events analytics port**: re-implement `streamEvents` / `aggregateEvents` against PG (`events` table) using SQL window/aggregation; only then can the Mongo `events` collection be dropped.
+3. **Tekmetric soak**: run `--mirror=tekmetric_work_orders|tekmetric_repair_orders|tekmetric_vehicles` end-to-end, verify, then port readers + retire Mongo collections. `tekmetric_tokens` is a separate auth-library cutover.
+4. **Protractor soak**: run `--mirror=protractor_work_orders|protractor_invoices|protractor_vehicles|protractor_callback_events`, verify, port readers + cache tables (rebuild-on-miss), retire Mongo collections.
+5. **Shopware soak**: run `--mirror=shopware_repair_orders|shopware_vehicles|shopware_customers|shopware_webhook_logs`, verify, port readers, retire Mongo collections. `shopware_backfill_progress` cutover is part of the shopware backfill rewrite (separate task).
+6. **Autoflow soak**: run `--mirror=autoflow_dvi_items|autoflow_events|af_open`, verify, port readers. `autoflow_credentials` is a separate auth-library cutover.
+7. **Autovitals soak**: run `--mirror=autovitals_vehicles|autovitals_imports`, verify, port readers. Add per-integration extract functions for `autovitals_appointments` + `autovitals_inspections`, then run + soak those.
+8. **Plan / recommendation cache cutover**: caches allow rebuild-on-miss, so soak can be short. Run `--mirror=plans|plan_cache|recommendations` for convenience, port readers, retire Mongo.
+9. **Carfax soak**: run `--mirror=carfax_reports|carfax_history|carfax_cache`, verify, port readers, retire Mongo.
+10. **Job index family**: run `--mirror=job_index|job_history|jobs`, verify, port readers, retire Mongo.
+11. **SMS history**: run `--mirror=sms_historical_work_orders`, verify, port readers, retire Mongo.
+12. **Pre-normalized retirement**: per-reader decision table — for each consumer of the legacy `vehicles` / `customers` / `repair_orders` / `manual_vehicles` Mongo collections, decide whether to (a) re-point at `normalized_*` (W3a output) which is preferred, or (b) re-point at `pre_normalized_*` (W3b mirror) as a port-one-for-one fallback. Then drop the Mongo collections via the Wave 0 procedure.

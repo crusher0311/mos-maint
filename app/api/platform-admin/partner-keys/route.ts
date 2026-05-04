@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
 import {
   generatePartnerApiKey,
   getAvailablePermissions,
 } from "@/lib/external-api/api-keys";
+import {
+  listPartnerApiKeys,
+  revokePartnerApiKey,
+  reactivatePartnerApiKey,
+} from "@/lib/data/repositories/api-keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
     return NextResponse.json(
@@ -19,16 +23,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const db = await getDb();
-  const partnerKeys = await db
-    .collection("api_keys")
-    .find({ isPartner: true })
-    .project({
-      keyHash: 0,
-    })
-    .sort({ createdAt: -1 })
-    .toArray();
-
+  // task #345 (W3b): partner-keys read served from PG via the
+  // repository. The repository strips `keyHash` so the response shape
+  // matches the legacy `.project({ keyHash: 0 })` Mongo path.
+  const partnerKeys = await listPartnerApiKeys();
   const permissions = getAvailablePermissions();
 
   return NextResponse.json({ success: true, partnerKeys, permissions });
@@ -60,31 +58,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid keyId format" }, { status: 400 });
   }
 
-  const db = await getDb();
-
   if (action === "revoke") {
-    const result = await db.collection("api_keys").updateOne(
-      { _id: new ObjectId(keyId), isPartner: true },
-      { $set: { revoked: true, revokedAt: new Date(), revokedBy: session.email || "platform_admin" } }
+    const ok = await revokePartnerApiKey(
+      keyId,
+      session.email || "platform_admin",
     );
-
-    if (result.matchedCount === 0) {
+    if (!ok) {
       return NextResponse.json({ error: "Partner key not found" }, { status: 404 });
     }
-
     return NextResponse.json({ success: true, message: "Partner key revoked" });
   }
 
   if (action === "reactivate") {
-    const result = await db.collection("api_keys").updateOne(
-      { _id: new ObjectId(keyId), isPartner: true },
-      { $unset: { revoked: "", revokedAt: "", revokedBy: "" } }
-    );
-
-    if (result.matchedCount === 0) {
+    const ok = await reactivatePartnerApiKey(keyId);
+    if (!ok) {
       return NextResponse.json({ error: "Partner key not found" }, { status: 404 });
     }
-
     return NextResponse.json({ success: true, message: "Partner key reactivated" });
   }
 

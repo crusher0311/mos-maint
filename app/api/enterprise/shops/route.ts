@@ -112,18 +112,11 @@ export async function POST(req: NextRequest) {
     }
 
     const db = await getDb();
-    
-    const counterResult = await db.collection("counters").findOneAndUpdate(
-      { _id: "shopId" as any },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" }
-    );
 
-    const shopId = (counterResult as any)?.seq || 10001;
-    
-    if (!shopId || shopId === 10001) {
-      console.log("[Enterprise Shops] Counter result:", JSON.stringify(counterResult));
-    }
+    // task #345 (W3b): PG-canonical counter via lib/ids.ts. Mongo
+    // `counters` is shadow-mirrored during soak (`WRITE_MONGO_COUNTERS`).
+    const { getNextShopId } = await import("@/lib/ids");
+    const shopId = await getNextShopId();
 
     // For enterprise locations, use the enterprise name as the shop name
     // and the provided "name" as the location identifier

@@ -474,27 +474,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
     }
 
-    const counter = await db.collection("counters").findOneAndUpdate(
-      { _id: "shopId" as any },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" }
-    );
-    let newShopId = counter?.seq || counter?.value?.seq;
-    if (!newShopId || newShopId < 1001) {
-      const lastShop = await db.collection("shops")
-        .find({}, { projection: { shopId: 1 } })
-        .sort({ shopId: -1 })
-        .limit(1)
-        .toArray();
-      const maxId = (lastShop.length > 0 && typeof lastShop[0].shopId === 'number') 
-        ? lastShop[0].shopId : 1000;
-      newShopId = maxId + 1;
-      await db.collection("counters").updateOne(
-        { _id: "shopId" as any },
-        { $set: { seq: newShopId } },
-        { upsert: true }
-      );
-    }
+    // task #345 (W3b): PG-canonical counter. The legacy floor logic
+    // (align to MAX(shopId) when the counter falls behind 1001) is
+    // preserved by passing `floor` to nextSeq. Mongo `counters` is
+    // shadow-mirrored during soak (`WRITE_MONGO_COUNTERS`).
+    const { nextSeq } = await import("@/lib/data/repositories/pg-counters");
+    const lastShop = await db.collection("shops")
+      .find({}, { projection: { shopId: 1 } })
+      .sort({ shopId: -1 })
+      .limit(1)
+      .toArray();
+    const maxId = (lastShop.length > 0 && typeof lastShop[0].shopId === 'number')
+      ? lastShop[0].shopId : 1000;
+    const newShopId = await nextSeq("shopId", { floor: maxId });
 
     const now = new Date();
     const normalizedOwnerEmail = ownerEmail.toLowerCase().trim();

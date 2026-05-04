@@ -63,6 +63,10 @@ export async function POST(req: NextRequest) {
       { $set: { seq: maxExisting }, $setOnInsert: { _id: "shopId" } },
       { upsert: true }
     );
+    // task #345 (W3b): align the PG-canonical counter as well so the
+    // first PG-issued shopId after this admin run is `maxExisting + 1`.
+    const { bumpSeq } = await import("@/lib/data/repositories/pg-counters");
+    await bumpSeq("shopId", maxExisting);
 
     // setup_tokens
     await ensure(setupTokens, { token: 1 }, { unique: true, name: "setup_token_unique" });

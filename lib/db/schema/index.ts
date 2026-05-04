@@ -8,3 +8,4 @@ export * from "./platform-features";
 export * from "./tekmetric-migration";
 export * from "./wave1";
 export * from "./wave2";
+export * from "./wave3";

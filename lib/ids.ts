@@ -1,51 +1,42 @@
 // lib/ids.ts
+//
+// Postgres-canonical (W3b, task #345). The `pg_counters` table is the
+// source of truth; Mongo `counters` is shadow-mirrored during the soak
+// window via the wave3 write-mode flag (`WRITE_MONGO_COUNTERS`).
+//
+// Historically this module talked to Mongo directly with
+// `findOneAndUpdate({ $inc: { seq: 1 } })`. The atomic semantics now
+// live in `lib/data/repositories/pg-counters.ts`; this file is a thin
+// alias for the legacy import path.
+import { nextSeq } from "@/lib/data/repositories/pg-counters";
 import { getDb } from "@/lib/mongo";
 
 /**
- * Atomically increments and returns the next numeric shopId (1,2,3,...).
- * - First ensures the counter exists with seq: 0
- * - Then increments with a pure $inc (no $setOnInsert on the same field)
- * - Works with both returnDocument:"after" and returnOriginal:false
+ * Atomically increments and returns the next numeric shopId
+ * (1, 2, 3, …). The first call seeds the counter at 1.
+ *
+ * Floor-aligns to `MAX(shopId)` from the legacy Mongo `shops`
+ * collection so that pre-existing IDs (which were created against the
+ * Mongo counter) cannot collide with a freshly-seeded `pg_counters`
+ * row. This is the same safeguard the platform-admin shop creation
+ * path applies inline; centralizing it here means every caller of
+ * `getNextShopId` benefits.
  */
 export async function getNextShopId(): Promise<number> {
-  const db = await getDb();
-  const counters = db.collection("counters");
-
-  // Ensure the counter doc exists; seed seq at 0 so first next = 1
-  await counters.updateOne(
-    { _id: "shopId" },
-    { $setOnInsert: { _id: "shopId", seq: 0 } },
-    { upsert: true }
-  );
-
-  // Try (v4+) returnDocument: "after"
-  let res: any = await counters.findOneAndUpdate(
-    { _id: "shopId" },
-    { $inc: { seq: 1 } },               // <-- no $setOnInsert here (avoids conflict)
-    { upsert: true, returnDocument: "after" as any }
-  );
-  let seq: any = res?.value?.seq;
-
-  // Fallback (v3.x) returnOriginal: false
-  if (!Number.isFinite(seq)) {
-    res = await (counters as any).findOneAndUpdate(
-      { _id: "shopId" },
-      { $inc: { seq: 1 } },
-      { upsert: true, returnOriginal: false }
-    );
-    seq = res?.value?.seq;
+  let floor = 0;
+  try {
+    const db = await getDb();
+    const last = await db
+      .collection("shops")
+      .find({}, { projection: { shopId: 1 } })
+      .sort({ shopId: -1 })
+      .limit(1)
+      .toArray();
+    const v = last[0]?.shopId;
+    if (typeof v === "number" && Number.isFinite(v)) floor = v;
+  } catch {
+    // Floor-alignment is a safety net, not the source of truth. If
+    // Mongo is unreachable the PG counter still gives a monotonic id.
   }
-
-  // Last resort: two-step (still atomic on $inc)
-  if (!Number.isFinite(seq)) {
-    await counters.updateOne({ _id: "shopId" }, { $inc: { seq: 1 } }, { upsert: true });
-    const doc = await counters.findOne({ _id: "shopId" });
-    seq = doc?.seq;
-  }
-
-  if (!Number.isFinite(seq)) {
-    throw new Error("Counter not initialized correctly");
-  }
-  return seq as number;
+  return nextSeq("shopId", { floor });
 }
-

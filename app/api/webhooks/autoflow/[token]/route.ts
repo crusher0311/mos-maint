@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import crypto from "node:crypto";
 import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow";
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
+import { insertEvent } from "@/lib/data/repositories/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,8 +109,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
 
   const db = await getDb();
 
-  // Persist raw event for audit / console
-  await db.collection("events").insertOne({
+  // Persist raw event for audit / console.
+  // task #345 (W3b): events ingress is PG-canonical via the
+  // repository; Mongo `events` is shadow-mirrored during soak so the
+  // legacy aggregate readers still see the row until they're flipped.
+  await insertEvent({
     provider: "autoflow",
     shopId: shop.shopId,
     token,

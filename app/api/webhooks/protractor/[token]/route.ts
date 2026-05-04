@@ -9,6 +9,7 @@ import {
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
+import { insertEvent } from "@/lib/data/repositories/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,7 +70,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   const objectId = req.nextUrl.searchParams.get("id") ?? null;
   const operation = req.nextUrl.searchParams.get("operation") ?? null;
 
-  await db.collection("events").insertOne({
+  // task #345 (W3b): events ingress is PG-canonical via the
+  // repository; Mongo `events` is shadow-mirrored during soak so the
+  // legacy aggregate readers (vehicle page / dashboards / debug
+  // routes) still see the row until they're flipped over.
+  await insertEvent({
     provider: "protractor",
     shopId: shop.shopId,
     token,
