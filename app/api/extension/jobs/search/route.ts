@@ -6,6 +6,7 @@ import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, b
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
+import { searchMongoJobIndex } from "@/lib/mongo-job-search";
 import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
 
 const MODEL_VARIANTS: Record<string, string[]> = {
@@ -265,7 +266,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[Jobs Search] Found ${supabaseResults.length} from supabase (${jobs.length} total candidates for scoring)`);
+    // Fallback to legacy Mongo `job_index` arm when the primary Supabase arm
+    // returns nothing. PG ingestion of `normalized_service_jobs` was never
+    // wired up, so without this fallback both routes return empty for every
+    // shop. Once ingestion is fixed, supabaseResults will be non-empty and
+    // this branch becomes dormant. See task #359.
+    let mongoResultCount = 0;
+    if (supabaseResults.length === 0) {
+      const mongoResults = await searchMongoJobIndex(
+        db,
+        searchShopIds,
+        coreTokens,
+        make || undefined,
+        limit * 5,
+        model || undefined,
+      );
+      mongoResultCount = mongoResults.length;
+      for (const job of mongoResults) {
+        const key = `${job.workOrderId || ''}-${job.job?.title || ''}-mongo`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          jobs.push(job);
+        }
+      }
+    }
+
+    console.log(`[Jobs Search] Served from supabase=${supabaseResults.length} mongo=${mongoResultCount} total=${jobs.length}`);
 
     const { targetSpecs, jobSpecsMap } = await resolveDataOneSpecs(vin || null, jobs);
     
