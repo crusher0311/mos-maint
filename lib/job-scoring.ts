@@ -39,6 +39,24 @@ export interface ScoreOptions {
   now?: Date;
 }
 
+/**
+ * Vehicle system the donor job operated on (Task #364).
+ *
+ * The matcher uses this to pick a per-category weight profile so chassis /
+ * brake / suspension / HVAC / body work isn't penalized for engine
+ * differences the way powertrain work legitimately should be.
+ */
+export type VehicleSystem =
+  | "powertrain"
+  | "suspension"
+  | "brakes"
+  | "steering"
+  | "hvac"
+  | "body"
+  | "electrical"
+  | "wheel_tire"
+  | "general";
+
 export interface ScoredJob {
   matchScore: number;
   matchBand: ScoreBand;
@@ -48,6 +66,8 @@ export interface ScoredJob {
   lowConfidence: boolean;
   crossClassPenalized: boolean;
   sameVinFastPath?: boolean;
+  /** Inferred vehicle-system category for this donor job (Task #364). */
+  vehicleSystem?: VehicleSystem;
   scoreBreakdown?: {
     gvwrClass: number;
     bodyStyle: number;
@@ -60,6 +80,19 @@ export interface ScoredJob {
     crossClassMultiplier: number;
     /** Recency / same-shop / corroboration evidence (Task #182). */
     evidenceBonus: number;
+    /** Category-aware profile applied to this match (Task #364). */
+    vehicleSystem: VehicleSystem;
+    /**
+     * Whether the engine signals (displacement, fuel) were considered.
+     * False for chassis / HVAC / body / wheel-tire / electrical work where
+     * engine differences shouldn't penalize an otherwise relevant match.
+     */
+    engineSignalsApplied: boolean;
+    /**
+     * Whether the diesel↔gas safety gate was active for this match.
+     * Only enabled for powertrain (and unclassified "general") jobs.
+     */
+    fuelGateApplied: boolean;
   };
   [key: string]: any;
 }
@@ -133,6 +166,101 @@ function getServiceCategory(title: string | null | undefined): string | null {
     if (keywords.some(kw => lower.includes(kw))) return category;
   }
   return null;
+}
+
+/**
+ * Vehicle-system keyword patterns (Task #364).
+ *
+ * Used to bucket a donor job into the system it actually touched, so the
+ * scorer can pick weights appropriate to the work. Order matters — the
+ * first pattern that matches wins. We intentionally check the more
+ * chassis-y categories before "powertrain" because some keywords (e.g.
+ * "tie rod", "cabin filter", "wheel bearing") would otherwise be swallowed
+ * by powertrain's broad keyword set.
+ *
+ * The classifier is deliberately keyword-driven and conservative: when a
+ * job title doesn't clearly indicate a system, we fall back to "general"
+ * which preserves today's powertrain-equivalent behavior (full engine
+ * weight, fuel safety gate on). That keeps the failure mode safe — an
+ * unclassified job is scored exactly the way it is today.
+ */
+// Each pattern uses a leading `\b` for word-boundary safety but no trailing
+// boundary, so plural forms ("ball joints", "spark plugs", "rotors") match
+// the same as the singular. Order matters: more specific categories come
+// first because some keywords (e.g. "tie rod") legitimately apply to more
+// than one system.
+const SYSTEM_PATTERNS: Array<[VehicleSystem, RegExp]> = [
+  // Brakes — distinct enough to check first.
+  ["brakes", /\b(brake|rotor|caliper|abs\b|master\s*cylinder|wheel\s*cylinder|parking\s*brake|emergency\s*brake|e[-\s]?brake)/i],
+  // HVAC — must beat powertrain because "blower", "cabin filter" are HVAC.
+  ["hvac", /\b(a\/c\b|air\s*conditioning|ac\s*compressor|heater|hvac\b|evaporator|condenser|blower\s*motor|cabin\s*filter|cabin\s*air\s*filter|refrigerant|freon|recharge|heater\s*core|expansion\s*valve|orifice\s*tube)/i],
+  // Wheel & tire — alignment, TPMS, rotation, balancing.
+  ["wheel_tire", /\b(tire|tyre|wheel(?!\s*cylinder|\s*bearing|\s*hub)|rim|tpms|rotation|balance|alignment|lug\s*nut|wheel\s*stud)/i],
+  // Suspension — control arms, ball joints, struts, wheel bearings, CV.
+  ["suspension", /\b(suspension|shock(?:\s*absorber)?|strut|coil\s*spring|leaf\s*spring|control\s*arm|upper\s*arm|lower\s*arm|ball\s*joint|sway\s*bar|stabilizer|bushing|air\s*ride|wheel\s*bearing|hub\s*assembly|cv\s*axle|cv\s*joint|knuckle)/i],
+  // Steering — rack, pump, tie rod, idler/pitman.
+  ["steering", /\b(steering|rack\s*(?:and|&)\s*pinion|power\s*steering|steering\s*pump|steering\s*rack|steering\s*column|steering\s*wheel|tie\s*rod|idler\s*arm|pitman\s*arm|steering\s*box)/i],
+  // Body — doors, mirrors, glass, lighting, wipers, seats, airbags.
+  ["body", /\b(door(?:\s*handle|\s*latch|\s*lock)?|window\s*regulator|window\s*motor|side\s*mirror|rear\s*view|bumper|fender|hood\s*latch|trunk|tailgate|liftgate|paint|trim|molding|weatherstrip|seat(?:\s*belt)?|upholstery|airbag|wiper|wiper\s*blade|washer\s*pump|washer\s*nozzle|headlight|headlamp|tail\s*light|tail\s*lamp|fog\s*light|turn\s*signal|interior\s*light)/i],
+  // Electrical — battery / alternator / starter / wiring / sensors / modules.
+  ["electrical", /\b(battery|batteries|alternator|starter|wiring|fuse|relay|harness|ignition\s*switch|key\s*fob|remote\s*start|ecm\b|pcm\b|tcm\b|bcm\b|body\s*control\s*module)/i],
+  // Powertrain — engine, transmission, fuel, cooling, exhaust, oil work.
+  ["powertrain", /\b(engine|motor(?!\s*mount)|valve(?!\s*stem)|head\s*gasket|gasket|timing|piston|cylinder\s*head|crankshaft|camshaft|turbo|intercooler|injector|fuel\s*pump|fuel\s*filter|fuel\s*rail|spark\s*plug|coil\s*pack|tune[-\s]*up|oil\s*change|oil\s*filter|oil\s*pan|valve\s*cover|intake\s*manifold|exhaust\s*manifold|catalytic|converter|muffler|exhaust|o2\s*sensor|oxygen\s*sensor|transmission|clutch|differential|transfer\s*case|axle\s*shaft|trans\s*fluid|atf\b|coolant|radiator|water\s*pump|cooling|thermostat(?!\s*housing)|head\s*bolt|serpentine|drive\s*belt|timing\s*belt|timing\s*chain)/i],
+];
+
+/**
+ * Classify a donor job into a vehicle-system category from its title and
+ * optional line-item descriptions. Returns "general" when no pattern
+ * matches — that preserves today's powertrain-equivalent scoring as the
+ * safe fallback for ambiguous canned-job titles.
+ */
+export function classifyVehicleSystem(
+  title: string | null | undefined,
+  lineItems?: Array<string | null | undefined> | null,
+): VehicleSystem {
+  const parts: string[] = [];
+  if (title) parts.push(String(title));
+  if (Array.isArray(lineItems)) {
+    for (const li of lineItems) if (li) parts.push(String(li));
+  }
+  if (parts.length === 0) return "general";
+  const haystack = parts.join(" \n ");
+  for (const [system, re] of SYSTEM_PATTERNS) {
+    if (re.test(haystack)) return system;
+  }
+  return "general";
+}
+
+interface CategoryProfile {
+  /** Whether to add the displacement contribution and the
+   *  "Different engine" material miss. */
+  engineSignalsApplied: boolean;
+  /** Whether the diesel↔gas hard-fail safety gate runs. */
+  fuelGateApplied: boolean;
+}
+
+/**
+ * Per-category scoring profile. Powertrain (and the safe-fallback
+ * "general") preserve today's behavior so engine-relevant work is still
+ * gated and weighted as it always has been. Chassis / HVAC / body /
+ * wheel-tire / electrical drop the engine signal entirely so a 2018 F-150
+ * ball joint match isn't penalized for the donor having a 2.7 EcoBoost
+ * vs. the target's 5.0.
+ */
+const CATEGORY_PROFILES: Record<VehicleSystem, CategoryProfile> = {
+  powertrain: { engineSignalsApplied: true, fuelGateApplied: true },
+  general:    { engineSignalsApplied: true, fuelGateApplied: true },
+  suspension: { engineSignalsApplied: false, fuelGateApplied: false },
+  brakes:     { engineSignalsApplied: false, fuelGateApplied: false },
+  steering:   { engineSignalsApplied: false, fuelGateApplied: false },
+  wheel_tire: { engineSignalsApplied: false, fuelGateApplied: false },
+  hvac:       { engineSignalsApplied: false, fuelGateApplied: false },
+  body:       { engineSignalsApplied: false, fuelGateApplied: false },
+  electrical: { engineSignalsApplied: false, fuelGateApplied: false },
+};
+
+export function getCategoryProfile(system: VehicleSystem): CategoryProfile {
+  return CATEGORY_PROFILES[system];
 }
 
 /**
@@ -250,6 +378,31 @@ export function scoreJob(
   const jVinNorm = normalizeVin(job.vehicle?.vin ?? job.vin);
   const sameVin = tVinNorm !== null && jVinNorm !== null && tVinNorm === jVinNorm;
 
+  // ----- Vehicle-system classification (Task #364) -----
+  // Bucket the donor job into the system it actually touched (brakes,
+  // suspension, hvac, powertrain, etc.) so we can pick category-appropriate
+  // weights below. Unrecognized titles fall back to "general", which
+  // preserves today's powertrain-equivalent behavior as a safe default.
+  const rawLineItems: any[] = Array.isArray(job.job?.lineItems)
+    ? job.job.lineItems
+    : Array.isArray(job.lineItems)
+      ? job.lineItems
+      : [];
+  const lineItemTexts: string[] = rawLineItems
+    .map((li: any) => {
+      if (typeof li === "string") return li;
+      if (li && typeof li === "object") {
+        return li.description || li.name || li.title || "";
+      }
+      return "";
+    })
+    .filter(Boolean);
+  const vehicleSystem = classifyVehicleSystem(
+    job.job?.title || job.title,
+    lineItemTexts,
+  );
+  const profile = getCategoryProfile(vehicleSystem);
+
   if (sameVin) {
     const vinPositives: string[] = ["Same vehicle (VIN match)"];
     if (targetYear && jobYear && targetYear === jobYear) {
@@ -270,6 +423,7 @@ export function scoreJob(
       lowConfidence: false,
       crossClassPenalized: false,
       sameVinFastPath: true,
+      vehicleSystem,
       scoreBreakdown: {
         gvwrClass: 0,
         bodyStyle: 0,
@@ -281,6 +435,9 @@ export function scoreJob(
         serviceCategory: 0,
         crossClassMultiplier: 1.0,
         evidenceBonus: 0,
+        vehicleSystem,
+        engineSignalsApplied: profile.engineSignalsApplied,
+        fuelGateApplied: profile.fuelGateApplied,
       },
     };
   }
@@ -289,10 +446,14 @@ export function scoreJob(
   // Runs *after* the same-VIN fast path: if it's the same physical vehicle,
   // fuel parsing disagreements (typos, partial decode, free-text engine
   // strings) shouldn't drop a clearly-correct match. For non-same-VIN
-  // donors we still hard-fail any diesel-vs-gas mismatch.
+  // donors we still hard-fail any diesel-vs-gas mismatch — but only when
+  // the donor job's vehicle system actually depends on the engine
+  // (powertrain / unclassified). A diesel F-250 ball joint is the same
+  // ball joint as a gas F-250 ball joint, so chassis / brake / HVAC /
+  // wheel-tire / body / electrical jobs skip the gate (Task #364).
   const tFuel = targetSpecs?.fuelType || parseSimpleFuel(targetVehicle.engine);
   const jFuel = jobSpecs?.fuelType || parseSimpleFuel(job.vehicle?.engine);
-  if (tFuel && jFuel && tFuel !== jFuel) {
+  if (profile.fuelGateApplied && tFuel && jFuel && tFuel !== jFuel) {
     if ((tFuel === "diesel" || jFuel === "diesel") && tFuel !== jFuel) {
       return {
         ...job,
@@ -303,6 +464,7 @@ export function scoreJob(
         gatePass: false,
         lowConfidence: true,
         crossClassPenalized: false,
+        vehicleSystem,
       };
     }
   }
@@ -373,11 +535,17 @@ export function scoreJob(
   }
 
   // ----- Displacement -----
+  // Task #364: only contribute (positively or negatively) when this job's
+  // category actually depends on the engine. For chassis / brake / HVAC /
+  // body / wheel-tire / electrical work we ignore engine size entirely,
+  // and we suppress the "Different engine" material miss so the advisor
+  // sees "Matched as: Suspension — engine ignored" instead of being told
+  // the engine was a problem when it wasn't.
   const tDisp = targetSpecs?.displacement || parseDisplacementFromEngine(targetVehicle.engine);
   const jDisp = jobSpecs?.displacement || parseDisplacementFromEngine(job.vehicle?.engine);
   let displacementScore = 0;
   let displacementClose = false;
-  if (tDisp && jDisp) {
+  if (profile.engineSignalsApplied && tDisp && jDisp) {
     const diff = Math.abs(tDisp - jDisp);
     if (diff <= 0.5) {
       displacementScore = 15;
@@ -513,8 +681,11 @@ export function scoreJob(
   // path above will already have mentioned it; the floor still applies as
   // long as the displacement is *not* a material mismatch.
   const closeYear = yearDiff !== null && yearDiff <= 1;
+  // For non-powertrain categories the engine is ignored, so engine
+  // disagreement never blocks the same-make+model+close-year floor
+  // (Task #364). For powertrain we keep the original guard.
   const engineMatchOrUnknown =
-    !tDisp || !jDisp || displacementClose;
+    !profile.engineSignalsApplied || !tDisp || !jDisp || displacementClose;
   if (
     sameMake &&
     sameModel &&
@@ -537,6 +708,7 @@ export function scoreJob(
     lowConfidence: band === "low_confidence",
     crossClassPenalized,
     sameVinFastPath: false,
+    vehicleSystem,
     scoreBreakdown: {
       gvwrClass: gvwrScore,
       bodyStyle: bodyScore,
@@ -548,6 +720,9 @@ export function scoreJob(
       serviceCategory: categoryScore,
       crossClassMultiplier,
       evidenceBonus,
+      vehicleSystem,
+      engineSignalsApplied: profile.engineSignalsApplied,
+      fuelGateApplied: profile.fuelGateApplied,
     },
   };
 }

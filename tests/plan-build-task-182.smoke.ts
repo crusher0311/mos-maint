@@ -293,11 +293,20 @@ const heavyDutySpecs: VehicleSpecs = {
     displacement: 5.0,
     fuelType: "gas",
   };
-  const scored = scoreJob(heavyDonor, target, lightTargetSpecs, heavyDutySpecs, "brake", {
+  // Task #364: the fuel safety gate now only fires for powertrain donor
+  // jobs (a brake job on a diesel truck is the same brake job whether the
+  // target burns gas or diesel). So we use a powertrain donor here to
+  // preserve the original Task #182 intent that diesel-vs-gas should
+  // gate-fail when engine relevance actually matters.
+  const dieselPowertrainDonor = {
+    ...heavyDonor,
+    job: { title: "Replace fuel injectors" },
+  };
+  const scored = scoreJob(dieselPowertrainDonor, target, lightTargetSpecs, heavyDutySpecs, "fuel injector", {
     now: FIXED_NOW,
     currentShopId: 25,
   });
-  // Diesel donor for gas target should fuel-gate first.
+  // Diesel donor for gas target on a powertrain job should fuel-gate first.
   ok("diesel donor for gas target -> gatePass=false", scored.gatePass === false);
   ok("fuel gate -> Failed Gate label", scored.matchBandLabel === "Failed Gate");
   ok("fuel gate -> score 0", scored.matchScore === 0);
