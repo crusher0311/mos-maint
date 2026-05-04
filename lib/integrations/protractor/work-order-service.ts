@@ -12,9 +12,9 @@
  * Keeping this in one place avoids the duplication that previously existed
  * between the two route files (Task #348 follow-up).
  */
-import { getDb } from "@/lib/mongo";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { upsertProtractorWorkOrderSnapshot } from "@/lib/integrations/protractor";
+import { touchDashboardUpdate } from "@/lib/data/repositories/shopware-cache";
 
 export async function finalizeProtractorWorkOrderCreation(
   shopId: number,
@@ -45,12 +45,7 @@ export async function finalizeProtractorWorkOrderCreation(
   }
 
   try {
-    const db = await getDb();
-    await db.collection("dashboard_updates").updateOne(
-      { _id: "lastUpdate" } as any,
-      { $set: { timestamp: Date.now() } },
-      { upsert: true },
-    );
+    await touchDashboardUpdate();
   } catch (err: any) {
     console.error(`${prefix} dashboard_updates bump failed:`, err?.message);
   }
