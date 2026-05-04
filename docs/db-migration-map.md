@@ -467,3 +467,93 @@ allowing the request. This preserves abuse resistance for auth/throttle
 protection at the cost of a transient outage when both stores are down.
 A risk-tiered "fail-open for low-risk endpoints" policy can be added
 later as an explicit per-call option.
+
+---
+
+## 9. Wave 2 schema landing (task #343, 2026-05-04)
+
+**Schema-only PR.** This task lays down the Postgres destination tables
+for every Wave 2 entity from §3.3 (W2 rows), §3.4 (W2 rows), §3.5
+(W2 rows), §3.7 (non-`api_keys`), and §3.8 (W2 rows), plus the explicit
+"Notable members" enumeration from `task-343.md`. **No reads have been
+switched and no Mongo writes removed.** Each sub-group cutover ships as
+its own follow-up task that uses these tables as the destination.
+
+The schema lives in `lib/db/schema/wave2.ts`; the SQL migration is
+`drizzle/0012_wave2_operational.sql`; the backfill script is
+`scripts/wave2-mongo-to-pg-backfill.ts` (skeleton — not wired into any
+cron yet, each sub-group cutover task runs it with `--only=<csv>`).
+
+### 9.1 Entities by sub-group
+
+| Sub-group       | Entities (Mongo collection → PG table is 1:1 unless noted) |
+|-----------------|------------------------------------------------------------|
+| `ai-caches`     | `ai_analysis_cache`, `maintenance_analysis_cache`, `ai_budget_alerts`, `vhi_analysis_log`, `concern_conversations`, `report_approved_items`, `remedied_deferred_work`, `shop_repair_patterns`, `oem_schedules`, `oem_carfax_mappings` |
+| `external-api`  | `external_api_appointments`, `external_api_keytags`, `external_api_stickers`, `sticker_generations`, `sticker_qr_scans`, `shop_media` |
+| `audit-notif`   | `audit_logs`, `admin_audit_logs`, `notifications`, `dashboard_updates` (canonicalized on a single `key` PK), `support_chat_sessions` |
+| `queues-locks`  | `enrichment_queue`, `extension_prefetch_locks`, `auto_booking_queue`. **`tekmetric_drain_lock` has no destination table** — it ports to `pg_try_advisory_lock(<int8>)` at cutover time. |
+| `tekmetric-op`  | `tekmetric_backfill_progress`, `tekmetric_backfill_health_alerts`, `tekmetric_permfailed_ro_alerts`, `tekmetric_skipped_ro_archive`, `tekmetric_catchup_runs`, `tekmetric_mileage_backfill_progress`, `tekmetric_webhook_logs`, `tekmetric_webhook_subscriptions`, `tekmetric_webhook_health_alerts` |
+| `misc`          | `platform_plans` |
+
+### 9.2 Schema conventions (carried over from W1)
+
+- **Natural key as PK** wherever the Mongo collection has one: `(shop_id, vin)`
+  for cache tables, `slug` for `platform_plans`, `tekmetric_shop_id` for
+  per-Tekmetric-shop state, etc.
+- **`backfill_mongo_id text UNIQUE` for append-only collections without a
+  natural key** (`vhi_analysis_log`, `audit_logs`, `admin_audit_logs`,
+  `tekmetric_skipped_ro_archive`, `tekmetric_catchup_runs`,
+  `tekmetric_webhook_logs`, all `external_api_*`, `sticker_generations`,
+  `sticker_qr_scans`, `shop_repair_patterns`). Ensures the backfill is
+  idempotent on re-run.
+- **`id text PK` mirroring the Mongo ObjectId hex** for entities whose
+  callers pass the id back in URLs / payloads (`notifications` —
+  `/api/notifications/[id]`; `concern_conversations` —
+  `conversationId`; `auto_booking_queue` — `replacesBookingId`).
+- **`jsonb` for genuinely heterogeneous Mongo shapes**: queue payloads,
+  audit details, webhook payloads, dashboard updates, repair-pattern
+  metadata. Indexed fields are pulled out as columns, the rest stays in
+  `data` / `payload` / `extra` / `raw`.
+- **`dashboard_updates` is canonicalized** on a single `key text PK`
+  because Mongo splits writers between `_id="lastUpdate"` (global
+  heartbeat) and `{shopId}` (per-shop heartbeat). The PG table uses
+  `key='lastUpdate'` for the global doc and `key='shop:<id>'` for
+  per-shop docs; the cutover PR rewrites both writers to a repository
+  helper that picks the right key.
+
+### 9.3 Cutover sub-group ordering (recommended)
+
+Each sub-group is its own follow-up task. The recommended order optimizes
+for risk (lowest first) and writer overlap:
+
+1. **`tekmetric-op`** — single-writer (Tekmetric crons), no user-facing
+   read path, lowest blast radius. Safe to ship first as the W2 pattern
+   shake-out.
+2. **`ai-caches`** — pure caches, rebuild-on-miss is allowed, **no soak
+   window required**. Backfill is optional. Can ship in parallel with
+   `tekmetric-op` since there is no writer overlap.
+3. **`external-api`** — self-contained, single writer per route. Append-only.
+4. **`audit-notif`** — append-only logs + per-user inbox. `dashboard_updates`
+   needs the canonical-key rewrite called out in §9.2.
+5. **`queues-locks`** — last because the cutover can also adopt
+   `SELECT … FOR UPDATE SKIP LOCKED` for `enrichment_queue` /
+   `auto_booking_queue` and the `pg_try_advisory_lock` port for
+   `tekmetric_drain_lock` — both are non-trivial behavioral changes,
+   not pure mirrors.
+6. **`misc`** (`platform_plans`) — trivial, can be folded into whichever
+   sub-group ships next.
+
+### 9.4 What this PR does **not** do
+
+- Does **not** switch any reads to PG.
+- Does **not** remove or modify any Mongo writes.
+- Does **not** wire `scripts/wave2-mongo-to-pg-backfill.ts` into any
+  cron or CI; nothing in production calls it yet.
+- Does **not** introduce a `lib/db/repositories/wave2.ts` repository
+  layer. That ships per sub-group, alongside the read-cutover, so each
+  sub-group PR is small and revertible.
+- Does **not** port `tekmetric_drain_lock` to a PG advisory lock —
+  that change goes with the `queues-locks` cutover.
+- Does **not** include a parity report script. The W1 pattern
+  (`scripts/wave1-parity-report.ts`) will be cloned per sub-group when
+  that sub-group's cutover task starts.
