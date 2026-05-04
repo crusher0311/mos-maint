@@ -3,62 +3,55 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/features";
 import { updatePartCrossReferences, JobIndexEntry } from "@/lib/job-index";
+import {
+  pgCountPartCrossRef,
+  pgFindCompatibleParts,
+  type PartCrossRefRow,
+} from "@/lib/db/repositories/wave1";
 
 export const dynamic = "force-dynamic";
 
-type PartCrossRef = {
-  shopId: number;
-  partNumber: string;
-  normalizedPartNumber: string;
-  description?: string;
-  manufacturer?: string;
-  usedOn: { year: number; make: string; model: string; engine?: string }[];
-  crossReferences: string[];
-  usageCount: number;
-  workOrderIds: string[];
-  lastUsedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 async function ensurePartsIndexed(shopId: number): Promise<void> {
+  // Wave 1 (task #342): part_cross_ref is canonical in Postgres.
+  const partsCount = await pgCountPartCrossRef(shopId);
+  if (partsCount > 0) return;
+
   const db = await getDb();
-  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
-  
-  if (partsCount === 0) {
-    let jobEntries: JobIndexEntry[] = await db.collection<JobIndexEntry>("job_index")
+  let jobEntries: JobIndexEntry[] = await db
+    .collection<JobIndexEntry>("job_index")
+    .find({ shopId })
+    .toArray();
+
+  if (jobEntries.length === 0) {
+    const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import(
+      "@/lib/job-index"
+    );
+    const cachedWOs = await db
+      .collection("protractor_work_orders")
       .find({ shopId })
       .toArray();
-    
-    if (jobEntries.length === 0) {
-      const { extractJobIndexFromCachedWorkOrder, upsertJobIndexEntries } = await import("@/lib/job-index");
-      const cachedWOs = await db.collection("protractor_work_orders")
-        .find({ shopId })
-        .toArray();
-      
-      if (cachedWOs.length > 0) {
-        console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
-        
-        const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
-        const vehicleByVin = new Map(vehicles.map(v => [v.vin?.toUpperCase(), v]));
-        
-        const allEntries: JobIndexEntry[] = [];
-        for (const wo of cachedWOs) {
-          const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
-          const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
-          allEntries.push(...entries);
-        }
-        if (allEntries.length > 0) {
-          await upsertJobIndexEntries(allEntries);
-          jobEntries = allEntries;
-        }
+
+    if (cachedWOs.length > 0) {
+      console.log(`[Parts] Building job index from ${cachedWOs.length} cached work orders`);
+      const vehicles = await db.collection("protractor_vehicles").find({ shopId }).toArray();
+      const vehicleByVin = new Map(vehicles.map((v) => [v.vin?.toUpperCase(), v]));
+
+      const allEntries: JobIndexEntry[] = [];
+      for (const wo of cachedWOs) {
+        const vehicle = wo.vin ? vehicleByVin.get(wo.vin.toUpperCase()) : null;
+        const entries = extractJobIndexFromCachedWorkOrder(shopId, wo, vehicle);
+        allEntries.push(...entries);
+      }
+      if (allEntries.length > 0) {
+        await upsertJobIndexEntries(allEntries);
+        jobEntries = allEntries;
       }
     }
-    
-    if (jobEntries.length > 0) {
-      console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
-      await updatePartCrossReferences(jobEntries);
-    }
+  }
+
+  if (jobEntries.length > 0) {
+    console.log(`[Parts] Auto-indexing ${jobEntries.length} jobs for shop ${shopId}`);
+    await updatePartCrossReferences(jobEntries);
   }
 }
 
@@ -69,7 +62,7 @@ export async function GET(req: NextRequest) {
   }
 
   const shopId = session.shopId;
-  
+
   const enabled = await isFeatureEnabled(shopId, "part_xref");
   if (!enabled) {
     return NextResponse.json({ error: "Feature not enabled for this shop" }, { status: 403 });
@@ -84,28 +77,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "year, make, and model are required" }, { status: 400 });
   }
 
-  const db = await getDb();
-  
   await ensurePartsIndexed(shopId);
-  const collection = db.collection<PartCrossRef>("part_cross_ref");
 
-  const results = await collection
-    .find({
-      shopId,
-      "usedOn.year": year,
-      "usedOn.make": { $regex: `^${make}$`, $options: "i" },
-      "usedOn.model": { $regex: `^${model}$`, $options: "i" },
-    })
-    .sort({ usageCount: -1 })
-    .limit(100)
-    .toArray();
+  const results = await pgFindCompatibleParts({ shopId, year, make, model, limit: 100 });
 
-  const grouped: Record<string, typeof results> = {};
+  const grouped: Record<string, PartCrossRefRow[]> = {};
   for (const part of results) {
     const category = categorizePartByDescription(part.description || "");
-    if (!grouped[category]) {
-      grouped[category] = [];
-    }
+    if (!grouped[category]) grouped[category] = [];
     grouped[category].push(part);
   }
 
@@ -114,7 +93,7 @@ export async function GET(req: NextRequest) {
     vehicle: { year, make, model },
     categories: Object.entries(grouped).map(([category, parts]) => ({
       category,
-      parts: parts.map(p => ({
+      parts: parts.map((p) => ({
         partNumber: p.partNumber,
         description: p.description,
         manufacturer: p.manufacturer,
@@ -128,7 +107,7 @@ export async function GET(req: NextRequest) {
 
 function categorizePartByDescription(description: string): string {
   const desc = description.toLowerCase();
-  
+
   if (desc.includes("oil") && desc.includes("filter")) return "Oil Filters";
   if (desc.includes("air") && desc.includes("filter")) return "Air Filters";
   if (desc.includes("cabin") && desc.includes("filter")) return "Cabin Filters";
@@ -144,6 +123,6 @@ function categorizePartByDescription(description: string): string {
   if (desc.includes("transmission")) return "Transmission";
   if (desc.includes("alternator")) return "Alternators";
   if (desc.includes("starter")) return "Starters";
-  
+
   return "Other Parts";
 }

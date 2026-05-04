@@ -356,13 +356,15 @@ async function seedKnowledgeBase() {
     }
     
     const now = new Date();
-    await db.collection("knowledge_articles").insertOne({
+    // Wave 1 (task #342): seed via repository so PG mirror stays in sync.
+    const { insertArticle } = await import("@/lib/data/repositories/knowledge-articles");
+    await insertArticle({
       ...article,
       createdBy: "system",
       createdAt: now,
       updatedAt: now,
       viewCount: 0,
-      helpfulCount: 0
+      helpfulCount: 0,
     });
     console.log(`  CREATED: "${article.title}" [${article.category}]`);
     created++;

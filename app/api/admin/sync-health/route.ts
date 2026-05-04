@@ -22,20 +22,20 @@ export async function GET() {
     const db = await getDb();
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+    // Wave 1 (task #342): ingestion_errors + sync_metrics are canonical in Postgres.
+    const { pgListUnresolvedIngestionErrors } = await import("@/lib/db/repositories/wave1");
+    const { getDb: getPg } = await import("@/lib/db/drizzle");
+    const { syncMetrics: syncMetricsTable } = await import("@/lib/db/schema/wave1");
+    const { gte: gtePg, desc: descPg } = await import("drizzle-orm");
     const [unresolvedErrors, recentSyncMetrics, normalizedStats] =
       await Promise.all([
-        db
-          .collection("ingestion_errors")
-          .find({ resolved: false })
-          .sort({ createdAt: -1 })
-          .limit(50)
-          .toArray(),
-        db
-          .collection("sync_metrics")
-          .find({ createdAt: { $gte: since24h } })
-          .sort({ createdAt: -1 })
-          .limit(100)
-          .toArray(),
+        pgListUnresolvedIngestionErrors(undefined, 50),
+        getPg()
+          .select()
+          .from(syncMetricsTable)
+          .where(gtePg(syncMetricsTable.createdAt, since24h))
+          .orderBy(descPg(syncMetricsTable.createdAt))
+          .limit(100),
         db
           .collection("normalized_work_orders")
           .aggregate([

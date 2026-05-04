@@ -362,11 +362,9 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
   const now = new Date();
   
   try {
-    const db = await getDb();
-    const cacheCollection = db.collection<CachedMaintenanceData>("dataone_cache");
-    
-    // Check for cached data
-    const cached = await cacheCollection.findOne({ squish });
+    // Wave 1 (task #342): canonical cache now in Postgres.
+    const { pgFindDataOneCache } = await import("@/lib/db/repositories/wave1");
+    const cached = (await pgFindDataOneCache(squish)) as CachedMaintenanceData | null;
     
     if (cached && cached.expiresAt > now && cached.vehicle) {
       const cachedHasIntervals = cached.data.items?.some((item: any) => item.miles || item.months);
@@ -486,26 +484,34 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
 
     const expiresAt = new Date(now.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
     
-    await cacheCollection.updateOne(
-      { squish },
-      {
-        $set: {
-          squish,
-          vin,
-          data: {
-            ok: finalOk,
-            count: finalCount,
-            items: finalItems,
-            error: finalError,
+    const cacheData = {
+      ok: finalOk,
+      count: finalCount,
+      items: finalItems,
+      error: finalError,
+    };
+
+    // Wave 1 dual-write: PG canonical (must succeed) + Mongo legacy mirror.
+    const { pgUpsertDataOneCache } = await import("@/lib/db/repositories/wave1");
+    await pgUpsertDataOneCache({
+      squish, vin, data: cacheData, vehicle: vehicleInfo,
+      fetchedAt: now, expiresAt, source: dataSource,
+    });
+    try {
+      const db2 = await getDb();
+      await db2.collection("dataone_cache").updateOne(
+        { squish },
+        {
+          $set: {
+            squish, vin, data: cacheData, vehicle: vehicleInfo,
+            fetchedAt: now, expiresAt, source: dataSource,
           },
-          vehicle: vehicleInfo,
-          fetchedAt: now,
-          expiresAt,
-          source: dataSource,
         },
-      },
-      { upsert: true }
-    );
+        { upsert: true },
+      );
+    } catch (err) {
+      console.error("[DataOne Cache] Mongo mirror failed (non-fatal):", err);
+    }
     
     console.log(`[DataOne Cache] Stored ${finalCount} items for squish ${squish} from ${dataSource}, expires ${expiresAt.toISOString()}`);
     
@@ -534,9 +540,12 @@ export async function invalidateMaintenanceCache(vin: string): Promise<boolean> 
   try {
     const squish = toSquish(vin);
     const db = await getDb();
-    const result = await db.collection("dataone_cache").deleteOne({ squish });
+    const { pgDeleteDataOneCache } = await import("@/lib/db/repositories/wave1");
+    const deleted = await pgDeleteDataOneCache(squish);
+    // Best-effort Mongo cleanup so the legacy collection drains during soak.
+    try { await db.collection("dataone_cache").deleteOne({ squish }); } catch { /* swallow */ }
     console.log(`[DataOne Cache] Invalidated cache for squish ${squish}`);
-    return result.deletedCount > 0;
+    return deleted;
   } catch (error) {
     console.error("[DataOne Cache] Failed to invalidate:", error);
     return false;
@@ -549,15 +558,8 @@ export async function getCacheStats(): Promise<{
   recentHits: number;
 }> {
   try {
-    const db = await getDb();
-    const cacheCollection = db.collection("dataone_cache");
-    const now = new Date();
-    
-    const [totalCached, expiredCount] = await Promise.all([
-      cacheCollection.countDocuments(),
-      cacheCollection.countDocuments({ expiresAt: { $lte: now } }),
-    ]);
-    
+    const { pgDataOneCacheStats } = await import("@/lib/db/repositories/wave1");
+    const { totalCached, expiredCount } = await pgDataOneCacheStats();
     return { totalCached, expiredCount, recentHits: 0 };
   } catch (error) {
     console.error("[DataOne Cache] Stats error:", error);

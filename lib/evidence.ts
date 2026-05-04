@@ -17,22 +17,25 @@ export async function buildEvidenceForVIN(vin: string) {
   const ymmFilter: any = { Year: veh?.year, Make: veh?.make, Model: veh?.model };
   if (veh?.trim) ymmFilter.Trim = veh.trim;
 
-  const intervals = await db.collection("lkp_ymm_maintenance_interval")
-    .find(ymmFilter, { projection: { _id: 0 } }).limit(5000).toArray();
-
-  const defs = await db.collection("def_maintenance_event")
-    .find({}, { projection: { _id: 0, EventCode: 1, Description: 1 } }).toArray();
-  const defMap = new Map(defs.map(d => [String(d.EventCode), String(d.Description)]));
+  // Wave 1 (task #342): legacy DataOne maintenance dump now in Postgres.
+  const { pgFindYmmMaintenanceIntervals, pgFindAllDefMaintenanceEvents } = await import(
+    "@/lib/db/repositories/wave1"
+  );
+  const intervals = await pgFindYmmMaintenanceIntervals(
+    veh?.year, veh?.make, veh?.model, veh?.trim,
+  );
+  const defs = await pgFindAllDefMaintenanceEvents();
+  const defMap = new Map(defs.map((d) => [String(d.eventCode), String(d.description ?? "")]));
 
   const oe_schedule = intervals.map((r: any) => ({
-    id: String(r.EventCode ?? r.ServiceCode ?? r._id ?? ""),
-    normalized_service: normalizeLabel(r.Description ?? defMap.get(String(r.EventCode)) ?? ""),
-    mileage_interval: toNum(r.MileageInterval),
-    time_interval_months: toNum(r.TimeIntervalMonths),
-    first_due_miles: toNum(r.FirstDueMiles),
-    first_due_months: toNum(r.FirstDueMonths),
-    description: String(r.Description ?? defMap.get(String(r.EventCode)) ?? ""),
-    oem_notes: r.OemNotes ? String(r.OemNotes) : undefined,
+    id: String(r.eventCode ?? r.id ?? ""),
+    normalized_service: normalizeLabel(r.description ?? defMap.get(String(r.eventCode)) ?? ""),
+    mileage_interval: toNum(r.mileageInterval),
+    time_interval_months: toNum(r.timeIntervalMonths),
+    first_due_miles: toNum(r.firstDueMiles),
+    first_due_months: toNum(r.firstDueMonths),
+    description: String(r.description ?? defMap.get(String(r.eventCode)) ?? ""),
+    oem_notes: r.oemNotes ? String(r.oemNotes) : undefined,
   }));
 
   const evidence = {

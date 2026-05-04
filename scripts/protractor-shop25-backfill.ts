@@ -339,6 +339,21 @@ async function main() {
       try {
         const servicePackages = invoice.ServicePackages || [];
         
+        // Wave 1 dual-write (task #342): also mirror to Postgres.
+        const closedAtVal = invoice.ScheduledTime ? new Date(invoice.ScheduledTime) : new Date();
+        try {
+          const { pgUpsertSmsHistoricalWorkOrder } = await import("@/lib/db/repositories/wave1");
+          await pgUpsertSmsHistoricalWorkOrder({
+            shopId: SHOP_ID,
+            sourceSystem: "protractor",
+            workOrderId: invoice.ID,
+            workOrderNumber: invoice.WorkOrderNumber ? String(invoice.WorkOrderNumber) : null,
+            closedAt: closedAtVal,
+            data: invoice,
+          });
+        } catch (err) {
+          console.error("[sms_historical] PG dual-write failed:", err);
+        }
         await historicalCollection.updateOne(
           { shopId: SHOP_ID, sourceSystem: "protractor", workOrderId: invoice.ID },
           {

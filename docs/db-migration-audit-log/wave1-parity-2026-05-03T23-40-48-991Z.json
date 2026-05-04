@@ -1,0 +1,189 @@
+{
+  "generatedAt": "2026-05-03T23:40:48.992Z",
+  "sampleSize": 3,
+  "reports": [
+    {
+      "entity": "ratelimits",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "viewed_vins",
+      "mongoCount": 635,
+      "pgCount": 635,
+      "countDelta": 0,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "100:JTJJM7FX2F5101961:325918488",
+        "100:1FTMF1CM7DKE62876:325702879",
+        "100:JN8CS1MUXFM380772:324098954"
+      ],
+      "missingFromMongo": [
+        "98:WDBUF56X27B158547:321200199",
+        "98:WBAKF5C55CE656596:321443458",
+        "98:JTLZE4FE6B1140770:319321955"
+      ]
+    },
+    {
+      "entity": "sync_metrics",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "ingestion_errors",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "extension_analytics",
+      "mongoCount": 249,
+      "pgCount": 249,
+      "countDelta": 0,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "69f3afcad7c608b3be3c67e3",
+        "69f2493e5ed411ffebbc1cdb",
+        "69f2488e996bc98c0d301baf"
+      ],
+      "missingFromMongo": [
+        "99",
+        "98",
+        "97"
+      ]
+    },
+    {
+      "entity": "data_quality_reports",
+      "mongoCount": 603,
+      "pgCount": 603,
+      "countDelta": 0,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "69f6ad0dd2d5e85c885956e6",
+        "69f6ad0dd2d5e85c88595680",
+        "69f6ad0cd2d5e85c8859567f"
+      ],
+      "missingFromMongo": [
+        "99",
+        "98",
+        "97"
+      ]
+    },
+    {
+      "entity": "system_announcements",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "knowledge_articles",
+      "mongoCount": 52,
+      "pgCount": 52,
+      "countDelta": 0,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "dataone_cache",
+      "mongoCount": 23586,
+      "pgCount": 23565,
+      "countDelta": -21,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "JTJJM7FXF5",
+        "JTNBK46K73",
+        "1GBJC33K8F"
+      ],
+      "missingFromMongo": [
+        "ZPBUA1ZLKL",
+        "ZN661ZUAKX",
+        "ZN661YUSLX"
+      ]
+    },
+    {
+      "entity": "dataone_oe",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "lkp_ymm_maintenance_interval",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "def_maintenance_event",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "dataone_lkp_squish_maintenance",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "part_cross_ref",
+      "mongoCount": 109637,
+      "pgCount": 109359,
+      "countDelta": -278,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "116:M200",
+        "116:30010",
+        "116:NI8233"
+      ],
+      "missingFromMongo": [
+        "76:XT12QULV",
+        "76:VS50682R",
+        "76:VS50639R1"
+      ]
+    },
+    {
+      "entity": "sms_historical_work_orders",
+      "mongoCount": 26014,
+      "pgCount": 26014,
+      "countDelta": 0,
+      "sampledMongoKeys": 3,
+      "missingFromPg": [
+        "29:protractor:c0e70dc3-8335-424a-a6f0-1c6c466c2db5",
+        "29:protractor:2075b095-7759-441f-8907-fda38708833a",
+        "29:protractor:013d6298-baef-4438-aee4-ab3f74a30429"
+      ],
+      "missingFromMongo": [
+        "29:protractor:ffec4662-3fdd-45d0-b89f-7269cfcd1940",
+        "29:protractor:ffaa1f1a-3ccf-4c88-b95f-03d1d7e7e94d",
+        "29:protractor:ff326634-2469-44d5-8a09-163591c4a8c4"
+      ]
+    }
+  ]
+}

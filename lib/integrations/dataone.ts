@@ -190,33 +190,52 @@ export async function fetchDataOneOeByVin(
   };
 }
 
-/** -------- Snapshot storage (cache) -------- */
+/** -------- Snapshot storage (cache) --------
+ * Wave 1 (task #342): canonical snapshot now in Postgres `dataone_oe`,
+ * Mongo retained as best-effort dual-write during soak.
+ */
 export async function upsertDataOneSnapshot(
   shopId: number,
   vin: string,
   mileageForCalc: number | null,
   payload: OeScheduleResult
 ) {
-  const db = await getDb();
   const now = new Date();
-  await db.collection("dataone_oe").updateOne(
-    { shopId, vin },
-    {
-      $set: {
-        shopId,
-        vin,
-        fetchedAt: now,
-        mileageUsed: mileageForCalc ?? null,
-        items: payload.items ?? null,
-        ok: payload.ok,
-        error: payload.error ?? null,
-        raw: payload.raw ?? null,
-        source: "dataone",
+  // PG canonical write — must succeed.
+  const { pgUpsertDataOneOe } = await import("@/lib/db/repositories/wave1");
+  await pgUpsertDataOneOe({
+    shopId,
+    vin,
+    mileageUsed: mileageForCalc ?? null,
+    items: payload.items ?? null,
+    ok: payload.ok,
+    error: payload.error ?? null,
+    raw: payload.raw ?? null,
+    source: "dataone",
+    fetchedAt: now,
+  });
+  // Mongo legacy mirror (best-effort, retained for W1.5 soak only).
+  try {
+    const db = await getDb();
+    await db.collection("dataone_oe").updateOne(
+      { shopId, vin },
+      {
+        $set: {
+          shopId, vin, fetchedAt: now,
+          mileageUsed: mileageForCalc ?? null,
+          items: payload.items ?? null,
+          ok: payload.ok,
+          error: payload.error ?? null,
+          raw: payload.raw ?? null,
+          source: "dataone",
+        },
+        $setOnInsert: { createdAt: now },
       },
-      $setOnInsert: { createdAt: now },
-    },
-    { upsert: true }
-  );
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error("[dataone] Mongo snapshot mirror failed (non-fatal):", err);
+  }
 }
 
 function snapshotToResult(doc: any): OeScheduleResult {
@@ -239,9 +258,9 @@ export async function fetchDataOneOeWithCache(
   maxAgeMs = 7 * 24 * 60 * 60 * 1000,
   doFetch: Fetcher = fetch
 ): Promise<OeScheduleResult> {
-  const db = await getDb();
-  const key = { shopId, vin };
-  const doc = await db.collection("dataone_oe").findOne(key);
+  // Wave 1: read snapshot from Postgres.
+  const { pgFindDataOneOe } = await import("@/lib/db/repositories/wave1");
+  const doc = await pgFindDataOneOe(shopId, vin);
 
   const now = Date.now();
   const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;

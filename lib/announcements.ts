@@ -243,17 +243,9 @@ export async function sendAnnouncement(
   }
 }
 
-export async function getActiveAnnouncements(userId: string): Promise<Announcement[]> {
+export async function getActiveAnnouncements(_userId: string): Promise<Announcement[]> {
   try {
-    const now = new Date();
-    return (await repo.listAnnouncements(
-      5,
-      {
-        status: "sent",
-        $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }],
-      },
-      { sentAt: -1 },
-    )) as Announcement[];
+    return (await repo.listActiveAnnouncements(5)) as Announcement[];
   } catch (error) {
     console.error("Error fetching active announcements:", error);
     return [];

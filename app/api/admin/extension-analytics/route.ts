@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPushToROStats } from "@/lib/extension-analytics";
-import { getDb } from "@/lib/mongo";
+import { getDb as getPg } from "@/lib/db/drizzle";
+import { extensionAnalytics } from "@/lib/db/schema/wave1";
+import { sql, eq, and, gte, lte, desc, type SQL } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,10 +11,10 @@ export async function GET(request: NextRequest) {
     const enterpriseId = searchParams.get("enterpriseId");
     const dateFilter = searchParams.get("dateFilter");
     const days = parseInt(searchParams.get("days") || "30");
-    
+
     let startDate: Date;
     let endDate: Date | undefined;
-    
+
     if (dateFilter === "today") {
       startDate = new Date();
       startDate.setHours(0, 0, 0, 0);
@@ -34,38 +36,39 @@ export async function GET(request: NextRequest) {
       endDate,
     });
 
-    const db = await getDb();
-    
-    const timestampQuery: any = { $gte: startDate };
-    if (endDate) timestampQuery.$lt = endDate;
-    
-    const matchStage: any = { 
-      eventType: "push_to_ro",
-      timestamp: timestampQuery
-    };
-    if (shopId) matchStage.shopId = Number(shopId);
-    if (enterpriseId) matchStage.enterpriseId = enterpriseId;
-
+    // Wave 1 (task #342): extension_analytics is canonical in Postgres.
+    const conds: SQL[] = [eq(extensionAnalytics.eventType, "push_to_ro")];
+    if (shopId) conds.push(eq(extensionAnalytics.shopId, Number(shopId)));
+    if (enterpriseId) conds.push(eq(extensionAnalytics.enterpriseId, enterpriseId));
+    if (startDate) conds.push(gte(extensionAnalytics.timestamp, startDate));
+    if (endDate) conds.push(lte(extensionAnalytics.timestamp, endDate));
+    const where = and(...conds);
+    const pg = getPg();
     const [recentEvents, topUsers] = await Promise.all([
-      db.collection("extension_analytics")
-        .find({ eventType: "push_to_ro" })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .toArray(),
-      db.collection("extension_analytics").aggregate([
-        { $match: matchStage },
-        { $group: { _id: "$userId", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 20 },
-      ]).toArray(),
+      pg
+        .select()
+        .from(extensionAnalytics)
+        .where(eq(extensionAnalytics.eventType, "push_to_ro"))
+        .orderBy(desc(extensionAnalytics.timestamp))
+        .limit(50),
+      pg
+        .select({
+          _id: extensionAnalytics.userId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(extensionAnalytics)
+        .where(where)
+        .groupBy(extensionAnalytics.userId)
+        .orderBy(desc(sql`count(*)`))
+        .limit(20),
     ]);
 
     return NextResponse.json({
       stats,
       topUsers: topUsers
-        .filter(u => u._id)
-        .map(u => ({ userId: u._id, count: u.count })),
-      recentEvents: recentEvents.map(e => ({
+        .filter((u) => u._id)
+        .map((u) => ({ userId: u._id, count: u.count })),
+      recentEvents: recentEvents.map((e) => ({
         shopId: e.shopId,
         userId: e.userId,
         jobTitle: e.jobTitle,
@@ -76,7 +79,7 @@ export async function GET(request: NextRequest) {
         timestamp: e.timestamp,
       })),
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching extension analytics:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

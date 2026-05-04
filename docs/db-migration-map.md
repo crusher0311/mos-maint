@@ -333,3 +333,137 @@ Wave 0 orphan drops can run in parallel with #1–#3 since they touch different 
 3. Is the `tekmetric_drain_lock` concept staying in Mongo post-migration, or are we porting it to a PG advisory lock at the same time?
 4. Does anything outside this repo write to `workflow_runs`?
 5. Are `dvi`, `dvi_results`, `inspectionfindings`, `tickets` still in active use, or can they move to Wave 0?
+
+---
+
+## 8. Wave 1 cutover log (task #342, 2026-05-03)
+
+Wave 1 moved 15 reference / leaf collections to Postgres. The schema lives in
+`lib/db/schema/wave1.ts`; the SQL migration is `drizzle/0011_wave1_reference_and_leaf.sql`;
+all PG-side reads/writes go through `lib/db/repositories/wave1.ts`.
+
+### 8.1 Per-entity status
+
+| Mongo collection                  | PG table                          | Reads     | Writes              |
+|-----------------------------------|-----------------------------------|-----------|---------------------|
+| `ratelimits`                      | `ratelimits`                      | PG        | PG canonical + Mongo mirror (best-effort) |
+| `viewed_vins`                     | `viewed_vins`                     | PG        | PG + Mongo dual-write |
+| `sync_metrics`                    | `sync_metrics`                    | PG        | PG + Mongo dual-write |
+| `ingestion_errors`                | `ingestion_errors`                | PG        | PG + Mongo dual-write |
+| `extension_analytics`             | `extension_analytics`             | PG        | PG + Mongo dual-write |
+| `data_quality_reports`            | `data_quality_reports`            | PG        | PG + Mongo dual-write |
+| `system_announcements`            | `system_announcements`            | PG        | PG + Mongo dual-write |
+| `knowledge_articles`              | `knowledge_articles`              | PG        | PG + Mongo dual-write |
+| `dataone_cache`                   | `dataone_cache`                   | PG        | PG + Mongo dual-write |
+| `dataone_oe`                      | `dataone_oe`                      | PG        | PG + Mongo dual-write |
+| `lkp_ymm_maintenance_interval`    | `lkp_ymm_maintenance_interval`    | PG        | n/a (reference, populated by backfill) |
+| `def_maintenance_event`           | `def_maintenance_event`           | PG        | n/a (reference, populated by backfill) |
+| `dataone_lkp_squish_maintenance`  | `dataone_lkp_squish_maintenance`  | PG        | n/a (reference, populated by backfill) |
+| `part_cross_ref`                  | `part_cross_ref`                  | PG (count + per-key) | PG + Mongo dual-write |
+| `sms_historical_work_orders`      | `sms_historical_work_orders`      | PG (script-only) | PG + Mongo dual-write |
+
+### 8.2 Backfill
+
+`pnpm tsx scripts/wave1-mongo-to-pg-backfill.ts` streams all 15 collections
+into the PG mirror tables. Idempotent; safe to re-run. Use `--only=<csv>`
+to target a subset and `--batch=<n>` to tune throughput.
+
+The script intentionally uses **separate write helpers** for backfill vs.
+the live request path:
+
+- `pgBackfillPartCrossRef` (backfill) **sets** `usageCount` and **replaces**
+  the `usedOn` / `workOrderIds` arrays from the source doc; the
+  live-write helper `pgUpsertPartCrossRef` increments and merges. This
+  prevents re-runs from inflating counts.
+- `pgBackfillIngestionError` (backfill) preserves `resolved`,
+  `retryCount`, `resolvedAt`, `createdAt`, and `updatedAt` from the
+  source doc; the live-write helper `pgUpsertIngestionError` increments
+  `retryCount` and forces `resolved=false`. Using the live helper at
+  backfill time would resurrect already-resolved errors.
+
+### 8.3 Deferred (W1.5 — operational, not in this PR)
+
+Per-entity 24–48h soak windows and Mongo-write removal are deferred to the
+W2 follow-up task already queued. Until then, every dual-write site keeps
+the legacy Mongo write best-effort so an emergency rollback to Mongo reads
+can be done with a one-line revert at each repo entry point.
+
+### 8.4 Parity report (read-cutover audit artifact)
+
+`pnpm tsx scripts/wave1-parity-report.ts` captures per-entity row counts
+(Mongo vs PG) and a small spot-sample diff (sample size configurable via
+`--sample=N`, default 10). Output:
+
+- `docs/db-migration-audit-log/wave1-parity-<ISO>.json` — full per-entity
+  report with `mongoCount`, `pgCount`, `countDelta`, `missingFromPg`,
+  `missingFromMongo`.
+- `docs/db-migration-audit-log/wave1-parity.log` — one-line-per-entity
+  summary appended on every run, so the audit trail accumulates in repo.
+
+Use `--only=<csv>` to scope to a subset (same flag as the backfill
+script). Run this before each entity's read-cutover sign-off and after
+any backfill re-run.
+
+#### 8.4.1 Latest dev parity result (2026-05-03T23:40:48Z)
+
+After running the backfill against the dev Mongo + Postgres pair:
+
+| Entity                              | Mongo raw | PG rows | Mongo distinct (PG unique key) |
+|-------------------------------------|-----------|---------|--------------------------------|
+| `ratelimits`                        | 0         | 0       | 0                              |
+| `viewed_vins`                       | 635       | 635     | 635                            |
+| `sync_metrics`                      | 0         | 0       | 0                              |
+| `ingestion_errors`                  | 0         | 0       | 0                              |
+| `extension_analytics`               | 249       | 249     | 249                            |
+| `data_quality_reports`              | 603       | 603     | 603                            |
+| `system_announcements`              | 0         | 0       | 0                              |
+| `knowledge_articles`                | 52        | 52      | 52                             |
+| `dataone_cache`                     | 23586     | 23565   | 23565 (21 dup-`squish` docs)   |
+| `dataone_oe`                        | 0         | 0       | 0                              |
+| `lkp_ymm_maintenance_interval`     | 0         | 0       | 0                              |
+| `def_maintenance_event`            | 0         | 0       | 0                              |
+| `dataone_lkp_squish_maintenance`   | 0         | 0       | 0                              |
+| `part_cross_ref`                    | 109637    | 109359  | 109359 (278 dup-(shopId,normalizedPartNumber) docs) |
+| `sms_historical_work_orders`        | 26014     | 26014   | 26014                          |
+
+PG row counts equal the **Mongo distinct count** for every entity that
+has data, including the two collections (`dataone_cache`, `part_cross_ref`)
+where PG's unique constraint collapses Mongo duplicate-key documents.
+The raw artifact is
+`docs/db-migration-audit-log/wave1-parity-2026-05-03T23-40-48-991Z.json`
+(re-confirmed in `…2026-05-03T23-53-35-232Z.json` after the round-5b
+write-path hardening flip — counts unchanged) and the appended summary
+lives in `docs/db-migration-audit-log/wave1-parity.log`.
+
+#### 8.4.2 Backfill idempotency
+
+Because `sync_metrics`, `extension_analytics`, `data_quality_reports`,
+and `lkp_ymm_maintenance_interval` have no natural unique key, the
+backfill stamps each Mongo `_id` into a `backfill_mongo_id text` column
+with a unique index (added by `drizzle/0011_…`) and uses
+`INSERT … ON CONFLICT (backfill_mongo_id) DO UPDATE` so re-runs do not
+double-insert. All other entities are upsert-by-natural-key. Re-running
+the backfill end-to-end against dev produced **identical** PG row counts
+(verified by running the small-entity backfill twice — counts unchanged).
+
+#### 8.4.3 What "PG canonical" means today
+
+For Wave 1, "PG canonical" means **all reads have moved to Postgres** and
+**every write path awaits Postgres first and surfaces PG failures to the
+caller** (no try/catch swallows the PG write). Mongo writes are issued
+afterwards as a best-effort legacy mirror inside a try/catch that only
+logs failures, so a Mongo outage cannot block traffic but a PG outage
+will fail the request — which is the desired semantics now that PG is
+the source of truth. The Mongo mirror is retained only so a one-line
+revert can flip reads back if a regression is found during the W1.5
+soak window; it is removed after the per-entity 24–48h soak passes (W2
+follow-up — **not** in this PR).
+
+### 8.5 Rate limiter failure mode
+
+`lib/rate.ts` is **fail-closed**: if both the PG counter and the Mongo
+fallback throw, `rateLimit()` returns `{ allowed: false }` rather than
+allowing the request. This preserves abuse resistance for auth/throttle
+protection at the cost of a transient outage when both stores are down.
+A risk-tiered "fail-open for low-risk endpoints" policy can be added
+later as an explicit per-call option.

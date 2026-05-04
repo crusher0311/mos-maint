@@ -33,7 +33,9 @@ export async function GET(
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    const vinViewCount = await db.collection("viewed_vins").countDocuments({ shopId });
+    // Wave 1 (task #342): viewed_vins count is canonical in Postgres.
+    const { pgGetViewedVinCount } = await import("@/lib/db/repositories/wave1");
+    const vinViewCount = await pgGetViewedVinCount(shopId);
 
     const trialEndsAtRaw = shop.trial?.endsAt || shop.trialEndsAt || null;
     const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;

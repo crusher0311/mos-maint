@@ -322,7 +322,9 @@ export async function GET() {
   const db = await getDb();
   
   const invoiceCount = await db.collection("protractor_invoices").countDocuments({ shopId });
-  const partsCount = await db.collection("part_cross_ref").countDocuments({ shopId });
+  // Wave 1 (task #342): part_cross_ref count is canonical in Postgres.
+  const { pgCountPartCrossRef } = await import("@/lib/db/repositories/wave1");
+  const partsCount = await pgCountPartCrossRef(shopId);
   const jobsCount = await db.collection("job_index").countDocuments({ shopId });
   const vehicleCount = await db.collection("protractor_vehicles").countDocuments({ shopId });
   

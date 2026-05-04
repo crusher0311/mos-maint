@@ -159,33 +159,57 @@ export async function POST() {
       
       const workOrderIds = Array.from(entry.workOrderIds);
       
-      const result = await collection.updateOne(
-        { shopId, normalizedPartNumber: normalized },
-        {
-          $set: {
-            shopId,
-            partNumber: entry.partNumber,
-            normalizedPartNumber: normalized,
-            description: entry.description,
-            manufacturer: entry.manufacturer,
-            usageCount: entry.usageCount,
-            updatedAt: new Date(),
-            lastUsedAt: new Date(),
+      // Wave 1 (task #342): PG `part_cross_ref` canonical; Mongo legacy
+      // mirror is best-effort. This rebuild route scans EVERY work order
+      // and computes the absolute `usageCount` + full arrays per part,
+      // so we use the SET/replace writer (`pgSetPartCrossRef`) — the
+      // increment-based `pgUpsertPartCrossRef` would compound counts on
+      // every rebuild.
+      const { pgSetPartCrossRef } = await import("@/lib/db/repositories/wave1");
+      await pgSetPartCrossRef({
+        shopId,
+        normalizedPartNumber: normalized,
+        partNumber: entry.partNumber,
+        description: entry.description ?? null,
+        manufacturer: entry.manufacturer ?? null,
+        usedOn,
+        workOrderIds,
+        usageCount: entry.usageCount,
+        lastUsedAt: new Date(),
+      });
+
+      let mongoResult: { upsertedCount?: number; modifiedCount?: number } = {};
+      try {
+        mongoResult = await collection.updateOne(
+          { shopId, normalizedPartNumber: normalized },
+          {
+            $set: {
+              shopId,
+              partNumber: entry.partNumber,
+              normalizedPartNumber: normalized,
+              description: entry.description,
+              manufacturer: entry.manufacturer,
+              usageCount: entry.usageCount,
+              updatedAt: new Date(),
+              lastUsedAt: new Date(),
+            },
+            $setOnInsert: {
+              crossReferences: [],
+              createdAt: new Date(),
+            },
+            $addToSet: {
+              usedOn: { $each: usedOn },
+              workOrderIds: { $each: workOrderIds },
+            },
           },
-          $setOnInsert: {
-            crossReferences: [],
-            createdAt: new Date(),
-          },
-          $addToSet: {
-            usedOn: { $each: usedOn },
-            workOrderIds: { $each: workOrderIds },
-          },
-        },
-        { upsert: true }
-      );
-      
-      if (result.upsertedCount > 0) created++;
-      else if (result.modifiedCount > 0) updated++;
+          { upsert: true }
+        );
+      } catch (err) {
+        console.error("[parts/build-database] Mongo mirror failed (non-fatal):", err);
+      }
+
+      if ((mongoResult.upsertedCount ?? 0) > 0) created++;
+      else if ((mongoResult.modifiedCount ?? 0) > 0) updated++;
     }
     
     console.log(`[Parts Build] Complete: ${created} created, ${updated} updated`);

@@ -14,48 +14,33 @@ function toSquish(vin: string) {
 }
 
 async function getLocalOeFromMongo(vin: string) {
-  const db = await getDb();
+  // Wave 1 (task #342): squish→OE lookup is canonical in Postgres.
+  // The aggregation reads `dataone_lkp_squish_maintenance` (PG) for the
+  // (vin_maintenance_id, maintenance_id) tuples, then joins against the
+  // existing PG DataOne ETL tables to materialize the maintenance schedule.
   const SQUISH = toSquish(vin);
+  const { pgFindSquishMaintenance } = await import("@/lib/db/repositories/wave1");
+  const { sql } = await import("drizzle-orm");
+  const { getDb: getPg } = await import("@/lib/db/drizzle");
 
-  const pipeline = [
-    { $match: { squish: SQUISH } },
-    { $project: { _id: 0, squish: 1, vin_maintenance_id: 1, maintenance_id: 1 } },
-    {
-      $lookup: {
-        from: "dataone_lkp_vin_maintenance_interval",
-        let: { vmi: "$vin_maintenance_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$vin_maintenance_id", "$$vmi"] } } },
-          { $project: { _id: 0, maintenance_interval_id: 1 } },
-        ],
-        as: "intervals",
-      },
-    },
-    { $unwind: "$intervals" },
-    {
-      $lookup: {
-        from: "dataone_lkp_maintenance_interval",
-        let: { mi: "$intervals.maintenance_interval_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$maintenance_interval_id", "$$mi"] } } },
-          { $project: { _id: 0, mileage: 1, service_items: 1 } },
-        ],
-        as: "schedule",
-      },
-    },
-    { $unwind: "$schedule" },
-    { $sort: { "schedule.mileage": 1 } },
-    {
-      $group: {
-        _id: null,
-        maintenance: { $push: { mileage: "$schedule.mileage", service_items: "$schedule.service_items" } },
-      },
-    },
-    { $project: { _id: 0, maintenance: 1 } },
-  ];
+  const tuples = await pgFindSquishMaintenance(SQUISH);
+  if (tuples.length === 0) return [];
 
-  const result = await db.collection("dataone_lkp_squish_maintenance").aggregate(pipeline).toArray();
-  return result[0]?.maintenance || [];
+  const vmiIds = Array.from(new Set(tuples.map((t) => t.vinMaintenanceId)));
+  const pg = getPg();
+  type IntervalRow = { mileage: number | null; service_items: unknown };
+  const rows = (await pg.execute(sql`
+    SELECT li.mileage AS mileage, li.service_items AS service_items
+    FROM dataone_lkp_vin_maintenance_interval lvmi
+    JOIN dataone_lkp_maintenance_interval li
+      ON li.maintenance_interval_id = lvmi.maintenance_interval_id
+    WHERE lvmi.vin_maintenance_id = ANY(${vmiIds}::int[])
+    ORDER BY li.mileage ASC
+  `)) as unknown as IntervalRow[];
+  return rows.map((r) => ({
+    mileage: r.mileage,
+    service_items: r.service_items,
+  }));
 }
 
 export async function POST(request: NextRequest) {

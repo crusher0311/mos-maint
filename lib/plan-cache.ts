@@ -264,48 +264,36 @@ export async function trackViewedVin(db: Db, shopId: number, vin: string, roId?:
   const now = new Date();
   const normalizedVin = vin.toUpperCase();
   const normalizedRoNumber = roId?.trim() || null;
-  
-  // Use roNumber to match the existing MongoDB index (shopId_vin_roNumber)
-  const query: any = { shopId, vin: normalizedVin, roNumber: normalizedRoNumber };
-  
+
+  // Wave 1 (task #342): PG `viewed_vins` is the canonical counter — must
+  // succeed. Mongo is a best-effort legacy mirror retained for soak.
+  const { pgTrackViewedVin } = await import("@/lib/db/repositories/wave1");
+  const result = await pgTrackViewedVin(shopId, normalizedVin, normalizedRoNumber);
+
   try {
-    const result = await db.collection("viewed_vins").updateOne(
-      query,
+    await db.collection("viewed_vins").updateOne(
+      { shopId, vin: normalizedVin, roNumber: normalizedRoNumber },
       {
-        $setOnInsert: {
-          firstViewedAt: now,
-        },
-        $set: {
-          lastViewedAt: now,
-        },
+        $setOnInsert: { firstViewedAt: now },
+        $set: { lastViewedAt: now },
         $inc: { viewCount: 1 },
       },
-      { upsert: true }
+      { upsert: true },
     );
-    
-    const isNew = result.upsertedCount > 0;
-    const count = await db.collection("viewed_vins").countDocuments({ shopId });
-    
-    return { count, isNew };
-  } catch (err: any) {
-    // Handle duplicate key error gracefully
-    if (err.code === 11000) {
-      await db.collection("viewed_vins").updateOne(
-        query,
-        { $set: { lastViewedAt: now }, $inc: { viewCount: 1 } }
-      );
-      const count = await db.collection("viewed_vins").countDocuments({ shopId });
-      return { count, isNew: false };
-    }
-    throw err;
+  } catch (err) {
+    const code = (err as { code?: number } | null)?.code;
+    if (code !== 11000) console.error("[viewed_vins] Mongo mirror failed (non-fatal):", err);
   }
+
+  return result;
 }
 
-export async function getViewedVinCount(db: Db, shopId: number): Promise<number> {
-  return db.collection("viewed_vins").countDocuments({ shopId });
+export async function getViewedVinCount(_db: Db, shopId: number): Promise<number> {
+  const { pgGetViewedVinCount } = await import("@/lib/db/repositories/wave1");
+  return pgGetViewedVinCount(shopId);
 }
 
-export async function hasViewedVin(db: Db, shopId: number, vin: string): Promise<boolean> {
-  const doc = await db.collection("viewed_vins").findOne({ shopId, vin: vin.toUpperCase() });
-  return doc !== null;
+export async function hasViewedVin(_db: Db, shopId: number, vin: string): Promise<boolean> {
+  const { pgHasViewedVin } = await import("@/lib/db/repositories/wave1");
+  return pgHasViewedVin(shopId, vin);
 }

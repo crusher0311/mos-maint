@@ -131,10 +131,12 @@ export async function GET() {
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
-      db.collection("viewed_vins").aggregate([
-        { $match: { shopId: { $in: allShopIdVariants } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
+      // Wave 1: viewed_vins counts now read from Postgres.
+      (async () => {
+        const { pgViewedVinsAggregateByShop } = await import("@/lib/db/repositories/wave1");
+        const rows = await pgViewedVinsAggregateByShop();
+        return rows.map((r) => ({ _id: r.shopId, count: r.count }));
+      })(),
       db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }

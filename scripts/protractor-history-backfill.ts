@@ -278,6 +278,21 @@ async function main() {
     const servicePackages = await fetchServicePackages(config, wo.ID);
     
     // Store raw data with enriched service packages
+    // Wave 1 dual-write (task #342): also mirror to Postgres.
+    const closedAtVal = wo.ScheduledTime ? new Date(wo.ScheduledTime) : new Date();
+    try {
+      const { pgUpsertSmsHistoricalWorkOrder } = await import("@/lib/db/repositories/wave1");
+      await pgUpsertSmsHistoricalWorkOrder({
+        shopId: SHOP_ID,
+        sourceSystem: "protractor",
+        workOrderId: wo.ID,
+        workOrderNumber: wo.WorkOrderNumber ? String(wo.WorkOrderNumber) : null,
+        closedAt: closedAtVal,
+        data: { ...details, ServicePackages: servicePackages },
+      });
+    } catch (err) {
+      console.error("[sms_historical] PG dual-write failed:", err);
+    }
     await historicalCollection.updateOne(
       { shopId: SHOP_ID, sourceSystem: "protractor", workOrderId: wo.ID },
       {

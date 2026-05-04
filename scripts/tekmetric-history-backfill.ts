@@ -340,6 +340,22 @@ async function main() {
           
           if (jobs.length === 0) continue;
           
+          // Wave 1 dual-write (task #342): also mirror to Postgres.
+          const closedAtRaw = ro.postedDate || ro.completedDate || ro.updatedDate;
+          const closedAtVal = closedAtRaw ? new Date(closedAtRaw) : null;
+          try {
+            const { pgUpsertSmsHistoricalWorkOrder } = await import("@/lib/db/repositories/wave1");
+            await pgUpsertSmsHistoricalWorkOrder({
+              shopId,
+              sourceSystem: "tekmetric",
+              workOrderId: String(ro.id),
+              workOrderNumber: ro.repairOrderNumber ? String(ro.repairOrderNumber) : null,
+              closedAt: closedAtVal,
+              data: { ro, vehicle, customer, jobs },
+            });
+          } catch (err) {
+            console.error("[sms_historical] PG dual-write failed:", err);
+          }
           // Store raw historical data
           await historicalCollection.updateOne(
             { shopId, sourceSystem: "tekmetric", workOrderId: String(ro.id) },

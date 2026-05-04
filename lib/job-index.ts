@@ -531,41 +531,65 @@ export async function updatePartCrossReferences(entries: JobIndexEntry[]): Promi
       const newWorkOrderIds = uniqueWorkOrderIds.filter(id => !existingWorkOrderIds.has(id));
       const newUsageCount = newWorkOrderIds.length;
       
-      if (newUsageCount === 0 && existing) {
-        await collection.updateOne(
-          { shopId, normalizedPartNumber },
-          {
-            $set: { updatedAt: new Date() },
-            $addToSet: { usedOn: { $each: uniqueUsedOn } },
-          }
-        );
-      } else {
-        await collection.updateOne(
-          { shopId, normalizedPartNumber },
-          {
-            $set: {
-              shopId,
-              partNumber: firstUsage.line.partNumber,
-              normalizedPartNumber,
-              description: firstUsage.line.description,
-              manufacturer: firstUsage.line.manufacturer,
-              updatedAt: new Date(),
-              lastUsedAt: new Date(),
+      // Wave 1 (task #342): PG `part_cross_ref` is canonical; Mongo is a
+      // best-effort legacy mirror retained for the W1.5 soak window. PG
+      // write must succeed before Mongo is touched. We pass the RAW
+      // `newUsageCount` (the count of work-order IDs not previously
+      // recorded) so the increment matches Mongo's `$inc: usageCount`.
+      // When `newUsageCount === 0` (re-index of a part with no new WOs),
+      // the PG repo's INSERT-side floors to 1 for first-time inserts and
+      // the UPDATE-side adds 0 — preserving the existing count.
+      const { pgUpsertPartCrossRef } = await import("@/lib/db/repositories/wave1");
+      await pgUpsertPartCrossRef({
+        shopId,
+        normalizedPartNumber,
+        partNumber: firstUsage.line.partNumber!,
+        description: firstUsage.line.description ?? null,
+        manufacturer: firstUsage.line.manufacturer ?? null,
+        usedOn: uniqueUsedOn,
+        workOrderIds: uniqueWorkOrderIds,
+        newUsageCount,
+      });
+
+      try {
+        if (newUsageCount === 0 && existing) {
+          await collection.updateOne(
+            { shopId, normalizedPartNumber },
+            {
+              $set: { updatedAt: new Date() },
+              $addToSet: { usedOn: { $each: uniqueUsedOn } },
+            }
+          );
+        } else {
+          await collection.updateOne(
+            { shopId, normalizedPartNumber },
+            {
+              $set: {
+                shopId,
+                partNumber: firstUsage.line.partNumber,
+                normalizedPartNumber,
+                description: firstUsage.line.description,
+                manufacturer: firstUsage.line.manufacturer,
+                updatedAt: new Date(),
+                lastUsedAt: new Date(),
+              },
+              $setOnInsert: {
+                crossReferences: [],
+                createdAt: new Date(),
+              },
+              $inc: { usageCount: newUsageCount || 1 },
+              $addToSet: {
+                usedOn: { $each: uniqueUsedOn },
+                workOrderIds: { $each: uniqueWorkOrderIds },
+              },
             },
-            $setOnInsert: {
-              crossReferences: [],
-              createdAt: new Date(),
-            },
-            $inc: { usageCount: newUsageCount || 1 },
-            $addToSet: { 
-              usedOn: { $each: uniqueUsedOn },
-              workOrderIds: { $each: uniqueWorkOrderIds },
-            },
-          },
-          { upsert: true }
-        );
+            { upsert: true }
+          );
+        }
+      } catch (err) {
+        console.error("[job-index] Mongo part_cross_ref mirror failed (non-fatal):", err);
       }
-      
+
       updatedCount++;
     }
   }

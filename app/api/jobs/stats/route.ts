@@ -16,9 +16,11 @@ export async function GET() {
   const shopId = Number(session.shopId);
   const db = await getDb();
 
+  // Wave 1 (task #342): part_cross_ref count is canonical in Postgres.
+  const { pgCountPartCrossRef } = await import("@/lib/db/repositories/wave1");
   const [jobsIndexed, partsIndexed] = await Promise.all([
     db.collection("job_index").countDocuments({ shopId }),
-    db.collection("part_cross_ref").countDocuments({ shopId }),
+    pgCountPartCrossRef(shopId),
   ]);
 
   return NextResponse.json({

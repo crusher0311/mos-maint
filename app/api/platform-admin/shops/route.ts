@@ -53,10 +53,15 @@ export async function GET() {
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
       ]).toArray(),
-      db.collection("viewed_vins").aggregate([
-        { $match: { shopId: { $in: shopIds } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
+      // Wave 1: viewed_vins counts now read from Postgres.
+      (async () => {
+        const { pgViewedVinsAggregateByShop } = await import("@/lib/db/repositories/wave1");
+        const rows = await pgViewedVinsAggregateByShop();
+        const allow = new Set(shopIds.map(Number));
+        return rows
+          .filter((r) => allow.has(Number(r.shopId)))
+          .map((r) => ({ _id: r.shopId, count: r.count }));
+      })(),
       db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
       db.collection("tekmetric_backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
       db.collection("job_history").aggregate([

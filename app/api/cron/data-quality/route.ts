@@ -42,15 +42,23 @@ export async function POST(req: NextRequest) {
           cleanupResult = await autoCleanupData(shop.shopId, false); // Not dry run
         }
 
-        // Store report in database for historical tracking
-        await db.collection("data_quality_reports").insertOne({
+        // Wave 1 dual-write (task #342): PG canonical (must succeed) +
+        // Mongo legacy best-effort mirror.
+        const dqDoc = {
           shopId: shop.shopId,
           shopName: shop.name,
           report,
           cleanupResult,
           createdAt: new Date(),
-          runType: "automated"
-        });
+          runType: "automated" as const,
+        };
+        const { pgInsertDataQualityReport } = await import("@/lib/db/repositories/wave1");
+        await pgInsertDataQualityReport(dqDoc);
+        try {
+          await db.collection("data_quality_reports").insertOne(dqDoc);
+        } catch (err) {
+          console.error("[data-quality] Mongo mirror failed (non-fatal):", err);
+        }
 
         results.push({
           shopId: shop.shopId,

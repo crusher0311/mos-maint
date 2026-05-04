@@ -1,4 +1,11 @@
 import { getDb } from "./mongo";
+import {
+  pgRecordSyncMetric,
+  pgUpsertIngestionError,
+  pgResolveIngestionError,
+  pgListUnresolvedIngestionErrors,
+  pgSyncMetricsAggregate,
+} from "@/lib/db/repositories/wave1";
 
 export interface SyncMetrics {
   workerType: "tekmetric-sync" | "protractor-sync" | "tekmetric-backfill" | "protractor-backfill";
@@ -26,109 +33,110 @@ export interface IngestionError {
 }
 
 export async function logSyncMetric(metric: SyncMetrics): Promise<void> {
+  // Wave 1 dual-write: PG canonical (must succeed) + Mongo best-effort mirror.
+  await pgRecordSyncMetric(metric);
   try {
     const db = await getDb();
-    await db.collection("sync_metrics").insertOne({
-      ...metric,
-      createdAt: new Date()
-    });
+    await db.collection("sync_metrics").insertOne({ ...metric, createdAt: new Date() });
   } catch (err) {
-    console.error("[SyncMetrics] Failed to log metric:", err);
+    console.error("[SyncMetrics] Mongo mirror failed (non-fatal):", err);
   }
 }
 
-export async function logIngestionError(error: Omit<IngestionError, "createdAt" | "retryCount" | "resolved">): Promise<void> {
+export async function logIngestionError(
+  error: Omit<IngestionError, "createdAt" | "retryCount" | "resolved">,
+): Promise<void> {
+  // PG canonical first; if it throws, the caller (a worker/retry loop) will
+  // re-queue the error so we don't silently lose it.
+  await pgUpsertIngestionError(error);
   try {
     const db = await getDb();
     await db.collection("ingestion_errors").updateOne(
-      { 
-        workerType: error.workerType, 
-        entityType: error.entityType, 
-        entityId: error.entityId 
+      {
+        workerType: error.workerType,
+        entityType: error.entityType,
+        entityId: error.entityId,
       },
       {
-        $set: {
-          ...error,
-          updatedAt: new Date(),
-          resolved: false
-        },
+        $set: { ...error, updatedAt: new Date(), resolved: false },
         $inc: { retryCount: 1 },
-        $setOnInsert: { createdAt: new Date() }
+        $setOnInsert: { createdAt: new Date() },
       },
-      { upsert: true }
+      { upsert: true },
     );
   } catch (err) {
-    console.error("[SyncMetrics] Failed to log ingestion error:", err);
+    console.error("[SyncMetrics] Mongo ingestion-error mirror failed (non-fatal):", err);
   }
 }
 
 export async function markIngestionErrorResolved(
   workerType: string,
   entityType: string,
-  entityId: string
+  entityId: string,
 ): Promise<void> {
+  // PG canonical first.
+  await pgResolveIngestionError(workerType, entityType, entityId);
   try {
     const db = await getDb();
     await db.collection("ingestion_errors").updateOne(
       { workerType, entityType, entityId },
-      { $set: { resolved: true, resolvedAt: new Date() } }
+      { $set: { resolved: true, resolvedAt: new Date() } },
     );
   } catch (err) {
-    console.error("[SyncMetrics] Failed to mark error resolved:", err);
+    console.error("[SyncMetrics] Mongo resolve mirror failed (non-fatal):", err);
   }
 }
 
-export async function getUnresolvedErrors(workerType?: string, limit = 100): Promise<IngestionError[]> {
+export async function getUnresolvedErrors(
+  workerType?: string,
+  limit = 100,
+): Promise<IngestionError[]> {
+  // Wave 1: read from PG.
   try {
-    const db = await getDb();
-    const query: any = { resolved: false };
-    if (workerType) query.workerType = workerType;
-    
-    const docs = await db.collection("ingestion_errors")
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray();
-    
-    return docs as unknown as IngestionError[];
+    const rows = await pgListUnresolvedIngestionErrors(workerType, limit);
+    return rows.map((r) => ({
+      workerType: r.workerType,
+      shopId: r.shopId ?? undefined,
+      entityType: r.entityType as IngestionError["entityType"],
+      entityId: r.entityId,
+      error: r.error,
+      rawData: r.rawData,
+      createdAt: r.createdAt,
+      retryCount: r.retryCount,
+      resolved: r.resolved,
+    }));
   } catch (err) {
-    console.error("[SyncMetrics] Failed to get unresolved errors:", err);
+    console.error("[SyncMetrics] PG read failed:", err);
     return [];
   }
 }
 
-export async function getSyncStats(workerType: string, hours = 24): Promise<{
+export async function getSyncStats(
+  workerType: string,
+  hours = 24,
+): Promise<{
   total: number;
   successful: number;
   failed: number;
   avgDurationMs: number;
 }> {
   try {
-    const db = await getDb();
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-    
-    const stats = await db.collection("sync_metrics").aggregate([
-      { $match: { workerType, createdAt: { $gte: since } } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          successful: { $sum: { $cond: ["$success", 1, 0] } },
-          failed: { $sum: { $cond: ["$success", 0, 1] } },
-          avgDurationMs: { $avg: "$durationMs" }
-        }
-      }
-    ]).toArray();
-    
-    const result = stats[0] as { total?: number; successful?: number; failed?: number; avgDurationMs?: number } | undefined;
-    return { 
-      total: result?.total || 0, 
-      successful: result?.successful || 0, 
-      failed: result?.failed || 0, 
-      avgDurationMs: result?.avgDurationMs || 0 
-    };
+    const sinceDays = Math.max(1, Math.ceil(hours / 24));
+    const rows = await pgSyncMetricsAggregate(workerType, sinceDays);
+    const cutoff = Date.now() - hours * 60 * 60 * 1000;
+    const filtered = rows.filter((r) => new Date(r.createdAt).getTime() >= cutoff);
+    const total = filtered.length;
+    const successful = filtered.filter((r) => r.success).length;
+    const failed = total - successful;
+    const durations = filtered
+      .map((r) => r.durationMs)
+      .filter((x): x is number => typeof x === "number");
+    const avgDurationMs = durations.length
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : 0;
+    return { total, successful, failed, avgDurationMs };
   } catch (err) {
-    console.error("[SyncMetrics] Failed to get sync stats:", err);
+    console.error("[SyncMetrics] PG sync-stats read failed:", err);
     return { total: 0, successful: 0, failed: 0, avgDurationMs: 0 };
   }
 }

@@ -6,3 +6,4 @@ export * from "./sniffer";
 export * from "./enhance-corrections";
 export * from "./platform-features";
 export * from "./tekmetric-migration";
+export * from "./wave1";

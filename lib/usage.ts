@@ -150,15 +150,9 @@ export async function getUsageAnalytics(startDate?: Date, endDate?: Date) {
     .toArray();
   const shopMap = new Map(shops.map(s => [String(s.shopId), s.name]));
 
-  const viewDateMatch: any = {};
-  if (startDate || endDate) {
-    viewDateMatch.firstViewedAt = {};
-    if (startDate) viewDateMatch.firstViewedAt.$gte = startDate;
-    if (endDate) viewDateMatch.firstViewedAt.$lte = endDate;
-  }
-  const totalViews = await db.collection("viewed_vins").countDocuments(
-    Object.keys(viewDateMatch).length > 0 ? viewDateMatch : {}
-  );
+  // Wave 1 (task #342): viewed_vins is canonical in Postgres.
+  const { pgCountViewedVinsBetween } = await import("@/lib/db/repositories/wave1");
+  const totalViews = await pgCountViewedVinsBetween(startDate, endDate);
   
   const totalCost = totals[0]?.totalCost || 0;
   const uniqueVinsProcessed = (totals[0]?.uniqueVins || []).filter(Boolean).length;

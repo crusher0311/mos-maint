@@ -40,7 +40,6 @@ const ALLOWLIST = new Set([
   "app/api/admin/database/query/route.ts",
   "app/api/admin/database/write/route.ts",
   "app/api/admin/db-indexes/route.ts",
-  "app/api/admin/extension-analytics/route.ts",
   "app/api/admin/features/route.ts",
   "app/api/admin/features/[shopId]/route.ts",
   "app/api/admin/hovercode-qrs/route.ts",

@@ -1,0 +1,270 @@
+{
+  "generatedAt": "2026-05-03T23:53:35.233Z",
+  "sampleSize": 10,
+  "reports": [
+    {
+      "entity": "ratelimits",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "viewed_vins",
+      "mongoCount": 635,
+      "pgCount": 635,
+      "countDelta": 0,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "100:JTJJM7FX2F5101961:325918488",
+        "100:1FTMF1CM7DKE62876:325702879",
+        "100:JN8CS1MUXFM380772:324098954",
+        "100:JTNBK46K973010775:325762874",
+        "100:1G11B5SL6EF274500:325762757",
+        "86:1FTFW1EF3CFB29377:325398817",
+        "111:3N1AB6AP6BL718271:324106193",
+        "111:3N1AB6AP6BL718271:319299393"
+      ],
+      "missingFromMongo": [
+        "98:WDBUF56X27B158547:321200199",
+        "98:WBAKF5C55CE656596:321443458",
+        "98:JTLZE4FE6B1140770:319321955",
+        "98:4JGBB5GB0BA633601:324390796",
+        "98:2T3H1RFV3LW074360:325468041",
+        "98:2C4RC1S79RR121949:324268653",
+        "98:1GCPKSE75CF219354:324423616",
+        "98:1C6RR7KM1KS750320:320300356",
+        "98:1C3EL55R96N260026:319940495"
+      ]
+    },
+    {
+      "entity": "sync_metrics",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "ingestion_errors",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "extension_analytics",
+      "mongoCount": 249,
+      "pgCount": 249,
+      "countDelta": 0,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "69f3afcad7c608b3be3c67e3",
+        "69f2493e5ed411ffebbc1cdb",
+        "69f2488e996bc98c0d301baf",
+        "69f2488d996bc98c0d301bae",
+        "69f2488c62715d4f280886f8",
+        "69f2488b996bc98c0d301bad",
+        "69f2488a5ed411ffebbc1a38",
+        "69f248895ed411ffebbc1a37",
+        "69f0f91c42537c1872fc18ef",
+        "69f0f8f042537c1872fc1815"
+      ],
+      "missingFromMongo": [
+        "99",
+        "98",
+        "97",
+        "96",
+        "95",
+        "94",
+        "93",
+        "92",
+        "91",
+        "90"
+      ]
+    },
+    {
+      "entity": "data_quality_reports",
+      "mongoCount": 603,
+      "pgCount": 603,
+      "countDelta": 0,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "69f6ad0dd2d5e85c885956e6",
+        "69f6ad0dd2d5e85c88595680",
+        "69f6ad0cd2d5e85c8859567f",
+        "69f6ad0cd2d5e85c8859567e",
+        "69f6ad0bd2d5e85c8859567d",
+        "69f6ad0bd2d5e85c8859567b",
+        "69f6ad0ad2d5e85c8859567a",
+        "69f6ad0ad2d5e85c88595679",
+        "69f6ad09d2d5e85c88595678",
+        "69f6ad09d2d5e85c88595677"
+      ],
+      "missingFromMongo": [
+        "99",
+        "98",
+        "97",
+        "96",
+        "95",
+        "94",
+        "93",
+        "92",
+        "91",
+        "90"
+      ]
+    },
+    {
+      "entity": "system_announcements",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "knowledge_articles",
+      "mongoCount": 52,
+      "pgCount": 52,
+      "countDelta": 0,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "dataone_cache",
+      "mongoCount": 23586,
+      "pgCount": 23565,
+      "countDelta": -21,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "JTJJM7FXF5",
+        "JTNBK46K73",
+        "1GBJC33K8F",
+        "1FDXW46R8E",
+        "1G1JD6SBK4",
+        "5YJYGDEDMF",
+        "1FTBF2A6GE",
+        "1GTHK2324F",
+        "5YFBPMBENP",
+        "1GTU9AEFMZ"
+      ],
+      "missingFromMongo": [
+        "ZPBUA1ZLKL",
+        "ZN661ZUAKX",
+        "ZN661YUSLX",
+        "ZN661YUSJX",
+        "ZN661YULHX",
+        "ZN661XUSMX",
+        "ZN661XULHX",
+        "ZN661XUAKX",
+        "ZN661XUAJX",
+        "ZFFXR41AW0"
+      ]
+    },
+    {
+      "entity": "dataone_oe",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "lkp_ymm_maintenance_interval",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "def_maintenance_event",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "dataone_lkp_squish_maintenance",
+      "mongoCount": 0,
+      "pgCount": 0,
+      "countDelta": 0,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": []
+    },
+    {
+      "entity": "part_cross_ref",
+      "mongoCount": 109637,
+      "pgCount": 109359,
+      "countDelta": -278,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "116:M200",
+        "116:30010",
+        "116:NI8233",
+        "116:NI8234",
+        "116:PA5703F",
+        "116:171",
+        "116:289",
+        "116:H621118",
+        "116:127211",
+        "116:127210"
+      ],
+      "missingFromMongo": [
+        "76:XT12QULV",
+        "76:VS50682R",
+        "76:VS50639R1",
+        "76:VC4356",
+        "76:TY39507",
+        "76:TS3439532B",
+        "76:TPMS1",
+        "76:SP530X",
+        "76:SL649",
+        "76:S9630385"
+      ]
+    },
+    {
+      "entity": "sms_historical_work_orders",
+      "mongoCount": 26014,
+      "pgCount": 26014,
+      "countDelta": 0,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "29:protractor:c0e70dc3-8335-424a-a6f0-1c6c466c2db5",
+        "29:protractor:2075b095-7759-441f-8907-fda38708833a",
+        "29:protractor:013d6298-baef-4438-aee4-ab3f74a30429",
+        "29:protractor:018b3c07-b8c8-4244-822e-e5b9b71e5b6a",
+        "29:protractor:d9a8ba9c-54f7-4999-a834-3df1c3b363f5",
+        "29:protractor:af3b8ce2-42b5-40e7-8090-e0af1ee8d005",
+        "29:protractor:afadb4fd-0454-42f4-97d7-41753181cb8e",
+        "29:protractor:88b96a6e-9f1e-4c93-bd5c-ea22cabce915",
+        "29:protractor:09e7a823-bf42-4a1e-ab3d-666c24293e72",
+        "29:protractor:11b57638-b4b8-460e-9284-580a8ef103ed"
+      ],
+      "missingFromMongo": [
+        "29:protractor:ffec4662-3fdd-45d0-b89f-7269cfcd1940",
+        "29:protractor:ffaa1f1a-3ccf-4c88-b95f-03d1d7e7e94d",
+        "29:protractor:ff326634-2469-44d5-8a09-163591c4a8c4",
+        "29:protractor:fe902f84-d83b-4e26-9e92-d1599095579b",
+        "29:protractor:fe87f070-580b-4496-b96b-cca5d0b5644e",
+        "29:protractor:fe5289c5-1499-4921-a414-bdbbc5562fcf",
+        "29:protractor:fdf7fc3e-91b0-4a02-a6ad-3b6afcba7e37",
+        "29:protractor:fdf722c4-1590-4ca0-98a2-a0a379d2f0d3",
+        "29:protractor:fdb9c14f-46ed-47e3-8fc2-af8ebf22b3ab",
+        "29:protractor:fd7a0aff-3039-4cba-bddd-8256afd13018"
+      ]
+    }
+  ]
+}

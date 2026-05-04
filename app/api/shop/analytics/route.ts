@@ -117,13 +117,19 @@ export async function GET(req: NextRequest) {
 
     const daily = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 
-    const viewMatch: any = { shopId };
-    if (startDateStr || endDateStr) {
-      viewMatch.firstViewedAt = {};
-      if (startDateStr) viewMatch.firstViewedAt.$gte = new Date(startDateStr);
-      if (endDateStr) viewMatch.firstViewedAt.$lte = new Date(endDateStr);
-    }
-    const viewCount = await db.collection("viewed_vins").countDocuments(viewMatch);
+    // Wave 1 (task #342): viewed_vins is canonical in Postgres.
+    const { getDb: getPg } = await import("@/lib/db/drizzle");
+    const { viewedVins } = await import("@/lib/db/schema/wave1");
+    const { sql: sqlPg, eq: eqPg, and: andPg, gte: gtePg, lte: ltePg } =
+      await import("drizzle-orm");
+    const vConds: any[] = [eqPg(viewedVins.shopId, shopId)];
+    if (startDateStr) vConds.push(gtePg(viewedVins.firstViewedAt, new Date(startDateStr)));
+    if (endDateStr) vConds.push(ltePg(viewedVins.firstViewedAt, new Date(endDateStr)));
+    const [vRow] = await getPg()
+      .select({ c: sqlPg<number>`count(*)::int` })
+      .from(viewedVins)
+      .where(andPg(...vConds));
+    const viewCount = Number(vRow?.c ?? 0);
 
     const usageMatch: any = { 
       $or: [
