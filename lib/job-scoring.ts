@@ -1,3 +1,5 @@
+import { resolvePlatform, isPlatformShareableSystem, type PlatformResolution } from "./vehicle-platform";
+
 export type ScoreBand = "exact" | "likely" | "possible" | "low_confidence";
 
 export const STOPWORDS = new Set([
@@ -93,6 +95,21 @@ export interface ScoredJob {
      * Only enabled for powertrain (and unclassified "general") jobs.
      */
     fuelGateApplied: boolean;
+    /**
+     * Resolved platform/chassis-family id for the target vehicle (Task #365),
+     * or null when the vehicle isn't in the curated platform table.
+     */
+    targetPlatform: string | null;
+    /**
+     * Resolved platform id for the donor vehicle (Task #365).
+     */
+    donorPlatform: string | null;
+    /**
+     * Whether sibling-model platform credit was applied to this match
+     * (Task #365). True only when target and donor share a platform, the
+     * donor model differs, and the job category is chassis-shareable.
+     */
+    platformCreditApplied: boolean;
   };
   [key: string]: any;
 }
@@ -403,6 +420,17 @@ export function scoreJob(
   );
   const profile = getCategoryProfile(vehicleSystem);
 
+  // ----- Platform / chassis-family resolution (Task #365) -----
+  // Resolve target & donor platforms from year+make+model. The resolver
+  // returns null when the vehicle isn't in the curated table, which
+  // preserves today's behavior as the safe fallback.
+  const targetPlatform: PlatformResolution | null = resolvePlatform(
+    targetVehicle.year, vehicleMake, vehicleModel,
+  );
+  const donorPlatform: PlatformResolution | null = resolvePlatform(
+    job.vehicle?.year, job.vehicle?.make, job.vehicle?.model,
+  );
+
   if (sameVin) {
     const vinPositives: string[] = ["Same vehicle (VIN match)"];
     if (targetYear && jobYear && targetYear === jobYear) {
@@ -438,6 +466,9 @@ export function scoreJob(
         vehicleSystem,
         engineSignalsApplied: profile.engineSignalsApplied,
         fuelGateApplied: profile.fuelGateApplied,
+        targetPlatform: targetPlatform?.id ?? null,
+        donorPlatform: donorPlatform?.id ?? null,
+        platformCreditApplied: false,
       },
     };
   }
@@ -500,11 +531,40 @@ export function scoreJob(
   const jobModelLower = job.vehicle?.model?.toLowerCase() || "";
   let modelScore = 0;
   let sameModel = false;
+  // Sibling-model platform credit (Task #365). Granted only when:
+  //   - target & donor resolve to the same platform id,
+  //   - the donor model differs from the target model, and
+  //   - the donor's vehicle system is chassis-shareable (suspension /
+  //     brakes / steering / hvac / body / wheel-tire). Powertrain,
+  //     electrical, and "general" never get this credit because those
+  //     parts aren't actually shared across siblings on the same chassis.
+  // We compute the flag here and use it in two places: as a partial-Model
+  // score boost (less than full same-model, more than family), and as a
+  // floor guarantee further down (sibling chassis donors with close year
+  // land at least Great Match).
+  let platformCreditApplied = false;
   if (targetModelLower && jobModelLower) {
     if (targetModelLower === jobModelLower) {
       modelScore = 25;
       sameModel = true;
       positives.push("Same model");
+    } else if (
+      targetPlatform &&
+      donorPlatform &&
+      targetPlatform.id === donorPlatform.id &&
+      isPlatformShareableSystem(vehicleSystem)
+    ) {
+      // Siblings on the same chassis: brakes / suspension / steering /
+      // HVAC / body / wheel-tire parts are typically the same. Score
+      // between full-model (25) and family-match (14) so true same-model
+      // matches still outrank platform siblings.
+      modelScore = 20;
+      platformCreditApplied = true;
+      const targetModelDisplay = vehicleModel || "target";
+      const donorModelDisplay = job.vehicle?.model || "donor";
+      positives.push(
+        `Same platform: ${targetPlatform.id} — ${donorModelDisplay} → ${targetModelDisplay}`,
+      );
     } else if (targetModelLower.includes(jobModelLower) || jobModelLower.includes(targetModelLower)) {
       modelScore = 14;
       positives.push("Model family match");
@@ -696,6 +756,22 @@ export function scoreJob(
     finalScore = Math.max(finalScore, SCORE_THRESHOLD_LIKELY + 5);
   }
 
+  // ----- Platform-sibling close-year floor (Task #365) -----
+  // When the donor is a sibling on the same platform doing chassis-shareable
+  // work and the year is close, guarantee at least the Great Match band.
+  // This is the whole point of the task — a Suburban ball-joint job within
+  // ±1 model year of a Tahoe target should surface as a strong match, not
+  // be demoted to "Possible" just because the model name differs.
+  // Floors are a notch below the same-model floor so true same-model
+  // matches still outrank platform siblings.
+  if (
+    platformCreditApplied &&
+    closeYear &&
+    !crossClassPenalized
+  ) {
+    finalScore = Math.max(finalScore, SCORE_THRESHOLD_LIKELY);
+  }
+
   const band = getScoreBand(finalScore);
 
   return {
@@ -723,6 +799,9 @@ export function scoreJob(
       vehicleSystem,
       engineSignalsApplied: profile.engineSignalsApplied,
       fuelGateApplied: profile.fuelGateApplied,
+      targetPlatform: targetPlatform?.id ?? null,
+      donorPlatform: donorPlatform?.id ?? null,
+      platformCreditApplied,
     },
   };
 }
