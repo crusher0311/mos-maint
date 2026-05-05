@@ -205,7 +205,14 @@ async function run() {
     const aggOps = fake.ops.filter(
       (o) => o.op === "aggregate" && o.collection === "tekmetric_webhook_logs",
     );
-    ok("aggregates tekmetric_webhook_logs once for the 24h window", aggOps.length === 1);
+    // Step 5 of task #376 added a second aggregate for the 7d receipt-rate
+    // baseline. The 24h aggregate (silent + drop detection) and the 7d
+    // aggregate (drop denominator) both run on every cron tick.
+    ok(
+      "aggregates tekmetric_webhook_logs for the 24h + 7d windows",
+      aggOps.length === 2,
+      `aggOps.length=${aggOps.length}`,
+    );
 
     // Users lookup filters to platform admins with an email.
     const usersFinds = fake.ops.filter(

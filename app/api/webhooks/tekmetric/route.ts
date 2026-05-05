@@ -12,11 +12,40 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
- * Production callers go through the real getDb() unchanged.
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB and
+ * `__deps.defer` to intercept the fire-and-forget background work the route
+ * dispatches after writing the inline cache row.
+ *
+ * `defer` is what implements step 3 of TEKMETRIC_5K_SCALING_PLAN.md (task #376):
+ * heavy NIS dual-writes and `getVehicle`/`getCustomer` enrichment fetches are
+ * pushed off the request thread so the webhook returns in <500ms while the
+ * cache + indexer + plan-invalidate work that drives dashboard freshness still
+ * runs inline. Errors are logged but never affect the 200 OK back to Tekmetric
+ * (preserves the soft-fail contract Tekmetric depends on for retries).
+ *
+ * Production callers go through the real implementations unchanged. The
+ * latency smoke test (tests/tekmetric-webhook-latency.smoke.ts) overrides
+ * `defer` to capture promises so it can both measure the inline budget and
+ * assert the deferred work eventually completed.
  */
-export const __deps: { getDb: typeof getDb } = {
+type DeferFn = (fn: () => Promise<void>) => void;
+const defaultDefer: DeferFn = (fn) => {
+  // Use setImmediate so the deferred work runs after the current
+  // request/response cycle has yielded — the handler can return its 200 OK
+  // first, then the NIS dual-write / enrichment kick off. Any thrown errors
+  // are logged but never surface to Tekmetric.
+  setImmediate(() => {
+    fn().catch((err: any) => {
+      console.error(
+        "[Tekmetric Webhook] Deferred work failed:",
+        err?.message || err,
+      );
+    });
+  });
+};
+export const __deps: { getDb: typeof getDb; defer: DeferFn } = {
   getDb,
+  defer: defaultDefer,
 };
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
@@ -201,6 +230,13 @@ function verifySignature(rawBody: string, req: NextRequest): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  // Step 2 of task #376: capture wall-clock duration of the inline-handled
+  // portion of the webhook so we can persist it to `tekmetric_webhook_logs`
+  // and surface p50/p95/p99 on the platform-admin webhook-status page. Heavy
+  // NIS work + Tekmetric API enrichment fetches are deferred via __deps.defer
+  // and intentionally NOT counted here — that's the whole point of the
+  // refactor.
+  const startTime = Date.now();
   try {
     // Read raw bytes first so signature verification (Step 3b) can run
     // before JSON parse. JSON.parse below works on the same buffer.
@@ -388,7 +424,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Phase B: dual-write into normalized tables. Soft-fail; webhook still 200s.
-        await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, cached);
+        // Step 3 of task #376: deferred off the request thread. The cache row,
+        // jobs index, and jobs-cache warm above are what drive dashboard
+        // freshness and stay inline; NIS dual-write into Postgres + the
+        // service-jobs/line-items expansion shipped in #360 is the slow part
+        // and now runs after the 200 OK has been sent back to Tekmetric.
+        __deps.defer(() =>
+          runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, cached),
+        );
 
         const wasInsert = !!result.upsertedId;
         console.log(`[Tekmetric Webhook] Terminal cache write for RO #${roNumber} (${wasInsert ? "INSERT" : "UPDATE"}) → ${statusName || "Posted"}`);
@@ -453,102 +496,114 @@ export async function POST(req: NextRequest) {
           `[Tekmetric Webhook] Upserted RO #${roNumber}: ${wasInsert ? 'INSERT' : 'UPDATE'} status=${statusName}, label=${newLabel}, odometer=${newOdometer || 'unchanged'}, customer=${payloadCustomerName || 'unchanged'}, shop=${shop?.shopId || 'unknown'}`
         );
 
-        // Enrich with vehicle + customer data if we're missing it. Fetches are independent and run
-        // in parallel; partial failures still preserve whatever data did come back.
+        if (!shop) {
+          console.warn(`[Tekmetric Webhook] No MOS shop found for tekmetric.shopId=${tekmetricShopId}; row was upserted with shopId=unknown`);
+        }
+
+        // Step 3 of task #376: defer the heavy post-cache work — vehicle /
+        // customer enrichment fetches against the Tekmetric API, the optional
+        // VHI rebuild trigger, and the NIS dual-write into Postgres. None of
+        // this is needed for dashboard freshness (the cache row + indexer above
+        // are), and all of it can comfortably run after the 200 OK has been
+        // sent back to Tekmetric. Refs TEKMETRIC_5K_SCALING_PLAN.md.
+        //
+        // Captured-by-value: `repairOrder`, `existingWO`, `payloadCustomerName`,
+        // `newOdometer`, `setFields` are all derived from the inbound payload
+        // and unchanged after this point — closing over them is safe.
         const needsVehicle = !!repairOrder.vehicleId && !(existingWO?.vin);
         const needsCustomer =
           !!repairOrder.customerId &&
           !(existingWO?.customerName && existingWO.customerName !== "Unknown Customer") &&
           !payloadCustomerName;
 
-        if (shop && (needsVehicle || needsCustomer)) {
-          const [vehicleResult, customerResult] = await Promise.allSettled([
-            needsVehicle ? getVehicle(repairOrder.vehicleId) : Promise.resolve(null),
-            needsCustomer ? getCustomer(repairOrder.customerId, shop?.shopId ? Number(shop.shopId) : undefined) : Promise.resolve(null),
-          ]);
+        __deps.defer(async () => {
+          // Enrich with vehicle + customer data if we're missing it. Fetches are independent and run
+          // in parallel; partial failures still preserve whatever data did come back.
+          if (shop && (needsVehicle || needsCustomer)) {
+            const [vehicleResult, customerResult] = await Promise.allSettled([
+              needsVehicle ? getVehicle(repairOrder.vehicleId) : Promise.resolve(null),
+              needsCustomer ? getCustomer(repairOrder.customerId, shop?.shopId ? Number(shop.shopId) : undefined) : Promise.resolve(null),
+            ]);
 
-          const enrichFields: any = {};
-          let enrichedVin: string | null = null;
-          let enrichedMileage: number | null = null;
+            const enrichFields: any = {};
+            let enrichedVin: string | null = null;
+            let enrichedMileage: number | null = null;
 
-          if (vehicleResult.status === 'fulfilled' && vehicleResult.value) {
-            const vehicle: any = vehicleResult.value;
-            if (vehicle.vin) {
-              enrichedVin = String(vehicle.vin).toUpperCase();
-              enrichFields.vin = enrichedVin;
+            if (vehicleResult.status === 'fulfilled' && vehicleResult.value) {
+              const vehicle: any = vehicleResult.value;
+              if (vehicle.vin) {
+                enrichedVin = String(vehicle.vin).toUpperCase();
+                enrichFields.vin = enrichedVin;
+              }
+              if (vehicle.year != null) enrichFields.vehicleYear = vehicle.year;
+              if (vehicle.make) enrichFields.vehicleMake = vehicle.make;
+              if (vehicle.model) enrichFields.vehicleModel = vehicle.model;
+              if (vehicle.engine) enrichFields.vehicleEngine = vehicle.engine;
+              const vehicleMileage = vehicle.mileageIn || vehicle.mileageOut;
+              if (!enrichFields.odometer && !setFields.odometer && vehicleMileage > 0) {
+                enrichFields.odometer = vehicleMileage;
+                enrichedMileage = vehicleMileage;
+              }
+            } else if (vehicleResult.status === 'rejected') {
+              console.error(`[Tekmetric Webhook] Vehicle enrichment failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, (vehicleResult.reason as any)?.message);
             }
-            if (vehicle.year != null) enrichFields.vehicleYear = vehicle.year;
-            if (vehicle.make) enrichFields.vehicleMake = vehicle.make;
-            if (vehicle.model) enrichFields.vehicleModel = vehicle.model;
-            if (vehicle.engine) enrichFields.vehicleEngine = vehicle.engine;
-            const vehicleMileage = vehicle.mileageIn || vehicle.mileageOut;
-            if (!enrichFields.odometer && !setFields.odometer && vehicleMileage > 0) {
-              enrichFields.odometer = vehicleMileage;
-              enrichedMileage = vehicleMileage;
+
+            if (customerResult.status === 'fulfilled' && customerResult.value) {
+              const customer: any = customerResult.value;
+              const fullName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
+              if (fullName) enrichFields.customerName = fullName;
+            } else if (customerResult.status === 'rejected') {
+              console.error(`[Tekmetric Webhook] Customer enrichment failed for RO #${roNumber}, customerId=${repairOrder.customerId}:`, (customerResult.reason as any)?.message);
             }
-          } else if (vehicleResult.status === 'rejected') {
-            console.error(`[Tekmetric Webhook] Vehicle enrichment failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, (vehicleResult.reason as any)?.message);
-          }
 
-          if (customerResult.status === 'fulfilled' && customerResult.value) {
-            const customer: any = customerResult.value;
-            const fullName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
-            if (fullName) enrichFields.customerName = fullName;
-          } else if (customerResult.status === 'rejected') {
-            console.error(`[Tekmetric Webhook] Customer enrichment failed for RO #${roNumber}, customerId=${repairOrder.customerId}:`, (customerResult.reason as any)?.message);
-          }
+            if (Object.keys(enrichFields).length > 0) {
+              enrichFields.updatedAt = new Date();
+              await db.collection("tekmetric_work_orders").updateOne(
+                { workOrderId: String(roId) },
+                { $set: enrichFields }
+              );
+              console.log(`[Tekmetric Webhook] Enriched RO #${roNumber} with: ${Object.keys(enrichFields).filter(k => k !== 'updatedAt').join(', ')}`);
+            }
 
-          if (Object.keys(enrichFields).length > 0) {
-            enrichFields.updatedAt = new Date();
-            await db.collection("tekmetric_work_orders").updateOne(
-              { workOrderId: String(roId) },
-              { $set: enrichFields }
-            );
-            console.log(`[Tekmetric Webhook] Enriched RO #${roNumber} with: ${Object.keys(enrichFields).filter(k => k !== 'updatedAt').join(', ')}`);
-          }
-
-          // Trigger VHI build once we have vin + mileage (from payload, existing row, or enrichment)
-          const finalVin = enrichedVin || existingWO?.vin;
-          const finalMileage =
-            (newOdometer && newOdometer > 0 ? newOdometer : null) ||
-            enrichedMileage ||
-            (existingWO?.odometer || null);
-          if (finalVin && finalMileage && finalMileage > 0) {
+            // Trigger VHI build once we have vin + mileage (from payload, existing row, or enrichment)
+            const finalVin = enrichedVin || existingWO?.vin;
+            const finalMileage =
+              (newOdometer && newOdometer > 0 ? newOdometer : null) ||
+              enrichedMileage ||
+              (existingWO?.odometer || null);
+            if (finalVin && finalMileage && finalMileage > 0) {
+              triggerVhiOnWorkOrderCreate(db, {
+                vin: finalVin,
+                shopId: Number(shop.shopId),
+                provider: "tekmetric",
+                roNumber: String(roNumber),
+                mileage: finalMileage,
+                source: "webhook",
+              }).catch((err: any) =>
+                console.error(`[Tekmetric Webhook] VHI create-build failed for VIN ${finalVin}:`, err.message)
+              );
+            }
+          } else if (existingWO?.vin && newOdometer && newOdometer > 0 && shop) {
+            // Existing row already has vehicle info; just trigger VHI on mileage update
             triggerVhiOnWorkOrderCreate(db, {
-              vin: finalVin,
+              vin: existingWO.vin,
               shopId: Number(shop.shopId),
               provider: "tekmetric",
               roNumber: String(roNumber),
-              mileage: finalMileage,
+              mileage: newOdometer,
               source: "webhook",
             }).catch((err: any) =>
-              console.error(`[Tekmetric Webhook] VHI create-build failed for VIN ${finalVin}:`, err.message)
+              console.error(`[Tekmetric Webhook] VHI create-build on update failed for VIN ${existingWO.vin}:`, err.message)
             );
           }
-        } else if (existingWO?.vin && newOdometer && newOdometer > 0 && shop) {
-          // Existing row already has vehicle info; just trigger VHI on mileage update
-          triggerVhiOnWorkOrderCreate(db, {
-            vin: existingWO.vin,
-            shopId: Number(shop.shopId),
-            provider: "tekmetric",
-            roNumber: String(roNumber),
-            mileage: newOdometer,
-            source: "webhook",
-          }).catch((err: any) =>
-            console.error(`[Tekmetric Webhook] VHI create-build on update failed for VIN ${existingWO.vin}:`, err.message)
+
+          // Phase B: dual-write to normalized tables. Re-read the cache row so any
+          // enrichment we just performed (vin/year/make/model) is reflected.
+          const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
+            { workOrderId: String(roId) }
           );
-        }
-
-        if (!shop) {
-          console.warn(`[Tekmetric Webhook] No MOS shop found for tekmetric.shopId=${tekmetricShopId}; row was upserted with shopId=unknown`);
-        }
-
-        // Phase B: dual-write to normalized tables. Re-read the cache row so any
-        // enrichment we just performed (vin/year/make/model) is reflected.
-        const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
-          { workOrderId: String(roId) }
-        );
-        await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, refreshedCached);
+          await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, refreshedCached);
+        });
       }
       
       try {
@@ -662,17 +717,24 @@ export async function POST(req: NextRequest) {
 
         // Phase C: dual-write inspections through NIS so normalized tables
         // pick up the freshly-fetched DVI data without waiting for polling.
+        // Step 3 of task #376: deferred — same rationale as the terminal-RO
+        // NIS above. The cache row already has the inspections array set
+        // inline by the updateMany above, so dashboards stay fresh.
         if (inspectionsSet && tekShopIdForInsp && cached?.data) {
           const enrichedRo = { ...cached.data, inspections: inspectionsSet };
-          const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
-            { workOrderId: String(repairOrderId) }
-          );
-          await runWebhookNormalizedIngestion(
-            db,
-            Number(tekShopIdForInsp),
-            enrichedRo,
-            refreshedCached
-          );
+          const tekShopForNis = Number(tekShopIdForInsp);
+          const roIdForNis = repairOrderId;
+          __deps.defer(async () => {
+            const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
+              { workOrderId: String(roIdForNis) }
+            );
+            await runWebhookNormalizedIngestion(
+              db,
+              tekShopForNis,
+              enrichedRo,
+              refreshedCached
+            );
+          });
         }
 
         // Invalidate plan cache since DVI results affect recommendations
@@ -708,20 +770,30 @@ export async function POST(req: NextRequest) {
       }
     }
     
+    // Step 2 of task #376: persist the inline-handler wall-clock duration so
+    // the platform-admin webhook-status page can compute p50/p95/p99 latency
+    // without grepping logs. Captured *before* the insert itself so we measure
+    // what Tekmetric experienced waiting on us, not the cost of writing the
+    // log row. The dashboard_updates upsert below is a tiny bookkeeping write
+    // and is intentionally excluded too — adding it would inflate the metric
+    // without changing what callers feel.
+    const handlerDurationMs = Date.now() - startTime;
+
     await db.collection("tekmetric_webhook_logs").insertOne({
       eventType,
       data,
       rawBody: body,
       headers: capturedHeaders, // Step 3b: introspectable header capture
-      receivedAt: new Date()
+      receivedAt: new Date(),
+      handlerDurationMs,
     });
-    
+
     await db.collection("dashboard_updates").updateOne(
       { _id: "lastUpdate" } as any,
       { $set: { timestamp: Date.now() } },
       { upsert: true }
     );
-    
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("[Tekmetric Webhook] Error:", error);
