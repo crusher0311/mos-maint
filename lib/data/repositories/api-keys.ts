@@ -263,9 +263,17 @@ export async function countApiUsageInWindow(
   windowStart: Date,
 ): Promise<number> {
   const pg = getPg();
+  // postgres-js (the driver under drizzle here) rejects a JS Date passed as
+  // a parameter to raw SQL with "The 'string' argument must be of type
+  // string or an instance of Buffer or ArrayBuffer. Received an instance of
+  // Date". This call site failed silently before the W3 cutover because the
+  // PG api_keys table was empty (every partner request 401'd before reaching
+  // the rate-limit check). Once partner keys were backfilled, every partner
+  // request started 500'ing here. Serialize the Date to an ISO timestamp
+  // string before binding so postgres-js accepts it.
   const rows = (await pg.execute(dsql`
     SELECT COUNT(*)::bigint AS c FROM external_api_usage_logs
-    WHERE key_hash = ${keyHash} AND timestamp >= ${windowStart}
+    WHERE key_hash = ${keyHash} AND timestamp >= ${windowStart.toISOString()}
   `)) as unknown as Array<{ c: string | number }>;
   return Number(rows[0]?.c ?? 0);
 }

@@ -720,9 +720,14 @@ export async function setShopFeaturesEnabled(
 ): Promise<void> {
   const db = getDb();
   const now = new Date();
+  // postgres-js rejects JS Date instances when bound as parameters in raw
+  // SQL — see the comment in lib/data/repositories/api-keys.ts
+  // (countApiUsageInWindow). Serialize to an ISO timestamp string for the
+  // raw UPDATE; the typed insert below uses drizzle's column metadata which
+  // already handles Date correctly.
   await db.execute(sql`
     UPDATE shop_features
-    SET enabled = false, updated_at = ${now}
+    SET enabled = false, updated_at = ${now.toISOString()}
     WHERE shop_id = ${shopId} AND feature_key <> ALL(${featureIds}::text[])
   `);
   for (const fk of featureIds) {
