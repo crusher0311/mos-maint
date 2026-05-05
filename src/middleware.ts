@@ -54,6 +54,14 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/api/external/")) return true;
   if (pathname.startsWith("/api/docs")) return true;
   if (pathname.startsWith("/report/")) return true;
+  // The public Vehicle Health Report page at /report/[vin] fetches its data
+  // from /api/report/[vin]?token=… The page itself is whitelisted above, but
+  // without also whitelisting the API the customer's browser would be
+  // short-circuited to 401 by the no-cookie check below — the route handler
+  // (which validates the share token via HMAC) never runs. The handler still
+  // requires a valid token; missing/invalid/expired tokens return 403 from
+  // the route, not from middleware.
+  if (pathname.startsWith("/api/report/")) return true;
   if (pathname.startsWith("/_next/")) return true;
   if (
     pathname === "/favicon.ico" ||
