@@ -184,19 +184,28 @@ async function publishItem(accessToken, target = 'default') {
   return data;
 }
 
-// Try the authenticated Chrome Web Store API to get the current live version.
-// Returns the crxVersion string, or null if the API is unavailable / disabled
-// for this Cloud project (the legacy upload+publish endpoints work without
-// the chromewebstore.googleapis.com API being enabled, but the GET items/{id}
-// endpoint does not — enabling it for the project that owns CWS_CLIENT_ID
-// makes this path the source of truth).
+// Try the authenticated Chrome Web Store API to get the current submitted
+// version. Returns the crxVersion string, or null if the API is unavailable
+// / disabled for this Cloud project (the legacy upload+publish endpoints
+// work without the chromewebstore.googleapis.com API being enabled, but
+// the GET items/{id} endpoint does not — enabling it for the project that
+// owns CWS_CLIENT_ID makes this path the source of truth).
+//
+// We use ?projection=DRAFT (NOT PUBLISHED) for two reasons:
+// 1. Google's API explicitly rejects ?projection=PUBLISHED for this item
+//    with a 400 "Please append ?projection=DRAFT to your request." (See
+//    debug-cws-publish.js — projection=PUBLISHED returns badRequest while
+//    projection=DRAFT returns 200 with the full item record.)
+// 2. DRAFT reflects the LATEST SUBMITTED version (what we should compare
+//    against to decide whether to upload again), which is strictly more
+//    useful for the auto-publisher than the lagging end-user-visible
+//    version. If we just submitted v1.27.1 and Google is reviewing it,
+//    DRAFT shows 1.27.1 — so the wrapper short-circuits as a no-op
+//    instead of trying to re-upload and getting ITEM_NOT_UPDATABLE.
 async function fetchLivePublishedVersionAuth(accessToken) {
   const { CWS_ITEM_ID } = getEnvSecrets();
-  // projection=PUBLISHED returns what users actually have installed, which is
-  // the source of truth we want to compare against (DRAFT can be ahead if a
-  // previous upload is still in review and has not gone live yet).
   const res = await fetch(
-    `https://www.googleapis.com/chromewebstore/v1.1/items/${CWS_ITEM_ID}?projection=PUBLISHED`,
+    `https://www.googleapis.com/chromewebstore/v1.1/items/${CWS_ITEM_ID}?projection=DRAFT`,
     {
       method: 'GET',
       headers: {
