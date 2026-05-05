@@ -389,9 +389,22 @@ export async function getRepairOrder(roId: number, shopId?: number): Promise<Tek
 
 export async function getJobs(
   repairOrderId: number,
-  shopId?: number
+  shopId: number
 ): Promise<PaginatedResponse<TekmetricJob>> {
-  return tekmetricRequest<PaginatedResponse<TekmetricJob>>(`/jobs?repairOrder=${repairOrderId}`, {}, shopId);
+  // Tekmetric's `/jobs` endpoint requires `shop` as a query parameter (not
+  // just a header) — see how `getJobsByShopWindow` in api.ts builds the URL.
+  // The previous version emitted `/jobs?repairOrder=${id}` with no `shop`
+  // param, which Tekmetric rejected with HTTP 400 ("Required request
+  // parameter 'shop' for method parameter type long is not present"). Every
+  // such failure was filling Render logs with `[Tekmetric Job Index] Error
+  // indexing jobs for WO …` lines and silently breaking job-index population
+  // from the incremental sync. Use `repairOrderId` (with the `Id` suffix) to
+  // match the spelling the rest of the codebase uses against Tekmetric.
+  return tekmetricRequest<PaginatedResponse<TekmetricJob>>(
+    `/jobs?shop=${shopId}&repairOrderId=${repairOrderId}`,
+    {},
+    shopId,
+  );
 }
 
 export async function getCannedJobs(

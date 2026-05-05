@@ -148,7 +148,12 @@ export async function indexTekmetricWorkOrderJobs(
     }
     
     if (jobs.length === 0) {
-      const jobsResponse = await getJobs(tekmetricShopId, { repairOrderId: workOrderId, size: 100 });
+      // `getJobs(repairOrderId, shopId)` — the previous call site had the
+      // arguments swapped (and passed an options object that getJobs doesn't
+      // accept), which sent the Tekmetric shop id as the `repairOrder` query
+      // param and produced a 400 on every incremental sync RO. See the
+      // comment on `getJobs` in lib/integrations/tekmetric/client.ts.
+      const jobsResponse = await getJobs(workOrderId, tekmetricShopId);
       jobs = (jobsResponse.content || []) as TekmetricJobWithDetails[];
     }
 
