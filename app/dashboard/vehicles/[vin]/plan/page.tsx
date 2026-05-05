@@ -54,6 +54,7 @@ import {
   parseServiceAction,
   type ServiceAction,
 } from "@/lib/service-keys";
+import { getShopDviBestPracticeMap } from "@/lib/dvi-best-practices";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -606,6 +607,7 @@ type TriagedItem = {
   intervalMonthsNormal?: number | null;
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
+  bestPracticeBlurb?: string | null;
 };
 
 type ShopIntervalOverride = {
@@ -665,7 +667,7 @@ function triage({
   shopServiceHistory?: ShopServiceHistory[];
   currentMiles: number | null;
   today?: Date;
-  dviFindings: Array<{ name?: string; status?: string | number; source?: string }>;
+  dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
   declinedServices?: DeclinedServiceEntry[];
   soonMiles?: number;
@@ -753,9 +755,18 @@ function triage({
     }
   }
 
-  // DVI bumps - track which items we've seen (from AutoFlow or AutoVitals)
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric" }>();
-  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric" }> = [];
+  // DVI bumps - track which items we've seen (from AutoFlow or AutoVitals).
+  // Merge: red beats yellow; pick the longer non-empty note on ties or when
+  // the higher-priority status arrives without a note.
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }>();
+  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }> = [];
+  const pickDviNote = (a?: string | null, b?: string | null): string | null => {
+    const aT = (a || "").trim();
+    const bT = (b || "").trim();
+    if (!aT) return bT || null;
+    if (!bT) return aT || null;
+    return bT.length > aT.length ? bT : aT;
+  };
   for (const it of dviFindings || []) {
     const rawName = String(it.name || "");
     if (!rawName) continue;
@@ -764,11 +775,18 @@ function triage({
     const dviSource = (it.source === "autovitals" ? "autovitals" : it.source === "tekmetric" ? "tekmetric" : "autoflow") as "autoflow" | "autovitals" | "tekmetric";
     const mappedStatus = s === "0" ? "red" : s === "1" ? "yellow" : null;
     if (!mappedStatus) continue;
+    const notes = it.notes ? String(it.notes).trim() || null : null;
     if (key) {
-      if (mappedStatus === "red") dviMap.set(key, { status: "red", name: rawName, dviSource });
-      else if (dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: rawName, dviSource });
+      const existing = dviMap.get(key);
+      if (mappedStatus === "red") {
+        const mergedNotes = existing ? pickDviNote(existing.notes, notes) : notes;
+        dviMap.set(key, { status: "red", name: rawName, dviSource, notes: mergedNotes });
+      } else if (!existing || existing.status !== "red") {
+        const mergedNotes = existing ? pickDviNote(existing.notes, notes) : notes;
+        dviMap.set(key, { status: "yellow", name: rawName, dviSource, notes: mergedNotes });
+      }
     } else {
-      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource });
+      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource, notes });
     }
   }
 
@@ -1039,7 +1057,7 @@ function triage({
       usingShopInterval,
       matchedDeferred, // Attach matching deferred work for "+ deferred" button
       action: action ?? null,
-      notes: o.notes ?? null,
+      notes: dviInfo?.notes ?? o.notes ?? null,
       // The recommended-default rationale is surfaced via a dedicated badge
       // in the renderer, so we deliberately do not duplicate it into `reason`
       // (which would render again as the gray italic pill).
@@ -1101,7 +1119,9 @@ function triage({
     usedServiceKeys.add(SAFETY_CHECK_OIL_LEVEL_KEY);
   }
 
-  // Add standalone DVI findings (red/yellow items not matched to OEM)
+  // Add standalone DVI findings (red/yellow items not matched to OEM).
+  // The per-shop blurb is applied post-triage so admin edits surface on
+  // the next page load without busting the plan cache.
   for (const [dviKey, dviInfo] of dviMap) {
     if (usedDviKeys.has(dviKey)) continue; // already matched to OEM item
     triaged.push({
@@ -1119,6 +1139,7 @@ function triage({
       bump: dviInfo.status,
       source: "dvi",
       dviSource: dviInfo.dviSource,
+      notes: dviInfo.notes ?? null,
     });
   }
 
@@ -1139,6 +1160,7 @@ function triage({
       bump: unmapped.status,
       source: "dvi",
       dviSource: unmapped.dviSource,
+      notes: unmapped.notes ?? null,
     });
   }
 
@@ -1836,28 +1858,28 @@ async function PlanContent({ params, searchParams }: PageProps) {
         }))
       : [];
 
-  // AutoFlow DVI findings
-  const autoflowDviFindings: Array<{ name?: string; status?: string | number; source?: string }> =
+  const autoflowDviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }> =
     (dvi as any).ok && Array.isArray((dvi as any).categories)
       ? (dvi as any).categories.flatMap((c: any) =>
-          Array.isArray(c.items) ? c.items.map((it: any) => ({ name: it.name, status: it.status, source: "autoflow" })) : []
+          Array.isArray(c.items) ? c.items.map((it: any) => ({ name: it.name, status: it.status, source: "autoflow", notes: it.notes ?? null })) : []
         )
       : [];
 
-  // AutoVitals DVI findings (already fetched in parallel above)
-  let autoVitalsDviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [];
+  // AutoVitals DVI findings (already fetched in parallel above).
+  let autoVitalsDviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }> = [];
   if ((avInspectionResult as any).ok && (avInspectionResult as any).items) {
     autoVitalsDviFindings = (avInspectionResult as any).items
       .filter((item: any) => item.status === "red" || item.status === "yellow")
       .map((item: any) => ({
         name: item.name,
         status: item.status === "red" ? "0" : "1",
-        source: "autovitals"
+        source: "autovitals",
+        notes: item.notes || item.techNotes || null,
       }));
     console.log(`[Plan Debug] AutoVitals DVI items: ${autoVitalsDviFindings.length}`);
   }
 
-  let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string; finding?: string }> = [];
+  let tekmetricDviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }> = [];
   if (activeIntegration === "tekmetric" && latestRepairOrderId) {
     try {
       const cachedWO = await db.collection("tekmetric_work_orders").findOne({
@@ -1870,18 +1892,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
           for (const task of group.tasks || []) {
             const code = task.inspectionRating?.code;
             if (code === "RQRSATTN") {
-              tekmetricDviFindings.push({ name: task.name, status: "0", source: "tekmetric", finding: task.finding });
+              tekmetricDviFindings.push({ name: task.name, status: "0", source: "tekmetric", notes: task.finding ?? null });
             } else if (code === "MAYRQRATTN") {
-              tekmetricDviFindings.push({ name: task.name, status: "1", source: "tekmetric", finding: task.finding });
+              tekmetricDviFindings.push({ name: task.name, status: "1", source: "tekmetric", notes: task.finding ?? null });
             }
           }
         }
         if (tekmetricDviFindings.length === 0 && inspection.items) {
           for (const item of inspection.items) {
             if (item.status === "bad") {
-              tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric" });
+              tekmetricDviFindings.push({ name: item.name, status: "0", source: "tekmetric", notes: item.note ?? item.notes ?? null });
             } else if (item.status === "marginal") {
-              tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric" });
+              tekmetricDviFindings.push({ name: item.name, status: "1", source: "tekmetric", notes: item.note ?? item.notes ?? null });
             }
           }
         }
@@ -1894,7 +1916,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     }
   }
 
-  const dviFindings: Array<{ name?: string; status?: string | number; source?: string }> = [
+  const dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }> = [
     ...autoflowDviFindings,
     ...autoVitalsDviFindings,
     ...tekmetricDviFindings,
@@ -1979,6 +2001,15 @@ async function PlanContent({ params, searchParams }: PageProps) {
   } catch (err) {
     console.warn(`[Plan] engine-risk classification failed for ${vin}:`, err);
     engineRisk = null;
+  }
+
+  // Load shop blurbs once; reapplied post-triage on both fresh and cached
+  // paths so admin edits surface without busting the plan cache.
+  let shopDviBestPracticeMap = new Map<string, string>();
+  try {
+    shopDviBestPracticeMap = await getShopDviBestPracticeMap(Number(shopId), db);
+  } catch (err) {
+    console.warn(`[Plan] Failed to load DVI best-practice blurbs for shop ${shopId}:`, err);
   }
 
   // Use cached buckets if available, otherwise build from triage
@@ -2075,6 +2106,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
     console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
     console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
+  }
+
+  // Attach per-shop blurbs to DVI Finding tiles (covers fresh + cached
+  // paths). OEM rows are excluded so blurbs never collide with row notes.
+  if (shopDviBestPracticeMap.size > 0) {
+    const applyBlurb = (item: TriagedItem) => {
+      if (item.category === "DVI Finding" && item.serviceKey) {
+        const blurb = shopDviBestPracticeMap.get(item.serviceKey);
+        if (blurb) item.bestPracticeBlurb = blurb;
+      }
+    };
+    buckets.overdue.forEach(applyBlurb);
+    buckets.dueSoon.forEach(applyBlurb);
+    buckets.upcoming.forEach(applyBlurb);
   }
 
   const COMPLIMENTARY_KEYS = new Set([
@@ -2445,6 +2490,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
+                      {t.category === "DVI Finding" && t.bestPracticeBlurb && t.bestPracticeBlurb.trim() && (
+                        <div className="text-xs text-neutral-700 mt-0.5 leading-snug">{t.bestPracticeBlurb.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-red-600 text-white px-2 py-0.5">OVERDUE</span>
@@ -2687,6 +2735,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
+                      {t.category === "DVI Finding" && t.bestPracticeBlurb && t.bestPracticeBlurb.trim() && (
+                        <div className="text-xs text-neutral-700 mt-0.5 leading-snug">{t.bestPracticeBlurb.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 border border-blue-300 px-2 py-0.5">
@@ -2774,6 +2825,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="font-medium">{t.title}</div>
                   {t.notes && t.notes.trim() && (
                     <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                  )}
+                  {t.category === "DVI Finding" && t.bestPracticeBlurb && t.bestPracticeBlurb.trim() && (
+                    <div className="text-xs text-neutral-700 mt-0.5 leading-snug">{t.bestPracticeBlurb.trim()}</div>
                   )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
@@ -2973,6 +3027,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
+                      {t.category === "DVI Finding" && t.bestPracticeBlurb && t.bestPracticeBlurb.trim() && (
+                        <div className="text-xs text-neutral-700 mt-0.5 leading-snug">{t.bestPracticeBlurb.trim()}</div>
+                      )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
                         <span className="rounded-full bg-blue-500 text-white px-2 py-0.5">COMPLIMENTARY</span>
@@ -3050,6 +3107,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <div className="font-medium">{t.title}</div>
                   {t.notes && t.notes.trim() && (
                     <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
+                  )}
+                  {t.category === "DVI Finding" && t.bestPracticeBlurb && t.bestPracticeBlurb.trim() && (
+                    <div className="text-xs text-neutral-700 mt-0.5 leading-snug">{t.bestPracticeBlurb.trim()}</div>
                   )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}

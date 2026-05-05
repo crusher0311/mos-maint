@@ -293,6 +293,7 @@ export interface TriagedItem {
   intervalMonthsNormal?: number | null;
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
+  bestPracticeBlurb?: string | null;
 }
 
 export interface Buckets {
@@ -320,13 +321,14 @@ export function triage({
   engineRisk = null,
   oilDutyPreference = "severe",
   distanceUnit = "miles",
+  dviBestPractices = null,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
   shopServiceHistory?: ShopServiceHistory[];
   currentMiles: number | null;
   today?: Date;
-  dviFindings: Array<{ name?: string; status?: string | number; source?: string }>;
+  dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
   declinedServices?: DeclinedServiceEntry[];
   soonMiles?: number;
@@ -349,6 +351,7 @@ export function triage({
    * extension/partner-API consumers all share one unit.
    */
   distanceUnit?: DistanceUnit;
+  dviBestPractices?: Map<string, string> | Record<string, string> | null;
 }): Buckets {
   const isMetricShop = distanceUnit === "kilometers";
   const oemToShopMiles = (mi: number | null | undefined): number | null => {
@@ -405,8 +408,17 @@ export function triage({
     }
   }
 
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric" }>();
-  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric" }> = [];
+  // Merge: red beats yellow; pick the longer non-empty note on ties or
+  // when the higher-priority status arrives without a note.
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }>();
+  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }> = [];
+  const pickNote = (a?: string | null, b?: string | null): string | null => {
+    const aT = (a || "").trim();
+    const bT = (b || "").trim();
+    if (!aT) return bT || null;
+    if (!bT) return aT || null;
+    return bT.length > aT.length ? bT : aT;
+  };
   for (const it of dviFindings || []) {
     const rawName = String(it.name || "");
     if (!rawName) continue;
@@ -415,13 +427,40 @@ export function triage({
     const dviSource = (it.source === "autovitals" ? "autovitals" : it.source === "tekmetric" ? "tekmetric" : "autoflow") as "autoflow" | "autovitals" | "tekmetric";
     const mappedStatus = s === "0" ? "red" : s === "1" ? "yellow" : null;
     if (!mappedStatus) continue;
+    const notes = (it.notes ?? null) ? String(it.notes).trim() || null : null;
     if (key) {
-      if (mappedStatus === "red") dviMap.set(key, { status: "red", name: rawName, dviSource });
-      else if (dviMap.get(key)?.status !== "red") dviMap.set(key, { status: "yellow", name: rawName, dviSource });
+      const existing = dviMap.get(key);
+      if (mappedStatus === "red") {
+        const mergedNotes = existing ? pickNote(existing.notes, notes) : notes;
+        dviMap.set(key, { status: "red", name: rawName, dviSource, notes: mergedNotes });
+      } else if (!existing || existing.status !== "red") {
+        const mergedNotes = existing ? pickNote(existing.notes, notes) : notes;
+        dviMap.set(key, { status: "yellow", name: rawName, dviSource, notes: mergedNotes });
+      }
     } else {
-      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource });
+      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource, notes });
     }
   }
+
+  // Normalize the optional best-practice lookup so callers can pass either
+  // a Map or a plain object. Stored values are already capped to 140 chars
+  // at write time; we still defensively trim/cap here.
+  const blurbLookup: Map<string, string> | null = (() => {
+    if (!dviBestPractices) return null;
+    const m = new Map<string, string>();
+    if (dviBestPractices instanceof Map) {
+      for (const [k, v] of dviBestPractices) {
+        const t = String(v || "").trim();
+        if (k && t) m.set(k, t.slice(0, 140));
+      }
+    } else {
+      for (const [k, v] of Object.entries(dviBestPractices)) {
+        const t = String(v || "").trim();
+        if (k && t) m.set(k, t.slice(0, 140));
+      }
+    }
+    return m.size > 0 ? m : null;
+  })();
 
   const declinedMap = new Map<string, DeclinedServiceEntry>();
   for (const d of declinedServices || []) {
@@ -699,7 +738,7 @@ export function triage({
       usingShopInterval,
       matchedDeferred,
       action: action ?? null,
-      notes: o.notes ?? null,
+      notes: dviInfo?.notes ?? o.notes ?? null,
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
       inspectOnly: inspectOnly || undefined,
@@ -789,6 +828,8 @@ export function triage({
       bump: dviInfo.status,
       source: "dvi",
       dviSource: dviInfo.dviSource,
+      notes: dviInfo.notes ?? null,
+      bestPracticeBlurb: blurbLookup?.get(dviKey) ?? null,
     });
   }
 
@@ -809,6 +850,9 @@ export function triage({
       bump: unmapped.status,
       source: "dvi",
       dviSource: unmapped.dviSource,
+      // Unmapped findings have no canonical serviceKey, so no blurb match.
+      notes: unmapped.notes ?? null,
+      bestPracticeBlurb: null,
     });
   }
 

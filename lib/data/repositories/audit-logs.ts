@@ -31,7 +31,8 @@ export type AuditAction =
   | "api_key_view"
   | "data_export"
   | "build_ro_from_vhi"
-  | "billing_settings_change";
+  | "billing_settings_change"
+  | "dvi_best_practice_change";
 
 export interface AdminAuditLogEntry {
   action: AuditAction;
