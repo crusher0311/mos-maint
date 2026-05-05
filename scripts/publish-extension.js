@@ -103,7 +103,26 @@ async function uploadToCWS(accessToken) {
     }
   );
 
-  const data = await res.json();
+  // Parse defensively — a non-2xx error response from googleapis returns a
+  // JSON error envelope without uploadState/itemError, so we MUST check the
+  // HTTP status before trusting the body shape. Skipping this check is what
+  // made earlier "successful" publishes silently no-op (the API was disabled
+  // for the Cloud project and every PUT returned 403, but the legacy check
+  // below only fires when uploadState === 'FAILURE').
+  const bodyText = await res.text();
+  let data;
+  try {
+    data = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    data = { _rawBody: bodyText };
+  }
+
+  if (!res.ok) {
+    const apiMsg = data?.error?.message || bodyText || `HTTP ${res.status}`;
+    const err = new Error(`Upload HTTP ${res.status}: ${apiMsg}`);
+    err.cwsResponse = data;
+    throw err;
+  }
 
   if (data.uploadState === 'FAILURE') {
     const err = new Error(`Upload failed: ${JSON.stringify(data.itemError || data)}`);
@@ -133,7 +152,24 @@ async function publishItem(accessToken, target = 'default') {
     }
   );
 
-  const data = await res.json();
+  // Same defensive parsing as uploadToCWS — a 4xx/5xx from googleapis
+  // returns an `{ error: {...} }` envelope with no `status` field, which
+  // would slip past the legacy `data.status && ...` guard below and
+  // incorrectly print "Publish status: OK".
+  const bodyText = await res.text();
+  let data;
+  try {
+    data = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    data = { _rawBody: bodyText };
+  }
+
+  if (!res.ok) {
+    const apiMsg = data?.error?.message || bodyText || `HTTP ${res.status}`;
+    const err = new Error(`Publish HTTP ${res.status}: ${apiMsg}`);
+    err.cwsResponse = data;
+    throw err;
+  }
 
   if (data.status && data.status[0] !== 'OK' && data.status[0] !== 'PUBLISHED_WITH_FRICTION_WARNING') {
     const err = new Error(`Publish failed: ${JSON.stringify(data)}`);
