@@ -1811,7 +1811,7 @@ function showBuildRoFromVhiModal(preview, context) {
       action: 'APPLY_BUILD_RO_FROM_VHI',
       context: context,
       selected: selected,
-      markerPrefix: preview.markerPrefix || '[ai-suggested from VHI',
+      markerPrefix: preview.markerPrefix || '[VHI]',
     }, () => {});
   });
 

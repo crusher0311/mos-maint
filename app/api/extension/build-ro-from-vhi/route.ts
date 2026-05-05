@@ -18,10 +18,10 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export const MARKER_PREFIX = "[ai-suggested from VHI";
+export const MARKER_PREFIX = "[VHI]";
 
-function markerTagFor(serviceKey: string) {
-  return `${MARKER_PREFIX}:${serviceKey}]`;
+function markerTagFor(_serviceKey: string) {
+  return MARKER_PREFIX;
 }
 
 interface ProposedItem {
@@ -101,7 +101,8 @@ function buildProposedItem(
   }
 
   if (item.last?.date) {
-    let lastStr = ` Last: ${item.last.date}`;
+    const lastDateStr = String(item.last.date).split("T")[0];
+    let lastStr = ` Last: ${lastDateStr}`;
     if (item.last.miles) lastStr += ` at ${Number(item.last.miles).toLocaleString()} ${distLabel}`;
     lastStr += ".";
     concernText += lastStr;

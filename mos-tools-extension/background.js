@@ -546,7 +546,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender?.tab?.id || currentSmsContext?._tabId;
     const ctx = message.context || currentSmsContext;
     const selected = message.selected || [];
-    const markerPrefix = message.markerPrefix || "[ai-suggested from VHI";
+    const markerPrefix = message.markerPrefix || "[VHI]";
 
     if (!ctx?.roId || selected.length === 0) {
       sendResponse({ success: false, error: "Missing context or no selection" });
@@ -2434,18 +2434,20 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   }
 
   // Build a regex from the configured marker prefix so this stays in sync
-  // with the server's MARKER_PREFIX (`[ai-suggested from VHI`).
-  const prefix = markerPrefix || "[ai-suggested from VHI";
+  // with the server's MARKER_PREFIX (`[VHI]`). The marker no longer embeds
+  // the serviceKey, so we identify already-stamped items by the displayName
+  // that follows the marker (e.g. `[VHI] Engine Oil — ...` → "Engine Oil").
+  const prefix = markerPrefix || "[VHI]";
   const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const markerRegex = new RegExp(`${escapedPrefix}:([^\\]]+)\\]`);
+  const markerRegex = new RegExp(`^${escapedPrefix}\\s+(.+?)(?:\\s+[—-]\\s|$)`);
 
   // 1. Fetch existing concerns + jobs to detect already-stamped items (idempotency)
-  let existingConcernTags = new Set();
-  let existingJobTags = new Set();
+  let existingConcernTitles = new Set();
+  let existingJobTitles = new Set();
 
   try {
     const concernsRes = await tekmetricFetchWithBackoff(
-      `${baseUrl}/api/repair-orders/${context.roId}/customer-concerns`,
+      `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
       {
         headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
       },
@@ -2455,9 +2457,9 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       const data = await concernsRes.json();
       const list = Array.isArray(data) ? data : (data?.data || []);
       for (const c of list) {
-        const text = c?.concern || "";
+        const text = (c?.concern || "").trim();
         const m = text.match(markerRegex);
-        if (m) existingConcernTags.add(m[1]);
+        if (m) existingConcernTitles.add(m[1].trim());
       }
     }
   } catch (err) {
@@ -2477,8 +2479,9 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       const estimate = estData?.data && estData?.type ? estData.data : estData;
       const jobs = (estimate?.jobs || []).filter(j => !j?.archived);
       for (const j of jobs) {
-        const m = (j?.name || "").match(markerRegex);
-        if (m) existingJobTags.add(m[1]);
+        const name = (j?.name || "").trim();
+        const m = name.match(markerRegex);
+        if (m) existingJobTitles.add(m[1].trim());
       }
     }
   } catch (err) {
@@ -2517,6 +2520,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   for (let i = 0; i < selected.length; i++) {
     const item = selected[i];
     const sk = item.serviceKey;
+    const titleKey = (item.title || "").trim();
 
     if (tabId) {
       chrome.tabs.sendMessage(tabId, {
@@ -2538,7 +2542,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       error: null,
     };
 
-    if (existingConcernTags.has(sk) && existingJobTags.has(sk)) {
+    if (existingConcernTitles.has(titleKey) && existingJobTitles.has(titleKey)) {
       result.outcome = "skipped_existing";
       skipped++;
       results.push(result);
@@ -2546,10 +2550,10 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     }
 
     // Create concern (only if not already present)
-    if (!existingConcernTags.has(sk)) {
+    if (!existingConcernTitles.has(titleKey)) {
       try {
         const cRes = await tekmetricFetchWithBackoff(
-          `${baseUrl}/api/repair-orders/${context.roId}/customer-concerns`,
+          `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
           {
             method: "POST",
             headers: {
@@ -2563,7 +2567,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         );
         if (cRes.ok) {
           result.concernCreated = true;
-          existingConcernTags.add(sk);
+          existingConcernTitles.add(titleKey);
         } else {
           const txt = await cRes.text();
           result.outcome = "failed";
@@ -2582,7 +2586,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     }
 
     // Create job (only if not already present) — two-step
-    if (!existingJobTags.has(sk)) {
+    if (!existingJobTitles.has(titleKey)) {
       let emptyJob;
       try {
         const emptyRes = await tekmetricFetchWithBackoff(
@@ -2677,7 +2681,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         }
         result.jobCreated = true;
         result.jobId = newJobId;
-        existingJobTags.add(sk);
+        existingJobTitles.add(titleKey);
       } catch (err) {
         result.outcome = "failed";
         result.error = "populate job error: " + err.message;
