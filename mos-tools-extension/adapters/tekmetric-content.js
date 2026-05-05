@@ -1556,15 +1556,12 @@ function injectBuildRoFromVhiButton() {
   btn.id = 'mos-build-ro-vhi-btn';
   btn.title = 'Build estimate from VHI (overdue + due-soon services)';
   btn.type = 'button';
-  // Use a simple emoji-style SVG fallback so we don't require a new icon asset.
-  btn.innerHTML = `
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="9" y1="13" x2="15" y2="13"/>
-      <line x1="9" y1="17" x2="15" y2="17"/>
-      <line x1="12" y1="10" x2="12" y2="10.01"/>
-    </svg>`;
+  // Match sibling extension buttons (Pre-fill DVI, Enhance Notes) which all
+  // use 32x32 PNG icons via chrome.runtime.getURL. The aiVHI_icon.png asset
+  // is the AI-flavored sibling of VHI_icon.png and is registered in
+  // manifest.json's web_accessible_resources.
+  const buildVhiIconUrl = chrome.runtime.getURL('icons/aiVHI_icon.png');
+  btn.innerHTML = `<img src="${buildVhiIconUrl}" width="32" height="32" style="object-fit:contain;" />`;
 
   Object.assign(btn.style, {
     display: 'inline-flex',

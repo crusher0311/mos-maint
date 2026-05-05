@@ -1,5 +1,14 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.1 — 2026-05-05
+
+### Changed
+- **"Build estimate from VHI" button now uses the AI-flavored VHI icon
+  (`aiVHI_icon.png`)** so it matches the visual style of the sibling
+  Pre-fill DVI and Enhance Notes buttons in the Tekmetric RO toolbar.
+  Previous build (1.27.0) used a placeholder inline SVG that did not
+  match the rest of the icon row.
+
 ## 1.26.7 — 2026-04-29
 
 ### Added
