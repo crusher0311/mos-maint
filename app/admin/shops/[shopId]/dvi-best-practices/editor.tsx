@@ -4,7 +4,7 @@
 // toKeyFromName so blurbs match the keys DVI plan matching looks up.
 
 import { useState } from "react";
-import { DVI_BEST_PRACTICE_MAX_CHARS } from "@/lib/dvi-best-practices";
+import { DVI_BEST_PRACTICE_MAX_CHARS } from "@/lib/dvi-best-practices-types";
 
 interface Row {
   serviceKey: string;

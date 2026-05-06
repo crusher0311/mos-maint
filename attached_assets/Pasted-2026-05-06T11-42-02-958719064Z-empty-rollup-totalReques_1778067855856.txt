@@ -1,0 +1,550 @@
+2026-05-06T11:42:02.958719064Z   ✓ empty-rollup: totalRequests=0
+2026-05-06T11:42:02.958721654Z   ✓ empty-rollup: totalErrors=0
+2026-05-06T11:42:02.958723734Z   ✓ empty-rollup: overallErrorRate=0
+2026-05-06T11:42:02.958729304Z   ✓ empty-rollup: fullyFailingCount=0
+2026-05-06T11:42:02.958731414Z 
+2026-05-06T11:42:02.958733525Z All smoke checks passed.
+2026-05-06T11:42:03.117506171Z 
+2026-05-06T11:42:03.117530682Z > mos-maintenance-mvp@1.8.0 test:tekmetric-catchup
+2026-05-06T11:42:03.117534972Z > node tests/tekmetric-catchup.smoke.mjs
+2026-05-06T11:42:03.117537782Z 
+2026-05-06T11:42:03.166311426Z 
+2026-05-06T11:42:03.166327957Z clean completion buckets shop as 'completed'
+2026-05-06T11:42:03.167301519Z   ✓ outcome === 'completed'
+2026-05-06T11:42:03.167312599Z   ✓ fireChunk called exactly twice (no retries)
+2026-05-06T11:42:03.16736837Z   ✓ no stuck-retry log line
+2026-05-06T11:42:03.167435742Z 
+2026-05-06T11:42:03.167439342Z stuck → retry → recover buckets shop as 'recovered'
+2026-05-06T11:42:03.167813941Z   ✓ outcome === 'recovered'
+2026-05-06T11:42:03.167879622Z   ✓ fireChunk called exactly 3 times (chunk1 + chunk1-retry + chunk2)
+2026-05-06T11:42:03.167980004Z   ✓ exactly one [STUCK-RETRY] log entry
+2026-05-06T11:42:03.168086187Z   ✓ stuck-retry recovery log line emitted
+2026-05-06T11:42:03.168284141Z   ✓ completion log marks recovered via stuck retry
+2026-05-06T11:42:03.168315732Z 
+2026-05-06T11:42:03.168320192Z stuck → retry → stuck again buckets shop as 'needs-followup' (chunk # in reason)
+2026-05-06T11:42:03.168635729Z   ✓ outcome === 'needs-followup'
+2026-05-06T11:42:03.16864336Z   ✓ reason includes 'stuck on chunk 1 after one retry'
+2026-05-06T11:42:03.16866824Z   ✓ retry fires exactly ONCE for the stuck chunk (no infinite loop): fireChunk called exactly twice total
+2026-05-06T11:42:03.168722721Z   ✓ needs-followup log line emitted
+2026-05-06T11:42:03.168736092Z 
+2026-05-06T11:42:03.168739492Z looksBusy guard is bypassed on the stuck-retry pass
+2026-05-06T11:42:03.169071429Z   ✓ recovery still completed: outcome === 'recovered'
+2026-05-06T11:42:03.169083159Z   ✓ fireChunk called for the retry pass (not blocked by looksBusy)
+2026-05-06T11:42:03.169123631Z   ✓ no 'Prod looks busy' log line on the retry pass
+2026-05-06T11:42:03.169219293Z   ✓ retry pass logged with [STUCK-RETRY] marker
+2026-05-06T11:42:03.169222523Z 
+2026-05-06T11:42:03.169225213Z renderSummary: ONLY_SHOPS=… line appears only for needs-followup bucket
+2026-05-06T11:42:03.169427347Z   ✓ summary lists completed bucket with shopId 5
+2026-05-06T11:42:03.169433667Z   ✓ summary lists recovered bucket with shopId 7
+2026-05-06T11:42:03.169474428Z   ✓ summary lists needs-followup bucket count = 2
+2026-05-06T11:42:03.169488859Z   ✓ summary lists needs-followup reason for shop 9 (chunk 3 in reason)
+2026-05-06T11:42:03.16954495Z   ✓ summary renders the suggested ONLY_SHOPS=9,11 re-run line
+2026-05-06T11:42:03.169578211Z   ✓ no ONLY_SHOPS line when nothing is in needs-followup
+2026-05-06T11:42:03.169591591Z   ✓ no 'Suggested re-run command' header when nothing is in needs-followup
+2026-05-06T11:42:03.169623122Z   ✓ needs-followup header still shown with '(none)' tag
+2026-05-06T11:42:03.169674443Z   ✓ dry-run summary shows the dry-run bucket line
+2026-05-06T11:42:03.169681013Z   ✓ no ONLY_SHOPS line in dry-run summary
+2026-05-06T11:42:03.169689643Z 
+2026-05-06T11:42:03.169693344Z All tekmetric-catchup smoke checks passed.
+2026-05-06T11:42:03.300095002Z 
+2026-05-06T11:42:03.300122383Z > mos-maintenance-mvp@1.8.0 test:vhr-engine-risk
+2026-05-06T11:42:03.300125833Z > tsx tests/vhr-engine-risk.smoke.ts
+2026-05-06T11:42:03.300128383Z 
+2026-05-06T11:42:05.310526089Z Vehicle Health Report — engine-risk regression (Task #176 / #195)
+2026-05-06T11:42:05.310672802Z   ✓ isComplimentaryItem(safetyCheckRow) === false
+2026-05-06T11:42:05.310687302Z   ✓ isComplimentaryItem(oilRow) === false
+2026-05-06T11:42:05.384979069Z   ✓ Recommendations tab renders the engine-risk chip text
+2026-05-06T11:42:05.390092596Z   ✓ Recommendations chip exists as a <span>
+2026-05-06T11:42:05.390187468Z   ✓ Recommendations chip carries engineRiskReason on its title tooltip
+2026-05-06T11:42:05.391469847Z   ✓ Recommendations tab has a 'Coming Up Soon' section
+2026-05-06T11:42:05.391681072Z   ✓ Safety Check — Oil Level h4 lives inside the Coming Up Soon section
+2026-05-06T11:42:05.39201937Z   ✓ Safety Check — Oil Level row is NOT in the Recommendations Additional Services strip
+2026-05-06T11:42:05.392283626Z   ✓ Plan tab button found
+2026-05-06T11:42:05.405683192Z   ✓ Plan tab renders engine-risk glyph with aria-label
+2026-05-06T11:42:05.405711933Z   ✓ Plan tab engine-risk glyph carries engineRiskReason on its title tooltip
+2026-05-06T11:42:05.405934148Z   ✓ Plan tab still mounts the NEXT 3 MO column header
+2026-05-06T11:42:05.405947238Z   ✓ NEXT 3 MO column resolves to a wrapper element
+2026-05-06T11:42:05.406125722Z   ✓ Safety Check — Oil Level row lives inside the NEXT 3 MO column
+2026-05-06T11:42:05.406591993Z   ✓ Engine-risk glyph (with aria-label) lives inside the NEXT 3 MO column
+2026-05-06T11:42:05.40691138Z   ✓ Plan tab Additional Services strip (if rendered) does NOT contain the Safety Check — Oil Level row
+2026-05-06T11:42:05.407810541Z 
+2026-05-06T11:42:05.407817771Z All VHR engine-risk regression checks passed.
+2026-05-06T11:42:05.566120917Z 
+2026-05-06T11:42:05.566144658Z > mos-maintenance-mvp@1.8.0 test:engine-risk-csv
+2026-05-06T11:42:05.566149258Z > tsx tests/engine-risk-csv.smoke.ts
+2026-05-06T11:42:05.566152478Z 
+2026-05-06T11:42:06.012655728Z Task #177 engine-risk CSV pipeline checks
+2026-05-06T11:42:06.0131955Z   ✓ header lists all canonical columns
+2026-05-06T11:42:06.013211681Z   ✓ CSV ends with newline
+2026-05-06T11:42:06.013223311Z   ✓ CSV escapes embedded commas/quotes
+2026-05-06T11:42:06.018341698Z   ✓ round-trip preserves row count
+2026-05-06T11:42:06.018353088Z   ✓ round-trip preserves first row label
+2026-05-06T11:42:06.018612604Z   ✓ round-trip preserves complex reason with quotes/commas
+2026-05-06T11:42:06.018628814Z   ✓ round-trip preserves numeric fields
+2026-05-06T11:42:06.018676935Z   ✓ round-trip preserves _id
+2026-05-06T11:42:06.01929734Z   ✓ round-trip diff has zero changes
+2026-05-06T11:42:06.020460826Z   ✓ bad row count
+2026-05-06T11:42:06.020532748Z   ✓ row 1 reports missing label
+2026-05-06T11:42:06.020557118Z   ✓ row 1 reports missing reason
+2026-05-06T11:42:06.020567498Z   ✓ row 1 reports bad action
+2026-05-06T11:42:06.02064328Z   ✓ row 2 reports bad _id hex
+2026-05-06T11:42:06.020702572Z   ✓ row 2 reports bad number
+2026-05-06T11:42:06.020751653Z   ✓ diff surfaces error rows
+2026-05-06T11:42:06.022253567Z   ✓ diff summary tallies
+2026-05-06T11:42:06.022411161Z   ✓ update entry present
+2026-05-06T11:42:06.022428521Z   ✓ update entry tracks reason change
+2026-05-06T11:42:06.022443741Z   ✓ update entry tracks aspiration cleared
+2026-05-06T11:42:06.022470622Z   ✓ update entry does not list unchanged fields
+2026-05-06T11:42:06.022477972Z   ✓ remove targets dropped row
+2026-05-06T11:42:06.022506693Z   ✓ add entry has new label
+2026-05-06T11:42:06.022513413Z   ✓ add entry has parsed match fields
+2026-05-06T11:42:06.023064686Z   ✓ header-only CSV parses to zero rows
+2026-05-06T11:42:06.02324767Z   ✓ header-only diff removes every current override
+2026-05-06T11:42:06.024093189Z   ✓ duplicate _id in CSV produces error entries
+2026-05-06T11:42:06.024160351Z   ✓ duplicate _id error mentions the offending id
+2026-05-06T11:42:06.024489628Z   ✓ missing required headers throws InvalidOverrideCsvError
+2026-05-06T11:42:06.024498958Z   ✓ header error mentions the missing required columns
+2026-05-06T11:42:06.025157463Z   ✓ orphan _id treated as add (not error)
+2026-05-06T11:42:06.025170754Z 
+2026-05-06T11:42:06.025174984Z All Task #177 CSV checks passed
+2026-05-06T11:42:06.17079399Z 
+2026-05-06T11:42:06.170821991Z > mos-maintenance-mvp@1.8.0 test:enhance-corrections-mos-shop-id
+2026-05-06T11:42:06.170825961Z > tsx tests/enhance-corrections-mos-shop-id.smoke.ts
+2026-05-06T11:42:06.170828971Z 
+2026-05-06T11:42:08.254964611Z enhance-corrections mosShopId regression
+2026-05-06T11:42:08.260344294Z [Enhance Corrections] Saved 1 corrections for mosShop=4242 (raw=111) by advisor@test.local
+2026-05-06T11:42:08.261550481Z   ✓ POST returns success
+2026-05-06T11:42:08.261565562Z   ✓ row stored with mos_shop_id only
+2026-05-06T11:42:08.262661007Z   ✓ GET after upstream-ID rename returns the prior correction
+2026-05-06T11:42:08.262669117Z   ✓ guard saw both upstream IDs (rename simulated end-to-end)
+2026-05-06T11:42:08.262675997Z 
+2026-05-06T11:42:08.262679397Z all assertions passed
+2026-05-06T11:42:08.416312597Z 
+2026-05-06T11:42:08.416333497Z > mos-maintenance-mvp@1.8.0 test:concern-conversations-mos-shop-id
+2026-05-06T11:42:08.416337547Z > tsx tests/concern-conversations-mos-shop-id.smoke.ts
+2026-05-06T11:42:08.416340117Z 
+2026-05-06T11:42:08.935926557Z concern_conversations mosShopId regression
+2026-05-06T11:42:08.944221576Z   ✓ POST followup returns ok
+2026-05-06T11:42:08.944238046Z   ✓ conversation stored with mosShopId
+2026-05-06T11:42:08.944286627Z   ✓ conversation also retains legacy raw shopId for backfill audit
+2026-05-06T11:42:08.945803692Z   ✓ GET after upstream-ID rename returns the prior conversation
+2026-05-06T11:42:08.945828633Z   ✓ guard saw both upstream IDs
+2026-05-06T11:42:08.945834273Z 
+2026-05-06T11:42:08.945838543Z concernSkipLearning legacy-shopId fallback
+2026-05-06T11:42:08.946171721Z   ✓ legacy shopId-keyed skip-stat surfaces via mosShopId fallback
+2026-05-06T11:42:08.946785945Z   ✓ recordRoundResults writes per-shop row keyed on mosShopId
+2026-05-06T11:42:08.946910798Z   ✓ recordRoundResults writes global rollup row (mosShopId=null)
+2026-05-06T11:42:08.946939308Z 
+2026-05-06T11:42:08.946950079Z all assertions passed
+2026-05-06T11:42:09.103902854Z 
+2026-05-06T11:42:09.103927065Z > mos-maintenance-mvp@1.8.0 test:hovercode-drift
+2026-05-06T11:42:09.103930474Z > tsx tests/hovercode-drift.smoke.ts
+2026-05-06T11:42:09.103933114Z 
+2026-05-06T11:42:09.852546516Z hovercode-drift smoke
+2026-05-06T11:42:09.881567879Z   ✓ GET sent to v2 hovercode endpoint
+2026-05-06T11:42:09.881587949Z   ✓ Authorization header includes Token
+2026-05-06T11:42:09.881590949Z   ✓ no drift warning when logo present
+2026-05-06T11:42:09.881994168Z   ✓ drift warning emitted on 200-with-no-logo
+2026-05-06T11:42:09.882008339Z   ✓ drift warning mentions missing logo
+2026-05-06T11:42:09.882346907Z   ✓ drift warning emitted on qr_data mismatch
+2026-05-06T11:42:09.882356237Z   ✓ drift warning mentions qr_data
+2026-05-06T11:42:09.882710785Z   ✓ drift warning emitted when read-back returns non-200
+2026-05-06T11:42:09.882794687Z 
+2026-05-06T11:42:09.882800157Z All smoke checks passed.
+2026-05-06T11:42:10.035987856Z 
+2026-05-06T11:42:10.036017597Z > mos-maintenance-mvp@1.8.0 test:hovercode-create-payload
+2026-05-06T11:42:10.036024087Z > tsx tests/hovercode-create-payload.smoke.ts
+2026-05-06T11:42:10.036028667Z 
+2026-05-06T11:42:10.764976219Z hovercode-create-payload smoke
+2026-05-06T11:42:10.765572953Z [HoverCode] Creating QR with options: {
+2026-05-06T11:42:10.765598433Z   workspace: '[redacted]',
+2026-05-06T11:42:10.765602884Z   qr_data: 'https://mos.tools/sticker/redirect/100',
+2026-05-06T11:42:10.765606244Z   display_name: 'MOS Sticker - Test Shop',
+2026-05-06T11:42:10.765609333Z   primary_color: '#111111',
+2026-05-06T11:42:10.765612404Z   background_color: '#ffffff',
+2026-05-06T11:42:10.765615434Z   dynamic: true,
+2026-05-06T11:42:10.765619074Z   pattern: 'Squares',
+2026-05-06T11:42:10.765622224Z   eye_style: 'Rounded',
+2026-05-06T11:42:10.765625324Z   logo_url: 'https://example.com/custom-logo.png',
+2026-05-06T11:42:10.765628484Z   generate_png: true
+2026-05-06T11:42:10.765631654Z }
+2026-05-06T11:42:10.794846121Z [HoverCode] Created QR code hc_test_1 for shop 100
+2026-05-06T11:42:10.79522023Z   ✓ create returns success=true on 200
+2026-05-06T11:42:10.795255541Z   ✓ POST sent to /hovercode/create/
+2026-05-06T11:42:10.795262691Z   ✓ logo_url present in outgoing body
+2026-05-06T11:42:10.795300672Z   ✓ caller-supplied logoUrl forwarded verbatim
+2026-05-06T11:42:10.795362533Z   ✓ qr_data set to redirect URL
+2026-05-06T11:42:10.795381074Z   ✓ workspace id forwarded
+2026-05-06T11:42:10.795431515Z   ✓ dynamic flag stays true
+2026-05-06T11:42:10.795450765Z   ✓ generate_png flag stays true
+2026-05-06T11:42:10.795623979Z [HoverCode] Creating QR with options: {
+2026-05-06T11:42:10.795630909Z   workspace: '[redacted]',
+2026-05-06T11:42:10.79563493Z   qr_data: 'https://mos.tools/sticker/redirect/200',
+2026-05-06T11:42:10.79563801Z   display_name: 'MOS Sticker - Default Shop',
+2026-05-06T11:42:10.79565172Z   primary_color: '#111111',
+2026-05-06T11:42:10.79565378Z   background_color: '#ffffff',
+2026-05-06T11:42:10.79565626Z   dynamic: true,
+2026-05-06T11:42:10.79565875Z   pattern: 'Squares',
+2026-05-06T11:42:10.79566074Z   eye_style: 'Rounded',
+2026-05-06T11:42:10.79566269Z   logo_url: 'https://mos.tools/appointment-logo.png',
+2026-05-06T11:42:10.79566484Z   generate_png: true
+2026-05-06T11:42:10.79566682Z }
+2026-05-06T11:42:10.795967437Z [HoverCode] Created QR code hc_test_1 for shop 200
+2026-05-06T11:42:10.796173622Z   ✓ default fallback logo_url is sent when caller omits logoUrl
+2026-05-06T11:42:10.796251414Z [HoverCode] Creating QR with options: {
+2026-05-06T11:42:10.796255084Z   workspace: '[redacted]',
+2026-05-06T11:42:10.796257364Z   qr_data: 'https://mos.tools/sticker/redirect/1',
+2026-05-06T11:42:10.796259394Z   display_name: 'MOS Sticker - x',
+2026-05-06T11:42:10.796261444Z   primary_color: '#111111',
+2026-05-06T11:42:10.796263444Z   background_color: '#ffffff',
+2026-05-06T11:42:10.796265494Z   dynamic: true,
+2026-05-06T11:42:10.796267774Z   pattern: 'Squares',
+2026-05-06T11:42:10.796269814Z   eye_style: 'Rounded',
+2026-05-06T11:42:10.796271814Z   logo_url: 'https://mos.tools/appointment-logo.png',
+2026-05-06T11:42:10.796274404Z   generate_png: true
+2026-05-06T11:42:10.796276424Z }
+2026-05-06T11:42:10.796615902Z [HoverCode-Drift] create hc_test_1 shop=200: qr_data expected="https://mos.tools/sticker/redirect/200" actual="https://mos.tools/sticker/redirect/100"
+2026-05-06T11:42:10.796702344Z [HoverCode] Created QR code hc_x for shop 1
+2026-05-06T11:42:10.796904428Z   ✓ Authorization header uses Token scheme
+2026-05-06T11:42:10.796917429Z 
+2026-05-06T11:42:10.796922029Z All smoke checks passed.
+2026-05-06T11:42:10.7969766Z [HoverCode-Drift] create hc_x shop=1: qr_data expected="https://mos.tools/sticker/redirect/1" actual=""; logo missing after upload (sent="https://mos.tools/appointment-logo.png")
+2026-05-06T11:42:10.958792657Z 
+2026-05-06T11:42:10.958812747Z > mos-maintenance-mvp@1.8.0 test:vhi-score-snapshot
+2026-05-06T11:42:10.958816727Z > tsx tests/vhi-score-snapshot.smoke.ts
+2026-05-06T11:42:10.958819197Z 
+2026-05-06T11:42:11.422627833Z vhi-score-snapshot smoke
+2026-05-06T11:42:11.422781186Z   ✓ brakes → 1.5×
+2026-05-06T11:42:11.422827007Z   ✓ engine → 1.3×
+2026-05-06T11:42:11.422839647Z   ✓ wipers → 0.7×
+2026-05-06T11:42:11.423167065Z   ✓ misc → 1.0×
+2026-05-06T11:42:11.425265753Z   ✓ overdue retains only paid items
+2026-05-06T11:42:11.425320924Z   ✓ dueSoon retains only paid items
+2026-05-06T11:42:11.425380095Z   ✓ upcoming retains items as-is
+2026-05-06T11:42:11.425511298Z   ✓ complimentary collected from all buckets
+2026-05-06T11:42:11.425719633Z   ✓ FIXTURE A: pristine score
+2026-05-06T11:42:11.425796615Z   ✓ FIXTURE A: pristine tier
+2026-05-06T11:42:11.425875467Z   ✓ FIXTURE B: score
+2026-05-06T11:42:11.425958458Z   ✓ FIXTURE B: tier
+2026-05-06T11:42:11.426054761Z   ✓ FIXTURE C: score
+2026-05-06T11:42:11.426060391Z   ✓ FIXTURE C: tier
+2026-05-06T11:42:11.426119082Z   ✓ FIXTURE D: complimentary items don't deduct
+2026-05-06T11:42:11.426127452Z   ✓ tier boundary: 90 = Excellent
+2026-05-06T11:42:11.426160193Z   ✓ tier boundary: 89 = Good
+2026-05-06T11:42:11.426164513Z   ✓ tier boundary: 80 = Good
+2026-05-06T11:42:11.426177163Z   ✓ tier boundary: 79 = Needs Attention
+2026-05-06T11:42:11.426185224Z   ✓ tier boundary: 70 = Needs Attention
+2026-05-06T11:42:11.426214384Z   ✓ tier boundary: 69 = Poor
+2026-05-06T11:42:11.426229085Z   ✓ tier boundary: 60 = Poor
+2026-05-06T11:42:11.426252065Z   ✓ tier boundary: 59 = Critical
+2026-05-06T11:42:11.426290936Z   ✓ tier boundary: 0 = Critical
+2026-05-06T11:42:11.440521851Z   ✓ formatVhiItem: key passthrough
+2026-05-06T11:42:11.440530421Z   ✓ formatVhiItem: title passthrough
+2026-05-06T11:42:11.440532761Z   ✓ formatVhiItem: intervalMiles passthrough
+2026-05-06T11:42:11.440538702Z   ✓ formatVhiItem: declined coerced to bool
+2026-05-06T11:42:11.440540871Z   ✓ formatVhiItem: iconStatus follows bucket
+2026-05-06T11:42:11.440578092Z   ✓ formatVhiItem: iconSvg null by default
+2026-05-06T11:42:11.440582312Z   ✓ formatVhiItem: progress is computed
+2026-05-06T11:42:11.440625513Z   ✓ deferred bucket → deferred iconStatus
+2026-05-06T11:42:11.440628013Z 
+2026-05-06T11:42:11.440630654Z All snapshot checks passed.
+2026-05-06T11:42:11.579638729Z 
+2026-05-06T11:42:11.57966381Z > mos-maintenance-mvp@1.8.0 test:vhi-rebuild-snapshot
+2026-05-06T11:42:11.57966935Z > tsx tests/vhi-rebuild-snapshot.smoke.ts
+2026-05-06T11:42:11.57967341Z 
+2026-05-06T11:42:12.270925091Z vhi-rebuild-snapshot smoke
+2026-05-06T11:42:12.273467549Z   ✓ returns success=true on cached plan
+2026-05-06T11:42:12.273481979Z   ✓ VIN is upper-cased
+2026-05-06T11:42:12.273491029Z   ✓ shopId echoed back
+2026-05-06T11:42:12.27350858Z   ✓ vehicle year preserved
+2026-05-06T11:42:12.273552311Z   ✓ vehicle make preserved
+2026-05-06T11:42:12.273622012Z   ✓ currentMiles preserved
+2026-05-06T11:42:12.273628142Z   ✓ customerName preserved
+2026-05-06T11:42:12.273635233Z   ✓ score is a number
+2026-05-06T11:42:12.273729585Z   ✓ tier label is a non-empty string
+2026-05-06T11:42:12.273734435Z   ✓ tier color is set
+2026-05-06T11:42:12.273744695Z   ✓ summary.overdue counts the 2 paid overdue items
+2026-05-06T11:42:12.273747875Z   ✓ summary.dueSoon counts the 1 paid dueSoon item
+2026-05-06T11:42:12.273753555Z   ✓ summary.upcoming counts the 1 paid upcoming item
+2026-05-06T11:42:12.273756696Z   ✓ summary.complimentary counts the 1 complimentary item
+2026-05-06T11:42:12.273772466Z   ✓ buckets.overdue has formatted items
+2026-05-06T11:42:12.273782446Z   ✓ buckets.complimentary has formatted items
+2026-05-06T11:42:12.273799537Z   ✓ formatted overdue item has iconStatus=overdue
+2026-05-06T11:42:12.273805966Z   ✓ formatted complimentary item has iconStatus=ok (bucketToStatus mapping)
+2026-05-06T11:42:12.273928049Z [VHI Rebuild] No cached plan for 1HGCM82633A123456 at shop 7, triggering build...
+2026-05-06T11:42:12.273990711Z   ✓ returns success=false when build fails
+2026-05-06T11:42:12.273996891Z   ✓ failedStage points at triggerPlanBuild
+2026-05-06T11:42:12.274007201Z   ✓ upstreamStatus surfaced for debugging
+2026-05-06T11:42:12.274010561Z   ✓ error message present
+2026-05-06T11:42:12.274089063Z [VHI Rebuild] No cached plan for 1HGCM82633A123456 at shop 7, triggering build...
+2026-05-06T11:42:12.775472226Z   ✓ returns success=false when cache empty after build
+2026-05-06T11:42:12.775522188Z   ✓ failedStage points at cacheReadAfterBuild
+2026-05-06T11:42:12.775531498Z   ✓ built=true (build did succeed)
+2026-05-06T11:42:12.775695652Z 
+2026-05-06T11:42:12.775728642Z All smoke checks passed.
+2026-05-06T11:42:12.915655329Z 
+2026-05-06T11:42:12.915681769Z > mos-maintenance-mvp@1.8.0 test:tekmetric-webhook-signature
+2026-05-06T11:42:12.91568725Z > tsx tests/tekmetric-webhook-signature.smoke.ts
+2026-05-06T11:42:12.91569122Z 
+2026-05-06T11:42:15.447445604Z tekmetric-webhook-signature smoke
+2026-05-06T11:42:15.450356791Z   ✓ no secret → verification skipped (introspection mode)
+2026-05-06T11:42:15.450650688Z   ✓ missing signature header → rejected
+2026-05-06T11:42:15.453346569Z   ✓ wrong signature → rejected
+2026-05-06T11:42:15.455323044Z   ✓ correct hex signature → accepted
+2026-05-06T11:42:15.457386622Z   ✓ correct sha256=<hex> signature → accepted (prefix stripped)
+2026-05-06T11:42:15.459460869Z   ✓ tampered body → rejected
+2026-05-06T11:42:15.459466979Z 
+2026-05-06T11:42:15.459470619Z All smoke checks passed.
+2026-05-06T11:42:15.610659053Z 
+2026-05-06T11:42:15.610682433Z > mos-maintenance-mvp@1.8.0 test:stripe-webhook-signature
+2026-05-06T11:42:15.610686694Z > tsx tests/stripe-webhook-signature.smoke.ts
+2026-05-06T11:42:15.610689314Z 
+2026-05-06T11:42:18.302666839Z stripe-webhook-signature smoke
+2026-05-06T11:42:18.309658618Z   ✓ missing stripe-signature → 400
+2026-05-06T11:42:18.309865213Z   ✓   → response body has error field
+2026-05-06T11:42:18.314180702Z Webhook signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe? 
+2026-05-06T11:42:18.314192602Z  If a webhook request is being forwarded by a third-party tool, ensure that the exact request body, including JSON formatting and new line style, is preserved.
+2026-05-06T11:42:18.314197432Z 
+2026-05-06T11:42:18.314202202Z Learn more about webhook signing and explore webhook integration examples for various frameworks at https://docs.stripe.com/webhooks/signature
+2026-05-06T11:42:18.314205972Z 
+2026-05-06T11:42:18.314374506Z   ✓ bogus signature with secret → 400 (not 500)
+2026-05-06T11:42:18.314380456Z 
+2026-05-06T11:42:18.314384986Z All smoke checks passed.
+2026-05-06T11:42:18.469287935Z 
+2026-05-06T11:42:18.469307105Z > mos-maintenance-mvp@1.8.0 test:extension-shop-lookup
+2026-05-06T11:42:18.469311915Z > tsx tests/extension-shop-lookup.smoke.ts
+2026-05-06T11:42:18.469315215Z 
+2026-05-06T11:42:19.16730164Z extension-shop-lookup smoke
+2026-05-06T11:42:19.168062428Z   ✓ tekmetric numeric shopId resolves to MOS shopId
+2026-05-06T11:42:19.168075808Z   ✓ tekmetric provider inferred
+2026-05-06T11:42:19.168287943Z   ✓ tekmetric stringy shopId resolves
+2026-05-06T11:42:19.168371425Z   ✓ protractor connectionId resolves
+2026-05-06T11:42:19.168378435Z   ✓ protractor provider preserved
+2026-05-06T11:42:19.168484577Z   ✓ shopware subdomain resolves
+2026-05-06T11:42:19.168561119Z   ✓ shopware provider preserved
+2026-05-06T11:42:19.168650951Z   ✓ autoflow domain (with .autotext.me suffix) resolves
+2026-05-06T11:42:19.168729793Z   ✓ autoflow provider preserved
+2026-05-06T11:42:19.168815045Z   ✓ provider inferred from doc shape when not stamped
+2026-05-06T11:42:19.168941068Z [Shop Lookup] No match for smsShopId=200, userShopIds=[42], isPlatformAdmin=false, providerHint=none
+2026-05-06T11:42:19.168957878Z [Shop Lookup] Shop exists (shopId=99, name=undefined) but user lacks access. shopId type=number
+2026-05-06T11:42:19.168966298Z   ✓ non-admin without ownership returns null
+2026-05-06T11:42:19.169110952Z   ✓ non-admin with ownership resolves
+2026-05-06T11:42:19.169185013Z [Shop Lookup] No match for smsShopId=brand-new-subdomain, userShopIds=[], isPlatformAdmin=true, providerHint=shopware
+2026-05-06T11:42:19.169237134Z [Shop Lookup] No shop configured with SMS ID brand-new-subdomain in any provider field
+2026-05-06T11:42:19.169370578Z [Shop Lookup] Shop-Ware fallback: single match shop 60 for subdomain "brand-new-subdomain" — saving for future lookups
+2026-05-06T11:42:19.169712495Z   ✓ shopware fallback finds the lone tenantId candidate
+2026-05-06T11:42:19.169749436Z   ✓ shopware fallback writes tenantSubdomain back to the shop doc
+2026-05-06T11:42:19.16991232Z [Shop Lookup] No match for smsShopId=ambiguous, userShopIds=[], isPlatformAdmin=true, providerHint=shopware
+2026-05-06T11:42:19.16993754Z [Shop Lookup] No shop configured with SMS ID ambiguous in any provider field
+2026-05-06T11:42:19.170018032Z [Shop Lookup] Shop-Ware fallback: 2 candidate shops for subdomain "ambiguous" — cannot auto-associate. Shops: 61, 62
+2026-05-06T11:42:19.170047383Z   ✓ shopware fallback refuses to guess when >1 candidates exist
+2026-05-06T11:42:19.170107764Z [Shop Lookup] No match for smsShopId=nothing-here, userShopIds=[], isPlatformAdmin=true, providerHint=none
+2026-05-06T11:42:19.170162276Z [Shop Lookup] No shop configured with SMS ID nothing-here in any provider field
+2026-05-06T11:42:19.170173846Z   ✓ empty shops collection returns null
+2026-05-06T11:42:19.170176926Z 
+2026-05-06T11:42:19.170180046Z All smoke checks passed.
+2026-05-06T11:42:19.326759083Z 
+2026-05-06T11:42:19.326783523Z > mos-maintenance-mvp@1.8.0 test:stripe-webhook-idempotency
+2026-05-06T11:42:19.326788903Z > tsx tests/stripe-webhook-idempotency.smoke.ts
+2026-05-06T11:42:19.326792123Z 
+2026-05-06T11:42:22.032669046Z stripe-webhook-idempotency smoke
+2026-05-06T11:42:22.038828637Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-05-06T11:42:22.039111133Z [Stripe Webhook] Event evt_dup_processed_001 already processed, skipping
+2026-05-06T11:42:22.040034584Z   ✓ processed-duplicate returns 200
+2026-05-06T11:42:22.040240039Z   ✓ processed-duplicate response has duplicate:true
+2026-05-06T11:42:22.040255349Z   ✓ processed-duplicate causes ZERO write ops
+2026-05-06T11:42:22.040810892Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-05-06T11:42:22.041393025Z   ✓ received-status prior record does NOT short-circuit (handler proceeds and writes)
+2026-05-06T11:42:22.041805645Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-05-06T11:42:22.042236014Z   ✓ no prior record → dedup row is created (insert-before-process)
+2026-05-06T11:42:22.042246555Z   ✓ dedup row reaches a terminal status (received or processed)
+2026-05-06T11:42:22.042275115Z 
+2026-05-06T11:42:22.042281235Z All smoke checks passed.
+2026-05-06T11:42:22.201459002Z 
+2026-05-06T11:42:22.201497492Z > mos-maintenance-mvp@1.8.0 test:tekmetric-webhook-idempotency
+2026-05-06T11:42:22.201502483Z > tsx tests/tekmetric-webhook-idempotency.smoke.ts
+2026-05-06T11:42:22.201506413Z 
+2026-05-06T11:42:24.603252758Z tekmetric-webhook-idempotency smoke
+2026-05-06T11:42:24.609300236Z [Tekmetric Webhook] Received event: {
+2026-05-06T11:42:24.609318956Z   "event": "RepairOrder.Updated",
+2026-05-06T11:42:24.609324956Z   "data": {
+2026-05-06T11:42:24.609330836Z     "repairOrder": {
+2026-05-06T11:42:24.609335547Z       "id": 9001,
+2026-05-06T11:42:24.609341827Z       "repairOrderNumber": 5555,
+2026-05-06T11:42:24.609346757Z       "shopId": 100,
+2026-05-06T11:42:24.609351507Z       "repairOrderStatus": {
+2026-05-06T11:42:24.609356277Z         "name": "In Progress",
+2026-05-06T11:42:24.609361507Z         "code": "IN_PROGRESS"
+2026-05-06T11:42:24.609366137Z       }
+2026-05-06T11:42:24.609370837Z     }
+2026-05-06T11:42:24.609375768Z   }
+2026-05-06T11:42:24.609381348Z }
+2026-05-06T11:42:24.609387028Z [Tekmetric Webhook] Parsed - eventType: "RepairOrder.Updated", repairOrder found: true, isRepairOrderUpdate: true
+2026-05-06T11:42:24.609410438Z [Tekmetric Webhook] RO Update: #5555 (ID: 9001), Status: In Progress (IN_PROGRESS)
+2026-05-06T11:42:24.609860129Z [Tekmetric Webhook] Upserted RO #5555: UPDATE status=In Progress, label=null, odometer=unchanged, customer=unchanged, shop=7
+2026-05-06T11:42:24.611016795Z   ✓ first delivery returns 200
+2026-05-06T11:42:24.611034535Z   ✓ first delivery creates exactly 1 cache row
+2026-05-06T11:42:24.612439038Z [Tekmetric Webhook NIS] No VIN available for RO 9001; skipping NIS (poll will reconcile)
+2026-05-06T11:42:24.617694007Z [Tekmetric Webhook] Received event: {
+2026-05-06T11:42:24.617705448Z   "event": "RepairOrder.Updated",
+2026-05-06T11:42:24.617709238Z   "data": {
+2026-05-06T11:42:24.617713898Z     "repairOrder": {
+2026-05-06T11:42:24.617717378Z       "id": 9001,
+2026-05-06T11:42:24.617721408Z       "repairOrderNumber": 5555,
+2026-05-06T11:42:24.617724868Z       "shopId": 100,
+2026-05-06T11:42:24.617728118Z       "repairOrderStatus": {
+2026-05-06T11:42:24.617731348Z         "name": "In Progress",
+2026-05-06T11:42:24.617734348Z         "code": "IN_PROGRESS"
+2026-05-06T11:42:24.617737579Z       }
+2026-05-06T11:42:24.617740729Z     }
+2026-05-06T11:42:24.617743899Z   }
+2026-05-06T11:42:24.617747109Z }
+2026-05-06T11:42:24.61779121Z [Tekmetric Webhook] Parsed - eventType: "RepairOrder.Updated", repairOrder found: true, isRepairOrderUpdate: true
+2026-05-06T11:42:24.61780078Z [Tekmetric Webhook] RO Update: #5555 (ID: 9001), Status: In Progress (IN_PROGRESS)
+2026-05-06T11:42:24.617991104Z [Tekmetric Webhook] Upserted RO #5555: UPDATE status=In Progress, label=null, odometer=unchanged, customer=unchanged, shop=7
+2026-05-06T11:42:24.61823089Z   ✓ second delivery (replay) returns 200
+2026-05-06T11:42:24.61824036Z   ✓ replay does NOT duplicate the cache row (still exactly 1)
+2026-05-06T11:42:24.618275451Z   ✓ replay advances updatedAt on the existing row (upsert hit, not no-op)
+2026-05-06T11:42:24.618278571Z   ✓ each delivery is independently logged (2 webhook_logs entries)
+2026-05-06T11:42:24.618342792Z 
+2026-05-06T11:42:24.618345573Z All smoke checks passed.
+2026-05-06T11:42:24.618524057Z [Tekmetric Webhook NIS] No VIN available for RO 9001; skipping NIS (poll will reconcile)
+2026-05-06T11:42:24.766566668Z 
+2026-05-06T11:42:24.766589469Z > mos-maintenance-mvp@1.8.0 test:jobs-search-canonical
+2026-05-06T11:42:24.766593459Z > tsx tests/jobs-search-canonical.smoke.ts
+2026-05-06T11:42:24.766595929Z 
+2026-05-06T11:42:27.094046577Z jobs-search-canonical smoke
+2026-05-06T11:42:27.094307893Z   ✓ canonical export exists (searchSupabaseServiceJobs)
+2026-05-06T11:42:27.094567268Z   ✓ empty searchShopIds returns [] (no-op guard)
+2026-05-06T11:42:27.094580439Z   ✓ empty tokens + no vehicleMake returns [] (full-table-scan guard)
+2026-05-06T11:42:27.094598059Z   ✓ explicit limit=0 still respects empty-shopIds guard
+2026-05-06T11:42:27.094603079Z   ✓ empty tokens + empty-string vehicleMake returns [] (no-op guard)
+2026-05-06T11:42:27.09462197Z 
+2026-05-06T11:42:27.09463596Z All smoke checks passed.
+2026-05-06T11:42:27.289973422Z 
+2026-05-06T11:42:27.290022313Z > mos-maintenance-mvp@1.8.0 test:jobs-search-shape
+2026-05-06T11:42:27.290028193Z > tsx tests/jobs-search-shape.smoke.ts
+2026-05-06T11:42:27.290032324Z 
+2026-05-06T11:42:29.825487013Z jobs-search-shape smoke
+2026-05-06T11:42:29.825967614Z   ✓ _id passes through service job id
+2026-05-06T11:42:29.825984154Z   ✓ shopId is preserved
+2026-05-06T11:42:29.826006045Z   ✓ vin lifted from work order vehicle
+2026-05-06T11:42:29.826036695Z   ✓ workOrderId is preserved
+2026-05-06T11:42:29.826042185Z   ✓ workOrderNumber lifted from join
+2026-05-06T11:42:29.826047366Z   ✓ dataSource pinned to 'supabase' (canonical tag)
+2026-05-06T11:42:29.826060326Z   ✓ sourceSystem read from provenance
+2026-05-06T11:42:29.826117897Z   ✓ vehicle.vin
+2026-05-06T11:42:29.826203939Z   ✓ vehicle.year
+2026-05-06T11:42:29.826211259Z   ✓ vehicle.make
+2026-05-06T11:42:29.826215029Z   ✓ vehicle.model
+2026-05-06T11:42:29.826219429Z   ✓ vehicle.engine prefers engineDescription over engine
+2026-05-06T11:42:29.82622695Z   ✓ job.title
+2026-05-06T11:42:29.82622914Z   ✓ job.description
+2026-05-06T11:42:29.82623203Z   ✓ job.name prefers cannedJobName
+2026-05-06T11:42:29.82623471Z   ✓ job.keywords default empty
+2026-05-06T11:42:29.82623665Z   ✓ totals.laborAmount parses to 175
+2026-05-06T11:42:29.8262396Z   ✓ totals.partsAmount parses to 85.5
+2026-05-06T11:42:29.82624675Z   ✓ totals.totalAmount parses to 260.5
+2026-05-06T11:42:29.8262508Z   ✓ totals.laborHours prefers billed over actual (1.25 not 1.10)
+2026-05-06T11:42:29.826261881Z   ✓ job.totals matches top-level totals (canonical mirror)
+2026-05-06T11:42:29.826265371Z   ✓ lines length matches input
+2026-05-06T11:42:29.826272621Z   ✓ first line is PART
+2026-05-06T11:42:29.826274851Z   ✓ first line description from partDescription
+2026-05-06T11:42:29.826279291Z   ✓ first line partNumber preserved
+2026-05-06T11:42:29.826283441Z   ✓ first line manufacturer preserved
+2026-05-06T11:42:29.826289991Z   ✓ first line numeric coercion: extendedPrice=85.5
+2026-05-06T11:42:29.826304282Z   ✓ first line numeric coercion: cost=42
+2026-05-06T11:42:29.826307522Z   ✓ second line is LABOR
+2026-05-06T11:42:29.826342192Z   ✓ second line hours coerced
+2026-05-06T11:42:29.82666148Z   ✓ performedAt prefers woCompletedDate when present
+2026-05-06T11:42:29.82666828Z   ✓ performedAt falls back to createdAt when no completed/closed dates
+2026-05-06T11:42:29.826712621Z   ✓ empty lines array preserved (not undefined)
+2026-05-06T11:42:29.826715801Z   ✓ missing provenance falls back to sourceSystem='unknown'
+2026-05-06T11:42:29.826717711Z 
+2026-05-06T11:42:29.826719741Z All smoke checks passed.
+2026-05-06T11:42:29.869833396Z 
+2026-05-06T11:42:29.869853826Z > mos-maintenance-mvp@1.8.0 build
+2026-05-06T11:42:29.869857366Z > next build
+2026-05-06T11:42:29.869859986Z 
+2026-05-06T11:42:30.434334141Z ⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+2026-05-06T11:42:30.489423239Z   ▲ Next.js 14.2.5
+2026-05-06T11:42:30.48945373Z   - Experiments (use with caution):
+2026-05-06T11:42:30.48946504Z     · instrumentationHook
+2026-05-06T11:42:30.489619634Z 
+2026-05-06T11:42:30.524976891Z    Creating an optimized production build ...
+2026-05-06T11:43:20.996020995Z Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+2026-05-06T11:43:20.996046486Z   npx update-browserslist-db@latest
+2026-05-06T11:43:20.996052056Z   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+2026-05-06T11:43:31.482336587Z Browserslist: caniuse-lite is outdated. Please run:
+2026-05-06T11:43:31.482363247Z   npx update-browserslist-db@latest
+2026-05-06T11:43:31.482368437Z   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+2026-05-06T11:43:34.211854837Z Failed to compile.
+2026-05-06T11:43:34.211878848Z 
+2026-05-06T11:43:34.211916309Z ./node_modules/mongodb/lib/client-side-encryption/auto_encrypter.js
+2026-05-06T11:43:34.211929609Z Module not found: Can't resolve 'net'
+2026-05-06T11:43:34.211933059Z 
+2026-05-06T11:43:34.211937949Z https://nextjs.org/docs/messages/module-not-found
+2026-05-06T11:43:34.21194101Z 
+2026-05-06T11:43:34.211944159Z Import trace for requested module:
+2026-05-06T11:43:34.21196419Z ./node_modules/mongodb/lib/index.js
+2026-05-06T11:43:34.21196666Z ./lib/mongo.ts
+2026-05-06T11:43:34.21196984Z ./lib/data/repositories/shop-dvi-best-practices.ts
+2026-05-06T11:43:34.21197375Z ./lib/dvi-best-practices.ts
+2026-05-06T11:43:34.21197706Z ./app/admin/shops/[shopId]/dvi-best-practices/editor.tsx
+2026-05-06T11:43:34.21198006Z 
+2026-05-06T11:43:34.211985851Z ./node_modules/mongodb/lib/client-side-encryption/mongocryptd_manager.js
+2026-05-06T11:43:34.21198918Z Module not found: Can't resolve 'child_process'
+2026-05-06T11:43:34.211992001Z 
+2026-05-06T11:43:34.211994991Z https://nextjs.org/docs/messages/module-not-found
+2026-05-06T11:43:34.211998071Z 
+2026-05-06T11:43:34.212000771Z Import trace for requested module:
+2026-05-06T11:43:34.212002841Z ./node_modules/mongodb/lib/client-side-encryption/auto_encrypter.js
+2026-05-06T11:43:34.212004881Z ./node_modules/mongodb/lib/index.js
+2026-05-06T11:43:34.212006911Z ./lib/mongo.ts
+2026-05-06T11:43:34.212008861Z ./lib/data/repositories/shop-dvi-best-practices.ts
+2026-05-06T11:43:34.212010931Z ./lib/dvi-best-practices.ts
+2026-05-06T11:43:34.212012951Z ./app/admin/shops/[shopId]/dvi-best-practices/editor.tsx
+2026-05-06T11:43:34.212014821Z 
+2026-05-06T11:43:34.212016861Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-06T11:43:34.212018891Z Module not found: Can't resolve 'fs/promises'
+2026-05-06T11:43:34.212020751Z 
+2026-05-06T11:43:34.212022631Z https://nextjs.org/docs/messages/module-not-found
+2026-05-06T11:43:34.212024461Z 
+2026-05-06T11:43:34.212026392Z Import trace for requested module:
+2026-05-06T11:43:34.212028432Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-06T11:43:34.212030412Z ./node_modules/mongodb/lib/index.js
+2026-05-06T11:43:34.212032401Z ./lib/mongo.ts
+2026-05-06T11:43:34.212034382Z ./lib/data/repositories/shop-dvi-best-practices.ts
+2026-05-06T11:43:34.212036302Z ./lib/dvi-best-practices.ts
+2026-05-06T11:43:34.212038392Z ./app/admin/shops/[shopId]/dvi-best-practices/editor.tsx
+2026-05-06T11:43:34.212040282Z 
+2026-05-06T11:43:34.212042252Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-06T11:43:34.212044312Z Module not found: Can't resolve 'net'
+2026-05-06T11:43:34.212046742Z 
+2026-05-06T11:43:34.212049962Z https://nextjs.org/docs/messages/module-not-found
+2026-05-06T11:43:34.212053012Z 
+2026-05-06T11:43:34.212056022Z Import trace for requested module:
+2026-05-06T11:43:34.212058912Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-06T11:43:34.212061932Z ./node_modules/mongodb/lib/index.js
+2026-05-06T11:43:34.212064962Z ./lib/mongo.ts
+2026-05-06T11:43:34.212068182Z ./lib/data/repositories/shop-dvi-best-practices.ts
+2026-05-06T11:43:34.212071093Z ./lib/dvi-best-practices.ts
+2026-05-06T11:43:34.212074202Z ./app/admin/shops/[shopId]/dvi-best-practices/editor.tsx
+2026-05-06T11:43:34.212077022Z 
+2026-05-06T11:43:34.212080323Z ./node_modules/mongodb/lib/client-side-encryption/state_machine.js
+2026-05-06T11:43:34.212082553Z Module not found: Can't resolve 'tls'
+2026-05-06T11:43:34.212084423Z 
+2026-05-06T11:43:34.212086293Z https://nextjs.org/docs/messages/module-not-found
+2026-05-06T11:43:34.212088113Z 
+2026-05-06T11:43:34.212090043Z Import trace for requested module:
+2026-05-06T11:43:34.212092063Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-06T11:43:34.212094003Z ./node_modules/mongodb/lib/index.js
+2026-05-06T11:43:34.212095933Z ./lib/mongo.ts
+2026-05-06T11:43:34.212097853Z ./lib/data/repositories/shop-dvi-best-practices.ts
+2026-05-06T11:43:34.212104393Z ./lib/dvi-best-practices.ts
+2026-05-06T11:43:34.212106413Z ./app/admin/shops/[shopId]/dvi-best-practices/editor.tsx
+2026-05-06T11:43:34.212120474Z 
+2026-05-06T11:43:34.212723757Z 
+2026-05-06T11:43:34.212795059Z > Build failed because of webpack errors
+2026-05-06T11:43:34.519951785Z ==> Build failed 😞
+2026-05-06T11:43:34.519981326Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
