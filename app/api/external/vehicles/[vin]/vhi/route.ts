@@ -7,6 +7,7 @@ import { getStatusIconSet } from "@/lib/vhi-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
+import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,10 +86,12 @@ export const GET = createExternalEndpoint(
         $or: [{ shopId: String(resolvedShopId) }, { shopId: Number(resolvedShopId) }],
         vin,
       },
-      { projection: { currentMileage: 1, lastMileage: 1 } }
+      { projection: { currentMileage: 1, lastMileage: 1, year: 1 } }
     );
 
     let mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+    let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
+    let mileageEstimateDetails: Record<string, unknown> | null = null;
 
     let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
 
@@ -212,12 +215,55 @@ export const GET = createExternalEndpoint(
       }
     }
 
+    // Fallback 1: estimate from CARFAX service history (rolling miles/day projection)
+    if (!mileage || mileage <= 0) {
+      try {
+        const est = await estimateMileageFromCarfax(Number(resolvedShopId), vin);
+        if (est.estimated && est.mileage && est.mileage > 0) {
+          mileage = est.mileage;
+          mileageSource = "estimated_carfax";
+          mileageEstimateDetails = {
+            confidence: est.confidence,
+            dataPoints: est.dataPoints,
+            lastRecordedMileage: est.lastRecordedMileage,
+            lastRecordedDate: est.lastRecordedDate,
+            milesPerDay: est.milesPerDay,
+          };
+          console.log(
+            `[VHI External] Estimated mileage ${mileage} from CARFAX for ${vin} (confidence=${est.confidence})`
+          );
+        }
+      } catch (err) {
+        console.warn(`[VHI External] CARFAX estimate failed for ${vin}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // Fallback 2: model-year * 12k miles/year (US national average), so we never hard-fail
+    if (!mileage || mileage <= 0) {
+      const year = vehicleDoc?.year && Number(vehicleDoc.year) > 1980 ? Number(vehicleDoc.year) : null;
+      if (year) {
+        const age = Math.max(1, new Date().getFullYear() - year);
+        const estimated = Math.min(250000, Math.max(12000, age * 12000));
+        mileage = estimated;
+        mileageSource = "estimated_annual";
+        mileageEstimateDetails = {
+          confidence: "very-low",
+          method: "model_year_x_12k",
+          modelYear: year,
+          assumedMilesPerYear: 12000,
+        };
+        console.log(
+          `[VHI External] Estimated mileage ${mileage} from model year ${year} for ${vin} (12k/yr fallback)`
+        );
+      }
+    }
+
     if (!mileage || mileage <= 0) {
       return NextResponse.json(
         {
           success: false,
           error: "Could not determine mileage for this vehicle",
-          message: "No mileage found in vehicle records, cached plans, or work orders. Provide mileage via the POST /api/external/vhi/analyze endpoint, or ensure the vehicle has a work order with an odometer reading.",
+          message: "No mileage found in vehicle records, cached plans, work orders, or CARFAX, and no model year available to estimate from.",
         },
         { status: 400 }
       );
@@ -263,6 +309,9 @@ export const GET = createExternalEndpoint(
       reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
+      mileageSource,
+      mileageEstimated: mileageSource !== "actual",
+      mileageEstimateDetails,
     });
   }
 );
