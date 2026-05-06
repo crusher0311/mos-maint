@@ -4,6 +4,7 @@ import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { SERVICE_KEY_DISPLAY_NAMES, toKeyFromName } from "@/lib/service-keys";
 import { getDb } from "@/lib/mongo";
 import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
+import { isMiscServiceKey, formatLastDate } from "@/lib/vhi-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,14 +87,20 @@ function buildProposedItem(
 
   let concernText: string;
   let noteText: string;
+  // Misc items (serviceKey starts with "misc_") have unreliable dueAtMiles
+  // — see isMiscServiceKey() comment. Suppress the mileage delta entirely
+  // so the concern reads "OVERDUE. Recommend..." instead of nonsense like
+  // "OVERDUE by 78,111 miles." Same for due_soon.
+  const isMisc = isMiscServiceKey(serviceKey);
+
   if (status === "overdue") {
-    const overBy = milesUntilDue != null ? Math.abs(milesUntilDue) : null;
+    const overBy = !isMisc && milesUntilDue != null ? Math.abs(milesUntilDue) : null;
     concernText = overBy
       ? `${tag} ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
       : `${tag} ${displayName} — OVERDUE. Recommend immediate service.`;
     noteText = `Auto-suggested from VHI (overdue${overBy ? ` by ${overBy.toLocaleString()} ${distLabel}` : ""}).`;
   } else {
-    const remaining = milesUntilDue && milesUntilDue > 0 ? milesUntilDue : null;
+    const remaining = !isMisc && milesUntilDue && milesUntilDue > 0 ? milesUntilDue : null;
     concernText = remaining
       ? `${tag} ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
       : `${tag} ${displayName} — due soon, recommend scheduling service.`;
@@ -101,7 +108,10 @@ function buildProposedItem(
   }
 
   if (item.last?.date) {
-    const lastDateStr = String(item.last.date).split("T")[0];
+    // Format as "Aug 05, 2021" rather than ISO "2021-08-05T00:00:00.000Z"
+    // or even bare "2021-08-05" — friendlier for advisors reading the
+    // technician concern in Tekmetric.
+    const lastDateStr = formatLastDate(item.last.date);
     let lastStr = ` Last: ${lastDateStr}`;
     if (item.last.miles) lastStr += ` at ${Number(item.last.miles).toLocaleString()} ${distLabel}`;
     lastStr += ".";

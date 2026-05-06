@@ -3,6 +3,7 @@ import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
+import { isMiscServiceKey, formatLastDate } from "@/lib/vhi-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -141,26 +142,32 @@ export async function POST(request: NextRequest) {
       ? vhiItem.item.dueAtMiles - resolvedMileage
       : null;
 
+    // Misc items have unreliable dueAtMiles — see isMiscServiceKey() in
+    // lib/vhi-text. Suppress mileage deltas so findings don't read
+    // "OVERDUE by 78,111 miles" for items where the due interval is
+    // synthetic.
+    const isMisc = isMiscServiceKey(serviceKey);
+
     if (vhiItem.status === "overdue") {
       rating = RATINGS.RQRSATTN;
-      const overBy = milesUntilDue ? Math.abs(milesUntilDue) : null;
+      const overBy = !isMisc && milesUntilDue ? Math.abs(milesUntilDue) : null;
       finding = overBy
         ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
         : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`;
       if (vhiItem.item.lastDate) {
-        finding += ` Last performed: ${vhiItem.item.lastDate}`;
+        finding += ` Last performed: ${formatLastDate(vhiItem.item.lastDate)}`;
         if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }
       confidence = "high";
     } else if (vhiItem.status === "due_soon") {
       rating = RATINGS.MAYRQRATTN;
-      const remaining = milesUntilDue || null;
+      const remaining = !isMisc && milesUntilDue ? milesUntilDue : null;
       finding = remaining
         ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
         : `[VHI] ${displayName} — due soon, recommend scheduling service.`;
       if (vhiItem.item.lastDate) {
-        finding += ` Last: ${vhiItem.item.lastDate}`;
+        finding += ` Last: ${formatLastDate(vhiItem.item.lastDate)}`;
         if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }
