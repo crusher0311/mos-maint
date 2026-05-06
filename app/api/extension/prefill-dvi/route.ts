@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
         : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`;
       if (vhiItem.item.lastDate) {
-        finding += ` Last performed: ${formatLastDate(vhiItem.item.lastDate)}`;
+        finding += ` Last Reported: ${formatLastDate(vhiItem.item.lastDate)}`;
         if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
         ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
         : `[VHI] ${displayName} — due soon, recommend scheduling service.`;
       if (vhiItem.item.lastDate) {
-        finding += ` Last: ${formatLastDate(vhiItem.item.lastDate)}`;
+        finding += ` Last Reported: ${formatLastDate(vhiItem.item.lastDate)}`;
         if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
         finding += ".";
       }

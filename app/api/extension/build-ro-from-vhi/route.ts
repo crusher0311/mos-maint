@@ -112,7 +112,7 @@ function buildProposedItem(
     // or even bare "2021-08-05" — friendlier for advisors reading the
     // technician concern in Tekmetric.
     const lastDateStr = formatLastDate(item.last.date);
-    let lastStr = ` Last: ${lastDateStr}`;
+    let lastStr = ` Last Reported: ${lastDateStr}`;
     if (item.last.miles) lastStr += ` at ${Number(item.last.miles).toLocaleString()} ${distLabel}`;
     lastStr += ".";
     concernText += lastStr;
