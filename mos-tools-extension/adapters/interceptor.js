@@ -50,6 +50,26 @@
       }
     }
 
+    // Passive RO load capture: when the Tekmetric SPA fetches a repair order's
+    // canonical record, snapshot the response and emit MOS_RO_LOADED so the
+    // content script can populate friendly RO #, vehicle, customer, mileage —
+    // without any DOM scraping. Computed up front so it fires regardless of
+    // whether the sniffer wrapper also runs below.
+    var roLoadMatch = typeof url === 'string'
+      ? url.match(/\/api\/shop\/\d+\/repair-order\/(\d+)(?:\?|$)/)
+      : null;
+    var roLoadId = roLoadMatch ? roLoadMatch[1] : null;
+    var fireRoLoaded = function(response) {
+      if (!roLoadId) return;
+      if (response.status >= 200 && response.status < 300) {
+        try {
+          response.clone().json().then(function(data) {
+            window.postMessage({ type: 'MOS_RO_LOADED', roId: roLoadId, data: data }, '*');
+          }).catch(function() {});
+        } catch(e) {}
+      }
+    };
+
     if (snifferActive) {
       var reqBody = null;
       try {
@@ -87,6 +107,14 @@
             }
           }, '*');
         }).catch(function() {});
+        fireRoLoaded(response);
+        return response;
+      });
+    }
+
+    if (roLoadId) {
+      return origFetch.apply(this, arguments).then(function(response) {
+        fireRoLoaded(response);
         return response;
       });
     }
@@ -156,6 +184,23 @@
           }, '*');
         } catch(e) {}
       });
+    }
+
+    // Passive RO load capture (XHR path) — see fetch hook above for rationale.
+    if (this._mosUrl && (!this._mosMethod || this._mosMethod === 'GET')) {
+      var roMatchXhr = this._mosUrl.match(/\/api\/shop\/\d+\/repair-order\/(\d+)(?:\?|$)/);
+      if (roMatchXhr) {
+        var roLoadIdXhr = roMatchXhr[1];
+        var xhrSelf = this;
+        this.addEventListener('load', function() {
+          try {
+            if (xhrSelf.status >= 200 && xhrSelf.status < 300 && xhrSelf.responseText) {
+              var parsedRo = JSON.parse(xhrSelf.responseText);
+              window.postMessage({ type: 'MOS_RO_LOADED', roId: roLoadIdXhr, data: parsedRo }, '*');
+            }
+          } catch(e) {}
+        });
+      }
     }
 
     return origSend.apply(this, arguments);

@@ -28,6 +28,13 @@ function rememberRoContext(ctx) {
     mileage: ctx.mileage || prior.mileage || null,
     vehicle: ctx.vehicle || prior.vehicle || null,
     vehicleDisplay: ctx.vehicleDisplay || prior.vehicleDisplay || null,
+    vehicleId: ctx.vehicleId || prior.vehicleId || null,
+    roNumber: ctx.roNumber || prior.roNumber || null,
+    customer: ctx.customer || prior.customer || null,
+    customerName: ctx.customerName || prior.customerName || null,
+    customerId: ctx.customerId || prior.customerId || null,
+    customerPhone: ctx.customerPhone || prior.customerPhone || null,
+    customerEmail: ctx.customerEmail || prior.customerEmail || null,
   };
   roContextCache.set(ctx.roId, merged);
   return merged;
@@ -41,7 +48,45 @@ function hydrateContextFromCache(ctx) {
   if (!ctx.mileage && cached.mileage) ctx.mileage = cached.mileage;
   if (!ctx.vehicle && cached.vehicle) ctx.vehicle = cached.vehicle;
   if (!ctx.vehicleDisplay && cached.vehicleDisplay) ctx.vehicleDisplay = cached.vehicleDisplay;
+  if (!ctx.vehicleId && cached.vehicleId) ctx.vehicleId = cached.vehicleId;
+  if (!ctx.roNumber && cached.roNumber) ctx.roNumber = cached.roNumber;
+  if (!ctx.customer && cached.customer) ctx.customer = cached.customer;
+  if (!ctx.customerName && cached.customerName) ctx.customerName = cached.customerName;
+  if (!ctx.customerId && cached.customerId) ctx.customerId = cached.customerId;
+  if (!ctx.customerPhone && cached.customerPhone) ctx.customerPhone = cached.customerPhone;
+  if (!ctx.customerEmail && cached.customerEmail) ctx.customerEmail = cached.customerEmail;
   return ctx;
+}
+
+// Merge fields parsed from the Tekmetric SPA's own /repair-order/{id} response
+// into the per-RO cache, so the next detectContext() picks them up without any
+// DOM scraping. Fed by the MOS_RO_LOADED message from interceptor.js.
+function mergeApiRoData(roId, data) {
+  if (!roId || !data) return;
+  const prior = roContextCache.get(String(roId)) || {};
+  const v = data.vehicle || {};
+  const c = data.customer || {};
+  const yearMakeModel = (v.year || v.make || v.model)
+    ? [v.year, v.make, v.model].filter(Boolean).join(' ').trim()
+    : null;
+  const customerName = (c.firstName || c.lastName)
+    ? [c.firstName, c.lastName].filter(Boolean).join(' ').trim()
+    : null;
+  const mileageIn = data.milesIn ?? data.mileageIn ?? v.mileageIn ?? null;
+  const merged = {
+    vin: prior.vin || v.vin || null,
+    mileage: prior.mileage || (typeof mileageIn === 'number' ? mileageIn : null),
+    vehicle: prior.vehicle || (yearMakeModel ? { year: v.year, make: v.make, model: v.model } : null),
+    vehicleDisplay: prior.vehicleDisplay || yearMakeModel || null,
+    vehicleId: prior.vehicleId || (v.id ? String(v.id) : null),
+    roNumber: prior.roNumber || (data.repairOrderNumber != null ? String(data.repairOrderNumber) : null),
+    customer: prior.customer || (customerName ? { id: c.id, firstName: c.firstName, lastName: c.lastName } : null),
+    customerName: prior.customerName || customerName,
+    customerId: prior.customerId || (c.id ? String(c.id) : null),
+    customerPhone: prior.customerPhone || null,
+    customerEmail: prior.customerEmail || null,
+  };
+  roContextCache.set(String(roId), merged);
 }
 
 function detectContext() {
@@ -2028,6 +2073,19 @@ function startCategoryChangeObserver() {
         action: 'SNIFFER_CAPTURE_FROM_PAGE',
         data: e.data.data
       });
+    }
+
+    // Tekmetric SPA loaded an RO — interceptor parsed its API response and
+    // handed us friendly RO #, vehicle, customer, mileage. Merge into cache
+    // and re-emit context so the side panel updates on first paint.
+    if (e.data && e.data.type === 'MOS_RO_LOADED' && e.data.roId && e.data.data) {
+      try {
+        mergeApiRoData(e.data.roId, e.data.data);
+        console.log('[MOS Tools] RO data captured from SPA network response for', e.data.roId);
+        updateContext();
+      } catch (err) {
+        console.warn('[MOS Tools] MOS_RO_LOADED handler error:', err);
+      }
     }
   });
 

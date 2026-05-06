@@ -16,6 +16,19 @@
   VHI: ...]" or "[VHI] ..." concerns already present on existing ROs,
   so deduplication keeps working through the transition.
 
+### Fixed
+- **Side panel header now shows the friendly RO #, vehicle, and
+  customer immediately on first paint** instead of placeholder
+  "Vehicle / RO #316713112" (the long internal Tekmetric ID) until the
+  VHI server round-trip completes. Implemented via a passive,
+  scrape-free hook in the main-world fetch/XHR interceptor: when the
+  Tekmetric SPA itself fetches `/api/shop/{shopId}/repair-order/{roId}`
+  the response is parsed and posted to the content script as
+  `MOS_RO_LOADED`. The content script merges friendly RO #, vehicle
+  (year/make/model + id), VIN, customer (name + id), and mileage-in
+  into the per-RO context cache and re-emits `SET_SMS_CONTEXT`. No DOM
+  scraping involved, so this survives Tekmetric UI redesigns.
+
 ## 1.27.2 — 2026-05-05
 
 ### Changed
