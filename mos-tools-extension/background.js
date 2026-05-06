@@ -2466,6 +2466,21 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     return text.replace(/^\s*\[ai-suggested from VHI:\s*([^\]]+)\]/i, "[VHI: $1]");
   };
 
+  // Tekmetric inspection-rating constants. The technician-concerns endpoint
+  // requires `inspectionRating` as a full {id,code,name} object (not just an
+  // id). These two values were captured from real Tekmetric UI POSTs in
+  // HARs supplied by Brandon on 2026-05-06:
+  //   - red    "Requires Immediate Attention"  id=3 code=RQRSATTN
+  //   - yellow "May Require Attention Soon"    id=2 code=MAYRQRATTN
+  // We map overdue VHI items to red and everything else (due-soon, etc.)
+  // to yellow. There's also a green "Looks Good" rating but VHI never
+  // surfaces healthy items as actionable concerns, so we don't use it.
+  const RATING_REQUIRES_ATTENTION = { id: 3, code: "RQRSATTN", name: "Requires Immediate Attention" };
+  const RATING_MAY_REQUIRE_ATTENTION = { id: 2, code: "MAYRQRATTN", name: "May Require Attention Soon" };
+  const ratingForStatus = (status) => {
+    return status === "overdue" ? RATING_REQUIRES_ATTENTION : RATING_MAY_REQUIRE_ATTENTION;
+  };
+
   // 1. Fetch existing technician concerns to detect already-stamped items
   //    (idempotency). Job-existence checks were removed in v1.27.2 along
   //    with job creation — see step 2 below.
@@ -2483,7 +2498,11 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       const data = await concernsRes.json();
       const list = Array.isArray(data) ? data : (data?.data || []);
       for (const c of list) {
-        const text = (c?.concern || "").trim();
+        // Tekmetric stores the concern title in `inspectionTask` (the
+        // `concern` field we used pre-1.27.4 was wrong — it never existed
+        // on the response). Fall back to `concern` defensively just in
+        // case any older Tekmetric API ever does return that key.
+        const text = (c?.inspectionTask || c?.concern || "").trim();
         const t = extractMarkerTitle(text.match(markerRegex));
         if (t) existingConcernTitles.add(t);
       }
@@ -2556,7 +2575,19 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
             "content-type": "application/json",
             accept: "application/json",
           },
-          body: JSON.stringify({ concern: rewriteVhiMarker(item.concern) }),
+          // The Tekmetric technician-concerns endpoint requires
+          // BOTH `inspectionRating` (full {id,code,name} object) and
+          // `inspectionTask` (free-text title). Pre-1.27.4 we sent
+          // `{concern: "..."}` which silently 400'd with
+          // {"inspectionRating":"required","inspectionTask":"required"}.
+          // Shape verified against real Tekmetric UI HARs from 2026-05-06.
+          // `inspectionTask` is just a string label — it does NOT need
+          // to reference a real RO inspection task (the response confirms
+          // hasRoInspectionTask:false, roInspectionId:null).
+          body: JSON.stringify({
+            inspectionRating: ratingForStatus(item.status),
+            inspectionTask: rewriteVhiMarker(item.concern),
+          }),
         },
         `build-ro-from-vhi POST concern ${sk}`
       );
@@ -2635,7 +2666,9 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         const persistedTitles = new Set();
         for (const c of verifyList) {
           if (c?.id != null) persistedIds.add(String(c.id));
-          const text = (c?.concern || "").trim();
+          // Tekmetric stores the title in `inspectionTask`; see GET-parser
+          // comment above for the same reason. Defensive `concern` fallback.
+          const text = (c?.inspectionTask || c?.concern || "").trim();
           const t = extractMarkerTitle(text.match(markerRegex));
           if (t) persistedTitles.add(t);
         }

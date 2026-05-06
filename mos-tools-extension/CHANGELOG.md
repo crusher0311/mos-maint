@@ -1,5 +1,43 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.4 — 2026-05-06
+
+### Fixed
+- **"Add all to concerns" button now actually adds concerns to the RO.**
+  Pre-1.27.4 every concern POST to Tekmetric's
+  `/api/repair-orders/{roId}/technician-concerns` endpoint silently
+  returned HTTP 400 with
+  `{"inspectionRating":"Inspection rating is required",
+  "inspectionTask":"Inspection task is required"}` — the body shape
+  `{concern: "..."}` we'd been sending since the feature shipped was
+  never the right one (no idea where it came from). Replaced with the
+  shape Tekmetric's own UI sends, captured from real HARs supplied by
+  Brandon on 2026-05-06:
+  ```json
+  {
+    "inspectionRating": {"id": 3, "code": "RQRSATTN", "name": "Requires Immediate Attention"},
+    "inspectionTask": "[VHI: Engine Oil] — overdue 5000 mi"
+  }
+  ```
+  - **Severity-aware rating mapping**: overdue items get the red
+    `RQRSATTN` ("Requires Immediate Attention", id=3) rating; due-soon
+    items get the yellow `MAYRQRATTN` ("May Require Attention Soon",
+    id=2) rating. Both rating shapes were verified against HARs from
+    real Tekmetric UI POSTs.
+  - **`inspectionTask` is just the title string** — Tekmetric's
+    response confirms `hasRoInspectionTask:false, roInspectionId:null`,
+    so we don't need to (and can't) link concerns to real RO inspection
+    tasks. The marker rewrite from 1.27.3 still applies (so the title
+    becomes `[VHI: Foo] — desc` not the verbose
+    `[ai-suggested from VHI: Foo] — desc`).
+  - **Idempotency GET parser + silent-success verification re-fetch
+    parser** both updated to read `c.inspectionTask` (the field that
+    actually exists on the response) instead of the imaginary
+    `c.concern` field, with a defensive `c.concern` fallback. Without
+    this fix, the existing-concerns dedupe set would always be empty
+    after a successful POST and the verification step would always
+    falsely demote successful POSTs to "failed".
+
 ## 1.27.3 — 2026-05-06
 
 ### Changed
