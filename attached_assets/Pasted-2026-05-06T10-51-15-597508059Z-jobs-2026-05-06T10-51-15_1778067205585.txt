@@ -1,0 +1,150 @@
+2026-05-06T10:51:15.597508059Z     "jobs": [],
+2026-05-06T10:51:15.597510639Z     "sublets": [],
+2026-05-06T10:51:15.597513189Z     "fees": [
+2026-05-06T10:51:15.597516009Z       {
+2026-05-06T10:51:15.597519029Z  
+2026-05-06T10:51:15.597522419Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #100340 created by vanmeterautorepair@gmail.com", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-05-06T10:51:15.597526049Z [Tekmetric Webhook] RO Update: #100340 (ID: 326766991), Status: Estimate (ESTIMATE)
+2026-05-06T10:51:15.683738194Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #10880
+2026-05-06T10:51:16.480501631Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 22396418 via stored x-auth-token
+2026-05-06T10:51:16.549896125Z [Tekmetric Webhook] Upserted RO #100340: INSERT status=Estimate, label=Not Started, odometer=67378, customer=unchanged, shop=89
+2026-05-06T10:51:18.590154125Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 227772459 via stored x-auth-token
+2026-05-06T10:51:20.913089163Z [Tekmetric Backfill] Shop 117 page 21/22: 100 ROs
+2026-05-06T10:51:21.780479646Z [Tekmetric Webhook] Enriched RO #100340 with: vin, vehicleYear, vehicleMake, vehicleModel, vehicleEngine, customerName
+2026-05-06T10:51:21.790441121Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 33652374 via stored x-auth-token
+2026-05-06T10:51:22.694368478Z [PlanCache] MISS: No cache entry for JN8AT2MVXHW285378
+2026-05-06T10:51:22.694390599Z [VHI Trigger] Auto-building VHI on RO create: VIN=JN8AT2MVXHW285378, shop=89, provider=tekmetric, RO=100340, mileage=67378
+2026-05-06T10:51:23.528292405Z [Tekmetric Incremental] Fetched 1 inspection(s) for RO 22398418 via stored x-auth-token
+2026-05-06T10:51:23.678890126Z [PlanCache] MISS: No cache entry for JN8AT2MVXHW285378
+2026-05-06T10:51:23.678918517Z [VHI Rebuild] No cached plan for JN8AT2MVXHW285378 at shop 89, triggering build...
+2026-05-06T10:51:25.260379982Z 
+2026-05-06T10:51:25.260425363Z <--- Last few GCs --->
+2026-05-06T10:51:25.260430033Z 
+2026-05-06T10:51:25.260435073Z [69:0x248b7000]  2461888 ms: Mark-Compact 1794.0 (1833.6) -> 1790.3 (1833.6) MB, pooled: 0 MB, 824.22 / 0.03 ms  (average mu = 0.141, current mu = 0.067) allocation failure; scavenge might not succeed
+2026-05-06T10:51:25.260454064Z 
+2026-05-06T10:51:25.260456504Z 
+2026-05-06T10:51:25.260459844Z <--- JS stacktrace --->
+2026-05-06T10:51:25.260462064Z 
+2026-05-06T10:51:25.260465224Z FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+2026-05-06T10:51:25.260468224Z ----- Native stack trace -----
+2026-05-06T10:51:25.260470474Z 
+2026-05-06T10:51:25.260473334Z  1: 0xe13fde node::OOMErrorHandler(char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+2026-05-06T10:51:25.260476434Z  2: 0x11d5070 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+2026-05-06T10:51:25.260479515Z  3: 0x11d5347 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+2026-05-06T10:51:25.260635719Z  4: 0x1402c05  [next-server (v14.2.5)]
+2026-05-06T10:51:25.261351667Z  5: 0x1402c33  [next-server (v14.2.5)]
+2026-05-06T10:51:25.262056435Z  6: 0x141bd0a  [next-server (v14.2.5)]
+2026-05-06T10:51:25.262755213Z  7: 0x141eed8  [next-server (v14.2.5)]
+2026-05-06T10:51:25.263563364Z  8: 0x1c84ba1  [next-server (v14.2.5)]
+2026-05-06T10:51:25.618362418Z Aborted (core dumped)
+2026-05-06T10:51:25.61962518Z [2026-05-06T10:43:16.020Z] Retrying in 10s...
+2026-05-06T10:51:25.61962592Z [2026-05-06T10:43:16.020Z] Attempt 2/3 failed: fetch failed
+2026-05-06T10:51:25.633376981Z [Next.js] Exited with code 134
+2026-05-06T10:51:28.628577111Z ==> Running 'node scripts/start-with-workers.js'
+2026-05-06T10:51:28.669143229Z ============================================================
+2026-05-06T10:51:28.669358694Z MOS Maintenance MVP - Production Start
+2026-05-06T10:51:28.669373145Z ============================================================
+2026-05-06T10:51:28.669500598Z Port: 10000
+2026-05-06T10:51:28.669513178Z Production URL: https://mos-maintenance-mvp-main.onrender.com
+2026-05-06T10:51:28.66957768Z 
+2026-05-06T10:51:28.669751105Z [1/3] Starting Next.js server...
+2026-05-06T10:51:29.582962059Z   ▲ Next.js 14.2.5
+2026-05-06T10:51:29.583190535Z   - Local:        http://localhost:10000
+2026-05-06T10:51:29.583200036Z   - Network:      http://0.0.0.0:10000
+2026-05-06T10:51:29.58335696Z 
+2026-05-06T10:51:29.583500723Z  ✓ Starting...
+2026-05-06T10:51:29.77968883Z [Cron] Starting in-process scheduler (instance=srv-d55jaqkhg0os73a5dd8g-7d869f86f8-2rtcj-68-1778064689779, base=http://127.0.0.1:10000)
+2026-05-06T10:51:29.797708251Z [Cron]   • tekmetric-incremental-sync   */30 * * * *    GET   /api/cron/tekmetric-incremental-sync
+2026-05-06T10:51:29.799761074Z [Cron]   • protractor-sync              */30 * * * *    GET   /api/cron/protractor-sync
+2026-05-06T10:51:29.801974351Z [Cron]   • shopware-sync                */30 * * * *    GET   /api/cron/shopware-sync
+2026-05-06T10:51:29.804169096Z [Cron]   • tekmetric-backfill           0 1 * * *       GET   /api/cron/tekmetric-backfill
+2026-05-06T10:51:29.808000465Z [Cron]   • weekend-backfill-boost       0,15,30,45 * * * 6,0 GET   /api/cron/tekmetric-backfill
+2026-05-06T10:51:29.810719624Z [Cron]   • protractor-backfill          0 2 * * *       GET   /api/cron/protractor-backfill
+2026-05-06T10:51:29.81566625Z [Cron]   • protractor-weekend-boost     5,20,35,50 * * * 6,0 GET   /api/cron/protractor-backfill
+2026-05-06T10:51:29.818501493Z [Cron]   • shopware-backfill            0 3 * * *       GET   /api/cron/shopware-backfill
+2026-05-06T10:51:29.824694372Z [Cron]   • shopware-weekend-boost       10,25,40,55 * * * 6,0 GET   /api/cron/shopware-backfill
+2026-05-06T10:51:29.82735304Z [Cron]   • new-shop-backfill-fastpath   */5 * * * *     GET   /api/cron/tekmetric-backfill?fastpath=newShops
+2026-05-06T10:51:29.829582377Z [Cron]   • shopware-enrich              15 * * * *      GET   /api/cron/shopware-enrich
+2026-05-06T10:51:29.832332187Z [Cron]   • backfill-reconcile           30 * * * *      GET   /api/cron/backfill-reconcile
+2026-05-06T10:51:29.834495942Z [Cron]   • log-sync                     */15 * * * *    GET   /api/cron/log-sync
+2026-05-06T10:51:29.837232382Z [Cron]   • dashboard-refresh            */10 * * * *    GET   /api/cron/dashboard-refresh
+2026-05-06T10:51:29.839603593Z [Cron]   • daily-grace-check            0 8 * * *       GET   /api/cron/daily-grace-check
+2026-05-06T10:51:29.842290981Z [Cron]   • tekmetric-webhook-health     7 * * * *       GET   /api/cron/tekmetric-webhook-health
+2026-05-06T10:51:29.84495765Z [Cron]   • tekmetric-ro-retry           30 5 * * *      GET   /api/cron/tekmetric-ro-retry
+2026-05-06T10:51:29.847505975Z [Cron]   • tekmetric-backfill-health    30 6 * * *      GET   /api/cron/tekmetric-backfill-health
+2026-05-06T10:51:29.851355403Z [Cron]   • backfill-chunk-speed-health  0 7 * * *       GET   /api/cron/backfill-chunk-speed-health
+2026-05-06T10:51:29.853388125Z [Cron]   • cron-health-alerter          */30 * * * *    GET   /api/cron/cron-health-alerter
+2026-05-06T10:51:29.856359101Z [Cron]   • data-quality                 0 2 * * *       POST  /api/cron/data-quality
+2026-05-06T10:51:29.858793864Z [Cron]   • daily-all                    0 4 * * *       GET   /api/cron/daily-all
+2026-05-06T10:51:29.858942327Z [Cron] 22 jobs registered and scheduled
+2026-05-06T10:51:29.976032762Z  ✓ Ready in 586ms
+2026-05-06T10:51:31.676675624Z [Startup] Waiting for server... (attempt 1/30)
+2026-05-06T10:51:31.766987544Z [Startup] Server is ready! (status: 401)
+2026-05-06T10:51:31.767854676Z [2/3] Starting Tekmetric Sync Worker...
+2026-05-06T10:51:31.769483718Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-05-06T10:51:31.769512009Z [4/5] Starting Plan Prefetch Worker...
+2026-05-06T10:51:31.77114396Z 
+2026-05-06T10:51:31.771161341Z ============================================================
+2026-05-06T10:51:31.771167981Z All services started!
+2026-05-06T10:51:31.771180691Z - Next.js server on port 10000
+2026-05-06T10:51:31.771199252Z - Tekmetric Sync Worker (every 60s)
+2026-05-06T10:51:31.771204212Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-06T10:51:31.771208832Z - Plan Prefetch Worker (every 30m)
+2026-05-06T10:51:31.771307175Z ============================================================
+2026-05-06T10:51:32.685598937Z Tekmetric Incremental Sync Worker started
+2026-05-06T10:51:32.685620847Z Base sync interval: 60 seconds
+2026-05-06T10:51:32.685625787Z Max retries: 3
+2026-05-06T10:51:32.685630648Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-05-06T10:51:32.685634438Z 
+2026-05-06T10:51:32.699665486Z [PlanPrefetch] Script loaded
+2026-05-06T10:51:32.69977964Z [PlanPrefetch] Worker starting...
+2026-05-06T10:51:32.699822161Z [PlanPrefetch] Will run every 30 minutes
+2026-05-06T10:51:32.699829521Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-05-06T10:51:37.791954167Z [DataOne] Keep-alive started (every 240s)
+2026-05-06T10:51:43.097343907Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:51:44.335936933Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:51:47.69120197Z [2026-05-06T10:51:47.690Z] Running Tekmetric sync...
+2026-05-06T10:51:52.073324107Z [Tekmetric Incremental] Shop 28: Processing overflow page 2
+2026-05-06T10:51:52.585538886Z [Tekmetric Incremental] Shop 28: Fetched page 2, got 100 ROs (updated since 2026-05-06T10:42:05.240Z)
+2026-05-06T10:51:53.073418893Z [Tekmetric Incremental] Shop 32: Processing overflow page 521
+2026-05-06T10:51:54.072998136Z [Tekmetric Incremental] Shop 36: Processing overflow page 617
+2026-05-06T10:51:54.094834194Z [Tekmetric] Inspections endpoint short-circuited for shop 14956 after 3 consecutive 401s on token …5ucaKPEI. Skipping inspections fetch for 30m.
+2026-05-06T10:52:01.588441082Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.595336398Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.608821033Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.610313801Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.795320912Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.796961024Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.79798738Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.798876533Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.801448099Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.873729067Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.908170878Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:01.909489832Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:02.222847836Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:02.223866152Z [Extension Auth] Token not found in DB, path=/api/extension/auth-token
+2026-05-06T10:52:05.456666085Z [Tekmetric Incremental] Shop 36: Fetched page 617, got 100 ROs (updated since 2026-05-03T21:33:14.139Z)
+2026-05-06T10:52:06.047495654Z [Tekmetric Incremental] Shop 32: Fetched page 521, got 100 ROs (updated since 2026-05-03T21:33:13.152Z)
+2026-05-06T10:52:06.736747811Z [Tekmetric] Inspections endpoint short-circuited for shop 470 after 3 consecutive 401s on token …zk1zEYoQ. Skipping inspections fetch for 30m.
+2026-05-06T10:52:08.120108828Z [Tekmetric] Inspections endpoint short-circuited for shop 469 after 3 consecutive 401s on token …t5JUSCl4. Skipping inspections fetch for 30m.
+2026-05-06T10:52:08.670452902Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81939
+2026-05-06T10:52:09.287339238Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81942
+2026-05-06T10:52:10.122182708Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81922
+2026-05-06T10:52:10.705663619Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81915
+2026-05-06T10:52:11.787566146Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81940
+2026-05-06T10:52:12.372132116Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81932
+2026-05-06T10:52:12.955204737Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81935
+2026-05-06T10:52:13.533167647Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81936
+2026-05-06T10:52:14.603690054Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81930
+2026-05-06T10:52:15.656239471Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81928
+2026-05-06T10:52:16.23691337Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81927
+2026-05-06T10:52:16.81642135Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81924
+2026-05-06T10:52:18.024541075Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81921
+2026-05-06T10:52:18.6034702Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81916
+2026-05-06T10:52:19.187150086Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81903
+2026-05-06T10:52:19.765090646Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81911
+2026-05-06T10:52:20.342930643Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81906
+2026-05-06T10:52:22.170097179Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81910
+2026-05-06T10:52:23.425235346Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81909
+2026-05-06T10:52:24.174445796Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81876
+2026-05-06T10:52:25.394136637Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #81884

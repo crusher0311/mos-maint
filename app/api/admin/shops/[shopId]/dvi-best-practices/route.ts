@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { logAdminAction } from "@/lib/audit-log";
+import { insertAuditLog } from "@/lib/data/repositories/audit-logs";
 import {
   listShopDviBestPractices,
   upsertShopDviBestPractice,
@@ -42,15 +42,13 @@ async function writeAudit(args: {
 }) {
   if ((args.before ?? "").trim() === (args.after ?? "").trim()) return;
   try {
-    const db = await getDb();
     const headerStore = args.req.headers;
     const ipAddress =
       headerStore.get("x-forwarded-for") ||
       headerStore.get("x-real-ip") ||
       undefined;
     const userAgent = headerStore.get("user-agent") || undefined;
-    const now = new Date();
-    await db.collection("audit_logs").insertOne({
+    await insertAuditLog({
       type: "dvi_best_practice_change",
       adminEmail: args.adminEmail,
       shopId: args.shopId,
@@ -60,7 +58,6 @@ async function writeAudit(args: {
       after: args.after,
       ipAddress,
       userAgent,
-      createdAt: now,
     });
     await logAdminAction({
       action: "dvi_best_practice_change",

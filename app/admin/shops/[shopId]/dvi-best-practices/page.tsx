@@ -9,7 +9,7 @@ import {
   DEFAULT_DVI_BEST_PRACTICES,
   DVI_BEST_PRACTICE_MAX_CHARS,
 } from "@/lib/dvi-best-practices";
-import { getDb } from "@/lib/mongo";
+import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 import DviBestPracticesEditor from "./editor";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function ShopDviBestPracticesPage({ params }: PageProps) {
 
   const [rows, shopDoc] = await Promise.all([
     listShopDviBestPractices(shopId),
-    (await getDb()).collection("shops").findOne({ shopId }, { projection: { name: 1 } }),
+    findShopByExactShopId<{ name?: string }>(shopId, { name: 1 }),
   ]);
 
   const authoredKeys = new Set(rows.map((r) => r.serviceKey));
