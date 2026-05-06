@@ -541,7 +541,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const failedItems = Array.isArray(r.failedItems) ? r.failedItems : [];
 
     if (added > 0) {
-      let msg = `Added ${added} item${added === 1 ? '' : 's'} to RO`;
+      let msg = `Added ${added} technician concern${added === 1 ? '' : 's'} to RO`;
       if (skipped > 0) msg += ` · ${skipped} already present`;
       if (failed > 0) {
         const names = failedItems.slice(0, 2).map(f => f.title).filter(Boolean);
@@ -550,13 +550,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       showToast(msg, failed > 0 ? 'warning' : 'success');
     } else if (skipped > 0 && failed === 0) {
-      showToast(`All ${skipped} item${skipped === 1 ? '' : 's'} already on this RO — nothing added`, 'info');
+      showToast(`All ${skipped} concern${skipped === 1 ? '' : 's'} already on this RO — nothing added`, 'info');
     } else if (failed > 0) {
       const names = failedItems.slice(0, 2).map(f => f.title).filter(Boolean);
       const detail = names.length ? `: ${names.join(', ')}${failed > names.length ? '…' : ''}` : '';
-      showToast(`Failed to add ${failed} item${failed === 1 ? '' : 's'}${detail}`, 'error');
+      showToast(`Failed to add ${failed} concern${failed === 1 ? '' : 's'}${detail}`, 'error');
     } else {
-      showToast('No items added', 'info');
+      showToast('No concerns added', 'info');
     }
 
     setTimeout(() => {
@@ -1554,7 +1554,7 @@ function injectBuildRoFromVhiButton() {
 
   const btn = document.createElement('button');
   btn.id = 'mos-build-ro-vhi-btn';
-  btn.title = 'Build estimate from VHI (overdue + due-soon services)';
+  btn.title = 'Add VHI items as technician concerns (overdue + due-soon services)';
   btn.type = 'button';
   // Match sibling extension buttons (Pre-fill DVI, Enhance Notes) which all
   // use 32x32 PNG icons via chrome.runtime.getURL. The aiVHI_icon.png asset
@@ -1675,7 +1675,7 @@ function showBuildRoFromVhiModal(preview, context) {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   });
   const summary = preview.summary || {};
-  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">Build estimate from VHI <span style="color:#6b7280;font-weight:400;font-size:13px">(${summary.overdue || 0} overdue, ${summary.dueSoon || 0} due soon)</span></div>`;
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">Add technician concerns from VHI <span style="color:#6b7280;font-weight:400;font-size:13px">(${summary.overdue || 0} overdue, ${summary.dueSoon || 0} due soon)</span></div>`;
 
   const selectAllWrap = document.createElement('label');
   Object.assign(selectAllWrap.style, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer' });
@@ -1689,12 +1689,7 @@ function showBuildRoFromVhiModal(preview, context) {
 
   const subhead = document.createElement('div');
   Object.assign(subhead.style, { padding: '8px 20px 0 20px', fontSize: '12px', color: '#6b7280' });
-  const matched = (preview.summary && preview.summary.matchedCannedJobs) || 0;
-  const total = proposed.length;
-  const matchedNote = matched > 0
-    ? `${matched} of ${total} jobs were pre-populated with parts and labor from your shop's canned jobs; the rest use a placeholder labor line. `
-    : '';
-  subhead.textContent = `Each selected item adds a customer concern and a job to this RO. ${matchedNote}Items already added in a prior run will be skipped automatically.`;
+  subhead.textContent = `Each selected item adds a technician concern to this RO. The advisor builds the matching jobs themselves. Items already added in a prior run will be skipped automatically.`;
   modal.appendChild(subhead);
 
   const body = document.createElement('div');
@@ -1745,16 +1740,8 @@ function showBuildRoFromVhiModal(preview, context) {
     concernRow.innerHTML = `<span style="font-weight:500;color:#6b7280">CONCERN:</span> ${escapeHtml(item.concern)}`;
     card.appendChild(concernRow);
 
-    const jobRow = document.createElement('div');
-    Object.assign(jobRow.style, { fontSize: '12px', color: '#374151', lineHeight: '1.4' });
-    const laborSummary = (item.job?.labor || []).map(l => `${l.name} (${l.hours}h)`).join(', ') || '—';
-    const partsCount = (item.job?.parts || []).length;
-    const cannedSrc = item.job && item.job.cannedJobSource;
-    const sourceTag = cannedSrc
-      ? ` <span style="font-size:10px;color:#065f46;background:#d1fae5;padding:1px 6px;border-radius:8px;margin-left:6px">from canned job</span>`
-      : ` <span style="font-size:10px;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:8px;margin-left:6px">placeholder labor</span>`;
-    jobRow.innerHTML = `<span style="font-weight:500;color:#6b7280">JOB:</span> ${escapeHtml(item.job?.name || item.title)}${sourceTag} — labor: ${escapeHtml(laborSummary)}${partsCount > 0 ? `, ${partsCount} part(s)` : ''}`;
-    card.appendChild(jobRow);
+    // Job row removed in v1.27.2 — feature now creates concerns only;
+    // the advisor adds the matching jobs themselves.
 
     body.appendChild(card);
   });

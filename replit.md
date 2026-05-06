@@ -22,7 +22,7 @@ The UI features a modern SaaS aesthetic with a dark sidebar, light content areas
 *   **AI Support Chatbot**: An OpenAI-powered floating chat widget provides instant answers and knowledge base retrieval.
 *   **Sticker & Keytag Generation**: QR codes are generated, and stickers/keytags are rendered using `node-canvas` for efficient printing.
 *   **VHI Coach (DVI Overlay)**: A floating overlay panel in the Detect Dog extension that appears during Digital Vehicle Inspections, matching inspection tasks to canonical service keys and displaying maintenance data.
-*   **Pre-fill DVI & Build RO from VHI**: One-click actions in the Detect Dog extension to auto-fill DVI inspection ratings and propose/create jobs based on VHI maintenance data.
+*   **Pre-fill DVI & Add Concerns from VHI**: One-click actions in the Detect Dog extension to auto-fill DVI inspection ratings and add technician concerns to the RO based on VHI maintenance data (overdue + due-soon services). The advisor builds the matching jobs themselves from those concerns.
 *   **Enhance Notes (AI Findings)**: An AI-powered feature in the Detect Dog extension that rewrites technician inspection findings into professional customer-facing language.
 *   **AI & Recommendations**: Provides AI-powered maintenance recommendations, smart job autocomplete, and a common failures advisor.
 *   **Estimate Assist & Audit**: A comprehensive system including a Job Knowledge Base, Smart Job Builder API, AI Estimate Language API, and an Estimate Audit Engine.

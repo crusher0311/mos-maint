@@ -2441,9 +2441,10 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const markerRegex = new RegExp(`^${escapedPrefix}\\s+(.+?)(?:\\s+[—-]\\s|$)`);
 
-  // 1. Fetch existing concerns + jobs to detect already-stamped items (idempotency)
+  // 1. Fetch existing technician concerns to detect already-stamped items
+  //    (idempotency). Job-existence checks were removed in v1.27.2 along
+  //    with job creation — see step 2 below.
   let existingConcernTitles = new Set();
-  let existingJobTitles = new Set();
 
   try {
     const concernsRes = await tekmetricFetchWithBackoff(
@@ -2461,57 +2462,23 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         const m = text.match(markerRegex);
         if (m) existingConcernTitles.add(m[1].trim());
       }
+      console.log(
+        `[Build RO from VHI] Found ${existingConcernTitles.size} existing [VHI] concern(s) on RO ${context.roId}`
+      );
+    } else {
+      const errText = await concernsRes.text().catch(() => "");
+      console.warn(
+        `[Build RO from VHI] GET concerns returned ${concernsRes.status}: ${errText.substring(0, 200)}`
+      );
     }
   } catch (err) {
     console.warn("[Build RO from VHI] Failed to fetch existing concerns:", err.message);
   }
 
-  try {
-    const estRes = await tekmetricFetchWithBackoff(
-      `${baseUrl}/api/repair-order/${context.roId}/estimate`,
-      {
-        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
-      },
-      `build-ro-from-vhi GET estimate ${context.roId}`
-    );
-    if (estRes.ok) {
-      const estData = await estRes.json();
-      const estimate = estData?.data && estData?.type ? estData.data : estData;
-      const jobs = (estimate?.jobs || []).filter(j => !j?.archived);
-      for (const j of jobs) {
-        const name = (j?.name || "").trim();
-        const m = name.match(markerRegex);
-        if (m) existingJobTitles.add(m[1].trim());
-      }
-    }
-  } catch (err) {
-    console.warn("[Build RO from VHI] Failed to fetch existing jobs:", err.message);
-  }
-
-  // 2. Fetch RO metadata for laborRate (used on populated jobs)
-  let laborRate = 15000;
-  try {
-    const roRes = await tekmetricFetchWithBackoff(
-      `${baseUrl}/api/shop/${shopId}/repair-order/${context.roId}`,
-      {
-        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
-      },
-      `build-ro-from-vhi GET ro ${context.roId}`
-    );
-    if (roRes.ok) {
-      const roData = await roRes.json();
-      const ro = roData?.data && roData?.type ? roData.data : roData;
-      if (typeof ro.laborRate === "number") {
-        laborRate = ro.laborRate;
-      } else if (ro.laborRate?.rate != null) {
-        laborRate = ro.laborRate.rate;
-      }
-    }
-  } catch (err) {
-    console.warn("[Build RO from VHI] Failed to fetch RO metadata, using default labor rate:", err.message);
-  }
-
-  // 3. For each selected item, create concern + two-step job (skip if already stamped)
+  // 2. For each selected item, create a technician concern (skip if already
+  //    present). Job creation was REMOVED in v1.27.2 per platform-admin
+  //    direction — the advisor now builds jobs themselves from the
+  //    technician concerns. See CHANGELOG 1.27.2 for the why.
   const results = [];
   let added = 0;
   let skipped = 0;
@@ -2536,168 +2503,149 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       title: item.title,
       status: item.status,
       concernCreated: false,
-      jobCreated: false,
-      jobId: null,
+      concernId: null,
       outcome: "pending",
       error: null,
     };
 
-    if (existingConcernTitles.has(titleKey) && existingJobTitles.has(titleKey)) {
+    if (existingConcernTitles.has(titleKey)) {
       result.outcome = "skipped_existing";
       skipped++;
       results.push(result);
       continue;
     }
 
-    // Create concern (only if not already present)
-    if (!existingConcernTitles.has(titleKey)) {
-      try {
-        const cRes = await tekmetricFetchWithBackoff(
-          `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
-          {
-            method: "POST",
-            headers: {
-              "x-auth-token": smsTokens.tekmetric,
-              "content-type": "application/json",
-              accept: "application/json",
-            },
-            body: JSON.stringify({ concern: item.concern }),
+    // POST the concern. We always read and log the response body so silent
+    // server-side rejections are visible. Tekmetric was reportedly returning
+    // 200 OK without persisting the concern (see commit message for v1.27.2);
+    // the verification re-fetch after the loop catches this case and
+    // demotes the result from "added" to "failed" so the toast tells the
+    // truth instead of pretending success.
+    try {
+      const cRes = await tekmetricFetchWithBackoff(
+        `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
+        {
+          method: "POST",
+          headers: {
+            "x-auth-token": smsTokens.tekmetric,
+            "content-type": "application/json",
+            accept: "application/json",
           },
-          `build-ro-from-vhi POST concern ${sk}`
+          body: JSON.stringify({ concern: item.concern }),
+        },
+        `build-ro-from-vhi POST concern ${sk}`
+      );
+      const cBody = await cRes.text();
+      let cData = null;
+      try { cData = cBody ? JSON.parse(cBody) : null; } catch { /* keep raw */ }
+
+      if (!cRes.ok) {
+        console.error(
+          `[Build RO from VHI] concern POST FAILED status=${cRes.status} ` +
+          `roId=${context.roId} item="${titleKey}" body=${cBody.substring(0, 500)}`
         );
-        if (cRes.ok) {
-          result.concernCreated = true;
-          existingConcernTitles.add(titleKey);
-        } else {
-          const txt = await cRes.text();
-          result.outcome = "failed";
-          result.error = `concern create ${cRes.status}: ${txt.substring(0, 200)}`;
-          failed++;
-          results.push(result);
-          continue;
-        }
-      } catch (err) {
         result.outcome = "failed";
-        result.error = "concern create error: " + err.message;
+        result.error = `concern create ${cRes.status}: ${cBody.substring(0, 200)}`;
         failed++;
         results.push(result);
         continue;
       }
+
+      const created = cData?.data?.id ? cData.data : cData;
+      console.log(
+        `[Build RO from VHI] concern POST 2xx for "${titleKey}" — ` +
+        `id=${created?.id ?? "(none in body)"} body=${cBody.substring(0, 300)}`
+      );
+      result.concernCreated = true;
+      result.concernId = created?.id ?? null;
+      result.outcome = "added";
+      added++;
+      existingConcernTitles.add(titleKey);
+      results.push(result);
+    } catch (err) {
+      console.error(`[Build RO from VHI] concern POST threw: ${err.message}`);
+      result.outcome = "failed";
+      result.error = "concern create error: " + err.message;
+      failed++;
+      results.push(result);
+      continue;
     }
 
-    // Create job (only if not already present) — two-step
-    if (!existingJobTitles.has(titleKey)) {
-      let emptyJob;
-      try {
-        const emptyRes = await tekmetricFetchWithBackoff(
-          `${baseUrl}/api/shop/${shopId}/job`,
-          {
-            method: "POST",
-            headers: {
-              "x-auth-token": smsTokens.tekmetric,
-              "content-type": "application/json",
-              accept: "application/json",
-            },
-            body: JSON.stringify({
-              name: item.job?.name || item.title,
-              repairOrderId: parseInt(context.roId),
-              syncPartsAttachedToNonQuotedOrders: false,
-            }),
-          },
-          `build-ro-from-vhi POST empty-job ${sk}`
-        );
-        if (!emptyRes.ok) {
-          const txt = await emptyRes.text();
-          result.outcome = "failed";
-          result.error = `empty job ${emptyRes.status}: ${txt.substring(0, 200)}`;
-          failed++;
-          results.push(result);
-          continue;
-        }
-        const j = await emptyRes.json();
-        emptyJob = j?.data && j?.type ? j.data : j;
-      } catch (err) {
-        result.outcome = "failed";
-        result.error = "empty job error: " + err.message;
-        failed++;
-        results.push(result);
-        continue;
-      }
-
-      const newJobId = emptyJob.id;
-      const populated = { ...emptyJob };
-      populated.name = item.job?.name || item.title;
-      populated.note = item.job?.note || null;
-      // Force null cross-shop-style entity refs (technician, laborMatrixId)
-      populated.technician = null;
-      populated.parts = (item.job?.parts || []).map((p) => ({
-        tempId: Math.random(),
-        jobId: newJobId,
-        partType: p.partType ? { id: p.partType.id, code: p.partType.code } : { id: 1, code: "PART" },
-        name: p.name || "",
-        partNumber: p.partNumber || "",
-        position: p.position || "",
-        quantity: p.quantity ?? 1,
-        cost: p.cost ?? 0,
-        retail: p.retail ?? 0,
-        oemPartNumber: p.oemPartNumber || "",
-      }));
-      populated.labor = (item.job?.labor || []).map((l) => ({
-        tempId: Math.random(),
-        jobId: newJobId,
-        name: l.name || "Labor",
-        hours: parseFloat(l.hours) || 0,
-        rate: laborRate,
-        autoApplyLaborMatrixId: null,
-        technician: null,
-      }));
-      populated.discounts = [];
-      populated.fees = [];
-      populated.smartJobIds = [];
-      populated.smartJobs = [];
-      populated.laborTechnicians = [];
-
-      try {
-        const popRes = await tekmetricFetchWithBackoff(
-          `${baseUrl}/api/shop/${shopId}/job`,
-          {
-            method: "POST",
-            headers: {
-              "x-auth-token": smsTokens.tekmetric,
-              "content-type": "application/json",
-              accept: "application/json",
-            },
-            body: JSON.stringify(populated),
-          },
-          `build-ro-from-vhi POST populate-job ${sk}`
-        );
-        if (!popRes.ok) {
-          const txt = await popRes.text();
-          result.outcome = "failed";
-          result.error = `populate job ${popRes.status}: ${txt.substring(0, 200)}`;
-          failed++;
-          results.push(result);
-          continue;
-        }
-        result.jobCreated = true;
-        result.jobId = newJobId;
-        existingJobTitles.add(titleKey);
-      } catch (err) {
-        result.outcome = "failed";
-        result.error = "populate job error: " + err.message;
-        failed++;
-        results.push(result);
-        continue;
-      }
-    }
-
-    result.outcome = result.concernCreated || result.jobCreated ? "added" : "skipped_existing";
-    if (result.outcome === "added") added++;
-    else skipped++;
-    results.push(result);
+    // -------------------------------------------------------------
+    // [REMOVED in v1.27.2] Two-step job creation block previously
+    // POSTed an empty job, then PUT a populated job with labor + parts
+    // matched to the shop's canned jobs. Removed per platform-admin
+    // direction so the feature only adds technician concerns; the
+    // advisor builds the jobs themselves from those concerns.
+    // -------------------------------------------------------------
 
     // gentle pacing
     await new Promise(r => setTimeout(r, 80));
+  }
+
+  // 3. Verification: re-fetch concerns and confirm everything we POSTed is
+  //    actually visible in Tekmetric. This catches the silent-failure mode
+  //    reported on 2026-05-05 (POST returned 2xx but no concerns appeared
+  //    on the RO). Items whose POST returned 2xx but are missing from the
+  //    re-fetch get demoted from "added" to "failed" so the user sees the
+  //    real outcome instead of a misleading success toast.
+  if (added > 0) {
+    try {
+      const verifyRes = await tekmetricFetchWithBackoff(
+        `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
+        {
+          headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+        },
+        `build-ro-from-vhi VERIFY concerns ${context.roId}`
+      );
+      if (verifyRes.ok) {
+        const verifyData = await verifyRes.json();
+        const verifyList = Array.isArray(verifyData) ? verifyData : (verifyData?.data || []);
+        // Build BOTH an id set and a title set so verification can prefer
+        // id-match (bulletproof, no normalization concerns) and fall back
+        // to title-match only when the POST response did not include an id.
+        // This avoids false demotions when item titles contain " — " or
+        // other characters that the markerRegex extracts ambiguously.
+        const persistedIds = new Set();
+        const persistedTitles = new Set();
+        for (const c of verifyList) {
+          if (c?.id != null) persistedIds.add(String(c.id));
+          const text = (c?.concern || "").trim();
+          const m = text.match(markerRegex);
+          if (m) persistedTitles.add(m[1].trim());
+        }
+        const silentlyMissing = [];
+        for (const r of results) {
+          if (!r.concernCreated) continue;
+          const verifiedById = r.concernId != null && persistedIds.has(String(r.concernId));
+          const verifiedByTitle = persistedTitles.has((r.title || "").trim());
+          if (verifiedById || verifiedByTitle) continue;
+          silentlyMissing.push(r.title);
+          r.outcome = "failed";
+          r.error = "concern POST returned 2xx but concern is NOT visible in Tekmetric on re-fetch (silent server-side rejection)";
+          added--;
+          failed++;
+        }
+        if (silentlyMissing.length > 0) {
+          console.error(
+            `[Build RO from VHI] SILENT FAILURE: ${silentlyMissing.length} concern(s) POSTed but not visible in Tekmetric on re-fetch. ` +
+            `Titles: ${silentlyMissing.slice(0, 5).join(", ")}${silentlyMissing.length > 5 ? "…" : ""}`
+          );
+        } else {
+          console.log(
+            `[Build RO from VHI] Verification PASSED: all ${added} new concern(s) visible on RO ${context.roId}`
+          );
+        }
+      } else {
+        console.warn(
+          `[Build RO from VHI] Verification GET returned ${verifyRes.status} — cannot confirm concerns persisted; trusting POST 2xx responses`
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[Build RO from VHI] Verification GET error: ${err.message} — cannot confirm concerns persisted`
+      );
+    }
   }
 
   // 4. Send audit log

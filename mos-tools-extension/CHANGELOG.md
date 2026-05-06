@@ -1,5 +1,27 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.2 — 2026-05-05
+
+### Changed
+- **"Add technician concerns from VHI" (formerly "Build estimate from VHI")
+  now creates technician concerns ONLY.** Job creation has been removed
+  per platform-admin direction — the advisor builds the matching jobs
+  themselves from the concerns the technician sees. This also fixes a
+  reported issue where job rows were appearing on the RO with no matching
+  concerns visible.
+- Button title and modal header updated accordingly.
+
+### Fixed
+- **Silent-success guard on technician-concern POST.** Previously, if
+  Tekmetric's `/api/repair-orders/{roId}/technician-concerns` POST
+  returned 2xx without actually persisting the concern, the extension
+  would mark the item as "added" and the toast would lie. The apply
+  flow now (a) logs the full POST response body for every item, and
+  (b) re-fetches the concerns list after the loop to verify every
+  successful POST is actually visible on the RO. Items that POSTed 2xx
+  but are missing on re-fetch are demoted from "added" to "failed" so
+  the user sees the real outcome.
+
 ## 1.27.1 — 2026-05-05
 
 ### Changed
