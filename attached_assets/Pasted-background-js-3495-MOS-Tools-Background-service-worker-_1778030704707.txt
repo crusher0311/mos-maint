@@ -1,0 +1,75 @@
+background.js:3495 [MOS Tools] Background service worker loaded
+background.js:47 [MOS] Restored API token from storage
+background.js:51 [MOS] Restored API URL: https://mos.tools
+background.js:55 [MOS] Restored shops: 67
+background.js:221 [MOS] Side panel opens on action click
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:295 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:130 [Tekmetric] Shop ID captured: 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:1940 [LaborRate] Fetched 8 rules for shop 14245
+background.js:3037 [LaborRate] Estimate returned 200 with no jobs
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:3078 [LaborRate] Vehicle: 2011 Ford F-350 Super Duty
+background.js:3106 [LaborRate] Raw customer API response keys: id, firstName, lastName, email, phone, vehicles, customerType, contactFirstName, contactLastName, notes, address, shopId, shopName, shopNickname, taxExempt, taxId, arCreditLimit, okForMarketing, textToPayEligible, leadSource, referrerId, referrerName, birthday, fleetId, deletedDate, rewardsId, fleetCompany, tekmetricId, linkedCustomers, tag, requiredFieldValidationBypassed, userBypassedBy, arBalance, storeCreditBalance, storeCreditBalanceAge, fullName
+background.js:3107 [LaborRate] Raw customer tags fields: {"tag":"FLEET"}
+background.js:3119 [LaborRate] Customer details: type="Business", tags=[FLEET]
+background.js:3159 [LaborRate] Matching against vehicle: 2011 Ford F-350 Super Duty fuel: Diesel categories: [] customer: Brandon phones: 1 custType: Business tags: ["FLEET"]
+background.js:3170 [LaborRate] Matched RO-level rule: "Fleet" (priority 50) → $299.99/hr
+background.js:3418 [LaborRate] Current rate on RO: 29999 (299.99/hr), target: 29999 (299.99/hr)
+background.js:3421 [LaborRate] Rate already matches ($299.99/hr), skipping
+background.js:3183 [LaborRate] Rule "Fleet" has overrideCategoryRates — skipping per-job category rules
+background.js:3217 [LaborRate] Per-job rules exist but no job categories found on RO
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:244 [MOS] Message received: BUILD_RO_FROM_VHI
+background.js:503 [Build RO from VHI] Preview requested
+background.js:244 [MOS] Message received: APPLY_BUILD_RO_FROM_VHI
+background.js:545 [Build RO from VHI] Apply requested
+background.js:2465 [Build RO from VHI] Found 0 existing [VHI] concern(s) on RO 316713112
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Replace non-synthetic rear axle lubricants." body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Replace climate-controlled seat filter." body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Rear Differential Fluid" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Transfer Case Fluid" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Power Steering Fluid" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Fuel System Cleaning" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Coolant Hoses" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Wheel Alignment" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Fuel Filter" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Oil Change" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Coolant Service" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:2543 [Build RO from VHI] concern POST FAILED status=400 roId=316713112 item="Battery" body={"type":"ERROR","message":"Invalid Input","data":null,"details":{"inspectionRating":"Inspection rating is required","inspectionTask":"Inspection task is required"}}
+applyBuildRoFromVhi @ background.js:2543
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:295 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:1031 [MOS] Error loading plan: Error: Failed to load plan
+    at loadPlan (sidepanel.js:1027:29)
+loadPlan @ sidepanel.js:1031
+sidepanel.js:1031 [MOS] Error loading plan: Error: Failed to load plan
+    at loadPlan (sidepanel.js:1027:29)
+loadPlan @ sidepanel.js:1031
+sidepanel.js:1031 [MOS] Error loading plan: Error: Failed to load plan
+    at loadPlan (sidepanel.js:1027:29)
+loadPlan @ sidepanel.js:1031
