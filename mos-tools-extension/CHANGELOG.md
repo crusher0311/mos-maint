@@ -6,6 +6,15 @@
 - Renamed the VHI button tooltip to "Add all to concerns" per
   platform-admin direction (was the longer "Add VHI items as technician
   concerns (overdue + due-soon services)").
+- **Concern marker shortened from "[ai-suggested from VHI: ...]" to
+  "[VHI: ...]"** per platform-admin direction. The verbose marker is
+  emitted by the proposal generator on the MOS API server (different
+  repo), so the extension now rewrites the marker client-side
+  immediately before POSTing to Tekmetric. The markerRegex used for
+  idempotency and the silent-success verification re-fetch was widened
+  to match both the new short form and any legacy "[ai-suggested from
+  VHI: ...]" or "[VHI] ..." concerns already present on existing ROs,
+  so deduplication keeps working through the transition.
 
 ## 1.27.2 — 2026-05-05
 

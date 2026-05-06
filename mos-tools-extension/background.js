@@ -2433,13 +2433,38 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     return { success: false, error: "No items selected" };
   }
 
-  // Build a regex from the configured marker prefix so this stays in sync
-  // with the server's MARKER_PREFIX (`[VHI]`). The marker no longer embeds
-  // the serviceKey, so we identify already-stamped items by the displayName
-  // that follows the marker (e.g. `[VHI] Engine Oil — ...` → "Engine Oil").
-  const prefix = markerPrefix || "[VHI]";
-  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const markerRegex = new RegExp(`^${escapedPrefix}\\s+(.+?)(?:\\s+[—-]\\s|$)`);
+  // Marker handling.
+  //
+  // The server's proposal generator currently emits concern text starting
+  // with the verbose marker "[ai-suggested from VHI: <title>] ...". Per
+  // platform-admin direction in v1.27.3 we want the user-facing marker to
+  // be the short "[VHI: <title>] ...". Rather than wait on a separate
+  // server-side deploy, we rewrite the marker client-side immediately
+  // before POSTing the concern (see rewriteVhiMarker below).
+  //
+  // markerRegex must therefore match BOTH formats so idempotency and
+  // verification continue to work for legacy concerns already present on
+  // ROs as well as any newly-rewritten ones:
+  //   [VHI: Engine Oil] — desc                    (new, post-rewrite)
+  //   [ai-suggested from VHI: Engine Oil] — desc  (legacy, server-emitted)
+  //   [VHI] Engine Oil — desc                     (very old format)
+  // markerPrefix from the message is intentionally ignored here — the
+  // regex is now multi-format and the server prefix has drifted from it.
+  const markerRegex = /^\[(?:ai-suggested from )?VHI(?::\s*([^\]]+)\]|\]\s+(.+?)(?:\s+[—-]\s|$))/i;
+  // Helper: pull the title out of a marker match regardless of which
+  // alternative branch matched. Group 1 is the bracketed-colon form,
+  // group 2 is the legacy space form.
+  const extractMarkerTitle = (match) => {
+    if (!match) return null;
+    const t = (match[1] ?? match[2] ?? "").trim();
+    return t || null;
+  };
+  // Helper: rewrite the verbose server marker to the short user-facing
+  // form. Idempotent — already-short markers pass through unchanged.
+  const rewriteVhiMarker = (text) => {
+    if (typeof text !== "string") return text;
+    return text.replace(/^\s*\[ai-suggested from VHI:\s*([^\]]+)\]/i, "[VHI: $1]");
+  };
 
   // 1. Fetch existing technician concerns to detect already-stamped items
   //    (idempotency). Job-existence checks were removed in v1.27.2 along
@@ -2459,8 +2484,8 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
       const list = Array.isArray(data) ? data : (data?.data || []);
       for (const c of list) {
         const text = (c?.concern || "").trim();
-        const m = text.match(markerRegex);
-        if (m) existingConcernTitles.add(m[1].trim());
+        const t = extractMarkerTitle(text.match(markerRegex));
+        if (t) existingConcernTitles.add(t);
       }
       console.log(
         `[Build RO from VHI] Found ${existingConcernTitles.size} existing [VHI] concern(s) on RO ${context.roId}`
@@ -2531,7 +2556,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
             "content-type": "application/json",
             accept: "application/json",
           },
-          body: JSON.stringify({ concern: item.concern }),
+          body: JSON.stringify({ concern: rewriteVhiMarker(item.concern) }),
         },
         `build-ro-from-vhi POST concern ${sk}`
       );
@@ -2611,8 +2636,8 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         for (const c of verifyList) {
           if (c?.id != null) persistedIds.add(String(c.id));
           const text = (c?.concern || "").trim();
-          const m = text.match(markerRegex);
-          if (m) persistedTitles.add(m[1].trim());
+          const t = extractMarkerTitle(text.match(markerRegex));
+          if (t) persistedTitles.add(t);
         }
         const silentlyMissing = [];
         for (const r of results) {
