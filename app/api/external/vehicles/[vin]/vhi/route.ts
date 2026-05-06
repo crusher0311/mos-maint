@@ -106,15 +106,49 @@ export const GET = createExternalEndpoint(
 
     const db = await getDb();
 
+    // Shop records use numeric shopId, but other collections (vehicles in
+    // particular) sometimes key by the shop's ObjectId, the ObjectId-as-string,
+    // or the numeric/string shopId. Look up the shop once and build every
+    // form so subsequent queries match regardless of how the data was keyed.
+    const { ObjectId } = await import("mongodb");
+    const shopRecord = await db.collection("shops").findOne(
+      { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+      { projection: { _id: 1, integrationProvider: 1 } }
+    );
+    const shopIdVariants: any[] = [String(resolvedShopId), Number(resolvedShopId)];
+    if (shopRecord?._id) {
+      shopIdVariants.push(shopRecord._id);
+      shopIdVariants.push(String(shopRecord._id));
+      // also accept the _id parsed back from string (some writers store it as ObjectId-from-string)
+      try {
+        const oid = new ObjectId(String(shopRecord._id));
+        if (!shopIdVariants.some((v) => v instanceof ObjectId && v.equals(oid))) {
+          shopIdVariants.push(oid);
+        }
+      } catch {
+        /* not a valid ObjectId, ignore */
+      }
+    }
+
     const vehicleDoc = await db.collection("vehicles").findOne(
       {
-        $or: [{ shopId: String(resolvedShopId) }, { shopId: Number(resolvedShopId) }],
-        vin,
+        shopId: { $in: shopIdVariants },
+        vin: { $in: [vin, vin.toUpperCase()] },
       },
-      { projection: { currentMileage: 1, lastMileage: 1, year: 1 } }
+      { projection: { currentMileage: 1, lastMileage: 1, mileage: 1, odometer: 1, year: 1 } }
     );
 
-    let mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+    let mileage =
+      vehicleDoc?.currentMileage ??
+      vehicleDoc?.lastMileage ??
+      vehicleDoc?.mileage ??
+      vehicleDoc?.odometer ??
+      null;
+    if (mileage) {
+      console.log(
+        `[VHI External] Loaded actual mileage ${mileage} from vehicles doc for ${vin} (shop=${resolvedShopId})`
+      );
+    }
     let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
     let mileageEstimateDetails: Record<string, unknown> | null = null;
 
@@ -183,7 +217,7 @@ export const GET = createExternalEndpoint(
 
     if (!mileage) {
       const expiredEntry = await db.collection("cached_plans").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
         { sort: { createdAt: -1 }, projection: { mileage: 1, "plan.currentMiles": 1 } }
       );
       if (expiredEntry) {
@@ -194,7 +228,7 @@ export const GET = createExternalEndpoint(
 
     if (!mileage) {
       const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
         { projection: { mileageAtAnalysis: 1 } }
       );
       if (analysisDoc?.mileageAtAnalysis) {
@@ -204,15 +238,11 @@ export const GET = createExternalEndpoint(
     }
 
     if (!mileage) {
-      const shopDoc = await db.collection("shops").findOne(
-        { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
-        { projection: { integrationProvider: 1 } }
-      );
-      const provider = shopDoc?.integrationProvider || "tekmetric";
+      const provider = shopRecord?.integrationProvider || "tekmetric";
 
       if (provider === "tekmetric") {
         const wo = await db.collection("tekmetric_work_orders").findOne(
-          { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { shopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
           { sort: { createdAt: -1 }, projection: { odometer: 1 } }
         );
         if (wo?.odometer) {
@@ -221,7 +251,7 @@ export const GET = createExternalEndpoint(
         }
       } else if (provider === "shopware") {
         const ro = await db.collection("shopware_repair_orders").findOne(
-          { mosShopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { mosShopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
           { sort: { updatedAt: -1 }, projection: { odometer: 1, "raw.odometer": 1, "raw.odometer_out": 1 } }
         );
         if (ro) {
@@ -230,7 +260,7 @@ export const GET = createExternalEndpoint(
         }
       } else if (provider === "protractor") {
         const wo = await db.collection("protractor_work_orders").findOne(
-          { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] }, vin: vin.toUpperCase() },
+          { shopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
           { sort: { updatedAt: -1 }, projection: { OutUsage: 1, InUsage: 1, Odometer: 1, "data.OutUsage": 1, "data.InUsage": 1, "data.Odometer": 1 } }
         );
         if (wo) {
