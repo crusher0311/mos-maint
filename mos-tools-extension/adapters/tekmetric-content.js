@@ -1554,7 +1554,7 @@ function injectBuildRoFromVhiButton() {
 
   const btn = document.createElement('button');
   btn.id = 'mos-build-ro-vhi-btn';
-  btn.title = 'Add VHI items as technician concerns (overdue + due-soon services)';
+  btn.title = 'Add all to concerns';
   btn.type = 'button';
   // Match sibling extension buttons (Pre-fill DVI, Enhance Notes) which all
   // use 32x32 PNG icons via chrome.runtime.getURL. The aiVHI_icon.png asset

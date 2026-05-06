@@ -1,5 +1,12 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.3 — 2026-05-06
+
+### Changed
+- Renamed the VHI button tooltip to "Add all to concerns" per
+  platform-admin direction (was the longer "Add VHI items as technician
+  concerns (overdue + due-soon services)").
+
 ## 1.27.2 — 2026-05-05
 
 ### Changed
