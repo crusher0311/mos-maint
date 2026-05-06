@@ -6,6 +6,8 @@ MOS Maintenance MVP is an AI-enhanced automotive maintenance management system d
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
+**Chrome Web Store publishing (mos-tools-extension): NEVER auto-publish.** Commit code, bump the manifest version, write the CHANGELOG entry — but DO NOT run `npx tsx scripts/auto-publish-extension.ts` or `scripts/publish-extension.js`. Wait for Brandon to say "publish it" (or equivalent) before sending anything to Google. The auto-publisher uses `CWS_REFRESH_TOKEN` to push directly to CWS, so a single command equals a real Google upload. Set 2026-05-06 after Brandon was surprised that v1.27.2 had been sent to Google without him saying so.
+
 ## System Architecture
 The application is built with Next.js 14.2.5, React 18, Next.js API Routes, and Tailwind CSS, primarily using TypeScript. It employs a dual-database strategy with Supabase PostgreSQL for core relational data and MongoDB Atlas for caching and legacy features.
 
