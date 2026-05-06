@@ -8,6 +8,31 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
+
+// Decode model year from VIN position 10 (no DB required).
+// VIN position 7 disambiguates 1980-2009 (digit) from 2010+ (letter).
+const VIN_YEAR_LETTERS_PRE_2010: Record<string, number> = {
+  A: 1980, B: 1981, C: 1982, D: 1983, E: 1984, F: 1985, G: 1986, H: 1987,
+  J: 1988, K: 1989, L: 1990, M: 1991, N: 1992, P: 1993, R: 1994, S: 1995,
+  T: 1996, V: 1997, W: 1998, X: 1999, Y: 2000,
+  "1": 2001, "2": 2002, "3": 2003, "4": 2004, "5": 2005,
+  "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+};
+const VIN_YEAR_LETTERS_POST_2010: Record<string, number> = {
+  A: 2010, B: 2011, C: 2012, D: 2013, E: 2014, F: 2015, G: 2016, H: 2017,
+  J: 2018, K: 2019, L: 2020, M: 2021, N: 2022, P: 2023, R: 2024, S: 2025,
+  T: 2026, V: 2027, W: 2028, X: 2029, Y: 2030,
+};
+function decodeYearFromVin(vin: string): number | null {
+  if (!vin || vin.length < 10) return null;
+  const v = vin.toUpperCase();
+  const pos7 = v[6];
+  const pos10 = v[9];
+  const isPost2010 = /[A-Z]/.test(pos7);
+  const map = isPost2010 ? VIN_YEAR_LETTERS_POST_2010 : VIN_YEAR_LETTERS_PRE_2010;
+  return map[pos10] ?? null;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -232,15 +257,44 @@ export const GET = createExternalEndpoint(
           console.log(
             `[VHI External] Estimated mileage ${mileage} from CARFAX for ${vin} (confidence=${est.confidence})`
           );
+        } else {
+          console.log(
+            `[VHI External] CARFAX estimate not available for ${vin} at shop ${resolvedShopId}: ${est.estimated ? "no mileage returned" : est.reason}`
+          );
         }
       } catch (err) {
-        console.warn(`[VHI External] CARFAX estimate failed for ${vin}:`, err instanceof Error ? err.message : err);
+        console.warn(`[VHI External] CARFAX estimate threw for ${vin}:`, err instanceof Error ? err.message : err);
       }
     }
 
-    // Fallback 2: model-year * 12k miles/year (US national average), so we never hard-fail
+    // Fallback 2: model-year * 12k miles/year (US national average), so we never hard-fail.
+    // Year source priority: vehicles doc → DataOne VIN decode → VIN position-10 character map.
     if (!mileage || mileage <= 0) {
-      const year = vehicleDoc?.year && Number(vehicleDoc.year) > 1980 ? Number(vehicleDoc.year) : null;
+      let year: number | null =
+        vehicleDoc?.year && Number(vehicleDoc.year) > 1980 ? Number(vehicleDoc.year) : null;
+      let yearSource = year ? "vehicles_doc" : null;
+
+      if (!year) {
+        try {
+          const enhanced = await getEnhancedVehicleData(vin);
+          const yr = enhanced?.vehicle?.year ? Number(enhanced.vehicle.year) : null;
+          if (yr && yr > 1980) {
+            year = yr;
+            yearSource = "dataone_decode";
+          }
+        } catch (err) {
+          console.warn(`[VHI External] DataOne decode threw for ${vin}:`, err instanceof Error ? err.message : err);
+        }
+      }
+
+      if (!year) {
+        const decoded = decodeYearFromVin(vin);
+        if (decoded) {
+          year = decoded;
+          yearSource = "vin_position_10";
+        }
+      }
+
       if (year) {
         const age = Math.max(1, new Date().getFullYear() - year);
         const estimated = Math.min(250000, Math.max(12000, age * 12000));
@@ -250,10 +304,15 @@ export const GET = createExternalEndpoint(
           confidence: "very-low",
           method: "model_year_x_12k",
           modelYear: year,
+          yearSource,
           assumedMilesPerYear: 12000,
         };
         console.log(
-          `[VHI External] Estimated mileage ${mileage} from model year ${year} for ${vin} (12k/yr fallback)`
+          `[VHI External] Estimated mileage ${mileage} from model year ${year} (source=${yearSource}) for ${vin} (12k/yr fallback)`
+        );
+      } else {
+        console.warn(
+          `[VHI External] Year-based fallback skipped for ${vin}: no year in vehicles doc, DataOne decode, or VIN position-10`
         );
       }
     }
