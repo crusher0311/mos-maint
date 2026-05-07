@@ -43,12 +43,18 @@ import {
   cacheJobs,
 } from "@/lib/integrations/tekmetric/incremental-sync";
 
-// Each cron tick processes up to this many pages of 100 ROs each. With a
-// 5 RPS shared Tekmetric budget, 30 pages × ~1 RO-list call + ~1 jobs call +
-// occasional vehicle/customer fetches comes out to roughly 3-5 minutes of
-// wall-clock — well under the 300s maxDuration on the cron route.
-const MAX_PAGES_PER_RUN = 30;
+// Each cron tick processes up to this many pages of 100 ROs each. Empirically
+// each page costs 30-45s of wall-clock once vehicle/customer/jobs fetches are
+// factored in (the 5 RPS shared Tekmetric budget gets fragmented across
+// dependent calls). 10 pages keeps us comfortably under both the 300s Next
+// route maxDuration AND the 5min cron wrapper timeout, with progress
+// persisted after every page so a timeout mid-chunk only loses one page of
+// work, not the whole batch.
+const MAX_PAGES_PER_RUN = 10;
 const PAGE_SIZE = 100;
+// Bail cleanly (with a progress write) before the route gets killed by
+// Render's request timeout. 240s leaves ~60s headroom under the 300s limit.
+const SOFT_DEADLINE_MS = 240 * 1000;
 
 type TekmetricVehicle = {
   id: number;
@@ -519,8 +525,43 @@ export async function runFullPageBackfillChunk(
       page++;
       pagesProcessed++;
 
+      // Persist progress after EVERY page so a mid-chunk timeout only costs
+      // one page of work. Without this, a request killed by Render's 300s
+      // limit (or the cron wrapper's 5min timeout) loses the whole batch
+      // and the next tick restarts from `fullPageNextPage`'s last value —
+      // which, on a fresh flag, is still 0. That's how shop 82 spent 30
+      // minutes re-indexing the same first 7 pages.
+      try {
+        await db
+          .collection("tekmetric_backfill_progress")
+          .updateOne(
+            { shopId },
+            {
+              $set: {
+                fullPageNextPage: page,
+                fullPageTotalPages: totalPages,
+                lastFullPageRunAt: new Date(),
+              },
+            },
+          );
+      } catch (writeErr: any) {
+        console.warn(
+          `[Tekmetric Full-Page Backfill] Shop ${shopId} progress write failed at page ${page}: ${writeErr?.message || writeErr}`,
+        );
+      }
+
       if (totalPages > 0 && page >= totalPages) {
         reachedEnd = true;
+        break;
+      }
+
+      // Soft deadline: stop adding pages so we have time to flush the
+      // normalized batch + write the final progress doc before the route
+      // is killed.
+      if (Date.now() - startedAt >= SOFT_DEADLINE_MS) {
+        console.log(
+          `[Tekmetric Full-Page Backfill] Shop ${shopId}: soft deadline hit after ${pagesProcessed} pages, deferring rest to next tick`,
+        );
         break;
       }
     }
