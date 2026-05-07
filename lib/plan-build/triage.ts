@@ -318,6 +318,7 @@ export function triage({
   intervalApplyMode = "always",
   vehicleYear = null,
   vehicleTransType = null,
+  fuelType = null,
   engineRisk = null,
   oilDutyPreference = "severe",
   distanceUnit = "miles",
@@ -338,6 +339,12 @@ export function triage({
   intervalApplyMode?: string;
   vehicleYear?: number | null;
   vehicleTransType?: string | null;
+  /**
+   * Powertrain fuel type as decoded by DataOne (e.g. "Gasoline", "Diesel",
+   * "Electric"). Used to skip combustion-only common-maintenance items on
+   * EVs (no fuel system, no hydraulic power steering).
+   */
+  fuelType?: string | null;
   /** Task #166: engine-risk classification result (oil-row chip + safety check). */
   engineRisk?: EngineRiskResult | null;
   /** Task #166: per-vehicle Normal/Severe duty preference for oil row. */
@@ -873,8 +880,20 @@ export function triage({
     { serviceKey: "coolant_hoses", title: "Coolant Hoses", category: "Coolant System", miles: 60000, months: null },
   ];
 
+  // Powertrain-incompatible common items: EVs have no fuel system to clean
+  // and use electric (not hydraulic) power steering, so these items make no
+  // sense on a Tesla / Bolt / Mach-E / etc. Hydrogen FCEVs are also fuel-less.
+  const isElectricVehicle =
+    typeof fuelType === "string" &&
+    /^(electric|hydrogen|fuel ?cell|bev|fcev)$/i.test(fuelType.trim());
+  const SKIP_FOR_ELECTRIC = new Set(["fuel_system", "power_steering"]);
+
   for (const cm of COMMON_MAINTENANCE) {
     if (usedServiceKeys.has(cm.serviceKey)) continue;
+
+    if (isElectricVehicle && SKIP_FOR_ELECTRIC.has(cm.serviceKey)) {
+      continue;
+    }
 
     const shopOverride = shopIntervals[cm.serviceKey];
     if (shopOverride?.excluded) continue;

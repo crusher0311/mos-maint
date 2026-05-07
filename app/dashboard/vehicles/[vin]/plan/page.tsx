@@ -2520,7 +2520,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             {t.usingShopInterval && shopLogo ? (
                               <img src={shopLogo} alt="Shop" className="h-3 inline" />
                             ) : null}
-                            {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                            {t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
@@ -2665,7 +2665,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Why this is recommended</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -2856,7 +2856,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.usingShopInterval && shopLogo ? (
                           <img src={shopLogo} alt="Shop" className="h-3 inline" />
                         ) : null}
-                        {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                        {t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
@@ -2978,7 +2978,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Why this is recommended</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -3057,7 +3057,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             {t.usingShopInterval && shopLogo ? (
                               <img src={shopLogo} alt="Shop" className="h-3 inline" />
                             ) : null}
-                            {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                            {t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                             {t.intervalMiles && t.intervalMonths ? " / " : ""}
                             {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                           </span>
@@ -3135,7 +3135,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.usingShopInterval && shopLogo ? (
                           <img src={shopLogo} alt="Shop" className="h-3 inline" />
                         ) : null}
-                        {t.usingShopInterval ? "Shop" : "OEM"}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
+                        {t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")}: {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : ""}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
                       </span>
@@ -3222,7 +3222,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     <summary className="cursor-pointer text-xs underline">Show details</summary>
                     <div className="mt-2 rounded-lg bg-neutral-50 p-2 text-xs text-neutral-700 space-y-1">
                       <div>
-                        <span className="font-medium">{t.usingShopInterval ? "Shop" : "OEM"} Interval:</span>{" "}
+                        <span className="font-medium">{t.usingShopInterval ? "Shop" : (t.source === "common" ? "Recommended" : "OEM")} Interval:</span>{" "}
                         {t.intervalMiles ? `${fmtDistance(t.intervalMiles, distanceUnit)} ${distLabel}` : "—"}
                         {t.intervalMiles && t.intervalMonths ? " / " : ""}
                         {t.intervalMonths ? `${t.intervalMonths} mo` : ""}

@@ -821,6 +821,7 @@ export async function POST(req: NextRequest) {
       intervalApplyMode,
       vehicleYear,
       vehicleTransType,
+      fuelType: (oemData.vehicle as any)?.fuelType ?? (oemData.vehicle as any)?.fuel_type ?? null,
       engineRisk,
       oilDutyPreference,
       // Task #336: pass shop unit so OEM intervals are converted to km
