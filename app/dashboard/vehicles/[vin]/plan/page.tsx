@@ -2234,6 +2234,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
           }
         : undefined,
       oilDutyPreference,
+      // Task #384: persist mileage provenance so external VHI responses
+      // echo the same `mileageSource` / `mileageEstimateDetails` whether
+      // they're served from this cached plan or freshly built. The
+      // dashboard estimates either via CARFAX (`estimated_carfax`) or via
+      // a date-projection from the last recorded reading (also CARFAX-backed).
+      mileageSource: mileageEstimated ? "estimated_carfax" : "actual",
+      mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : null,
     };
     
     setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {

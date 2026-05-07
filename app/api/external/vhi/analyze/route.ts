@@ -94,8 +94,17 @@ export const POST = createExternalEndpoint(
       (isPartner ? `, partner=${partnerId}` : "")
     );
 
+    // Task #384: the analyze endpoint always uses the partner-supplied
+    // mileage or the RO odometer — both are "actual". Forward this so
+    // rebuildVhi persists it on cached_plans and the response carries the
+    // same shape as the GET endpoint.
+    const mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
+    const mileageEstimateDetails: Record<string, unknown> | null = null;
+
     const result = await rebuildVhi(resolvedShopId, vin, mileage, {
       invalidateFirst: true,
+      mileageSource,
+      mileageEstimateDetails,
     });
 
     if (!result.success) {
@@ -118,6 +127,12 @@ export const POST = createExternalEndpoint(
       );
     }
 
+    const responseSource = result.mileageSource ?? mileageSource;
+    const responseDetails =
+      responseSource === "actual"
+        ? null
+        : (result.mileageEstimateDetails ?? mileageEstimateDetails);
+
     await db.collection("vhi_analysis_log").insertOne({
       vin: vin.toUpperCase(),
       shopId: resolvedShopId,
@@ -125,6 +140,10 @@ export const POST = createExternalEndpoint(
       smsShopId,
       roNumber: roNumber || null,
       mileage,
+      // Task #384: log mileage provenance so partner support tickets can
+      // tell at a glance whether we trusted an actual odometer or a fallback.
+      mileageSource: responseSource,
+      mileageEstimateDetails: responseDetails,
       score: result.score?.value,
       tier: result.score?.tier,
       summary: result.summary,
@@ -147,6 +166,10 @@ export const POST = createExternalEndpoint(
       buckets: result.buckets,
       reportUrl: buildReportUrl(result.vin || vin.toUpperCase(), resolvedShopId),
       analyzedAt: new Date().toISOString(),
+      // Task #384: keep the contract identical to GET /vehicles/[vin]/vhi.
+      mileageSource: responseSource,
+      mileageEstimated: responseSource !== "actual",
+      mileageEstimateDetails: responseDetails,
     });
   }
 );

@@ -160,6 +160,14 @@ export const GET = createExternalEndpoint(
       const score = computeScore(separated);
       const tier = getScoreTier(score);
 
+      // Task #384: echo persisted mileage source. Legacy entries that
+      // predate the persistence change are missing the fields — default
+      // to "actual" / null so the response shape is always consistent.
+      const cachedSource: "actual" | "estimated_carfax" | "estimated_annual" =
+        plan.mileageSource ?? "actual";
+      const cachedDetails =
+        cachedSource === "actual" ? null : plan.mileageEstimateDetails ?? null;
+
       return NextResponse.json({
         success: true,
         vin,
@@ -197,6 +205,9 @@ export const GET = createExternalEndpoint(
         reportUrl: buildReportUrl(vin, resolvedShopId),
         cachedAt: cached.createdAt,
         source: "cached_plan",
+        mileageSource: cachedSource,
+        mileageEstimated: cachedSource !== "actual",
+        mileageEstimateDetails: cachedDetails,
       });
     }
 
@@ -205,10 +216,17 @@ export const GET = createExternalEndpoint(
 
     if (analysisResult) {
       console.log(`[VHI External] Found analysis cache for ${vin} at shop ${resolvedShopId}`);
+      // Task #384: spread defaults the source/details from the analysis
+      // cache (handled by getVhiFromAnalysisCache for legacy entries).
+      const aSource = analysisResult.mileageSource ?? "actual";
+      const aDetails = aSource === "actual" ? null : analysisResult.mileageEstimateDetails ?? null;
       return NextResponse.json({
         success: true,
         vin,
         ...analysisResult,
+        mileageSource: aSource,
+        mileageEstimated: aSource !== "actual",
+        mileageEstimateDetails: aDetails,
         icons: getStatusIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
@@ -362,7 +380,13 @@ export const GET = createExternalEndpoint(
       `[PartnerVHI] rebuild_start requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
       `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner}`
     );
-    const result = await rebuildVhi(resolvedShopId, vin, mileage, { invalidateFirst: false });
+    const result = await rebuildVhi(resolvedShopId, vin, mileage, {
+      invalidateFirst: false,
+      // Task #384: forward the resolved source so the persisted cache row
+      // (and therefore the next cache HIT) carries the same fields.
+      mileageSource,
+      mileageEstimateDetails,
+    });
 
     if (!result.success) {
       console.error(
@@ -398,9 +422,15 @@ export const GET = createExternalEndpoint(
       reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
-      mileageSource,
-      mileageEstimated: mileageSource !== "actual",
-      mileageEstimateDetails,
+      // Task #384: prefer the rebuild result so the response matches the
+      // values that were just persisted into cached_plans.
+      mileageSource: result.mileageSource ?? mileageSource,
+      mileageEstimated:
+        (result.mileageSource ?? mileageSource) !== "actual",
+      mileageEstimateDetails:
+        (result.mileageSource ?? mileageSource) === "actual"
+          ? null
+          : result.mileageEstimateDetails ?? mileageEstimateDetails,
     });
   }
 );

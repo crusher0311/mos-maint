@@ -587,6 +587,11 @@ export async function runOnDemandAnalysis(
   // for Canadian shops at intake so anchors against the (already-shop-unit)
   // odometer + last-performed mileage produce correct dueAt + milesToGo.
   distanceUnit: DistanceUnit = "miles",
+  // Task #384: persist mileage provenance onto the analysis cache so the
+  // external VHI endpoint echoes the same fields when it serves from the
+  // analysis cache fallback.
+  mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual",
+  mileageEstimateDetails: Record<string, unknown> | null = null,
 ) {
   const isMetricShop = distanceUnit === "kilometers";
   const oemToShopMiles = (mi: number | null | undefined): number => {
@@ -1034,7 +1039,13 @@ export async function runOnDemandAnalysis(
         source: "extension_on_demand",
         schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
         mileageAtAnalysis: currentMileage,
-        showInspectItems
+        showInspectItems,
+        // Task #384: persist mileage provenance so external VHI responses
+        // served from the analysis cache include the same fields as the
+        // on-demand and cached_plan branches.
+        mileageSource,
+        mileageEstimateDetails:
+          mileageSource === "actual" ? null : mileageEstimateDetails,
       }
     },
     { upsert: true }
@@ -1890,7 +1901,12 @@ export async function GET(request: NextRequest) {
           // Task #336: forwarded so OEM intervals are converted to the
           // shop's unit (km for Canadian shops) before being persisted to
           // maintenance_analysis_cache + rendered in the side panel.
-          shopDistanceUnit
+          shopDistanceUnit,
+          // Task #384: persist mileage provenance on the analysis cache so
+          // the external VHI endpoint echoes the same fields when it
+          // serves from this fallback.
+          mileageEstimated ? "estimated_carfax" : "actual",
+          mileageEstimated ? mileageEstimateDetails : null,
         );
         analysisData = { recommendations, showInspectItems };
       } catch (e) {

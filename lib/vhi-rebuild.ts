@@ -57,6 +57,12 @@ export interface VhiRebuildResult {
     complimentary?: any[];
   };
   cachedAt?: Date;
+  /** Task #384: source of the mileage that was used to build / read the plan. */
+  mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
+  /** Derived from mileageSource — true when source !== "actual". */
+  mileageEstimated?: boolean;
+  /** Task #384: structured details about the estimate (CARFAX projection, year×12k, ...). */
+  mileageEstimateDetails?: Record<string, unknown> | null;
   error?: string;
   failedStage?: VhiRebuildFailedStage;
   upstreamStatus?: number;
@@ -133,7 +139,18 @@ export async function rebuildVhi(
   shopId: number,
   vin: string,
   mileage: number,
-  options: { invalidateFirst?: boolean } = {}
+  options: {
+    invalidateFirst?: boolean;
+    /**
+     * Task #384: forwarded so the persisted `cached_plans` doc carries
+     * the same source/details that the on-demand response reports. The
+     * caller already resolved these (CARFAX projection, year×12k fallback,
+     * or "actual"); we just plumb them through so a follow-up cache HIT
+     * surfaces the identical fields.
+     */
+    mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
+    mileageEstimateDetails?: Record<string, unknown> | null;
+  } = {}
 ): Promise<VhiRebuildResult> {
   const db = await __deps.getDb();
   const vinUpper = vin.toUpperCase();
@@ -182,6 +199,58 @@ export async function rebuildVhi(
   const score = computeScore(separated);
   const tier = getScoreTier(score);
 
+  // Task #384: persist mileageSource/Details onto the cached plan doc when
+  // the caller resolved them, so a subsequent cache HIT echoes the same
+  // values rather than dropping them. We patch in-place instead of writing
+  // a fresh setCachedPlan because the build endpoint owns the rest of the
+  // plan shape.
+  const cachedHasSource = plan.mileageSource !== undefined;
+  let resolvedSource: "actual" | "estimated_carfax" | "estimated_annual" =
+    options.mileageSource ?? plan.mileageSource ?? "actual";
+  let resolvedDetails: Record<string, unknown> | null =
+    resolvedSource === "actual"
+      ? null
+      : (options.mileageEstimateDetails ??
+          (plan.mileageEstimateDetails as Record<string, unknown> | undefined) ??
+          null);
+
+  // Persist when:
+  //  - the caller resolved a source different from what's cached, OR
+  //  - the cache row is missing the field entirely (legacy entry — backfill
+  //    even with "actual" so support tooling sees the field), OR
+  //  - source matches but the caller has details the cache doesn't.
+  const sourceChanged =
+    options.mileageSource !== undefined &&
+    options.mileageSource !== (plan.mileageSource ?? "actual");
+  const legacyBackfill = !cachedHasSource;
+  const detailsBackfill =
+    resolvedSource !== "actual" &&
+    options.mileageEstimateDetails != null &&
+    plan.mileageEstimateDetails == null;
+
+  if (sourceChanged || legacyBackfill || detailsBackfill) {
+    try {
+      await db.collection("cached_plans").updateOne(
+        { vin: vinUpper, shopId: { $in: [String(shopId), Number(shopId)] } },
+        {
+          $set: {
+            "plan.mileageSource": resolvedSource,
+            "plan.mileageEstimateDetails":
+              resolvedSource === "actual" ? null : resolvedDetails,
+          },
+        },
+      );
+    } catch (err: any) {
+      console.warn(
+        `[VHI Rebuild] Failed to persist mileageSource for ${vinUpper}: ${err?.message}`,
+      );
+    }
+  }
+
+  if (resolvedSource === "actual") {
+    resolvedDetails = null;
+  }
+
   return {
     success: true,
     vin: vinUpper,
@@ -222,6 +291,9 @@ export async function rebuildVhi(
       ),
     },
     cachedAt: cached.createdAt,
+    mileageSource: resolvedSource,
+    mileageEstimated: resolvedSource !== "actual",
+    mileageEstimateDetails: resolvedDetails,
   };
 }
 

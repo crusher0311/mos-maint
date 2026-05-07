@@ -131,6 +131,15 @@ export interface CachedPlanData {
     matchedOverrideLabel?: string | null;
   };
   oilDutyPreference?: "normal" | "severe";
+  /**
+   * Task #384: persisted alongside the plan so external VHI responses can
+   * echo the same `mileageSource` / `mileageEstimateDetails` regardless of
+   * whether they're served from cache or freshly built. Legacy entries that
+   * predate this change are missing the fields — readers should default to
+   * `"actual"` / `null` and treat `mileageEstimated` as derived.
+   */
+  mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
+  mileageEstimateDetails?: Record<string, unknown> | null;
 }
 
 export interface CachedPlan {

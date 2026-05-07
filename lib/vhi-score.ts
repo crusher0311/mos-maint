@@ -159,6 +159,14 @@ export interface AnalysisCacheVhiResult {
   distanceUnit: string;
   customerName: string | null;
   cachedAt: Date;
+  /**
+   * Task #384: surface the persisted mileage source so external VHI
+   * responses served from the analysis cache include the same fields as
+   * the on-demand and cached_plan branches. Legacy entries that predate
+   * the persistence change default to "actual" / null.
+   */
+  mileageSource: "actual" | "estimated_carfax" | "estimated_annual";
+  mileageEstimateDetails: Record<string, unknown> | null;
 }
 
 const ANALYSIS_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 4; // 4 hours
@@ -244,6 +252,12 @@ export async function getVhiFromAnalysisCache(
     distanceUnit: "miles",
     customerName: vehicleDoc?.customerName ?? null,
     cachedAt: doc.analyzedAt ? new Date(doc.analyzedAt) : new Date(),
+    // Task #384: legacy entries that predate persistence default to actual.
+    mileageSource: (doc.mileageSource as AnalysisCacheVhiResult["mileageSource"]) ?? "actual",
+    mileageEstimateDetails:
+      (doc.mileageSource ?? "actual") === "actual"
+        ? null
+        : (doc.mileageEstimateDetails ?? null),
   };
 }
 
