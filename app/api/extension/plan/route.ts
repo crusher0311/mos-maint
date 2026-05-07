@@ -113,7 +113,7 @@ function computeEstimatedDate(milesToGo: number | null, intervalMiles: number | 
 
 const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   oil: [/oil change/i, /engine oil/i, /oil filter/i, /oil and filter/i, /synthetic oil/i, /lube.*oil/i],
-  tire_rotation: [/tire rotation/i, /rotate tire/i],
+  tire_rotation: [/tire rotation/i, /rotate tire/i, /tires? rotated/i, /rotate (?:and|&) balance/i, /wheel rotation/i],
   cabin_air: [/cabin air/i, /cabin filter/i, /pollen filter/i, /interior air filter/i],
   engine_air: [/\bair filter\b/i, /engine air/i, /air cleaner/i],
   coolant: [/coolant/i, /antifreeze/i, /radiator flush/i],

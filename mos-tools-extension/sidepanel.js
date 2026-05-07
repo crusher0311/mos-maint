@@ -1417,10 +1417,22 @@ function createServiceItemHTML(item, type) {
   const overdueText = getOverdueText(item, type);
   
   // Last done info with logo, or reason text (e.g. "No record of this service being performed.")
+  // For DVI Finding items the technician's note is the meaningful body — prefer it
+  // over the generic "no record" fallback. For other items, append the note when present.
   const lastDone = formatLastDone(item.last, currentContext?.mileage);
-  const lastDoneHtml = lastDone ? 
-    `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>` :
-    `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
+  const techNote = (item.notes || '').trim();
+  const isDviFinding = item.category === 'DVI Finding' || item.source === 'dvi';
+  let lastDoneHtml;
+  if (lastDone) {
+    lastDoneHtml = `<div class="last-done">${lastDone.text} ${lastDone.logo}</div>`;
+  } else if (isDviFinding && techNote) {
+    lastDoneHtml = `<div class="last-done reason-text">${escapeHtml(techNote)}</div>`;
+  } else {
+    lastDoneHtml = `<div class="last-done reason-text">${escapeHtml(item.reason || 'No record of this service being performed.')}</div>`;
+  }
+  if (techNote && !isDviFinding) {
+    lastDoneHtml += `<div class="last-done reason-text" style="margin-top:4px;"><strong>Tech note:</strong> ${escapeHtml(techNote)}</div>`;
+  }
   
   // Check if we have full job details from canned job match
   const hasFullDetails = item.laborItems && item.laborItems.length > 0;

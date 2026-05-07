@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.5 — 2026-05-07
+
+### Fixed
+- **VHI panel now shows the technician's DVI note instead of "No record of
+  this service being performed."** When a DVI item (Front Brake Pads,
+  Fluid Leaks, Other, etc.) is brought into VHI, the API has always
+  carried `item.notes` (the tech's finding text), but `sidepanel.js` only
+  rendered `item.reason`. For DVI Finding rows `reason` is unset, so the
+  panel fell through to the generic "no record" fallback even though the
+  tech's note was sitting right there on the item. Now: for DVI Finding
+  items the tech note replaces the fallback; for non-DVI items with a
+  note, the note is appended on a second line as "Tech note: …".
+
 ## 1.27.4 — 2026-05-06
 
 ### Fixed
