@@ -904,6 +904,8 @@ export default function PlatformShopsPage() {
       setReviewDialog({ shop, mode: "flag" });
     },
     triggerExtendTrial: (shop: Shop) => { setExtendTrialShop(shop); setExtendTrialDays("14"); },
+    triggerBackfill,
+    triggerFullPageReindex,
   };
 
   const colSpan = 6;
@@ -1871,6 +1873,8 @@ interface ShopRowProps {
   triggerExtendTrial: (shop: Shop) => void;
   triggerApproveReview: (shop: Shop) => void;
   triggerFlagReview: (shop: Shop) => void;
+  triggerBackfill: (shop: Shop) => void;
+  triggerFullPageReindex: (shop: Shop) => void;
 }
 
 function ShopRow(props: ShopRowProps) {
@@ -1879,6 +1883,7 @@ function ShopRow(props: ShopRowProps) {
     openMenuShopId, setOpenMenuShopId, accessShop, openFeatureModal,
     toggleLock, deleteShop, resendCardCaptureEmail, triggerExtendTrial,
     triggerApproveReview, triggerFlagReview,
+    triggerBackfill, triggerFullPageReindex,
   } = props;
   const reviewStatus = (shop.reviewStatus || "approved") as ShopReviewStatus;
   const needsReview = reviewStatus !== "approved";
