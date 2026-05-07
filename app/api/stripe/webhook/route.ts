@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
+import { seedDefaultAdmins } from "@/lib/seed-default-admins";
 import {
   sendEmail,
   makeWelcomeEmail,
@@ -297,6 +298,8 @@ export async function POST(req: NextRequest) {
           assertNoLegacyPasswordField(userDoc);
           await db.collection("users").insertOne(userDoc);
           console.log(`[Stripe] Created user ${pending.adminEmail} for shop ${shopId}`);
+
+          await seedDefaultAdmins(db, shopId);
           
           await db.collection("pending_signups").updateOne(
             { pendingId },
@@ -481,6 +484,7 @@ export async function POST(req: NextRequest) {
             await db.collection("shops").insertOne(shopDoc);
             assertNoLegacyPasswordField(userDoc);
             await db.collection("users").insertOne(userDoc);
+            await seedDefaultAdmins(db, newShopId);
             await db.collection("crm_provisions").insertOne({
               stripeSessionId: (session as any).id,
               stripeCustomerId: session.customer,

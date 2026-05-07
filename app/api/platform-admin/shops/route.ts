@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
+import { seedDefaultAdmins } from "@/lib/seed-default-admins";
 import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings } from "@/lib/stripe";
@@ -583,6 +584,8 @@ export async function POST(req: NextRequest) {
 
     assertNoLegacyPasswordField(userDoc);
     await db.collection("users").insertOne(userDoc);
+
+    await seedDefaultAdmins(db, newShopId);
 
     await db.collection("audit_logs").insertOne({
       type: "shop_created",
