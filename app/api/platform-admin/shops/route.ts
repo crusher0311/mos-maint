@@ -400,6 +400,17 @@ export async function GET() {
             lastError,
             lastErrorAt,
             processedCount: bf?.processedCount || 0,
+            // Tekmetric full-page reindex flags. `needsFullPageReindex`
+            // is set either by the coverage probe in the chunker or by
+            // an admin clicking the "Full-page reindex" menu item. UI
+            // surfaces this as a yellow warning state so on-call knows
+            // the date-window chunker has finished but the shop is
+            // still under-covered.
+            needsFullPageReindex: activeIntegration === "tekmetric" ? !!bf?.needsFullPageReindex : false,
+            fullPageMode: activeIntegration === "tekmetric" ? !!bf?.fullPageMode : false,
+            fullPageNextPage: activeIntegration === "tekmetric" && typeof bf?.fullPageNextPage === "number" ? bf.fullPageNextPage : null,
+            fullPageTotalPages: activeIntegration === "tekmetric" && typeof bf?.fullPageTotalPages === "number" ? bf.fullPageTotalPages : null,
+            lastCoverageCheck: activeIntegration === "tekmetric" && bf?.lastCoverageCheck ? bf.lastCoverageCheck : null,
           };
         })() : null,
         integrationDetails: {

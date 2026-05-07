@@ -8,6 +8,16 @@ import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCa
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
+import { probeTekmetricRoCount } from "@/lib/integrations/tekmetric/full-page-backfill";
+
+// Coverage probe: shops with this many Tekmetric ROs available but a low
+// indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
+// reindex instead of being marked complete. Catches shops whose entire
+// history was bulk-migrated into Tekmetric in the last few weeks (Casey,
+// Duxler) — every RO has a recent updatedDate, so the 90-day window
+// chunker walks back through 18 empty windows and falsely declares done.
+const COVERAGE_PROBE_MIN_TOTAL = 5000;
+const COVERAGE_MIN_RATIO = 0.3;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -430,7 +440,26 @@ async function backfillShopChunkInner(
   let customersCacheMisses = 0;
 
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
-  
+
+  // Full-page mode short-circuit: when a shop has been flagged for
+  // full-page reindex (`fullPageMode: true`) the dedicated
+  // `/api/cron/tekmetric-fullpage-backfill` worker owns it. The regular
+  // chunker bails out so two cron paths never race writes against the
+  // same `tekmetric_backfill_progress` row. Returning a benign no-op
+  // shape avoids upsetting the outer queue accounting.
+  if (progress?.fullPageMode === true && progress?.completed !== true) {
+    console.log(
+      `[Tekmetric Backfill] Shop ${shopId}: deferring to full-page worker (fullPageMode=true, nextPage=${progress.fullPageNextPage ?? 0})`,
+    );
+    return {
+      jobsIndexed: 0,
+      skipped: 0,
+      complete: false,
+      message: `deferred to full-page worker (page ${progress.fullPageNextPage ?? 0})`,
+      normalizedCount: 0,
+    };
+  }
+
   const shop = await db.collection("shops").findOne({ shopId });
   const enterpriseId = shop?.enterpriseId;
   
@@ -998,8 +1027,61 @@ async function backfillShopChunkInner(
   // A force-skipped chunk DID move the cursor — count that as forward
   // progress for the purposes of completion (otherwise a bad final
   // window would leave the shop perpetually one chunk shy of done).
-  const isComplete =
+  let isComplete =
     (!chunkHadError || forceSkipBadWindow) && !hitPageCap && nextChunkEnd <= oldestDate;
+  // Coverage probe: before declaring victory, ask Tekmetric how many ROs
+  // it actually has for this shop with no date filter. If we've indexed
+  // dramatically fewer than that AND the shop is large enough that low
+  // coverage isn't just startup noise, refuse to mark complete and flag
+  // the shop for full-page reindex instead. This is the safety net for
+  // bulk-migrated shops (Casey/Duxler/etc) whose ROs all share recent
+  // updatedDates — the date-window chunker can't see the rest of their
+  // history and will otherwise fall-positive complete with <2% indexed.
+  let coverageCheck: any = null;
+  let downgradeToFullPage = false;
+  if (isComplete) {
+    const totalAvailable = await probeTekmetricRoCount(shopId, tekmetricShopId);
+    // CRITICAL: use indexed RO count, NOT job count. `totalAvailable` from
+    // Tekmetric is `/repair-orders` totalElements (ROs). `totalJobsIndexed`
+    // counts service-line jobs which routinely outnumber ROs 2–5x — using
+    // the wrong unit would let bulk-migrated shops slip through with a
+    // false ratio > 1.0. We count canonical ROs from `normalized_work_orders`
+    // which is the dual-write target for the chunker (see ingestionService
+    // .ingestWorkOrderBatchWithAllEntities). countDocuments uses the
+    // shopId index (see scripts/ensure-indexes.ts).
+    let totalIndexedRos = 0;
+    try {
+      totalIndexedRos = await db.collection("normalized_work_orders").countDocuments({ shopId });
+    } catch (countErr: any) {
+      console.warn(`[Tekmetric Backfill] Shop ${shopId}: coverage probe count failed:`, countErr?.message || countErr);
+    }
+    if (
+      totalAvailable !== null &&
+      totalAvailable > COVERAGE_PROBE_MIN_TOTAL &&
+      totalIndexedRos / totalAvailable < COVERAGE_MIN_RATIO
+    ) {
+      coverageCheck = {
+        totalElementsAvailable: totalAvailable,
+        totalRosIndexed: totalIndexedRos,
+        ratio: Number((totalIndexedRos / totalAvailable).toFixed(4)),
+        checkedAt: new Date(),
+        triggeredAutoFlag: true,
+      };
+      downgradeToFullPage = true;
+      isComplete = false;
+      console.warn(
+        `[Tekmetric Backfill] Shop ${shopId}: COVERAGE LOW — Tekmetric reports ${totalAvailable} ROs but only ${totalIndexedRos} ROs indexed (${(totalIndexedRos / totalAvailable * 100).toFixed(1)}%). Auto-flagging for full-page reindex.`,
+      );
+    } else if (totalAvailable !== null) {
+      coverageCheck = {
+        totalElementsAvailable: totalAvailable,
+        totalRosIndexed: totalIndexedRos,
+        ratio: Number((totalIndexedRos / Math.max(1, totalAvailable)).toFixed(4)),
+        checkedAt: new Date(),
+        triggeredAutoFlag: false,
+      };
+    }
+  }
   // Track actual cursor movement so the sync-health endpoint can report a
   // truthful "frozen for N days" — relying on lastRunAt/lastErrorAt
   // underreports duration for shops that run every night but never advance
@@ -1203,6 +1285,16 @@ async function backfillShopChunkInner(
           : {}),
         lastChunkMetrics: chunkMetrics,
         recentChunkMetrics: nextRecentChunkMetrics,
+        ...(coverageCheck ? { lastCoverageCheck: coverageCheck } : {}),
+        ...(downgradeToFullPage
+          ? {
+              needsFullPageReindex: true,
+              fullPageMode: true,
+              fullPageNextPage: 0,
+              fullPageQueuedAt: now,
+              fullPageQueueReason: `auto-flagged by coverage probe: ${coverageCheck?.totalRosIndexed}/${coverageCheck?.totalElementsAvailable} ROs (${((coverageCheck?.ratio ?? 0) * 100).toFixed(1)}%)`,
+            }
+          : {}),
         ...(chunkHadError && !forceSkipBadWindow
           ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow

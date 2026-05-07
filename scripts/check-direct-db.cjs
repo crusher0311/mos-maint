@@ -89,6 +89,8 @@ const ALLOWLIST = new Set([
   "app/api/cron/shopware-sync/route.ts",
   "app/api/cron/tekmetric-backfill-health/route.ts",
   "app/api/cron/tekmetric-backfill/route.ts",
+  "app/api/cron/tekmetric-fullpage-backfill/route.ts",
+  "app/api/platform-admin/shops/[shopId]/fullpage-reindex/route.ts",
   "app/api/cron/tekmetric-endpoint-health/route.ts",
   "app/api/cron/tekmetric-incremental-sync/route.ts",
   "app/api/cron/tekmetric-probe/route.ts",

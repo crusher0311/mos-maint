@@ -6,7 +6,7 @@ import {
   Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock,
   CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle,
   Mail, CreditCard, ShieldCheck, ShieldAlert, Flag,
-  MoreHorizontal, Users, Car, TrendingUp, Sparkles,
+  MoreHorizontal, Users, Car, TrendingUp, Sparkles, Database, Zap,
 } from "lucide-react";
 import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
 
@@ -100,6 +100,21 @@ interface BackfillStatus {
   lastError: string | null;
   lastErrorAt: string | null;
   source?: "protractor" | "tekmetric";
+  // Tekmetric full-page reindex flags. Set when the date-window chunker's
+  // coverage probe finds the shop has dramatically more ROs in Tekmetric
+  // than we've indexed (bulk-migrated history) OR when an admin manually
+  // queues a full-page reindex.
+  needsFullPageReindex?: boolean;
+  fullPageMode?: boolean;
+  fullPageNextPage?: number | null;
+  fullPageTotalPages?: number | null;
+  lastCoverageCheck?: {
+    totalElementsAvailable: number;
+    totalRosIndexed: number;
+    ratio: number;
+    checkedAt: string;
+    triggeredAutoFlag: boolean;
+  } | null;
 }
 
 interface Shop {
@@ -343,6 +358,61 @@ export default function PlatformShopsPage() {
       alert("Failed to access shop");
     } finally {
       setImpersonating(null);
+    }
+  };
+
+  // Per-shop "Trigger backfill" — kicks the existing date-window chunker
+  // for one shop. Useful when you want to control queue order on shops
+  // that are already indexing correctly. Does NOT solve the bulk-migrated
+  // shop problem (Casey/Duxler) — for those, use Full-page reindex.
+  const triggerBackfill = async (shop: Shop) => {
+    if (!confirm(`Re-trigger the regular backfill for ${shop.name} (Shop ${shop.shopId})?\n\nThis re-runs the date-window chunker. For migrated shops with hidden history, use "Full-page reindex" instead.`)) return;
+    setActionLoading(`${shop.shopId}-backfill`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shop.shopId}/backfill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Backfill triggered.");
+        loadShops();
+      } else {
+        alert(data.error || "Failed to trigger backfill.");
+      }
+    } catch (err) {
+      console.error("Trigger backfill error:", err);
+      alert("Failed to trigger backfill.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Per-shop "Full-page reindex" — flips the shop into full-page mode
+  // (no date filter, paginate /repair-orders by id ASC). For Tekmetric
+  // shops whose history was bulk-migrated and is invisible to the
+  // date-window chunker. Slow but thorough; the dedicated cron drains
+  // it automatically.
+  const triggerFullPageReindex = async (shop: Shop) => {
+    if (!confirm(`Full-page reindex ${shop.name} (Shop ${shop.shopId})?\n\nThis paginates Tekmetric's /repair-orders endpoint with no date filter. For shops with 100k+ ROs this can take many hours and uses a chunk of the Tekmetric API budget. Continue?`)) return;
+    setActionLoading(`${shop.shopId}-fullpage`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${shop.shopId}/fullpage-reindex`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert(data.message || "Full-page reindex queued.");
+        loadShops();
+      } else {
+        alert(data.error || "Failed to queue full-page reindex.");
+      }
+    } catch (err) {
+      console.error("Full-page reindex error:", err);
+      alert("Failed to queue full-page reindex.");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -2025,6 +2095,8 @@ function ShopRow(props: ShopRowProps) {
               resendCardCaptureEmail={resendCardCaptureEmail}
               toggleLock={toggleLock}
               deleteShop={deleteShop}
+              triggerBackfill={triggerBackfill}
+              triggerFullPageReindex={triggerFullPageReindex}
             />
           </div>
         </td>
@@ -2101,6 +2173,7 @@ function ShopRowMenu({
   shop, isOpen, setOpen, actionLoading,
   triggerExtendTrial,
   resendCardCaptureEmail, toggleLock, deleteShop,
+  triggerBackfill, triggerFullPageReindex,
 }: {
   shop: Shop;
   isOpen: boolean;
@@ -2110,6 +2183,8 @@ function ShopRowMenu({
   resendCardCaptureEmail: (shop: Shop) => void;
   toggleLock: (shopId: number | string, isLocked: boolean) => void;
   deleteShop: (shop: Shop) => void;
+  triggerBackfill: (shop: Shop) => void;
+  triggerFullPageReindex: (shop: Shop) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -2160,6 +2235,25 @@ function ShopRowMenu({
               )}
             </>
           )}
+          {shop.backfill?.source === "tekmetric" && (
+            <>
+              <div className="border-t border-gray-100 my-1" />
+              {item(
+                <RotateCcw className="w-4 h-4 text-blue-600" />,
+                "Trigger backfill",
+                () => triggerBackfill(shop),
+              )}
+              {item(
+                <Database className={`w-4 h-4 ${shop.backfill?.needsFullPageReindex ? "text-amber-600" : "text-purple-600"}`} />,
+                shop.backfill?.fullPageMode
+                  ? "Full-page reindex (running)"
+                  : shop.backfill?.needsFullPageReindex
+                    ? "Full-page reindex (recommended)"
+                    : "Full-page reindex",
+                () => triggerFullPageReindex(shop),
+              )}
+            </>
+          )}
           <div className="border-t border-gray-100 my-1" />
           {item(
             shop.isLocked ? <Unlock className="w-4 h-4 text-green-600" /> : <Lock className="w-4 h-4 text-orange-600" />,
@@ -2176,6 +2270,36 @@ function ShopRowMenu({
 function BackfillCell({ backfill }: { backfill: BackfillStatus | null }) {
   if (!backfill) return <span className="text-gray-300">—</span>;
   const count = backfill.totalJobsIndexed.toLocaleString();
+  // Full-page mode running: dedicated worker is paginating the shop with
+  // no date filter. Show purple Zap so on-call can tell this apart from
+  // a regular date-window chunker run.
+  if (backfill.fullPageMode) {
+    const pagesNote = backfill.fullPageTotalPages
+      ? `page ${backfill.fullPageNextPage ?? 0} of ${backfill.fullPageTotalPages}`
+      : `page ${backfill.fullPageNextPage ?? 0}`;
+    return (
+      <div className="flex items-center justify-center gap-1 text-purple-600" title={`Full-page reindex running (${pagesNote}): ${count} jobs indexed so far. The dedicated cron paginates Tekmetric's /repair-orders with no date filter — slower but thorough for migrated shops.`}>
+        <Zap className="w-4 h-4 animate-pulse" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
+  // Coverage-low warning: chunker finished but Tekmetric reports many
+  // more ROs than we indexed. Click the row's "Full-page reindex" menu
+  // item to recover the missing history.
+  if (backfill.needsFullPageReindex) {
+    const cov = backfill.lastCoverageCheck;
+    const ratioPct = cov ? `${(cov.ratio * 100).toFixed(1)}%` : "low";
+    const covNote = cov
+      ? `Coverage ${ratioPct}: indexed ${cov.totalRosIndexed.toLocaleString()} of ${cov.totalElementsAvailable.toLocaleString()} ROs available in Tekmetric.`
+      : "Low coverage detected — Tekmetric has more ROs than we've indexed.";
+    return (
+      <div className="flex items-center justify-center gap-1 text-amber-600" title={`${covNote} Use the row menu's "Full-page reindex" to recover the missing history.`}>
+        <AlertTriangle className="w-4 h-4" />
+        <span className="text-xs">{count}</span>
+      </div>
+    );
+  }
   if (backfill.status === "completed") {
     return (
       <div className="flex items-center justify-center gap-1 text-green-600" title={`Completed: ${count} jobs indexed (${backfill.source || 'unknown'})`}>
