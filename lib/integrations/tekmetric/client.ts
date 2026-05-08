@@ -507,8 +507,9 @@ async function persistInspectionsTokenHealth(
     const { getDb } = await import('@/lib/mongo');
     const db = await getDb();
     if (status === 'short_circuited') {
+      const { tekmetricShopIdFilter } = await import('./shop-lookup');
       await db.collection('shops').updateOne(
-        { 'tekmetric.shopId': tekmetricShopId },
+        tekmetricShopIdFilter(tekmetricShopId),
         {
           $set: {
             'tekmetric.inspectionsTokenHealth': {
@@ -524,8 +525,9 @@ async function persistInspectionsTokenHealth(
         },
       );
     } else {
+      const { tekmetricShopIdFilter } = await import('./shop-lookup');
       await db.collection('shops').updateOne(
-        { 'tekmetric.shopId': tekmetricShopId },
+        tekmetricShopIdFilter(tekmetricShopId),
         {
           $set: {
             'tekmetric.inspectionsTokenHealth': {

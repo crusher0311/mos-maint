@@ -7,6 +7,7 @@ import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
+import { tekmetricShopIdFilter } from "@/lib/integrations/tekmetric/shop-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,7 +73,7 @@ async function runWebhookNormalizedIngestion(
   cached: any | null,
 ): Promise<void> {
   try {
-    const shop = await db.collection("shops").findOne({ "tekmetric.shopId": tekmetricShopId });
+    const shop = await db.collection("shops").findOne(tekmetricShopIdFilter(tekmetricShopId));
     if (!shop?.shopId) {
       console.log(`[Tekmetric Webhook NIS] No internal shop found for tekmetricShopId=${tekmetricShopId}; skipping NIS`);
       return;
@@ -352,9 +353,9 @@ export async function POST(req: NextRequest) {
         });
 
         if (cached && !cached.jobsIndexed && cached.vin) {
-          const shop = await db.collection("shops").findOne({
-            "tekmetric.shopId": tekmetricShopId
-          });
+          const shop = await db.collection("shops").findOne(
+            tekmetricShopIdFilter(tekmetricShopId)
+          );
 
           if (shop) {
             try {
@@ -443,9 +444,9 @@ export async function POST(req: NextRequest) {
           workOrderId: String(roId)
         });
 
-        const shop = await db.collection("shops").findOne({
-          "tekmetric.shopId": tekmetricShopId
-        });
+        const shop = await db.collection("shops").findOne(
+          tekmetricShopIdFilter(tekmetricShopId)
+        );
 
         const newLabel = repairOrder.repairOrderCustomLabel?.name || repairOrder.repairOrderLabel?.name || null;
         const DVI_LABEL_RE = /\binsp|dvi\b|\bmulti.?point|\bcourtesy.check|\bcomplimentary.check/i;
@@ -608,7 +609,7 @@ export async function POST(req: NextRequest) {
       
       try {
         const shop = await db.collection("shops").findOne(
-          { "tekmetric.shopId": tekmetricShopId },
+          tekmetricShopIdFilter(tekmetricShopId),
           { projection: { shopId: 1 } }
         );
         
@@ -667,7 +668,7 @@ export async function POST(req: NextRequest) {
         if (tekShopIdForInsp) {
           try {
             const shopForInsp = await db.collection("shops").findOne(
-              { "tekmetric.shopId": Number(tekShopIdForInsp) },
+              tekmetricShopIdFilter(tekShopIdForInsp as any),
               { projection: { "tekmetric.xAuthToken": 1, shopId: 1 } }
             );
             const xAuthToken = shopForInsp?.tekmetric?.xAuthToken || null;
