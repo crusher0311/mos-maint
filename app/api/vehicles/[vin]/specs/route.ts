@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getVehicleSpecsLocal, decodeVinLocal } from "@/lib/integrations/dataone-local";
+import { getVehicleSpecsLocal, decodeVinLocal, type DecodeHint } from "@/lib/integrations/dataone-local";
 import { deriveFuelTypeLabel } from "@/lib/fuel-type-label";
+import { getCarfaxDecodeHint } from "@/lib/integrations/carfax";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,20 +22,46 @@ export async function GET(
   // Optional disambiguation hints — caller passes the SMS vehicle's stored
   // trim/subModel/transmission so an ambiguous squish can resolve to one row.
   const sp = req.nextUrl.searchParams;
-  const hint = {
+  const smsHint: DecodeHint = {
     trim: sp.get("trim"),
     subModel: sp.get("subModel"),
     transmission: sp.get("transmission"),
     transmissionType: sp.get("transmissionType"),
     engineDescription: sp.get("engine"),
   };
-  const hasHint = Object.values(hint).some((v) => v && v.trim().length > 0);
+  const hasSmsHint = Object.values(smsHint).some((v) => v && String(v).trim().length > 0);
+  const shopId = Number(session.shopId ?? 0);
 
   try {
-    const [specsResult, decodeResult] = await Promise.all([
-      getVehicleSpecsLocal(upperVin, hasHint ? hint : undefined),
-      decodeVinLocal(upperVin, hasHint ? hint : undefined),
+    let activeHint: DecodeHint | undefined = hasSmsHint ? smsHint : undefined;
+    let [specsResult, decodeResult] = await Promise.all([
+      getVehicleSpecsLocal(upperVin, activeHint),
+      decodeVinLocal(upperVin, activeHint),
     ]);
+
+    // Backstop: ambiguous squish + cached CARFAX → mine the trim from
+    // serviceHistory.model ("VERSA SV") and feed it back as a hint. SMS
+    // hint always wins per-field; CARFAX only fills gaps.
+    if (decodeResult.ambiguous && shopId && decodeResult.decoded?.model) {
+      const cf = await getCarfaxDecodeHint(shopId, upperVin, decodeResult.decoded.model);
+      if (cf && (cf.trim || cf.engineDescription)) {
+        // SMS hint wins per-field, but only when actually provided —
+        // empty strings from `?trim=` shouldn't block CARFAX values.
+        const pick = (a: string | null | undefined, b: string | null | undefined) =>
+          (a && a.trim()) ? a : (b && b.trim() ? b : null);
+        const merged: DecodeHint = {
+          trim: pick(smsHint.trim, cf.trim),
+          subModel: pick(smsHint.subModel, null),
+          transmission: pick(smsHint.transmission, null),
+          transmissionType: pick(smsHint.transmissionType, null),
+          engineDescription: pick(smsHint.engineDescription, cf.engineDescription),
+        };
+        [specsResult, decodeResult] = await Promise.all([
+          getVehicleSpecsLocal(upperVin, merged),
+          decodeVinLocal(upperVin, merged),
+        ]);
+      }
+    }
 
     const vehicleInfo = decodeResult.ok && decodeResult.decoded ? {
       year: decodeResult.decoded.year,

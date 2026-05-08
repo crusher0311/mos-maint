@@ -254,6 +254,66 @@ export async function fetchCarfaxLive(
   };
 }
 
+/** -------- Decode hint extracted from a cached CARFAX report --------
+ * RepairLink-style trim/engine accuracy without a paid build-sheet API:
+ * CARFAX's Service History response includes a `serviceHistory.model` field
+ * that bakes the trim into the model string ("VERSA SV", "MUSTANG GT") plus
+ * `engineInformation` and `driveline`. When the fleet already has a cached
+ * CARFAX report (we paid for it), we can mine those fields and feed them
+ * back to the DataOne decoder as a disambiguation hint — closing the gap
+ * for ambiguous VIN squishes (e.g. 2018 Versa S/S Plus/SV). Cache-only;
+ * never triggers a live CARFAX fetch.
+ */
+export type CarfaxDecodeHint = {
+  trim?: string | null;
+  engineDescription?: string | null;
+};
+
+export async function getCarfaxDecodeHint(
+  shopId: number,
+  vin: string,
+  modelName?: string | null,
+): Promise<CarfaxDecodeHint | null> {
+  if (!shopId || !vin) return null;
+  const db = await getDb();
+  const doc = await db
+    .collection("carfax_reports")
+    .findOne({ shopId, vin: vin.toUpperCase() });
+  if (!doc?.ok || !doc?.raw?.serviceHistory) return null;
+
+  const sh = doc.raw.serviceHistory as {
+    model?: string;
+    engineInformation?: string;
+  };
+
+  // Parse trim by stripping the canonical model name from the front of
+  // CARFAX's combined "MODEL TRIM" string. "VERSA SV" + model "Versa" → "SV".
+  // If we don't know the canonical model, fall back to: take everything
+  // after the first whitespace token (works for single-word models; fails
+  // gracefully for "GRAND CARAVAN SXT" where caller should pass modelName).
+  let trim: string | null = null;
+  const cfModel = nonEmpty(sh.model)?.toUpperCase() ?? null;
+  if (cfModel) {
+    const canonical = nonEmpty(modelName)?.toUpperCase() ?? null;
+    if (canonical && cfModel.startsWith(canonical)) {
+      const rest = cfModel.slice(canonical.length).trim();
+      if (rest) trim = rest;
+    } else {
+      // No canonical model passed — best-effort: drop first token.
+      const parts = cfModel.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) trim = parts.slice(1).join(" ");
+    }
+  }
+
+  const hint: CarfaxDecodeHint = {
+    trim,
+    engineDescription: nonEmpty(sh.engineInformation),
+  };
+  // Return null when nothing useful was extracted so callers can short-circuit.
+  if (!hint.trim && !hint.engineDescription) return null;
+  return hint;
+}
+
 /** -------- Snapshot storage (cache) -------- */
 export async function upsertCarfaxSnapshot(
   shopId: number,
