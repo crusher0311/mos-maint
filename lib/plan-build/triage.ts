@@ -305,6 +305,7 @@ export interface Buckets {
 export function triage({
   oemItems,
   carfaxRecords,
+  carfaxCategories = [],
   shopServiceHistory = [],
   currentMiles,
   today = new Date(),
@@ -326,6 +327,21 @@ export function triage({
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
+  /**
+   * CARFAX's own pre-classified per-category rollup
+   * (`serviceHistory.serviceCategories`). When CARFAX groups services
+   * under a manufacturer-scheduled bundle (e.g. "60,000 mile service
+   * performed"), the per-record text doesn't always include each line
+   * item, but the category summary still reflects the latest date/
+   * odometer. We trust this as a higher-priority "last performed"
+   * signal than scanning raw record text — see the loop below for how
+   * shop history still wins (deduped via isMatchingHistory).
+   */
+  carfaxCategories?: Array<{
+    serviceName: string;
+    date?: string | null;
+    odometer?: number | null;
+  }>;
   shopServiceHistory?: ShopServiceHistory[];
   currentMiles: number | null;
   today?: Date;
@@ -403,6 +419,28 @@ export function triage({
     const miles = r.miles;
     const desc = String(r.description || "").trim();
     const keys = toKeyFromFreeText(desc);
+    for (const k of keys) {
+      const prev = lastMap.get(k);
+      const shopRecords = shopHistoryByKey.get(k) || [];
+      const matchesShop = shopRecords.some(sr => isMatchingHistory(sr, { miles, date }));
+      if (matchesShop) continue;
+      const cand: LastDone = { miles, date, source: "carfax" };
+      const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
+      const candScore = date ? date.getTime() : -Infinity;
+      if (!prev || candScore > prevScore) lastMap.set(k, cand);
+    }
+  }
+
+  // CARFAX serviceCategories rollup — see the type comment above for why
+  // this beats per-record text. Same shop-history dedup so we don't
+  // double-count a service the shop just performed.
+  for (const cat of carfaxCategories || []) {
+    const name = String(cat.serviceName || "").trim();
+    if (!name) continue;
+    const date = parseCarfaxDate(cat.date ?? null);
+    if (date && (date < earliestDate || date > today)) continue;
+    const miles = typeof cat.odometer === "number" ? cat.odometer : null;
+    const keys = toKeyFromFreeText(name);
     for (const k of keys) {
       const prev = lastMap.get(k);
       const shopRecords = shopHistoryByKey.get(k) || [];

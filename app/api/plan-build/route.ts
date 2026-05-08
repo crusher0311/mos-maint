@@ -694,6 +694,7 @@ export async function POST(req: NextRequest) {
     }
 
     const carfaxRecords = (carfaxResult as any).ok ? ((carfaxResult as any).serviceRecords || []) : [];
+    const carfaxCategories = (carfaxResult as any).ok ? ((carfaxResult as any).serviceCategories || []) : [];
     
     let mpdBlended: number | null = null;
     if ((carfaxResult as any).ok && Array.isArray((carfaxResult as any).serviceRecords)) {
@@ -809,6 +810,7 @@ export async function POST(req: NextRequest) {
     const buckets = triage({
       oemItems,
       carfaxRecords,
+      carfaxCategories,
       shopServiceHistory,
       currentMiles: mileage,
       dviFindings,

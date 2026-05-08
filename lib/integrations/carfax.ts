@@ -13,6 +13,12 @@ export type CarfaxServiceRecord = {
   location?: string | null;
 };
 
+export type CarfaxServiceCategory = {
+  serviceName: string;
+  date: string | null;
+  odometer: number | null;
+};
+
 export type CarfaxResult = {
   ok: boolean;
   vin?: string | null;
@@ -22,6 +28,7 @@ export type CarfaxResult = {
   damageReports?: number | null;
   lastReportedMileage?: number | null;
   serviceRecords?: CarfaxServiceRecord[] | null;
+  serviceCategories?: CarfaxServiceCategory[] | null;
   titleIssues?: string[] | null;
   recalls?: string[] | null;
   raw?: any;
@@ -198,6 +205,29 @@ export async function fetchCarfaxLive(
     }
   }
 
+  // CARFAX provides a `serviceCategories` summary that is its own
+  // pre-classified rollup of "what was last performed in each category"
+  // (e.g. "Tire rotation", "Oil change/Engine oil filter"). This is more
+  // accurate than re-parsing the per-record free text descriptions because
+  // CARFAX often groups manufacturer-scheduled services (like a 60k mile
+  // service) under multiple categories without repeating each line item in
+  // the displayRecords text. See lib/plan-build/triage.ts for how this is
+  // merged with shop history + per-record matches.
+  const rawCategories = root?.serviceHistory?.serviceCategories;
+  const serviceCategories: CarfaxServiceCategory[] | null = Array.isArray(rawCategories)
+    ? rawCategories
+        .map((c: any): CarfaxServiceCategory | null => {
+          const name = nonEmpty(c?.serviceName);
+          if (!name) return null;
+          return {
+            serviceName: name,
+            date: nonEmpty(c?.dateOfLastService),
+            odometer: toInt(c?.odometerOfLastService),
+          };
+        })
+        .filter((c): c is CarfaxServiceCategory => c !== null)
+    : null;
+
   const titleIssues: string[] | null =
     Array.isArray(root?.titleIssues)
       ? root.titleIssues.map((x: any) => String(x)).filter(Boolean)
@@ -217,6 +247,7 @@ export async function fetchCarfaxLive(
     damageReports: damageReports ?? null,
     lastReportedMileage: lastMiles ?? null,
     serviceRecords: serviceRecords ?? null,
+    serviceCategories: serviceCategories ?? null,
     titleIssues: titleIssues ?? null,
     recalls: recalls ?? null,
     raw: json,
@@ -244,6 +275,7 @@ export async function upsertCarfaxSnapshot(
         damageReports: report.damageReports ?? null,
         lastReportedMileage: report.lastReportedMileage ?? null,
         serviceRecords: report.serviceRecords ?? null,
+        serviceCategories: report.serviceCategories ?? null,
         titleIssues: report.titleIssues ?? null,
         recalls: report.recalls ?? null,
         ok: report.ok,
@@ -268,6 +300,7 @@ function snapshotToResult(doc: any): CarfaxResult {
     damageReports: doc.damageReports ?? null,
     lastReportedMileage: doc.lastReportedMileage ?? null,
     serviceRecords: doc.serviceRecords ?? null,
+    serviceCategories: doc.serviceCategories ?? null,
     titleIssues: doc.titleIssues ?? null,
     recalls: doc.recalls ?? null,
     raw: doc.raw ?? null,
