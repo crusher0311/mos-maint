@@ -1767,7 +1767,6 @@ export async function GET(request: NextRequest) {
         mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
         ...plan,
         deferredWork: cachedPlan.plan.deferredWork || [],
-        vinUsage: vinTrackingResult ? { count: vinTrackingResult.count, limit: vinTrackingResult.limit } : undefined,
         fromDashboardCache: true,
         repairOrderNumber,
         customerName,
