@@ -1533,7 +1533,9 @@ export async function GET(request: NextRequest) {
     // First try to use the dashboard's cached plan for consistency
     // Task #336: pass shop unit so a stale cache built before the unit
     // flip (e.g. shop switched mi→km) is rejected as mismatched and rebuilt.
+    const tBeforeCache = Date.now();
     const cachedPlan = !forceRefresh ? await getCachedPlan(db, vin.toUpperCase(), mosShopId, mileage, shopDistanceUnit) : null;
+    console.log(`[Extension Plan] TIMING preCache=${tBeforeCache - reqStart}ms cacheLookup=${Date.now() - tBeforeCache}ms cacheHit=${!!cachedPlan} vin=${vin?.toUpperCase()} shop=${mosShopId} mileage=${mileage}`);
 
     let currentRoDviFindings: Array<{ name: string; status: "red" | "yellow"; dviSource: string; finding?: string }> = [];
     if (provider === "tekmetric" && roId) {
@@ -1760,6 +1762,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      console.log(`[Extension Plan] TIMING CACHE_HIT_RETURN total=${Date.now() - reqStart}ms vin=${vin?.toUpperCase()} shop=${mosShopId}`);
       return NextResponse.json({
         vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
@@ -1890,6 +1893,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        const tBeforeAnalysis = Date.now();
         const recommendations = await runOnDemandAnalysis(
           mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
           { oemResult, shopWorkOrders },
@@ -1907,6 +1911,7 @@ export async function GET(request: NextRequest) {
           mileageEstimated ? "estimated_carfax" : "actual",
           mileageEstimated ? mileageEstimateDetails : null,
         );
+        console.log(`[Extension Plan] TIMING runOnDemandAnalysis=${Date.now() - tBeforeAnalysis}ms parallelFetch=${tBeforeAnalysis - startTime}ms vin=${vin?.toUpperCase()}`);
         analysisData = { recommendations, showInspectItems };
       } catch (e) {
         console.error("[Extension] On-demand analysis failed:", e);
@@ -2068,6 +2073,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.log(`[Extension Plan] TIMING FALLBACK_RETURN total=${Date.now() - reqStart}ms vin=${vin?.toUpperCase()} shop=${mosShopId} analyzed=${!!analysisData}`);
     return NextResponse.json({
       vehicle: vehicle ? {
         year: vehicle.year,

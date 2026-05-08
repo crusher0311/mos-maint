@@ -40,15 +40,16 @@ export async function triggerVhiOnWorkOrderCreate(
     return;
   }
 
+  const tStart = Date.now();
   const lockKey = `create:${vin}:${shopId}`;
   if (!acquireRebuildLock(lockKey)) {
-    console.log(`[VHI Trigger] Skipping duplicate create-build for ${lockKey}`);
+    console.log(`[VHI Trigger] TIMING create vin=${vin} shop=${shopId} outcome=DEDUPED lockKey=${lockKey} elapsed=${Date.now() - tStart}ms`);
     return;
   }
 
   const existing = await getCachedPlan(db, vin, shopId, input.mileage);
   if (existing) {
-    console.log(`[VHI Trigger] Plan already cached for ${vin} at shop ${shopId}, skipping create-build`);
+    console.log(`[VHI Trigger] TIMING create vin=${vin} shop=${shopId} outcome=ALREADY_CACHED inputMileage=${input.mileage} cachedMileage=${existing.mileage} elapsed=${Date.now() - tStart}ms`);
     return;
   }
 
@@ -59,19 +60,21 @@ export async function triggerVhiOnWorkOrderCreate(
   }
 
   if (!mileage || mileage <= 0) {
-    console.log(`[VHI Trigger] No mileage for create-build on ${vin}, skipping`);
+    console.log(`[VHI Trigger] TIMING create vin=${vin} shop=${shopId} outcome=NO_MILEAGE elapsed=${Date.now() - tStart}ms`);
     return;
   }
 
   console.log(
     `[VHI Trigger] Auto-building VHI on RO create: VIN=${vin}, shop=${shopId}, ` +
-    `provider=${provider}, RO=${roNumber || "N/A"}, mileage=${mileage}`
+    `provider=${provider}, RO=${roNumber || "N/A"}, mileage=${mileage}, source=${source}`
   );
 
   try {
+    const tBuild = Date.now();
     const result = await rebuildVhi(shopId, vin, mileage, {
       invalidateFirst: false,
     });
+    console.log(`[VHI Trigger] TIMING create vin=${vin} shop=${shopId} outcome=${result.success ? "BUILT" : "BUILD_FAILED"} mileage=${mileage} rebuildVhi=${Date.now() - tBuild}ms total=${Date.now() - tStart}ms${result.success ? "" : ` failedStage=${result.failedStage} err=${result.error}`}`);
 
     if (result.success) {
       await db.collection("vhi_analysis_log").insertOne({
@@ -110,9 +113,10 @@ export async function triggerVhiOnWorkOrderClose(
     return;
   }
 
+  const tStart = Date.now();
   const lockKey = `${vin}:${shopId}:${roNumber || "any"}`;
   if (!acquireRebuildLock(lockKey)) {
-    console.log(`[VHI Trigger] Skipping duplicate rebuild for ${lockKey} (within ${DEDUPE_WINDOW_MS / 1000}s window)`);
+    console.log(`[VHI Trigger] TIMING close vin=${vin} shop=${shopId} outcome=DEDUPED lockKey=${lockKey} elapsed=${Date.now() - tStart}ms`);
     return;
   }
 
@@ -123,9 +127,7 @@ export async function triggerVhiOnWorkOrderClose(
   }
 
   if (!mileage || mileage <= 0) {
-    console.warn(
-      `[VHI Trigger] Skipping VHI rebuild for ${vin} — no mileage available from RO or vehicle record`
-    );
+    console.log(`[VHI Trigger] TIMING close vin=${vin} shop=${shopId} outcome=NO_MILEAGE elapsed=${Date.now() - tStart}ms`);
     return;
   }
 
@@ -135,9 +137,11 @@ export async function triggerVhiOnWorkOrderClose(
   );
 
   try {
+    const tBuild = Date.now();
     const result = await rebuildVhi(shopId, vin, mileage, {
       invalidateFirst: true,
     });
+    console.log(`[VHI Trigger] TIMING close vin=${vin} shop=${shopId} outcome=${result.success ? "BUILT" : "BUILD_FAILED"} mileage=${mileage} rebuildVhi=${Date.now() - tBuild}ms total=${Date.now() - tStart}ms${result.success ? "" : ` failedStage=${result.failedStage} err=${result.error}`}`);
 
     if (result.success) {
       await db.collection("vhi_analysis_log").insertOne({

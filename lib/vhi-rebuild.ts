@@ -152,6 +152,7 @@ export async function rebuildVhi(
     mileageEstimateDetails?: Record<string, unknown> | null;
   } = {}
 ): Promise<VhiRebuildResult> {
+  const tStart = Date.now();
   const db = await __deps.getDb();
   const vinUpper = vin.toUpperCase();
 
@@ -159,11 +160,16 @@ export async function rebuildVhi(
     await __deps.invalidateCachedPlan(db, vinUpper, shopId);
   }
 
+  const tAfterInvalidate = Date.now();
   let cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
+  const tAfterFirstRead = Date.now();
 
   if (!cached) {
     console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build...`);
+    const tBeforeBuild = Date.now();
     const built = await __deps.triggerPlanBuild(shopId, vinUpper, mileage);
+    const tAfterBuild = Date.now();
+    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
 
     if (!built.ok) {
       return {
@@ -179,7 +185,9 @@ export async function rebuildVhi(
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
+    const tBeforeReread = Date.now();
     cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
+    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} postBuildRead=${Date.now() - tBeforeReread}ms cacheVisible=${!!cached} totalRebuild=${Date.now() - tStart}ms`);
 
     if (!cached) {
       return {
@@ -192,6 +200,8 @@ export async function rebuildVhi(
         upstreamStatus: built.status,
       };
     }
+  } else {
+    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} outcome=ALREADY_FRESH invalidate=${tAfterInvalidate - tStart}ms read=${tAfterFirstRead - tAfterInvalidate}ms total=${Date.now() - tStart}ms`);
   }
 
   const plan = cached.plan;
