@@ -150,7 +150,10 @@ function computeContentHash(entry: any): string {
 // "Shop #null" and we lose visibility into who's burning the Tekmetric quota.
 async function tekmetricRequest<T>(endpoint: string, shopId?: number, _retries = 3): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
-    const data = await centralTekmetricRequest<T>(endpoint, {}, shopId);
+    // Date-window backfill is background work — yield rate-limit slots to
+    // interactive VHI/dashboard requests so techs aren't waiting behind a
+    // chunk's bursty fan-out.
+    const data = await centralTekmetricRequest<T>(endpoint, {}, shopId, false, false, 'background');
     return { ok: true, data };
   } catch (err: any) {
     return { ok: false, error: err.message };

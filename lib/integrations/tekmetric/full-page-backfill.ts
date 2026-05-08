@@ -118,7 +118,16 @@ async function tekmetricRequest<T>(
   shopId?: number,
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
-    const data = await centralTekmetricRequest<T>(endpoint, {}, shopId);
+    // Backfill is background work — yield rate-limit slots to interactive
+    // VHI/dashboard requests so techs aren't waiting behind a 30-page chunk.
+    const data = await centralTekmetricRequest<T>(
+      endpoint,
+      {},
+      shopId,
+      false,
+      false,
+      'background',
+    );
     return { ok: true, data };
   } catch (err: any) {
     return { ok: false, error: err.message };

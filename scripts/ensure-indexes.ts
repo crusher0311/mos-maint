@@ -121,6 +121,14 @@ async function ensureIndexes() {
       // tekmetric_work_orders - dashboard
       { collection: "tekmetric_work_orders", index: { shopId: 1 } },
       { collection: "tekmetric_work_orders", index: { shopId: 1, status: 1 } },
+      // VHI history lookup: every extension /api/extension/plan request
+      // queries by (shopId, vin) to build "Last Performed". Without this
+      // compound index the query falls back to scanning every RO for the
+      // shop — brutal on Tekmetric shops with 100k+ ROs (e.g. HEART 82).
+      { collection: "tekmetric_work_orders", index: { shopId: 1, vin: 1, completedDate: -1 } },
+      // RO-by-id lookup used by the live-RO fallback in the plan route
+      // and the DVI overlay. Without it the same scan happens.
+      { collection: "tekmetric_work_orders", index: { shopId: 1, workOrderId: 1 } },
 
       // normalized collections
       { collection: "normalized_work_orders", index: { shopId: 1 } },

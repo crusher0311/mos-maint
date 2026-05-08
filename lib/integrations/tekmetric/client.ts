@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { acquireRateLimitSlot } from "@/lib/integrations/core/rate-limiter";
+import { acquireRateLimitSlot, type RateLimitPriority } from "@/lib/integrations/core/rate-limiter";
 import { getValidToken, refreshToken, clearCachedToken, isConfigured } from "./auth";
 import type { 
   TekmetricShop, 
@@ -206,6 +206,12 @@ export async function tekmetricRequest<T = any>(
   // Prevents an infinite clamp loop if the post-clamp request also 400s
   // (e.g. token doesn't accept any history at all).
   historyClampRetry = false,
+  // 'interactive' (default) for VHI/dashboard/anything a human waits on,
+  // 'background' for full-page backfills, prefetch, cron sweeps. Background
+  // calls only get a rate-limit slot when the interactive queue is empty,
+  // so a 30-page backfill chunk no longer parks 30 requests ahead of a
+  // tech's VHI load.
+  priority: RateLimitPriority = 'interactive',
 ): Promise<T> {
   const method = options.method || 'GET';
 
@@ -213,7 +219,7 @@ export async function tekmetricRequest<T = any>(
     // Local cap reduced 10→5 rps to stay below Tekmetric's per-IP throttle.
     // Combined with the distributed limiter and the tighter incremental-sync
     // cadence, this materially reduces the 429 rate observed in production.
-    const rateSlot = await acquireRateLimitSlot('tekmetric', 5);
+    const rateSlot = await acquireRateLimitSlot('tekmetric', 5, priority);
     if (!rateSlot.acquired) {
       throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
@@ -243,7 +249,7 @@ export async function tekmetricRequest<T = any>(
         console.log('[Tekmetric] Received 401, refreshing token and retrying...');
         clearCachedToken();
         await refreshToken();
-        return tekmetricRequest<T>(endpoint, options, shopId, true, historyClampRetry);
+        return tekmetricRequest<T>(endpoint, options, shopId, true, historyClampRetry, priority);
       }
 
       if (response.status === 429 && attempt <= MAX_429_RETRIES) {
@@ -277,7 +283,7 @@ export async function tekmetricRequest<T = any>(
             trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId, {
               errorMessage: truncateForTracking(`history-window clamp-retry: ${reason}`),
             }).catch(() => {});
-            return tekmetricRequest<T>(clamped, options, shopId, authRetry, true);
+            return tekmetricRequest<T>(clamped, options, shopId, authRetry, true, priority);
           }
         }
 
