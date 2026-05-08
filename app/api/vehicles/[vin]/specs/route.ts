@@ -17,11 +17,23 @@ export async function GET(
 
   const { vin } = await params;
   const upperVin = vin.toUpperCase();
-  
+
+  // Optional disambiguation hints — caller passes the SMS vehicle's stored
+  // trim/subModel/transmission so an ambiguous squish can resolve to one row.
+  const sp = req.nextUrl.searchParams;
+  const hint = {
+    trim: sp.get("trim"),
+    subModel: sp.get("subModel"),
+    transmission: sp.get("transmission"),
+    transmissionType: sp.get("transmissionType"),
+    engineDescription: sp.get("engine"),
+  };
+  const hasHint = Object.values(hint).some((v) => v && v.trim().length > 0);
+
   try {
     const [specsResult, decodeResult] = await Promise.all([
-      getVehicleSpecsLocal(upperVin),
-      decodeVinLocal(upperVin),
+      getVehicleSpecsLocal(upperVin, hasHint ? hint : undefined),
+      decodeVinLocal(upperVin, hasHint ? hint : undefined),
     ]);
 
     const vehicleInfo = decodeResult.ok && decodeResult.decoded ? {
@@ -49,6 +61,8 @@ export async function GET(
       wheelbase: decodeResult.decoded.wheelbase,
       brakeSystem: decodeResult.decoded.brake_system,
       countryOfMfr: decodeResult.decoded.country_of_mfr,
+      ambiguous: decodeResult.ambiguous || false,
+      ambiguousFields: decodeResult.ambiguousFields || [],
     } : null;
 
     return NextResponse.json({

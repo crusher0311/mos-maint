@@ -19,15 +19,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
   }
 
-  const vin = req.nextUrl.searchParams.get("vin");
+  const sp = req.nextUrl.searchParams;
+  const vin = sp.get("vin");
   if (!vin) {
     return NextResponse.json({ error: "VIN parameter required" }, { status: 400, headers: corsHeaders });
   }
 
+  // Optional disambiguation hints from the SMS vehicle record (extension passes
+  // these from Tekmetric / Protractor / Shop-Ware when available).
+  const hint = {
+    trim: sp.get("trim"),
+    subModel: sp.get("subModel"),
+    transmission: sp.get("transmission"),
+    transmissionType: sp.get("transmissionType"),
+    engineDescription: sp.get("engine"),
+  };
+  const hasHint = Object.values(hint).some((v) => v && v.trim().length > 0);
+
   try {
     const [specsResult, decodeResult] = await Promise.all([
-      getVehicleSpecsLocal(vin.toUpperCase()),
-      decodeVinLocal(vin.toUpperCase()),
+      getVehicleSpecsLocal(vin.toUpperCase(), hasHint ? hint : undefined),
+      decodeVinLocal(vin.toUpperCase(), hasHint ? hint : undefined),
     ]);
 
     const vehicleInfo = decodeResult.ok && decodeResult.decoded ? {
@@ -55,6 +67,8 @@ export async function GET(req: NextRequest) {
       wheelbase: decodeResult.decoded.wheelbase,
       brakeSystem: decodeResult.decoded.brake_system,
       countryOfMfr: decodeResult.decoded.country_of_mfr,
+      ambiguous: decodeResult.ambiguous || false,
+      ambiguousFields: decodeResult.ambiguousFields || [],
     } : null;
 
     return NextResponse.json({

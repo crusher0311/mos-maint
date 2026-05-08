@@ -23,7 +23,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
     }
 
-    const result = await decodeVinLocal(vin);
+    // Optional disambiguation hints from the caller's SMS vehicle record.
+    const hint = {
+      trim: searchParams.get("trim"),
+      subModel: searchParams.get("subModel"),
+      transmission: searchParams.get("transmission"),
+      transmissionType: searchParams.get("transmissionType"),
+      engineDescription: searchParams.get("engine"),
+    };
+    const hasHint = Object.values(hint).some((v) => v && v.trim().length > 0);
+
+    const result = await decodeVinLocal(vin, hasHint ? hint : undefined);
 
     if (!result.ok || !result.decoded) {
       return NextResponse.json({ vin, year: null, make: null, model: null, decoded: false });
@@ -49,6 +59,9 @@ export async function GET(request: NextRequest) {
       doors: d.doors || null,
       vehicleType: d.vehicle_type || null,
       countryOfMfr: d.country_of_mfr || null,
+      ambiguous: result.ambiguous || false,
+      ambiguousFields: result.ambiguousFields || [],
+      candidateCount: result.candidateCount || 1,
     });
   } catch (error) {
     console.error("VIN decode error:", error);

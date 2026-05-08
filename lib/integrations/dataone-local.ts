@@ -180,27 +180,250 @@ export interface MaintenanceItem {
   intervalMonthsSevere: number | null;
 }
 
-export async function decodeVinLocal(vin: string): Promise<{
+/**
+ * Optional hints derived from the SMS / SMSes' stored vehicle record. Used to
+ * disambiguate when the VIN squish (positions 1-8 + 10-11) maps to multiple
+ * DataOne rows that disagree on trim/transmission/engine. See `mergeCandidates`
+ * for the disambiguation contract.
+ */
+export interface DecodeHint {
+  trim?: string | null;
+  subModel?: string | null;
+  /** Free-text transmission description, e.g. "CVT", "Automatic", "5-Speed Manual" */
+  transmission?: string | null;
+  /** "M" | "A" | "CVT" | "AM" | "DCT" | "DDCT" — DataOne trans_type letter codes */
+  transmissionType?: string | null;
+  /** Free-text engine description from SMS (helps when trims share trim name but differ on engine) */
+  engineDescription?: string | null;
+  engineCylinders?: number | null;
+  fuelType?: string | null;
+}
+
+/** Fields whose disagreement we treat as user-visible "ambiguous" — when these
+ * vary across candidate rows we null them out rather than confidently lying. */
+const AMBIGUITY_FIELDS = [
+  "trim",
+  "style",
+  "mfr_model_num",
+  "doors",
+  "trans_id",
+  "trans_name",
+  "trans_type",
+  "trans_speeds",
+  "engine_id",
+  "engine_name",
+  "engine_size",
+  "engine_cylinders",
+  "engine_aspiration",
+  "engine_induction",
+  "fuel_type",
+  "drive_type",
+  "body_type",
+  "body_subtype",
+  "brake_system",
+  "wheelbase",
+  "gross_vehicle_weight_range",
+] as const;
+
+function norm(s: unknown): string {
+  return String(s ?? "").toLowerCase().trim();
+}
+
+/** Score how well a candidate row matches an SMS-provided hint. Higher is better.
+ * Returns 0 when no hint fields are usable (caller should treat all candidates as tied). */
+function scoreCandidate(row: VinReferenceData, hint: DecodeHint): number {
+  let score = 0;
+  let usable = 0;
+
+  const trimHint = norm(hint.trim);
+  const subHint = norm(hint.subModel);
+  const transHint = norm(hint.transmission);
+  const transTypeHint = norm(hint.transmissionType);
+  const engineHint = norm(hint.engineDescription);
+  const fuelHint = norm(hint.fuelType);
+
+  if (trimHint) {
+    usable++;
+    const rowTrim = norm(row.trim);
+    const rowStyle = norm(row.style);
+    if (rowTrim === trimHint || rowStyle === trimHint) score += 5;
+    else if (rowTrim && (trimHint.includes(rowTrim) || rowTrim.includes(trimHint))) score += 3;
+    else if (rowStyle && (subHint || trimHint) && rowStyle.includes(trimHint)) score += 2;
+  }
+
+  if (subHint) {
+    usable++;
+    const rowStyle = norm(row.style);
+    const rowTrim = norm(row.trim);
+    if (rowStyle === subHint) score += 5;
+    else if (rowStyle && (subHint.includes(rowStyle) || rowStyle.includes(subHint))) score += 3;
+    else if (rowTrim && subHint.includes(rowTrim)) score += 2;
+  }
+
+  if (transTypeHint) {
+    usable++;
+    if (norm(row.trans_type) === transTypeHint) score += 6;
+  } else if (transHint) {
+    usable++;
+    const rowTransName = norm(row.trans_name);
+    const rowTransType = norm(row.trans_type);
+    // Map SMS free-text to DataOne trans_type letters.
+    const isManualHint = /\bmanual\b|\bm\/t\b|\b[3-9]-?spd?\s*manual\b|\bstick\b/.test(transHint);
+    const isAutoHint = /\bautomatic\b|\bauto\b|\ba\/t\b|\bautom\b/.test(transHint) && !/\bcvt\b/.test(transHint);
+    const isCvtHint = /\bcvt\b/.test(transHint);
+    const isDctHint = /\bdct\b|\bdual.?clutch\b/.test(transHint);
+    if (rowTransName === transHint) score += 6;
+    else if (isCvtHint && rowTransType === "cvt") score += 5;
+    else if (isManualHint && rowTransType === "m") score += 5;
+    else if (isAutoHint && (rowTransType === "a" || rowTransType === "am")) score += 5;
+    else if (isDctHint && (rowTransType === "dct" || rowTransType === "ddct")) score += 5;
+    else if (rowTransName && transHint.includes(rowTransName)) score += 2;
+  }
+
+  if (typeof hint.engineCylinders === "number" && hint.engineCylinders > 0) {
+    usable++;
+    if (row.engine_cylinders === hint.engineCylinders) score += 4;
+  }
+
+  if (engineHint) {
+    usable++;
+    const rowEng = norm(row.engine_name);
+    if (rowEng && (rowEng === engineHint || engineHint.includes(rowEng) || rowEng.includes(engineHint))) score += 3;
+  }
+
+  if (fuelHint) {
+    usable++;
+    if (norm(row.fuel_type) === fuelHint) score += 3;
+  }
+
+  // If no hint fields were usable, return 0 so all candidates tie and the
+  // caller falls through to ambiguity-merge.
+  return usable === 0 ? 0 : score;
+}
+
+/** Merge candidate rows into a single VinReferenceData. For any field listed in
+ * AMBIGUITY_FIELDS that varies across rows, the merged value is nulled so
+ * callers can render "Variable" / "Unknown" instead of confidently lying. When
+ * candidates AGREE on a field but the base row's value is empty, the first
+ * non-null candidate value is backfilled (so ambiguity never silently drops
+ * data that all variants share). The decoded `vehicle_id` is also nulled when
+ * candidates disagree on it — `getVehicleSpecsLocal` / `getVehicleRecallsLocal`
+ * use this to refuse to fetch trim-specific data tied to an arbitrary variant. */
+function mergeCandidates(rows: VinReferenceData[]): { merged: VinReferenceData; ambiguousFields: string[] } {
+  const base = { ...rows[0] } as VinReferenceData;
+  const ambiguousFields: string[] = [];
+  if (rows.length <= 1) return { merged: base, ambiguousFields };
+
+  const isEmpty = (v: unknown) => v === null || v === undefined || v === "";
+
+  for (const field of AMBIGUITY_FIELDS) {
+    const distinct = new Set<string>();
+    let firstNonNull: unknown = undefined;
+    for (const r of rows) {
+      const v = (r as any)[field];
+      if (isEmpty(v)) continue;
+      distinct.add(String(v).toLowerCase());
+      if (firstNonNull === undefined) firstNonNull = v;
+    }
+    if (distinct.size > 1) {
+      ambiguousFields.push(field);
+      // Use `null` for both string and numeric fields. The TS type declares
+      // numbers as required, but the merged-ambiguous value semantically means
+      // "unknown"; callers use `value || null` style coalescing already, so a
+      // real null (not 0) prevents leaking false "0 cylinders" / "0L engine".
+      (base as any)[field] = null;
+    } else if (distinct.size === 1 && isEmpty((base as any)[field]) && firstNonNull !== undefined) {
+      // All candidates agree (or only one had an opinion) and base happens to
+      // be empty — backfill so we don't drop data that's actually known.
+      (base as any)[field] = firstNonNull;
+    }
+  }
+
+  // vehicle_id is the FK that drives specs/recalls lookups. Only blank it
+  // when SUBSTANTIVE differences exist between candidates — pure cosmetic
+  // variation (e.g. "Sedan" vs "Sedan (midyear release)") shouldn't refuse
+  // specs because the underlying specs/recalls are effectively identical.
+  const SUBSTANTIVE_FIELDS = [
+    "trim",
+    "trans_id",
+    "trans_type",
+    "trans_name",
+    "trans_speeds",
+    "engine_id",
+    "engine_name",
+    "engine_size",
+    "engine_cylinders",
+    "drive_type",
+    "body_type",
+    "body_subtype",
+    "doors",
+    "fuel_type",
+  ];
+  const substantiveDisagreement = ambiguousFields.some((f) => SUBSTANTIVE_FIELDS.includes(f));
+  const vidSet = new Set(rows.map((r) => r.vehicle_id).filter((id) => id != null));
+  if (vidSet.size > 1 && substantiveDisagreement) {
+    (base as any).vehicle_id = null;
+    ambiguousFields.push("vehicle_id");
+  }
+
+  return { merged: base, ambiguousFields };
+}
+
+export interface DecodeResult {
   ok: boolean;
   vin: string;
   decoded?: VinReferenceData;
+  /** True when the VIN squish matches multiple DataOne rows and the hint (if
+   * any) could not narrow them to one. Conflicting fields on `decoded` are
+   * nulled — callers should render "Variable" / "Unknown" for those fields. */
+  ambiguous?: boolean;
+  ambiguousFields?: string[];
+  candidateCount?: number;
   error?: string;
   source: "local";
-}> {
+}
+
+export async function decodeVinLocal(vin: string, hint?: DecodeHint): Promise<DecodeResult> {
   try {
     const squish = toSquish(vin);
-    
-    const result = await withRetry((db) => db<VinReferenceData[]>`
-      SELECT * FROM dataone_vin_reference 
+
+    const rows = await withRetry((db) => db<VinReferenceData[]>`
+      SELECT * FROM dataone_vin_reference
       WHERE vin_pattern = ${squish}
-      LIMIT 1
     `);
-    
-    if (result.length === 0) {
+
+    if (rows.length === 0) {
       return { ok: false, vin, error: "VIN not found in database", source: "local" };
     }
-    
-    return { ok: true, vin, decoded: result[0], source: "local" };
+
+    if (rows.length === 1) {
+      return { ok: true, vin, decoded: rows[0], ambiguous: false, candidateCount: 1, source: "local" };
+    }
+
+    // Multiple candidates — try the hint first.
+    let pool = rows;
+    if (hint) {
+      const scored = rows.map((r) => ({ r, s: scoreCandidate(r, hint) }));
+      const max = scored.reduce((m, x) => (x.s > m ? x.s : m), 0);
+      if (max > 0) {
+        pool = scored.filter((x) => x.s === max).map((x) => x.r);
+      }
+    }
+
+    if (pool.length === 1) {
+      return { ok: true, vin, decoded: pool[0], ambiguous: false, candidateCount: rows.length, source: "local" };
+    }
+
+    const { merged, ambiguousFields } = mergeCandidates(pool);
+    return {
+      ok: true,
+      vin,
+      decoded: merged,
+      ambiguous: ambiguousFields.length > 0,
+      ambiguousFields,
+      candidateCount: rows.length,
+      source: "local",
+    };
   } catch (error) {
     console.error("DataOne VIN decode error:", error);
     return { ok: false, vin, error: String(error), source: "local" };
@@ -213,11 +436,19 @@ export async function batchDecodeSquishes(squishes: string[]): Promise<Map<strin
   const unique = [...new Set(squishes)];
   try {
     const rows = await withRetry((db) => db<VinReferenceData[]>`
-      SELECT DISTINCT ON (vin_pattern) * FROM dataone_vin_reference 
+      SELECT * FROM dataone_vin_reference
       WHERE vin_pattern = ANY(${unique})
     `);
+    // Group by vin_pattern, then merge ambiguous candidates so callers don't
+    // get arbitrary trim/transmission picks. No hint available in the batch path.
+    const byPattern = new Map<string, VinReferenceData[]>();
     for (const row of rows) {
-      result.set(row.vin_pattern, row);
+      const list = byPattern.get(row.vin_pattern);
+      if (list) list.push(row);
+      else byPattern.set(row.vin_pattern, [row]);
+    }
+    for (const [pattern, group] of byPattern) {
+      result.set(pattern, group.length === 1 ? group[0] : mergeCandidates(group).merged);
     }
   } catch (error) {
     console.error("[DataOne] Batch decode error:", error);
@@ -362,51 +593,61 @@ export async function getMaintenanceScheduleLocal(vin: string): Promise<{
   }
 }
 
-export async function getEnhancedVehicleDataLocal(vin: string): Promise<{
+export async function getEnhancedVehicleDataLocal(vin: string, hint?: DecodeHint): Promise<{
   ok: boolean;
   vin: string;
   vehicle?: {
-    year: number;
-    make: string;
-    model: string;
-    trim: string;
-    style: string;
-    engine: string;
-    transmission: string;
-    driveType: string;
-    bodyType: string;
-    fuelType: string;
-    cylinders: number;
-    doors: number;
+    year: number | null;
+    make: string | null;
+    model: string | null;
+    trim: string | null;
+    style: string | null;
+    engine: string | null;
+    transmission: string | null;
+    driveType: string | null;
+    bodyType: string | null;
+    fuelType: string | null;
+    cylinders: number | null;
+    doors: number | null;
   };
+  ambiguous?: boolean;
+  ambiguousFields?: string[];
   error?: string;
   source: "local";
 }> {
-  const decoded = await decodeVinLocal(vin);
-  
+  const decoded = await decodeVinLocal(vin, hint);
+
   if (!decoded.ok || !decoded.decoded) {
     return { ok: false, vin, error: decoded.error, source: "local" };
   }
-  
+
   const d = decoded.decoded;
-  
+  const fuel = d.fuel_type;
+  const fuelLabel = fuel == null ? null
+    : fuel === "G" ? "Gasoline"
+    : fuel === "D" ? "Diesel"
+    : fuel === "E" ? "Electric"
+    : fuel;
+
   return {
     ok: true,
     vin,
     vehicle: {
-      year: d.year,
-      make: d.make,
-      model: d.model,
-      trim: d.trim,
-      style: d.style,
-      engine: d.engine_name,
-      transmission: d.trans_name,
-      driveType: d.drive_type,
-      bodyType: d.body_type,
-      fuelType: d.fuel_type === "G" ? "Gasoline" : d.fuel_type === "D" ? "Diesel" : d.fuel_type === "E" ? "Electric" : d.fuel_type,
-      cylinders: d.engine_cylinders,
-      doors: d.doors,
+      year: d.year ?? null,
+      make: d.make ?? null,
+      model: d.model ?? null,
+      trim: d.trim ?? null,
+      style: d.style ?? null,
+      engine: d.engine_name ?? null,
+      transmission: d.trans_name ?? null,
+      driveType: d.drive_type ?? null,
+      bodyType: d.body_type ?? null,
+      fuelType: fuelLabel,
+      cylinders: d.engine_cylinders ?? null,
+      doors: d.doors ?? null,
     },
+    ambiguous: decoded.ambiguous || false,
+    ambiguousFields: decoded.ambiguousFields || [],
     source: "local",
   };
 }
@@ -443,23 +684,39 @@ function isSafetyCriticalRecall(recall: VehicleRecall): boolean {
   return SAFETY_CRITICAL_KEYWORDS.some(keyword => textToCheck.includes(keyword));
 }
 
-export async function getVehicleRecallsLocal(vin: string): Promise<{
+export async function getVehicleRecallsLocal(vin: string, hint?: DecodeHint): Promise<{
   ok: boolean;
   vin: string;
   recalls: VehicleRecall[];
   count: number;
   safetyCriticalCount: number;
+  ambiguous?: boolean;
   error?: string;
   source: "local";
 }> {
   try {
-    const decoded = await decodeVinLocal(vin);
-    
+    const decoded = await decodeVinLocal(vin, hint);
+
     if (!decoded.ok || !decoded.decoded) {
       return { ok: false, vin, recalls: [], count: 0, safetyCriticalCount: 0, error: "Cannot decode VIN", source: "local" };
     }
-    
+
     const vehicleId = decoded.decoded.vehicle_id;
+    // When the VIN squish maps to multiple DataOne variants with different
+    // vehicle_ids and no hint resolved them, mergeCandidates blanks vehicle_id.
+    // Refuse to return recalls for an arbitrary trim.
+    if (vehicleId == null) {
+      return {
+        ok: false,
+        vin,
+        recalls: [],
+        count: 0,
+        safetyCriticalCount: 0,
+        ambiguous: true,
+        error: "VIN matches multiple vehicle variants — pass trim or transmission to disambiguate",
+        source: "local",
+      };
+    }
     
     const recalls = await withRetry((db) => db<VehicleRecall[]>`
       SELECT 
@@ -564,11 +821,12 @@ export interface VehicleSpecsGrouped {
   };
 }
 
-export async function getVehicleSpecsLocal(vin: string): Promise<{
+export async function getVehicleSpecsLocal(vin: string, hint?: DecodeHint): Promise<{
   ok: boolean;
   vin: string;
   specs: VehicleSpecification[];
   grouped: VehicleSpecsGrouped;
+  ambiguous?: boolean;
   error?: string;
   source: "local";
 }> {
@@ -581,12 +839,27 @@ export async function getVehicleSpecsLocal(vin: string): Promise<{
     seating: {},
     interior: {},
   };
-  
+
   try {
-    const decoded = await decodeVinLocal(vin);
-    
+    const decoded = await decodeVinLocal(vin, hint);
+
     if (!decoded.ok || !decoded.decoded) {
       return { ok: false, vin, specs: [], grouped: emptyGrouped, error: "Cannot decode VIN", source: "local" };
+    }
+
+    // If vehicle_id was blanked because the squish matches multiple variants
+    // and the hint (if any) couldn't pick one, refuse rather than serving
+    // specs for an arbitrary trim (different wheel sizes / GVWR / etc.).
+    if (decoded.decoded.vehicle_id == null) {
+      return {
+        ok: false,
+        vin,
+        specs: [],
+        grouped: emptyGrouped,
+        ambiguous: true,
+        error: "VIN matches multiple vehicle variants — pass trim or transmission to disambiguate",
+        source: "local",
+      };
     }
     
     const vehicleId = decoded.decoded.vehicle_id;
