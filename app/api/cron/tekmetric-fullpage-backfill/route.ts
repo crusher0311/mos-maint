@@ -15,6 +15,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { runFullPageBackfillChunk } from "@/lib/integrations/tekmetric/full-page-backfill";
+import {
+  acquireInFlightLock,
+  releaseInFlightLock,
+} from "@/lib/integrations/tekmetric/inflight-lock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -175,6 +179,24 @@ export async function GET(req: NextRequest) {
       );
       break;
     }
+    // Per-shop in-flight lock. If a manual POST or a slow previous tick
+    // is still running this shop, skip and move on rather than racing.
+    const lock = await acquireInFlightLock(db, shop.shopId);
+    if (!lock.acquired) {
+      console.log(
+        `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: skipped — in-flight lock held by ${lock.heldBy} until ${lock.heldUntil?.toISOString?.() || lock.heldUntil}`,
+      );
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ok: true,
+        skipped: true,
+        reason: "in_flight",
+        heldBy: lock.heldBy,
+        heldUntil: lock.heldUntil,
+      });
+      continue;
+    }
     try {
       const result = await runForShop(db, shop);
       results.push({ shopId: shop.shopId, name: shop.name, ...result });
@@ -190,6 +212,8 @@ export async function GET(req: NextRequest) {
         complete: false,
         error: (err?.message || String(err)).slice(0, 400),
       });
+    } finally {
+      await releaseInFlightLock(db, shop.shopId, lock.owner);
     }
   }
 
@@ -240,26 +264,70 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Per-shop in-flight lock. Manual retries during ops debugging
+  // (Render's edge times out at ~280s but the Node promise keeps running
+  // server-side) used to stack 4+ concurrent runs on the same shop, all
+  // reading the same `prePassNextPage` and competing for the shared
+  // 8 RPS Tekmetric budget. 409 here means a previous POST or cron tick
+  // is still running — wait for the TTL, or check `catchup-status` for
+  // live progress.
+  const lock = await acquireInFlightLock(db, targetShopId);
+  if (!lock.acquired) {
+    const heldUntilIso =
+      lock.heldUntil instanceof Date
+        ? lock.heldUntil.toISOString()
+        : lock.heldUntil;
+    const startedAtIso =
+      lock.startedAt instanceof Date
+        ? lock.startedAt.toISOString()
+        : lock.startedAt;
+    const startedAgoSec = lock.startedAt
+      ? Math.round(
+          (Date.now() - new Date(lock.startedAt).getTime()) / 1000,
+        )
+      : null;
+    const heldUntilSec = lock.heldUntil
+      ? Math.round(
+          (new Date(lock.heldUntil).getTime() - Date.now()) / 1000,
+        )
+      : null;
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "in_flight",
+        message: `Shop ${targetShopId} is already running${startedAgoSec !== null ? ` (started ${startedAgoSec}s ago` : ""}${heldUntilSec !== null ? `, lock held for ${heldUntilSec}s more` : startedAgoSec !== null ? "" : ""}${startedAgoSec !== null ? ")" : ""}. Wait for it to finish or for the TTL to expire.`,
+        heldBy: lock.heldBy,
+        heldUntil: heldUntilIso,
+        startedAt: startedAtIso,
+      },
+      { status: 409 },
+    );
+  }
+
   const startTime = Date.now();
   const deadlineMs = startTime + 270 * 1000;
   const results: any[] = [];
 
-  // Drain pages for this single shop until either complete OR the request
-  // deadline. The chunk function caps each call at MAX_PAGES_PER_RUN pages,
-  // so we loop until we run out of time or hit completion.
-  while (Date.now() < deadlineMs) {
-    const result = await runFullPageBackfillChunk(
-      db,
-      targetShopId,
-      tekmetricShopId,
-    );
-    results.push({
-      pagesProcessed: result.pagesProcessed,
-      jobsIndexed: result.jobsIndexed,
-      complete: result.complete,
-      message: result.message,
-    });
-    if (result.complete || !result.ok || result.pagesProcessed === 0) break;
+  try {
+    // Drain pages for this single shop until either complete OR the request
+    // deadline. The chunk function caps each call at MAX_PAGES_PER_RUN pages,
+    // so we loop until we run out of time or hit completion.
+    while (Date.now() < deadlineMs) {
+      const result = await runFullPageBackfillChunk(
+        db,
+        targetShopId,
+        tekmetricShopId,
+      );
+      results.push({
+        pagesProcessed: result.pagesProcessed,
+        jobsIndexed: result.jobsIndexed,
+        complete: result.complete,
+        message: result.message,
+      });
+      if (result.complete || !result.ok || result.pagesProcessed === 0) break;
+    }
+  } finally {
+    await releaseInFlightLock(db, targetShopId, lock.owner);
   }
 
   const totalJobs = results.reduce(

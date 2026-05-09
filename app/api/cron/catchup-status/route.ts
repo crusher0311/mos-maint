@@ -149,6 +149,15 @@ export async function GET(req: NextRequest) {
           : null,
         lastPrePassRunAt: progress.lastPrePassRunAt || null,
         prePassCompletedAt: progress.prePassCompletedAt || null,
+        // Per-shop in-flight lock state
+        // (lib/integrations/tekmetric/inflight-lock.ts). When
+        // `inFlightUntil` is in the future, the GET cron skips this shop
+        // and the POST single-shop trigger returns 409. Stale locks are
+        // self-healed by the TTL (default 6 min) so a crashed process
+        // never permanently blocks the shop.
+        inFlightUntil: progress.inFlightUntil || null,
+        inFlightStartedAt: progress.inFlightStartedAt || null,
+        inFlightOwner: progress.inFlightOwner || null,
       };
     });
 
