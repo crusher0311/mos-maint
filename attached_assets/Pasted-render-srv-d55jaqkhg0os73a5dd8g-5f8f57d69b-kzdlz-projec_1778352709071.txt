@@ -1,0 +1,41 @@
+render@srv-d55jaqkhg0os73a5dd8g-5f8f57d69b-kzdlz:~/project/src$ cat > /tmp/clear116.ts <<'EOF'
+import { getDb } from "./lib/mongo";
+async function main() {
+  const db = await getDb();
+  const total = await db.collection("protractor_template_cache").countDocuments({ shopId: 116 });
+  const notFound = await db.collection("protractor_template_cache").countDocuments({ shopId: 116, is404: true });
+  console.log("BEFORE shop 116:", { total, notFound, ok: total - notFound });
+  if (process.argv.includes("--delete")) {
+    const r = await db.collection("protractor_template_cache").deleteMany({ shopId: 116 });
+    console.log("Deleted:", r.deletedCount);
+  } else {
+    console.log("(dry run — re-run with --delete to actually clear)");
+  }
+  process.exit(0);
+}
+main().catch(e => { console.error(e); process.exit(1); });
+EOF
+npx tsx /tmp/clear116.ts
+node:internal/modules/cjs/loader:1401
+  const err = new Error(message);
+              ^
+
+Error: Cannot find module './lib/mongo'
+Require stack:
+- /tmp/clear116.ts
+    at node:internal/modules/cjs/loader:1401:15
+    at nextResolveSimple (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:1004)
+    at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:2630
+    at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1542
+    at resolveTsPaths (/opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:760)
+    at /opt/render/project/src/node_modules/tsx/dist/register-D46fvsV_.cjs:4:1102
+    at m._resolveFilename (file:///opt/render/project/src/node_modules/tsx/dist/register-B7jrtLTO.mjs:1:789)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+    at Function._load (node:internal/modules/cjs/loader:1211:37) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/tmp/clear116.ts' ]
+}
+
+Node.js v22.16.0
+render@srv-d55jaqkhg0os73a5dd8g-5f8f57d69b-kzdlz:~/project/src$ 
