@@ -1,0 +1,50 @@
+2026-05-09T18:13:18.70697406Z   ✓ triage(mi): safety row intervalMiles unchanged (3,000)
+2026-05-09T18:13:18.706994531Z   ✓ triage(mi): safety row recommendedReason mentions 'mi' (not 'km')
+2026-05-09T18:13:18.707012081Z 
+2026-05-09T18:13:18.707018571Z [2a] On-demand path, distanceUnit=kilometers
+2026-05-09T18:13:18.707874957Z [Extension] Running analysis for VIN TESTVIN0000000339, shop 42, mileage 50000 km, showInspect=true
+2026-05-09T18:13:18.707882597Z [Extension] Using prefetched 0 work orders
+2026-05-09T18:13:18.707889017Z [Extension] OEM data: 1 items, source: cache
+2026-05-09T18:13:18.708121812Z [Extension] Engine risk FLAGGED for VIN TESTVIN0000000339 (baseline): Chrysler 3.6L Pentastar engines have documented oil-consumption issues; 3,000 mi level checks recommended.
+2026-05-09T18:13:18.7085848Z [Extension] OEM processing: 1 recs, skipped: noInterval=0, inspect=0, excluded=0
+2026-05-09T18:13:18.708689682Z [Extension] Auto-inserted "Safety Check — oil level" for VIN TESTVIN0000000339 (anchor=50000, dueAt=54828, status=due_soon)
+2026-05-09T18:13:18.709054299Z [Extension] Analysis complete: overdue=1, dueSoon=1, upcoming=0
+2026-05-09T18:13:18.709066599Z   ✓ runOnDemandAnalysis(km): oil row interval === 8,047
+2026-05-09T18:13:18.70907437Z   ✓ runOnDemandAnalysis(km): oil row intervalText reads 'km'
+2026-05-09T18:13:18.709145191Z   ✓ runOnDemandAnalysis(km): Safety Check — Oil Level row present
+2026-05-09T18:13:18.709166591Z   ✓ runOnDemandAnalysis(km): safety row interval === 4,828
+2026-05-09T18:13:18.709173501Z   ✓ runOnDemandAnalysis(km): safety row intervalText reads 'km'
+2026-05-09T18:13:18.709221842Z   ✓ runOnDemandAnalysis(km): safety row engineRiskReason mentions 'km'
+2026-05-09T18:13:18.709252443Z 
+2026-05-09T18:13:18.709256903Z [2b] On-demand path, distanceUnit=miles (regression guard)
+2026-05-09T18:13:18.709285943Z [Extension] Running analysis for VIN TESTVIN0000000339, shop 42, mileage 50000 mi, showInspect=true
+2026-05-09T18:13:18.709291354Z [Extension] Using prefetched 0 work orders
+2026-05-09T18:13:18.709294083Z [Extension] OEM data: 1 items, source: cache
+2026-05-09T18:13:18.709378465Z [Extension] Engine risk FLAGGED for VIN TESTVIN0000000339 (baseline): Chrysler 3.6L Pentastar engines have documented oil-consumption issues; 3,000 mi level checks recommended.
+2026-05-09T18:13:18.709433486Z [Extension] OEM processing: 1 recs, skipped: noInterval=0, inspect=0, excluded=0
+2026-05-09T18:13:18.709464347Z [Extension] Auto-inserted "Safety Check — oil level" for VIN TESTVIN0000000339 (anchor=50000, dueAt=53000, status=due_soon)
+2026-05-09T18:13:18.709543248Z [Extension] Analysis complete: overdue=1, dueSoon=1, upcoming=0
+2026-05-09T18:13:18.709579969Z   ✓ runOnDemandAnalysis(mi): oil row interval unchanged (5,000)
+2026-05-09T18:13:18.709588579Z   ✓ runOnDemandAnalysis(mi): oil row intervalText reads 'mi' (not 'km')
+2026-05-09T18:13:18.709671241Z   ✓ runOnDemandAnalysis(mi): safety row interval unchanged (3,000)
+2026-05-09T18:13:18.709678861Z   ✓ runOnDemandAnalysis(mi): safety row engineRiskReason mentions 'mi' (not 'km')
+2026-05-09T18:13:18.709682301Z 
+2026-05-09T18:13:18.709686411Z Task #339 smoke PASSED
+2026-05-09T18:13:18.887437937Z 
+2026-05-09T18:13:18.887456068Z > mos-maintenance-mvp@1.8.0 test:smoke
+2026-05-09T18:13:18.887463088Z > npm run lint:direct-db && npm run lint:no-migrate-tab && npm run test:tekmig-api-auth && npm run test:extension-guard && npm run test:extension-auth-no-plaintext && npm run test:extension-manifest-version-bump && npm run test:oe-logo && npm run test:unit-format && npm run test:protractor-canned-jobs-filter && npm run test:fuel-type-label && npm run test:backfill-chunk-speed-health && npm run test:chunk-speed-email-html && npm run test:backfill-chunk-speed-health:route && npm run test:tekmetric-backfill-health:route && npm run test:tekmetric-webhook-health:route && npm run test:tekmetric-endpoint-health:route && npm run test:tekmetric-endpoint-health && npm run test:tekmetric-catchup && npm run test:tekmetric-shared-rate-limiter && npm run test:vhr-engine-risk && npm run test:engine-risk-csv && npm run test:enhance-corrections-mos-shop-id && npm run test:concern-conversations-mos-shop-id && npm run test:hovercode-drift && npm run test:hovercode-create-payload && npm run test:vhi-score-snapshot && npm run test:vhi-rebuild-snapshot && npm run test:tekmetric-webhook-signature && npm run test:stripe-webhook-signature && npm run test:extension-shop-lookup && npm run test:stripe-webhook-idempotency && npm run test:tekmetric-webhook-idempotency && npm run test:jobs-search-canonical && npm run test:jobs-search-shape
+2026-05-09T18:13:18.887467458Z 
+2026-05-09T18:13:19.007888051Z 
+2026-05-09T18:13:19.007910832Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-05-09T18:13:19.007913812Z > node scripts/check-direct-db.cjs
+2026-05-09T18:13:19.007915962Z 
+2026-05-09T18:13:19.10770749Z 
+2026-05-09T18:13:19.10773497Z [check-direct-db] 1 file(s) call getDb()/getMongoClient() directly without being on the allowlist:
+2026-05-09T18:13:19.1077384Z 
+2026-05-09T18:13:19.107881853Z   - lib/integrations/tekmetric/shared-rate-limiter.ts
+2026-05-09T18:13:19.107890873Z 
+2026-05-09T18:13:19.107894973Z Add a function in lib/data/repositories/<entity>.ts and call it from these files instead.
+2026-05-09T18:13:19.107898373Z See docs/data-access.md for details.
+2026-05-09T18:13:19.107900733Z 
+2026-05-09T18:13:19.17665609Z ==> Build failed 😞
+2026-05-09T18:13:19.1766898Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

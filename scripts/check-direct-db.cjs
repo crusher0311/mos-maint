@@ -347,6 +347,7 @@ const ALLOWLIST = new Set([
   "lib/integrations/tekmetric/incremental-sync.ts",
   "lib/integrations/tekmetric/job-index.ts",
   "lib/integrations/tekmetric/jobs-prewarm.ts",
+  "lib/integrations/tekmetric/shared-rate-limiter.ts",
   "lib/integrations/tekmetric/sync.ts",
   "lib/integrations/tekmetric/usage-tracker.ts",
   "lib/integrations/tekmetric/webhook-subscribe.ts",
