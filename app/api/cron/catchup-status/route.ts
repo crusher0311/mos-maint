@@ -119,6 +119,22 @@ export async function GET(req: NextRequest) {
         lastCoveredByCatchupAt: cov?.lastSeenAt || null,
         catchupRunsCovered: cov?.runsCovered || 0,
         lastCatchupOutcome: cov?.lastOutcome || null,
+        // Full-page worker fields. These live on the same
+        // `tekmetric_backfill_progress` doc but are written by
+        // `lib/integrations/tekmetric/full-page-backfill.ts` instead of the
+        // date-window chunker. Without surfacing them, a shop in
+        // `fullPageMode: true` looks "stuck" because lastCursorMoveAt /
+        // currentChunkEnd never move (the date-window chunker early-returns
+        // for these shops at line 453 of tekmetric-backfill/route.ts).
+        // The real progress signal for a fullpage shop is fullPageNextPage
+        // climbing and lastFullPageRunAt being recent.
+        fullPageMode: progress.fullPageMode === true,
+        fullPageNextPage: typeof progress.fullPageNextPage === "number"
+          ? progress.fullPageNextPage
+          : null,
+        lastFullPageRunAt: progress.lastFullPageRunAt || null,
+        fullPageQueuedAt: progress.fullPageQueuedAt || null,
+        fullPageQueueReason: progress.fullPageQueueReason || null,
       };
     });
 
@@ -153,6 +169,13 @@ export async function GET(req: NextRequest) {
         catchupRunsReturned: trimmedRuns.length,
         coverageWindowRuns: coverageWindow.length,
         uncoveredShopCount: uncoveredShops.length,
+        // Full-page worker visibility. A high `fullPageShopsIncomplete`
+        // explains a low `tekShopsComplete` — those shops aren't being
+        // touched by the date-window chunker on purpose; they're queued
+        // for the every-2-min fullpage cron instead.
+        fullPageShopsTotal: shopRows.filter((r) => r.fullPageMode).length,
+        fullPageShopsIncomplete: incompleteShops.filter((r) => r.fullPageMode)
+          .length,
       },
       catchupRuns: trimmedRuns,
       shops: shopRows,
