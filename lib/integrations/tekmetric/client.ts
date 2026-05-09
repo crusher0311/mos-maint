@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot, type RateLimitPriority } from "@/lib/integrations/core/rate-limiter";
+import { acquireSharedTekmetricSlot } from "./shared-rate-limiter";
 import { getValidToken, refreshToken, clearCachedToken, isConfigured } from "./auth";
 import type { 
   TekmetricShop, 
@@ -226,6 +227,25 @@ export async function tekmetricRequest<T = any>(
     const rateSlot = await acquireRateLimitSlot('tekmetric', 8, priority);
     if (!rateSlot.acquired) {
       throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
+    }
+    // Cross-process per-second gate. The local pacer above only enforces RPS
+    // within a single Node process; without this, two services sharing the
+    // same Tekmetric OAuth credentials each fire 8 RPS = 16 RPS combined and
+    // blow Tekmetric's 10 RPS per-key cap. See shared-rate-limiter.ts for
+    // the full rationale. Fail-closed on timeout: treat it like a 429 — back
+    // off and retry within the existing loop instead of issuing the request
+    // and breaching the cap.
+    const sharedSlot = await acquireSharedTekmetricSlot();
+    if (!sharedSlot.acquired) {
+      if (attempt > MAX_429_RETRIES) {
+        throw new Error(`[Tekmetric] Shared rate limiter timed out after ${MAX_429_RETRIES} attempts on ${endpoint}; refusing to breach the cap.`);
+      }
+      const backoffMs = compute429Backoff(attempt, null);
+      console.warn(`[Tekmetric] shared rate limiter saturated on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms before retry`);
+      const backoffCounter = backoff429Storage.getStore();
+      if (backoffCounter) backoffCounter.ms += backoffMs;
+      await new Promise(r => setTimeout(r, backoffMs));
+      continue;
     }
     const apiCallCounter = apiCallStorage.getStore();
     if (apiCallCounter) apiCallCounter.count++;
@@ -596,6 +616,17 @@ export async function getRepairOrderInspectionsWithXAuth(
       const rateSlot = await acquireRateLimitSlot('tekmetric', 8);
       if (!rateSlot.acquired) {
         console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
+        return [];
+      }
+      // Cross-process per-second gate (see shared-rate-limiter.ts).
+      // Fail-closed: if the limiter saturated, skip this RO's inspection
+      // fetch rather than breaching the cap. Inspection data is non-critical
+      // (caller already handles `[]` as "no inspections") so degrading to
+      // empty here is acceptable; the alternative would be issuing the
+      // request and contributing to a 429 storm.
+      const sharedSlot = await acquireSharedTekmetricSlot();
+      if (!sharedSlot.acquired) {
+        console.warn(`[Tekmetric] Shared rate limiter saturated for inspection fetch RO ${repairOrderId}; skipping to avoid cap breach`);
         return [];
       }
       const apiCallCounter = apiCallStorage.getStore();
