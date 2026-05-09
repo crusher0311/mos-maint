@@ -24,6 +24,8 @@ import {
   shouldKeepEnrichedCannedJob,
   classifySyncCannedJobsBatchSource,
   normalizeCannedJobForCache,
+  unwrapServicePackageTemplate,
+  extractServicePackageTemplateContent,
 } from "../lib/integrations/protractor/client";
 
 let failed = 0;
@@ -209,6 +211,140 @@ ok(
   "normalize — null/undefined input doesn't crash",
   normalizeCannedJobForCache(null).title === "" &&
     normalizeCannedJobForCache(undefined).lineCount === 0,
+);
+
+// 6. Template-detail response shape parser. Task #397 root-caused the
+// shop-116 0/693 deep-sync to `/ServicePackageTemplate/Read/{id}`
+// returning HTTP 200 with a body shape the parser silently didn't
+// recognize — every template fell through `template.ID` being undefined
+// and we returned `{ ok: false }` with no log. The unwrap+extract pair
+// must handle:
+//   - canonical top-level shape (already worked)
+//   - the legacy `{ ServicePackageTemplate: {...} }` wrapper
+//   - alt envelopes Protractor returns for some shop deployments
+//     (`ServicePackageTemplateReadResponse`, `Result`, single-item
+//     `ItemCollection`)
+//   - alt content fields (`Title` at top level, `ServicePackageLines`
+//     as a bare array, `Lines` / `LineItems` instead of
+//     `ServicePackageLines.ItemCollection`)
+// If anyone reverts to the one-liner `(data.ServicePackageTemplate ||
+// data)` parser, these checks fail before the next deep sync silently
+// drops to 0 again.
+const canonicalTopLevel = {
+  ID: "tpl-1",
+  Code: "OIL",
+  ServicePackageHeader: { Title: "Oil Change", Description: "5W-30" },
+  ServicePackageLines: { ItemCollection: [{ ID: "l1" }, { ID: "l2" }] },
+};
+ok(
+  "unwrap — canonical top-level shape passes through unchanged",
+  unwrapServicePackageTemplate(canonicalTopLevel) === canonicalTopLevel,
+);
+
+const legacyWrapped = { ServicePackageTemplate: canonicalTopLevel };
+ok(
+  "unwrap — legacy { ServicePackageTemplate } wrapper",
+  unwrapServicePackageTemplate(legacyWrapped) === canonicalTopLevel,
+);
+
+const readResponseEnvelope = {
+  ServicePackageTemplateReadResponse: {
+    ServicePackageTemplate: canonicalTopLevel,
+  },
+};
+ok(
+  "unwrap — nested ReadResponse envelope (shop-116-shaped)",
+  unwrapServicePackageTemplate(readResponseEnvelope) === canonicalTopLevel,
+);
+
+const resultEnvelope = { Result: canonicalTopLevel };
+ok(
+  "unwrap — generic { Result } envelope",
+  unwrapServicePackageTemplate(resultEnvelope) === canonicalTopLevel,
+);
+
+const singleItemCollection = { ItemCollection: [canonicalTopLevel] };
+ok(
+  "unwrap — single-element ItemCollection envelope",
+  unwrapServicePackageTemplate(singleItemCollection) === canonicalTopLevel,
+);
+
+ok(
+  "unwrap — null / non-template input returns null",
+  unwrapServicePackageTemplate(null) === null &&
+    unwrapServicePackageTemplate({ Result: { Foo: "bar" } }) === null,
+);
+
+const canonicalContent = extractServicePackageTemplateContent(canonicalTopLevel);
+ok(
+  "extract — canonical shape: id/title/description/lines",
+  canonicalContent.id === "tpl-1" &&
+    canonicalContent.title === "Oil Change" &&
+    canonicalContent.description === "5W-30" &&
+    canonicalContent.lines.length === 2,
+);
+
+// Alt content shape: title at top level, lines as a bare array, id only
+// available via ServicePackageTemplateID. This is the kind of variation
+// that silently dropped shop 116 templates because the old enrichment
+// code only read ServicePackageHeader.Title and
+// ServicePackageLines.ItemCollection.
+const altShape = {
+  ServicePackageTemplateID: "tpl-2",
+  Title: "Brake Inspection",
+  Description: "Front + rear",
+  ServicePackageLines: [{ ID: "l1" }, { ID: "l2" }, { ID: "l3" }],
+};
+const altContent = extractServicePackageTemplateContent(altShape);
+ok(
+  "extract — alt shape (Title at root, lines as array, id from ServicePackageTemplateID)",
+  altContent.id === "tpl-2" &&
+    altContent.title === "Brake Inspection" &&
+    altContent.description === "Front + rear" &&
+    altContent.lines.length === 3,
+);
+
+const lineItemsShape = {
+  ID: "tpl-3",
+  Header: { Title: "Tire Rotation" },
+  LineItems: [{ ID: "l1" }],
+};
+const lineItemsContent = extractServicePackageTemplateContent(lineItemsShape);
+ok(
+  "extract — Header.Title + LineItems fallback",
+  lineItemsContent.id === "tpl-3" &&
+    lineItemsContent.title === "Tire Rotation" &&
+    lineItemsContent.lines.length === 1,
+);
+
+// End-to-end: the shop-116 envelope must round-trip through unwrap +
+// extract and yield non-empty content, exactly the path that was
+// returning ok:false silently before this task.
+const shop116Envelope = {
+  ServicePackageTemplateReadResponse: {
+    ServicePackageTemplate: {
+      ID: "tpl-shop116",
+      Code: "OIL",
+      Title: "Synthetic Oil Change",
+      ServicePackageLines: [{ ID: "l1" }, { ID: "l2" }],
+    },
+  },
+};
+const shop116Inner = unwrapServicePackageTemplate(shop116Envelope);
+const shop116Content = extractServicePackageTemplateContent(shop116Inner);
+ok(
+  "shop 116 — wrapped envelope with alt content fields yields a usable template",
+  !!shop116Inner &&
+    shop116Content.id === "tpl-shop116" &&
+    shop116Content.title === "Synthetic Oil Change" &&
+    shop116Content.lines.length === 2,
+);
+
+ok(
+  "extract — null/empty input returns empty struct without throwing",
+  extractServicePackageTemplateContent(null).id === "" &&
+    extractServicePackageTemplateContent(undefined).lines.length === 0 &&
+    extractServicePackageTemplateContent({}).title === "",
 );
 
 if (failed > 0) {

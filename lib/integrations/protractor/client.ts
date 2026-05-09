@@ -2564,6 +2564,156 @@ export async function fetchServicePackageTemplates(
 const TEMPLATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TEMPLATE_404_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for 404s
 
+// Common wrapper keys we've seen Protractor wrap a single
+// /ServicePackageTemplate/Read/{id} payload in across shop deployments.
+// Some shops return the template object at the top level; others wrap it
+// once (and very rarely twice). Order matters only insofar as the most
+// specific keys come first so we don't accidentally descend into a generic
+// `Result` / `Data` envelope before checking the canonical wrapper.
+const TEMPLATE_RESPONSE_WRAPPER_KEYS = [
+  "ServicePackageTemplate",
+  "ServicePackageTemplateRead",
+  "ServicePackageTemplateReadResponse",
+  "ServicePackageTemplateReadResult",
+  "Template",
+  "Item",
+  "Body",
+  "Result",
+  "Data",
+  "Response",
+];
+
+function looksLikeServicePackageTemplate(obj: any): boolean {
+  if (!obj || typeof obj !== "object") return false;
+  return !!(
+    obj.ID ||
+    obj.Header?.ID ||
+    obj.ServicePackageTemplateID ||
+    obj.TemplateID ||
+    obj.ServicePackageHeader ||
+    obj.ServicePackageLines ||
+    obj.Title ||
+    obj.Lines ||
+    obj.LineItems
+  );
+}
+
+// Strip whatever wrapper Protractor returned and hand back the inner
+// template-shaped object. Additive: shops that already work (top-level or
+// `ServicePackageTemplate` wrapper) keep working; shops that return a
+// different envelope (root cause for shop 116 dropping 0/693) are now
+// recognized too. Returns null if nothing template-shaped was found.
+export function unwrapServicePackageTemplate(raw: any): any | null {
+  if (!raw || typeof raw !== "object") return null;
+  let current: any = raw;
+  for (let depth = 0; depth < 4; depth++) {
+    if (looksLikeServicePackageTemplate(current)) return current;
+    // Single-element ItemCollection envelope.
+    if (Array.isArray(current?.ItemCollection) && current.ItemCollection.length === 1) {
+      current = current.ItemCollection[0];
+      continue;
+    }
+    let unwrapped: any = null;
+    for (const key of TEMPLATE_RESPONSE_WRAPPER_KEYS) {
+      const next = current[key];
+      if (next && typeof next === "object") {
+        unwrapped = next;
+        break;
+      }
+    }
+    if (!unwrapped) break;
+    current = unwrapped;
+  }
+  return looksLikeServicePackageTemplate(current) ? current : null;
+}
+
+// Pull the four fields enrichment cares about (id/title/description/lines)
+// out of an unwrapped template, supporting alternative field names that
+// some shops return alongside the canonical ServicePackageHeader /
+// ServicePackageLines.ItemCollection shape. Exported for the regression
+// smoke test.
+export function extractServicePackageTemplateContent(template: any): {
+  id: string;
+  title: string;
+  description: string;
+  lines: any[];
+} {
+  if (!template || typeof template !== "object") {
+    return { id: "", title: "", description: "", lines: [] };
+  }
+  const id =
+    template.ID ||
+    template.Header?.ID ||
+    template.ServicePackageTemplateID ||
+    template.TemplateID ||
+    "";
+  const title =
+    template.ServicePackageHeader?.Title ||
+    template.Title ||
+    template.Header?.Title ||
+    template.Name ||
+    "";
+  const description =
+    template.ServicePackageHeader?.Description ||
+    template.ServicePackageFooter?.Description ||
+    template.Description ||
+    "";
+  const linesRaw = template.ServicePackageLines;
+  let lines: any[] = [];
+  if (Array.isArray(linesRaw)) {
+    lines = linesRaw;
+  } else if (Array.isArray(linesRaw?.ItemCollection)) {
+    lines = linesRaw.ItemCollection;
+  } else if (Array.isArray(template.Lines)) {
+    lines = template.Lines;
+  } else if (Array.isArray(template.LineItems)) {
+    lines = template.LineItems;
+  } else if (Array.isArray(template.Operations?.ItemCollection)) {
+    lines = template.Operations.ItemCollection;
+  }
+  return {
+    id: String(id || ""),
+    title: String(title || ""),
+    description: String(description || ""),
+    lines,
+  };
+}
+
+// One-shot per-shop diagnostic so the very first detail call per process
+// per shop logs the response envelope shape (keys only, no values / no
+// PII). Lets us see what Protractor is actually returning for a
+// previously-unseen shop without spamming the log on every template.
+const _templateShapeDiagnosticLogged = new Set<number>();
+function logTemplateShapeDiagnostic(shopId: number, templateId: string, raw: any): void {
+  if (_templateShapeDiagnosticLogged.has(shopId)) return;
+  _templateShapeDiagnosticLogged.add(shopId);
+  try {
+    const topKeys = raw && typeof raw === "object" ? Object.keys(raw) : [];
+    const wrapperHits = TEMPLATE_RESPONSE_WRAPPER_KEYS.filter(
+      (k) => raw && typeof raw === "object" && raw[k] && typeof raw[k] === "object",
+    );
+    const inner = unwrapServicePackageTemplate(raw);
+    const innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
+    const linesRaw = inner?.ServicePackageLines;
+    const linesShape = Array.isArray(linesRaw)
+      ? `array(len=${linesRaw.length})`
+      : Array.isArray(linesRaw?.ItemCollection)
+        ? `ItemCollection(len=${linesRaw.ItemCollection.length})`
+        : linesRaw === undefined
+          ? "undefined"
+          : typeof linesRaw;
+    console.log(
+      `[Protractor:TemplateShape] shop=${shopId} templateId=${templateId} ` +
+        `topKeys=[${topKeys.join(",")}] wrapperKeysPresent=[${wrapperHits.join(",")}] ` +
+        `innerKeys=[${innerKeys.join(",")}] hasHeader=${!!inner?.ServicePackageHeader} ` +
+        `headerTitle=${!!inner?.ServicePackageHeader?.Title} ` +
+        `linesShape=${linesShape} fallbackTitleField=${!!inner?.Title}`,
+    );
+  } catch {
+    // Diagnostic must never throw.
+  }
+}
+
 export async function fetchServicePackageTemplateDetail(
   shopId: number,
   templateId: string
@@ -2592,7 +2742,7 @@ export async function fetchServicePackageTemplateDetail(
   }
 
   // Try the most reliable endpoint first (skip noisy fallbacks)
-  const result = await protractorFetch<ProtractorServicePackageTemplate | { ServicePackageTemplate?: ProtractorServicePackageTemplate }>(
+  const result = await protractorFetch<any>(
     `/ServicePackageTemplate/Read/${templateId}`,
     config,
     {},
@@ -2601,16 +2751,42 @@ export async function fetchServicePackageTemplateDetail(
   );
 
   if (result.ok && result.data) {
-    const template = (result.data as any).ServicePackageTemplate || result.data;
-    
-    if (template.ID) {
+    // First call per shop per process logs the envelope shape (keys
+    // only — no values, no PII) so a previously-unknown wrapper shape
+    // shows up in BetterStack on the very first run instead of after
+    // a customer reports zero canned jobs.
+    logTemplateShapeDiagnostic(shopId, templateId, result.data);
+
+    const inner = unwrapServicePackageTemplate(result.data);
+    const content = extractServicePackageTemplateContent(inner);
+
+    if (inner && content.id) {
+      // Normalize to the canonical shape downstream code expects
+      // (ServicePackageHeader.Title, ServicePackageLines.ItemCollection)
+      // so we don't have to teach every caller about alt field names.
+      // We only fill in canonical fields when they're missing — never
+      // overwrite a present canonical value.
+      const normalized: ProtractorServicePackageTemplate = {
+        ...inner,
+        ID: content.id,
+        ServicePackageHeader: {
+          ...(inner.ServicePackageHeader || {}),
+          Title: inner.ServicePackageHeader?.Title || content.title,
+          Description: inner.ServicePackageHeader?.Description || content.description,
+        },
+        ServicePackageLines: {
+          ItemCollection:
+            inner.ServicePackageLines?.ItemCollection ?? content.lines,
+        },
+      };
+
       // Cache successful response
       await db.collection("protractor_template_cache").updateOne(
         { cacheKey },
-        { 
-          $set: { 
+        {
+          $set: {
             cacheKey,
-            template,
+            template: normalized,
             is404: false,
             shopId,
             templateId,
@@ -2620,10 +2796,30 @@ export async function fetchServicePackageTemplateDetail(
         },
         { upsert: true }
       );
-      return { ok: true, template };
+      return { ok: true, template: normalized };
+    }
+
+    // Parsed-but-empty: HTTP 200, body present, but we couldn't pull
+    // an ID *and* either a title or lines out of any known shape. This
+    // is the silent failure mode that dropped shop 116 to 0/693 — make
+    // it loud (console.error so the syslog drain definitely picks it up)
+    // and include enough shape info to debug, but no values / no PII.
+    try {
+      const topKeys = Object.keys(result.data || {});
+      const innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
+      console.error(
+        `[Protractor] WARN: detail parse failed for shop=${shopId} ` +
+          `templateId=${templateId} — got 200 OK but couldn't extract ` +
+          `id/title/lines. topKeys=[${topKeys.join(",")}] ` +
+          `innerKeys=[${innerKeys.join(",")}] ` +
+          `hadInner=${!!inner} hadId=${!!content.id} ` +
+          `hadTitle=${content.title.length > 0} hadLines=${content.lines.length > 0}`,
+      );
+    } catch {
+      // Diagnostic must never throw.
     }
   }
-  
+
   // Check if this is a 404 response
   const is404 = result.error?.includes("404") || result.error?.includes("not found");
   
@@ -3402,18 +3598,18 @@ export async function enrichCannedJobsWithDetails(
       batch.map(async (job) => {
         const detailResult = await fetchServicePackageTemplateDetail(shopId, job.ID);
         if (detailResult.ok && detailResult.template) {
-          const template = detailResult.template;
-          const title = template.ServicePackageHeader?.Title || "";
-          const description = template.ServicePackageHeader?.Description || template.ServicePackageFooter?.Description || "";
-          const lines = template.ServicePackageLines?.ItemCollection || [];
-          
+          // Use the alt-shape-aware extractor so shops that return
+          // titles/lines under non-canonical field names (the shop 116
+          // bug) still get content, not just shops that return the
+          // textbook ServicePackageHeader / ServicePackageLines shape.
+          const content = extractServicePackageTemplateContent(detailResult.template);
           return {
             ...job,
-            Title: title,
-            Description: description,
-            ServicePackageLines: lines,
-            _hasTitle: title.trim().length > 0,
-            _hasLines: lines.length > 0,
+            Title: content.title,
+            Description: content.description,
+            ServicePackageLines: content.lines,
+            _hasTitle: content.title.trim().length > 0,
+            _hasLines: content.lines.length > 0,
           };
         }
         return { ...job, _hasTitle: false, _hasLines: false };
@@ -3458,7 +3654,11 @@ export async function enrichCannedJobsWithDetails(
   // it. Threshold is intentionally conservative — real-world enrichment for
   // healthy shops keeps ~95% of the list.
   if (filterEmpty && total >= 50 && dropped / total > 0.5) {
-    console.warn(
+    // Use console.error rather than console.warn: the BetterStack syslog
+    // drain reliably forwards stderr, and this drop alarm being silently
+    // missing in prod (task #397) is exactly what allowed shop 116 to sit
+    // at 0/693 across three back-to-back deep syncs without paging us.
+    console.error(
       `[Protractor] WARN: enrichment dropped ${dropped}/${total} ` +
       `(${Math.round((dropped / total) * 100)}%) jobs for shop ${shopId}. ` +
       `strictCodeFilter=${useStrictCodeFilter}. Investigate filter or source data.`,
