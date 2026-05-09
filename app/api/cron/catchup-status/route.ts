@@ -135,6 +135,20 @@ export async function GET(req: NextRequest) {
         lastFullPageRunAt: progress.lastFullPageRunAt || null,
         fullPageQueuedAt: progress.fullPageQueuedAt || null,
         fullPageQueueReason: progress.fullPageQueueReason || null,
+        // Bulk jobs pre-pass (lib/integrations/tekmetric/full-page-backfill.ts).
+        // When prePassDone=true the RO loop reads jobs from
+        // `tekmetric_jobs_prepass` instead of calling /jobs?repairOrderId=X
+        // per RO. While prePassDone=false but prePassNextPage is climbing,
+        // the shop is in pre-pass-burning-budget mode (RO loop is paused).
+        prePassDone: progress.prePassDone === true,
+        prePassNextPage: typeof progress.prePassNextPage === "number"
+          ? progress.prePassNextPage
+          : null,
+        prePassTotalPages: typeof progress.prePassTotalPages === "number"
+          ? progress.prePassTotalPages
+          : null,
+        lastPrePassRunAt: progress.lastPrePassRunAt || null,
+        prePassCompletedAt: progress.prePassCompletedAt || null,
       };
     });
 
@@ -176,6 +190,15 @@ export async function GET(req: NextRequest) {
         fullPageShopsTotal: shopRows.filter((r) => r.fullPageMode).length,
         fullPageShopsIncomplete: incompleteShops.filter((r) => r.fullPageMode)
           .length,
+        // Pre-pass coverage across the fullpage queue. Once
+        // `prePassShopsDone` == `fullPageShopsTotal`, every fullpage shop
+        // is in zero-API-cost-per-RO mode.
+        prePassShopsDone: shopRows.filter(
+          (r) => r.fullPageMode && r.prePassDone,
+        ).length,
+        prePassShopsInProgress: shopRows.filter(
+          (r) => r.fullPageMode && !r.prePassDone && r.prePassNextPage !== null,
+        ).length,
       },
       catchupRuns: trimmedRuns,
       shops: shopRows,

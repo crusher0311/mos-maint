@@ -57,6 +57,266 @@ const PAGE_SIZE = 100;
 // Render's request timeout. 240s leaves ~60s headroom under the 300s limit.
 const SOFT_DEADLINE_MS = 240 * 1000;
 
+// Bulk jobs pre-pass: paginates `/jobs?shop=X` once at the start of a
+// full-page backfill and writes every job to `tekmetric_jobs_prepass`
+// keyed by jobId. The RO loop then looks up jobs from that collection
+// instead of calling `/jobs?repairOrderId=X` once per RO. For a 270k-RO
+// shop this drops the per-shop API budget from ~270k calls to ~5k calls.
+//
+// Idempotent: re-running the pre-pass after a crash just upserts the
+// same jobs by jobId. Resumable: prePassNextPage is persisted on
+// tekmetric_backfill_progress after every page.
+const PREPASS_PAGE_SIZE = 100;
+const PREPASS_MAX_PAGES_PER_RUN = 60; // ~6k jobs/run at 8 RPS, ~30s wall clock
+const JOBS_PREPASS_COLLECTION = "tekmetric_jobs_prepass";
+
+function isJobsPrePassEnabled(shopId: number): boolean {
+  const scoped = (process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS_SHOPS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (scoped.length > 0) {
+    return scoped.includes(String(shopId));
+  }
+  return process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS === "true";
+}
+
+export interface JobsPrePassResult {
+  ok: boolean;
+  done: boolean;
+  startPage: number;
+  endPage: number;
+  totalPages: number;
+  pagesProcessed: number;
+  jobsWritten: number;
+  durationMs: number;
+  error?: string;
+}
+
+/**
+ * Bulk-fetch all jobs for a shop and upsert them by jobId so the RO loop
+ * can read them with zero API cost. Resumable across cron ticks.
+ *
+ * Returns when:
+ *   - all jobs pages have been walked (done=true), OR
+ *   - PREPASS_MAX_PAGES_PER_RUN is hit (done=false, resume next tick), OR
+ *   - the deadline is reached (done=false, resume next tick).
+ */
+export async function runJobsPrePass(
+  db: any,
+  shopId: number,
+  tekmetricShopId: number,
+  deadlineMs: number,
+): Promise<JobsPrePassResult> {
+  const startedAt = Date.now();
+  const progress = await db
+    .collection("tekmetric_backfill_progress")
+    .findOne({ shopId });
+  const startPage: number =
+    typeof progress?.prePassNextPage === "number"
+      ? progress.prePassNextPage
+      : 0;
+
+  let page = startPage;
+  let pagesProcessed = 0;
+  let totalPages = 0;
+  let jobsWritten = 0;
+  let lastError: string | null = null;
+  let reachedEnd = false;
+
+  // Ensure indexes exist before the first write. createIndex is idempotent
+  // and cheap. Without these indexes, getPrePassJobs degrades to a
+  // collection scan at 270k+ docs — erasing the perf win we're chasing.
+  // Compound (shopId, jobId) is the safe unique key in case Tekmetric job
+  // IDs are not globally unique across shops.
+  try {
+    await Promise.all([
+      db
+        .collection(JOBS_PREPASS_COLLECTION)
+        .createIndex({ shopId: 1, jobId: 1 }, { unique: true }),
+      db
+        .collection(JOBS_PREPASS_COLLECTION)
+        .createIndex({ shopId: 1, repairOrderId: 1 }),
+    ]);
+  } catch (idxErr: any) {
+    console.warn(
+      `[Tekmetric Jobs Pre-Pass] Shop ${shopId}: index ensure failed (continuing): ${idxErr?.message || idxErr}`,
+    );
+  }
+
+  console.log(
+    `[Tekmetric Jobs Pre-Pass] Shop ${shopId}: starting at page ${startPage}, max ${PREPASS_MAX_PAGES_PER_RUN} pages this run`,
+  );
+
+  while (pagesProcessed < PREPASS_MAX_PAGES_PER_RUN) {
+    if (Date.now() >= deadlineMs) {
+      console.log(
+        `[Tekmetric Jobs Pre-Pass] Shop ${shopId}: deadline reached at page ${page} (${pagesProcessed} pages this run)`,
+      );
+      break;
+    }
+
+    const queryParams = new URLSearchParams({
+      shop: tekmetricShopId.toString(),
+      page: page.toString(),
+      size: PREPASS_PAGE_SIZE.toString(),
+      sort: "id",
+      sortDirection: "ASC",
+    });
+
+    const result = await tekmetricRequest<{
+      content: TekmetricJob[];
+      totalPages: number;
+    }>(`/jobs?${queryParams}`, shopId);
+
+    if (!result.ok || !result.data) {
+      lastError = result.error || "Pre-pass /jobs call failed";
+      console.error(
+        `[Tekmetric Jobs Pre-Pass] Shop ${shopId} page ${page} error: ${lastError}`,
+      );
+      break;
+    }
+
+    totalPages = result.data.totalPages || 0;
+    const jobs = result.data.content || [];
+
+    if (jobs.length === 0) {
+      reachedEnd = true;
+      page++;
+      pagesProcessed++;
+      break;
+    }
+
+    // Bulk upsert keyed by compound (shopId, jobId). Idempotent — re-runs
+    // overwrite the same docs. Compound key guards against the (unverified)
+    // possibility that Tekmetric job IDs aren't globally unique across shops.
+    try {
+      const ops = jobs
+        .filter((j) => typeof j?.id === "number")
+        .map((job: any) => ({
+          updateOne: {
+            filter: { shopId, jobId: job.id },
+            update: {
+              $set: {
+                jobId: job.id,
+                shopId,
+                tekmetricShopId,
+                repairOrderId: job.repairOrderId,
+                data: job,
+                cachedAt: new Date(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+      if (ops.length > 0) {
+        await db.collection(JOBS_PREPASS_COLLECTION).bulkWrite(ops, {
+          ordered: false,
+        });
+        jobsWritten += ops.length;
+      }
+    } catch (writeErr: any) {
+      // Fail loudly — pre-pass without writes is just burning API quota.
+      lastError = `pre-pass bulkWrite failed: ${writeErr?.message || writeErr}`;
+      console.error(
+        `[Tekmetric Jobs Pre-Pass] Shop ${shopId} page ${page} write error: ${lastError}`,
+      );
+      break;
+    }
+
+    page++;
+    pagesProcessed++;
+
+    // Persist after every page so a mid-run timeout costs only one page.
+    await db
+      .collection("tekmetric_backfill_progress")
+      .updateOne(
+        { shopId },
+        {
+          $set: {
+            prePassNextPage: page,
+            prePassTotalPages: totalPages,
+            lastPrePassRunAt: new Date(),
+          },
+        },
+      )
+      .catch(() => {});
+
+    if (totalPages > 0 && page >= totalPages) {
+      reachedEnd = true;
+      break;
+    }
+  }
+
+  const done = reachedEnd && !lastError;
+  if (done) {
+    await db
+      .collection("tekmetric_backfill_progress")
+      .updateOne(
+        { shopId },
+        {
+          $set: {
+            prePassDone: true,
+            prePassCompletedAt: new Date(),
+            prePassNextPage: page,
+            prePassTotalPages: totalPages,
+          },
+        },
+      )
+      .catch(() => {});
+  }
+
+  const durationMs = Date.now() - startedAt;
+  console.log(
+    `[Tekmetric Jobs Pre-Pass] Shop ${shopId}: pages ${startPage}..${page - 1} of ${totalPages || "?"}, ${jobsWritten} jobs written, ${durationMs}ms${done ? " — DONE" : ""}`,
+  );
+
+  return {
+    ok: !lastError,
+    done,
+    startPage,
+    endPage: page - 1,
+    totalPages,
+    pagesProcessed,
+    jobsWritten,
+    durationMs,
+    error: lastError || undefined,
+  };
+}
+
+/**
+ * Look up jobs for an RO from the pre-pass index.
+ *
+ * Returns:
+ *   - TekmetricJob[] (possibly empty) on a successful query.
+ *   - null ONLY on a query error — caller MUST treat null as "unknown,
+ *     fall back to the API" rather than "no jobs", otherwise a transient
+ *     Mongo blip silently drops jobs from the backfill.
+ *
+ * The empty-vs-null distinction is load-bearing: with prePassDoneForShop=true,
+ * an empty result legitimately means the RO has no jobs (skip safely),
+ * but a null result means we couldn't read the index and must fall back.
+ */
+async function getPrePassJobs(
+  db: any,
+  shopId: number,
+  repairOrderId: number,
+): Promise<TekmetricJob[] | null> {
+  try {
+    const docs = await db
+      .collection(JOBS_PREPASS_COLLECTION)
+      .find({ shopId, repairOrderId })
+      .project({ data: 1, _id: 0 })
+      .toArray();
+    return (docs || []).map((d: any) => d.data as TekmetricJob);
+  } catch (err: any) {
+    console.warn(
+      `[Tekmetric Jobs Pre-Pass] getPrePassJobs error for shop ${shopId} RO ${repairOrderId}: ${err?.message || err}`,
+    );
+    return null;
+  }
+}
+
 type TekmetricVehicle = {
   id: number;
   vin?: string;
@@ -221,8 +481,42 @@ export async function runFullPageBackfillChunk(
     const vehicleCache = new Map<number, TekmetricVehicle>();
     const customerCache = new Map<number, TekmetricCustomer>();
 
+    // Bulk jobs pre-pass: if enabled for this shop and not yet complete,
+    // burn this tick's budget on the pre-pass. The next tick will see
+    // prePassDone=true and proceed to the RO loop with zero per-RO /jobs
+    // API calls.
+    const prePassEnabled = isJobsPrePassEnabled(shopId);
+    let prePassDoneForShop = !!progress?.prePassDone;
+    const tickDeadlineMs = Date.now() + SOFT_DEADLINE_MS;
+    if (prePassEnabled && !prePassDoneForShop) {
+      const prePassResult = await runJobsPrePass(
+        db,
+        shopId,
+        tekmetricShopId,
+        tickDeadlineMs,
+      );
+      prePassDoneForShop = prePassResult.done;
+      if (!prePassResult.done) {
+        // Hand the rest of this tick back to the cron — pre-pass needs more.
+        return {
+          ok: prePassResult.ok,
+          complete: false,
+          pagesProcessed: 0,
+          startPage,
+          endPage: startPage - 1,
+          totalPages: 0,
+          rosFetched: 0,
+          jobsIndexed: 0,
+          jobsSkipped: 0,
+          normalizedCount: 0,
+          message: `pre-pass in progress: page ${prePassResult.endPage + 1} of ${prePassResult.totalPages || "?"}, ${prePassResult.jobsWritten} jobs written this tick`,
+          error: prePassResult.error,
+        };
+      }
+    }
+
     console.log(
-      `[Tekmetric Full-Page Backfill] Shop ${shopId}: starting at page ${startPage}, max ${MAX_PAGES_PER_RUN} pages this run`,
+      `[Tekmetric Full-Page Backfill] Shop ${shopId}: starting at page ${startPage}, max ${MAX_PAGES_PER_RUN} pages this run${prePassDoneForShop ? " (pre-pass index in use)" : ""}`,
     );
 
     let lastError: string | null = null;
@@ -339,17 +633,56 @@ export async function runFullPageBackfillChunk(
             }
           }
 
-          // Jobs lookup: same priority order as the chunker. The full-page
-          // path can't use the bulk shop-window pre-pass (that's keyed by
-          // updatedDate), so we rely on the per-RO cache + Mongo cache +
-          // tekmetric_work_orders fallback.
+          // Jobs lookup priority:
+          //   1. Bulk pre-pass index (`tekmetric_jobs_prepass`, populated
+          //      once per shop by runJobsPrePass) — zero API cost.
+          //   2. Per-RO TTL'd Mongo cache (`tekmetric_jobs_cache`).
+          //   3. Webhook-cached `tekmetric_work_orders.data.jobs`.
+          //   4. Fallback: per-RO `/jobs?repairOrderId=X` API call.
+          // When the pre-pass is done for this shop, an empty result from
+          // step 1 means the RO genuinely has no jobs and we skip without
+          // burning an API call.
           let jobs: TekmetricJob[] = [];
-          const cachedJobs = await getCachedJobs(db, ro.id).catch(
-            () => null,
-          );
-          if (cachedJobs) {
+          let prePassUsed = false;
+          if (prePassDoneForShop) {
+            const prepassJobs = await getPrePassJobs(db, shopId, ro.id);
+            // Safety net: if the RO was created/updated AFTER the pre-pass
+            // finished walking, the index can't possibly know about its
+            // jobs. Fall through to the cache/API chain so we don't drop
+            // newly-created ROs.
+            const prePassCompletedAt = progress?.prePassCompletedAt
+              ? new Date(progress.prePassCompletedAt).getTime()
+              : 0;
+            const roTouchedAt = (() => {
+              const u = (ro as any).updatedDate || (ro as any).createdDate;
+              return u ? new Date(u).getTime() : 0;
+            })();
+            const newerThanPrePass =
+              prePassCompletedAt > 0 && roTouchedAt > prePassCompletedAt;
+
+            if (prepassJobs === null) {
+              // Query error — treat as unknown, fall through to cache/API.
+              // (Do NOT skip the RO; that would silently drop jobs on a
+              // transient Mongo blip.)
+            } else if (newerThanPrePass) {
+              // RO post-dates the pre-pass; index may be stale for it.
+              // Fall through to cache/API for a fresh read.
+            } else if (prepassJobs.length > 0) {
+              jobs = prepassJobs;
+              prePassUsed = true;
+            } else {
+              // Successful query, zero docs, RO not newer than pre-pass:
+              // pre-pass walked every job for this shop and this RO had
+              // none. Skip without a per-RO API call.
+              continue;
+            }
+          }
+          const cachedJobs = prePassUsed
+            ? null
+            : await getCachedJobs(db, ro.id).catch(() => null);
+          if (!prePassUsed && cachedJobs) {
             jobs = cachedJobs as TekmetricJob[];
-          } else {
+          } else if (!prePassUsed) {
             const cachedWO = await db
               .collection("tekmetric_work_orders")
               .findOne(
