@@ -347,6 +347,102 @@ ok(
     extractServicePackageTemplateContent({}).title === "",
 );
 
+// 7. Task #405 regression guard: enrichment MUST call the documented
+// canned-job detail endpoint (`/ServicePackage/CannedJob/{id}` via
+// `fetchCannedJobDetail`), NOT the price-lookup template endpoint
+// (`/ServicePackageTemplate/Read/{id}` via
+// `fetchServicePackageTemplateDetail`). The two endpoints take IDs from
+// different ID spaces — for shop 116 every one of 693 detail calls
+// silently returned HTTP 404 because canned-job IDs aren't valid
+// service-package-template IDs. The 404s were then cached for 7 days
+// (now 6 hours per task #405). If anyone re-points the enrichment loop
+// back at the wrong endpoint, this check fails before deploy.
+import { readFileSync } from "fs";
+import { join } from "path";
+
+const clientSrc = readFileSync(
+  join(__dirname, "../lib/integrations/protractor/client.ts"),
+  "utf8",
+);
+
+function extractFunctionBody(src: string, signature: string): string {
+  const start = src.indexOf(signature);
+  if (start < 0) return "";
+  // Find next top-level export (function/const/class) after the signature
+  // — good enough for our regression guards since these functions don't
+  // contain inner `\nexport ` strings.
+  const next = src.indexOf("\nexport ", start + signature.length);
+  return src.slice(start, next > 0 ? next : src.length);
+}
+
+const enrichBody = extractFunctionBody(
+  clientSrc,
+  "export async function enrichCannedJobsWithDetails",
+);
+
+ok(
+  "enrichCannedJobsWithDetails calls fetchCannedJobDetail (the right endpoint)",
+  enrichBody.includes("fetchCannedJobDetail("),
+  "regression: enrichment must hit /ServicePackage/CannedJob/{id} via fetchCannedJobDetail",
+);
+
+ok(
+  "enrichCannedJobsWithDetails does NOT call fetchServicePackageTemplateDetail",
+  !enrichBody.includes("fetchServicePackageTemplateDetail("),
+  "regression: that path silently 404s for shop 116 and caches the 404s",
+);
+
+const fetchCannedJobDetailBody = extractFunctionBody(
+  clientSrc,
+  "export async function fetchCannedJobDetail",
+);
+
+ok(
+  "fetchCannedJobDetail uses /ServicePackage/CannedJob/ endpoint",
+  fetchCannedJobDetailBody.includes("`/ServicePackage/CannedJob/${cannedJobId}`"),
+  "regression: must hit the documented canned-job endpoint, not the template endpoint",
+);
+
+ok(
+  "fetchCannedJobDetail uses its own cache collection (not protractor_template_cache)",
+  fetchCannedJobDetailBody.includes('"protractor_canned_job_detail_cache"') &&
+    !fetchCannedJobDetailBody.includes('"protractor_template_cache"'),
+  "regression: separate cache so template price-lookup and canned-job enrichment can't poison each other",
+);
+
+ok(
+  "fetchCannedJobDetail logs first-call envelope shape regardless of HTTP status",
+  fetchCannedJobDetailBody.includes("logCannedJobDetailShapeDiagnostic("),
+  "regression: the missing-on-404 diagnostic is exactly what hid this bug for months",
+);
+
+const cleanupBody = extractFunctionBody(
+  clientSrc,
+  "export async function clearPoisonedTemplate404sOnce",
+);
+
+ok(
+  "clearPoisonedTemplate404sOnce is gated by a marker doc (idempotent)",
+  cleanupBody.includes("migration_markers") && cleanupBody.includes("task_405_clear_poisoned_template_404s"),
+  "regression: must not nuke the cache on every enrich call",
+);
+
+ok(
+  "clearPoisonedTemplate404sOnce only deletes is404 entries",
+  cleanupBody.includes("deleteMany({ is404: true })"),
+  "regression: must not delete legitimate cached templates used by price-lookup callers",
+);
+
+// Sanity: enrichment must also still use the alt-shape extractor on the
+// new detail response (canned-job detail uses the same
+// ServicePackageHeader / ServicePackageLines.ItemCollection shape as
+// templates per Protractor docs, so the existing extractor applies).
+ok(
+  "enrichCannedJobsWithDetails uses extractServicePackageTemplateContent on the detail response",
+  enrichBody.includes("extractServicePackageTemplateContent(detailResult.detail)"),
+  "regression: must keep alt-shape parsing so non-canonical Protractor envelopes still yield content",
+);
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);

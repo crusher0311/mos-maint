@@ -4,7 +4,8 @@ import {
   fetchCannedJobs, 
   enrichCannedJobsWithDetails,
   upsertCannedJobsCache,
-  ProtractorCannedJob 
+  ProtractorCannedJob,
+  clearPoisonedTemplate404sOnce,
 } from "@/lib/integrations/protractor";
 
 export const runtime = "nodejs";
@@ -24,6 +25,24 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(`[Canned Jobs Enrich] Starting deep sync for shop ${shopId}...`);
+
+    // Step 0 (task #405): one-shot cleanup of `is404`-poisoned entries in
+    // protractor_template_cache, left behind by the old wrong-endpoint
+    // enrichment path. Idempotent (gated by a marker doc), so safe to
+    // call on every enrich; only the first call after deploy actually
+    // does work. Don't fail the request if cleanup throws — the new
+    // enrichment path uses a different cache collection and works fine
+    // either way.
+    try {
+      const cleanup = await clearPoisonedTemplate404sOnce();
+      if (!cleanup.skipped) {
+        console.log(
+          `[Canned Jobs Enrich] Task #405 cleanup ran: ${cleanup.deletedCount} poisoned entries deleted across ${cleanup.byShop?.length ?? 0} shops`,
+        );
+      }
+    } catch (cleanupErr: any) {
+      console.error("[Canned Jobs Enrich] Task #405 cleanup failed (continuing):", cleanupErr?.message);
+    }
 
     // Step 1: Fetch all canned jobs from list
     const listResult = await fetchCannedJobs(shopId);

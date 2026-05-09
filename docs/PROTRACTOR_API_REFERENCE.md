@@ -157,9 +157,24 @@ Do NOT echo back the full GET response. The GET response contains read-only fiel
 ---
 
 #### `GET /ServicePackage/CannedJob/{id}`
-**Purpose**: Get canned job template details
+**Purpose**: Get canned job template details (full title, description, lines, parts, labor)
 **Used in**:
-- `lib/integrations/protractor.ts` → `getCannedJobDetails()`
+- `lib/integrations/protractor/client.ts` → `fetchCannedJobById()` (single-job lookups)
+- `lib/integrations/protractor/client.ts` → `fetchCannedJobDetail()` (cached lookups used by enrichment)
+- `lib/integrations/protractor/client.ts` → `enrichCannedJobsWithDetails()` (deep-sync enrichment of every canned job ID returned by `/CannedJob/`)
+
+**This is the correct endpoint for canned-job enrichment.** Do not substitute
+`/ServicePackageTemplate/{id}` or `/ServicePackageTemplate/Read/{id}` here —
+those take ServicePackageTemplate IDs, which are a different ID space than
+CannedJob IDs. Calling the template endpoint with a CannedJob ID returns
+HTTP 404. Task #405 fixed a long-standing wiring bug where enrichment hit the
+wrong endpoint and silently returned 0 enriched jobs for shops where the
+basic `/CannedJob/` list didn't carry titles (e.g. shop 116, 0/693).
+
+Detail response cache: `protractor_canned_job_detail_cache` (separate from
+the template cache so the two can't poison each other). Hits and 404s are
+both cached, with TTLs of 24h and 6h respectively. Regression guard lives in
+`tests/protractor-canned-jobs-filter.smoke.ts`.
 
 ---
 
@@ -169,8 +184,14 @@ Do NOT echo back the full GET response. The GET response contains read-only fiel
 **Purpose**: Get service package template (for price estimation)
 **Used in**:
 - Add Deferred fallback: When no invoice history, get template pricing
+- `lib/integrations/protractor/client.ts` → `fetchServicePackageTemplateDetail()` (price-lookup callers only)
 
 **Note**: Templates have $0 prices with "LookupRequired" flag - not useful for pricing.
+
+**DO NOT call this endpoint with CannedJob IDs.** It only accepts
+ServicePackageTemplate IDs. For canned-job content (title/lines/parts) use
+`GET /ServicePackage/CannedJob/{id}` instead — see the canned-job entry above.
+Cache: `protractor_template_cache` (success TTL 24h, 404 TTL 6h).
 
 ---
 
