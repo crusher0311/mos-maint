@@ -1,0 +1,72 @@
+render@srv-d55jaqkhg0os73a5dd8g-6d848f448b-j24kh:~/project/src$ curl -sS -K <(echo "header = \"Authorization: Bearer $CRON_SECRET\"") \
+  "https://mos.tools/api/cron/catchup-status?runs=5" \
+  | jq '.summary, (.shops[] | select(.shopId == 112 or .shopId == 122 or .shopId == 123))'
+{
+  "tekShopsTotal": 54,
+  "tekShopsComplete": 2,
+  "tekShopsIncomplete": 52,
+  "tekShopsWithLastError": 0,
+  "catchupRunsReturned": 0,
+  "coverageWindowRuns": 0,
+  "uncoveredShopCount": 52,
+  "fullPageShopsTotal": 5,
+  "fullPageShopsIncomplete": 5
+}
+{
+  "shopId": 112,
+  "name": "HEART Certified Auto Care",
+  "tekmetricShopId": 18008,
+  "complete": false,
+  "lastRunAt": "2026-05-09T14:56:01.931Z",
+  "lastCursorMoveAt": "2026-05-07T05:01:17.909Z",
+  "currentChunkEnd": "2026-05-06T03:52:06.636Z",
+  "lastError": null,
+  "lastErrorAt": null,
+  "lastCoveredByCatchupAt": null,
+  "catchupRunsCovered": 0,
+  "lastCatchupOutcome": null,
+  "fullPageMode": true,
+  "fullPageNextPage": 4,
+  "lastFullPageRunAt": "2026-05-09T14:56:01.931Z",
+  "fullPageQueuedAt": "2026-05-07T15:37:01.913Z",
+  "fullPageQueueReason": "manual flag via flag-fullpage-reindex.cjs (bulk-migrated history not visible to date-window chunker)"
+}
+{
+  "shopId": 122,
+  "name": "HEART Certified Auto Care",
+  "tekmetricShopId": 18009,
+  "complete": false,
+  "lastRunAt": "2026-05-09T11:39:50.506Z",
+  "lastCursorMoveAt": "2026-05-06T19:50:16.513Z",
+  "currentChunkEnd": "2026-05-08T23:59:59.999Z",
+  "lastError": null,
+  "lastErrorAt": null,
+  "lastCoveredByCatchupAt": null,
+  "catchupRunsCovered": 0,
+  "lastCatchupOutcome": null,
+  "fullPageMode": true,
+  "fullPageNextPage": 9,
+  "lastFullPageRunAt": "2026-05-09T11:39:50.506Z",
+  "fullPageQueuedAt": "2026-05-07T15:37:01.673Z",
+  "fullPageQueueReason": "manual flag via flag-fullpage-reindex.cjs (bulk-migrated history not visible to date-window chunker)"
+}
+{
+  "shopId": 123,
+  "name": "HEART Certified Auto Care",
+  "tekmetricShopId": 18007,
+  "complete": false,
+  "lastRunAt": "2026-05-06T19:45:17.121Z",
+  "lastCursorMoveAt": "2026-05-06T19:45:17.121Z",
+  "currentChunkEnd": "2026-05-06T01:24:16.281Z",
+  "lastError": null,
+  "lastErrorAt": null,
+  "lastCoveredByCatchupAt": null,
+  "catchupRunsCovered": 0,
+  "lastCatchupOutcome": null,
+  "fullPageMode": true,
+  "fullPageNextPage": 1,
+  "lastFullPageRunAt": "2026-05-09T14:38:46.788Z",
+  "fullPageQueuedAt": "2026-05-07T15:37:01.793Z",
+  "fullPageQueueReason": "manual flag via flag-fullpage-reindex.cjs (bulk-migrated history not visible to date-window chunker)"
+}
+render@srv-d55jaqkhg0os73a5dd8g-6d848f448b-j24kh:~/project/src$ 
