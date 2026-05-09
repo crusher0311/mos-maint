@@ -1,0 +1,69 @@
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ # 1. Did anything get written for shop 112?
+curl -s -H "Authorization: Bearer $CRON_SECRET" https://mos.tools/api/cron/catchup-status | jq '.shops[] | select(.shopId == 112) | {prePassDone, prePassNextPage, prePassTotalPages, lastPrePassRunAt, fullPageNextPage, lastFullPageRunAt}'
+{
+  "prePassDone": false,
+  "prePassNextPage": null,
+  "prePassTotalPages": null,
+  "lastPrePassRunAt": null,
+  "fullPageNextPage": 4,
+  "lastFullPageRunAt": "2026-05-09T14:56:01.931Z"
+}
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ # 2. How many shops are in the fullpage queue, and are any of them progressing?
+curl -s -H "Authorization: Bearer $CRON_SECRET" https://mos.tools/api/cron/catchup-status | jq '.summary, [.shops[] | select(.fullPageMode == true) | {shopId, name, fullPageNextPage, lastFullPageRunAt, prePassNextPage, lastPrePassRunAt}]'
+{
+  "tekShopsTotal": 54,
+  "tekShopsComplete": 2,
+  "tekShopsIncomplete": 52,
+  "tekShopsWithLastError": 0,
+  "catchupRunsReturned": 0,
+  "coverageWindowRuns": 0,
+  "uncoveredShopCount": 52,
+  "fullPageShopsTotal": 5,
+  "fullPageShopsIncomplete": 5,
+  "prePassShopsDone": 0,
+  "prePassShopsInProgress": 0
+}
+[
+  {
+    "shopId": 82,
+    "name": "HEART Certified Auto Care",
+    "fullPageNextPage": 10,
+    "lastFullPageRunAt": "2026-05-09T16:47:35.140Z",
+    "prePassNextPage": null,
+    "lastPrePassRunAt": null
+  },
+  {
+    "shopId": 112,
+    "name": "HEART Certified Auto Care",
+    "fullPageNextPage": 4,
+    "lastFullPageRunAt": "2026-05-09T14:56:01.931Z",
+    "prePassNextPage": null,
+    "lastPrePassRunAt": null
+  },
+  {
+    "shopId": 118,
+    "name": "Team Ryan",
+    "fullPageNextPage": 9,
+    "lastFullPageRunAt": "2026-05-09T14:21:30.710Z",
+    "prePassNextPage": null,
+    "lastPrePassRunAt": null
+  },
+  {
+    "shopId": 122,
+    "name": "HEART Certified Auto Care",
+    "fullPageNextPage": 9,
+    "lastFullPageRunAt": "2026-05-09T11:39:50.506Z",
+    "prePassNextPage": null,
+    "lastPrePassRunAt": null
+  },
+  {
+    "shopId": 123,
+    "name": "HEART Certified Auto Care",
+    "fullPageNextPage": 1,
+    "lastFullPageRunAt": "2026-05-09T14:38:46.788Z",
+    "prePassNextPage": null,
+    "lastPrePassRunAt": null
+  }
+]
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ # 3. Anything obvious in the Render logs?  From the Render dashboard, open the prod web service → Logs tab → filter for "Pre-Pass" or "Full-Page" in the last 10 min. Paste what you see.
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ 
