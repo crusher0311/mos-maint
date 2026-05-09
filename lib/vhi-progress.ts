@@ -259,3 +259,48 @@ export function computeIntervalProgress(
 
   return { miles, time, status, headline };
 }
+
+/**
+ * Task #392: per-axis "trigger" status pair for the byMiles / byTime fields
+ * we surface on TriagedItem, the cached_plans payload, and the
+ * AppFueled VHI response. When an axis can't be evaluated (e.g. no time
+ * interval, or no current mileage) we return `null` for that axis so
+ * downstream consumers can tell "axis not in play" apart from "axis ok".
+ */
+export function getProgressTriggers(
+  item: ProgressInput,
+  currentMiles: number | null,
+  today: Date = new Date(),
+  distanceUnit: DistanceUnitLabel = "miles",
+): { byMiles: ProgressStatus | null; byTime: ProgressStatus | null } {
+  const p = computeIntervalProgress(item, currentMiles, today, distanceUnit);
+  return { byMiles: p.miles.status, byTime: p.time.status };
+}
+
+/**
+ * Task #392: build the trigger suffix for a bucket badge ("OVERDUE BY
+ * TIME", "DUE SOON BY MILEAGE", etc). Returns "" for upcoming or when
+ * neither axis matches the severity, so callers can append unconditionally.
+ *
+ *   severity = "overdue"  → axes with status "overdue" count
+ *   severity = "soon"     → axes with status "soon" count (an "overdue"
+ *                           axis is reported under the overdue badge,
+ *                           not here)
+ *   severity = "upcoming" → always ""
+ */
+export function formatTriggerSuffix(
+  byMiles: ProgressStatus | null | undefined,
+  byTime: ProgressStatus | null | undefined,
+  severity: "overdue" | "soon" | "upcoming",
+  opts: { mileageLabel?: string } = {},
+): string {
+  if (severity === "upcoming") return "";
+  const target: ProgressStatus = severity === "overdue" ? "overdue" : "soon";
+  const milesHit = byMiles === target;
+  const timeHit = byTime === target;
+  const mLabel = opts.mileageLabel ?? "mileage";
+  if (milesHit && timeHit) return ` by time and ${mLabel}`;
+  if (timeHit) return " by time";
+  if (milesHit) return ` by ${mLabel}`;
+  return "";
+}

@@ -92,6 +92,15 @@ export interface TriagedItemCache {
   /** OEM Severe-duty interval (mi/months), preserved alongside the active value. */
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
+  /**
+   * Task #392: per-axis triage status, persisted so cached / partner reads
+   * can render "Overdue by time" vs "Overdue by mileage" without
+   * recomputing. Either field may be null when the axis has no data
+   * (e.g. no time interval, or no current mileage). The combined
+   * worst-of bucket assignment still lives in the surrounding bucket.
+   */
+  byMiles?: "overdue" | "soon" | "ok" | null;
+  byTime?: "overdue" | "soon" | "ok" | null;
 }
 
 export interface CachedDeferredWork {

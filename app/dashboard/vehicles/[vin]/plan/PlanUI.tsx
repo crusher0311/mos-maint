@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 // import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 // import { ChevronDown, ChevronUp, Clipboard, Printer, Share2 } from "lucide-react";
+import { getProgressTriggers, formatTriggerSuffix, type ProgressStatus } from "@/lib/vhi-progress";
 
 type TriagedItem = {
   key: string;
@@ -20,6 +21,9 @@ type TriagedItem = {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
+  /** Task #392: per-axis trigger from triage (preferred); recomputed if missing. */
+  byMiles?: ProgressStatus | null;
+  byTime?: ProgressStatus | null;
 };
 
 function fmtMiles(m?: number | null) {
@@ -69,7 +73,17 @@ function Evidence({ t }: { t: TriagedItem }) {
   );
 }
 
-function ServiceCard({ t, severity }: { t: TriagedItem; severity: "overdue" | "soon" | "upcoming" }) {
+function ServiceCard({ t, severity, currentMiles }: { t: TriagedItem; severity: "overdue" | "soon" | "upcoming"; currentMiles: number | null }) {
+  // Task #392: derive per-axis trigger so we can label the badge
+  // ("OVERDUE BY TIME", "DUE SOON BY MILEAGE", etc). Prefer the value
+  // already stamped on the triaged item; recompute on the fly if missing
+  // (covers cached entries that pre-date Task #392).
+  const triggers =
+    t.byMiles !== undefined || t.byTime !== undefined
+      ? { byMiles: t.byMiles ?? null, byTime: t.byTime ?? null }
+      : getProgressTriggers(t, currentMiles);
+  const triggerSuffix = formatTriggerSuffix(triggers.byMiles, triggers.byTime, severity);
+
   const lineForClipboard = useMemo(() => {
     const bits: string[] = [];
     bits.push(`${t.title}`);
@@ -95,7 +109,11 @@ function ServiceCard({ t, severity }: { t: TriagedItem; severity: "overdue" | "s
             <CardTitle className="text-sm truncate">{t.title}</CardTitle>
             <div className="mt-1 flex flex-wrap items-center gap-1 sm:gap-2 text-xs text-neutral-600">
               {t.category && <Badge variant="secondary" className="text-xs">{t.category}</Badge>}
-              <Badge className={`${badgeColor} text-white text-xs`}>{severity.toUpperCase()}</Badge>
+              <Badge className={`${badgeColor} text-white text-xs`}>
+                {severity === "soon"
+                  ? `DUE SOON${triggerSuffix.toUpperCase()}`
+                  : `${severity.toUpperCase()}${triggerSuffix.toUpperCase()}`}
+              </Badge>
               {t.bump === "red" && <Badge className="bg-red-600 text-white text-xs">DVI 🔴</Badge>}
               {t.bump === "yellow" && <Badge className="bg-amber-600 text-white text-xs">DVI 🟡</Badge>}
               {(t.intervalMiles || t.intervalMonths) && (
@@ -235,7 +253,7 @@ export function PlanUI({
             {buckets.overdue.length === 0 ? (
               <div className="text-sm text-neutral-500">Nothing overdue 🎉</div>
             ) : (
-              buckets.overdue.map((t) => <ServiceCard key={t.key} t={t} severity="overdue" />)
+              buckets.overdue.map((t) => <ServiceCard key={t.key} t={t} severity="overdue" currentMiles={currentMiles} />)
             )}
           </TabsContent>
 
@@ -243,7 +261,7 @@ export function PlanUI({
             {buckets.dueSoon.length === 0 ? (
               <div className="text-sm text-neutral-500">Nothing due soon.</div>
             ) : (
-              buckets.dueSoon.map((t) => <ServiceCard key={t.key} t={t} severity="soon" />)
+              buckets.dueSoon.map((t) => <ServiceCard key={t.key} t={t} severity="soon" currentMiles={currentMiles} />)
             )}
           </TabsContent>
 
@@ -251,7 +269,7 @@ export function PlanUI({
             {buckets.upcoming.length === 0 ? (
               <div className="text-sm text-neutral-500">No upcoming items.</div>
             ) : (
-              buckets.upcoming.map((t) => <ServiceCard key={t.key} t={t} severity="upcoming" />)
+              buckets.upcoming.map((t) => <ServiceCard key={t.key} t={t} severity="upcoming" currentMiles={currentMiles} />)
             )}
           </TabsContent>
         </Tabs>

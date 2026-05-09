@@ -45,6 +45,7 @@ import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCach
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
+import { getProgressTriggers, formatTriggerSuffix } from "@/lib/vhi-progress";
 import PlanLoading from "./loading";
 import { getOELogoUrl } from "@/lib/oe-logos";
 import {
@@ -2502,7 +2503,23 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
-                        <span className="rounded-full bg-red-600 text-white px-2 py-0.5">OVERDUE</span>
+                        {(() => {
+                          // Task #392: include the axis that triggered the
+                          // overdue state in the badge so users can tell
+                          // whether time, mileage, or both pushed the item
+                          // past due. Prefer the stamped triage values
+                          // (covers cached items round-tripping through
+                          // TriagedItemCache); recompute only as a
+                          // fallback for legacy rows that pre-date #392.
+                          const trig =
+                            (t as any).byMiles !== undefined || (t as any).byTime !== undefined
+                              ? { byMiles: (t as any).byMiles ?? null, byTime: (t as any).byTime ?? null }
+                              : getProgressTriggers(t, currentMiles, undefined, distanceUnit);
+                          const suffix = formatTriggerSuffix(trig.byMiles, trig.byTime, "overdue");
+                          return (
+                            <span className="rounded-full bg-red-600 text-white px-2 py-0.5">{`OVERDUE${suffix.toUpperCase()}`}</span>
+                          );
+                        })()}
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
@@ -2838,7 +2855,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
-                    <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">DUE SOON</span>
+                    {(() => {
+                      // Task #392: same trigger-aware badge as the
+                      // overdue list — call out whether time or mileage
+                      // pushed the item into Due Soon. Prefer stamped
+                      // triage values; recompute only as a fallback.
+                      const trig =
+                        (t as any).byMiles !== undefined || (t as any).byTime !== undefined
+                          ? { byMiles: (t as any).byMiles ?? null, byTime: (t as any).byTime ?? null }
+                          : getProgressTriggers(t, currentMiles, undefined, distanceUnit);
+                      const suffix = formatTriggerSuffix(trig.byMiles, trig.byTime, "soon");
+                      return (
+                        <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">{`DUE SOON${suffix.toUpperCase()}`}</span>
+                      );
+                    })()}
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"

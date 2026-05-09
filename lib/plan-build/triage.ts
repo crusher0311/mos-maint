@@ -31,6 +31,7 @@ import {
   type EngineRiskResult,
 } from "@/lib/engine-risk";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
+import { getProgressTriggers, type ProgressStatus } from "@/lib/vhi-progress";
 
 export const DEFAULT_SOON_MILES = 1000;
 export const DEFAULT_SOON_DAYS = 30;
@@ -294,6 +295,14 @@ export interface TriagedItem {
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
   bestPracticeBlurb?: string | null;
+  /**
+   * Task #392: per-axis status (mileage / time) computed from the same
+   * math as the overall `status`. Either may be null when the axis has
+   * no data. The combined worst-of severity still drives bucket
+   * placement; these fields just expose which axis triggered it.
+   */
+  byMiles?: ProgressStatus | null;
+  byTime?: ProgressStatus | null;
 }
 
 export interface Buckets {
@@ -1039,6 +1048,30 @@ export function triage({
   const dueSoon: TriagedItem[] = [];
   const upcoming: TriagedItem[] = [];
 
+  // Task #392: stamp per-axis status on every triaged item before
+  // bucketing so the badge text + AppFueled payload can show "by time" /
+  // "by mileage" without recomputing in each consumer.
+  for (const t of triaged) {
+    const triggers = getProgressTriggers(
+      {
+        intervalMiles: t.intervalMiles ?? null,
+        intervalMonths: t.intervalMonths ?? null,
+        last: t.last
+          ? { miles: t.last.miles ?? null, date: t.last.date ?? null }
+          : null,
+        dueAtMiles: t.dueAtMiles ?? null,
+        dueAtDate: t.dueAtDate ?? null,
+        milesToGo: t.milesToGo ?? null,
+        daysToGo: t.daysToGo ?? null,
+      },
+      currentMiles,
+      today,
+      distanceUnit,
+    );
+    t.byMiles = triggers.byMiles;
+    t.byTime = triggers.byTime;
+  }
+
   for (const t of triaged) {
     const mOver = t.milesToGo != null && t.milesToGo <= 0;
     const dOver = t.daysToGo != null && t.daysToGo <= 0;
@@ -1133,5 +1166,9 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
     intervalMonthsNormal: item.intervalMonthsNormal ?? null,
     intervalMilesSevere: item.intervalMilesSevere ?? null,
     intervalMonthsSevere: item.intervalMonthsSevere ?? null,
+    // Task #392: persist per-axis trigger so cached reads / partner API
+    // can show "by time" / "by mileage" without recomputing.
+    byMiles: item.byMiles ?? null,
+    byTime: item.byTime ?? null,
   };
 }

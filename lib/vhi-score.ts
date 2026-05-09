@@ -118,6 +118,13 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
 
   const iconStatus: IconStatus | null = bucketToStatus(bucket) ?? progress?.status ?? null;
 
+  // Task #392: per-axis trigger status. Prefer the live progress math
+  // (covers freshly-built plans whether or not the cache row carried the
+  // fields). Fall back to the persisted byMiles/byTime so older cached
+  // entries that pre-date Task #392 still surface something useful.
+  const byMiles = progress?.miles.status ?? item.byMiles ?? null;
+  const byTime = progress?.time.status ?? item.byTime ?? null;
+
   return {
     key: item.key,
     serviceKey: item.serviceKey,
@@ -147,6 +154,14 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
     progress,
     iconStatus,
     iconSvg: includeIconSvg ? getStatusIconSvg(iconStatus) : null,
+    /**
+     * Task #392: per-axis trigger statuses so partners can render
+     * "Overdue by time" / "Overdue by mileage" themselves. Either field
+     * can be null when the axis has no data (e.g. no time interval, or
+     * no current odometer). The top-level `status` from `progress`
+     * stays the worst-of-the-two so existing consumers don't break.
+     */
+    triggers: { byMiles, byTime },
   };
 }
 
