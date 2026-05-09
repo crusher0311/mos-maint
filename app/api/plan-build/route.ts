@@ -41,6 +41,10 @@ import {
   type ShopServiceHistory,
 } from "@/lib/plan-build/triage";
 import { resolveCustomerName } from "@/lib/plan-build/customer-name";
+import {
+  detectMileageDiscrepancy,
+  shopHistoryLabelFromProvider,
+} from "@/lib/plan-build/mileage-discrepancy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -890,6 +894,36 @@ export async function POST(req: NextRequest) {
       },
       oilDutyPreference,
     };
+
+    // Task #391: detect mileage rollback (current odometer lower than a
+    // previously reported reading from shop history or CARFAX). Persist
+    // on the plan so external/internal readers can surface the warning
+    // without re-running the math.
+    try {
+      const provider =
+        (shopDoc as any)?.integrationProvider ||
+        (tekmetricWOs.length > 0 ? "tekmetric" : protractorWOs.length > 0 ? "protractor" : null);
+      const carfaxRecsForCheck =
+        (carfaxResult as any).ok && Array.isArray((carfaxResult as any).serviceRecords)
+          ? (carfaxResult as any).serviceRecords
+          : [];
+      const discrepancy = detectMileageDiscrepancy({
+        currentMiles: mileage,
+        shopHistory: shopServiceHistory,
+        carfaxRecords: carfaxRecsForCheck,
+        shopHistoryLabel: shopHistoryLabelFromProvider(provider),
+      });
+      if (discrepancy) {
+        planData.mileageDiscrepancy = discrepancy;
+        console.log(
+          `[PlanBuild] Mileage discrepancy for ${vin}: current=${discrepancy.currentMiles} prior=${discrepancy.priorMiles} from ${discrepancy.priorSource} (gap=${discrepancy.gapMiles})`,
+        );
+      } else {
+        planData.mileageDiscrepancy = null;
+      }
+    } catch (err: any) {
+      console.warn(`[PlanBuild] mileage discrepancy detection failed for ${vin}: ${err?.message}`);
+    }
 
     await setCachedPlan(db, vin, shopId, mileage, planData);
 

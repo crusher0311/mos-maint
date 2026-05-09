@@ -9,6 +9,28 @@ import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
+import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
+
+/**
+ * Task #391: build the partner-facing `flags` array. Always present on
+ * the response (empty when there are no flags) so partners can rely on
+ * the shape. Currently only `mileage_discrepancy` is emitted.
+ */
+function buildFlags(opts: {
+  mileageDiscrepancy?: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
+}) {
+  const flags: Array<ReturnType<typeof buildMileageDiscrepancyFlag>> = [];
+  if (opts.mileageDiscrepancy) {
+    flags.push(buildMileageDiscrepancyFlag(opts.mileageDiscrepancy));
+  }
+  return flags;
+}
 
 // Decode model year from VIN position 10 (no DB required).
 // VIN position 7 disambiguates 1980-2009 (digit) from 2010+ (letter).
@@ -208,6 +230,8 @@ export const GET = createExternalEndpoint(
         mileageSource: cachedSource,
         mileageEstimated: cachedSource !== "actual",
         mileageEstimateDetails: cachedDetails,
+        // Task #391: surface mileage rollback warning when present.
+        flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null }),
       });
     }
 
@@ -230,6 +254,9 @@ export const GET = createExternalEndpoint(
         icons: getStatusIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
+        // Task #391: legacy analysis-cache rows generally have no flag,
+        // but the array is always present for partner-shape stability.
+        flags: buildFlags({ mileageDiscrepancy: analysisResult.mileageDiscrepancy }),
       });
     }
 
@@ -431,6 +458,9 @@ export const GET = createExternalEndpoint(
         (result.mileageSource ?? mileageSource) === "actual"
           ? null
           : result.mileageEstimateDetails ?? mileageEstimateDetails,
+      // Task #391: surface mileage rollback warning if the freshly built
+      // plan recorded one. Always-present empty array otherwise.
+      flags: buildFlags({ mileageDiscrepancy: result.mileageDiscrepancy ?? null }),
     });
   }
 );

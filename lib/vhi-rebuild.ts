@@ -63,6 +63,17 @@ export interface VhiRebuildResult {
   mileageEstimated?: boolean;
   /** Task #384: structured details about the estimate (CARFAX projection, year×12k, ...). */
   mileageEstimateDetails?: Record<string, unknown> | null;
+  /**
+   * Task #391: mileage rollback warning persisted on the cached plan.
+   * `null` (or absent) when no discrepancy was detected.
+   */
+  mileageDiscrepancy?: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
   error?: string;
   failedStage?: VhiRebuildFailedStage;
   upstreamStatus?: number;
@@ -304,6 +315,8 @@ export async function rebuildVhi(
     mileageSource: resolvedSource,
     mileageEstimated: resolvedSource !== "actual",
     mileageEstimateDetails: resolvedDetails,
+    // Task #391: surface persisted mileage rollback flag (or null).
+    mileageDiscrepancy: plan.mileageDiscrepancy ?? null,
   };
 }
 

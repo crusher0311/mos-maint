@@ -17,13 +17,26 @@ export interface DataQualityReport {
 }
 
 export interface DataQualityIssue {
-  type: 'orphaned_customer' | 'incomplete_vehicle' | 'stale_record' | 'duplicate_email' | 'invalid_vin' | 'missing_data';
+  type: 'orphaned_customer' | 'incomplete_vehicle' | 'stale_record' | 'duplicate_email' | 'invalid_vin' | 'missing_data' | 'mileage_discrepancy';
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
   entityId: string;
   entityType: 'customer' | 'vehicle' | 'repair_order';
   shopId?: number;
   suggestedAction: string;
+  /**
+   * Task #391: structured payload for `mileage_discrepancy` issues so the
+   * admin UI can render specifics (current vs prior, source, date) and
+   * link out to the vehicle detail page.
+   */
+  details?: {
+    vin?: string;
+    currentMiles?: number;
+    priorMiles?: number;
+    priorSource?: string;
+    priorDate?: string | null;
+    gapMiles?: number;
+  };
 }
 
 export async function runDataQualityCheck(shopId?: number): Promise<DataQualityReport> {
@@ -167,6 +180,51 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
     });
   });
 
+  // 6. Mileage rollback discrepancies (Task #391). Cached plans persist
+  // the worst (largest gap) prior reading on `plan.mileageDiscrepancy`
+  // when the current odometer is lower than a prior shop/CARFAX entry
+  // by more than the tolerance.
+  let mileageDiscrepancyCount = 0;
+  try {
+    const planFilter: any = { "plan.mileageDiscrepancy": { $ne: null, $exists: true } };
+    if (shopId) {
+      planFilter.shopId = { $in: [String(shopId), Number(shopId)] };
+    }
+    const flagged = await db.collection("cached_plans").find(planFilter, {
+      projection: { vin: 1, shopId: 1, "plan.mileageDiscrepancy": 1, "plan.vehicle": 1 },
+    }).toArray();
+    mileageDiscrepancyCount = flagged.length;
+    for (const entry of flagged) {
+      const d = (entry as any).plan?.mileageDiscrepancy;
+      if (!d) continue;
+      const v = (entry as any).plan?.vehicle || {};
+      const vehicleLabel = [v.year, v.make, v.model].filter(Boolean).join(" ") || (entry as any).vin;
+      const dateStr = d.priorDate ? new Date(d.priorDate).toLocaleDateString("en-US") : "unknown date";
+      issues.push({
+        type: 'mileage_discrepancy',
+        severity: 'medium',
+        description:
+          `${vehicleLabel} (${(entry as any).vin}): current odometer ` +
+          `${Number(d.currentMiles).toLocaleString()} is below prior reading ` +
+          `${Number(d.priorMiles).toLocaleString()} from ${d.priorSource} on ${dateStr}.`,
+        entityId: (entry as any).vin,
+        entityType: 'vehicle',
+        shopId: typeof (entry as any).shopId === "number" ? (entry as any).shopId : Number((entry as any).shopId),
+        suggestedAction: 'Verify the current odometer against the source record; an odometer rollback or data-entry error may be present.',
+        details: {
+          vin: (entry as any).vin,
+          currentMiles: d.currentMiles,
+          priorMiles: d.priorMiles,
+          priorSource: d.priorSource,
+          priorDate: d.priorDate,
+          gapMiles: d.gapMiles,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[DataQuality] mileage discrepancy scan failed:", err);
+  }
+
   // Generate summary
   const totalCustomers = await db.collection("customers").countDocuments(shopFilter);
   const activeCustomers = await db.collection("customers").countDocuments({
@@ -190,6 +248,9 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
   }
   if (duplicateEmails.length > 0) {
     recommendations.push(`${duplicateEmails.length} email duplicates found - merge or clean up records`);
+  }
+  if (mileageDiscrepancyCount > 0) {
+    recommendations.push(`${mileageDiscrepancyCount} vehicle(s) have a mileage rollback warning — verify the current odometer against shop / CARFAX history`);
   }
 
   return {

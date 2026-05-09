@@ -20,6 +20,7 @@ interface DataQualityReport {
     entityId: string;
     entityType: string;
     suggestedAction: string;
+    details?: Record<string, unknown>;
   }>;
   recommendations: string[];
 }
@@ -214,7 +215,17 @@ export default function DataQualityPage() {
                     </div>
                     <p className="text-sm text-gray-900 mb-1">{issue.description}</p>
                     <p className="text-xs text-gray-500">
-                      {issue.entityType}: {issue.entityId}
+                      {issue.entityType}:{" "}
+                      {issue.type === "mileage_discrepancy" && issue.entityType === "vehicle" ? (
+                        <a
+                          href={`/dashboard/vehicles/${issue.entityId}`}
+                          className="underline text-blue-600 hover:text-blue-800"
+                        >
+                          {issue.entityId}
+                        </a>
+                      ) : (
+                        issue.entityId
+                      )}
                     </p>
                   </div>
                   <div className="ml-4 text-right">

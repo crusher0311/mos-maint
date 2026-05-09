@@ -318,6 +318,40 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   let mileageEstimated = false;
   let mileageEstimateDetails: any = null;
 
+  // Task #391: read the persisted mileage rollback warning (if any) so we
+  // can render the warning banner on the vehicle detail page.
+  let mileageDiscrepancy: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null = null;
+  try {
+    const planEntry = await db.collection("cached_plans").findOne(
+      {
+        vin: vin.toUpperCase(),
+        shopId: { $in: [String(shopId), Number(shopId)] },
+      },
+      { sort: { createdAt: -1 }, projection: { "plan.mileageDiscrepancy": 1 } },
+    );
+    const persisted = (planEntry as any)?.plan?.mileageDiscrepancy;
+    // Defensive type guard against malformed legacy / partial docs.
+    if (
+      persisted &&
+      typeof persisted === "object" &&
+      typeof persisted.currentMiles === "number" &&
+      typeof persisted.priorMiles === "number" &&
+      typeof persisted.priorSource === "string" &&
+      typeof persisted.gapMiles === "number" &&
+      (persisted.priorDate === null || typeof persisted.priorDate === "string")
+    ) {
+      mileageDiscrepancy = persisted;
+    }
+  } catch (err) {
+    console.warn("[Vehicle Detail] mileage discrepancy lookup failed:", err);
+  }
+
   if (!resolvedMiles || resolvedMiles <= 0) {
     try {
       const estimate = await estimateMileageFromCarfax(shopId, vin);
@@ -693,6 +727,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       resolvedMiles={resolvedMiles}
       mileageEstimated={mileageEstimated}
       mileageEstimateDetails={mileageEstimateDetails}
+      mileageDiscrepancy={mileageDiscrepancy}
       dvi={dvi}
       tekmetricDvi={tekmetricDvi}
       protractorDvi={protractorDvi}

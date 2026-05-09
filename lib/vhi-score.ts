@@ -167,6 +167,17 @@ export interface AnalysisCacheVhiResult {
    */
   mileageSource: "actual" | "estimated_carfax" | "estimated_annual";
   mileageEstimateDetails: Record<string, unknown> | null;
+  /**
+   * Task #391: mileage rollback warning if detected at analysis time.
+   * Legacy entries default to null (no flag).
+   */
+  mileageDiscrepancy: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
 }
 
 const ANALYSIS_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 4; // 4 hours
@@ -258,6 +269,8 @@ export async function getVhiFromAnalysisCache(
       (doc.mileageSource ?? "actual") === "actual"
         ? null
         : (doc.mileageEstimateDetails ?? null),
+    // Task #391: legacy analysis-cache rows have no discrepancy field.
+    mileageDiscrepancy: doc.mileageDiscrepancy ?? null,
   };
 }
 

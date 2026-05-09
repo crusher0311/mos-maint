@@ -23,8 +23,13 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  *    shop's local distance unit. Older cache entries mixed real miles
  *    (OEM intervals) with shop-unit anchors and need to be discarded so
  *    Kilometers-preference shops stop seeing 1.6× inflated values.
+ *  - v6 (May 2026, task 391): adds optional `mileageDiscrepancy` field
+ *    so the rollback warning surfaces from cache without re-running
+ *    detection. Older entries (which never carried the field) just
+ *    surface no flag, which is the safe default — bumping the version
+ *    forces a fresh build so the flag actually appears.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 5;
+export const PLAN_CACHE_SCHEMA_VERSION = 6;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -140,6 +145,19 @@ export interface CachedPlanData {
    */
   mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
   mileageEstimateDetails?: Record<string, unknown> | null;
+  /**
+   * Task #391: Mileage rollback warning. Populated when the current
+   * odometer is lower than a prior shop-history or CARFAX reading by
+   * more than the tolerance (50 mi). Worst (largest gap) prior reading
+   * wins. `null`/missing means no discrepancy.
+   */
+  mileageDiscrepancy?: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
 }
 
 export interface CachedPlan {

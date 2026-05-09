@@ -138,6 +138,14 @@ interface VehicleDetailClientProps {
     lastRecordedDate: string;
     milesPerDay: number;
   } | null;
+  /** Task #391: mileage rollback warning surfaced from cached_plans. */
+  mileageDiscrepancy?: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
   dvi: DviResult;
   tekmetricDvi?: TekmetricDvi | null;
   protractorDvi?: ProtractorDvi | null;
@@ -228,6 +236,7 @@ export default function VehicleDetailClient({
   resolvedMiles,
   mileageEstimated = false,
   mileageEstimateDetails = null,
+  mileageDiscrepancy = null,
   dvi,
   tekmetricDvi,
   protractorDvi,
@@ -425,6 +434,25 @@ export default function VehicleDetailClient({
                   <Edit2 className="w-3 h-3" />
                 </button>
               </div>
+              {mileageDiscrepancy && (
+                <div
+                  role="alert"
+                  className="mt-2 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 max-w-xl"
+                >
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-600" />
+                  <span>
+                    <strong>Heads up:</strong> current odometer (
+                    {mileageDiscrepancy.currentMiles.toLocaleString()}) is lower than a
+                    prior reading of{" "}
+                    {mileageDiscrepancy.priorMiles.toLocaleString()} from{" "}
+                    {mileageDiscrepancy.priorSource}
+                    {mileageDiscrepancy.priorDate
+                      ? ` on ${new Date(mileageDiscrepancy.priorDate).toLocaleDateString("en-US")}`
+                      : ""}
+                    . Service due dates may be inaccurate.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
