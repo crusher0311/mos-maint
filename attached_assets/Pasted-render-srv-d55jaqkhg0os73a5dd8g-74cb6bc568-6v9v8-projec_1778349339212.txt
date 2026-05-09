@@ -1,0 +1,66 @@
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ curl -s "https://${BETTERSTACK_QUERY_HOST}?output_format_pretty_row_numbers=0" \
+  -u "${BETTERSTACK_QUERY_USERNAME}:${BETTERSTACK_QUERY_PASSWORD}" \
+  -H "Content-Type: plain/text" \
+  --data "SELECT dt, raw FROM remote(${BETTERSTACK_QUERY_SOURCE:-t500063_mos_production}_logs) WHERE dt >= now() - INTERVAL 10 MINUTE AND (raw ILIKE '%shared-rate-limiter%' OR raw ILIKE '%shared limiter%' OR raw ILIKE '%CAP BREACH%' OR raw ILIKE '%fail-closed%' OR raw ILIKE '%acquired%false%' OR raw ILIKE '%Pre-Pass%' OR raw ILIKE '%tekmetric_rate_buckets%' OR raw ILIKE '%429%') ORDER BY dt DESC LIMIT 100 FORMAT JSONEachRow" | jq -r '.dt + " | " + (.raw | fromjson | .message | tostring)' | head -100
+2026-05-09 17:55:07.570534 | {"clientIP":"12.106.129.3","host":"mos.tools","method":"GET","path":"/api/platform-admin/tickets/count","requestId":"d55284c5-1c2b-4292","responseBytes":277,"responseTimeMS":180,"statusCode":200,"time":"2026-05-09T17:55:07.570534563Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:55:00.126885 | [Tekmetric Jobs Pre-Pass] Shop 112: pages 7..7 of 2372, 100 jobs written, 591456ms
+2026-05-09 17:55:00.126856 | [Tekmetric Jobs Pre-Pass] Shop 112: deadline reached at page 8 (1 pages this run)
+2026-05-09 17:54:59.876678 | [Tekmetric Jobs Pre-Pass] Shop 112: pages 7..7 of 2372, 100 jobs written, 992826ms
+2026-05-09 17:54:59.876642 | [Tekmetric Jobs Pre-Pass] Shop 112: deadline reached at page 8 (1 pages this run)
+2026-05-09 17:54:59.499647 | [Tekmetric Jobs Pre-Pass] Shop 112: pages 7..7 of 2372, 100 jobs written, 1126299ms
+2026-05-09 17:54:59.499618 | [Tekmetric Jobs Pre-Pass] Shop 112: deadline reached at page 8 (1 pages this run)
+2026-05-09 17:54:58.407673 | [Tekmetric Jobs Pre-Pass] Shop 112: pages 7..7 of 2372, 100 jobs written, 1607681ms
+2026-05-09 17:54:58.407646 | [Tekmetric Jobs Pre-Pass] Shop 112: deadline reached at page 8 (1 pages this run)
+2026-05-09 17:54:54.429738 | [RateLimit] tekmetric at 604/600, waiting 2735ms (attempt 1/8, exponential backoff)
+2026-05-09 17:54:41.824104 | [Tekmetric] 429 on /customers/106215523 (attempt 1/5), backing off 2819ms
+2026-05-09 17:54:41.409724 | [Tekmetric] 429 on /customers/21306512 (attempt 1/5), backing off 2337ms
+2026-05-09 17:54:41.006619 | [Tekmetric] 429 on /vehicles/146757637 (attempt 1/5), backing off 2022ms
+2026-05-09 17:54:40.629664 | [Tekmetric] 429 on /customers/53454368 (attempt 1/5), backing off 2781ms
+2026-05-09 17:54:37.387151 | [Tekmetric] 429 on /customers/21303264 (attempt 1/5), backing off 2561ms
+2026-05-09 17:54:37.260580 | [Tekmetric] 429 on /customers/3544940 (attempt 1/5), backing off 2026ms
+2026-05-09 17:54:37.143906 | [Tekmetric] 429 on /vehicles/23306958 (attempt 1/5), backing off 2650ms
+2026-05-09 17:54:34.025276 | [Tekmetric] 429 on /vehicles/23301864 (attempt 1/5), backing off 2427ms
+2026-05-09 17:54:31.876085 | {"clientIP":"74.220.48.6","host":"mos-maintenance-mvp-main.onrender.com","method":"POST","path":"/api/internal/plan-pregenerate","requestId":"3429c98d-67b0-4b59","responseBytes":237,"responseTimeMS":5,"statusCode":401,"time":"2026-05-09T17:54:31.876085229Z","userAgent":"node"}
+2026-05-09 17:54:29.146004 | {"clientIP":"74.220.48.6","host":"mos-maintenance-mvp-main.onrender.com","method":"POST","path":"/api/internal/plan-pregenerate","requestId":"984f4eb5-58b1-429c","responseBytes":237,"responseTimeMS":3,"statusCode":401,"time":"2026-05-09T17:54:29.146004787Z","userAgent":"node"}
+2026-05-09 17:54:28.807142 | {"clientIP":"50.103.129.134","host":"mos.tools","method":"GET","path":"/api/dashboard/data?page=1&pageSize=100","requestId":"302f5f71-03bf-4fab","responseBytes":4739,"responseTimeMS":1366,"statusCode":200,"time":"2026-05-09T17:54:28.807142915Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:54:25.043011 | [Tekmetric] 429 on /vehicles/153379828 (attempt 1/5), backing off 2422ms
+2026-05-09 17:54:13.185257 | [Tekmetric Backfill] Shop 32: bulk jobs pre-pass — pages=101 ros=2612 jobs=10007 ~apiCallsSaved=2511
+2026-05-09 17:53:24.040421 | [Tekmetric] 429 on /vehicles/154222267 (attempt 1/5), backing off 2540ms
+2026-05-09 17:53:23.030638 | [Tekmetric] 429 on /customers/70594929 (attempt 1/5), backing off 2239ms
+2026-05-09 17:53:21.595429 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 305754255 via stored x-auth-token
+2026-05-09 17:53:16.884419 | [Tekmetric] 429 on /vehicles/100565367 (attempt 1/5), backing off 2288ms
+2026-05-09 17:52:31.894296 | [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17795
+2026-05-09 17:52:27.764290 | {"clientIP":"50.103.129.134","host":"mos.tools","method":"GET","path":"/api/support/tickets/count","requestId":"ad3afb46-47f3-43f2","responseBytes":277,"responseTimeMS":206,"statusCode":200,"time":"2026-05-09T17:52:27.764290397Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:52:19.498144 | {"clientIP":"162.212.202.163","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?connectionId=61b8eb099ab54bd49bd1d64d0b7ff585&apiKey=9da6c37c510f4303b6c0a8dba6d58d3d&type=ServiceItem&id=34257963-0946-4dbb-8245-10aa2a096630&operation=Update","requestId":"105f6cb3-bfd0-458a","responseBytes":310,"responseTimeMS":1035,"statusCode":200,"time":"2026-05-09T17:52:19.498144294Z","userAgent":""}
+2026-05-09 17:52:10.753909 | [Tekmetric] 429 on /customers/36687324 (attempt 1/5), backing off 2208ms
+2026-05-09 17:51:54.017526 | [Cron] Shop 83 (tek: 9221): Found 15429 work orders in tekmetric_work_orders
+2026-05-09 17:51:53.985411 | [Cron] Shop 83 (tek: 9221): Found 15429 work orders in tekmetric_work_orders
+2026-05-09 17:51:46.313429 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 312220863 via stored x-auth-token
+2026-05-09 17:51:19.429661 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 306314620 via stored x-auth-token
+2026-05-09 17:51:19.325278 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 312194429 via stored x-auth-token
+2026-05-09 17:51:17.977943 | {"clientIP":"172.56.168.72","host":"mos.tools","method":"POST","path":"/api/extension/tek-endpoint-report","requestId":"3e31f254-df08-45cf","responseBytes":509,"responseTimeMS":429,"statusCode":200,"time":"2026-05-09T17:51:17.977943693Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:51:08.242991 | [DataOne Cache] HIT for squish JHMGK5H5GS, cached at 2026-05-08T13:39:13.013Z
+2026-05-09 17:50:23.942979 | [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #90057
+2026-05-09 17:50:08.211744 | {"clientIP":"12.106.129.3","host":"mos.tools","method":"GET","path":"/api/platform-admin/tickets/count","requestId":"99d582e7-35b4-42dd","responseBytes":277,"responseTimeMS":448,"statusCode":200,"time":"2026-05-09T17:50:08.211744429Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:49:53.144295 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 310783799 via stored x-auth-token
+2026-05-09 17:49:49.429948 | [Extension Auth Token] Stored x-auth-token for shop 122 (tekmetric 18009) from fausto@heartautocare.com
+2026-05-09 17:49:25.314299 | {"clientIP":"152.117.99.75","host":"mos.tools","method":"GET","path":"/api/dashboard/data?page=1&pageSize=100&search=47217","requestId":"cfecbd80-0830-4c04","responseBytes":579,"responseTimeMS":843,"statusCode":200,"time":"2026-05-09T17:49:25.314299605Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:49:15.598854 | {"clientIP":"172.72.252.20","host":"mos.tools","method":"GET","path":"/api/notifications/count","requestId":"a5ea8bd0-549f-4537","responseBytes":279,"responseTimeMS":202,"statusCode":200,"time":"2026-05-09T17:49:15.598854296Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:48:33.380429 | [Tekmetric Incremental] Fetched 1 inspection(s) for RO 185374267 via stored x-auth-token
+2026-05-09 17:48:28.268102 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 312194429 via stored x-auth-token
+2026-05-09 17:48:25.747429 | 
+2026-05-09 17:48:24.743715 | [Tekmetric Incremental] Fetched 2 inspection(s) for RO 312194429 via stored x-auth-token
+2026-05-09 17:48:15.893944 | {"clientIP":"172.72.252.20","host":"mos.tools","method":"GET","path":"/api/notifications/count","requestId":"b7774fb8-07da-4c1f","responseBytes":279,"responseTimeMS":192,"statusCode":200,"time":"2026-05-09T17:48:15.893944298Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:48:03.724291 | [2026-05-09T17:37:57.027Z] Attempt 2/3 failed: fetch failed
+2026-05-09 17:47:43.724293 | [Tekmetric Incremental] Shop 86: Processing overflow page 91
+2026-05-09 17:46:51.429137 | [RingCentral] Error syncing call BQN6CGV3x2rhDUA: column "ringcentral_extension_id" does not exist
+2026-05-09 17:46:49.429464 | [RingCentral] Error syncing call BQRhgozgWXDZDUA: column "ringcentral_extension_id" does not exist
+2026-05-09 17:46:32.684297 | {"clientIP":"96.48.96.232","host":"mos.tools","method":"GET","path":"/api/notifications/count","requestId":"917a48f8-c206-4bf0","responseBytes":279,"responseTimeMS":218,"statusCode":200,"time":"2026-05-09T17:46:32.684297134Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:46:32.429028 | {"clientIP":"96.48.96.232","host":"mos.tools","method":"GET","path":"/api/support/tickets/count","requestId":"f4ac668f-f180-419a","responseBytes":277,"responseTimeMS":185,"statusCode":200,"time":"2026-05-09T17:46:32.429028762Z","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"}
+2026-05-09 17:45:55.091110 | {"clientIP":"74.220.48.6","host":"mos-maintenance-mvp-main.onrender.com","method":"POST","path":"/api/internal/plan-pregenerate","requestId":"6a35006b-d6f8-4290","responseBytes":237,"responseTimeMS":5,"statusCode":401,"time":"2026-05-09T17:45:55.091110007Z","userAgent":"node"}
+2026-05-09 17:45:52.524295 | [Cron] Shop 97 (tek: 8007): Found 1851 work orders in tekmetric_work_orders
+2026-05-09 17:45:50.388208 | {"clientIP":"74.220.48.6","host":"mos-maintenance-mvp-main.onrender.com","method":"POST","path":"/api/internal/plan-pregenerate","requestId":"c97569e8-a833-4574","responseBytes":237,"responseTimeMS":4,"statusCode":401,"time":"2026-05-09T17:45:50.388208429Z","userAgent":"node"}
+2026-05-09 17:45:49.347129 | [Cron] Shop 83 (tek: 9221): Found 15429 work orders in tekmetric_work_orders
+2026-05-09 17:45:49.257751 | [Cron] Shop 83 (tek: 9221): Found 15429 work orders in tekmetric_work_orders
+2026-05-09 17:45:38.020429 | "data": {
+render@srv-d55jaqkhg0os73a5dd8g-74cb6bc568-6v9v8:~/project/src$ 
