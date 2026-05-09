@@ -1,0 +1,279 @@
+2026-05-09T19:25:17.515392498Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #14246
+2026-05-09T19:25:18.069436292Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117041
+2026-05-09T19:25:18.244941882Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #17966
+2026-05-09T19:25:18.628377618Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117029
+2026-05-09T19:25:18.936270056Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17970
+2026-05-09T19:25:19.028231817Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14247
+2026-05-09T19:25:19.500570578Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17968
+2026-05-09T19:25:19.853435165Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117026
+2026-05-09T19:25:20.255146921Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #17953
+2026-05-09T19:25:21.07002016Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14248
+2026-05-09T19:25:21.747741192Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14238
+2026-05-09T19:25:22.064505642Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117009
+2026-05-09T19:25:24.078993699Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #116740
+2026-05-09T19:25:24.195186219Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #14240
+2026-05-09T19:25:25.200779471Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17962
+2026-05-09T19:25:25.459053622Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14241
+2026-05-09T19:25:25.811481849Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17909
+2026-05-09T19:25:26.103881637Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14239
+2026-05-09T19:25:26.276342044Z clientIP="173.165.115.201" requestID="ab8131a7-edc1-4192" responseTimeMS=173 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:26.408668958Z clientIP="173.165.115.201" requestID="f401ab21-0d5d-4d07" responseTimeMS=173 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:26.737325566Z clientIP="173.165.115.201" requestID="f1ed3468-a34e-4923" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:26.830720077Z clientIP="173.165.115.201" requestID="06398778-1a1e-4b33" responseTimeMS=174 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:26.998373249Z clientIP="173.165.115.201" requestID="0ece2202-6fb7-4408" responseTimeMS=899 responseBytes=4754 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:27.046120537Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117042
+2026-05-09T19:25:27.459070113Z clientIP="50.103.129.134" requestID="721f8f07-4c12-4509" responseTimeMS=189 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:27.868247548Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117019
+2026-05-09T19:25:27.999612043Z clientIP="50.103.129.134" requestID="f0dad08d-304f-4879" responseTimeMS=553 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:28.010481962Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14242
+2026-05-09T19:25:28.213670646Z clientIP="50.103.129.134" requestID="4507a59c-3f77-45f9" responseTimeMS=530 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:28.27018546Z clientIP="50.103.129.134" requestID="1e1d4537-e5e0-46c5" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:28.477185143Z clientIP="50.103.129.134" requestID="cc7fa2be-ee7a-47b4" responseTimeMS=1191 responseBytes=4645 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:28.700927124Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14237
+2026-05-09T19:25:29.01550805Z [Tekmetric Incremental] Indexed 14 jobs into job_index for RO #17925
+2026-05-09T19:25:29.319691905Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117030
+2026-05-09T19:25:29.458059702Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14245
+2026-05-09T19:25:29.888198152Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17964
+2026-05-09T19:25:30.537295565Z [Tekmetric Incremental] Indexed 9 jobs into job_index for RO #14232
+2026-05-09T19:25:30.770089785Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #17917
+2026-05-09T19:25:30.860915694Z clientIP="3.237.27.208" requestID="be26dbf0-efd0-4591" responseTimeMS=692 responseBytes=268 userAgent=""
+2026-05-09T19:25:31.11566922Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117040
+2026-05-09T19:25:31.45866558Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17958
+2026-05-09T19:25:32.142597628Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17960
+2026-05-09T19:25:32.379691385Z clientIP="96.48.96.232" requestID="280f5da7-d6dc-4068" responseTimeMS=174 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:32.597005308Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #14233
+2026-05-09T19:25:32.612845171Z clientIP="96.48.96.232" requestID="bc370728-30c2-463b" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:32.824296571Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17954
+2026-05-09T19:25:33.289993674Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14236
+2026-05-09T19:25:33.506400403Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17957
+2026-05-09T19:25:33.578687559Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #116922
+2026-05-09T19:25:34.370907639Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17959
+2026-05-09T19:25:32.401359065Z clientIP="96.48.96.232" requestID="2c022394-fe32-4210" responseTimeMS=196 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:32.632489223Z clientIP="96.48.96.232" requestID="10498cf7-db29-4dac" responseTimeMS=195 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:34.461237759Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #117037
+2026-05-09T19:25:34.821468623Z [Tekmetric Incremental] Indexed 16 jobs into job_index for RO #14235
+2026-05-09T19:25:35.054606552Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17961
+2026-05-09T19:25:35.140375357Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #116952
+2026-05-09T19:25:35.837505577Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #14228
+2026-05-09T19:25:36.075066257Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117038
+2026-05-09T19:25:36.312272679Z [Tekmetric Incremental] Indexed 12 jobs into job_index for RO #17882
+2026-05-09T19:25:36.469829738Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14230
+2026-05-09T19:25:37.614239449Z [Tekmetric Incremental] Indexed 10 jobs into job_index for RO #14231
+2026-05-09T19:25:37.647786836Z clientIP="72.198.61.82" requestID="b4007b73-d680-4adc" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:37.946912245Z clientIP="72.198.61.82" requestID="b20db153-15fa-498e" responseTimeMS=195 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:38.20278613Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #116958
+2026-05-09T19:25:38.273025206Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17785
+2026-05-09T19:25:38.373037659Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14227
+2026-05-09T19:25:38.884936524Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #116766
+2026-05-09T19:25:39.441560473Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117034
+2026-05-09T19:25:40.069452233Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14226
+2026-05-09T19:25:41.074088001Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #14229
+2026-05-09T19:25:41.383280151Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #117028
+2026-05-09T19:25:41.762711377Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14218
+2026-05-09T19:25:41.960693643Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17830
+2026-05-09T19:25:43.05921756Z [Tekmetric Incremental] Indexed 9 jobs into job_index for RO #17225
+2026-05-09T19:25:44.123944249Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14221
+2026-05-09T19:25:44.134492704Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #117031
+2026-05-09T19:25:45.938845101Z [Tekmetric Incremental] Indexed 16 jobs into job_index for RO #17877
+2026-05-09T19:25:46.231375042Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #117020
+2026-05-09T19:25:46.541959188Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #14223
+2026-05-09T19:25:46.81180212Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #17860
+2026-05-09T19:25:47.432886689Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #17947
+2026-05-09T19:25:48.249647825Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #117027
+2026-05-09T19:25:48.357776653Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14217
+2026-05-09T19:25:49.266019419Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #116801
+2026-05-09T19:25:49.58518383Z [Tekmetric Incremental] Indexed 12 jobs into job_index for RO #17807
+2026-05-09T19:25:50.03400506Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14219
+2026-05-09T19:25:50.8684212Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #17956
+2026-05-09T19:25:51.623662501Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #17952
+2026-05-09T19:25:52.159714713Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #14222
+2026-05-09T19:25:52.632444893Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #116938
+2026-05-09T19:25:53.719713067Z clientIP="74.244.155.68" requestID="4e6b985a-2341-4ef7" responseTimeMS=437 responseBytes=485 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:53.720028237Z [Extension Auth Token] Stored x-auth-token for shop 108 (tekmetric 5834) from info@autodynamicservices.com
+2026-05-09T19:25:53.941727078Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14220
+2026-05-09T19:25:54.6381101Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14214
+2026-05-09T19:25:54.896399061Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17951
+2026-05-09T19:25:55.098986913Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #117024
+2026-05-09T19:25:55.453934323Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17950
+2026-05-09T19:25:56.013732142Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17938
+2026-05-09T19:25:56.096245056Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14216
+2026-05-09T19:25:56.608622763Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #116941
+2026-05-09T19:25:56.824433826Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #17948
+2026-05-09T19:25:57.325982151Z ==> Detected service running on port 10000
+2026-05-09T19:25:57.357892343Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14215
+2026-05-09T19:25:57.363046333Z [InternalAPI] Error fetching vehicles: connection 24 to 89.193.213.168:27017 timed out
+2026-05-09T19:25:57.364237423Z [PlanPrefetch] Shop 29: Failed to get vehicles (500)
+2026-05-09T19:25:57.398951999Z ==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+2026-05-09T19:25:57.528482809Z clientIP="192.82.47.40" requestID="2fc55365-4b88-499e" responseTimeMS=173 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:57.56252774Z clientIP="192.82.47.40" requestID="a036078a-e531-41f4" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:57.693758894Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #17943
+2026-05-09T19:25:57.782223478Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117018
+2026-05-09T19:25:57.807886501Z clientIP="192.82.47.40" requestID="6e1e5fb2-f6b4-4cc2" responseTimeMS=172 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:57.845990231Z clientIP="192.82.47.40" requestID="db474c16-3810-45ea" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:58.129309511Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14210
+2026-05-09T19:25:58.152868405Z clientIP="47.41.180.20" requestID="c5b028c3-c09e-41cf" responseTimeMS=172 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:58.167515228Z clientIP="47.41.180.20" requestID="bbf4ea7a-69f4-4212" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:58.224963985Z [InternalAPI] Shop 32: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 49
+2026-05-09T19:25:58.226688178Z [PlanPrefetch] Shop 32: Processing 15 vehicles
+2026-05-09T19:25:58.535665118Z clientIP="47.41.180.20" requestID="c8cf2b9f-d368-4b5a" responseTimeMS=181 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:58.537799647Z clientIP="47.41.180.20" requestID="4f020b49-2bdf-424f" responseTimeMS=196 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:25:58.604883653Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #117023
+2026-05-09T19:25:58.741049925Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17944
+2026-05-09T19:25:59.447554151Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14212
+2026-05-09T19:26:00.076451516Z [Cron] Skip fullpage-backfill-tekmetric (lock held by another instance)
+2026-05-09T19:26:00.193892378Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14205
+2026-05-09T19:26:00.44263211Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #17942
+2026-05-09T19:26:00.989014871Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #117017
+2026-05-09T19:26:01.469262921Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17871
+2026-05-09T19:26:02.111203714Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14207
+2026-05-09T19:26:02.183002399Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #117015
+2026-05-09T19:26:02.553368997Z clientIP="50.103.129.134" requestID="58777f4a-fc8f-4031" responseTimeMS=211 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:02.556974344Z clientIP="50.103.129.134" requestID="abe1113e-6467-4454" responseTimeMS=197 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:02.818649244Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14208
+2026-05-09T19:26:02.835729448Z clientIP="50.103.129.134" requestID="ee6d641e-574f-45cb" responseTimeMS=188 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:03.240046289Z clientIP="50.103.129.134" requestID="f8f0cb65-1d31-4e49" responseTimeMS=589 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:03.40540532Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #116911
+2026-05-09T19:26:03.674874263Z clientIP="50.103.129.134" requestID="976b48e7-15d5-4780" responseTimeMS=1334 responseBytes=4739 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:03.978631407Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17934
+2026-05-09T19:26:04.045369714Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #117002
+2026-05-09T19:26:04.278018375Z clientIP="24.204.248.20" requestID="5efedc4c-ed2f-4f2a" responseTimeMS=193 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:04.317484012Z clientIP="24.204.248.20" requestID="66eaca54-bf47-40dc" responseTimeMS=214 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:04.589308457Z clientIP="24.204.248.20" requestID="3259d409-62e3-4875" responseTimeMS=197 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:04.715390357Z clientIP="24.204.248.20" requestID="c54f8f20-0558-4cae" responseTimeMS=173 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:04.718097842Z [2026-05-09T19:21:03.965Z] Attempt 1/3 failed: fetch failed
+2026-05-09T19:26:04.718296476Z [2026-05-09T19:21:03.965Z] Retrying in 5s...
+2026-05-09T19:26:04.754371843Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #117014
+2026-05-09T19:26:05.059392679Z [Tekmetric Incremental] Indexed 9 jobs into job_index for RO #17936
+2026-05-09T19:26:05.526522639Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #116998
+2026-05-09T19:26:05.702856881Z [Tekmetric Incremental] Indexed 12 jobs into job_index for RO #14204
+2026-05-09T19:26:05.932697017Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17928
+2026-05-09T19:26:06.238245796Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #116970
+2026-05-09T19:26:06.903463395Z [Tekmetric Incremental] Indexed 9 jobs into job_index for RO #14209
+2026-05-09T19:26:07.385119519Z clientIP="12.106.129.3" requestID="dd2cdaa0-326e-45f2" responseTimeMS=4 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.400059967Z clientIP="12.106.129.3" requestID="11aca199-2e4c-49f2" responseTimeMS=6 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.468480936Z clientIP="12.106.129.3" requestID="19c7b444-4030-4515" responseTimeMS=6 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.58798044Z clientIP="12.106.129.3" requestID="942ac21d-cd9a-4d84" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.588793771Z clientIP="12.106.129.3" requestID="c850d008-1219-473f" responseTimeMS=4 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.595420331Z clientIP="12.106.129.3" requestID="26357ea1-1ea0-4d5c" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.597645443Z clientIP="72.198.61.82" requestID="bd3ad67f-7a98-4945" responseTimeMS=172 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.630673101Z clientIP="12.106.129.3" requestID="7c4a6695-cd79-49d6" responseTimeMS=207 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.648436496Z clientIP="72.198.61.82" requestID="ab4fe314-c921-4d9b" responseTimeMS=205 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.864162532Z clientIP="12.106.129.3" requestID="9b2a7acc-e1f8-413b" responseTimeMS=205 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.865379355Z clientIP="12.106.129.3" requestID="643f712a-47bc-46e2" responseTimeMS=204 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.866374385Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #17937
+2026-05-09T19:26:07.893446251Z clientIP="72.198.61.82" requestID="d59bcc7e-13af-4347" responseTimeMS=171 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.894538929Z clientIP="12.106.129.3" requestID="771ae7cd-b31e-4542" responseTimeMS=184 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:07.990517688Z clientIP="12.106.129.3" requestID="7f44a48d-2f43-4c96" responseTimeMS=579 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:08.079645697Z clientIP="72.198.61.82" requestID="9f26b61e-d1c7-4f45" responseTimeMS=206 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:08.142448764Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #116984
+2026-05-09T19:26:08.275504577Z clientIP="12.106.129.3" requestID="8e657c0a-7d3c-4f8d" responseTimeMS=207 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:08.714276975Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #17929
+2026-05-09T19:26:09.055711686Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14203
+2026-05-09T19:26:09.55762329Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #17940
+2026-05-09T19:26:09.682444257Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14206
+2026-05-09T19:26:10.106775842Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117011
+2026-05-09T19:26:10.266641499Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #17939
+2026-05-09T19:26:10.373844224Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14200
+2026-05-09T19:26:11.049274849Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14202
+2026-05-09T19:26:11.253987454Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17933
+2026-05-09T19:26:11.300590065Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117006
+2026-05-09T19:26:11.978305288Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14199
+2026-05-09T19:26:12.773103143Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #17878
+2026-05-09T19:26:12.959442806Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #117008
+2026-05-09T19:26:14.117618714Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14196
+2026-05-09T19:26:14.538510202Z [Tekmetric Incremental] Shop 28: Processing overflow page 7
+2026-05-09T19:26:14.840869291Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17932
+2026-05-09T19:26:14.84361137Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #117007
+2026-05-09T19:26:15.061832754Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #14195
+2026-05-09T19:26:15.471800795Z clientIP="172.72.252.20" requestID="bc045fcf-787f-4e2b" responseTimeMS=208 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:15.475992701Z clientIP="172.72.252.20" requestID="2178899c-75ea-4d40" responseTimeMS=194 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:15.537871958Z [Tekmetric Incremental] Shop 32: Processing overflow page 115
+2026-05-09T19:26:15.633881782Z [Tekmetric Incremental] Shop 28: Fetched page 7, got 100 ROs (updated since 2026-05-09T18:45:04.623Z)
+2026-05-09T19:26:15.663378333Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #17930
+2026-05-09T19:26:15.782953359Z clientIP="172.72.252.20" requestID="075dc7ca-3f68-4323" responseTimeMS=183 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:15.789878498Z clientIP="172.72.252.20" requestID="fa2c93ca-f331-4ea8" responseTimeMS=208 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:15.880980601Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14192
+2026-05-09T19:26:16.538280328Z [Tekmetric Incremental] Shop 36: Processing overflow page 502
+2026-05-09T19:26:16.909193519Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #14194
+2026-05-09T19:26:16.914794858Z [Tekmetric Incremental] Indexed 12 jobs into job_index for RO #17891
+2026-05-09T19:26:17.566362621Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #117003
+2026-05-09T19:26:17.830594516Z [Tekmetric Incremental] Shop 36: Fetched page 502, got 100 ROs (updated since 2026-05-06T12:01:11.400Z)
+2026-05-09T19:26:17.918069276Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #17872
+2026-05-09T19:26:18.352162454Z [Tekmetric Incremental] Shop 32: Fetched page 115, got 100 ROs (updated since 2026-05-09T07:49:03.856Z)
+2026-05-09T19:26:18.358774718Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #14197
+2026-05-09T19:26:18.482426096Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #17924
+2026-05-09T19:26:19.569721748Z clientIP="3.237.27.208" requestID="2a7b6f18-8114-415d" responseTimeMS=628 responseBytes=268 userAgent=""
+2026-05-09T19:26:20.396308964Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17914
+2026-05-09T19:26:20.775969692Z [Tekmetric Incremental] Indexed 8 jobs into job_index for RO #14191
+2026-05-09T19:26:21.476707336Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #116985
+2026-05-09T19:26:22.107398661Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #17902
+2026-05-09T19:26:22.245427045Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #117000
+2026-05-09T19:26:22.351442805Z [Tekmetric Incremental] Indexed 17 jobs into job_index for RO #14187
+2026-05-09T19:26:23.227724723Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #14188
+2026-05-09T19:26:23.902200506Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #116996
+2026-05-09T19:26:24.230539031Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14181
+2026-05-09T19:26:24.707979555Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #116966
+2026-05-09T19:26:24.856047738Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14182
+2026-05-09T19:26:25.806314652Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #17884
+2026-05-09T19:26:26.268393729Z clientIP="173.165.115.201" requestID="aac5f58d-ea6c-437c" responseTimeMS=176 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:26.321685864Z clientIP="173.165.115.201" requestID="71c8ad2f-ada8-4a8b" responseTimeMS=205 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:26.555814908Z clientIP="173.165.115.201" requestID="1d79625b-bd4a-4d85" responseTimeMS=189 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:26.753449831Z clientIP="173.165.115.201" requestID="9382842b-87e4-444b" responseTimeMS=191 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:26.820386768Z [Tekmetric Incremental] Indexed 1 jobs into job_index for RO #116928
+2026-05-09T19:26:26.864247884Z clientIP="173.165.115.201" requestID="23cd6bf6-4b84-4a1f" responseTimeMS=755 responseBytes=4758 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:27.459578692Z clientIP="50.103.129.134" requestID="73c8ad4b-75f8-4632" responseTimeMS=175 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:27.472108869Z clientIP="50.103.129.134" requestID="b874d10c-1ab7-430e" responseTimeMS=204 responseBytes=336 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:27.628020065Z clientIP="50.103.129.134" requestID="8197baa5-b262-4b94" responseTimeMS=183 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:27.719239889Z clientIP="50.103.129.134" requestID="7ba4a7c9-50b8-4568" responseTimeMS=171 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:28.020830044Z clientIP="3.237.27.208" requestID="e9185fdc-5f19-482c" responseTimeMS=521 responseBytes=268 userAgent=""
+2026-05-09T19:26:28.024072749Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14183
+2026-05-09T19:26:28.041613808Z clientIP="50.103.129.134" requestID="b5d24ff1-7ec0-4d84" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:28.494959181Z clientIP="50.103.129.134" requestID="7c4afeb3-6eca-4de4" responseTimeMS=1211 responseBytes=4645 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:29.213940177Z [Tekmetric Incremental] Indexed 5 jobs into job_index for RO #117001
+2026-05-09T19:26:29.219483354Z [Tekmetric Incremental] Indexed 11 jobs into job_index for RO #14184
+2026-05-09T19:26:29.538511161Z clientIP="34.19.73.234" requestID="b7958168-854a-4f4f" responseTimeMS=84 responseBytes=7442 userAgent="Go-http-client/2.0"
+2026-05-09T19:26:30.631328847Z clientIP="3.237.27.208" requestID="9508412a-a2c9-4aa5" responseTimeMS=693 responseBytes=268 userAgent=""
+2026-05-09T19:26:31.022003351Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14190
+2026-05-09T19:26:31.497064226Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #17918
+2026-05-09T19:26:32.301508023Z [Tekmetric Incremental] Indexed 6 jobs into job_index for RO #116967
+2026-05-09T19:26:32.392403906Z clientIP="96.48.96.232" requestID="c6154253-b114-4369" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:32.403010708Z clientIP="96.48.96.232" requestID="55d934e5-88b4-422d" responseTimeMS=202 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:32.616723899Z clientIP="96.48.96.232" requestID="7659c6b2-52ad-47be" responseTimeMS=182 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:32.624393456Z clientIP="96.48.96.232" requestID="91c35306-5d07-4383" responseTimeMS=200 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:26:33.143487701Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #116992
+2026-05-09T19:26:34.017665987Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14179
+2026-05-09T19:26:34.725786284Z [Tekmetric Incremental] Indexed 3 jobs into job_index for RO #14176
+2026-05-09T19:26:35.350946044Z [Tekmetric Incremental] Indexed 7 jobs into job_index for RO #17875
+2026-05-09T19:26:36.136728987Z [Tekmetric Incremental] Indexed 4 jobs into job_index for RO #14175
+2026-05-09T19:26:36.465297729Z [Tekmetric Incremental] Indexed 9 jobs into job_index for RO #116988
+2026-05-09T19:26:36.813180309Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14177
+2026-05-09T19:26:37.89350431Z [Tekmetric Incremental] Indexed 2 jobs into job_index for RO #14170
+2026-05-09T19:31:57.570597151Z clientIP="192.82.47.40" requestID="9ecdf674-be42-40fd" responseTimeMS=198 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:57.868231961Z clientIP="192.82.47.40" requestID="450178fe-a6d4-4083" responseTimeMS=208 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:57.411185209Z clientIP="192.82.47.40" requestID="b786dbe0-aa4f-454f" responseTimeMS=211 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:57.847452486Z clientIP="192.82.47.40" requestID="012eb845-5ef9-425a" responseTimeMS=171 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:58.10307409Z clientIP="47.41.180.20" requestID="7c1c3ac2-515b-4b1b" responseTimeMS=204 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:58.455060859Z clientIP="47.41.180.20" requestID="b7b0bc3a-6cf6-4f10" responseTimeMS=189 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:58.093045766Z clientIP="47.41.180.20" requestID="c08f5a10-b255-4e25" responseTimeMS=171 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:31:58.437047491Z clientIP="47.41.180.20" requestID="9e34020e-544a-4460" responseTimeMS=199 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:02.670176261Z clientIP="50.103.129.134" requestID="ddfab66b-a813-4709" responseTimeMS=190 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:02.644830594Z clientIP="50.103.129.134" requestID="693da0fd-ddf1-4d1e" responseTimeMS=184 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:02.929741569Z clientIP="50.103.129.134" requestID="4a36a923-c6ee-4d08" responseTimeMS=207 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:03.531215072Z clientIP="50.103.129.134" requestID="0bc7387f-2430-441c" responseTimeMS=1176 responseBytes=4645 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:02.943058345Z clientIP="50.103.129.134" requestID="1f0eda92-d990-4521" responseTimeMS=188 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:04.260366866Z clientIP="24.204.248.20" requestID="86147929-4c9a-481b" responseTimeMS=191 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:04.299121696Z clientIP="24.204.248.20" requestID="3178e8f3-162b-4fac" responseTimeMS=207 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:04.604365665Z clientIP="24.204.248.20" requestID="f493545d-5a80-4483" responseTimeMS=229 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:04.616714958Z clientIP="24.204.248.20" requestID="0b3a32b9-930b-4401" responseTimeMS=201 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.621344282Z clientIP="12.106.129.3" requestID="98e1ad28-c523-42be" responseTimeMS=204 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.592906817Z clientIP="12.106.129.3" requestID="137e89a6-3658-4659" responseTimeMS=5 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.639858884Z clientIP="72.198.61.82" requestID="44ab1910-7267-41b9" responseTimeMS=189 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.86603103Z clientIP="12.106.129.3" requestID="4b203e62-6735-4b04" responseTimeMS=181 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.631329937Z clientIP="72.198.61.82" requestID="572d1c99-470b-495f" responseTimeMS=197 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.919770305Z clientIP="72.198.61.82" requestID="3e1193b7-c47f-40c8" responseTimeMS=189 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.626562919Z clientIP="12.106.129.3" requestID="d8e32eb7-ecf2-4b72" responseTimeMS=4 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.404822714Z clientIP="12.106.129.3" requestID="714ed7cc-5a75-467b" responseTimeMS=4 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.414050305Z clientIP="12.106.129.3" requestID="366fb7af-3b45-48c0" responseTimeMS=3 responseBytes=237 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.953926368Z clientIP="72.198.61.82" requestID="39169260-1020-4516" responseTimeMS=197 responseBytes=279 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.859602543Z clientIP="12.106.129.3" requestID="5fce508d-2461-4a73" responseTimeMS=200 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+2026-05-09T19:32:07.585802617Z clientIP="12.106.129.3" requestID="f840963f-4b48-4c8d" responseTimeMS=190 responseBytes=277 userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
