@@ -12,6 +12,7 @@ import {
   fetchCannedJobs,
   fetchServicePackageTemplateDetail,
   upsertCannedJobsCache,
+  classifySyncCannedJobsBatchSource,
 } from "@/lib/integrations/protractor";
 import {
   extractJobIndexFromWorkOrder,
@@ -121,7 +122,18 @@ export async function POST(req: NextRequest) {
         )
       );
       
-      await upsertCannedJobsCache(shopId, templatesWithDetails);
+      // Detail fetches above can fail per-template and fall back to the
+      // basic /CannedJob/ summary (which has ID/Code but no
+      // ServicePackageHeader). classifySyncCannedJobsBatchSource only
+      // returns "enriched" when *every* item carries the detail-shape
+      // marker; otherwise it returns "sync-partial" so
+      // fetchCannedJobsWithCache will trigger a background re-enrich and
+      // self-heal (task #387).
+      await upsertCannedJobsCache(
+        shopId,
+        templatesWithDetails,
+        { source: classifySyncCannedJobsBatchSource(templatesWithDetails) },
+      );
       results.cannedJobsSynced = templatesWithDetails.length;
       
       const withLines = templatesWithDetails.filter((t: any) => t.ServicePackageLines?.ItemCollection?.length > 0);

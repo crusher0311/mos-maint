@@ -45,7 +45,12 @@ export async function POST(req: NextRequest) {
     console.log(`[Canned Jobs Enrich] Enrichment complete: ${enrichedJobs.length} useful jobs found`);
 
     // Step 3: Save to cache
-    await upsertCannedJobsCache(shopId, enrichedJobs as ProtractorCannedJob[]);
+    // Mark as fully enriched: every item has been through
+    // enrichCannedJobsWithDetails (titles + lines populated). This lets
+    // fetchCannedJobsWithCache short-circuit to the cache instead of
+    // re-fetching the empty-titled basic /CannedJob/ list and clobbering
+    // this result. (Bug seen on shop 116 — task #387.)
+    await upsertCannedJobsCache(shopId, enrichedJobs as ProtractorCannedJob[], { source: "enriched" });
 
     return NextResponse.json({
       ok: true,

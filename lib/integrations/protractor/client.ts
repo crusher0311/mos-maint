@@ -3213,30 +3213,83 @@ export async function fetchWorkOrdersForVehicle(
   return { ok: false, error: "WORK_ORDER_LOOKUP_NOT_AVAILABLE" };
 }
 
+// Normalize a single canned-job-ish input into the persisted summary
+// shape. Two distinct upstream shapes flow into this writer:
+//
+//   - `ProtractorCannedJob` (basic /CannedJob/ list shape):
+//     Title, Description, ServicePackageLines (array)
+//   - `ProtractorServicePackageTemplate` (detail shape from
+//     fetchServicePackageTemplateDetail): ServicePackageHeader.Title,
+//     ServicePackageHeader.Description, ServicePackageLines.ItemCollection
+//
+// The previous implementation only read the basic shape, so when the sync
+// route passed detail-shaped templates the persisted title/lineCount were
+// silently empty even though the data was there. Exported as a pure
+// helper so the regression has a smoke test.
+export function normalizeCannedJobForCache(input: any): {
+  id: string;
+  title: string;
+  description: string;
+  chapter: string;
+  code: string;
+  laborHours: number | null;
+  laborRate: number | null;
+  fixedPrice: number | null;
+  lineCount: number;
+} {
+  const job = input ?? {};
+  const header = job.ServicePackageHeader ?? {};
+  const footer = job.ServicePackageFooter ?? {};
+
+  // ServicePackageLines may be either an array (basic shape) or
+  // { ItemCollection: [...] } (detail shape).
+  let lineCount = 0;
+  if (Array.isArray(job.ServicePackageLines)) {
+    lineCount = job.ServicePackageLines.length;
+  } else if (Array.isArray(job.ServicePackageLines?.ItemCollection)) {
+    lineCount = job.ServicePackageLines.ItemCollection.length;
+  }
+
+  return {
+    id: job.ID ?? job.id ?? "",
+    title: header.Title ?? job.Title ?? "",
+    description: header.Description ?? footer.Description ?? job.Description ?? "",
+    chapter: job.Chapter ?? "",
+    code: job.Code ?? "",
+    laborHours: job.LaborHours ?? null,
+    laborRate: job.LaborRate ?? null,
+    fixedPrice: job.FixedPrice ?? null,
+    lineCount,
+  };
+}
+
 export async function upsertCannedJobsCache(
   shopId: number,
-  cannedJobs: ProtractorCannedJob[]
+  cannedJobs: ProtractorCannedJob[],
+  options?: { source?: "enriched" | "api" | "discovered" | "sync-partial" }
 ): Promise<void> {
   const db = await getDb();
   const now = new Date();
-  
+
+  // The `source` field is read by `fetchCannedJobsWithCache` to decide
+  // whether to short-circuit to the cache (`"enriched"`) or treat the
+  // doc as stale and re-fetch + re-enrich. Callers must pass the right
+  // value: only mark `"enriched"` when every item has been through
+  // `enrichCannedJobsWithDetails` (titles + lines populated). For partial
+  // / fallback writes (e.g. the broad sync route where some template
+  // detail fetches may have failed and were swapped for the basic
+  // summary), pass `"sync-partial"` so a subsequent
+  // `fetchCannedJobsWithCache` will still trigger the background re-enrich.
+  const source = options?.source ?? "sync-partial";
+
   await db.collection("protractor_canned_jobs").updateOne(
     { shopId },
     {
       $set: {
         shopId,
-        items: cannedJobs.map(job => ({
-          id: job.ID,
-          title: job.Title ?? "",
-          description: job.Description ?? "",
-          chapter: job.Chapter ?? "",
-          code: job.Code ?? "",
-          laborHours: job.LaborHours ?? null,
-          laborRate: job.LaborRate ?? null,
-          fixedPrice: job.FixedPrice ?? null,
-          lineCount: job.ServicePackageLines?.length ?? 0,
-        })),
+        items: cannedJobs.map((job) => normalizeCannedJobForCache(job)),
         fetchedAt: now,
+        source,
       },
       $setOnInsert: { createdAt: now },
     },
@@ -3263,6 +3316,67 @@ export async function getCannedJobsFromCache(
 
 // Fetch full details for canned jobs, filtering out items without titles
 // Rate limited to ~50 per second (should complete 7500 items in ~2.5 min)
+//
+// Per-shop opt-in: require canned-job Code to contain BOTH a letter AND a
+// number on top of the content check. This was the historical default and
+// helped one shop drop chapter-header rows, but it silently dropped legit
+// items for shops with non-standard codes (pure letters / pure numerics /
+// empty codes — e.g. shop 35, shop 116). Default is now content-only;
+// shops can opt back into the strict pattern via
+// `shops.protractor.strictCannedJobFilter: true`.
+//
+// Pure filter — exported for unit/smoke tests so the
+// "shop 116 dropped to zero" regression is caught loudly without needing
+// a live Protractor / Mongo round-trip.
+export function shouldKeepEnrichedCannedJob(
+  job: { Code?: string; _hasTitle?: boolean; _hasLines?: boolean },
+  options?: { strictCodeFilter?: boolean },
+): boolean {
+  const hasContent = !!(job._hasTitle || job._hasLines);
+  if (!hasContent) return false;
+  if (options?.strictCodeFilter) {
+    const code = (job.Code || "").trim();
+    const hasLetter = /[a-zA-Z]/.test(code);
+    const hasNumber = /[0-9]/.test(code);
+    if (!(hasLetter && hasNumber)) return false;
+  }
+  return true;
+}
+
+// Decide the `source` tag to write when caching a batch of templates from
+// the broader sync route. The sync route fetches per-template details but
+// falls back to the basic /CannedJob/ summary on failure (which has only
+// ID/Code, no ServicePackageHeader). Only when *every* template carries a
+// ServicePackageHeader (the shape returned by
+// fetchServicePackageTemplateDetail) is the batch fully enriched and safe
+// to short-circuit on the next read. Otherwise we tag it `"sync-partial"`
+// so fetchCannedJobsWithCache will re-trigger background enrichment and
+// self-heal.
+//
+// Exported pure helper so the regression on shop 116 can't recur silently.
+export function classifySyncCannedJobsBatchSource(
+  batch: ReadonlyArray<{ ServicePackageHeader?: unknown } | null | undefined>,
+): "enriched" | "sync-partial" {
+  if (!batch.length) return "sync-partial";
+  const allEnriched = batch.every(
+    (t) => t != null && (t as { ServicePackageHeader?: unknown }).ServicePackageHeader !== undefined,
+  );
+  return allEnriched ? "enriched" : "sync-partial";
+}
+
+async function shouldUseStrictCannedJobFilter(shopId: number): Promise<boolean> {
+  try {
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { "protractor.strictCannedJobFilter": 1 } },
+    );
+    return shop?.protractor?.strictCannedJobFilter === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function enrichCannedJobsWithDetails(
   shopId: number,
   jobs: ProtractorCannedJob[],
@@ -3274,8 +3388,12 @@ export async function enrichCannedJobsWithDetails(
   const enrichedJobs: ProtractorCannedJob[] = [];
   const batchSize = 50; // Process 50 at a time (~50/sec rate limit)
   const filterEmpty = options?.filterEmptyTitles ?? true;
-  
-  console.log(`[Protractor] Enriching ${jobs.length} jobs with details (filter empty titles: ${filterEmpty})...`);
+  const useStrictCodeFilter = filterEmpty && (await shouldUseStrictCannedJobFilter(shopId));
+
+  console.log(
+    `[Protractor] Enriching ${jobs.length} jobs with details for shop ${shopId} ` +
+    `(filter empty titles: ${filterEmpty}, strict code filter: ${useStrictCodeFilter})...`,
+  );
   
   for (let i = 0; i < jobs.length; i += batchSize) {
     const batch = jobs.slice(i, i + batchSize);
@@ -3302,31 +3420,13 @@ export async function enrichCannedJobsWithDetails(
       })
     );
     
-    // Filter and add to results
-    // Shop 35 (Precision Auto Service) uses non-standard codes, skip alphanumeric filter for them
-    const skipAlphanumericFilter = shopId === 35;
-    
+    // Filter and add to results.
     for (const job of batchResults) {
-      if (filterEmpty) {
-        const hasContent = job._hasTitle || job._hasLines;
-        
-        if (skipAlphanumericFilter) {
-          // For Shop 35: only require content (title or lines), no code pattern check
-          if (hasContent) {
-            enrichedJobs.push(job);
-          }
-        } else {
-          // Default: require code with BOTH a letter AND a number
-          // Real codes: O8, T15, BG1, SUB4, A200, etc.
-          const code = (job.Code || "").trim();
-          const hasLetter = /[a-zA-Z]/.test(code);
-          const hasNumber = /[0-9]/.test(code);
-          
-          if (hasLetter && hasNumber && hasContent) {
-            enrichedJobs.push(job);
-          }
-        }
-      } else {
+      if (!filterEmpty) {
+        enrichedJobs.push(job);
+        continue;
+      }
+      if (shouldKeepEnrichedCannedJob(job, { strictCodeFilter: useStrictCodeFilter })) {
         enrichedJobs.push(job);
       }
     }
@@ -3346,7 +3446,25 @@ export async function enrichCannedJobsWithDetails(
     }
   }
   
-  console.log(`[Protractor] Enrichment complete: ${enrichedJobs.length} jobs with titles/lines out of ${jobs.length} total`);
+  const kept = enrichedJobs.length;
+  const total = jobs.length;
+  const dropped = total - kept;
+  console.log(`[Protractor] Enrichment complete: ${kept} jobs with titles/lines out of ${total} total`);
+
+  // Loud regression alarm: if filterEmpty is on and we dropped most of the
+  // source list, something is almost certainly wrong (overly strict filter,
+  // bad shop config, mass enrichment failures). Surface it so we catch the
+  // next "shop X canned jobs not loading" bug before the customer reports
+  // it. Threshold is intentionally conservative — real-world enrichment for
+  // healthy shops keeps ~95% of the list.
+  if (filterEmpty && total >= 50 && dropped / total > 0.5) {
+    console.warn(
+      `[Protractor] WARN: enrichment dropped ${dropped}/${total} ` +
+      `(${Math.round((dropped / total) * 100)}%) jobs for shop ${shopId}. ` +
+      `strictCodeFilter=${useStrictCodeFilter}. Investigate filter or source data.`,
+    );
+  }
+
   return enrichedJobs;
 }
 
