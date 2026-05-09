@@ -216,10 +216,14 @@ export async function tekmetricRequest<T = any>(
   const method = options.method || 'GET';
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
-    // Local cap reduced 10→5 rps to stay below Tekmetric's per-IP throttle.
-    // Combined with the distributed limiter and the tighter incremental-sync
-    // cadence, this materially reduces the 429 rate observed in production.
-    const rateSlot = await acquireRateLimitSlot('tekmetric', 5, priority);
+    // Tekmetric's documented production limit is 600 requests/minute = 10 RPS
+    // sustained, per API key (https://api.tekmetric.com Rate Limiting page).
+    // We cap at 8 RPS locally — 80% of the documented ceiling — so transient
+    // bursts from multiple workers + the distributed limiter don't push us
+    // momentarily over 10/sec and trigger 429s. Background priority requests
+    // (full-page backfills) still yield to interactive ones via the two-lane
+    // queue in lib/integrations/core/rate-limiter.ts.
+    const rateSlot = await acquireRateLimitSlot('tekmetric', 8, priority);
     if (!rateSlot.acquired) {
       throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
@@ -589,7 +593,7 @@ export async function getRepairOrderInspectionsWithXAuth(
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
     try {
-      const rateSlot = await acquireRateLimitSlot('tekmetric', 5);
+      const rateSlot = await acquireRateLimitSlot('tekmetric', 8);
       if (!rateSlot.acquired) {
         console.warn(`[Tekmetric] Rate limit exhausted for inspection fetch RO ${repairOrderId}`);
         return [];

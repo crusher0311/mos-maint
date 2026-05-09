@@ -44,13 +44,14 @@ import {
 } from "@/lib/integrations/tekmetric/incremental-sync";
 
 // Each cron tick processes up to this many pages of 100 ROs each. Empirically
-// each page costs 30-45s of wall-clock once vehicle/customer/jobs fetches are
-// factored in (the 5 RPS shared Tekmetric budget gets fragmented across
-// dependent calls). 10 pages keeps us comfortably under both the 300s Next
-// route maxDuration AND the 5min cron wrapper timeout, with progress
-// persisted after every page so a timeout mid-chunk only loses one page of
-// work, not the whole batch.
-const MAX_PAGES_PER_RUN = 10;
+// each page costs ~20-30s of wall-clock at 8 RPS once vehicle/customer/jobs
+// fetches are factored in (the shared Tekmetric budget gets fragmented across
+// dependent calls). The SOFT_DEADLINE_MS guard below bails cleanly mid-chunk
+// before Render kills the route, so a higher MAX is safe — it just lets one
+// shop drain longer per tick rather than spreading thin across many shops.
+// Bumped 10 -> 30 in tandem with the 5 -> 8 RPS cap bump so HEART/Honest Tom
+// drains finish in weeks instead of months.
+const MAX_PAGES_PER_RUN = 30;
 const PAGE_SIZE = 100;
 // Bail cleanly (with a progress write) before the route gets killed by
 // Render's request timeout. 240s leaves ~60s headroom under the 300s limit.
