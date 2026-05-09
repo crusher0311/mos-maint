@@ -307,6 +307,7 @@ export async function POST(req: NextRequest) {
   const startTime = Date.now();
   const deadlineMs = startTime + 270 * 1000;
   const results: any[] = [];
+  let deadlineHit = false;
 
   try {
     // Drain pages for this single shop until either complete OR the request
@@ -326,8 +327,24 @@ export async function POST(req: NextRequest) {
       });
       if (result.complete || !result.ok || result.pagesProcessed === 0) break;
     }
+    if (Date.now() >= deadlineMs) {
+      deadlineHit = true;
+    }
   } finally {
-    await releaseInFlightLock(db, targetShopId, lock.owner);
+    // Owner-scoped + deadline-aware release. We DELIBERATELY do not release
+    // on the route-level deadline-driven exit — that path leaves the lock
+    // in place so the TTL is the only recovery mechanism for runaway
+    // promises (Render kills the response at ~280s but the Node promise
+    // can keep running on the server, and we don't want stacked manual
+    // retries to all start within seconds of each other). Normal
+    // completion/error/throw paths still release immediately.
+    if (deadlineHit) {
+      console.log(
+        `[Tekmetric Full-Page POST] Shop ${targetShopId}: deadline reached after ${Math.round((Date.now() - startTime) / 1000)}s — leaving in-flight lock for TTL (~6 min) so stacked retries can't re-trigger.`,
+      );
+    } else {
+      await releaseInFlightLock(db, targetShopId, lock.owner);
+    }
   }
 
   const totalJobs = results.reduce(
