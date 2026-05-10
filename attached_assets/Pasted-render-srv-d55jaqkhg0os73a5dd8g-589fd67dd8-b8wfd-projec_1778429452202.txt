@@ -1,0 +1,184 @@
+render@srv-d55jaqkhg0os73a5dd8g-589fd67dd8-b8wfd:~/project/src$ DRAIN_PARALLELISM=6 npx tsx scripts/drain-tekmetric-backfill.ts
+[2026-05-10T16:09:53.520Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-10T16:09:53.520Z] parallelism=6 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-367-1778429393519-b8813g shopIdFilter=ALL_INCOMPLETE
+[2026-05-10T16:09:54.284Z] Lock acquired owner=drain-367-1778429393519-b8813g expiresAt=2026-05-10T16:14:54.208Z
+[2026-05-10T16:09:58.798Z] Found 53 incomplete shops to drain
+[2026-05-10T16:09:58.799Z] START shop=124 (Open Bay Auto) tek=17349
+[2026-05-10T16:09:58.803Z] START shop=91 (Jae Allread) tek=17156
+[2026-05-10T16:09:58.804Z] START shop=110 (2nd Mile Repair) tek=5232
+[2026-05-10T16:09:58.804Z] START shop=74 (Oneway Automotive) tek=4138
+[2026-05-10T16:09:58.804Z] START shop=84 (EC Auto Repair) tek=33
+[2026-05-10T16:09:58.804Z] START shop=86 (Access Automotive) tek=1714
+[Tekmetric Backfill] Shop 124: 2022-05-04 to 2022-08-02 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91: 2025-02-12 to 2025-05-13 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 74: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 84: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 86: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1065ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:00.008Z] CHUNK shop=91 #1 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2025-02-12 to 2025-05-13: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2024-11-14 to 2025-02-12 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 124: cursor advance FULL
+[Tekmetric Backfill] Shop 124: chunk metrics duration=1663ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:00.581Z] CHUNK shop=124 #1 jobs=0 skipped=0 complete=false elapsed=1.8s msg="2022-05-04 to 2022-08-02: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=792ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 124: 2022-02-03 to 2022-05-04 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 74 page 1/7: 100 ROs
+[2026-05-10T16:10:00.939Z] CHUNK shop=91 #2 jobs=0 skipped=0 complete=false elapsed=0.9s msg="2024-11-14 to 2025-02-12: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2024-08-16 to 2024-11-14 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 86 page 1/9: 100 ROs
+[Tekmetric Backfill] Shop 124: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 84 page 1/4: 100 ROs
+[Tekmetric] Inspections endpoint short-circuited for shop 1714 after 3 consecutive 401s on token …jfDpUFx8. Skipping inspections fetch for 30m.
+[Tekmetric] Inspections endpoint short-circuited for shop 4138 after 3 consecutive 401s on token …SzC1TPCk. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1820ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 124: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 124: cursor advance FULL
+[Tekmetric Backfill] Shop 124: chunk metrics duration=2300ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:02.901Z] CHUNK shop=91 #3 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2024-08-16 to 2024-11-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T16:10:03.009Z] CHUNK shop=124 #2 jobs=0 skipped=0 complete=false elapsed=2.4s msg="2022-02-03 to 2022-05-04: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2024-05-18 to 2024-08-16 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124: 2021-11-05 to 2022-02-03 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=742ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:03.782Z] CHUNK shop=91 #4 jobs=0 skipped=0 complete=false elapsed=0.9s msg="2024-05-18 to 2024-08-16: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2024-02-18 to 2024-05-18 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 124: cursor advance FULL
+[Tekmetric Backfill] Shop 124: chunk metrics duration=1525ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:04.697Z] CHUNK shop=124 #3 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2021-11-05 to 2022-02-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 124: 2021-08-07 to 2021-11-05 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1857ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 124: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[2026-05-10T16:10:05.780Z] CHUNK shop=91 #5 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2024-02-18 to 2024-05-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2023-11-20 to 2024-02-18 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 124: cursor advance FULL
+[Tekmetric Backfill] Shop 124: chunk metrics duration=1700ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:06.534Z] CHUNK shop=124 #4 jobs=0 skipped=0 complete=false elapsed=1.8s msg="2021-08-07 to 2021-11-05: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=989ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:06.897Z] CHUNK shop=91 #6 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2023-11-20 to 2024-02-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 124: 2021-05-10 to 2021-08-07 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91: 2023-08-22 to 2023-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 124 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1621ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 124: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[2026-05-10T16:10:08.640Z] CHUNK shop=91 #7 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2023-08-22 to 2023-11-20: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2023-05-24 to 2023-08-22 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 124: cursor advance FULL
+[Tekmetric Backfill] Shop 124: chunk metrics duration=2886ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 124: Marked tekmetricBackfillComplete=true
+[2026-05-10T16:10:09.616Z] CHUNK shop=124 #5 jobs=0 skipped=0 complete=true elapsed=3.1s msg="2021-05-10 to 2021-08-07: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T16:10:09.616Z] DONE shop=124 (Open Bay Auto) chunks=5 jobs=0 skipped=0
+[2026-05-10T16:10:09.616Z] START shop=88 (Lebrini's Service Station Corp) tek=12764
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1285ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 88: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[2026-05-10T16:10:10.048Z] CHUNK shop=91 #8 jobs=0 skipped=0 complete=false elapsed=1.4s msg="2023-05-24 to 2023-08-22: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2023-02-23 to 2023-05-24 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=11 ros=263 jobs=1094 ~apiCallsSaved=252
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1540ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 88 page 1/6: 100 ROs
+[2026-05-10T16:10:11.710Z] CHUNK shop=91 #9 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2023-02-23 to 2023-05-24: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2022-11-25 to 2023-02-23 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110 page 1/3: 100 ROs
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1107ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:12.937Z] CHUNK shop=91 #10 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2022-11-25 to 2023-02-23: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2022-08-27 to 2022-11-25 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric] Inspections endpoint short-circuited for shop 12764 after 3 consecutive 401s on token …w-AUAb6w. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1500ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:14.560Z] CHUNK shop=91 #11 jobs=0 skipped=0 complete=false elapsed=1.6s msg="2022-08-27 to 2022-11-25: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2022-05-29 to 2022-08-27 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric] Inspections endpoint short-circuited for shop 5232 after 3 consecutive 401s on token …vXkiTPNg. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 84 page 2/4: 100 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1993ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:16.688Z] CHUNK shop=91 #12 jobs=0 skipped=0 complete=false elapsed=2.1s msg="2022-05-29 to 2022-08-27: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2022-02-28 to 2022-05-29 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 86 page 2/9: 100 ROs
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1868ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:18.672Z] CHUNK shop=91 #13 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2022-02-28 to 2022-05-29: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2021-11-30 to 2022-02-28 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1868ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:20.666Z] CHUNK shop=91 #14 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2021-11-30 to 2022-02-28: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2021-09-01 to 2021-11-30 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 88 page 2/6: 100 ROs
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1899ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:22.681Z] CHUNK shop=91 #15 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2021-09-01 to 2021-11-30: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2021-06-03 to 2021-09-01 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=1871ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[2026-05-10T16:10:24.673Z] CHUNK shop=91 #16 jobs=0 skipped=0 complete=false elapsed=2.0s msg="2021-06-03 to 2021-09-01: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 91: 2021-05-10 to 2021-06-03 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 91 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 91: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 91: cursor advance FULL
+[Tekmetric Backfill] Shop 91: chunk metrics duration=2739ms ros=0 jobsCache=0/0 vehiclesCache=0/0 customersCache=0/0 429backoff=0ms
+[Tekmetric Backfill] Shop 91: Marked tekmetricBackfillComplete=true
+[2026-05-10T16:10:27.537Z] CHUNK shop=91 #17 jobs=0 skipped=0 complete=true elapsed=2.9s msg="2021-05-10 to 2021-06-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T16:10:27.537Z] DONE shop=91 (Jae Allread) chunks=17 jobs=0 skipped=0
+[2026-05-10T16:10:27.537Z] START shop=97 (Consider It Fixed Auto Repair) tek=8007
+[Tekmetric Backfill] Shop 97: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=11 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 84 page 3/4: 100 ROs
+[Tekmetric Backfill] Shop 97 page 1/3: 100 ROs
+[2026-05-10T16:10:28.799Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=0.6min
+[Tekmetric Backfill] Shop 88 page 3/6: 100 ROs
+[Tekmetric] Inspections endpoint short-circuited for shop 8007 after 3 consecutive 401s on token …ixYSz5dc. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 86 page 3/9: 100 ROs
+[Tekmetric Backfill] Shop 97 page 2/3: 100 ROs
+[Tekmetric Backfill] Shop 74 page 2/7: 100 ROs
+[Tekmetric Backfill] Shop 88 page 4/6: 100 ROs
+[Tekmetric Backfill] Shop 84 page 4/4: 62 ROs
+[Tekmetric
