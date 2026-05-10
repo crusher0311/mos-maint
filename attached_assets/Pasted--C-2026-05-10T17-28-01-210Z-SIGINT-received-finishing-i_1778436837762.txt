@@ -1,0 +1,104 @@
+^C[2026-05-10T17:28:01.210Z] SIGINT received — finishing in-flight chunks then exiting
+[2026-05-10T17:28:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=78.6min
+[2026-05-10T17:28:58.832Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=79.1min
+[2026-05-10T17:29:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=79.6min
+[2026-05-10T17:29:58.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=80.1min
+[2026-05-10T17:30:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=80.6min
+[2026-05-10T17:30:58.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=81.1min
+[2026-05-10T17:31:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=81.6min
+[2026-05-10T17:31:58.834Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=82.1min
+[2026-05-10T17:32:28.834Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=82.6min
+[2026-05-10T17:32:58.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=83.1min
+[2026-05-10T17:33:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=83.6min
+[2026-05-10T17:33:58.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=84.1min
+[2026-05-10T17:34:28.833Z] HEARTBEAT done=2/53 complete=2 error=0 elapsed=84.6min
+[Tekmetric Backfill] Shop 97: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 97: cursor advance FULL
+[Tekmetric Backfill] Shop 97: chunk metrics duration=3190493ms ros=246 jobsCache=220/220 vehiclesCache=220/220 customersCache=220/220 429backoff=0ms
+[2026-05-10T17:34:36.952Z] CHUNK shop=97 #2 jobs=0 skipped=663 complete=false elapsed=3190.6s msg="2025-05-13 to 2025-08-11: 0 jobs indexed, 663 unchanged, 0 normalized"
+[2026-05-10T17:34:58.834Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=85.1min
+[2026-05-10T17:35:28.834Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=85.6min
+[2026-05-10T17:35:58.835Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=86.1min
+[2026-05-10T17:36:28.835Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=86.6min
+[2026-05-10T17:36:58.836Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=87.1min
+[2026-05-10T17:37:28.835Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=87.6min
+[2026-05-10T17:37:58.836Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=88.1min
+[2026-05-10T17:38:28.836Z] HEARTBEAT done=3/53 complete=2 error=0 elapsed=88.6min
+[Tekmetric Backfill] Shop 110: Normalized 3 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=667389ms ros=107 jobsCache=98/98 vehiclesCache=98/98 customersCache=98/98 429backoff=0ms
+[2026-05-10T17:38:48.072Z] CHUNK shop=110 #5 jobs=0 skipped=358 complete=false elapsed=667.5s msg="2024-05-18 to 2024-08-16: 0 jobs indexed, 358 unchanged, 3 normalized"
+[2026-05-10T17:38:58.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=89.1min
+[2026-05-10T17:39:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=89.6min
+[2026-05-10T17:39:58.835Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=90.1min
+[2026-05-10T17:40:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=90.6min
+[2026-05-10T17:40:58.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=91.1min
+[2026-05-10T17:41:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=91.6min
+[2026-05-10T17:41:58.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=92.1min
+[2026-05-10T17:42:28.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=92.6min
+[2026-05-10T17:42:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=93.1min
+[2026-05-10T17:43:28.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=93.6min
+[2026-05-10T17:43:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=94.1min
+[2026-05-10T17:44:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=94.6min
+[2026-05-10T17:44:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=95.1min
+[2026-05-10T17:45:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=95.6min
+[2026-05-10T17:45:58.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=96.1min
+[2026-05-10T17:46:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=96.6min
+[2026-05-10T17:46:58.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=97.1min
+[2026-05-10T17:47:28.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=97.6min
+[2026-05-10T17:47:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=98.1min
+[2026-05-10T17:48:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=98.6min
+[2026-05-10T17:48:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=99.1min
+[2026-05-10T17:49:28.836Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=99.6min
+[2026-05-10T17:49:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=100.1min
+[2026-05-10T17:50:28.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=100.6min
+[2026-05-10T17:50:58.837Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=101.1min
+[2026-05-10T17:51:28.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=101.6min
+[2026-05-10T17:51:58.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=102.1min
+[2026-05-10T17:52:28.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=102.6min
+[2026-05-10T17:52:58.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=103.1min
+[2026-05-10T17:53:28.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=103.6min
+[2026-05-10T17:53:58.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=104.1min
+[2026-05-10T17:54:28.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=104.6min
+[2026-05-10T17:54:58.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=105.1min
+[2026-05-10T17:55:28.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=105.6min
+[2026-05-10T17:55:58.838Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=106.1min
+[2026-05-10T17:56:28.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=106.6min
+[2026-05-10T17:56:58.839Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=107.1min
+[2026-05-10T17:57:28.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=107.6min
+[2026-05-10T17:57:58.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=108.1min
+[2026-05-10T17:58:28.841Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=108.6min
+[2026-05-10T17:58:58.841Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=109.1min
+[2026-05-10T17:59:28.841Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=109.6min
+[2026-05-10T17:59:58.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=110.1min
+[2026-05-10T18:00:28.841Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=110.6min
+[2026-05-10T18:00:58.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=111.1min
+[2026-05-10T18:01:28.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=111.6min
+[2026-05-10T18:01:58.840Z] HEARTBEAT done=4/53 complete=2 error=0 elapsed=112.1min
+[Tekmetric Backfill] Shop 74: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 74: cursor advance FULL
+[Tekmetric Backfill] Shop 74: chunk metrics duration=6732297ms ros=619 jobsCache=556/556 vehiclesCache=273/556 customersCache=326/556 429backoff=4564ms
+[2026-05-10T18:02:11.268Z] CHUNK shop=74 #1 jobs=0 skipped=1687 complete=false elapsed=6732.5s msg="2025-08-11 to 2025-11-09: 0 jobs indexed, 1687 unchanged, 0 normalized"
+[2026-05-10T18:02:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=112.6min
+[2026-05-10T18:02:58.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=113.1min
+[2026-05-10T18:03:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=113.6min
+[2026-05-10T18:03:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=114.1min
+[2026-05-10T18:04:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=114.6min
+[2026-05-10T18:04:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=115.1min
+[2026-05-10T18:05:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=115.6min
+[2026-05-10T18:05:58.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=116.1min
+[2026-05-10T18:06:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=116.6min
+[2026-05-10T18:06:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=117.1min
+[2026-05-10T18:07:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=117.6min
+[2026-05-10T18:07:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=118.1min
+[2026-05-10T18:08:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=118.6min
+[2026-05-10T18:08:58.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=119.1min
+[2026-05-10T18:09:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=119.6min
+[2026-05-10T18:09:58.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=120.1min
+[2026-05-10T18:10:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=120.6min
+[2026-05-10T18:10:58.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=121.1min
+[2026-05-10T18:11:28.840Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=121.6min
+[2026-05-10T18:11:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=122.1min
+[2026-05-10T18:12:28.842Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=122.6min
+[2026-05-10T18:12:58.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=123.1min
+[2026-05-10T18:13:28.841Z] HEARTBEAT done=5/53 complete=2 error=0 elapsed=123.6min
