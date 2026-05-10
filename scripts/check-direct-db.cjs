@@ -365,9 +365,11 @@ const ALLOWLIST = new Set([
   "lib/usage.ts",
   "lib/vhi-rebuild.ts",
   "scripts/backfill-concern-conversations-mos-shop-id.ts",
+  "scripts/backfill-job-index-aces.ts",
   "scripts/cleanup-task-277-vin-billing-fields.ts",
   "scripts/drain-protractor-backfill.ts",
   "scripts/drain-tekmetric-backfill.ts",
+  "scripts/job-index-aces-coverage.ts",
   "scripts/protractor-job-index-catchup.ts",
   "scripts/wave1-backfill.ts",
 ]);
