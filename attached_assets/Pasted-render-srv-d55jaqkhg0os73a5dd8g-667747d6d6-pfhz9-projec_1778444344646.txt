@@ -1,0 +1,71 @@
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ for SID in 82 112 118 122 123 129; do
+  echo "--- shop $SID ---"
+  curl -s -X POST -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" -d "{\"shopId\":$SID}" "$RENDER_EXTERNAL_URL/api/cron/tekmetric-fullpage-backfill" | jq '{shopId, name, ok, prePassNextPage, prePassDone, fullPageNextPage, durationMs, message}'
+done
+--- shop 82 ---
+{
+  "shopId": 82,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+--- shop 112 ---
+{
+  "shopId": 112,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+--- shop 118 ---
+{
+  "shopId": 118,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+--- shop 122 ---
+{
+  "shopId": 122,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+--- shop 123 ---
+{
+  "shopId": 123,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+--- shop 129 ---
+{
+  "shopId": 129,
+  "name": null,
+  "ok": true,
+  "prePassNextPage": null,
+  "prePassDone": null,
+  "fullPageNextPage": null,
+  "durationMs": null,
+  "message": "1 chunk(s) processed, more pages remain — cron will continue automatically"
+}
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ 
