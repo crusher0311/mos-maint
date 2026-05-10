@@ -3,6 +3,7 @@
 
 import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
+import { enrichVinsWithAces } from "@/lib/job-index-aces";
 
 // Compute a deterministic hash of job entry content for change detection
 export function computeJobHash(entry: JobIndexEntry): string {
@@ -35,6 +36,11 @@ export type JobIndexEntry = {
     engine?: string;
     serviceItemId?: string;
     mileage?: number | null;
+    /** Task #382 — DataOne ACES IDs. Null/absent when squish ambiguous. */
+    acesVehicleId?: number | null;
+    acesEngineId?: number | null;
+    submodelKey?: string | null;
+    acesDecodedAt?: Date;
   };
   
   job: {
@@ -68,6 +74,12 @@ export type JobLineItem = {
   quantity: number;
   unitPrice: number;
   extendedPrice: number;
+  // Task #382 — PCDB / PartsTech IDs on part lines. Tekmetric and Shop-Ware
+  // populate these on-write when the source payload carries them. Protractor
+  // intentionally leaves these absent — Protractor does not surface PCDB.
+  pcdbPartTypeId?: number;
+  pcdbPartTypeName?: string;
+  partsTechPartId?: string;
 };
 
 export type PartCrossRef = {
@@ -432,7 +444,37 @@ export async function upsertJobIndexEntries(entries: JobIndexEntry[]): Promise<{
   
   // Track labor rates per shop to cache the most recent one
   const shopLaborRates = new Map<number, number>();
-  
+
+  // Task #382 — bulk ACES enrichment in one DataOne batch lookup. Entries
+  // whose vehicle already carries acesDecodedAt (e.g. backfilled or written
+  // by a Tek/SW indexer that already enriched) are skipped to avoid the
+  // round-trip. Soft-fails: if enrichment throws, we still upsert the
+  // un-enriched entries below.
+  try {
+    const vinsToDecode = entries
+      .filter((e) => e.vehicle?.vin && !e.vehicle?.acesDecodedAt)
+      .map((e) => e.vehicle.vin as string);
+    if (vinsToDecode.length > 0) {
+      const enrichments = await enrichVinsWithAces(vinsToDecode);
+      for (const entry of entries) {
+        const vin = entry.vehicle?.vin;
+        if (!vin || entry.vehicle?.acesDecodedAt) continue;
+        const enriched = enrichments.get(vin);
+        if (!enriched) continue;
+        entry.vehicle.acesVehicleId = enriched.acesVehicleId;
+        entry.vehicle.acesEngineId = enriched.acesEngineId;
+        entry.vehicle.submodelKey = enriched.submodelKey;
+        entry.vehicle.acesDecodedAt = enriched.acesDecodedAt;
+        // Task #382 — DataOne authoritative on Y/M/M when squish resolves.
+        if (enriched.year != null) entry.vehicle.year = enriched.year;
+        if (enriched.make != null) entry.vehicle.make = enriched.make;
+        if (enriched.model != null) entry.vehicle.model = enriched.model;
+      }
+    }
+  } catch (err) {
+    console.warn(`[job_index] bulk ACES enrichment failed: ${(err as Error)?.message || err}`);
+  }
+
   for (const entry of entries) {
     const filter = {
       shopId: entry.shopId,

@@ -16,6 +16,30 @@ export interface VehicleSpecs {
   driveType: string | null;
   displacement: number | null;
   fuelType: string | null;
+  /**
+   * ACES `vehicle_id` from the DataOne decode (Task #382). Identifies a
+   * specific year/make/model/submodel/engine/transmission combination —
+   * when both target and donor decode to the same `vehicle_id` it's an
+   * exact ACES fit and the scorer short-circuits to Exact Fit (ACES).
+   * Null when DataOne couldn't resolve a unique variant.
+   */
+  acesVehicleId: number | null;
+  /**
+   * ACES `engine_id` from the DataOne decode (Task #382). Two donors with
+   * the same `engine_id` but a different `vehicle_id` (e.g. the same 5.7L
+   * HEMI in a Ram and a Durango) are strong matches for engine / oil /
+   * cooling / fuel work even though the chassis differs.
+   */
+  acesEngineId: number | null;
+  /**
+   * Submodel proxy: `year|make|model|style` lower-cased and trimmed
+   * (Task #382). DataOne doesn't expose a discrete `submodel_id` — `style`
+   * is the closest stable label (e.g. "EX-L", "Limited 4dr SUV"). Two
+   * donors with the same `submodelKey` but different `acesEngineId` are
+   * strong matches for body / brakes / suspension work that doesn't depend
+   * on the engine.
+   */
+  submodelKey: string | null;
 }
 
 export interface VehicleContext {
@@ -110,6 +134,18 @@ export interface ScoredJob {
      * donor model differs, and the job category is chassis-shareable.
      */
     platformCreditApplied: boolean;
+    /**
+     * ACES tier that fired for this match (Task #382), or null when none
+     * applied (either ACES IDs are absent on either side, or this match
+     * fell through to the legacy heuristic scorer).
+     *   - "exact_aces"      → target.vehicle_id === donor.vehicle_id
+     *   - "engine_match"    → same engine_id, different vehicle_id, donor
+     *                         job is in the powertrain / general system
+     *   - "submodel_match"  → same submodelKey, different engine_id, donor
+     *                         job is in body / brakes / suspension /
+     *                         steering / wheel_tire
+     */
+    acesTier: "exact_aces" | "engine_match" | "submodel_match" | null;
   };
   [key: string]: any;
 }
@@ -326,14 +362,67 @@ export function extractVehicleSpecs(decoded: any): VehicleSpecs {
     else fuelType = 'gas';
   }
 
+  // ACES IDs (Task #382). DataOne returns vehicle_id / engine_id at the
+  // top level of `dataone_vin_reference`. `mergeCandidates` will null
+  // these when the squish is ambiguous, so we coerce zero/missing to
+  // null so the scorer treats "ambiguous" the same as "absent".
+  const acesVehicleId =
+    typeof decoded.vehicle_id === "number" && decoded.vehicle_id > 0
+      ? decoded.vehicle_id
+      : null;
+  const acesEngineId =
+    typeof decoded.engine_id === "number" && decoded.engine_id > 0
+      ? decoded.engine_id
+      : null;
+
+  // Submodel proxy: year|make|model|style — only built when all four are
+  // present so we never collide on empty-string keys.
+  let submodelKey: string | null = null;
+  const yr = decoded.year;
+  const mk = decoded.make;
+  const md = decoded.model;
+  const st = decoded.style;
+  if (yr && mk && md && st) {
+    submodelKey = `${String(yr).trim()}|${String(mk).trim().toLowerCase()}|${String(md).trim().toLowerCase()}|${String(st).trim().toLowerCase()}`;
+  }
+
   return {
     gvwrBand: parseGvwrBand(decoded.gross_vehicle_weight_range),
     bodyType: decoded.body_type || null,
     driveType: decoded.drive_type || null,
     displacement,
     fuelType,
+    acesVehicleId,
+    acesEngineId,
+    submodelKey,
   };
 }
+
+/**
+ * Vehicle-system buckets that benefit from a same-engine ACES match
+ * (Task #382, Tier B). Two donors that share an `engine_id` but sit in
+ * different chassis (different `vehicle_id`) are still strong matches
+ * for engine / oil / cooling / fuel / exhaust work — the part is bolted
+ * to the engine, not the body.
+ */
+const ENGINE_SHARED_SYSTEMS: ReadonlySet<VehicleSystem> = new Set([
+  "powertrain",
+  "general",
+]);
+
+/**
+ * Vehicle-system buckets that benefit from a same-submodel ACES match
+ * (Task #382, Tier C). Body / brake / suspension / steering / wheel-tire
+ * parts depend on the chassis, not the engine, so a donor on the same
+ * submodel with a different engine option is still a strong match.
+ */
+const CHASSIS_SHARED_SYSTEMS: ReadonlySet<VehicleSystem> = new Set([
+  "body",
+  "brakes",
+  "suspension",
+  "steering",
+  "wheel_tire",
+]);
 
 /**
  * Normalize a VIN for the same-VIN fast-path comparison.
@@ -469,6 +558,7 @@ export function scoreJob(
         targetPlatform: targetPlatform?.id ?? null,
         donorPlatform: donorPlatform?.id ?? null,
         platformCreditApplied: false,
+        acesTier: null,
       },
     };
   }
@@ -498,6 +588,182 @@ export function scoreJob(
         vehicleSystem,
       };
     }
+  }
+
+  // ----- ACES tiers (Task #382) -----
+  // Three short-circuit tiers that fire ONLY when both target & donor have
+  // the relevant ACES IDs from DataOne. When IDs are absent on either side
+  // (e.g. ambiguous squish, missing decode, pre-backfill historical row)
+  // we fall through to the legacy heuristic scorer below — so existing
+  // behaviour is preserved exactly.
+  //
+  //   Tier A (exact_aces)     → target.vehicle_id === donor.vehicle_id
+  //                              → Exact Fit (ACES), score 100. Identifies
+  //                                the same year/make/model/submodel/
+  //                                engine/transmission build.
+  //   Tier B (engine_match)   → same engine_id, different vehicle_id, AND
+  //                              the donor job is in the powertrain or
+  //                              general system (engine / oil / cooling /
+  //                              fuel work) → Great Match floor.
+  //   Tier C (submodel_match) → same submodelKey, different engine_id, AND
+  //                              the donor job is in body / brakes /
+  //                              suspension / steering / wheel-tire (work
+  //                              that doesn't depend on the engine) →
+  //                              Great Match floor.
+  const tAcesVid = targetSpecs?.acesVehicleId ?? null;
+  const jAcesVid = jobSpecs?.acesVehicleId ?? null;
+  const tAcesEid = targetSpecs?.acesEngineId ?? null;
+  const jAcesEid = jobSpecs?.acesEngineId ?? null;
+  const tSubKey = targetSpecs?.submodelKey ?? null;
+  const jSubKey = jobSpecs?.submodelKey ?? null;
+
+  // Tier A — exact ACES vehicle match. Short-circuits to score 100.
+  if (tAcesVid !== null && jAcesVid !== null && tAcesVid === jAcesVid) {
+    const acesPositives: string[] = [`Exact ACES match (vehicle_id ${tAcesVid})`];
+    if (targetYear && jobYear && targetYear === jobYear) {
+      acesPositives.push("Exact year");
+    }
+    const queryCat = searchQuery ? getServiceCategory(searchQuery) : null;
+    const jobCat = getServiceCategory(job.job?.title || job.title);
+    if (queryCat && jobCat && queryCat === jobCat) {
+      acesPositives.push(`Service category match (${jobCat})`);
+    }
+    return {
+      ...job,
+      matchScore: 100,
+      matchBand: "exact" as ScoreBand,
+      matchBandLabel: "Exact Fit (ACES)",
+      matchReason: buildMatchReason(acesPositives, []),
+      gatePass: true,
+      lowConfidence: false,
+      crossClassPenalized: false,
+      sameVinFastPath: false,
+      vehicleSystem,
+      scoreBreakdown: {
+        gvwrClass: 0,
+        bodyStyle: 0,
+        model: 0,
+        make: 0,
+        displacement: 0,
+        driveType: 0,
+        year: 0,
+        serviceCategory: 0,
+        crossClassMultiplier: 1.0,
+        evidenceBonus: 0,
+        vehicleSystem,
+        engineSignalsApplied: profile.engineSignalsApplied,
+        fuelGateApplied: profile.fuelGateApplied,
+        targetPlatform: targetPlatform?.id ?? null,
+        donorPlatform: donorPlatform?.id ?? null,
+        platformCreditApplied: false,
+        acesTier: "exact_aces",
+      },
+    };
+  }
+
+  // Tier B — same engine, different vehicle. Powertrain / general only.
+  // Score lands at the same Great-Match floor as the same-make+model+close-
+  // year guarantee so true exact matches still outrank engine-only siblings.
+  const tierBApplies =
+    tAcesEid !== null &&
+    jAcesEid !== null &&
+    tAcesEid === jAcesEid &&
+    tAcesVid !== null &&
+    jAcesVid !== null &&
+    tAcesVid !== jAcesVid &&
+    ENGINE_SHARED_SYSTEMS.has(vehicleSystem);
+
+  // Tier C — same submodel, different engine. Chassis-shared work only.
+  const tierCApplies =
+    tSubKey !== null &&
+    jSubKey !== null &&
+    tSubKey === jSubKey &&
+    tAcesEid !== null &&
+    jAcesEid !== null &&
+    tAcesEid !== jAcesEid &&
+    CHASSIS_SHARED_SYSTEMS.has(vehicleSystem);
+
+  if (tierBApplies || tierCApplies) {
+    const acesPositives: string[] = [];
+    let acesTier: "engine_match" | "submodel_match";
+    let baseScore: number;
+    if (tierBApplies) {
+      acesTier = "engine_match";
+      acesPositives.push(`Same engine (ACES engine_id ${tAcesEid})`);
+      baseScore = SCORE_THRESHOLD_EXACT - 5; // 75 → likely band, just under exact
+    } else {
+      acesTier = "submodel_match";
+      acesPositives.push("Same submodel (ACES) — engine ignored");
+      baseScore = SCORE_THRESHOLD_EXACT - 10; // 70 → likely band
+    }
+
+    if (targetYear && jobYear) {
+      const yd = Math.abs(targetYear - jobYear);
+      if (yd === 0) acesPositives.push("Exact year");
+      else if (yd <= 2) acesPositives.push(`${yd} year${yd === 1 ? "" : "s"} off`);
+    }
+    const queryCat = searchQuery ? getServiceCategory(searchQuery) : null;
+    const jobCat = getServiceCategory(job.job?.title || job.title);
+    if (queryCat && jobCat && queryCat === jobCat) {
+      acesPositives.push(`Service category match (${jobCat})`);
+    }
+
+    // Same-shop / recency / corroboration evidence bonuses still apply —
+    // mirrors the legacy scorer so an Exact Fit (ACES) sibling with three
+    // corroborating same-shop donors still outranks a one-off donor.
+    let acesEvidence = 0;
+    if (job.performedAt) {
+      const performedAt = new Date(job.performedAt).getTime();
+      if (!Number.isNaN(performedAt)) {
+        const nowMs = (options?.now ?? new Date()).getTime();
+        const ageMonths = (nowMs - performedAt) / (1000 * 60 * 60 * 24 * 30);
+        if (ageMonths <= 6) { acesEvidence += 5; acesPositives.push("Recent"); }
+        else if (ageMonths <= 12) { acesEvidence += 3; acesPositives.push("Recent"); }
+      }
+    }
+    if (options?.currentShopId != null && job.shopId != null
+        && Number(options.currentShopId) === Number(job.shopId)) {
+      acesEvidence += 5;
+      acesPositives.push("Same shop");
+    }
+    const corr = options?.corroboratingCount ?? 0;
+    if (corr > 1) {
+      acesEvidence += Math.min(6, (corr - 1) * 2);
+      if (corr >= 3) acesPositives.push(`${corr} matching jobs`);
+    }
+
+    const finalAces = Math.max(0, Math.min(100, baseScore + acesEvidence));
+    return {
+      ...job,
+      matchScore: finalAces,
+      matchBand: getScoreBand(finalAces),
+      matchBandLabel: getBandLabel(getScoreBand(finalAces)),
+      matchReason: buildMatchReason(acesPositives, []),
+      gatePass: true,
+      lowConfidence: false,
+      crossClassPenalized: false,
+      sameVinFastPath: false,
+      vehicleSystem,
+      scoreBreakdown: {
+        gvwrClass: 0,
+        bodyStyle: 0,
+        model: 0,
+        make: 0,
+        displacement: 0,
+        driveType: 0,
+        year: 0,
+        serviceCategory: 0,
+        crossClassMultiplier: 1.0,
+        evidenceBonus: acesEvidence,
+        vehicleSystem,
+        engineSignalsApplied: profile.engineSignalsApplied,
+        fuelGateApplied: profile.fuelGateApplied,
+        targetPlatform: targetPlatform?.id ?? null,
+        donorPlatform: donorPlatform?.id ?? null,
+        platformCreditApplied: false,
+        acesTier,
+      },
+    };
   }
 
   // ----- GVWR class (vehicle weight band) -----
@@ -802,6 +1068,7 @@ export function scoreJob(
       targetPlatform: targetPlatform?.id ?? null,
       donorPlatform: donorPlatform?.id ?? null,
       platformCreditApplied,
+      acesTier: null,
     },
   };
 }

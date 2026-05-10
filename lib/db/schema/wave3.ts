@@ -1089,6 +1089,14 @@ export const jobIndex = pgTable(
     vehicleVin: text("vehicle_vin"),
     serviceItemId: text("service_item_id"),
     performedAt: timestamp("performed_at", { withTimezone: true }),
+    // Task #382 — ACES IDs from the DataOne decode of `vehicleVin`. Both
+    // nullable; populated by the on-write indexer enrichers (Tek, SW,
+    // Protractor) and the historical backfill in
+    // `scripts/backfill-job-index-aces.ts`. The scorer in
+    // `lib/job-scoring.ts` reads these via `extractVehicleSpecs` to fire
+    // the three ACES tiers; absence falls back to the legacy heuristic.
+    acesVehicleId: integer("aces_vehicle_id"),
+    acesEngineId: integer("aces_engine_id"),
     lines: jsonb("lines"),
     payload: jsonb("payload"),
   },
@@ -1097,6 +1105,8 @@ export const jobIndex = pgTable(
     shopVinIdx: index("ji_shop_vin_idx").on(t.shopId, t.vehicleVin),
     serviceItemIdx: index("ji_service_item_idx").on(t.shopId, t.serviceItemId),
     backfillUniq: uniqueIndex("ji_backfill_uniq").on(t.backfillMongoId),
+    acesVehicleIdx: index("ji_aces_vehicle_idx").on(t.acesVehicleId),
+    acesEngineIdx: index("ji_aces_engine_idx").on(t.acesEngineId),
   }),
 );
 

@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getJobs, getVehicle, getRepairOrders } from ".";
+import { enrichVinWithAces, extractTekmetricPcdb } from "@/lib/job-index-aces";
 
 type TekmetricJobWithDetails = {
   id: number;
@@ -48,6 +49,11 @@ export type TekmetricJobIndexEntry = {
     model?: string;
     engine?: string;
     mileage?: number | null;
+    /** Task #382 — DataOne ACES IDs. Null/absent when squish ambiguous. */
+    acesVehicleId?: number | null;
+    acesEngineId?: number | null;
+    submodelKey?: string | null;
+    acesDecodedAt?: Date;
   };
   
   job: {
@@ -65,6 +71,10 @@ export type TekmetricJobIndexEntry = {
     unitPrice: number;
     extendedPrice: number;
     hours?: number;
+    /** Task #382 — PCDB / PartsTech IDs (parts only, when present on raw). */
+    pcdbPartTypeId?: number;
+    pcdbPartTypeName?: string;
+    partsTechPartId?: string;
   }>;
   
   totals: {
@@ -188,7 +198,24 @@ export async function indexTekmetricWorkOrderJobs(
       { projection: { cachedLaborRate: 1 } }
     );
     const shopLaborRate = shopDoc?.cachedLaborRate || 150;
-    
+
+    // Task #382 — ACES enrichment from DataOne squish lookup. Soft-fails to
+    // null fields so an indexer outage doesn't block the underlying write.
+    const acesEnrichment = await enrichVinWithAces(vehicle.vin);
+    const enrichedVehicle: TekmetricJobIndexEntry["vehicle"] = {
+      ...vehicle,
+      ...(acesEnrichment ? {
+        // Task #382 — DataOne is authoritative on Y/M/M when squish resolves.
+        year: acesEnrichment.year ?? vehicle.year,
+        make: acesEnrichment.make ?? vehicle.make,
+        model: acesEnrichment.model ?? vehicle.model,
+        acesVehicleId: acesEnrichment.acesVehicleId,
+        acesEngineId: acesEnrichment.acesEngineId,
+        submodelKey: acesEnrichment.submodelKey,
+        acesDecodedAt: acesEnrichment.acesDecodedAt,
+      } : {}),
+    };
+
     for (const job of jobs) {
       if (!job.name) continue;
       
@@ -240,7 +267,9 @@ export async function indexTekmetricWorkOrderJobs(
             manufacturer: part.brand,
             quantity: qty,
             unitPrice: retailDollars,
-            extendedPrice: qty * retailDollars
+            extendedPrice: qty * retailDollars,
+            // Task #382 — PCDB / PartsTech IDs (when present on the raw part).
+            ...extractTekmetricPcdb(part),
           });
         }
       } else if (partsAmountDollars > 0) {
@@ -260,7 +289,7 @@ export async function indexTekmetricWorkOrderJobs(
         servicePackageId: String(job.id),
         performedAt: new Date(completedDate || new Date()),
         mileage: mileage ?? null,
-        vehicle: { ...vehicle, mileage: mileage ?? null },
+        vehicle: { ...enrichedVehicle, mileage: mileage ?? null },
         job: {
           title: job.name,
           keywords: extractKeywords(job.name)
@@ -525,12 +554,27 @@ export async function reindexFromStoredData(
     const shopLaborRate = shopRateCache.get(numericShopId) || 150;
     
     const jobs = wo.data.jobs as TekmetricJobWithDetails[];
-    const vehicle = {
+    const baseVehicle = {
       vin: wo.vin,
       year: wo.vehicleYear,
       make: wo.vehicleMake,
       model: wo.vehicleModel,
       engine: wo.vehicleEngine
+    };
+    // Task #382 — ACES enrichment from DataOne squish lookup.
+    const acesEnrichment = await enrichVinWithAces(baseVehicle.vin);
+    const vehicle: TekmetricJobIndexEntry["vehicle"] = {
+      ...baseVehicle,
+      ...(acesEnrichment ? {
+        // Task #382 — DataOne is authoritative on Y/M/M when squish resolves.
+        year: acesEnrichment.year ?? baseVehicle.year,
+        make: acesEnrichment.make ?? baseVehicle.make,
+        model: acesEnrichment.model ?? baseVehicle.model,
+        acesVehicleId: acesEnrichment.acesVehicleId,
+        acesEngineId: acesEnrichment.acesEngineId,
+        submodelKey: acesEnrichment.submodelKey,
+        acesDecodedAt: acesEnrichment.acesDecodedAt,
+      } : {}),
     };
     const completedDate = wo.completedDate || wo.updatedDate || wo.createdDate;
     
@@ -585,7 +629,9 @@ export async function reindexFromStoredData(
             manufacturer: part.brand,
             quantity: qty,
             unitPrice: retailDollars,
-            extendedPrice: qty * retailDollars
+            extendedPrice: qty * retailDollars,
+            // Task #382 — PCDB / PartsTech IDs (when present on the raw part).
+            ...extractTekmetricPcdb(part),
           });
         }
       } else if (partsAmountDollars > 0) {

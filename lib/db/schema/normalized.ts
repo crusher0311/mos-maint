@@ -199,6 +199,13 @@ export const normalizedVehicles = pgTable("normalized_vehicles", {
   vin: text("vin"),
   vinDecoded: boolean("vin_decoded").notNull().default(false),
   vinDecodeData: jsonb("vin_decode_data"),
+  // Task #382 — ACES IDs from the DataOne decode. Both nullable so a
+  // missing/ambiguous decode still inserts cleanly. `acesDecodedAt` is
+  // stamped whenever the indexer or backfill writes the IDs (or
+  // confirms there's nothing to attach for an unresolvable VIN).
+  acesVehicleId: integer("aces_vehicle_id"),
+  acesEngineId: integer("aces_engine_id"),
+  acesDecodedAt: timestamp("aces_decoded_at"),
 
   year: integer("year"),
   make: text("make"),
@@ -265,6 +272,11 @@ export const normalizedVehicles = pgTable("normalized_vehicles", {
   sourceSystemIdx: index("nv_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nv_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nv_updated_at_idx").on(table.updatedAt),
+  // Task #382 — ACES IDs are queried both as a join key into DataOne and as
+  // a coverage metric, so they get their own indexes. nullable, partial
+  // not needed (the column is sparse enough that PG will fast-path nulls).
+  acesVehicleIdx: index("nv_aces_vehicle_idx").on(table.acesVehicleId),
+  acesEngineIdx: index("nv_aces_engine_idx").on(table.acesEngineId),
 }));
 
 export const normalizedCustomers = pgTable("normalized_customers", {

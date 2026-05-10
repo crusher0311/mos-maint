@@ -29,6 +29,7 @@ import {
   normalizedLineItems,
   normalizedPayments,
 } from "./db/schema/normalized";
+import { enrichVinWithAces } from "./job-index-aces";
 
 type DrizzleDb = ReturnType<typeof import("./db/drizzle").getDb>;
 
@@ -40,14 +41,51 @@ export class SupabaseDualWriter {
   }
 
   async upsertVehicle(doc: any): Promise<void> {
+    // Task #382 — Decode ACES IDs once per vehicle write. Soft-fails to
+    // null fields so an indexer outage doesn't block the underlying upsert.
+    // Skip the round-trip when the doc is already carrying decoded IDs
+    // (e.g. when re-syncing the same VIN within a single batch).
+    let acesVehicleId: number | null = doc.acesVehicleId ?? null;
+    let acesEngineId: number | null = doc.acesEngineId ?? null;
+    let acesDecodedAt: Date | null = doc.acesDecodedAt ?? null;
+    let acesYear: number | null = null;
+    let acesMake: string | null = null;
+    let acesModel: string | null = null;
+    if (acesDecodedAt == null && doc.vin) {
+      const enriched = await enrichVinWithAces(doc.vin);
+      if (enriched) {
+        acesVehicleId = enriched.acesVehicleId;
+        acesEngineId = enriched.acesEngineId;
+        acesDecodedAt = enriched.acesDecodedAt;
+        acesYear = enriched.year;
+        acesMake = enriched.make;
+        acesModel = enriched.model;
+      } else {
+        // VIN couldn't be decoded — still stamp the timestamp so the
+        // backfill knows we tried (matches the Mongo writer's behaviour).
+        acesDecodedAt = new Date();
+      }
+    }
+
+    // Task #382 — vinDecoded is the canonical "this VIN has authoritative
+    // ACES data" signal in normalized_vehicles. Treat the presence of
+    // either ACES ID as the threshold (matches scoring's expectation).
+    const vinDecoded = acesVehicleId != null || acesEngineId != null;
+
     const row = {
       id: doc._id,
       shopId: doc.shopId,
       enterpriseId: doc.enterpriseId || null,
       vin: doc.vin || null,
-      year: doc.year || null,
-      make: doc.make || null,
-      model: doc.model || null,
+      acesVehicleId,
+      acesEngineId,
+      acesDecodedAt,
+      vinDecoded,
+      // Task #382 — DataOne authoritative on Y/M/M when resolved; fall
+      // back to source-supplied values otherwise.
+      year: acesYear ?? doc.year ?? null,
+      make: acesMake ?? doc.make ?? null,
+      model: acesModel ?? doc.model ?? null,
       submodel: doc.submodel || null,
       trim: doc.trim || null,
       bodyStyle: doc.bodyStyle || null,

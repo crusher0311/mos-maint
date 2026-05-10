@@ -32,6 +32,7 @@ import {
 import { updateRepairPattern } from '@/lib/repair-patterns';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
+import { enrichVinWithAces, extractShopWarePcdb, extractTekmetricPcdb } from '@/lib/job-index-aces';
 
 // =============================================================================
 // TYPES
@@ -91,9 +92,19 @@ export class NormalizedIngestionService {
     sourceSystem: SourceSystem,
     shopId: number,
     enterpriseId?: string,
-    options: IngestionOptions = {}
+    options: IngestionOptions = {},
+    /**
+     * Task #382 — Optional explicit adapter override for tooling that
+     * already holds a typed adapter instance (e.g. the historical rebuild
+     * script in scripts/backfill-job-index-aces.ts feeds the Shop-Ware
+     * adapter directly so it can call writeToJobIndex without re-running
+     * the full normalize pipeline). Bypasses the registry lookup but still
+     * validates the adapter is non-null. Production sync code paths must
+     * leave this undefined and rely on the registry.
+     */
+    adapterOverride?: INormalizedAdapter,
   ) {
-    const adapter = getAdapter(sourceSystem);
+    const adapter = adapterOverride ?? getAdapter(sourceSystem);
     if (!adapter) {
       throw new Error(`No adapter found for source system: ${sourceSystem}`);
     }
@@ -1442,13 +1453,38 @@ export class NormalizedIngestionService {
   // DUAL WRITE TO JOB INDEX (for backward compatibility)
   // ---------------------------------------------------------------------------
   
-  private async writeToJobIndex(sourceData: any, serviceJobs: Partial<NormalizedServiceJob>[]): Promise<void> {
+  /**
+   * Public so the historical rebuild script
+   * (scripts/backfill-job-index-aces.ts Phase A) can drive Shop-Ware
+   * reindex from raw repair-order payloads without re-running the full
+   * normalize pipeline. The script constructs a service per shop with the
+   * Shop-Ware adapter, calls extractServiceJobsFromWorkOrder, and then
+   * writeToJobIndex to insert the missing job_index entries.
+   */
+  async writeToJobIndex(sourceData: any, serviceJobs: Partial<NormalizedServiceJob>[]): Promise<void> {
     const jobIndexCollection = this.db.collection('job_index');
     
     const vehicle = this.adapter.extractVehicleFromWorkOrder(sourceData);
     const sourceIds = this.adapter.getSourceIds(sourceData);
     const workOrderId = sourceIds.find(s => s.isPrimary)?.idValue || sourceData.ID || sourceData.id;
-    
+
+    // Task #382 — ACES enrichment from DataOne squish lookup. Soft-fails so
+    // an indexer outage doesn't block the underlying job_index write.
+    const aces = await enrichVinWithAces(vehicle?.vin);
+
+    // Task #382 — Build per-service-job line arrays with PCDB / PartsTech
+    // IDs attached to each part line. Only applies to Tekmetric and Shop-Ware
+    // (Protractor doesn't surface PCDB). The result is a Map<serviceJobKey,
+    // line[]> so the per-job loop below can attach the matching subset to
+    // its own jobIndexEntry.lines field — keeping PCDB at the line level
+    // (Task #382 requirement) instead of buried in a top-level array.
+    const linesByJob =
+      this.adapter.sourceSystem === 'tekmetric'
+        ? this.buildTekmetricLinesByJob(sourceData)
+        : this.adapter.sourceSystem === 'shopware'
+          ? this.buildShopWareLinesByJob(sourceData)
+          : new Map<string, any[]>();
+
     for (const job of serviceJobs) {
       if (!job.title) continue;
       
@@ -1468,7 +1504,16 @@ export class NormalizedIngestionService {
       if (existing && existing.contentHash === contentHash) {
         continue;
       }
-      
+
+      // Resolve this service job's part lines. Tek keys by raw job id
+      // (`job.id`); SW keys by raw service_item id; both fall back to
+      // looking the title up in the lines map for older payloads.
+      const jobKey =
+        (job as any).sourceJobId != null
+          ? String((job as any).sourceJobId)
+          : job.title || '';
+      const jobLines = linesByJob.get(jobKey) ?? linesByJob.get(job.title || '') ?? [];
+
       const jobIndexEntry = {
         shopId: this.shopId,
         enterpriseId: this.enterpriseId,
@@ -1481,11 +1526,34 @@ export class NormalizedIngestionService {
         total: job.total ?? null,
         laborTotal: job.laborTotal ?? null,
         partsTotal: job.partsTotal ?? null,
+        // Task #382 — DataOne is authoritative on Y/M/M when squish
+        // resolves; fall back to source-supplied values otherwise. This
+        // keeps shop-typed misspellings (e.g. "MERCEDES-BENZ" vs "Mercedes")
+        // from polluting the scoring corpus.
         vin: vehicle?.vin,
-        year: vehicle?.year,
-        make: vehicle?.make,
-        model: vehicle?.model,
+        year: aces?.year ?? vehicle?.year,
+        make: aces?.make ?? vehicle?.make,
+        model: aces?.model ?? vehicle?.model,
         engine: vehicle?.engineDescription,
+        // Task #382 — ACES IDs from DataOne, nested under `vehicle.*` to
+        // match the canonical shape used by the Tek live indexer
+        // (lib/integrations/tekmetric/job-index.ts) and by the rebuild +
+        // coverage tooling. Null when squish ambiguous.
+        vehicle: {
+          vin: vehicle?.vin,
+          year: aces?.year ?? vehicle?.year,
+          make: aces?.make ?? vehicle?.make,
+          model: aces?.model ?? vehicle?.model,
+          engine: vehicle?.engineDescription,
+          acesVehicleId: aces?.acesVehicleId ?? null,
+          acesEngineId: aces?.acesEngineId ?? null,
+          submodelKey: aces?.submodelKey ?? null,
+          acesDecodedAt: aces?.acesDecodedAt ?? null,
+        },
+        // Task #382 — Lines array with PCDB / PartsTech IDs on part lines
+        // (Tek + SW). Empty array when nothing present so consumers always
+        // see a uniform shape.
+        lines: jobLines,
         closedDate: sourceData.ClosedDate || sourceData.InvoiceDate || sourceData.postedDate || sourceData.completedDate,
         contentHash,
         logicVersion: 3,
@@ -1511,6 +1579,121 @@ export class NormalizedIngestionService {
   // DUAL WRITE TO REPAIR PATTERNS (for shop pattern learning)
   // ---------------------------------------------------------------------------
   
+  /**
+   * Task #382 — Build a Map<sourceJobId, line[]> for a Tekmetric raw RO
+   * payload. Each part line carries PCDB / PartsTech IDs when present so
+   * the writeToJobIndex caller can attach the matching subset directly to
+   * its own job entry. Labor lines are emitted too (so `lines` mirrors
+   * what the live Tekmetric indexer in lib/integrations/tekmetric/job-index.ts
+   * produces) — keeps the SW + Tek dual-write paths shape-consistent.
+   */
+  // Public so the ACES coverage smoke test can exercise the
+  // representative-path line-builder behavior (per-line PCDB capture)
+  // without spinning up a full Mongo + service instance.
+  buildTekmetricLinesByJob(sourceData: any): Map<string, any[]> {
+    const out = new Map<string, any[]>();
+    const jobs = Array.isArray(sourceData?.jobs) ? sourceData.jobs : [];
+    for (const job of jobs) {
+      const lines: any[] = [];
+      const labors = Array.isArray(job.labor) ? job.labor : [];
+      for (const labor of labors) {
+        const hours = labor.hours || 0;
+        const rate = (labor.rate || 0) / 100;
+        lines.push({
+          lineType: 'labor',
+          description: labor.name || job.name,
+          quantity: 1,
+          unitPrice: rate,
+          extendedPrice: hours * rate,
+          hours,
+        });
+      }
+      const parts = Array.isArray(job.parts) ? job.parts : [];
+      for (const part of parts) {
+        const qty = part.quantity || 1;
+        const unit = (part.retail || part.cost || 0) / 100;
+        lines.push({
+          lineType: 'part',
+          description: part.name || part.description || '',
+          partNumber: part.partNumber,
+          manufacturer: part.brand,
+          quantity: qty,
+          unitPrice: unit,
+          extendedPrice: qty * unit,
+          ...extractTekmetricPcdb(part),
+        });
+      }
+      const key = String(job.id);
+      out.set(key, lines);
+      if (job.name) out.set(job.name, lines);
+    }
+    return out;
+  }
+
+  /**
+   * Task #382 — Same idea for Shop-Ware. Shop-Ware repair-order payloads
+   * carry parts under `service_items[].parts` (or `parts` at the RO root
+   * for older payloads); we tolerate both. The result is keyed by
+   * service_item id so each writeToJobIndex iteration finds its lines.
+   */
+  // Public for the same reason as buildTekmetricLinesByJob — see above.
+  buildShopWareLinesByJob(sourceData: any): Map<string, any[]> {
+    const out = new Map<string, any[]>();
+    const items = Array.isArray(sourceData?.service_items) ? sourceData.service_items : [];
+    for (const item of items) {
+      const lines: any[] = [];
+      const labors = Array.isArray(item.labors) ? item.labors : [];
+      for (const labor of labors) {
+        lines.push({
+          lineType: 'labor',
+          description: labor.name,
+          quantity: 1,
+          unitPrice: 0,
+          extendedPrice: 0,
+          hours: labor.hours,
+        });
+      }
+      const parts = Array.isArray(item.parts) ? item.parts : [];
+      for (const part of parts) {
+        const qty = part.quantity || 1;
+        const unit = (part.sell_price_cents ?? 0) / 100;
+        lines.push({
+          lineType: 'part',
+          description: part.description || part.name || '',
+          partNumber: part.number || part.part_number || part.partNumber,
+          manufacturer: part.brand,
+          quantity: qty,
+          unitPrice: unit,
+          extendedPrice: qty * unit,
+          ...extractShopWarePcdb(part),
+        });
+      }
+      const key = String(item.id);
+      out.set(key, lines);
+      if (item.name) out.set(item.name, lines);
+    }
+    // Fallback: older flat-parts payloads (no service_items wrapper).
+    if (out.size === 0 && Array.isArray(sourceData?.parts)) {
+      const lines: any[] = [];
+      for (const part of sourceData.parts) {
+        const qty = part.quantity || 1;
+        const unit = (part.sell_price_cents ?? 0) / 100;
+        lines.push({
+          lineType: 'part',
+          description: part.description || part.name || '',
+          partNumber: part.number || part.part_number || part.partNumber,
+          manufacturer: part.brand,
+          quantity: qty,
+          unitPrice: unit,
+          extendedPrice: qty * unit,
+          ...extractShopWarePcdb(part),
+        });
+      }
+      out.set('', lines);
+    }
+    return out;
+  }
+
   private async writeToRepairPatterns(sourceData: any, serviceJobs: Partial<NormalizedServiceJob>[]): Promise<void> {
     const vehicle = this.adapter.extractVehicleFromWorkOrder(sourceData);
     

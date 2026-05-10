@@ -918,6 +918,13 @@ const MIRRORS: MirrorSpec[] = [
     extract: (d) => {
       const sid = asInt(d.shopId);
       if (sid == null) return null;
+      // Task #382 — Forward ACES IDs into the PG job_index columns so
+      // ongoing Mongo→PG mirror keeps `aces_vehicle_id` / `aces_engine_id`
+      // continuously in sync. Source of truth is `vehicle.aces*` (canonical
+      // shape used by Tek/SW/Protractor live indexers); fall back to
+      // top-level for legacy shape compatibility.
+      const acesVid = d.vehicle?.acesVehicleId ?? d.acesVehicleId ?? null;
+      const acesEid = d.vehicle?.acesEngineId ?? d.acesEngineId ?? null;
       return {
         values: {
           backfill_mongo_id: String(d._id),
@@ -925,9 +932,11 @@ const MIRRORS: MirrorSpec[] = [
           work_order_number: asInt(d.workOrderNumber),
           job_title: asStr(d.jobTitle),
           job_code: asStr(d.jobCode),
-          vehicle_vin: asStr(d.vehicleVin ?? d.vin),
+          vehicle_vin: asStr(d.vehicleVin ?? d.vehicle?.vin ?? d.vin),
           service_item_id: asStr(d.serviceItemId),
           performed_at: asDate(d.performedAt),
+          aces_vehicle_id: acesVid,
+          aces_engine_id: acesEid,
           lines: d.lines ?? null,
           payload: d,
         },
