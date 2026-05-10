@@ -1,0 +1,89 @@
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-blsc5:~/project/src$ curl -s -H "Authorization: Bearer $CRON_SECRET" "$RENDER_EXTERNAL_URL/api/cron/catchup-status" | jq '{summary, fullPage: (.shops | map(select(.fullPageMode == true)) | map({shopId, name, complete, prePassNextPage, prePassTotalPages, prePassDone, fullPageNextPage, lastFullPageRunAt}))}'
+{
+  "summary": {
+    "tekShopsTotal": 54,
+    "tekShopsComplete": 3,
+    "tekShopsIncomplete": 51,
+    "tekShopsWithLastError": 2,
+    "catchupRunsReturned": 0,
+    "coverageWindowRuns": 0,
+    "uncoveredShopCount": 51,
+    "fullPageShopsTotal": 7,
+    "fullPageShopsIncomplete": 7,
+    "prePassShopsDone": 1,
+    "prePassShopsInProgress": 6
+  },
+  "fullPage": [
+    {
+      "shopId": 82,
+      "name": "HEART Certified Auto Care",
+      "complete": false,
+      "prePassNextPage": 368,
+      "prePassTotalPages": 6429,
+      "prePassDone": false,
+      "fullPageNextPage": 31,
+      "lastFullPageRunAt": "2026-05-10T15:33:58.261Z"
+    },
+    {
+      "shopId": 88,
+      "name": "Lebrini's Service Station Corp",
+      "complete": false,
+      "prePassNextPage": 226,
+      "prePassTotalPages": 712,
+      "prePassDone": false,
+      "fullPageNextPage": 0,
+      "lastFullPageRunAt": null
+    },
+    {
+      "shopId": 112,
+      "name": "HEART Certified Auto Care",
+      "complete": false,
+      "prePassNextPage": 2372,
+      "prePassTotalPages": 2372,
+      "prePassDone": true,
+      "fullPageNextPage": 14,
+      "lastFullPageRunAt": "2026-05-10T15:34:04.548Z"
+    },
+    {
+      "shopId": 118,
+      "name": "Team Ryan",
+      "complete": false,
+      "prePassNextPage": 279,
+      "prePassTotalPages": 1102,
+      "prePassDone": false,
+      "fullPageNextPage": 34,
+      "lastFullPageRunAt": "2026-05-10T15:56:25.765Z"
+    },
+    {
+      "shopId": 122,
+      "name": "HEART Certified Auto Care",
+      "complete": false,
+      "prePassNextPage": 176,
+      "prePassTotalPages": 3177,
+      "prePassDone": false,
+      "fullPageNextPage": 37,
+      "lastFullPageRunAt": "2026-05-10T15:52:59.273Z"
+    },
+    {
+      "shopId": 123,
+      "name": "HEART Certified Auto Care",
+      "complete": false,
+      "prePassNextPage": 735,
+      "prePassTotalPages": 1950,
+      "prePassDone": false,
+      "fullPageNextPage": 18,
+      "lastFullPageRunAt": "2026-05-10T15:31:48.301Z"
+    },
+    {
+      "shopId": 129,
+      "name": "Downtown Automotive Center",
+      "complete": false,
+      "prePassNextPage": 236,
+      "prePassTotalPages": 1485,
+      "prePassDone": false,
+      "fullPageNextPage": 0,
+      "lastFullPageRunAt": null
+    }
+  ]
+}
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-blsc5:~/project/src$ 
