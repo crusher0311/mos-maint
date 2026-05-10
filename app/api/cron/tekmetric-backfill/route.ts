@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongo";
 import pLimit from "p-limit";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
-import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking } from "@/lib/integrations/tekmetric/client";
+import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking, runWithTekmetricAbortSignal } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
@@ -389,11 +389,27 @@ async function sweepStaleSkippedRos(
 export async function backfillShopChunk(
   db: any,
   shopId: number,
-  tekmetricShopId: number
+  tekmetricShopId: number,
+  // Optional hard-cancel signal. When the drain script's two-stage SIGINT
+  // fires (or 30s graceful timeout), the worker calls `controller.abort()`
+  // on its per-worker controller. The signal is bound via AsyncLocalStorage
+  // (see `runWithTekmetricAbortSignal`) so every Tekmetric `fetch` issued
+  // under this chunk forwards it; an in-flight 100-min chunk rejects
+  // promptly with AbortError instead of running to completion.
+  signal?: AbortSignal,
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
+  const run = () => backfillShopChunkInner(db, shopId, tekmetricShopId);
   try {
-    return await backfillShopChunkInner(db, shopId, tekmetricShopId);
+    return signal ? await runWithTekmetricAbortSignal(signal, run) : await run();
   } catch (err: any) {
+    // Operator-initiated hard-cancel (drain script SIGINT). Don't pollute
+    // the progress row's `lastError` with "chunk threw: aborted" — that
+    // would show up in admin diagnostics as a real failure and trigger
+    // the auto-clear sweep timer for nothing. Just bubble the AbortError
+    // up to the worker, which already maps it to a "stopped" outcome.
+    if (err?.name === "AbortError" || signal?.aborted) {
+      throw err;
+    }
     // The inner function may throw between the init-row upsert and the
     // final progress write. Without recording the failure here, the shop
     // ends up with a progress row but no `lastRunAt` / `lastError`, which

@@ -19,8 +19,23 @@
  *
  * Safe to run alongside the existing cron (uses same Mongo progress
  * collection with upsert; chunk function is idempotent on RO content
- * hash). To stop, send SIGINT (Ctrl-C) or SIGTERM — the script finishes
- * the in-flight chunk for each worker, then exits cleanly.
+ * hash).
+ *
+ * Stopping (two-stage):
+ *   1. First SIGINT/SIGTERM — sets `stopRequested=true` and gives the
+ *      in-flight chunks up to DRAIN_GRACEFUL_STOP_MS (default 30s) to
+ *      return on their own. Workers won't pick up new shops.
+ *   2. Second SIGINT (Ctrl-C twice) OR the 30s grace expires — calls
+ *      `controller.abort()` on every per-worker AbortController. The
+ *      signal is propagated into `backfillShopChunk` via
+ *      `runWithTekmetricAbortSignal`, so every in-flight Tekmetric
+ *      `fetch` rejects with AbortError, the chunk function throws, the
+ *      worker's catch block returns "stopped", and the script exits
+ *      within ~5s. Lease release runs in the main `finally` regardless.
+ *
+ * This two-stage stop exists because chunks can take 100+ minutes on
+ * slow shops — without hard-cancel the script was effectively
+ * un-killable (had to close the Render shell tab). See task #415.
  */
 
 import { getDb } from "@/lib/mongo";
@@ -39,6 +54,21 @@ const SHOP_ID_FILTER = (process.env.DRAIN_SHOP_IDS || "")
   .split(",")
   .map((s) => Number(s.trim()))
   .filter((n) => Number.isFinite(n) && n > 0);
+// Grace period between first SIGINT (set stopRequested) and the
+// hard-cancel that aborts every in-flight chunk's HTTP requests. A
+// second SIGINT skips this wait and aborts immediately. Tunable for
+// tests / unusual workloads.
+const GRACEFUL_STOP_MS = Math.max(
+  1000,
+  Number(process.env.DRAIN_GRACEFUL_STOP_MS) || 30_000,
+);
+// Final hard exit if the abort+lease-release cleanup itself hangs. The
+// AbortError path should let the script exit within ~5s; this is the
+// last-resort hammer.
+const HARD_EXIT_AFTER_ABORT_MS = Math.max(
+  5000,
+  Number(process.env.DRAIN_HARD_EXIT_MS) || 15_000,
+);
 
 // Lease TTL — the cron checks `tekmetric_drain_lock`'s `expiresAt`. We
 // refresh it well before expiry so a healthy drain holds the lock
@@ -67,6 +97,38 @@ type ShopOutcome = {
 };
 
 let stopRequested = false;
+let hardCancelRequested = false;
+let sigintCount = 0;
+let gracefulStopTimer: NodeJS.Timeout | null = null;
+let hardExitTimer: NodeJS.Timeout | null = null;
+// Per-worker AbortController registry. Each worker creates one and
+// re-uses it across every chunk it runs. On hard-cancel we walk this
+// array and call `abort()` on each, which propagates into every
+// in-flight Tekmetric `fetch` via runWithTekmetricAbortSignal.
+const workerControllers: AbortController[] = [];
+
+function triggerHardCancel(reason: string): void {
+  if (hardCancelRequested) return;
+  hardCancelRequested = true;
+  stopRequested = true;
+  log(`HARD-CANCEL ${reason}; aborting ${workerControllers.length} in-flight chunk(s)`);
+  for (const c of workerControllers) {
+    try {
+      c.abort();
+    } catch {}
+  }
+  // Insurance: if abort+cleanup doesn't unwind within
+  // HARD_EXIT_AFTER_ABORT_MS, force-exit. The lease TTL means a missed
+  // release self-heals on the cron's next pass.
+  if (!hardExitTimer) {
+    hardExitTimer = setTimeout(() => {
+      log(`FORCE-EXIT cleanup did not finish within ${HARD_EXIT_AFTER_ABORT_MS}ms; exiting now`);
+      process.exit(130);
+    }, HARD_EXIT_AFTER_ABORT_MS);
+    // Don't keep the event loop alive just for this timer.
+    if (typeof hardExitTimer.unref === "function") hardExitTimer.unref();
+  }
+}
 
 function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
@@ -205,7 +267,7 @@ async function loadIncompleteShops(): Promise<ShopJob[]> {
   return jobs;
 }
 
-async function drainShop(job: ShopJob): Promise<ShopOutcome> {
+async function drainShop(job: ShopJob, signal: AbortSignal): Promise<ShopOutcome> {
   const db = await getDb();
   const startedAt = new Date();
   let chunksRun = 0;
@@ -217,7 +279,7 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
   );
 
   while (chunksRun < MAX_CHUNKS_PER_SHOP) {
-    if (stopRequested) {
+    if (stopRequested || signal.aborted) {
       return {
         shopId: job.shopId,
         name: job.name,
@@ -236,10 +298,29 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
       result = await backfillShopChunk(
         db,
         job.shopId,
-        job.tekmetricShopId
+        job.tekmetricShopId,
+        signal,
       );
     } catch (err: any) {
       const msg = err?.message ? String(err.message) : String(err);
+      // Hard-cancel path: signal was aborted mid-chunk. Return "stopped"
+      // instead of "error" so we don't pollute the failure metric with
+      // operator-initiated cancellations.
+      if (err?.name === "AbortError" || signal.aborted) {
+        log(
+          `STOPPED shop=${job.shopId} chunk=${chunksRun + 1} aborted mid-chunk`
+        );
+        return {
+          shopId: job.shopId,
+          name: job.name,
+          chunksRun,
+          jobsIndexed,
+          skipped,
+          finalState: "stopped",
+          startedAt,
+          endedAt: new Date(),
+        };
+      }
       log(
         `ERROR shop=${job.shopId} chunk=${chunksRun + 1}: ${msg.slice(0, 200)}`
       );
@@ -304,23 +385,32 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
   };
 }
 
-async function runWithParallelism<T>(
-  items: T[],
+async function runWithParallelism(
+  items: ShopJob[],
   workers: number,
-  fn: (item: T) => Promise<ShopOutcome>,
+  fn: (item: ShopJob, signal: AbortSignal) => Promise<ShopOutcome>,
   results: ShopOutcome[]
 ): Promise<void> {
   const queue = [...items];
 
   async function workerLoop(workerId: number) {
+    // One AbortController per worker, registered globally so the SIGINT
+    // handler can call abort() on every in-flight chunk at once.
+    const controller = new AbortController();
+    workerControllers.push(controller);
+
     while (queue.length > 0) {
-      if (stopRequested) return;
+      if (stopRequested || controller.signal.aborted) return;
       const item = queue.shift();
       if (!item) return;
       try {
-        const outcome = await fn(item);
+        const outcome = await fn(item, controller.signal);
         results.push(outcome);
       } catch (err: any) {
+        if (err?.name === "AbortError" || controller.signal.aborted) {
+          log(`WORKER_${workerId} aborted`);
+          return;
+        }
         log(
           `WORKER_${workerId} unexpected error: ${err?.message || String(err)}`
         );
@@ -349,14 +439,27 @@ async function main() {
         : "shopIdFilter=ALL_INCOMPLETE")
   );
 
-  process.on("SIGINT", () => {
-    log("SIGINT received — finishing in-flight chunks then exiting");
+  // Two-stage stop. See module docstring for the full contract.
+  const onStopSignal = (sig: string) => {
+    sigintCount++;
+    if (sigintCount >= 2) {
+      log(`${sig} received (2nd) — hard-cancelling in-flight chunks immediately`);
+      triggerHardCancel(`second ${sig}`);
+      return;
+    }
+    log(
+      `${sig} received — graceful stop: finishing in-flight chunks (up to ${Math.round(GRACEFUL_STOP_MS / 1000)}s) then aborting. Press Ctrl-C again to skip the wait.`,
+    );
     stopRequested = true;
-  });
-  process.on("SIGTERM", () => {
-    log("SIGTERM received — finishing in-flight chunks then exiting");
-    stopRequested = true;
-  });
+    if (!gracefulStopTimer) {
+      gracefulStopTimer = setTimeout(() => {
+        triggerHardCancel(`graceful ${Math.round(GRACEFUL_STOP_MS / 1000)}s timeout`);
+      }, GRACEFUL_STOP_MS);
+      if (typeof gracefulStopTimer.unref === "function") gracefulStopTimer.unref();
+    }
+  };
+  process.on("SIGINT", () => onStopSignal("SIGINT"));
+  process.on("SIGTERM", () => onStopSignal("SIGTERM"));
 
   // Acquire drain lock BEFORE loading shops so cron can't sneak a tick in
   // between our load and our first chunk write.
@@ -393,6 +496,8 @@ async function main() {
   } finally {
     if (heartbeat) clearInterval(heartbeat);
     clearInterval(lockRefresher);
+    if (gracefulStopTimer) clearTimeout(gracefulStopTimer);
+    if (hardExitTimer) clearTimeout(hardExitTimer);
     await releaseDrainLock();
   }
 

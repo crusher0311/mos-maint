@@ -38,6 +38,75 @@ const backoff429Storage = new AsyncLocalStorage<{ ms: number }>();
 // ad-hoc real-time API calls that don't care about the aggregated metric.
 const apiCallStorage = new AsyncLocalStorage<{ count: number }>();
 
+// Per-operation Tekmetric abort signal. Scoped via AsyncLocalStorage so a
+// caller (e.g. the drain worker in scripts/drain-tekmetric-backfill.ts)
+// can hard-cancel every in-flight Tekmetric `fetch` issued under the
+// chunk by calling `controller.abort()` on a per-worker controller.
+// Without this, SIGINT to the drain script can only mark
+// `stopRequested=true` and politely wait for the in-flight chunk to
+// return on its own — which is up to ~2 hours for a slow shop. With
+// this in place, the central `tekmetricRequest` and
+// `getRepairOrderInspectionsWithXAuth` paths both check the signal
+// before each request, pass it to `fetch` (so an in-flight HTTP read
+// rejects with AbortError), and exit their 429-backoff sleeps early.
+// Outside a tracking scope `getStore()` returns undefined and behaviour
+// is unchanged. See `runWithTekmetricAbortSignal` below.
+const abortSignalStorage = new AsyncLocalStorage<AbortSignal>();
+
+/**
+ * Run `fn` with `signal` bound as the active Tekmetric abort signal.
+ * Any Tekmetric request issued (transitively) under `fn` will:
+ *   1. throw AbortError before issuing a fetch if signal is already aborted,
+ *   2. forward the signal to fetch so an in-flight HTTP read can be cancelled,
+ *   3. wake from 429/shared-limiter backoff sleeps early on abort.
+ *
+ * Used by the drain script to make SIGINT actually stop in-flight chunks
+ * instead of waiting for a 100-minute fetch to return on its own. Other
+ * callers (cron, webhooks, interactive routes) don't bind a signal and
+ * see no behaviour change.
+ */
+export async function runWithTekmetricAbortSignal<T>(
+  signal: AbortSignal,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return abortSignalStorage.run(signal, fn);
+}
+
+function getActiveAbortSignal(): AbortSignal | undefined {
+  return abortSignalStorage.getStore();
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    const err: any = new Error("Tekmetric request aborted");
+    err.name = "AbortError";
+    throw err;
+  }
+}
+
+/**
+ * Sleep that resolves after `ms` OR rejects with AbortError as soon as
+ * `signal` aborts. Used for 429 / shared-limiter backoffs so a
+ * SIGINT-triggered abort doesn't have to wait out a 60s backoff.
+ */
+function abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) return new Promise(r => setTimeout(r, ms));
+  if (signal.aborted) {
+    return Promise.reject(Object.assign(new Error("Tekmetric backoff aborted"), { name: "AbortError" }));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(Object.assign(new Error("Tekmetric backoff aborted"), { name: "AbortError" }));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /**
  * Run `fn` with a fresh, chunk-scoped 429-backoff counter active. Any 429
  * waits paid by Tekmetric requests issued (transitively) under `fn` are
@@ -215,8 +284,14 @@ export async function tekmetricRequest<T = any>(
   priority: RateLimitPriority = 'interactive',
 ): Promise<T> {
   const method = options.method || 'GET';
+  // Hard-cancel signal (drain script SIGINT). Ambient via ALS so callers
+  // don't have to thread it through every wrapper. Falls back to any
+  // explicit `options.signal` the caller passed.
+  const abortSignal = (options.signal as AbortSignal | undefined) ?? getActiveAbortSignal();
+  throwIfAborted(abortSignal);
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
+    throwIfAborted(abortSignal);
     // Tekmetric's documented production limit is 600 requests/minute = 10 RPS
     // sustained, per API key (https://api.tekmetric.com Rate Limiting page).
     // We cap at 8 RPS locally — 80% of the documented ceiling — so transient
@@ -244,7 +319,7 @@ export async function tekmetricRequest<T = any>(
       console.warn(`[Tekmetric] shared rate limiter saturated on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms before retry`);
       const backoffCounter = backoff429Storage.getStore();
       if (backoffCounter) backoffCounter.ms += backoffMs;
-      await new Promise(r => setTimeout(r, backoffMs));
+      await abortableSleep(backoffMs, abortSignal);
       continue;
     }
     const apiCallCounter = apiCallStorage.getStore();
@@ -263,6 +338,7 @@ export async function tekmetricRequest<T = any>(
           'Content-Type': 'application/json',
           ...options.headers,
         },
+        signal: abortSignal,
       });
 
       statusCode = response.status;
@@ -283,7 +359,7 @@ export async function tekmetricRequest<T = any>(
         console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
         const backoffCounter = backoff429Storage.getStore();
         if (backoffCounter) backoffCounter.ms += backoffMs;
-        await new Promise(r => setTimeout(r, backoffMs));
+        await abortableSleep(backoffMs, abortSignal);
         continue;
       }
 
@@ -610,8 +686,11 @@ export async function getRepairOrderInspectionsWithXAuth(
   // Collapsed endpoint identifier used for 401 records so the API traffic
   // page groups them into a single per-shop row instead of one row per RO.
   const collapsedEndpointPath = `/shop/${tekmetricShopId}/repair-orders/[ro]/inspections`;
+  const abortSignal = getActiveAbortSignal();
+  throwIfAborted(abortSignal);
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
+    throwIfAborted(abortSignal);
     try {
       const rateSlot = await acquireRateLimitSlot('tekmetric', 8);
       if (!rateSlot.acquired) {
@@ -639,6 +718,7 @@ export async function getRepairOrderInspectionsWithXAuth(
           'x-auth-token': xAuthToken,
           'Content-Type': 'application/json',
         },
+        signal: abortSignal,
       });
 
       const latencyMs = Date.now() - startTime;
@@ -650,7 +730,7 @@ export async function getRepairOrderInspectionsWithXAuth(
         console.warn(`[Tekmetric] 429 on inspection fetch RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
         const backoffCounter = backoff429Storage.getStore();
         if (backoffCounter) backoffCounter.ms += backoffMs;
-        await new Promise(r => setTimeout(r, backoffMs));
+        await abortableSleep(backoffMs, abortSignal);
         continue;
       }
 
@@ -716,6 +796,12 @@ export async function getRepairOrderInspectionsWithXAuth(
 
       return response.json();
     } catch (err: any) {
+      // Propagate hard-cancel up to the caller so the chunk can exit
+      // promptly. Other errors are non-fatal (caller treats `[]` as
+      // "no inspections") and stay swallowed.
+      if (err?.name === "AbortError" || abortSignal?.aborted) {
+        throw err;
+      }
       console.warn(`[Tekmetric] Inspection fetch error for RO ${repairOrderId}: ${err.message}`);
       return [];
     }
