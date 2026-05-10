@@ -181,17 +181,41 @@ both cached, with TTLs of 24h and 6h respectively. Regression guard lives in
 ### 5. ServicePackageTemplate Endpoints
 
 #### `GET /ServicePackageTemplate/{id}`
-**Purpose**: Get service package template (for price estimation)
-**Used in**:
-- Add Deferred fallback: When no invoice history, get template pricing
-- `lib/integrations/protractor/client.ts` → `fetchServicePackageTemplateDetail()` (price-lookup callers only)
+**Purpose**: Canonical documented endpoint for ServicePackageTemplate
+records. Returns the full template including all service package lines and
+inspection lines. Used by:
 
-**Note**: Templates have $0 prices with "LookupRequired" flag - not useful for pricing.
+1. **Price estimation** (Add Deferred fallback when no invoice history) via
+   `lib/integrations/protractor/client.ts` → `fetchServicePackageTemplateDetail()`.
+   Note that templates returned this way have $0 prices with "LookupRequired"
+   flags — not useful for pricing without further lookups.
+2. **Canned-job enrichment for v1.0 / template-fallback shops** (e.g. shop
+   116) via `lib/integrations/protractor/client.ts` →
+   `fetchCannedJobDetailViaTemplate()` → called from
+   `enrichCannedJobsWithDetails()` when the list endpoint that produced the
+   IDs was `GET /ServicePackageTemplate` (i.e. `listSource === "servicepackagetemplate"`).
+
+**Endpoint-dispatch rule for canned-job enrichment** (task #406): the
+detail endpoint depends on which list endpoint produced the IDs.
+
+| List endpoint that returned items     | Detail endpoint to use                                  |
+|---------------------------------------|---------------------------------------------------------|
+| `GET /CannedJob/` (v2.0 shops)        | `GET /ServicePackage/CannedJob/{id}` via `fetchCannedJobDetail` |
+| `GET /ServicePackageTemplate` (v1.0)  | `GET /ServicePackageTemplate/{id}` via `fetchCannedJobDetailViaTemplate` |
+| `POST /ServicePackageTemplate(/List)/Read` (fallback) | same as `GET /ServicePackageTemplate` — template ID space |
+
+Mixing the two silently 404s for every item (shop 116 was hit by this in
+both directions back-to-back, dropping to 0/693 enriched twice).
 
 **DO NOT call this endpoint with CannedJob IDs.** It only accepts
-ServicePackageTemplate IDs. For canned-job content (title/lines/parts) use
-`GET /ServicePackage/CannedJob/{id}` instead — see the canned-job entry above.
-Cache: `protractor_template_cache` (success TTL 24h, 404 TTL 6h).
+ServicePackageTemplate IDs. For v2.0 shops whose list came from
+`GET /CannedJob/`, use `GET /ServicePackage/CannedJob/{id}` instead — see
+the canned-job entry above.
+
+Caches (both in `protractor_template_cache`, distinct cacheKey prefixes
+so they cannot poison each other):
+- Price-lookup path: `protractor_template_${shopId}_${templateId}` (24h success / 6h 404)
+- Canned-job-via-template enrichment: `protractor_template_get_${shopId}_${templateId}` (24h success / 6h 404)
 
 ---
 

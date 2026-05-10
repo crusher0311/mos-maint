@@ -54,11 +54,15 @@ export async function POST(req: NextRequest) {
     const totalJobs = listResult.cannedJobs.length;
     console.log(`[Canned Jobs Enrich] Fetched ${totalJobs} jobs from list, starting enrichment...`);
 
-    // Step 2: Enrich with details (filtering out empty titles)
+    // Step 2: Enrich with details (filtering out empty titles).
+    // Pass `listSource` so enrichment hits the right detail endpoint —
+    // `/ServicePackage/CannedJob/{id}` for v2.0 shops whose list came
+    // from `/CannedJob/`, or the canonical bare `/ServicePackageTemplate/{id}`
+    // for v1.0 / template-fallback shops like 116. (Task #406.)
     const enrichedJobs = await enrichCannedJobsWithDetails(
-      shopId, 
+      shopId,
       listResult.cannedJobs,
-      { filterEmptyTitles: true }
+      { filterEmptyTitles: true, listSource: listResult.source }
     );
 
     console.log(`[Canned Jobs Enrich] Enrichment complete: ${enrichedJobs.length} useful jobs found`);

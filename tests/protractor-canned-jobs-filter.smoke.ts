@@ -381,15 +381,27 @@ const enrichBody = extractFunctionBody(
 );
 
 ok(
-  "enrichCannedJobsWithDetails calls fetchCannedJobDetail (the right endpoint)",
+  "enrichCannedJobsWithDetails calls fetchCannedJobDetail (the v2.0 /CannedJob/ branch)",
   enrichBody.includes("fetchCannedJobDetail("),
-  "regression: enrichment must hit /ServicePackage/CannedJob/{id} via fetchCannedJobDetail",
+  "regression: /CannedJob/-list shops must hit /ServicePackage/CannedJob/{id}",
+);
+
+ok(
+  "enrichCannedJobsWithDetails calls fetchCannedJobDetailViaTemplate (the v1.0 fallback branch)",
+  enrichBody.includes("fetchCannedJobDetailViaTemplate("),
+  "regression: /ServicePackageTemplate-list shops (e.g. 116) must hit the bare canonical /ServicePackageTemplate/{id}",
+);
+
+ok(
+  "enrichCannedJobsWithDetails dispatches on listSource",
+  enrichBody.includes('listSource === "servicepackagetemplate"'),
+  "regression: dispatch must be source-driven, not shop-id-driven (no `if (shopId === 116)`)",
 );
 
 ok(
   "enrichCannedJobsWithDetails does NOT call fetchServicePackageTemplateDetail",
   !enrichBody.includes("fetchServicePackageTemplateDetail("),
-  "regression: that path silently 404s for shop 116 and caches the 404s",
+  "regression: that hits /ServicePackageTemplate/Read/{id} (undocumented), 404s for 116, and poisons the price-lookup cache",
 );
 
 const fetchCannedJobDetailBody = extractFunctionBody(
@@ -441,6 +453,135 @@ ok(
   "enrichCannedJobsWithDetails uses extractServicePackageTemplateContent on the detail response",
   enrichBody.includes("extractServicePackageTemplateContent(detailResult.detail)"),
   "regression: must keep alt-shape parsing so non-canonical Protractor envelopes still yield content",
+);
+
+// 8. Task #406 regression guards: the v1.0 / template-fallback path.
+// Shop 116 was double-broken: first by the wrong template /Read/{id}
+// endpoint (task #405), then by enrichment unconditionally hitting the
+// v2.0-only /ServicePackage/CannedJob/{id} after task #405's fix. The
+// canonical documented endpoint for ServicePackageTemplate IDs is the
+// bare GET /ServicePackageTemplate/{id} — no /Read/ segment, distinct
+// from the price-lookup helper. Pin both the URL and the dispatch.
+const fetchCannedJobDetailViaTemplateBody = extractFunctionBody(
+  clientSrc,
+  "export async function fetchCannedJobDetailViaTemplate",
+);
+
+ok(
+  "fetchCannedJobDetailViaTemplate uses the bare /ServicePackageTemplate/{id} endpoint (no /Read/ segment)",
+  fetchCannedJobDetailViaTemplateBody.includes("`/ServicePackageTemplate/${templateId}`"),
+  "regression: must hit the canonical documented endpoint, not /ServicePackageTemplate/Read/{id} or /ServicePackage/CannedJob/{id}",
+);
+
+ok(
+  "fetchCannedJobDetailViaTemplate does NOT use /Read/ in its detail URL",
+  !fetchCannedJobDetailViaTemplateBody.includes("`/ServicePackageTemplate/Read/${templateId}`"),
+  "regression: the /Read/ variant is undocumented and 404s for v1.0 / template-fallback shops",
+);
+
+ok(
+  "fetchCannedJobDetailViaTemplate does NOT use the canned-job endpoint",
+  !fetchCannedJobDetailViaTemplateBody.includes("/ServicePackage/CannedJob/"),
+  "regression: that endpoint takes CannedJob IDs, not ServicePackageTemplate IDs",
+);
+
+ok(
+  "fetchCannedJobDetailViaTemplate logs first-call envelope shape regardless of HTTP status",
+  fetchCannedJobDetailViaTemplateBody.includes("logCannedJobDetailViaTemplateShapeDiagnostic("),
+  "regression: must surface wrong-endpoint regressions on the very first detail call",
+);
+
+ok(
+  "fetchCannedJobDetailViaTemplate uses a distinct cacheKey prefix from fetchServicePackageTemplateDetail",
+  fetchCannedJobDetailViaTemplateBody.includes("`protractor_template_get_${shopId}_${templateId}`"),
+  "regression: must not collide with the price-lookup template cache namespace",
+);
+
+// 9. Task #406 diagnostic-never-swallow guard. The original
+// logCannedJobDetailShapeDiagnostic wrapped the entire shape inspection
+// in try/catch with an empty catch block, so when result.data was
+// undefined (the 404 case it was specifically built to expose) any
+// thrown error inside the diagnostic was eaten and zero log lines were
+// emitted — exactly the silence pattern that hid this bug for two
+// rounds. The fix: shape inspection is best-effort, but the
+// console.log line ALWAYS fires unconditionally outside any try/catch.
+const cannedJobDiagFn = clientSrc.slice(
+  clientSrc.indexOf("function logCannedJobDetailShapeDiagnostic("),
+  clientSrc.indexOf("function logCannedJobDetailViaTemplateShapeDiagnostic("),
+);
+const viaTemplateDiagFn = clientSrc.slice(
+  clientSrc.indexOf("function logCannedJobDetailViaTemplateShapeDiagnostic("),
+  clientSrc.indexOf("function logCannedJobDetailViaTemplateShapeDiagnostic(") +
+    clientSrc.slice(clientSrc.indexOf("function logCannedJobDetailViaTemplateShapeDiagnostic(")).indexOf("\n}\n") + 3,
+);
+
+function diagnosticAlwaysLogs(fnSrc: string): boolean {
+  // The console.log call must live OUTSIDE any try block (i.e. after the
+  // last `catch {` / `catch (` block closes). A simple structural check:
+  // the body's last `console.log(` index must come after the last
+  // `catch (` index. If the diagnostic re-grew an `} catch {` wrapper
+  // around the console.log, those positions would invert.
+  const lastCatch = Math.max(fnSrc.lastIndexOf("catch ("), fnSrc.lastIndexOf("catch {"));
+  const lastConsoleLog = fnSrc.lastIndexOf("console.log(");
+  return lastConsoleLog > lastCatch;
+}
+
+ok(
+  "logCannedJobDetailShapeDiagnostic emits its log line OUTSIDE any try/catch (never-swallow)",
+  diagnosticAlwaysLogs(cannedJobDiagFn),
+  "regression: a thrown error inside the shape inspection must NOT prevent the minimal log line",
+);
+
+ok(
+  "logCannedJobDetailViaTemplateShapeDiagnostic emits its log line OUTSIDE any try/catch (never-swallow)",
+  diagnosticAlwaysLogs(viaTemplateDiagFn),
+  "regression: same guarantee on the v1.0 / template-fallback path",
+);
+
+// Behavior check: the diagnostic must successfully run with raw=undefined
+// (the exact 404 case that hid the bug) without throwing, and the
+// minimal info — shopId, cannedJobId, httpOk, httpError — must all be
+// present in the log line. We exercise this by stubbing console.log,
+// invoking the function (which is module-private — re-grab it via the
+// module scope by triggering a fetch is too heavy, so we just verify by
+// source the line includes the required fields).
+ok(
+  "logCannedJobDetailShapeDiagnostic line includes shopId, cannedJobId, httpOk, httpError",
+  cannedJobDiagFn.includes("shop=${shopId}") &&
+    cannedJobDiagFn.includes("cannedJobId=${cannedJobId}") &&
+    cannedJobDiagFn.includes("httpOk=${httpOk}") &&
+    cannedJobDiagFn.includes("httpError"),
+  "regression: minimum required fields per task #406 must always be in the log line",
+);
+
+ok(
+  "logCannedJobDetailViaTemplateShapeDiagnostic line includes shopId, templateId, httpOk, httpError",
+  viaTemplateDiagFn.includes("shop=${shopId}") &&
+    viaTemplateDiagFn.includes("templateId=${templateId}") &&
+    viaTemplateDiagFn.includes("httpOk=${httpOk}") &&
+    viaTemplateDiagFn.includes("httpError"),
+  "regression: same minimum-fields guarantee on the v1.0 / template-fallback path",
+);
+
+// 10. Task #406 list-source tagging: fetchCannedJobs must thread the
+// list-endpoint identity into its return value so enrichment can
+// dispatch correctly. If anyone strips this, both v2.0 and v1.0 shops
+// silently regress to whichever default the enricher picks.
+const fetchCannedJobsBody = extractFunctionBody(
+  clientSrc,
+  "export async function fetchCannedJobs",
+);
+
+ok(
+  'fetchCannedJobs tags the /CannedJob/ branch as source: "cannedjob"',
+  fetchCannedJobsBody.includes('source: "cannedjob"'),
+  "regression: enrichment dispatch needs this tag",
+);
+
+ok(
+  'fetchCannedJobs tags the /ServicePackageTemplate branch as source: "servicepackagetemplate"',
+  fetchCannedJobsBody.includes('source: "servicepackagetemplate"'),
+  "regression: enrichment dispatch needs this tag for v1.0 / shop 116 fallback",
 );
 
 if (failed > 0) {

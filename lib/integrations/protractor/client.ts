@@ -2327,9 +2327,27 @@ export type ProtractorCannedJob = {
   };
 };
 
+// Tag identifying which list endpoint actually produced the items
+// returned from `fetchCannedJobs`. Drives detail-endpoint dispatch in
+// `enrichCannedJobsWithDetails` per task #406:
+//   - "cannedjob"             → IDs are CannedJob IDs; detail endpoint
+//                                is `/ServicePackage/CannedJob/{id}`
+//   - "servicepackagetemplate" → IDs are ServicePackageTemplate IDs
+//                                (v1.0 / template-fallback shops like
+//                                shop 116); detail endpoint is the
+//                                canonical bare `/ServicePackageTemplate/{id}`
+export type ProtractorCannedJobsListSource =
+  | "cannedjob"
+  | "servicepackagetemplate";
+
 export async function fetchCannedJobs(
   shopId: number
-): Promise<{ ok: boolean; cannedJobs?: ProtractorCannedJob[]; error?: string }> {
+): Promise<{
+  ok: boolean;
+  cannedJobs?: ProtractorCannedJob[];
+  source?: ProtractorCannedJobsListSource;
+  error?: string;
+}> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -2380,7 +2398,7 @@ export async function fetchCannedJobs(
 
   if (cannedJobSuccess && allCannedJobs.length > 0) {
     console.log(`[Protractor:CannedJobs] SUCCESS — Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
-    return { ok: true, cannedJobs: allCannedJobs };
+    return { ok: true, cannedJobs: allCannedJobs, source: "cannedjob" };
   }
 
   // Try GET /ServicePackageTemplate
@@ -2395,7 +2413,11 @@ export async function fetchCannedJobs(
 
   if (getResult.ok && getResult.data?.ItemCollection?.length) {
     console.log(`[Protractor:CannedJobs] SUCCESS — Found ${getResult.data.ItemCollection.length} service packages via GET /ServicePackageTemplate`);
-    return { ok: true, cannedJobs: getResult.data.ItemCollection };
+    return {
+      ok: true,
+      cannedJobs: getResult.data.ItemCollection,
+      source: "servicepackagetemplate",
+    };
   }
   
   if (getResult.error) {
@@ -2437,7 +2459,11 @@ export async function fetchCannedJobs(
     
     if (result.ok && items?.length) {
       console.log(`[Protractor:CannedJobs] SUCCESS — Found ${items.length} service packages via POST ${endpoint}`);
-      return { ok: true, cannedJobs: items };
+      // POST /ServicePackageTemplate(/List)/Read returns ServicePackageTemplate
+      // items, same ID space as GET /ServicePackageTemplate. Per task #406
+      // dispatch on this so enrichment hits the canonical
+      // /ServicePackageTemplate/{id} bare endpoint, not /ServicePackage/CannedJob/{id}.
+      return { ok: true, cannedJobs: items, source: "servicepackagetemplate" };
     }
     
     if (result.error) {
@@ -2885,29 +2911,98 @@ function logCannedJobDetailShapeDiagnostic(
 ): void {
   if (_cannedJobDetailShapeDiagnosticLogged.has(shopId)) return;
   _cannedJobDetailShapeDiagnosticLogged.add(shopId);
+  // Task #406: NEVER let the diagnostic itself be the reason a wrong-
+  // endpoint regression hides. The original implementation wrapped
+  // everything in a try/catch with an empty catch block, so when the
+  // detailed shape inspection threw on edge cases (e.g. raw === undefined
+  // when fetch failed at the HTTP layer), no log line was emitted at
+  // all — silently consuming the very signal it was built to surface.
+  // Now we always emit at least a minimal line; the rich shape line is
+  // best-effort on top.
+  let topKeys: string[] = [];
+  let innerKeys: string[] = [];
+  let linesShape = "n/a";
+  let hasHeader = false;
+  let headerTitle = false;
+  let fallbackTitleField = false;
+  let shapeError: string | undefined;
   try {
-    const topKeys = raw && typeof raw === "object" ? Object.keys(raw) : [];
+    topKeys = raw && typeof raw === "object" ? Object.keys(raw) : [];
     const inner = unwrapServicePackageTemplate(raw);
-    const innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
+    innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
     const linesRaw = inner?.ServicePackageLines;
-    const linesShape = Array.isArray(linesRaw)
+    linesShape = Array.isArray(linesRaw)
       ? `array(len=${linesRaw.length})`
       : Array.isArray(linesRaw?.ItemCollection)
         ? `ItemCollection(len=${linesRaw.ItemCollection.length})`
         : linesRaw === undefined
           ? "undefined"
           : typeof linesRaw;
-    console.log(
-      `[Protractor:CannedJobDetail] shop=${shopId} cannedJobId=${cannedJobId} ` +
-        `httpOk=${httpOk} httpError=${httpError ? httpError.slice(0, 80) : "none"} ` +
-        `topKeys=[${topKeys.join(",")}] innerKeys=[${innerKeys.join(",")}] ` +
-        `hasHeader=${!!inner?.ServicePackageHeader} ` +
-        `headerTitle=${!!inner?.ServicePackageHeader?.Title} ` +
-        `linesShape=${linesShape} fallbackTitleField=${!!inner?.Title}`,
-    );
-  } catch {
-    // Diagnostic must never throw.
+    hasHeader = !!inner?.ServicePackageHeader;
+    headerTitle = !!inner?.ServicePackageHeader?.Title;
+    fallbackTitleField = !!inner?.Title;
+  } catch (err: any) {
+    shapeError = String(err?.message || err).slice(0, 80);
   }
+  console.log(
+    `[Protractor:CannedJobDetail] shop=${shopId} cannedJobId=${cannedJobId} ` +
+      `httpOk=${httpOk} httpError=${httpError ? httpError.slice(0, 80) : "none"} ` +
+      `dataPresent=${raw !== undefined && raw !== null} ` +
+      `topKeys=[${topKeys.join(",")}] innerKeys=[${innerKeys.join(",")}] ` +
+      `hasHeader=${hasHeader} headerTitle=${headerTitle} ` +
+      `linesShape=${linesShape} fallbackTitleField=${fallbackTitleField}` +
+      (shapeError ? ` shapeError=${shapeError}` : ""),
+  );
+}
+
+// Same always-log-on-first-call diagnostic for the v1.0 / template-fallback
+// path (task #406). Mirrors the canned-job detail diagnostic above so the
+// next wrong-endpoint regression on EITHER dispatch path is visible in
+// BetterStack on the very first detail call per shop per process.
+const _cannedJobDetailViaTemplateShapeDiagnosticLogged = new Set<number>();
+function logCannedJobDetailViaTemplateShapeDiagnostic(
+  shopId: number,
+  templateId: string,
+  raw: any,
+  httpOk: boolean,
+  httpError?: string,
+): void {
+  if (_cannedJobDetailViaTemplateShapeDiagnosticLogged.has(shopId)) return;
+  _cannedJobDetailViaTemplateShapeDiagnosticLogged.add(shopId);
+  let topKeys: string[] = [];
+  let innerKeys: string[] = [];
+  let linesShape = "n/a";
+  let hasHeader = false;
+  let headerTitle = false;
+  let fallbackTitleField = false;
+  let shapeError: string | undefined;
+  try {
+    topKeys = raw && typeof raw === "object" ? Object.keys(raw) : [];
+    const inner = unwrapServicePackageTemplate(raw);
+    innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
+    const linesRaw = inner?.ServicePackageLines;
+    linesShape = Array.isArray(linesRaw)
+      ? `array(len=${linesRaw.length})`
+      : Array.isArray(linesRaw?.ItemCollection)
+        ? `ItemCollection(len=${linesRaw.ItemCollection.length})`
+        : linesRaw === undefined
+          ? "undefined"
+          : typeof linesRaw;
+    hasHeader = !!inner?.ServicePackageHeader;
+    headerTitle = !!inner?.ServicePackageHeader?.Title;
+    fallbackTitleField = !!inner?.Title;
+  } catch (err: any) {
+    shapeError = String(err?.message || err).slice(0, 80);
+  }
+  console.log(
+    `[Protractor:CannedJobDetailViaTemplate] shop=${shopId} templateId=${templateId} ` +
+      `httpOk=${httpOk} httpError=${httpError ? httpError.slice(0, 80) : "none"} ` +
+      `dataPresent=${raw !== undefined && raw !== null} ` +
+      `topKeys=[${topKeys.join(",")}] innerKeys=[${innerKeys.join(",")}] ` +
+      `hasHeader=${hasHeader} headerTitle=${headerTitle} ` +
+      `linesShape=${linesShape} fallbackTitleField=${fallbackTitleField}` +
+      (shapeError ? ` shapeError=${shapeError}` : ""),
+  );
 }
 
 export async function fetchCannedJobDetail(
@@ -3023,6 +3118,156 @@ export async function fetchCannedJobDetail(
   }
 
   return { ok: false, error: `Canned job detail not found for ID ${cannedJobId}` };
+}
+
+// ---------------------------------------------------------------------------
+// Canned-job detail via template (task #406).
+//
+// For Protractor accounts on the v1.0 / template-fallback path (e.g. shop
+// 116), `GET /CannedJob/` returns HTTP 404 entirely, so `fetchCannedJobs`
+// falls back to `GET /ServicePackageTemplate` — which returns IDs in the
+// ServicePackageTemplate ID space, not the CannedJob ID space. The
+// canonical documented endpoint for those IDs is `GET /ServicePackageTemplate/{id}`
+// (no `/Read/` segment). Calling `/ServicePackage/CannedJob/{id}` with
+// template IDs (what task #405 wired in) silently 404s for every item,
+// which is what dropped shop 116 to 0/693 enriched again on 2026-05-09.
+//
+// This fetcher is the v1.0 / template-fallback counterpart to
+// `fetchCannedJobDetail`. Cache lives in `protractor_template_cache` —
+// same collection as `fetchServicePackageTemplateDetail`, since this is
+// exactly the documented use case for that cache — but with a distinct
+// cacheKey prefix so the two callers can't poison each other's results.
+// ---------------------------------------------------------------------------
+
+const CANNED_JOB_DETAIL_VIA_TEMPLATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const CANNED_JOB_DETAIL_VIA_TEMPLATE_404_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
+export async function fetchCannedJobDetailViaTemplate(
+  shopId: number,
+  templateId: string,
+): Promise<{ ok: boolean; detail?: ProtractorServicePackageTemplate; error?: string; cached?: boolean }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const db = await getDb();
+  // Distinct cacheKey prefix so this can't collide with
+  // `fetchServicePackageTemplateDetail` (which hits the undocumented
+  // `/ServicePackageTemplate/Read/{id}` and uses prefix
+  // `protractor_template_`). Same collection, different namespace.
+  const cacheKey = `protractor_template_get_${shopId}_${templateId}`;
+
+  const cached = await db.collection("protractor_template_cache").findOne({
+    cacheKey,
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (cached) {
+    if (cached.is404) {
+      return { ok: false, error: "Template not found (cached 404)", cached: true };
+    }
+    if (cached.template) {
+      return { ok: true, detail: cached.template, cached: true };
+    }
+  }
+
+  const result = await protractorFetch<any>(
+    // Bare canonical endpoint per the official Protractor Integration
+    // Web Service docs — NO `/Read/` segment. Task #406 regression guard
+    // in tests/protractor-canned-jobs-filter.smoke.ts pins this URL.
+    `/ServicePackageTemplate/${templateId}`,
+    config,
+    {},
+    0,
+    shopId,
+  );
+
+  // Always log first-call shape per shop per process (success OR failure).
+  // Same never-swallow guarantees as the canned-job detail diagnostic.
+  logCannedJobDetailViaTemplateShapeDiagnostic(
+    shopId,
+    templateId,
+    result.data,
+    result.ok,
+    result.error,
+  );
+
+  if (result.ok && result.data) {
+    const inner = unwrapServicePackageTemplate(result.data);
+    const content = extractServicePackageTemplateContent(inner);
+
+    if (inner && content.id) {
+      const normalized: ProtractorServicePackageTemplate = {
+        ...inner,
+        ID: content.id,
+        ServicePackageHeader: {
+          ...(inner.ServicePackageHeader || {}),
+          Title: inner.ServicePackageHeader?.Title || content.title,
+          Description: inner.ServicePackageHeader?.Description || content.description,
+        },
+        ServicePackageLines: {
+          ItemCollection:
+            inner.ServicePackageLines?.ItemCollection ?? content.lines,
+        },
+      };
+
+      await db.collection("protractor_template_cache").updateOne(
+        { cacheKey },
+        {
+          $set: {
+            cacheKey,
+            template: normalized,
+            is404: false,
+            shopId,
+            templateId,
+            fetchedAt: new Date(),
+            expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_CACHE_TTL_MS),
+          },
+        },
+        { upsert: true },
+      );
+      return { ok: true, detail: normalized };
+    }
+
+    // Parsed-but-empty: HTTP 200 with body but no id/title/lines we
+    // recognize. Loud (console.error) so the syslog drain catches it.
+    try {
+      const topKeys = Object.keys(result.data || {});
+      const innerKeys = inner && typeof inner === "object" ? Object.keys(inner) : [];
+      console.error(
+        `[Protractor] WARN: canned-job-via-template detail parse failed for shop=${shopId} ` +
+          `templateId=${templateId} — got 200 OK but couldn't extract ` +
+          `id/title/lines. topKeys=[${topKeys.join(",")}] ` +
+          `innerKeys=[${innerKeys.join(",")}] hadInner=${!!inner} ` +
+          `hadId=${!!content.id} hadTitle=${content.title.length > 0} ` +
+          `hadLines=${content.lines.length > 0}`,
+      );
+    } catch {
+      // Diagnostic must never throw.
+    }
+  }
+
+  const is404 = result.error?.includes("404") || result.error?.includes("not found");
+  if (is404) {
+    await db.collection("protractor_template_cache").updateOne(
+      { cacheKey },
+      {
+        $set: {
+          cacheKey,
+          is404: true,
+          template: null,
+          shopId,
+          templateId,
+          fetchedAt: new Date(),
+          expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_404_TTL_MS),
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  return { ok: false, error: `Template detail not found for ID ${templateId}` };
 }
 
 // One-shot, idempotent cleanup for task #405: the OLD enrichment path
@@ -3853,31 +4098,46 @@ export async function enrichCannedJobsWithDetails(
   options?: { 
     onProgress?: (completed: number, total: number, kept: number) => void;
     filterEmptyTitles?: boolean;
+    // Task #406: which list endpoint produced `jobs`. Drives detail-
+    // endpoint dispatch — see ProtractorCannedJobsListSource. Defaults
+    // to "cannedjob" to preserve task #405 behavior for callers that
+    // haven't been updated yet (which only matters for shops whose list
+    // came from `/CannedJob/` — the path that already worked). The
+    // smoke test in tests/protractor-canned-jobs-filter.smoke.ts pins
+    // both dispatch branches.
+    listSource?: ProtractorCannedJobsListSource;
   }
 ): Promise<ProtractorCannedJob[]> {
   const enrichedJobs: ProtractorCannedJob[] = [];
   const batchSize = 50; // Process 50 at a time (~50/sec rate limit)
   const filterEmpty = options?.filterEmptyTitles ?? true;
   const useStrictCodeFilter = filterEmpty && (await shouldUseStrictCannedJobFilter(shopId));
+  const listSource: ProtractorCannedJobsListSource = options?.listSource ?? "cannedjob";
 
   console.log(
     `[Protractor] Enriching ${jobs.length} jobs with details for shop ${shopId} ` +
-    `(filter empty titles: ${filterEmpty}, strict code filter: ${useStrictCodeFilter})...`,
+    `(filter empty titles: ${filterEmpty}, strict code filter: ${useStrictCodeFilter}, ` +
+    `listSource: ${listSource})...`,
   );
-  
+
   for (let i = 0; i < jobs.length; i += batchSize) {
     const batch = jobs.slice(i, i + batchSize);
     
     const batchResults = await Promise.all(
       batch.map(async (job) => {
-        // Task #405: must be `/ServicePackage/CannedJob/{id}`
-        // (fetchCannedJobDetail), NOT `/ServicePackageTemplate/Read/{id}`
-        // (fetchServicePackageTemplateDetail). Canned-job IDs and
-        // service-package-template IDs are different ID spaces — the
-        // wrong endpoint silently 404'd for shop 116 across all 693 jobs.
-        // The regression smoke test guards this line — do not change
+        // Task #406: dispatch on the list-endpoint source.
+        //   - "cannedjob"               → /ServicePackage/CannedJob/{id}
+        //                                  via fetchCannedJobDetail (task #405).
+        //   - "servicepackagetemplate"  → bare /ServicePackageTemplate/{id}
+        //                                  via fetchCannedJobDetailViaTemplate.
+        // Picking the wrong branch silently 404s for every item (shop
+        // 116 had this happen in BOTH directions back-to-back). The
+        // regression smoke test pins both branches — do not change
         // without updating tests/protractor-canned-jobs-filter.smoke.ts.
-        const detailResult = await fetchCannedJobDetail(shopId, job.ID);
+        const detailResult =
+          listSource === "servicepackagetemplate"
+            ? await fetchCannedJobDetailViaTemplate(shopId, job.ID)
+            : await fetchCannedJobDetail(shopId, job.ID);
         if (detailResult.ok && detailResult.detail) {
           // Use the alt-shape-aware extractor so shops that return
           // titles/lines under non-canonical field names still get
@@ -4016,8 +4276,11 @@ export async function fetchCannedJobsWithCache(
     );
 
     // Run enrichment in background (fire and forget) - don't block the response
-    console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs...`);
-    enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, { filterEmptyTitles: true })
+    console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs (source: ${listResult.source})...`);
+    enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, {
+      filterEmptyTitles: true,
+      listSource: listResult.source,
+    })
       .then(async (enrichedJobs) => {
         const enrichedNow = new Date();
         await db.collection("protractor_canned_jobs").updateOne(
@@ -4063,7 +4326,7 @@ export async function fetchCannedJobsWithCache(
     const enrichedJobs = await enrichCannedJobsWithDetails(
       shopId,
       listResult.cannedJobs,
-      { filterEmptyTitles: true }
+      { filterEmptyTitles: true, listSource: listResult.source }
     );
 
     const now = new Date();

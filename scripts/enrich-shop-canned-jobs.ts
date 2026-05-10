@@ -58,11 +58,17 @@ async function main() {
     process.exit(1);
   }
   const total = listResult.cannedJobs.length;
-  console.log(`[enrich-shop-canned-jobs] Fetched ${total} jobs from /CannedJob/, starting enrichment...`);
+  console.log(
+    `[enrich-shop-canned-jobs] Fetched ${total} jobs (source: ${listResult.source}), starting enrichment...`,
+  );
 
-  // Step 2: enrich (uses the new /ServicePackage/CannedJob/{id} path).
+  // Step 2: enrich. Dispatch on listSource per task #406:
+  //   - "cannedjob"              → /ServicePackage/CannedJob/{id}
+  //   - "servicepackagetemplate" → bare /ServicePackageTemplate/{id}
+  //                                (v1.0 / fallback shops like 116)
   const enriched = await enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, {
     filterEmptyTitles: true,
+    listSource: listResult.source,
   });
 
   // Step 3: persist with source: "enriched" so fetchCannedJobsWithCache
