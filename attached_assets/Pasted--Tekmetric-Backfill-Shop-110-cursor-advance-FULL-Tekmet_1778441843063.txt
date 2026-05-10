@@ -1,0 +1,787 @@
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=1576ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:00.684Z] CHUNK shop=110 #8 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2022-05-29 to 2022-08-27: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 110: 2022-02-28 to 2022-05-29 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 110 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 110: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=1084ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:01.882Z] CHUNK shop=110 #9 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2022-02-28 to 2022-05-29: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 110: 2021-11-30 to 2022-02-28 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 110 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 110: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=991ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:02.987Z] CHUNK shop=110 #10 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2021-11-30 to 2022-02-28: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 110: 2021-09-01 to 2021-11-30 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 110 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 110: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=989ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:04.090Z] CHUNK shop=110 #11 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2021-09-01 to 2021-11-30: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 110: 2021-06-03 to 2021-09-01 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 110 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 110: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=965ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:05.168Z] CHUNK shop=110 #12 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2021-06-03 to 2021-09-01: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 110: 2021-05-10 to 2021-06-03 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[2026-05-10T19:33:05.618Z] HEARTBEAT done=0/52 complete=0 error=0 elapsed=11.6min
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 110 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 110: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 110: cursor advance FULL
+[Tekmetric Backfill] Shop 110: chunk metrics duration=1728ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[Tekmetric Backfill] Shop 110: Marked tekmetricBackfillComplete=true
+[2026-05-10T19:33:07.087Z] CHUNK shop=110 #13 jobs=0 skipped=0 complete=true elapsed=1.9s msg="2021-05-10 to 2021-06-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T19:33:07.087Z] DONE shop=110 (2nd Mile Repair) chunks=13 jobs=0 skipped=783
+[2026-05-10T19:33:07.087Z] START shop=105 (Mangrove Auto LLC) tek=17028
+[Tekmetric Backfill] Shop 105: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=932ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:08.145Z] CHUNK shop=105 #1 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2025-08-11 to 2025-11-09: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=705ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:08.975Z] CHUNK shop=105 #2 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2025-05-13 to 2025-08-11: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2025-02-12 to 2025-05-13 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=713ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:09.813Z] CHUNK shop=105 #3 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2025-02-12 to 2025-05-13: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2024-11-14 to 2025-02-12 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=706ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:10.645Z] CHUNK shop=105 #4 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2024-11-14 to 2025-02-12: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2024-08-16 to 2024-11-14 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=915ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:11.686Z] CHUNK shop=105 #5 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2024-08-16 to 2024-11-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2024-05-18 to 2024-08-16 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=704ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:12.516Z] CHUNK shop=105 #6 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2024-05-18 to 2024-08-16: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2024-02-18 to 2024-05-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=1039ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:13.681Z] CHUNK shop=105 #7 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2024-02-18 to 2024-05-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2023-11-20 to 2024-02-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=887ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:14.693Z] CHUNK shop=105 #8 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-11-20 to 2024-02-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2023-08-22 to 2023-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=713ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:15.532Z] CHUNK shop=105 #9 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2023-08-22 to 2023-11-20: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2023-05-24 to 2023-08-22 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=1016ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:16.674Z] CHUNK shop=105 #10 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2023-05-24 to 2023-08-22: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2023-02-23 to 2023-05-24 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=868ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:17.606Z] CHUNK shop=105 #11 jobs=0 skipped=0 complete=false elapsed=0.9s msg="2023-02-23 to 2023-05-24: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2022-11-25 to 2023-02-23 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=951ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:18.621Z] CHUNK shop=105 #12 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-11-25 to 2023-02-23: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2022-08-27 to 2022-11-25 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=944ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:19.691Z] CHUNK shop=105 #13 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2022-08-27 to 2022-11-25: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2022-05-29 to 2022-08-27 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=854ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:20.671Z] CHUNK shop=105 #14 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-05-29 to 2022-08-27: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2022-02-28 to 2022-05-29 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=1026ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:21.822Z] CHUNK shop=105 #15 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2022-02-28 to 2022-05-29: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2021-11-30 to 2022-02-28 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=703ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:22.652Z] CHUNK shop=105 #16 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2021-11-30 to 2022-02-28: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2021-09-01 to 2021-11-30 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=864ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:23.642Z] CHUNK shop=105 #17 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-09-01 to 2021-11-30: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2021-06-03 to 2021-09-01 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=871ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:24.640Z] CHUNK shop=105 #18 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-06-03 to 2021-09-01: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 105: 2021-05-10 to 2021-06-03 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 105 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 105: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 105: cursor advance FULL
+[Tekmetric Backfill] Shop 105: chunk metrics duration=1277ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[Tekmetric Backfill] Shop 105: Marked tekmetricBackfillComplete=true
+[2026-05-10T19:33:26.107Z] CHUNK shop=105 #19 jobs=0 skipped=0 complete=true elapsed=1.5s msg="2021-05-10 to 2021-06-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T19:33:26.107Z] DONE shop=105 (Mangrove Auto LLC) chunks=19 jobs=0 skipped=0
+[2026-05-10T19:33:26.107Z] START shop=111 (Commander Services) tek=17779
+[Tekmetric Backfill] Shop 111: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1448ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:27.681Z] CHUNK shop=111 #1 jobs=0 skipped=0 complete=false elapsed=1.6s msg="2025-08-11 to 2025-11-09: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1088ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:28.896Z] CHUNK shop=111 #2 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2025-05-13 to 2025-08-11: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2025-02-12 to 2025-05-13 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=952ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:29.977Z] CHUNK shop=111 #3 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2025-02-12 to 2025-05-13: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2024-11-14 to 2025-02-12 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1548ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:31.650Z] CHUNK shop=111 #4 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2024-11-14 to 2025-02-12: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2024-08-16 to 2024-11-14 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1022ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:32.797Z] CHUNK shop=111 #5 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2024-08-16 to 2024-11-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2024-05-18 to 2024-08-16 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=959ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:33.881Z] CHUNK shop=111 #6 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2024-05-18 to 2024-08-16: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2024-02-18 to 2024-05-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=953ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:34.959Z] CHUNK shop=111 #7 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2024-02-18 to 2024-05-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2023-11-20 to 2024-02-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[2026-05-10T19:33:35.619Z] HEARTBEAT done=2/52 complete=2 error=0 elapsed=12.1min
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1573ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:36.658Z] CHUNK shop=111 #8 jobs=0 skipped=0 complete=false elapsed=1.7s msg="2023-11-20 to 2024-02-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2023-08-22 to 2023-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1136ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:37.858Z] CHUNK shop=111 #9 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2023-08-22 to 2023-11-20: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2023-05-24 to 2023-08-22 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=898ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:38.820Z] CHUNK shop=111 #10 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-05-24 to 2023-08-22: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2023-02-23 to 2023-05-24 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=893ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:39.834Z] CHUNK shop=111 #11 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-02-23 to 2023-05-24: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2022-11-25 to 2023-02-23 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1059ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:41.014Z] CHUNK shop=111 #12 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2022-11-25 to 2023-02-23: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2022-08-27 to 2022-11-25 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=940ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:42.075Z] CHUNK shop=111 #13 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2022-08-27 to 2022-11-25: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2022-05-29 to 2022-08-27 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=934ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:43.132Z] CHUNK shop=111 #14 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2022-05-29 to 2022-08-27: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2022-02-28 to 2022-05-29 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=950ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:44.203Z] CHUNK shop=111 #15 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2022-02-28 to 2022-05-29: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2021-11-30 to 2022-02-28 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=940ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:45.263Z] CHUNK shop=111 #16 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2021-11-30 to 2022-02-28: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2021-09-01 to 2021-11-30 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1273ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:46.657Z] CHUNK shop=111 #17 jobs=0 skipped=0 complete=false elapsed=1.4s msg="2021-09-01 to 2021-11-30: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2021-06-03 to 2021-09-01 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1120ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:47.898Z] CHUNK shop=111 #18 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2021-06-03 to 2021-09-01: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 111: 2021-05-10 to 2021-06-03 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 111: bulk jobs pre-pass — pages=1 ros=0 jobs=0 ~apiCallsSaved=0
+[Tekmetric Backfill] Shop 111 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 111: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 111: cursor advance FULL
+[Tekmetric Backfill] Shop 111: chunk metrics duration=1226ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[Tekmetric Backfill] Shop 111: Marked tekmetricBackfillComplete=true
+[2026-05-10T19:33:49.295Z] CHUNK shop=111 #19 jobs=0 skipped=0 complete=true elapsed=1.4s msg="2021-05-10 to 2021-06-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[2026-05-10T19:33:49.295Z] DONE shop=111 (Commander Services) chunks=19 jobs=0 skipped=0
+[2026-05-10T19:33:49.295Z] START shop=129 (Downtown Automotive Center) tek=17959
+[Tekmetric Backfill] Shop 129: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=753ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:50.106Z] CHUNK shop=129 #1 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2025-08-11 to 2025-11-09: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=760ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:50.924Z] CHUNK shop=129 #2 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2025-05-13 to 2025-08-11: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2025-02-12 to 2025-05-13 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=754ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:51.737Z] CHUNK shop=129 #3 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2025-02-12 to 2025-05-13: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2024-11-14 to 2025-02-12 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=754ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:52.549Z] CHUNK shop=129 #4 jobs=0 skipped=0 complete=false elapsed=0.8s msg="2024-11-14 to 2025-02-12: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2024-08-16 to 2024-11-14 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=1048ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:53.655Z] CHUNK shop=129 #5 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2024-08-16 to 2024-11-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2024-05-18 to 2024-08-16 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=933ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:54.645Z] CHUNK shop=129 #6 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2024-05-18 to 2024-08-16: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2024-02-18 to 2024-05-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=984ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:55.689Z] CHUNK shop=129 #7 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2024-02-18 to 2024-05-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2023-11-20 to 2024-02-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=915ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:56.662Z] CHUNK shop=129 #8 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-11-20 to 2024-02-18: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2023-08-22 to 2023-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=939ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:57.659Z] CHUNK shop=129 #9 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-08-22 to 2023-11-20: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2023-05-24 to 2023-08-22 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=973ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:58.692Z] CHUNK shop=129 #10 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-05-24 to 2023-08-22: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2023-02-23 to 2023-05-24 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=894ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:33:59.644Z] CHUNK shop=129 #11 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2023-02-23 to 2023-05-24: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2022-11-25 to 2023-02-23 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=992ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:00.695Z] CHUNK shop=129 #12 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2022-11-25 to 2023-02-23: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2022-08-27 to 2022-11-25 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=949ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:01.703Z] CHUNK shop=129 #13 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-08-27 to 2022-11-25: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2022-05-29 to 2022-08-27 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=958ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:02.720Z] CHUNK shop=129 #14 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-05-29 to 2022-08-27: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2022-02-28 to 2022-05-29 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=910ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:03.689Z] CHUNK shop=129 #15 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-02-28 to 2022-05-29: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2021-11-30 to 2022-02-28 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=925ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:04.673Z] CHUNK shop=129 #16 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-11-30 to 2022-02-28: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2021-09-01 to 2021-11-30 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[2026-05-10T19:34:05.620Z] HEARTBEAT done=3/52 complete=3 error=0 elapsed=12.6min
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=951ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:05.737Z] CHUNK shop=129 #17 jobs=0 skipped=0 complete=false elapsed=1.1s msg="2021-09-01 to 2021-11-30: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2021-06-03 to 2021-09-01 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=749ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:06.599Z] CHUNK shop=129 #18 jobs=0 skipped=0 complete=false elapsed=0.9s msg="2021-06-03 to 2021-09-01: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: 2021-05-10 to 2021-06-03 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 129 page 1/0: 0 ROs
+[Tekmetric Backfill] Shop 129: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+[Tekmetric Backfill] Shop 129: COVERAGE LOW — Tekmetric reports 20060 ROs but only 21 ROs indexed (0.1%). Auto-flagging for full-page reindex.
+[Tekmetric Backfill] Shop 129: cursor advance FULL
+[Tekmetric Backfill] Shop 129: chunk metrics duration=1459ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+[2026-05-10T19:34:08.172Z] CHUNK shop=129 #19 jobs=0 skipped=0 complete=false elapsed=1.6s msg="2021-05-10 to 2021-06-03: 0 jobs indexed, 0 unchanged, 0 normalized"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.283Z] CHUNK shop=129 #20 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.339Z] CHUNK shop=129 #21 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.395Z] CHUNK shop=129 #22 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.452Z] CHUNK shop=129 #23 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.508Z] CHUNK shop=129 #24 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.564Z] CHUNK shop=129 #25 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.621Z] CHUNK shop=129 #26 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.677Z] CHUNK shop=129 #27 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.734Z] CHUNK shop=129 #28 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.790Z] CHUNK shop=129 #29 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.846Z] CHUNK shop=129 #30 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.902Z] CHUNK shop=129 #31 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:08.958Z] CHUNK shop=129 #32 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.015Z] CHUNK shop=129 #33 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.072Z] CHUNK shop=129 #34 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.129Z] CHUNK shop=129 #35 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.188Z] CHUNK shop=129 #36 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.249Z] CHUNK shop=129 #37 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.306Z] CHUNK shop=129 #38 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.362Z] CHUNK shop=129 #39 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.419Z] CHUNK shop=129 #40 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.475Z] CHUNK shop=129 #41 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.531Z] CHUNK shop=129 #42 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.588Z] CHUNK shop=129 #43 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.644Z] CHUNK shop=129 #44 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.700Z] CHUNK shop=129 #45 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.757Z] CHUNK shop=129 #46 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.813Z] CHUNK shop=129 #47 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.869Z] CHUNK shop=129 #48 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.926Z] CHUNK shop=129 #49 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:09.982Z] CHUNK shop=129 #50 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.038Z] CHUNK shop=129 #51 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.095Z] CHUNK shop=129 #52 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.151Z] CHUNK shop=129 #53 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.207Z] CHUNK shop=129 #54 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.263Z] CHUNK shop=129 #55 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.319Z] CHUNK shop=129 #56 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.379Z] CHUNK shop=129 #57 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.436Z] CHUNK shop=129 #58 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.492Z] CHUNK shop=129 #59 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.548Z] CHUNK shop=129 #60 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.604Z] CHUNK shop=129 #61 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.661Z] CHUNK shop=129 #62 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.717Z] CHUNK shop=129 #63 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.773Z] CHUNK shop=129 #64 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.830Z] CHUNK shop=129 #65 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.886Z] CHUNK shop=129 #66 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:10.944Z] CHUNK shop=129 #67 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.002Z] CHUNK shop=129 #68 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.058Z] CHUNK shop=129 #69 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.114Z] CHUNK shop=129 #70 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.170Z] CHUNK shop=129 #71 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.227Z] CHUNK shop=129 #72 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.283Z] CHUNK shop=129 #73 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.339Z] CHUNK shop=129 #74 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.395Z] CHUNK shop=129 #75 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.451Z] CHUNK shop=129 #76 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.507Z] CHUNK shop=129 #77 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.564Z] CHUNK shop=129 #78 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.620Z] CHUNK shop=129 #79 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.676Z] CHUNK shop=129 #80 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.732Z] CHUNK shop=129 #81 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.788Z] CHUNK shop=129 #82 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.845Z] CHUNK shop=129 #83 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.902Z] CHUNK shop=129 #84 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:11.958Z] CHUNK shop=129 #85 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.014Z] CHUNK shop=129 #86 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.071Z] CHUNK shop=129 #87 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.127Z] CHUNK shop=129 #88 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.184Z] CHUNK shop=129 #89 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.240Z] CHUNK shop=129 #90 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.296Z] CHUNK shop=129 #91 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.353Z] CHUNK shop=129 #92 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.409Z] CHUNK shop=129 #93 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.465Z] CHUNK shop=129 #94 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.521Z] CHUNK shop=129 #95 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.578Z] CHUNK shop=129 #96 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.634Z] CHUNK shop=129 #97 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.690Z] CHUNK shop=129 #98 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.747Z] CHUNK shop=129 #99 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.803Z] CHUNK shop=129 #100 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.860Z] CHUNK shop=129 #101 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.917Z] CHUNK shop=129 #102 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:12.976Z] CHUNK shop=129 #103 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.033Z] CHUNK shop=129 #104 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.089Z] CHUNK shop=129 #105 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.145Z] CHUNK shop=129 #106 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.201Z] CHUNK shop=129 #107 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.258Z] CHUNK shop=129 #108 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.314Z] CHUNK shop=129 #109 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.370Z] CHUNK shop=129 #110 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.427Z] CHUNK shop=129 #111 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.483Z] CHUNK shop=129 #112 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.539Z] CHUNK shop=129 #113 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.596Z] CHUNK shop=129 #114 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.652Z] CHUNK shop=129 #115 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.708Z] CHUNK shop=129 #116 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.764Z] CHUNK shop=129 #117 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.821Z] CHUNK shop=129 #118 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.877Z] CHUNK shop=129 #119 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.933Z] CHUNK shop=129 #120 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:13.990Z] CHUNK shop=129 #121 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.046Z] CHUNK shop=129 #122 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.102Z] CHUNK shop=129 #123 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.158Z] CHUNK shop=129 #124 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.215Z] CHUNK shop=129 #125 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.271Z] CHUNK shop=129 #126 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.327Z] CHUNK shop=129 #127 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.384Z] CHUNK shop=129 #128 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.440Z] CHUNK shop=129 #129 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.497Z] CHUNK shop=129 #130 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.553Z] CHUNK shop=129 #131 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.612Z] CHUNK shop=129 #132 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.669Z] CHUNK shop=129 #133 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.725Z] CHUNK shop=129 #134 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.781Z] CHUNK shop=129 #135 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.837Z] CHUNK shop=129 #136 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.893Z] CHUNK shop=129 #137 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:14.950Z] CHUNK shop=129 #138 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.006Z] CHUNK shop=129 #139 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.063Z] CHUNK shop=129 #140 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.119Z] CHUNK shop=129 #141 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.176Z] CHUNK shop=129 #142 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.232Z] CHUNK shop=129 #143 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.288Z] CHUNK shop=129 #144 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.344Z] CHUNK shop=129 #145 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.400Z] CHUNK shop=129 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.457Z] CHUNK shop=129 #147 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.514Z] CHUNK shop=129 #148 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.570Z] CHUNK shop=129 #149 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.627Z] CHUNK shop=129 #150 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.684Z] CHUNK shop=129 #151 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.740Z] CHUNK shop=129 #152 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.797Z] CHUNK shop=129 #153 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.853Z] CHUNK shop=129 #154 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.909Z] CHUNK shop=129 #155 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:15.965Z] CHUNK shop=129 #156 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.022Z] CHUNK shop=129 #157 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.078Z] CHUNK shop=129 #158 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.134Z] CHUNK shop=129 #159 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.191Z] CHUNK shop=129 #160 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.247Z] CHUNK shop=129 #161 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.304Z] CHUNK shop=129 #162 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.360Z] CHUNK shop=129 #163 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.416Z] CHUNK shop=129 #164 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.472Z] CHUNK shop=129 #165 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.529Z] CHUNK shop=129 #166 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.585Z] CHUNK shop=129 #167 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.641Z] CHUNK shop=129 #168 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.697Z] CHUNK shop=129 #169 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.754Z] CHUNK shop=129 #170 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.810Z] CHUNK shop=129 #171 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.866Z] CHUNK shop=129 #172 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.922Z] CHUNK shop=129 #173 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:16.979Z] CHUNK shop=129 #174 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.035Z] CHUNK shop=129 #175 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.092Z] CHUNK shop=129 #176 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.149Z] CHUNK shop=129 #177 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.205Z] CHUNK shop=129 #178 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.262Z] CHUNK shop=129 #179 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.319Z] CHUNK shop=129 #180 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.375Z] CHUNK shop=129 #181 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.433Z] CHUNK shop=129 #182 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.489Z] CHUNK shop=129 #183 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.545Z] CHUNK shop=129 #184 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.602Z] CHUNK shop=129 #185 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.658Z] CHUNK shop=129 #186 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.715Z] CHUNK shop=129 #187 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.771Z] CHUNK shop=129 #188 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.827Z] CHUNK shop=129 #189 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.884Z] CHUNK shop=129 #190 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.940Z] CHUNK shop=129 #191 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:17.996Z] CHUNK shop=129 #192 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.052Z] CHUNK shop=129 #193 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.109Z] CHUNK shop=129 #194 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.165Z] CHUNK shop=129 #195 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.222Z] CHUNK shop=129 #196 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.278Z] CHUNK shop=129 #197 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.335Z] CHUNK shop=129 #198 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.391Z] CHUNK shop=129 #199 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[Tekmetric Backfill] Shop 129: deferring to full-page worker (fullPageMode=true, nextPage=0)
+[2026-05-10T19:34:18.447Z] CHUNK shop=129 #200 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+[2026-05-10T19:34:18.447Z] MAX_CHUNKS shop=129 hit safety cap of 200; will resume on next run
+[2026-05-10T19:34:18.447Z] START shop=32 (HEART Certified Auto Care) tek=469
+[Tekmetric Backfill] Shop 32: 2025-11-09 to 2026-02-07 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[2026-05-10T19:34:35.620Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=13.1min
+[2026-05-10T19:35:05.620Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=13.6min
+[PgCanonical] Postgres write failed — entity: vehicle, id: 698f40782f3b64cd6a230a48, action: update, shop: 74, pgCode: 42703, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: null, pgHint: null, causeMessage: column "aces_vehicle_id" of relation "normalized_vehicles" does not exist, error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+params: 698f40782f3b64cd6a230a48,698f2fbd1735a772dca39428,74,{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"270842629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"32701","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"243440603","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31877","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"190655629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30495","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"178545438","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30181","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"161655329","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"29455","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"109036383","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"27881","isPrimary":false}],"firstSeenAt":"2026-02-13T15:17:12.623Z","lastSeenAt":"2026-05-10T19:35:15.613Z","lastSyncedAt":"2026-05-10T19:35:15.613Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"51804d5af3bc0e0a","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},18,1GNDX03E51D297580,true,,226570,2026-05-10T19:35:15.617Z,2001,Chevrolet,Venture,Plus,,,3.4L 6Cyl GAS LA1 Naturally Aspirated,,,,,Silver,,,false,,,miles,**Vehicle master information changed from 2001 Chevrolet Venture to 2001 Chevrolet Venture Plus on 9/30/22,[],{},[],,,0,0,{"enterpriseId":"698f2fbd1735a772dca39428","shopId":74,"vin":"1GNDX03E51D297580","vinDecoded":false,"year":2001,"make":"Chevrolet","model":"Venture","submodel":"Plus","engineDescription":"3.4L 6Cyl GAS LA1 Naturally Aspirated","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"notes":"**Vehicle master information changed from 2001 Chevrolet Venture to 2001 Chevrolet Venture Plus on 9/30/22","tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f40782f3b64cd6a230a48","provenance":{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"270842629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"32701","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"243440603","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31877","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"190655629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30495","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"178545438","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30181","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"161655329","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"29455","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"109036383","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"27881","isPrimary":false}],"firstSeenAt":"2026-02-13T15:17:12.623Z","lastSeenAt":"2026-05-10T19:35:15.613Z","lastSyncedAt":"2026-05-10T19:35:15.613Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"51804d5af3bc0e0a","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":18,"createdAt":"2026-02-13T15:17:12.623Z","updatedAt":"2026-05-10T19:35:15.613Z"},2026-02-13T15:17:12.623Z,2026-05-10T19:35:15.613Z,698f2fbd1735a772dca39428,74,{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"270842629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"32701","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"243440603","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31877","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"190655629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30495","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"178545438","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30181","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"161655329","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"29455","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"109036383","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"27881","isPrimary":false}],"firstSeenAt":"2026-02-13T15:17:12.623Z","lastSeenAt":"2026-05-10T19:35:15.613Z","lastSyncedAt":"2026-05-10T19:35:15.613Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"51804d5af3bc0e0a","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},18,1GNDX03E51D297580,true,,226570,2026-05-10T19:35:15.617Z,2001,Chevrolet,Venture,Plus,,,3.4L 6Cyl GAS LA1 Naturally Aspirated,,,,,Silver,,,false,,,miles,**Vehicle master information changed from 2001 Chevrolet Venture to 2001 Chevrolet Venture Plus on 9/30/22,[],{},[],,,0,0,{"enterpriseId":"698f2fbd1735a772dca39428","shopId":74,"vin":"1GNDX03E51D297580","vinDecoded":false,"year":2001,"make":"Chevrolet","model":"Venture","submodel":"Plus","engineDescription":"3.4L 6Cyl GAS LA1 Naturally Aspirated","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"notes":"**Vehicle master information changed from 2001 Chevrolet Venture to 2001 Chevrolet Venture Plus on 9/30/22","tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f40782f3b64cd6a230a48","provenance":{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"270842629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"32701","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"243440603","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31877","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"190655629","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30495","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"178545438","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"30181","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"161655329","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"29455","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"109036383","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"27881","isPrimary":false}],"firstSeenAt":"2026-02-13T15:17:12.623Z","lastSeenAt":"2026-05-10T19:35:15.613Z","lastSyncedAt":"2026-05-10T19:35:15.613Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"51804d5af3bc0e0a","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":18,"createdAt":"2026-02-13T15:17:12.623Z","updatedAt":"2026-05-10T19:35:15.613Z"},2026-05-10T19:35:15.613Z
+[2026-05-10T19:35:35.621Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=14.1min
+[2026-05-10T19:36:05.622Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=14.6min
+[PgCanonical] Postgres write failed — entity: vehicle, id: 698f49fee281f1e8e0402982, action: update, shop: 74, pgCode: 42703, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: null, pgHint: null, causeMessage: column "aces_vehicle_id" of relation "normalized_vehicles" does not exist, error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+params: 698f49fee281f1e8e0402982,698f2fbd1735a772dca39428,74,{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"244335819","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31912","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"232387670","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31574","isPrimary":false}],"firstSeenAt":"2026-02-13T15:57:50.973Z","lastSeenAt":"2026-05-10T19:36:15.600Z","lastSyncedAt":"2026-05-10T19:36:15.600Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"dfaacbc44b2de775","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},11,1FTYR14U14PB22777,true,,300001484,2026-05-10T19:36:15.607Z,2004,Ford,Ranger,Tremor,,,3.0L 6Cyl GAS Naturally Aspirated,,,,,,cdw295,,false,,,miles,,[],{},[],,,0,0,{"enterpriseId":"698f2fbd1735a772dca39428","shopId":74,"vin":"1FTYR14U14PB22777","vinDecoded":false,"year":2004,"make":"Ford","model":"Ranger","submodel":"Tremor","engineDescription":"3.0L 6Cyl GAS Naturally Aspirated","licensePlate":"cdw295","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f49fee281f1e8e0402982","provenance":{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"244335819","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31912","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"232387670","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31574","isPrimary":false}],"firstSeenAt":"2026-02-13T15:57:50.973Z","lastSeenAt":"2026-05-10T19:36:15.600Z","lastSyncedAt":"2026-05-10T19:36:15.600Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"dfaacbc44b2de775","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":11,"createdAt":"2026-02-13T15:57:50.973Z","updatedAt":"2026-05-10T19:36:15.600Z"},2026-02-13T15:57:50.973Z,2026-05-10T19:36:15.600Z,698f2fbd1735a772dca39428,74,{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"244335819","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31912","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"232387670","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31574","isPrimary":false}],"firstSeenAt":"2026-02-13T15:57:50.973Z","lastSeenAt":"2026-05-10T19:36:15.600Z","lastSyncedAt":"2026-05-10T19:36:15.600Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"dfaacbc44b2de775","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},11,1FTYR14U14PB22777,true,,300001484,2026-05-10T19:36:15.607Z,2004,Ford,Ranger,Tremor,,,3.0L 6Cyl GAS Naturally Aspirated,,,,,,cdw295,,false,,,miles,,[],{},[],,,0,0,{"enterpriseId":"698f2fbd1735a772dca39428","shopId":74,"vin":"1FTYR14U14PB22777","vinDecoded":false,"year":2004,"make":"Ford","model":"Ranger","submodel":"Tremor","engineDescription":"3.0L 6Cyl GAS Naturally Aspirated","licensePlate":"cdw295","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f49fee281f1e8e0402982","provenance":{"sourceSystem":"tekmetric","sourceIds":[{"system":"tekmetric","idType":"repair_order_id","idValue":"244335819","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31912","isPrimary":false},{"system":"tekmetric","idType":"repair_order_id","idValue":"232387670","isPrimary":true},{"system":"tekmetric","idType":"repair_order_number","idValue":"31574","isPrimary":false}],"firstSeenAt":"2026-02-13T15:57:50.973Z","lastSeenAt":"2026-05-10T19:36:15.600Z","lastSyncedAt":"2026-05-10T19:36:15.600Z","syncRunId":"tekmetric-backfill-1778440896025","contentHash":"dfaacbc44b2de775","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":11,"createdAt":"2026-02-13T15:57:50.973Z","updatedAt":"2026-05-10T19:36:15.600Z"},2026-05-10T19:36:15.600Z
+[2026-05-10T19:36:35.622Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=15.1min
+[2026-05-10T19:37:05.623Z] HEARTBEAT done=4/52 complete=3 error=0 elapsed=15.6min
