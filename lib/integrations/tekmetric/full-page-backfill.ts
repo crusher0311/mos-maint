@@ -81,6 +81,35 @@ function isJobsPrePassEnabled(shopId: number): boolean {
   return process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS === "true";
 }
 
+// Per-endpoint env flags so we can roll out vehicles + customers
+// pre-passes independently of each other (and independently of jobs).
+// The same `TEKMETRIC_FULLPAGE_BULK_PREPASS_SHOPS` allowlist applies
+// to all three when set so a single shop can be opted into the full
+// bulk-prepass pipeline at once.
+function shopAllowlistApplies(shopId: number): { scoped: boolean; included: boolean } {
+  const scoped = (process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS_SHOPS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (scoped.length === 0) return { scoped: false, included: false };
+  return { scoped: true, included: scoped.includes(String(shopId)) };
+}
+
+function isVehiclesPrePassEnabled(shopId: number): boolean {
+  const a = shopAllowlistApplies(shopId);
+  if (a.scoped) return a.included;
+  return process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS_VEHICLES === "true";
+}
+
+function isCustomersPrePassEnabled(shopId: number): boolean {
+  const a = shopAllowlistApplies(shopId);
+  if (a.scoped) return a.included;
+  return process.env.TEKMETRIC_FULLPAGE_BULK_PREPASS_CUSTOMERS === "true";
+}
+
+const VEHICLES_PREPASS_COLLECTION = "tekmetric_vehicles_cache";
+const CUSTOMERS_PREPASS_COLLECTION = "tekmetric_customers_cache";
+
 export interface JobsPrePassResult {
   ok: boolean;
   done: boolean;
@@ -317,6 +346,321 @@ async function getPrePassJobs(
   }
 }
 
+export interface EntityPrePassResult {
+  ok: boolean;
+  done: boolean;
+  startPage: number;
+  endPage: number;
+  totalPages: number;
+  pagesProcessed: number;
+  itemsWritten: number;
+  durationMs: number;
+  error?: string;
+}
+
+/**
+ * Generic bulk-prepass for a shop-paginated Tekmetric list endpoint
+ * (currently `/vehicles` and `/customers`). Walks the endpoint with
+ * `?shop=X&page=N&size=100&sort=id&sortDirection=ASC` and upserts each
+ * item by `(shopId, <idField>)` into `collectionName`. Resumable across
+ * cron ticks via `nextPageField` / `donePageField` on the
+ * `tekmetric_backfill_progress` row.
+ *
+ * Modeled after `runJobsPrePass`. Same idempotency, same per-page
+ * progress write, same deadline-aware bail. Kept generic because the
+ * vehicle and customer paths only differ in the endpoint path, the
+ * collection name, and the progress doc field names — duplicating the
+ * 130+ lines of bookkeeping for each would be pure noise.
+ */
+async function runEntityPrePass(opts: {
+  db: any;
+  shopId: number;
+  tekmetricShopId: number;
+  deadlineMs: number;
+  endpoint: "vehicles" | "customers";
+  collectionName: string;
+  idField: "vehicleId" | "customerId";
+  nextPageField: string;
+  donePageField: string;
+  totalPagesField: string;
+  completedAtField: string;
+  lastRunAtField: string;
+  logTag: string;
+}): Promise<EntityPrePassResult> {
+  const {
+    db,
+    shopId,
+    tekmetricShopId,
+    deadlineMs,
+    endpoint,
+    collectionName,
+    idField,
+    nextPageField,
+    donePageField,
+    totalPagesField,
+    completedAtField,
+    lastRunAtField,
+    logTag,
+  } = opts;
+  const startedAt = Date.now();
+  const progress = await db
+    .collection("tekmetric_backfill_progress")
+    .findOne({ shopId });
+  const startPage: number =
+    typeof progress?.[nextPageField] === "number"
+      ? progress[nextPageField]
+      : 0;
+
+  let page = startPage;
+  let pagesProcessed = 0;
+  let totalPages = 0;
+  let itemsWritten = 0;
+  let lastError: string | null = null;
+  let reachedEnd = false;
+
+  // Same compound index as the jobs prepass: scoped by (shopId, id) so
+  // lookups don't degrade to a collection scan, and unique so re-runs
+  // upsert deterministically.
+  try {
+    await db
+      .collection(collectionName)
+      .createIndex({ shopId: 1, [idField]: 1 }, { unique: true });
+  } catch (idxErr: any) {
+    console.warn(
+      `${logTag} Shop ${shopId}: index ensure failed (continuing): ${idxErr?.message || idxErr}`,
+    );
+  }
+
+  console.log(
+    `${logTag} Shop ${shopId}: starting at page ${startPage}, max ${PREPASS_MAX_PAGES_PER_RUN} pages this run`,
+  );
+
+  while (pagesProcessed < PREPASS_MAX_PAGES_PER_RUN) {
+    if (Date.now() >= deadlineMs) {
+      console.log(
+        `${logTag} Shop ${shopId}: deadline reached at page ${page} (${pagesProcessed} pages this run)`,
+      );
+      break;
+    }
+
+    const queryParams = new URLSearchParams({
+      shop: tekmetricShopId.toString(),
+      page: page.toString(),
+      size: PREPASS_PAGE_SIZE.toString(),
+      sort: "id",
+      sortDirection: "ASC",
+    });
+
+    const result = await tekmetricRequest<{
+      content: Array<{ id: number }>;
+      totalPages: number;
+    }>(`/${endpoint}?${queryParams}`, shopId);
+
+    if (!result.ok || !result.data) {
+      lastError = result.error || `Pre-pass /${endpoint} call failed`;
+      console.error(
+        `${logTag} Shop ${shopId} page ${page} error: ${lastError}`,
+      );
+      break;
+    }
+
+    totalPages = result.data.totalPages || 0;
+    const items = result.data.content || [];
+
+    if (items.length === 0) {
+      reachedEnd = true;
+      page++;
+      pagesProcessed++;
+      break;
+    }
+
+    try {
+      const ops = items
+        .filter((it) => typeof it?.id === "number")
+        .map((it: any) => ({
+          updateOne: {
+            filter: { shopId, [idField]: it.id },
+            update: {
+              $set: {
+                [idField]: it.id,
+                shopId,
+                tekmetricShopId,
+                data: it,
+                cachedAt: new Date(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+      if (ops.length > 0) {
+        await db
+          .collection(collectionName)
+          .bulkWrite(ops, { ordered: false });
+        itemsWritten += ops.length;
+      }
+    } catch (writeErr: any) {
+      lastError = `pre-pass bulkWrite failed: ${writeErr?.message || writeErr}`;
+      console.error(
+        `${logTag} Shop ${shopId} page ${page} write error: ${lastError}`,
+      );
+      break;
+    }
+
+    page++;
+    pagesProcessed++;
+
+    await db
+      .collection("tekmetric_backfill_progress")
+      .updateOne(
+        { shopId },
+        {
+          $set: {
+            [nextPageField]: page,
+            [totalPagesField]: totalPages,
+            [lastRunAtField]: new Date(),
+          },
+        },
+      )
+      .catch(() => {});
+
+    if (totalPages > 0 && page >= totalPages) {
+      reachedEnd = true;
+      break;
+    }
+  }
+
+  const done = reachedEnd && !lastError;
+  if (done) {
+    await db
+      .collection("tekmetric_backfill_progress")
+      .updateOne(
+        { shopId },
+        {
+          $set: {
+            [donePageField]: true,
+            [completedAtField]: new Date(),
+            [nextPageField]: page,
+            [totalPagesField]: totalPages,
+          },
+        },
+      )
+      .catch(() => {});
+  }
+
+  const durationMs = Date.now() - startedAt;
+  console.log(
+    `${logTag} Shop ${shopId}: pages ${startPage}..${page - 1} of ${totalPages || "?"}, ${itemsWritten} ${endpoint} written, ${durationMs}ms${done ? " — DONE" : ""}`,
+  );
+
+  return {
+    ok: !lastError,
+    done,
+    startPage,
+    endPage: page - 1,
+    totalPages,
+    pagesProcessed,
+    itemsWritten,
+    durationMs,
+    error: lastError || undefined,
+  };
+}
+
+export async function runVehiclesPrePass(
+  db: any,
+  shopId: number,
+  tekmetricShopId: number,
+  deadlineMs: number,
+): Promise<EntityPrePassResult> {
+  return runEntityPrePass({
+    db,
+    shopId,
+    tekmetricShopId,
+    deadlineMs,
+    endpoint: "vehicles",
+    collectionName: VEHICLES_PREPASS_COLLECTION,
+    idField: "vehicleId",
+    nextPageField: "vehiclesPrePassNextPage",
+    donePageField: "vehiclesPrePassDone",
+    totalPagesField: "vehiclesPrePassTotalPages",
+    completedAtField: "vehiclesPrePassCompletedAt",
+    lastRunAtField: "lastVehiclesPrePassRunAt",
+    logTag: "[Tekmetric Vehicles Pre-Pass]",
+  });
+}
+
+export async function runCustomersPrePass(
+  db: any,
+  shopId: number,
+  tekmetricShopId: number,
+  deadlineMs: number,
+): Promise<EntityPrePassResult> {
+  return runEntityPrePass({
+    db,
+    shopId,
+    tekmetricShopId,
+    deadlineMs,
+    endpoint: "customers",
+    collectionName: CUSTOMERS_PREPASS_COLLECTION,
+    idField: "customerId",
+    nextPageField: "customersPrePassNextPage",
+    donePageField: "customersPrePassDone",
+    totalPagesField: "customersPrePassTotalPages",
+    completedAtField: "customersPrePassCompletedAt",
+    lastRunAtField: "lastCustomersPrePassRunAt",
+    logTag: "[Tekmetric Customers Pre-Pass]",
+  });
+}
+
+/**
+ * Look up a single vehicle from the bulk pre-pass cache.
+ *
+ * Same null-vs-undefined semantics as `getPrePassJobs`:
+ *   - Returns `undefined` on a query error so caller treats it as
+ *     "unknown, fall back to per-RO API".
+ *   - Returns `null` when the query succeeded but no doc exists for
+ *     that vehicle. Caller MUST decide whether the missing doc means
+ *     "vehicle was created after pre-pass walked, fall back to API"
+ *     or "this shop's pre-pass legitimately has no row" — typically
+ *     it's the former, since pre-passes only exist for shops that
+ *     opted in.
+ */
+export async function getPrePassVehicle(
+  db: any,
+  shopId: number,
+  vehicleId: number,
+): Promise<any | null | undefined> {
+  try {
+    const doc = await db
+      .collection(VEHICLES_PREPASS_COLLECTION)
+      .findOne({ shopId, vehicleId }, { projection: { data: 1, _id: 0 } });
+    return doc ? (doc.data as any) : null;
+  } catch (err: any) {
+    console.warn(
+      `[Tekmetric Vehicles Pre-Pass] getPrePassVehicle error for shop ${shopId} vehicle ${vehicleId}: ${err?.message || err}`,
+    );
+    return undefined;
+  }
+}
+
+/** See `getPrePassVehicle` for null/undefined semantics. */
+export async function getPrePassCustomer(
+  db: any,
+  shopId: number,
+  customerId: number,
+): Promise<any | null | undefined> {
+  try {
+    const doc = await db
+      .collection(CUSTOMERS_PREPASS_COLLECTION)
+      .findOne({ shopId, customerId }, { projection: { data: 1, _id: 0 } });
+    return doc ? (doc.data as any) : null;
+  } catch (err: any) {
+    console.warn(
+      `[Tekmetric Customers Pre-Pass] getPrePassCustomer error for shop ${shopId} customer ${customerId}: ${err?.message || err}`,
+    );
+    return undefined;
+  }
+}
+
 type TekmetricVehicle = {
   id: number;
   vin?: string;
@@ -487,6 +831,10 @@ export async function runFullPageBackfillChunk(
     // API calls.
     const prePassEnabled = isJobsPrePassEnabled(shopId);
     let prePassDoneForShop = !!progress?.prePassDone;
+    const vehiclesPrePassEnabled = isVehiclesPrePassEnabled(shopId);
+    let vehiclesPrePassDoneForShop = !!progress?.vehiclesPrePassDone;
+    const customersPrePassEnabled = isCustomersPrePassEnabled(shopId);
+    let customersPrePassDoneForShop = !!progress?.customersPrePassDone;
     const tickDeadlineMs = Date.now() + SOFT_DEADLINE_MS;
     if (prePassEnabled && !prePassDoneForShop) {
       const prePassResult = await runJobsPrePass(
@@ -515,8 +863,72 @@ export async function runFullPageBackfillChunk(
       }
     }
 
+    // Bulk vehicles pre-pass — same shape as the jobs pre-pass above.
+    // Independently gated so we can roll out per-endpoint. The per-RO
+    // /vehicles/{id} fan-out is the dominant remaining bottleneck on
+    // first-time backfills (50-60% miss rate against the legacy 24h
+    // TTL'd `tekmetric_vehicle_cache`); walking `/vehicles?shop=X` once
+    // drops the per-RO API budget for vehicles to ~0 for the rest of
+    // the backfill.
+    if (vehiclesPrePassEnabled && !vehiclesPrePassDoneForShop) {
+      const vRes = await runVehiclesPrePass(
+        db,
+        shopId,
+        tekmetricShopId,
+        tickDeadlineMs,
+      );
+      vehiclesPrePassDoneForShop = vRes.done;
+      if (!vRes.done) {
+        return {
+          ok: vRes.ok,
+          complete: false,
+          pagesProcessed: 0,
+          startPage,
+          endPage: startPage - 1,
+          totalPages: 0,
+          rosFetched: 0,
+          jobsIndexed: 0,
+          jobsSkipped: 0,
+          normalizedCount: 0,
+          message: `vehicles pre-pass in progress: page ${vRes.endPage + 1} of ${vRes.totalPages || "?"}, ${vRes.itemsWritten} vehicles written this tick`,
+          error: vRes.error,
+        };
+      }
+    }
+
+    if (customersPrePassEnabled && !customersPrePassDoneForShop) {
+      const cRes = await runCustomersPrePass(
+        db,
+        shopId,
+        tekmetricShopId,
+        tickDeadlineMs,
+      );
+      customersPrePassDoneForShop = cRes.done;
+      if (!cRes.done) {
+        return {
+          ok: cRes.ok,
+          complete: false,
+          pagesProcessed: 0,
+          startPage,
+          endPage: startPage - 1,
+          totalPages: 0,
+          rosFetched: 0,
+          jobsIndexed: 0,
+          jobsSkipped: 0,
+          normalizedCount: 0,
+          message: `customers pre-pass in progress: page ${cRes.endPage + 1} of ${cRes.totalPages || "?"}, ${cRes.itemsWritten} customers written this tick`,
+          error: cRes.error,
+        };
+      }
+    }
+
+    let vehiclesCacheHits = 0;
+    let vehiclesCacheMisses = 0;
+    let customersCacheHits = 0;
+    let customersCacheMisses = 0;
+
     console.log(
-      `[Tekmetric Full-Page Backfill] Shop ${shopId}: starting at page ${startPage}, max ${MAX_PAGES_PER_RUN} pages this run${prePassDoneForShop ? " (pre-pass index in use)" : ""}`,
+      `[Tekmetric Full-Page Backfill] Shop ${shopId}: starting at page ${startPage}, max ${MAX_PAGES_PER_RUN} pages this run${prePassDoneForShop ? " (jobs pre-pass in use)" : ""}${vehiclesPrePassDoneForShop ? " (vehicles pre-pass in use)" : ""}${customersPrePassDoneForShop ? " (customers pre-pass in use)" : ""}`,
     );
 
     let lastError: string | null = null;
@@ -578,25 +990,47 @@ export async function runFullPageBackfillChunk(
           if (ro.vehicleId) {
             if (vehicleCache.has(ro.vehicleId)) {
               vehicle = vehicleCache.get(ro.vehicleId)!;
+              vehiclesCacheHits++;
             } else {
-              const cached = await getCachedVehicle(
-                db,
-                ro.vehicleId,
-              ).catch(() => null);
-              if (cached) {
-                vehicle = cached as TekmetricVehicle;
-                vehicleCache.set(ro.vehicleId, vehicle);
-              } else {
-                const vehResult = await tekmetricRequest<TekmetricVehicle>(
-                  `/vehicles/${ro.vehicleId}`,
+              // Lookup chain:
+              //   1. Bulk pre-pass cache (`tekmetric_vehicles_cache`,
+              //      populated by runVehiclesPrePass) — zero API cost.
+              //   2. Legacy 24h TTL'd `tekmetric_vehicle_cache`.
+              //   3. Per-RO `/vehicles/{id}` API call.
+              let prePassVehicle: any = undefined;
+              if (vehiclesPrePassDoneForShop) {
+                prePassVehicle = await getPrePassVehicle(
+                  db,
                   shopId,
+                  ro.vehicleId,
                 );
-                if (vehResult.ok && vehResult.data) {
-                  vehicle = vehResult.data;
+              }
+              if (prePassVehicle) {
+                vehicle = prePassVehicle as TekmetricVehicle;
+                vehicleCache.set(ro.vehicleId, vehicle);
+                vehiclesCacheHits++;
+              } else {
+                const cached = await getCachedVehicle(
+                  db,
+                  ro.vehicleId,
+                ).catch(() => null);
+                if (cached) {
+                  vehicle = cached as TekmetricVehicle;
                   vehicleCache.set(ro.vehicleId, vehicle);
-                  await cacheVehicle(db, ro.vehicleId, vehResult.data as any).catch(
-                    () => {},
+                  vehiclesCacheHits++;
+                } else {
+                  vehiclesCacheMisses++;
+                  const vehResult = await tekmetricRequest<TekmetricVehicle>(
+                    `/vehicles/${ro.vehicleId}`,
+                    shopId,
                   );
+                  if (vehResult.ok && vehResult.data) {
+                    vehicle = vehResult.data;
+                    vehicleCache.set(ro.vehicleId, vehicle);
+                    await cacheVehicle(db, ro.vehicleId, vehResult.data as any).catch(
+                      () => {},
+                    );
+                  }
                 }
               }
             }
@@ -606,28 +1040,45 @@ export async function runFullPageBackfillChunk(
           if (ro.customerId) {
             if (customerCache.has(ro.customerId)) {
               customer = customerCache.get(ro.customerId)!;
+              customersCacheHits++;
             } else {
-              const cached = await getCachedCustomer(
-                db,
-                ro.customerId,
-              ).catch(() => null);
-              if (cached) {
-                customer = cached as TekmetricCustomer;
+              let prePassCustomer: any = undefined;
+              if (customersPrePassDoneForShop) {
+                prePassCustomer = await getPrePassCustomer(
+                  db,
+                  shopId,
+                  ro.customerId,
+                );
+              }
+              if (prePassCustomer) {
+                customer = prePassCustomer as TekmetricCustomer;
                 customerCache.set(ro.customerId, customer);
+                customersCacheHits++;
               } else {
-                const custResult =
-                  await tekmetricRequest<TekmetricCustomer>(
-                    `/customers/${ro.customerId}`,
-                    shopId,
-                  );
-                if (custResult.ok && custResult.data) {
-                  customer = custResult.data;
+                const cached = await getCachedCustomer(
+                  db,
+                  ro.customerId,
+                ).catch(() => null);
+                if (cached) {
+                  customer = cached as TekmetricCustomer;
                   customerCache.set(ro.customerId, customer);
-                  await cacheCustomer(
-                    db,
-                    ro.customerId,
-                    custResult.data as any,
-                  ).catch(() => {});
+                  customersCacheHits++;
+                } else {
+                  customersCacheMisses++;
+                  const custResult =
+                    await tekmetricRequest<TekmetricCustomer>(
+                      `/customers/${ro.customerId}`,
+                      shopId,
+                    );
+                  if (custResult.ok && custResult.data) {
+                    customer = custResult.data;
+                    customerCache.set(ro.customerId, customer);
+                    await cacheCustomer(
+                      db,
+                      ro.customerId,
+                      custResult.data as any,
+                    ).catch(() => {});
+                  }
                 }
               }
             }
@@ -982,7 +1433,7 @@ export async function runFullPageBackfillChunk(
 
     const durationMs = Date.now() - startedAt;
     console.log(
-      `[Tekmetric Full-Page Backfill] Shop ${shopId}: pages ${startPage}..${page - 1} of ${totalPages || "?"}, ${rosFetched} ROs, ${jobsIndexed} jobs indexed, ${jobsSkipped} unchanged, ${normalizedCount} normalized, ${durationMs}ms${complete ? " — COMPLETE" : ""}`,
+      `[Tekmetric Full-Page Backfill] Shop ${shopId}: pages ${startPage}..${page - 1} of ${totalPages || "?"}, ${rosFetched} ROs, ${jobsIndexed} jobs indexed, ${jobsSkipped} unchanged, ${normalizedCount} normalized, vehiclesCache=${vehiclesCacheHits}/${vehiclesCacheHits + vehiclesCacheMisses}, customersCache=${customersCacheHits}/${customersCacheHits + customersCacheMisses}, ${durationMs}ms${complete ? " — COMPLETE" : ""}`,
     );
 
     return {

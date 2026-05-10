@@ -8,7 +8,7 @@ import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCa
 import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
-import { probeTekmetricRoCount } from "@/lib/integrations/tekmetric/full-page-backfill";
+import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -457,8 +457,23 @@ async function backfillShopChunkInner(
   let vehiclesCacheMisses = 0;
   let customersCacheHits = 0;
   let customersCacheMisses = 0;
+  // Bulk pre-pass hit/miss counters (task #413). Distinct from the
+  // umbrella vehiclesCacheHits/Misses so on-call can confirm in the
+  // admin sync-health view that the bulk pre-pass cache is the path
+  // doing the work, vs. just the legacy 24h TTL'd per-RO cache.
+  // `*PrePassMisses` only increments when prePassDoneForShop is true
+  // — i.e. the pre-pass cache was checked and didn't have the row,
+  // forcing fall-through to the legacy cache or API. A high miss rate
+  // here on a "done" pre-pass means new vehicles/customers landed
+  // after the pre-pass walked and we'll need a refresh pass.
+  let vehiclesPrePassHits = 0;
+  let vehiclesPrePassMisses = 0;
+  let customersPrePassHits = 0;
+  let customersPrePassMisses = 0;
 
   let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  const vehiclesPrePassDoneForShop = !!progress?.vehiclesPrePassDone;
+  const customersPrePassDoneForShop = !!progress?.customersPrePassDone;
 
   // Full-page mode short-circuit: when a shop has been flagged for
   // full-page reindex (`fullPageMode: true`) the dedicated
@@ -700,27 +715,53 @@ async function backfillShopChunkInner(
           vehicle = vehicleCache.get(ro.vehicleId)!;
           vehiclesCacheHits++;
         } else {
-          // Defensive: a Mongo hiccup on the read used to throw straight
-          // out of Promise.all and crash the entire chunk (the RO loop has
-          // no per-RO try/catch above). Treat a cache miss/error as
-          // "no cached vehicle, fetch from API" so one bad lookup can't
-          // freeze the shop. Matches the `.catch(() => {})` already on
-          // the cacheVehicle write below.
-          const mongoVehicle = await getCachedVehicle(db, ro.vehicleId).catch(err => {
-            console.warn(`[Tekmetric Backfill] getCachedVehicle failed for vehicle ${ro.vehicleId}: ${err?.message || err}`);
-            return null;
-          });
-          if (mongoVehicle) {
-            vehicle = mongoVehicle as TekmetricVehicle;
+          // Lookup chain (cheapest -> most expensive):
+          //   1. Bulk pre-pass cache `tekmetric_vehicles_cache`, populated
+          //      once per shop by the full-page worker's
+          //      `runVehiclesPrePass`. When prePass is done for the shop,
+          //      this is a single Mongo read with zero API cost.
+          //   2. Legacy 24h TTL'd `tekmetric_vehicle_cache`.
+          //   3. Per-RO `/vehicles/{id}` API call (the bottleneck we're
+          //      trying to avoid on first-time backfills).
+          let prePassVehicle: any = undefined;
+          if (vehiclesPrePassDoneForShop) {
+            prePassVehicle = await getPrePassVehicle(db, shopId, ro.vehicleId);
+          }
+          if (prePassVehicle) {
+            vehicle = prePassVehicle as TekmetricVehicle;
             vehicleCache.set(ro.vehicleId, vehicle);
             vehiclesCacheHits++;
+            vehiclesPrePassHits++;
           } else {
-            vehiclesCacheMisses++;
-            const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`, shopId);
-            if (vehResult.ok && vehResult.data) {
-              vehicle = vehResult.data;
+            // Pre-pass coverage metric: count any pre-pass cache miss
+            // here (even if the legacy 24h cache or in-memory cache
+            // ends up satisfying the lookup). The signal we want is
+            // "what fraction of vehicles seen this chunk were already
+            // in the bulk pre-pass index" — anything else under-reports
+            // pre-pass gaps.
+            if (vehiclesPrePassDoneForShop) vehiclesPrePassMisses++;
+            // Defensive: a Mongo hiccup on the read used to throw straight
+            // out of Promise.all and crash the entire chunk (the RO loop has
+            // no per-RO try/catch above). Treat a cache miss/error as
+            // "no cached vehicle, fetch from API" so one bad lookup can't
+            // freeze the shop. Matches the `.catch(() => {})` already on
+            // the cacheVehicle write below.
+            const mongoVehicle = await getCachedVehicle(db, ro.vehicleId).catch(err => {
+              console.warn(`[Tekmetric Backfill] getCachedVehicle failed for vehicle ${ro.vehicleId}: ${err?.message || err}`);
+              return null;
+            });
+            if (mongoVehicle) {
+              vehicle = mongoVehicle as TekmetricVehicle;
               vehicleCache.set(ro.vehicleId, vehicle);
-              await cacheVehicle(db, ro.vehicleId, vehResult.data as any).catch(() => {});
+              vehiclesCacheHits++;
+            } else {
+              vehiclesCacheMisses++;
+              const vehResult = await tekmetricRequest<TekmetricVehicle>(`/vehicles/${ro.vehicleId}`, shopId);
+              if (vehResult.ok && vehResult.data) {
+                vehicle = vehResult.data;
+                vehicleCache.set(ro.vehicleId, vehicle);
+                await cacheVehicle(db, ro.vehicleId, vehResult.data as any).catch(() => {});
+              }
             }
           }
         }
@@ -732,22 +773,36 @@ async function backfillShopChunkInner(
           customer = customerCache.get(ro.customerId)!;
           customersCacheHits++;
         } else {
-          // Same defensive treatment as getCachedVehicle above.
-          const mongoCustomer = await getCachedCustomer(db, ro.customerId).catch(err => {
-            console.warn(`[Tekmetric Backfill] getCachedCustomer failed for customer ${ro.customerId}: ${err?.message || err}`);
-            return null;
-          });
-          if (mongoCustomer) {
-            customer = mongoCustomer as TekmetricCustomer;
+          let prePassCustomer: any = undefined;
+          if (customersPrePassDoneForShop) {
+            prePassCustomer = await getPrePassCustomer(db, shopId, ro.customerId);
+          }
+          if (prePassCustomer) {
+            customer = prePassCustomer as TekmetricCustomer;
             customerCache.set(ro.customerId, customer);
             customersCacheHits++;
+            customersPrePassHits++;
           } else {
-            customersCacheMisses++;
-            const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`, shopId);
-            if (custResult.ok && custResult.data) {
-              customer = custResult.data;
+            // See vehicles branch above for the rationale on counting
+            // pre-pass misses here vs. inside the legacy/API fallback.
+            if (customersPrePassDoneForShop) customersPrePassMisses++;
+            // Same defensive treatment as getCachedVehicle above.
+            const mongoCustomer = await getCachedCustomer(db, ro.customerId).catch(err => {
+              console.warn(`[Tekmetric Backfill] getCachedCustomer failed for customer ${ro.customerId}: ${err?.message || err}`);
+              return null;
+            });
+            if (mongoCustomer) {
+              customer = mongoCustomer as TekmetricCustomer;
               customerCache.set(ro.customerId, customer);
-              await cacheCustomer(db, ro.customerId, custResult.data as any).catch(() => {});
+              customersCacheHits++;
+            } else {
+              customersCacheMisses++;
+              const custResult = await tekmetricRequest<TekmetricCustomer>(`/customers/${ro.customerId}`, shopId);
+              if (custResult.ok && custResult.data) {
+                customer = custResult.data;
+                customerCache.set(ro.customerId, customer);
+                await cacheCustomer(db, ro.customerId, custResult.data as any).catch(() => {});
+              }
             }
           }
         }
@@ -1237,6 +1292,12 @@ async function backfillShopChunkInner(
     customersCacheHitRate: customersCacheTotal > 0
       ? Number((customersCacheHits / customersCacheTotal).toFixed(4))
       : null,
+    vehiclesPrePassDoneForShop,
+    vehiclesPrePassHits,
+    vehiclesPrePassMisses,
+    customersPrePassDoneForShop,
+    customersPrePassHits,
+    customersPrePassMisses,
     backoff429Ms: Math.round(chunkBackoffMs),
     chunkHadError,
     hitPageCap,
@@ -1274,7 +1335,9 @@ async function backfillShopChunkInner(
       `duration=${chunkDurationMs}ms ros=${seenROIds.size} ` +
       `jobsCache=${jobsCacheHits}/${jobsCacheTotal} ` +
       `vehiclesCache=${vehiclesCacheHits}/${vehiclesCacheTotal} ` +
+      `vehiclesPrePass=${vehiclesPrePassDoneForShop ? `${vehiclesPrePassHits}/${vehiclesPrePassHits + vehiclesPrePassMisses}` : "off"} ` +
       `customersCache=${customersCacheHits}/${customersCacheTotal} ` +
+      `customersPrePass=${customersPrePassDoneForShop ? `${customersPrePassHits}/${customersPrePassHits + customersPrePassMisses}` : "off"} ` +
       `429backoff=${Math.round(chunkBackoffMs)}ms`,
   );
 
