@@ -1,0 +1,436 @@
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ curl -s -H "Authorization: Bearer $CRON_SECRET" "$RENDER_EXTERNAL_URL/api/cron/catchup-status" | jq '.shops | map({shopId, name, tekRoCount: .tekmetricRoCount, indexed: .normalizedWorkOrderCount, coveragePct: (if .tekmetricRoCount > 0 then ((.normalizedWorkOrderCount / .tekmetricRoCount) * 100 | floor) else null end), fullPageMode: .fullPageMode}) | sort_by(.coveragePct)'
+[
+  {
+    "shopId": 28,
+    "name": "C.A.R. Experts",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 32,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 36,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 37,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 54,
+    "name": "Demore's Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 57,
+    "name": "Kennedy Auto Solutions",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 63,
+    "name": "Service Solutions Garage",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 73,
+    "name": "Oneway Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 74,
+    "name": "Oneway Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 75,
+    "name": "Oneway Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 78,
+    "name": "Harrison's Automotive and Transmissions",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 82,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  },
+  {
+    "shopId": 83,
+    "name": "Schindler's Garage",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 84,
+    "name": "EC Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 85,
+    "name": "Team Ryan Automotive - Buford",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 86,
+    "name": "Access Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 87,
+    "name": "Bimmerworks",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 88,
+    "name": "Lebrini's Service Station Corp",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 89,
+    "name": "Van Meter Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 90,
+    "name": "Endress Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 91,
+    "name": "Jae Allread",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 92,
+    "name": "Jay's Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 93,
+    "name": "Honest Tom's Complete Auto Care - North Myrtle",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 94,
+    "name": "Further Performance LLC",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 95,
+    "name": "B & W Service Center",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 96,
+    "name": "Andy's Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 97,
+    "name": "Consider It Fixed Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 98,
+    "name": "RBK Auto Tech",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 99,
+    "name": "Auto Works Automotive Service Center",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 100,
+    "name": "International Auto",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 101,
+    "name": "Honest Tom's Complete Auto Care - Sterling Park",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 102,
+    "name": "Honest Tom's Complete Auto Care - Lowes Island",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 103,
+    "name": "Honest Tom's Complete Auto Care - Silver Spring",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 104,
+    "name": "ChaCha Express Auto Center",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 105,
+    "name": "Mangrove Auto LLC",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 106,
+    "name": "Greaser's Auto",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 107,
+    "name": "Midtown Auto Clinic",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 108,
+    "name": "Auto Dynamic Services",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 110,
+    "name": "2nd Mile Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 111,
+    "name": "Commander Services",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 112,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  },
+  {
+    "shopId": 117,
+    "name": "Team Ryan",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 118,
+    "name": "Team Ryan",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  },
+  {
+    "shopId": 119,
+    "name": "Lube Center of Green Castle",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 120,
+    "name": "Woodward Motor Sport",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 121,
+    "name": "True North Automotive",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 122,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  },
+  {
+    "shopId": 123,
+    "name": "HEART Certified Auto Care",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  },
+  {
+    "shopId": 124,
+    "name": "Open Bay Auto",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 125,
+    "name": "Zoom Automotive Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 126,
+    "name": "Tulsa Auto Fix WNxUjZD6",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 127,
+    "name": "Sonny's Auto Repair",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 128,
+    "name": "Auto Source West MI",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": false
+  },
+  {
+    "shopId": 129,
+    "name": "Downtown Automotive Center",
+    "tekRoCount": null,
+    "indexed": null,
+    "coveragePct": null,
+    "fullPageMode": true
+  }
+]
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ 
