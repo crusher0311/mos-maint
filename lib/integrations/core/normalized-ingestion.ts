@@ -457,6 +457,22 @@ export class NormalizedIngestionService {
       
       if (existing) {
         if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          // task #414: PG canonical may be missing this row if the Mongo doc
+          // pre-dates the W3a polarity flip (task #344) — every successful
+          // skip used to short-circuit before any PG write, leaving child
+          // service_jobs / line_items / payments with no parent WO row to
+          // FK against. Idempotently upsert PG on the skip path so the FK
+          // invariant holds. PG upsert is `onConflictDoUpdate` so the cost
+          // is one cheap UPSERT per skipped RO; correctness > microperf.
+          await this.dualWriteToSupabase('work_order', existing._id, 'skip-fk-backfill', () =>
+            this.supabaseDualWriter!.upsertWorkOrder({
+              ...existing,
+              shopId: this.shopId,
+              enterpriseId: this.enterpriseId,
+              vehicleId: vehicleId || existing.vehicleId,
+              customerId: customerId || existing.customerId,
+            })
+          );
           return {
             success: true,
             entityType: 'work_order',
@@ -637,6 +653,19 @@ export class NormalizedIngestionService {
       
       if (existing) {
         if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+          // task #414: PG canonical may be missing this row if the Mongo doc
+          // pre-dates the W3a polarity flip (task #344). Without this
+          // backfill upsert, child line_items would FK-violate against a
+          // missing parent service_job. See ingestWorkOrder skip path for
+          // the full rationale.
+          await this.dualWriteToSupabase('service_job', existing._id, 'skip-fk-backfill', () =>
+            this.supabaseDualWriter!.upsertServiceJob({
+              ...existing,
+              shopId: this.shopId,
+              enterpriseId: this.enterpriseId,
+              workOrderId,
+            })
+          );
           return {
             success: true,
             entityType: 'service_job',
