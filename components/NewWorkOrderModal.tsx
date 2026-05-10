@@ -26,6 +26,7 @@ import {
   ChevronDown,
   HelpCircle,
 } from "lucide-react";
+import { getAcesTierBadge } from "@/lib/aces-tier-badge";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
@@ -1851,6 +1852,17 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                                 {job.matchBandLabel && (
                                   <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0 ${bandColors[job.matchBand] || "bg-gray-100 text-gray-500"}`}>{job.matchBandLabel}</span>
                                 )}
+                                {(() => {
+                                  const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
+                                  return aces ? (
+                                    <span
+                                      title={aces.tooltip}
+                                      className={`text-[9px] font-medium px-1 py-0.5 rounded border flex-shrink-0 cursor-help ${aces.className}`}
+                                    >
+                                      {aces.label}
+                                    </span>
+                                  ) : null;
+                                })()}
                               </div>
                               <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap pl-5">
                                 {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}

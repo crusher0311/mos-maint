@@ -431,6 +431,7 @@ export async function GET(request: NextRequest) {
         matchBand: job.matchBand,
         matchBandLabel: job.matchBandLabel,
         matchReason: job.matchReason,
+        acesTier: job.scoreBreakdown?.acesTier ?? null,
         lowConfidence: job.lowConfidence || false,
         crossClassPenalized: job.crossClassPenalized || false,
         source: sourceType,

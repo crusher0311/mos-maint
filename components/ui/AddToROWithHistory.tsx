@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Loader2, Check, AlertCircle, ChevronDown, ChevronUp, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
 import { AddToROButton } from "./AddToROButton";
+import { getAcesTierBadge, type AcesTier } from "@/lib/aces-tier-badge";
 
 type HistoricalJob = {
   _id: string;
@@ -31,6 +32,10 @@ type HistoricalJob = {
   matchScore?: number;
   matchBand?: "exact" | "likely" | "possible" | "poor";
   matchBandLabel?: string;
+  scoreBreakdown?: {
+    acesTier?: AcesTier;
+    [key: string]: any;
+  };
 };
 
 type CannedJobOption = {
@@ -446,7 +451,7 @@ export function AddToROWithHistory({
                       <div className="px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <span
                                 className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
                                   job.matchBand
@@ -454,6 +459,17 @@ export function AddToROWithHistory({
                               >
                                 {job.matchBandLabel || job.matchBand}
                               </span>
+                              {(() => {
+                                const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
+                                return aces ? (
+                                  <span
+                                    title={aces.tooltip}
+                                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-help ${aces.className}`}
+                                  >
+                                    {aces.label}
+                                  </span>
+                                ) : null;
+                              })()}
                               {job.matchScore && (
                                 <span className="text-[10px] text-gray-400">
                                   {job.matchScore}%

@@ -1792,6 +1792,31 @@ function getBandStyle(band) {
   }
 }
 
+function getAcesTierBadge(tier) {
+  switch (tier) {
+    case 'exact_aces':
+      return {
+        label: 'Exact fit',
+        tooltip: 'Exact ACES match \u2014 same year, make, model, submodel, and engine as the target vehicle.',
+        className: 'aces-exact',
+      };
+    case 'engine_match':
+      return {
+        label: 'Same engine',
+        tooltip: 'Same engine in a different chassis \u2014 strong match for engine, oil, cooling, fuel, and exhaust work.',
+        className: 'aces-engine',
+      };
+    case 'submodel_match':
+      return {
+        label: 'Same chassis',
+        tooltip: 'Same chassis with a different engine option \u2014 strong match for body, brakes, suspension, steering, and wheel/tire work.',
+        className: 'aces-submodel',
+      };
+    default:
+      return null;
+  }
+}
+
 function createJobItemHTML(job, lookupId) {
   const vehicle = job.vehicle ? 
     `${job.vehicle.year || ''} ${job.vehicle.make || ''} ${job.vehicle.model || ''}`.trim() : '';
@@ -1806,7 +1831,11 @@ function createJobItemHTML(job, lookupId) {
   const matchLabel = job.matchBandLabel || `${job.matchScore || 0}%`;
   const matchScore = job.matchScore || 0;
   const matchReason = job.matchReason || '';
-  
+  const acesBadge = getAcesTierBadge(job.acesTier);
+  const acesBadgeHtml = acesBadge
+    ? `<span class="match-badge aces-badge ${acesBadge.className}" title="${escapeHtml(acesBadge.tooltip)}">${escapeHtml(acesBadge.label)}</span>`
+    : '';
+
   return `
     <li class="job-item" data-job-id="${job._id}">
       <div class="job-header">
@@ -1814,6 +1843,7 @@ function createJobItemHTML(job, lookupId) {
           <div class="job-title-row">
             <span class="job-title">${escapeHtml(job.title || job.name)}</span>
             <span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>
+            ${acesBadgeHtml}
             <span class="match-score">${matchScore}%</span>
           </div>
           <div class="job-vehicle">${vehicle}${engine}</div>

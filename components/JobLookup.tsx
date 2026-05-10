@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign, Check } from "lucide-react";
+import { getAcesTierBadge, type AcesTier } from "@/lib/aces-tier-badge";
 
 type JobResult = {
   _id: string;
@@ -51,6 +52,7 @@ type JobResult = {
     constraints: number;
     evidence: number;
     locationBonus?: number;
+    acesTier?: AcesTier;
   };
 };
 
@@ -311,6 +313,17 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       <span className={`text-xs px-1.5 sm:px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
                         {job.matchBandLabel}
                       </span>
+                      {(() => {
+                        const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
+                        return aces ? (
+                          <span
+                            title={aces.tooltip}
+                            className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full border cursor-help ${aces.className}`}
+                          >
+                            {aces.label}
+                          </span>
+                        ) : null;
+                      })()}
                       <span className="text-xs sm:text-sm font-semibold text-blue-600">{job.matchScore}%</span>
                     </div>
                     <div className="mt-1 text-xs sm:text-sm text-gray-500 flex flex-wrap items-center gap-1 sm:gap-2">
