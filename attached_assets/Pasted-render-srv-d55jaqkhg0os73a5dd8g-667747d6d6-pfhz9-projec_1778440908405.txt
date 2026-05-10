@@ -1,0 +1,31 @@
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ echo "VEHICLES=[$TEKMETRIC_FULLPAGE_BULK_PREPASS_VEHICLES] CUSTOMERS=[$TEKMETRIC_FULLPAGE_BULK_PREPASS_CUSTOMERS]"
+VEHICLES=[true] CUSTOMERS=[true]
+render@srv-d55jaqkhg0os73a5dd8g-667747d6d6-pfhz9:~/project/src$ DRAIN_PARALLELISM=6 npx tsx scripts/drain-tekmetric-backfill.ts
+[2026-05-10T19:21:31.010Z] ===== Tekmetric Backfill Drain Worker =====
+[2026-05-10T19:21:31.011Z] parallelism=6 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-275-1778440891010-ttxonc shopIdFilter=ALL_INCOMPLETE
+[2026-05-10T19:21:31.665Z] Lock acquired owner=drain-275-1778440891010-ttxonc expiresAt=2026-05-10T19:26:31.600Z
+[2026-05-10T19:21:35.615Z] Found 52 incomplete shops to drain
+[2026-05-10T19:21:35.616Z] START shop=110 (2nd Mile Repair) tek=5232
+[2026-05-10T19:21:35.620Z] START shop=97 (Consider It Fixed Auto Repair) tek=8007
+[2026-05-10T19:21:35.620Z] START shop=74 (Oneway Automotive) tek=4138
+[2026-05-10T19:21:35.620Z] START shop=84 (EC Auto Repair) tek=33
+[2026-05-10T19:21:35.621Z] START shop=88 (Lebrini's Service Station Corp) tek=12764
+[2026-05-10T19:21:35.621Z] START shop=86 (Access Automotive) tek=1714
+[Tekmetric Backfill] Shop 110: 2024-02-18 to 2024-05-18 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 84: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 74: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 97: 2025-02-12 to 2025-05-13 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 88: 2025-05-13 to 2025-08-11 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 86: 2025-08-11 to 2025-11-09 (reverse) pace=DAYTIME tz=America/Chicago hour=14 conc=4 chunkDays=90 maxPages=50
+[Tekmetric Backfill] Shop 74 page 1/7: 100 ROs
+[Tekmetric Backfill] Shop 97 page 1/3: 100 ROs
+[Tekmetric Backfill] Shop 88 page 1/6: 100 ROs
+[Tekmetric Backfill] Shop 84 page 1/5: 100 ROs
+[Tekmetric] Inspections endpoint short-circuited for shop 4138 after 3 consecutive 401s on token …SzC1TPCk. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 86 page 1/9: 100 ROs
+[Tekmetric] Inspections endpoint short-circuited for shop 8007 after 3 consecutive 401s on token …ixYSz5dc. Skipping inspections fetch for 30m.
+[Tekmetric] Inspections endpoint short-circuited for shop 1714 after 3 consecutive 401s on token …jfDpUFx8. Skipping inspections fetch for 30m.
+[Tekmetric] Inspections endpoint short-circuited for shop 12764 after 3 consecutive 401s on token …w-AUAb6w. Skipping inspections fetch for 30m.
+[Tekmetric Backfill] Shop 110: bulk jobs pre-pass — pages=4 ros=93 jobs=321 ~apiCallsSaved=89
+[Tekmetric Backfill] Shop 110 page 1/1: 77 ROs
+[T
