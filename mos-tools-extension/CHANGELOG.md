@@ -1,5 +1,31 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.6 — 2026-05-10
+
+### Fixed
+- **Job Lookup now sends the target VIN to the search API.** The
+  Lookup tab was firing `/api/extension/jobs/search` without the `vin`
+  parameter, so the server fell into a code path that early-returned
+  before resolving the VIN from the work order. Result: every search
+  came back with `dataOneEnhanced: false` and `acesTier: null` on
+  every donor, so ACES tier matches (Exact Fit ACES 100%, Same engine
+  75 floor, Same submodel 70 floor — Task #382) never fired and the
+  scorer always fell through to the legacy heuristic. Reproduced on
+  RO 500278 (2015 Jeep Cherokee, VIN `1C4PJMCB7FW568719`) where a
+  same-shop same-year same-model donor scored 94% instead of the
+  100% ACES short-circuit it should have hit. Now: sidepanel sends
+  `currentContext.vin` on every search; the server-side
+  `resolveVehicleContext` was also hardened to fall back to the WO
+  doc when VIN is missing even if year/make/model were passed.
+
+### Added
+- **"ACES match unavailable" banner on Job Lookup results.** When the
+  API returns `dataOneEnhanced: false`, the Lookup tab now shows an
+  amber notice above the results so an advisor knows the scores are
+  from the heuristic scorer only. Previously this was completely
+  silent — the only way to tell ACES had failed was to read the raw
+  API response in DevTools.
+
 ## 1.27.5 — 2026-05-07
 
 ### Fixed

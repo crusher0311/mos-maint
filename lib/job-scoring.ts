@@ -197,6 +197,13 @@ function normalizeBodyGroup(bodyType: string | null | undefined): string | null 
 }
 
 const SERVICE_CATEGORIES: Record<string, string[]> = {
+  // Component R&R wins over fluid/system keywords. A "BRAKE FLUID LEVEL
+  // SENSOR" R&R must NOT match a "brake fluid" or "brake" search as a
+  // fluid/brake service — it's a switch replacement that happens to
+  // mention brake fluid. Listed first so getServiceCategory's
+  // first-match wins behavior catches these before falling through to
+  // the broader system buckets below.
+  sensor_switch: ["level sensor", "level switch", "level indicator", "level warning", "warning indicator", "indicator switch", "fluid sensor", "fluid switch"],
   tire: ["tire", "rotation", "balance", "alignment", "wheel", "rim", "tpms"],
   brake: ["brake", "rotor", "caliper", "pad", "drum", "shoe"],
   engine: ["engine", "motor", "valve", "gasket", "timing", "piston", "cylinder head", "head gasket"],

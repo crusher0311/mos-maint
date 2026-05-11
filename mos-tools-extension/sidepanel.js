@@ -1744,6 +1744,10 @@ async function handleJobSearch() {
       if (currentContext.vehicle.model) params.set('model', currentContext.vehicle.model);
       if (currentContext.vehicle.engine) params.set('engine', currentContext.vehicle.engine);
     }
+    // Pass VIN so the server can DataOne-decode the target and fire ACES
+    // tier matches. Without this, dataOneEnhanced stays false and ACES
+    // never engages regardless of repair type.
+    if (currentContext?.vin) params.set('vin', currentContext.vin);
     
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
@@ -1752,7 +1756,7 @@ async function handleJobSearch() {
     
     if (result.error) throw new Error(result.error);
     
-    renderJobResults(result.jobs || []);
+    renderJobResults(result.jobs || [], { dataOneEnhanced: result.dataOneEnhanced });
   } catch (err) {
     console.error('[MOS] Error searching jobs:', err);
     elements.lookupLoading.classList.add('hidden');
@@ -1761,7 +1765,7 @@ async function handleJobSearch() {
   }
 }
 
-function renderJobResults(jobs) {
+function renderJobResults(jobs, meta) {
   elements.lookupLoading.classList.add('hidden');
   
   if (jobs.length === 0) {
@@ -1773,7 +1777,20 @@ function renderJobResults(jobs) {
   // Clear previous data and build new list with Map storage
   lookupJobsDataMap.clear();
   elements.lookupResults.classList.remove('hidden');
-  elements.lookupResults.innerHTML = jobs.map((job, index) => {
+
+  // When the API couldn't decode the target VIN through DataOne, ACES tier
+  // matches (Exact Fit ACES / Same engine / Same submodel) cannot fire — so
+  // every score on this page is from the legacy heuristic scorer. Surface
+  // that visibly so an advisor doesn't think "Exact Fit 94%" is the same
+  // confidence level as "Exact Fit (ACES) 100%".
+  let banner = '';
+  if (meta && meta.dataOneEnhanced === false) {
+    banner = '<div style="background:#fef3c7;border:1px solid #fcd34d;color:#78350f;padding:8px 10px;border-radius:6px;font-size:12px;margin-bottom:8px;">' +
+      '<strong>ACES match unavailable</strong> — vehicle VIN didn\'t decode through DataOne, so scores below are from the heuristic scorer only.' +
+      '</div>';
+  }
+
+  elements.lookupResults.innerHTML = banner + jobs.map((job, index) => {
     const jobId = `lookup-${index}`;
     lookupJobsDataMap.set(jobId, job);
     return createJobItemHTML(job, jobId);

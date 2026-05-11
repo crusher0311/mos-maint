@@ -38,7 +38,13 @@ async function resolveVehicleContext(
   params: { year: string | null; make: string | null; model: string | null; engine: string | null; vin: string | null; roId: string | null; mosShopId: number | null; provider: string }
 ): Promise<{ year: string | null; make: string | null; model: string | null; engine: string | null; vin: string | null }> {
   let { year, make, model, engine, vin, roId, mosShopId, provider } = params;
-  if (year || make || model || !roId || !mosShopId) {
+  // Skip the WO lookup only when we already have a VIN (the only thing we
+  // can't reliably reconstruct downstream) OR when we don't have the keys
+  // to look it up. Older clients passed year/make/model without a VIN; in
+  // that case we still want the WO lookup to populate the missing VIN so
+  // DataOne decode can fire and ACES tiers can engage. Otherwise the
+  // route silently returned dataOneEnhanced=false on every search.
+  if (vin || !roId || !mosShopId) {
     return { year, make, model, engine, vin };
   }
   
@@ -48,24 +54,24 @@ async function resolveVehicleContext(
   });
   
   if (workOrder) {
-    year = workOrder.vehicleYear?.toString() || null;
-    make = workOrder.vehicleMake || null;
-    model = workOrder.vehicleModel || null;
-    engine = workOrder.vehicleEngine || null;
-    vin = workOrder.vehicleVin || workOrder.vin || vin;
-    console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model}`);
+    year = year || workOrder.vehicleYear?.toString() || null;
+    make = make || workOrder.vehicleMake || null;
+    model = model || workOrder.vehicleModel || null;
+    engine = engine || workOrder.vehicleEngine || null;
+    vin = vin || workOrder.vehicleVin || workOrder.vin || null;
+    console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model} VIN=${vin ? vin.slice(0,8)+'...' : 'none'}`);
   } else if (provider === "tekmetric") {
     console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
     const tekRo = await db.collection("tekmetric_repair_orders").findOne({
       $or: [{ id: parseInt(roId) }, { id: String(roId) }]
     });
     if (tekRo?.vehicle) {
-      year = tekRo.vehicle.year?.toString() || null;
-      make = tekRo.vehicle.make || null;
-      model = tekRo.vehicle.model || null;
-      engine = tekRo.vehicle.engine || null;
-      vin = tekRo.vehicle.vin || vin;
-      console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model}`);
+      year = year || tekRo.vehicle.year?.toString() || null;
+      make = make || tekRo.vehicle.make || null;
+      model = model || tekRo.vehicle.model || null;
+      engine = engine || tekRo.vehicle.engine || null;
+      vin = vin || tekRo.vehicle.vin || null;
+      console.log(`[Jobs Search] Resolved vehicle from tekmetric_repair_orders: ${year} ${make} ${model} VIN=${vin ? vin.slice(0,8)+'...' : 'none'}`);
     }
   }
   return { year, make, model, engine, vin };
