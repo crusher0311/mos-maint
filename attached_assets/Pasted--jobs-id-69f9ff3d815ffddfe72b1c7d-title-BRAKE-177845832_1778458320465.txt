@@ -1,0 +1,294 @@
+{
+    "jobs": [
+        {
+            "_id": "69f9ff3d815ffddfe72b1c7d",
+            "title": "BRAKE FLUID LEVEL SENSOR",
+            "description": null,
+            "vehicle": {
+                "vin": "1C4RJFAG8EC280159",
+                "year": 2014,
+                "make": "Jeep",
+                "model": "Grand Cherokee"
+            },
+            "workOrderNumber": "145380",
+            "laborItems": [
+                {
+                    "name": "Remove & Replace Brake Fluid Level Warning Indicator Switch",
+                    "hours": 1
+                }
+            ],
+            "parts": [
+                {
+                    "name": "Brake Fluid Level Sensor",
+                    "partNumber": "SU15049",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 23.75,
+                    "retail": 89.73
+                },
+                {
+                    "name": "BRAKE FLUID LEVEL SENSOR",
+                    "partNumber": null,
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 23.21,
+                    "retail": 89.73
+                },
+                {
+                    "name": "DOT 4 ULTRA-DRY PREMIUM BRAKE FLUID",
+                    "partNumber": "84032",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 24.4,
+                    "retail": 0
+                }
+            ],
+            "totals": {
+                "laborHours": 1,
+                "laborAmount": 229.87,
+                "partsAmount": 89.73,
+                "totalAmount": 319.6
+            },
+            "matchScore": 72,
+            "matchBand": "likely",
+            "matchBandLabel": "Great Match",
+            "matchReason": "Same vehicle class (light), Model family match, 1 year off, Service category match (brake), Recent",
+            "acesTier": null,
+            "lowConfidence": false,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 32,
+            "location": "Evanston"
+        },
+        {
+            "_id": "69fe3bae852a9bafb2604f00",
+            "title": "BF - Brake Fluid Flush",
+            "description": null,
+            "vehicle": {
+                "vin": "1C4RJHAG1RC700460",
+                "year": 2024,
+                "make": "Jeep",
+                "model": "Grand Cherokee"
+            },
+            "workOrderNumber": "200121",
+            "laborItems": [
+                {
+                    "name": "Brake Fluid Flush",
+                    "hours": 0.5
+                }
+            ],
+            "parts": [
+                {
+                    "name": "Brake Fluid",
+                    "partNumber": null,
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 0,
+                    "retail": 30
+                }
+            ],
+            "totals": {
+                "laborHours": 0.5,
+                "laborAmount": 7995,
+                "partsAmount": 3000,
+                "totalAmount": 10995
+            },
+            "matchScore": 64,
+            "matchBand": "likely",
+            "matchBandLabel": "Great Match",
+            "matchReason": "Same vehicle class (light), Model family match, Service category match (brake), Recent",
+            "acesTier": null,
+            "lowConfidence": false,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 123,
+            "location": "Casey - Arlington Heights"
+        },
+        {
+            "_id": "69ff413f72e48f2c8fa43909",
+            "title": "BF Brake Fluid Flush",
+            "description": null,
+            "vehicle": {
+                "vin": "1C4BJWEG7EL140339",
+                "year": 2014,
+                "make": "Jeep",
+                "model": "Wrangler"
+            },
+            "workOrderNumber": "450303",
+            "laborItems": [
+                {
+                    "name": "Brake Fluid Flush",
+                    "hours": 0.5
+                }
+            ],
+            "parts": [
+                {
+                    "name": "Brake Fluid",
+                    "partNumber": "BF",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 0,
+                    "retail": 30
+                }
+            ],
+            "totals": {
+                "laborHours": 0.5,
+                "laborAmount": 7995,
+                "partsAmount": 3000,
+                "totalAmount": 10995
+            },
+            "matchScore": 58,
+            "matchBand": "likely",
+            "matchBandLabel": "Great Match",
+            "matchReason": "Same vehicle class (light), Same make, 1 year off, Service category match (brake), Recent",
+            "acesTier": null,
+            "lowConfidence": false,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 122,
+            "location": "Casey - Palatine"
+        },
+        {
+            "_id": "69fc7d2f3132b7eb63bb9037",
+            "title": "BRAKE SYSTEM FLUID FLUSH",
+            "description": null,
+            "vehicle": {
+                "vin": "3C4NJDAB6HT603043",
+                "year": 2017,
+                "make": "Jeep",
+                "model": "Compass"
+            },
+            "workOrderNumber": "48039",
+            "laborItems": [
+                {
+                    "name": "BRAKE SYSTEM FLUID SERVICE",
+                    "hours": 0.5
+                }
+            ],
+            "parts": [
+                {
+                    "name": "BRAKE FLUID",
+                    "partNumber": "BRK",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 5,
+                    "retail": 34.95
+                }
+            ],
+            "totals": {
+                "laborHours": 0.5,
+                "laborAmount": 83.43,
+                "partsAmount": 34.95,
+                "totalAmount": 118.38
+            },
+            "matchScore": 31,
+            "matchBand": "low_confidence",
+            "matchBandLabel": "Low Confidence",
+            "matchReason": "Same make, 2 years off, Service category match (brake)",
+            "acesTier": null,
+            "lowConfidence": true,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 36,
+            "location": "Wilmette"
+        },
+        {
+            "_id": "69fc5f2b3132b7eb63ba7194",
+            "title": "BRAKE SYSTEM FLUID FLUSH",
+            "description": null,
+            "vehicle": {
+                "vin": "ZACCJBBB9JPG85681",
+                "year": 2018,
+                "make": "Jeep",
+                "model": "Renegade"
+            },
+            "workOrderNumber": "57643",
+            "laborItems": [
+                {
+                    "name": "BRAKE SYSTEM FLUID SERVICE",
+                    "hours": 0.5
+                }
+            ],
+            "parts": [
+                {
+                    "name": "BRAKE FLUID",
+                    "partNumber": "BRK",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 5,
+                    "retail": 34.95
+                }
+            ],
+            "totals": {
+                "laborHours": 0.5,
+                "laborAmount": 83.43,
+                "partsAmount": 34.95,
+                "totalAmount": 118.38
+            },
+            "matchScore": 28,
+            "matchBand": "low_confidence",
+            "matchBandLabel": "Low Confidence",
+            "matchReason": "Same make, 3 years off, Service category match (brake)",
+            "acesTier": null,
+            "lowConfidence": true,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 36,
+            "location": "Wilmette"
+        },
+        {
+            "_id": "69fc70133132b7eb63baffb2",
+            "title": "BRAKE SYSTEM FLUID FLUSH",
+            "description": null,
+            "vehicle": {
+                "vin": "1J4GL58K26W274275",
+                "year": 2006,
+                "make": "Jeep",
+                "model": "Liberty"
+            },
+            "workOrderNumber": "33830",
+            "laborItems": [
+                {
+                    "name": "BRAKE SYSTEM FLUID SERVICE",
+                    "hours": 0.5
+                }
+            ],
+            "parts": [
+                {
+                    "name": "BRAKE FLUID",
+                    "partNumber": "BRK",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 5,
+                    "retail": 27.95
+                }
+            ],
+            "totals": {
+                "laborHours": 0.5,
+                "laborAmount": 65.34,
+                "partsAmount": 27.95,
+                "totalAmount": 93.29
+            },
+            "matchScore": 25,
+            "matchBand": "low_confidence",
+            "matchBandLabel": "Low Confidence",
+            "matchReason": "Same make, Service category match (brake)",
+            "acesTier": null,
+            "lowConfidence": true,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 36,
+            "location": "Wilmette"
+        }
+    ],
+    "total": 6,
+    "query": "brake fluid",
+    "dataOneEnhanced": false,
+    "stats": {
+        "totalFound": 6,
+        "fromSupabase": 6,
+        "gatesFailed": 0,
+        "belowThreshold": 3,
+        "returned": 6
+    }
+}
