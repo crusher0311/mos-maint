@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db/drizzle";
 import { normalizedServiceJobs, normalizedWorkOrders, normalizedLineItems } from "@/lib/db/schema/normalized";
 import { eq, and, inArray, ilike, sql, desc, isNull, or } from "drizzle-orm";
+import { expandTokenVariants } from "@/lib/job-scoring";
 
 export async function searchSupabaseServiceJobs(
   searchShopIds: number[],
@@ -22,13 +23,22 @@ export async function searchSupabaseServiceJobs(
   try {
     const db = getDb();
 
+    // For each token expand to its singular/plural variants and OR across
+    // (title|description|cannedJobName) for every variant. Substring `ilike`
+    // already handles "pad" -> donor "pads" by accident (substring match),
+    // but the reverse direction ("pads" -> donor "pad") needs the explicit
+    // singular form. Variants keeps both arms symmetric with the Mongo fix.
     const tokenConditions = coreTokens.map(token => {
-      const pattern = `%${token}%`;
-      return or(
-        ilike(normalizedServiceJobs.title, pattern),
-        ilike(normalizedServiceJobs.description, pattern),
-        ilike(normalizedServiceJobs.cannedJobName, pattern),
-      );
+      const variants = expandTokenVariants(token);
+      const orParts = variants.flatMap(v => {
+        const pattern = `%${v}%`;
+        return [
+          ilike(normalizedServiceJobs.title, pattern),
+          ilike(normalizedServiceJobs.description, pattern),
+          ilike(normalizedServiceJobs.cannedJobName, pattern),
+        ];
+      });
+      return or(...orParts);
     });
 
     const conditions = [

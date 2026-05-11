@@ -1133,6 +1133,41 @@ export function buildSearchQuery(query: string): { coreTokens: string[]; allToke
 }
 
 /**
+ * Expand a search token to a small set of inflectional variants so that
+ * "brake pad" matches donor jobs indexed as "brake pads" (and vice versa).
+ *
+ * The job indexers (`lib/job-index.ts`, `lib/integrations/tekmetric/job-index.ts`)
+ * store the literal lowercased words from each donor title with no stemming.
+ * That means the Mongo arm's `{ keywords: { $all: tokens } }` lookup is an
+ * exact-equality match: typing "pad" misses keyword "pads", typing "pads"
+ * misses keyword "pad". We fix it on the query side instead of reindexing.
+ *
+ * Conservative ruleset (no full stemmer to avoid false positives):
+ *   - Always include the original token.
+ *   - If token ends in "ies" (length > 4): add the "y" form (batteries -> battery).
+ *   - Else if token ends in "es" (length > 4): add the bare form (hoses -> hose).
+ *   - If token ends in "s" but not "ss" (length > 3): add the singular (pads -> pad).
+ *   - If token does not end in "s": add the simple plural (pad -> pads).
+ *
+ * Returns a deduplicated array — usually 1-2 entries per token.
+ */
+export function expandTokenVariants(token: string): string[] {
+  const variants = new Set<string>([token]);
+  if (token.endsWith("ies") && token.length > 4) {
+    variants.add(token.slice(0, -3) + "y");
+  } else if (token.endsWith("es") && token.length > 4) {
+    variants.add(token.slice(0, -2));
+  }
+  if (token.endsWith("s") && !token.endsWith("ss") && token.length > 3) {
+    variants.add(token.slice(0, -1));
+  }
+  if (!token.endsWith("s")) {
+    variants.add(token + "s");
+  }
+  return Array.from(variants);
+}
+
+/**
  * Count how many sibling donor jobs corroborate each scored job (Task #182).
  *
  * Two donor jobs corroborate each other when they share the same canned-job

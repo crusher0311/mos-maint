@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { expandTokenVariants } from "@/lib/job-scoring";
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -36,7 +37,21 @@ export async function searchMongoJobIndex(
   };
 
   if (coreTokens.length > 0) {
-    matchStage["job.keywords"] = { $all: coreTokens };
+    // Donor keywords are indexed as the literal lowercased words from each
+    // title with no stemming, so an exact `$all` lookup misses simple
+    // singular/plural variations ("brake pad" vs indexed "pads"). Expand each
+    // token to its small variant set and require that EVERY token has at
+    // least one variant present in the keywords array. Single-token queries
+    // collapse to a fast `$in` against the existing `(shopId, job.keywords)`
+    // index; multi-token queries become `$and` of per-token `$in` clauses,
+    // which the planner handles efficiently.
+    if (coreTokens.length === 1) {
+      matchStage["job.keywords"] = { $in: expandTokenVariants(coreTokens[0]) };
+    } else {
+      matchStage["$and"] = coreTokens.map((t) => ({
+        "job.keywords": { $in: expandTokenVariants(t) },
+      }));
+    }
   }
   if (vehicleMake) {
     matchStage["vehicle.make"] = { $regex: escapeRegex(vehicleMake), $options: "i" };
