@@ -822,6 +822,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       if (selectedVehicle.make) params.set("make", selectedVehicle.make);
       if (selectedVehicle.model) params.set("model", selectedVehicle.model);
       if (selectedVehicle.engine) params.set("engine", selectedVehicle.engine);
+      // Pass VIN so the server can DataOne-decode the target and fire ACES
+      // tier matches. Without this, dataOneEnhanced stays false and ACES
+      // never engages.
+      if (selectedVehicle.vin) params.set("vin", selectedVehicle.vin);
       params.set("strictModel", "true");
       const res = await fetch(`/api/jobs/search?${params.toString()}`);
       const data = await res.json();
