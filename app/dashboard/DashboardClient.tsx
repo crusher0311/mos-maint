@@ -1525,6 +1525,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <div className="flex-1 overflow-auto p-6">
               <JobLookup
                 currentVehicle={{
+                  vin: jobLookupVehicle.vin,
                   year: jobLookupVehicle.year,
                   make: jobLookupVehicle.make,
                   model: jobLookupVehicle.model,

@@ -58,6 +58,7 @@ type JobResult = {
 
 type Props = {
   currentVehicle?: {
+    vin?: string;
     year?: number;
     make?: string;
     model?: string;
@@ -75,6 +76,11 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [addingJob, setAddingJob] = useState<string | null>(null);
   const [featureNotAvailable, setFeatureNotAvailable] = useState(false);
+  // Tracks whether the last search successfully decoded the target VIN
+  // through DataOne. When false, ACES tier matches (Exact Fit ACES /
+  // Same engine / Same submodel) cannot fire and every score below is
+  // from the legacy heuristic scorer — surface that to the advisor.
+  const [acesUnavailable, setAcesUnavailable] = useState(false);
 
   const handleSearch = async () => {
     if (!query.trim() && !currentVehicle?.make) {
@@ -93,6 +99,10 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       if (currentVehicle?.make) params.set("make", currentVehicle.make);
       if (currentVehicle?.model) params.set("model", currentVehicle.model);
       if (currentVehicle?.engine) params.set("engine", currentVehicle.engine);
+      // Pass VIN so the server can DataOne-decode the target and fire
+      // ACES tier matches. Without this, dataOneEnhanced stays false
+      // and ACES never engages regardless of repair type.
+      if (currentVehicle?.vin) params.set("vin", currentVehicle.vin);
 
       const res = await fetch(`/api/jobs/search?${params.toString()}`);
       const data = await res.json();
@@ -100,6 +110,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       if (res.status === 402 && data.code === "FEATURE_NOT_AVAILABLE") {
         setFeatureNotAvailable(true);
         setResults([]);
+        setAcesUnavailable(false);
         return;
       }
 
@@ -108,6 +119,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       }
 
       setResults(data.results || []);
+      setAcesUnavailable(data.dataOneEnhanced === false);
     } catch (err: any) {
       setError(err.message);
       setResults([]);
@@ -261,6 +273,12 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       {error && (
         <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {acesUnavailable && results.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm">
+          <strong>ACES match unavailable</strong> — vehicle VIN didn&apos;t decode through DataOne, so scores below are from the heuristic scorer only.
         </div>
       )}
 
