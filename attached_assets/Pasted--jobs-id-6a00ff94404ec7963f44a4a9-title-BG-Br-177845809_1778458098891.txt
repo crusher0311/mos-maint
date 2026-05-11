@@ -1,0 +1,102 @@
+{
+    "jobs": [
+        {
+            "_id": "6a00ff94404ec7963f44a4a9",
+            "title": "BG Brake System Service",
+            "description": null,
+            "vehicle": {
+                "vin": "1C4RJFCG9JC335712",
+                "year": 2018,
+                "make": "Jeep",
+                "model": "Grand Cherokee"
+            },
+            "workOrderNumber": "142799",
+            "laborItems": [
+                {
+                    "name": "Removes old & contaminated brake fluid from master cylinder, brake lines, ABS module & calipers. The service effectively extracts and replaces brake fluid from the vehicle, replacing the old fluid with BG Premium Brake Fluid. Service is performed according to OEM procedures. Upon completion, the system is inspected for leaks, and test driven.",
+                    "hours": 0.7
+                }
+            ],
+            "parts": [
+                {
+                    "name": "DOT 4 Ultra-Dry Premium Brake Fluid",
+                    "partNumber": "84032",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 23.55,
+                    "retail": 39.1
+                }
+            ],
+            "totals": {
+                "laborHours": 0.7,
+                "laborAmount": 137.79,
+                "partsAmount": 39.1,
+                "totalAmount": 176.89
+            },
+            "matchScore": 69,
+            "matchBand": "likely",
+            "matchBandLabel": "Great Match",
+            "matchReason": "Same vehicle class (light), Model family match, 3 years off, Service category match (brake), Recent",
+            "acesTier": null,
+            "lowConfidence": false,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 32,
+            "location": "Evanston"
+        },
+        {
+            "_id": "6a00f0c5404ec7963f447c21",
+            "title": "BG Brake System Service",
+            "description": null,
+            "vehicle": {
+                "vin": "1C4RJYB67RC711923",
+                "year": 2024,
+                "make": "Jeep",
+                "model": "Grand Cherokee"
+            },
+            "workOrderNumber": "142958",
+            "laborItems": [
+                {
+                    "name": "Removes old & contaminated brake fluid from master cylinder, brake lines, ABS module & calipers. The service effectively extracts and replaces brake fluid from the vehicle, replacing the old fluid with BG Premium Brake Fluid. Service is performed according to OEM procedures. Upon completion, the system is inspected for leaks, and test driven.",
+                    "hours": 0.7
+                }
+            ],
+            "parts": [
+                {
+                    "name": "DOT 4 ULTRA-DRY PREMIUM BRAKE FLUID",
+                    "partNumber": "84032",
+                    "brand": null,
+                    "quantity": 1,
+                    "cost": 23.55,
+                    "retail": 39.1
+                }
+            ],
+            "totals": {
+                "laborHours": 0.7,
+                "laborAmount": 137.79,
+                "partsAmount": 39.1,
+                "totalAmount": 176.89
+            },
+            "matchScore": 66,
+            "matchBand": "likely",
+            "matchBandLabel": "Great Match",
+            "matchReason": "Same vehicle class (light), Model family match, Service category match (brake), Recent",
+            "acesTier": null,
+            "lowConfidence": false,
+            "crossClassPenalized": false,
+            "source": "protractor",
+            "shopId": 32,
+            "location": "Evanston"
+        }
+    ],
+    "total": 2,
+    "query": "brake",
+    "dataOneEnhanced": false,
+    "stats": {
+        "totalFound": 2,
+        "fromSupabase": 2,
+        "gatesFailed": 0,
+        "belowThreshold": 0,
+        "returned": 2
+    }
+}
