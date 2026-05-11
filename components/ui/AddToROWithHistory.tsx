@@ -191,6 +191,11 @@ export function AddToROWithHistory({
       if (vehicleMake) params.set("make", vehicleMake);
       if (vehicleModel) params.set("model", vehicleModel);
       if (vehicleEngine) params.set("engine", vehicleEngine);
+      // Pass VIN so the server can DataOne-decode the target and fire ACES
+      // tier matches. Without this, dataOneEnhanced stays false and ACES
+      // never engages — even same-VIN donor jobs lose the Tier A 100%
+      // short-circuit and fall back to the heuristic 90%.
+      if (vin) params.set("vin", vin);
       params.set("limit", "10");
 
       const res = await fetch(`/api/jobs/search?${params.toString()}`, {
