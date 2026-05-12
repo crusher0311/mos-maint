@@ -112,6 +112,32 @@ export async function fetchCarfaxLive(
     return { ok: false, error: "Invalid JSON from CARFAX." };
   }
 
+  // ---- In-band error envelope ----
+  // CARFAX returns HTTP 200 with `{ errorMessages: { errors: [{ code, message }] } }`
+  // for failures like:
+  //   - 107 "The VIN provided is not valid..."
+  //   - 302 "User does not have access to this Product"
+  // Without this guard the parser below would happily walk a body with no
+  // service records and stamp `ok: true` on the snapshot, overwriting any
+  // previously-good cached report and silently corrupting downstream
+  // mileage estimation. We surface these as `ok: false` with the upstream
+  // code+message so callers (and the snapshot upsert) treat them as
+  // outright failures.
+  const inBandErrors =
+    json?.errorMessages?.errors ||
+    json?.report?.errorMessages?.errors ||
+    json?.data?.errorMessages?.errors;
+  if (Array.isArray(inBandErrors) && inBandErrors.length > 0) {
+    const first = inBandErrors[0] || {};
+    const code = first?.code != null ? String(first.code) : "?";
+    const message = nonEmpty(first?.message) || "Unknown CARFAX error";
+    return {
+      ok: false,
+      error: `CARFAX ${code}: ${message}`,
+      raw: json,
+    };
+  }
+
   // ---- Normalize common shapes from CARFAX ----
   // Some responses are { report: {...} }, some { data: {...} }, and some (like yours) root-level.
   const root: any = json?.report || json?.data || json;
@@ -315,6 +341,29 @@ export async function getCarfaxDecodeHint(
 }
 
 /** -------- Snapshot storage (cache) -------- */
+/**
+ * Upserts a CARFAX snapshot for (shopId, vin) — but never destroys a
+ * previously-good cached report when the new fetch is unhealthy.
+ *
+ * Three cases:
+ *   1. New report failed (ok:false). We keep the prior payload intact and
+ *      only stamp lifecycle/error metadata: lastFetchAttemptAt,
+ *      lastErrorAt, lastErrorMessage, plus rawError. The historical
+ *      `serviceRecords` / `serviceCategories` / `lastReportedMileage`
+ *      survive so downstream mileage estimation still has data to work
+ *      with during a CARFAX outage.
+ *   2. New report succeeded (ok:true) but came back empty
+ *      (`serviceRecords` null/empty) AND we previously had real records.
+ *      Same preservation behavior — record the empty fetch in
+ *      `lastEmptyFetchAt` for observability but don't wipe the good data.
+ *   3. New report succeeded with real content (or this is the first ever
+ *      snapshot for the VIN). Overwrite the payload fields normally.
+ *
+ * Before this guard a transient CARFAX error or a single bad-response
+ * 200 (in-band errorMessages, see fetchCarfaxLive) would silently
+ * destroy the cached history for any VIN re-requested in that window —
+ * 709 platform-wide reports were corrupted this way before the fix.
+ */
 export async function upsertCarfaxSnapshot(
   shopId: number,
   vin: string,
@@ -322,12 +371,100 @@ export async function upsertCarfaxSnapshot(
 ) {
   const db = await getDb();
   const now = new Date();
-  await db.collection("carfax_reports").updateOne(
+  const coll = db.collection("carfax_reports");
+
+  const newHasContent =
+    report.ok &&
+    Array.isArray(report.serviceRecords) &&
+    report.serviceRecords.length > 0;
+
+  // Failure / empty paths: read the existing doc to decide whether to
+  // preserve. We can skip this read on the happy path because we'll
+  // overwrite everything anyway.
+  let existing: any = null;
+  if (!newHasContent) {
+    existing = await coll.findOne(
+      { shopId, vin },
+      {
+        projection: {
+          serviceRecords: 1,
+          serviceCategories: 1,
+          lastReportedMileage: 1,
+          ok: 1,
+        },
+      }
+    );
+  }
+
+  const existingHasContent =
+    existing &&
+    existing.ok &&
+    Array.isArray(existing.serviceRecords) &&
+    existing.serviceRecords.length > 0;
+
+  // Common lifecycle fields that always update on a fetch attempt.
+  const lifecycle: Record<string, any> = {
+    shopId,
+    vin,
+    source: "carfax",
+    lastFetchAttemptAt: now,
+  };
+
+  if (!report.ok) {
+    // Case 1: new fetch failed.
+    const setFields: Record<string, any> = {
+      ...lifecycle,
+      lastErrorAt: now,
+      lastErrorMessage: report.error ?? null,
+      rawError: report.raw ?? null,
+    };
+    if (!existingHasContent) {
+      // Nothing to preserve — write the failure as the canonical state.
+      setFields.fetchedAt = now;
+      setFields.ok = false;
+      setFields.error = report.error ?? null;
+      setFields.raw = report.raw ?? null;
+      setFields.serviceRecords = null;
+      setFields.serviceCategories = null;
+      setFields.lastReportedMileage = null;
+      setFields.reportDate = null;
+      setFields.numberOfOwners = null;
+      setFields.accidents = null;
+      setFields.damageReports = null;
+      setFields.titleIssues = null;
+      setFields.recalls = null;
+    }
+    // else: leave ok / serviceRecords / etc. as the previously-good values.
+    await coll.updateOne(
+      { shopId, vin },
+      { $set: setFields, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+    return;
+  }
+
+  if (!newHasContent && existingHasContent) {
+    // Case 2: ok:true but empty, and we have good prior data — preserve it.
+    await coll.updateOne(
+      { shopId, vin },
+      {
+        $set: {
+          ...lifecycle,
+          lastEmptyFetchAt: now,
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+    return;
+  }
+
+  // Case 3: happy path — first snapshot, or new content overwrites old.
+  await coll.updateOne(
     { shopId, vin },
     {
       $set: {
-        shopId,
-        vin,
+        ...lifecycle,
         fetchedAt: now,
         reportDate: report.reportDate ?? null,
         numberOfOwners: report.numberOfOwners ?? null,
@@ -341,7 +478,6 @@ export async function upsertCarfaxSnapshot(
         ok: report.ok,
         error: report.error ?? null,
         raw: report.raw ?? null,
-        source: "carfax",
       },
       $setOnInsert: { createdAt: now },
     },
