@@ -66,6 +66,21 @@ function makeFakeCollection() {
       docs.push(doc);
       return { insertedId: docs.length };
     },
+    // Mirrors Mongo's updateOne with $set + upsert:true semantics —
+    // enough for setCachedPlan's new race-safe upsert path.
+    updateOne: async (filter: any, update: any, options?: { upsert?: boolean }) => {
+      const idx = docs.findIndex((d) => matchesQuery(d, filter));
+      if (idx >= 0) {
+        if (update.$set) Object.assign(docs[idx], update.$set);
+        return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+      }
+      if (options?.upsert) {
+        const newDoc: Doc = { ...filter, ...(update.$set ?? {}) };
+        docs.push(newDoc);
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      }
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+    },
     find: (q: any) => {
       const result = docs.filter((d) => matchesQuery(d, q));
       const cursor = {
@@ -222,17 +237,41 @@ async function main() {
   }
 
   // ----------------- 3. mileage-tolerance guard on read -----------------
+  // 2026-05-12: getCachedPlan accepts any entry created within the last
+  // 30 seconds regardless of mileage (freshness override added to fix the
+  // cacheReadAfterBuild race for partner VHI lookups). To exercise the
+  // tolerance guard in isolation, we age the row past the freshness
+  // window before reading.
   {
     const db = makeFakeDb();
     await setCachedPlan(db, "ABCDEFGHJKLMNPQRS", 7, 70000, samplePlan);
+    const coll = db._coll("cached_plans") as FakeColl;
+    coll.docs[0].createdAt = new Date(Date.now() - 60_000); // 60s ago
 
     const within = await getCachedPlan(db, "ABCDEFGHJKLMNPQRS", 7, 70300);
     ok("getCachedPlan HITs within the 500-mile tolerance window", within != null);
 
     const outside = await getCachedPlan(db, "ABCDEFGHJKLMNPQRS", 7, 71000);
     ok(
-      "getCachedPlan MISSes when the new mileage is beyond the tolerance",
+      "getCachedPlan MISSes when the new mileage is beyond the tolerance (entry past freshness window)",
       outside === null,
+    );
+  }
+
+  // ----------------- 3b. freshness override on read -----------------
+  // A row created < 30s ago is accepted regardless of mileage delta, so a
+  // partner VHI lookup never surfaces "cacheReadAfterBuild" when a
+  // concurrent writer for the same VIN landed a slightly different mileage
+  // estimate (CARFAX projection vs year×12k vs actual odometer).
+  {
+    const db = makeFakeDb();
+    await setCachedPlan(db, "ABCDEFGHJKLMNPQRV", 7, 70000, samplePlan);
+
+    const fresh = await getCachedPlan(db, "ABCDEFGHJKLMNPQRV", 7, 95000);
+    ok(
+      "getCachedPlan HITs a just-built (<30s) entry even with a wildly different requested mileage",
+      fresh != null,
+      `expected HIT, got ${fresh === null ? "null" : "doc"}`,
     );
   }
 

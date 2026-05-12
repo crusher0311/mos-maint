@@ -223,14 +223,30 @@ export async function getCachedPlan(
     }
 
     if (currentMiles != null && currentMiles > 0) {
-      if (entry.mileage == null || entry.mileage <= 0) {
-        console.log(`[PlanCache] SKIP: Cache has no mileage but current is ${currentMiles} for ${vin}`);
-        continue;
-      }
-      const mileageDiff = Math.abs(currentMiles - entry.mileage);
-      if (mileageDiff > MILEAGE_TOLERANCE) {
-        console.log(`[PlanCache] SKIP: Mileage changed ${entry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
-        continue;
+      // 2026-05-12: freshness override. A row created within the last
+      // 30 seconds is the result of a just-finished plan-build (either
+      // ours or a concurrent caller's). Accept it regardless of mileage
+      // delta — whatever the most-recent build resolved is the truth,
+      // and rejecting it would force the awaiting partner request to
+      // surface "cacheReadAfterBuild" even though a perfectly good plan
+      // is sitting in the cache. The upsert in setCachedPlan guarantees
+      // we won't see a stale row from a previous TTL window here (the
+      // row is always overwritten in place).
+      const ageMs = Date.now() - entry.createdAt.getTime();
+      const isFreshlyBuilt = ageMs < 30_000;
+
+      if (!isFreshlyBuilt) {
+        if (entry.mileage == null || entry.mileage <= 0) {
+          console.log(`[PlanCache] SKIP: Cache has no mileage but current is ${currentMiles} for ${vin}`);
+          continue;
+        }
+        const mileageDiff = Math.abs(currentMiles - entry.mileage);
+        if (mileageDiff > MILEAGE_TOLERANCE) {
+          console.log(`[PlanCache] SKIP: Mileage changed ${entry.mileage} -> ${currentMiles} (diff: ${mileageDiff}) for ${vin}`);
+          continue;
+        }
+      } else if (entry.mileage != null && Math.abs(currentMiles - entry.mileage) > MILEAGE_TOLERANCE) {
+        console.log(`[PlanCache] HIT (freshness override): ${vin} cached ${ageMs}ms ago at ${entry.mileage} mi, request was ${currentMiles} mi (diff > ${MILEAGE_TOLERANCE}) — accepting because just-built`);
       }
     }
 
@@ -254,20 +270,42 @@ export async function setCachedPlan(
   const normalizedVin = vin.toUpperCase();
   const normalizedShopId = Number(shopId);
 
+  // 2026-05-12 (Task #392 follow-up): historically this was
+  // deleteMany({vin, shopId}) followed by insertOne(...). Two near-
+  // simultaneous plan-builds for the same VIN (e.g. AppFueled firing
+  // partner VHI lookups in pairs, or a webhook colliding with a partner
+  // request) would race: writer A's deleteMany would wipe writer B's
+  // freshly-inserted row, leaving a brief window where the row didn't
+  // exist OR where the row's mileage differed by > MILEAGE_TOLERANCE
+  // from what the awaiting reader expected — surfacing as
+  // "Plan build completed but cache not yet available"
+  // (failedStage=cacheReadAfterBuild) on the partner.
+  //
+  // Fix: clean up only the legacy String-shopId variant rows first
+  // (cheap idempotent cleanup so old polluted shops converge over
+  // time), then upsert the canonical Number-shopId row. The row is
+  // never absent — concurrent writers race on the upsert, last-write-
+  // wins, but readers always see SOMETHING and the freshness override
+  // in getCachedPlan accepts a just-built row even if its mileage
+  // differs from the reader's request.
   await db.collection("cached_plans").deleteMany({
     vin: normalizedVin,
-    shopId: { $in: [String(normalizedShopId), normalizedShopId] },
+    shopId: String(normalizedShopId),
   });
 
-  await db.collection("cached_plans").insertOne({
-    vin: normalizedVin,
-    shopId: normalizedShopId,
-    mileage,
-    plan,
-    createdAt: now,
-    expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
-    schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
-  });
+  await db.collection("cached_plans").updateOne(
+    { vin: normalizedVin, shopId: normalizedShopId },
+    {
+      $set: {
+        mileage,
+        plan,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
+        schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
+      },
+    },
+    { upsert: true },
+  );
   console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
 }
 
