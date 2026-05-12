@@ -412,16 +412,58 @@ export function triage({
 
   const lastMap = new Map<string, LastDone>();
 
+  // Task #431: don't let a candidate with `miles == null` displace a stored
+  // candidate that already has a real odometer. CARFAX's serviceCategories
+  // rollup often carries `odometerOfLastService = null` even when the
+  // matching per-record line has a real reading — a pure "newest date wins"
+  // merge would wipe the mileage signal and force `computeAnchorMiles` to
+  // fall back to "interval only", which collapses overdue math (e.g. cabin
+  // air filter "Due at 12,000 mi" instead of 33,578). The merge now:
+  //   - takes the strictly-newer date,
+  //   - but if the newer entry would *lose* the mileage signal (incoming
+  //     null vs prior non-null), keeps the prior `miles` and only adopts
+  //     the newer date/source;
+  //   - on equal dates, prefers the entry that has miles;
+  //   - on older dates, ignores the candidate (the lone exception is when
+  //     the prior entry has no miles and the older one does — then we
+  //     promote the older miles onto the newer date so the anchor still
+  //     has a number).
+  const mergeLastDone = (prev: LastDone | undefined, cand: LastDone): LastDone => {
+    if (!prev) return cand;
+    const prevTime = prev.date ? prev.date.getTime() : -Infinity;
+    const candTime = cand.date ? cand.date.getTime() : -Infinity;
+    const prevHasMiles = prev.miles != null;
+    const candHasMiles = cand.miles != null;
+    if (candTime > prevTime) {
+      if (!candHasMiles && prevHasMiles) {
+        return { miles: prev.miles, date: cand.date, source: cand.source };
+      }
+      return cand;
+    }
+    if (candTime === prevTime) {
+      if (candHasMiles && !prevHasMiles) {
+        return { miles: cand.miles, date: prev.date ?? cand.date, source: prev.source ?? cand.source };
+      }
+      return prev;
+    }
+    if (!prevHasMiles && candHasMiles) {
+      return { miles: cand.miles, date: prev.date, source: prev.source };
+    }
+    return prev;
+  };
+
   for (const sh of shopServiceHistory || []) {
     const keys = toKeyFromFreeText(sh.serviceName || "");
     for (const k of keys) {
-      const prev = lastMap.get(k);
       const cand: LastDone = { miles: sh.mileage, date: sh.date, source: "shop" };
-      const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
-      const candScore = sh.date ? sh.date.getTime() : -Infinity;
-      if (!prev || candScore > prevScore) lastMap.set(k, cand);
+      lastMap.set(k, mergeLastDone(lastMap.get(k), cand));
     }
   }
+
+  // Per-key index of enriched per-record CARFAX entries with a real
+  // odometer. Used by the rollup pass below to backfill `miles` when
+  // `odometerOfLastService` is null on the rollup row.
+  const perRecordWithMilesByKey = new Map<string, Array<{ date: Date | null; miles: number }>>();
 
   for (const r of enrichedRecords) {
     const date = r.date;
@@ -429,16 +471,35 @@ export function triage({
     const desc = String(r.description || "").trim();
     const keys = toKeyFromFreeText(desc);
     for (const k of keys) {
-      const prev = lastMap.get(k);
+      if (miles != null) {
+        if (!perRecordWithMilesByKey.has(k)) perRecordWithMilesByKey.set(k, []);
+        perRecordWithMilesByKey.get(k)!.push({ date, miles });
+      }
       const shopRecords = shopHistoryByKey.get(k) || [];
       const matchesShop = shopRecords.some(sr => isMatchingHistory(sr, { miles, date }));
       if (matchesShop) continue;
       const cand: LastDone = { miles, date, source: "carfax" };
-      const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
-      const candScore = date ? date.getTime() : -Infinity;
-      if (!prev || candScore > prevScore) lastMap.set(k, cand);
+      lastMap.set(k, mergeLastDone(lastMap.get(k), cand));
     }
   }
+
+  // Task #431: backfill miles for the rollup pass when odometer is null by
+  // borrowing from the matching per-record CARFAX line — exact-date match
+  // wins, otherwise the closest record at-or-before the rollup date.
+  const findRolloverMiles = (key: string, atDate: Date | null): number | null => {
+    if (!atDate) return null;
+    const list = perRecordWithMilesByKey.get(key);
+    if (!list || !list.length) return null;
+    const at = atDate.getTime();
+    const exact = list.find(r => r.date && r.date.getTime() === at);
+    if (exact) return exact.miles;
+    const atOrBefore = list.filter(r => r.date && r.date.getTime() <= at);
+    if (atOrBefore.length) {
+      atOrBefore.sort((a, b) => b.date!.getTime() - a.date!.getTime());
+      return atOrBefore[0].miles;
+    }
+    return null;
+  };
 
   // CARFAX serviceCategories rollup — see the type comment above for why
   // this beats per-record text. Same shop-history dedup so we don't
@@ -448,17 +509,15 @@ export function triage({
     if (!name) continue;
     const date = parseCarfaxDate(cat.date ?? null);
     if (date && (date < earliestDate || date > today)) continue;
-    const miles = typeof cat.odometer === "number" ? cat.odometer : null;
+    let miles: number | null = typeof cat.odometer === "number" ? cat.odometer : null;
     const keys = toKeyFromFreeText(name);
     for (const k of keys) {
-      const prev = lastMap.get(k);
       const shopRecords = shopHistoryByKey.get(k) || [];
       const matchesShop = shopRecords.some(sr => isMatchingHistory(sr, { miles, date }));
       if (matchesShop) continue;
-      const cand: LastDone = { miles, date, source: "carfax" };
-      const prevScore = prev?.date ? prev.date.getTime() : -Infinity;
-      const candScore = date ? date.getTime() : -Infinity;
-      if (!prev || candScore > prevScore) lastMap.set(k, cand);
+      const candMiles = miles == null ? findRolloverMiles(k, date) : miles;
+      const cand: LastDone = { miles: candMiles, date, source: "carfax" };
+      lastMap.set(k, mergeLastDone(lastMap.get(k), cand));
     }
   }
 
