@@ -371,6 +371,7 @@ const ALLOWLIST = new Set([
   "scripts/drain-tekmetric-backfill.ts",
   "scripts/job-index-aces-coverage.ts",
   "scripts/protractor-job-index-catchup.ts",
+  "scripts/repair-corrupted-carfax-snapshots.ts",
   "scripts/wave1-backfill.ts",
 ]);
 
