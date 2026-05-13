@@ -234,6 +234,147 @@ async function processCallbackEvent(
   }
 }
 
+// Background enrichment for new/open work orders — extracted out of the
+// POST handler so we can ack the webhook in <50ms instead of blocking
+// on a round-trip to Protractor's own API. Fire-and-forget from the
+// caller; this function owns its own try/catch so a failure here can
+// never leak into the webhook response.
+//
+// Safety note (2026-05-13): we run on Render in long-running Node
+// process mode (not serverless / Edge), so the process is NOT torn
+// down after Response is sent — fire-and-forget Promises continue to
+// execute. If we ever move this route to a serverless / Edge runtime
+// we MUST switch to `unstable_after()` from `next/server` (or push
+// the work to an external queue) so the background task isn't killed
+// mid-flight.
+//
+// `eventId` is the _id of the row we just inserted into
+// protractor_callback_events, scoped per request. Passing it lets us
+// stamp processed/lastAttemptAt on the SPECIFIC event row instead of
+// matching by `{workOrderId, processed:false}` — which would race if
+// two webhooks for the same workOrderId arrive nearly simultaneously
+// and clobber each other's status.
+async function enrichOpenWorkOrderInBackground(
+  db: Db,
+  shopId: number,
+  workOrderId: string,
+  status: string | null,
+  eventId: ObjectId,
+): Promise<void> {
+  try {
+    const result = await fetchWorkOrderById(shopId, workOrderId);
+    if (!result.ok || !result.workOrder) {
+      const errMsg = result.ok ? "no workOrder in result" : result.error;
+      console.log(`[Protractor Callback] Background enrich: failed to fetch WO ${workOrderId}: ${errMsg}`);
+      // Stamp lastAttemptAt + increment attempts so the daily cron
+      // sees this as a retry candidate rather than thinking it was
+      // never attempted. We deliberately leave processed: false.
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: eventId },
+        {
+          $set: { lastAttemptAt: new Date(), lastError: String(errMsg).slice(0, 500) },
+          $inc: { attempts: 1 },
+        },
+      );
+      return;
+    }
+
+    await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+    await signalDashboardUpdate(db);
+    console.log(`[Protractor Callback] Background enrich: upserted WO ${workOrderId} (shop ${shopId})`);
+
+    const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
+    if (vin && result.workOrder.ServiceItem) {
+      await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
+
+      const vehicle = result.workOrder.ServiceItem;
+      const currentOdometer = result.workOrder.InUsage ?? (vehicle as any)?.Usage ?? result.workOrder.Odometer ?? (vehicle as any)?.Odometer;
+
+      const workOrderSource = {
+        provider: "protractor",
+        workOrderId: String(result.workOrder.ID),
+        workOrderNumber: result.workOrder.WorkOrderNumber,
+        status: result.workOrder.WorkflowStage || status || "Open",
+        addedAt: new Date(),
+      };
+
+      const existingVehicle = await db.collection("vehicles").findOne({
+        $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+        vin,
+      });
+
+      if (existingVehicle) {
+        const existingSources = existingVehicle.status?.sources || [];
+        const sourceIndex = existingSources.findIndex(
+          (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder!.ID)
+        );
+
+        let updatedSources;
+        if (sourceIndex >= 0) {
+          updatedSources = [...existingSources];
+          updatedSources[sourceIndex] = workOrderSource;
+        } else {
+          updatedSources = [...existingSources, workOrderSource];
+        }
+
+        await db.collection("vehicles").updateOne(
+          { _id: existingVehicle._id },
+          {
+            $set: {
+              year: (vehicle as any)?.Year ?? existingVehicle.year,
+              make: (vehicle as any)?.Make ?? existingVehicle.make,
+              model: (vehicle as any)?.Model ?? existingVehicle.model,
+              license: (vehicle as any)?.LicensePlate ?? existingVehicle.license,
+              lastMileage: currentOdometer ?? existingVehicle.lastMileage,
+              updatedAt: new Date(),
+              protractorId: (vehicle as any)?.ID ?? existingVehicle.protractorId,
+              "status.active": true,
+              "status.sources": updatedSources,
+              "status.updatedAt": new Date(),
+            },
+          }
+        );
+      } else {
+        await db.collection("vehicles").insertOne({
+          shopId: String(shopId),
+          vin,
+          year: (vehicle as any)?.Year,
+          make: (vehicle as any)?.Make,
+          model: (vehicle as any)?.Model,
+          license: (vehicle as any)?.LicensePlate,
+          lastMileage: currentOdometer,
+          protractorId: (vehicle as any)?.ID,
+          status: {
+            active: true,
+            sources: [workOrderSource],
+            updatedAt: new Date(),
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+    }
+
+    await db.collection("protractor_callback_events").updateOne(
+      { _id: eventId },
+      { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
+    );
+  } catch (err: any) {
+    console.error(`[Protractor Callback] Background enrich error for WO ${workOrderId}:`, err?.message || err);
+    // Stamp lastAttemptAt + increment attempts so the daily cron picks
+    // it up on the next pass; deliberately leave processed: false.
+    try {
+      await db.collection("protractor_callback_events").updateOne(
+        { _id: eventId },
+        {
+          $set: { lastAttemptAt: new Date(), lastError: String(err?.message || err).slice(0, 500) },
+          $inc: { attempts: 1 },
+        },
+      );
+    } catch {}
+  }
+}
+
 async function processWithRetries(
   db: Db,
   eventId: ObjectId,
@@ -381,7 +522,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
-    await db.collection("protractor_callback_events").insertOne({
+    const insertResult = await db.collection("protractor_callback_events").insertOne({
       receivedAt: new Date(),
       payload,
       workOrderId,
@@ -390,111 +531,30 @@ export async function POST(request: NextRequest) {
       shopId: shop.shopId,
       processed: false
     });
+    const eventId = insertResult.insertedId;
 
     const normalizedStatus = (status || "").toUpperCase();
     const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
 
-    // For NEW/OPEN work orders, immediately fetch from Protractor and upsert
-    // so they appear on the dashboard right away (not just after daily cron)
+    // For NEW/OPEN work orders, fire enrichment in the background and ack
+    // the webhook immediately. Doing the Protractor API round-trip inline
+    // used to make our 200 wait on Protractor's own /workorders/{id}
+    // response — which is the exact thing they asked us to stop doing on
+    // 2026-05-13 ("webhooks to hit their site are taking a long time to
+    // complete"). The enrichment helper owns its own try/catch so a
+    // failure can never leak into the ack path.
     if (!isClosed && workOrderId) {
       const shopId = Number(shop.shopId);
-      console.log(`[Protractor Callback] New/open work order ${workOrderId} with status: ${status} (shop: ${shopId}) - fetching immediately`);
+      console.log(`[Protractor Callback] New/open work order ${workOrderId} with status: ${status} (shop: ${shopId}) - enriching in background`);
 
-      try {
-        const result = await fetchWorkOrderById(shopId, workOrderId);
-        if (result.ok && result.workOrder) {
-          await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
-          await signalDashboardUpdate(db);
-          console.log(`[Protractor Callback] Upserted work order ${workOrderId} for immediate dashboard display`);
-
-          const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
-          if (vin && result.workOrder.ServiceItem) {
-            await upsertProtractorVehicleSnapshot(shopId, vin, result.workOrder.ServiceItem);
-            console.log(`[Protractor Callback] Upserted vehicle ${vin} for shop ${shopId}`);
-          }
-
-          // Also update the vehicles collection so it stays in sync
-          if (vin) {
-            const vehicle = result.workOrder.ServiceItem;
-            const currentOdometer = result.workOrder.InUsage ?? vehicle?.Usage ?? result.workOrder.Odometer ?? vehicle?.Odometer;
-
-            const workOrderSource = {
-              provider: "protractor",
-              workOrderId: String(result.workOrder.ID),
-              workOrderNumber: result.workOrder.WorkOrderNumber,
-              status: result.workOrder.WorkflowStage || status || "Open",
-              addedAt: new Date(),
-            };
-
-            const existingVehicle = await db.collection("vehicles").findOne({
-              $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
-              vin,
-            });
-
-            if (existingVehicle) {
-              const existingSources = existingVehicle.status?.sources || [];
-              const sourceIndex = existingSources.findIndex(
-                (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(result.workOrder!.ID)
-              );
-
-              let updatedSources;
-              if (sourceIndex >= 0) {
-                updatedSources = [...existingSources];
-                updatedSources[sourceIndex] = workOrderSource;
-              } else {
-                updatedSources = [...existingSources, workOrderSource];
-              }
-
-              await db.collection("vehicles").updateOne(
-                { _id: existingVehicle._id },
-                {
-                  $set: {
-                    year: vehicle?.Year ?? existingVehicle.year,
-                    make: vehicle?.Make ?? existingVehicle.make,
-                    model: vehicle?.Model ?? existingVehicle.model,
-                    license: vehicle?.LicensePlate ?? existingVehicle.license,
-                    lastMileage: currentOdometer ?? existingVehicle.lastMileage,
-                    updatedAt: new Date(),
-                    protractorId: vehicle?.ID ?? existingVehicle.protractorId,
-                    "status.active": true,
-                    "status.sources": updatedSources,
-                    "status.updatedAt": new Date(),
-                  },
-                }
-              );
-            } else {
-              await db.collection("vehicles").insertOne({
-                shopId: String(shopId),
-                vin,
-                year: vehicle?.Year,
-                make: vehicle?.Make,
-                model: vehicle?.Model,
-                license: vehicle?.LicensePlate,
-                lastMileage: currentOdometer,
-                protractorId: vehicle?.ID,
-                status: {
-                  active: true,
-                  sources: [workOrderSource],
-                  updatedAt: new Date(),
-                },
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              });
-            }
-          }
-
-          await db.collection("protractor_callback_events").updateOne(
-            { workOrderId, processed: false },
-            { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
-          );
-        } else {
-          console.log(`[Protractor Callback] Failed to fetch work order ${workOrderId}: ${result.error}`);
-        }
-      } catch (fetchErr: any) {
-        console.error(`[Protractor Callback] Error fetching new work order ${workOrderId}:`, fetchErr.message);
-      }
+      // Fire-and-forget — DO NOT await.
+      enrichOpenWorkOrderInBackground(db, shopId, workOrderId, status, eventId)
+        .catch((err: any) => console.error(`[Protractor Callback] Background enrich top-level error:`, err?.message || err));
     }
 
+    // (Legacy synchronous enrichment block removed 2026-05-13 —
+    // enrichOpenWorkOrderInBackground above is now the single source
+    // of truth so the webhook can ack in <50ms.)
     if (isClosed) {
       console.log(`[Protractor Callback] Work order ${workOrderId} closed with status: ${status} (shop: ${shop.shopId})`);
 
