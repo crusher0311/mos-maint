@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,7 +72,16 @@ export async function GET(request: NextRequest) {
       if (cacheIncomplete && tekShopId) {
         try {
           const { getRepairOrder, getVehicle, getCustomer } = await import("@/lib/integrations/tekmetric/client");
-          const ro = await getRepairOrder(parseInt(roId), tekShopId);
+          // Heart-shop slowdown mitigation: 6s cap on the RO fetch. If
+          // Tekmetric is stalling we keep whatever we already pulled from
+          // the Mongo `tekmetric_work_orders` cache rather than blocking
+          // the side panel for 30-60s.
+          const ro = await withUpstreamTimeout(
+            getRepairOrder(parseInt(roId), tekShopId),
+            6000,
+            `tekmetric ro-context /repair-orders/${roId}`,
+            null as any,
+          );
           if (ro) {
             if (!repairOrderNumber && ro.repairOrderNumber) {
               repairOrderNumber = String(ro.repairOrderNumber);
@@ -80,9 +90,25 @@ export async function GET(request: NextRequest) {
               mileage = ro.mileageIn || ro.mileageOut || null;
             }
 
+            // Each upstream call gets its own 4s timeout so a single
+            // hung endpoint cannot drag the parallel batch out.
             const [vehicleRes, customerRes] = await Promise.all([
-              ro.vehicleId ? getVehicle(ro.vehicleId, tekShopId).catch(() => null) : Promise.resolve(null),
-              ro.customerId ? getCustomer(ro.customerId, tekShopId).catch(() => null) : Promise.resolve(null),
+              ro.vehicleId
+                ? withUpstreamTimeout(
+                    getVehicle(ro.vehicleId, tekShopId).catch(() => null),
+                    4000,
+                    `tekmetric ro-context /vehicles/${ro.vehicleId}`,
+                    null,
+                  )
+                : Promise.resolve(null),
+              ro.customerId
+                ? withUpstreamTimeout(
+                    getCustomer(ro.customerId, tekShopId).catch(() => null),
+                    4000,
+                    `tekmetric ro-context /customers/${ro.customerId}`,
+                    null,
+                  )
+                : Promise.resolve(null),
             ]);
 
             if (vehicleRes) {

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { trackViewedVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
@@ -330,7 +331,17 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
   }
   try {
     const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-    const data = await tekmetricRequest(`/repair-orders/${roId}`, {}, mosShopId);
+    // Heart-shop slowdown mitigation: cap the upstream Tekmetric call at 6s.
+    // On timeout `data` is null and the caller falls back to the Mongo
+    // `tekmetric_work_orders` cache (possibly stale but always present)
+    // rather than blocking the VHI panel for 30s+ while Tekmetric stalls.
+    const data = await withUpstreamTimeout(
+      tekmetricRequest(`/repair-orders/${roId}`, {}, mosShopId),
+      6000,
+      `tekmetric /repair-orders/${roId}`,
+      null,
+    );
+    if (data == null) return null;
     tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
     if (tekmetricRoCache.size > 200) {
       const oldest = Array.from(tekmetricRoCache.entries())
@@ -1181,7 +1192,12 @@ export async function GET(request: NextRequest) {
                 console.log(`[Extension] Vehicle ${vehicleId} found in MongoDB cache`);
               } else {
                 const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                const vehData = await tekmetricRequest(`/vehicles/${vehicleId}`, {}, mosShopId ? Number(mosShopId) : undefined);
+                const vehData = await withUpstreamTimeout(
+                  tekmetricRequest(`/vehicles/${vehicleId}`, {}, mosShopId ? Number(mosShopId) : undefined),
+                  4000,
+                  `tekmetric /vehicles/${vehicleId}`,
+                  null,
+                );
                 roVin = vehData?.vin;
                 if (vehData) await cacheVehicle(db, vehicleId, vehData).catch(() => {});
               }
@@ -1411,7 +1427,12 @@ export async function GET(request: NextRequest) {
 
     if (vin) {
       try {
-        const estimate = await estimateMileageFromCarfax(mosShopId, vin.toUpperCase());
+        const estimate = await withUpstreamTimeout(
+          estimateMileageFromCarfax(mosShopId, vin.toUpperCase()),
+          5000,
+          `carfax estimateMileage ${vin}`,
+          { estimated: false as const, mileage: null, reason: "timeout" } as any,
+        );
         if (!mileage || mileage <= 0) {
           if (estimate.estimated) {
             mileage = estimate.mileage;
@@ -1479,7 +1500,12 @@ export async function GET(request: NextRequest) {
               } else {
                 console.log(`[Extension] API FALLBACK: Customer ${customerId} not in cache, fetching from API`);
                 const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
-                const custData = await tekmetricRequest(`/customers/${customerId}`, {}, mosShopId ? Number(mosShopId) : undefined);
+                const custData = await withUpstreamTimeout(
+                  tekmetricRequest(`/customers/${customerId}`, {}, mosShopId ? Number(mosShopId) : undefined),
+                  4000,
+                  `tekmetric /customers/${customerId}`,
+                  null,
+                );
                 if (custData?.firstName && custData?.lastName) {
                   customerName = `${custData.firstName} ${custData.lastName}`;
                 } else if (custData?.name) {

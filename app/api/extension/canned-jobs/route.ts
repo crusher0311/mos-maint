@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getCannedJobs } from "@/lib/integrations/tekmetric";
 import { protractorAdapter } from "@/lib/integrations/protractor/adapter";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,7 +119,21 @@ export async function GET(request: NextRequest) {
           let hasMore = true;
           
           while (hasMore) {
-            const response = await getCannedJobs(tekmetricShopId, { page, size: 100 });
+            // Heart-shop slowdown mitigation: cap each page at 5s. On
+            // timeout we break the loop with whatever pages we already
+            // collected (still better than blocking the extension for
+            // the full 14s+ we saw in production), and if we got nothing
+            // the catch/cache fallthrough below kicks in.
+            const response = await withUpstreamTimeout(
+              getCannedJobs(tekmetricShopId, { page, size: 100 }),
+              5000,
+              `tekmetric canned-jobs page=${page} shop=${tekmetricShopId}`,
+              null as any,
+            );
+            if (!response) {
+              console.warn(`[Extension Canned Jobs] page ${page} timed out — using ${allCannedJobs.length} jobs collected so far`);
+              break;
+            }
             allCannedJobs = allCannedJobs.concat(response.content || []);
             hasMore = !response.last;
             page++;
