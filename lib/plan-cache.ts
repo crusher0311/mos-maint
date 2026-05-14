@@ -29,7 +29,13 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  *    surface no flag, which is the safe default — bumping the version
  *    forces a fresh build so the flag actually appears.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 6;
+/**
+ * v7 (task #434) — adds `lastSource` ("direct" | "implied") and the
+ * implied parent display fields on `last`. Bumping forces a one-time
+ * rebuild so cached rows surface the new "Anchored to <parent> on <date>"
+ * label instead of falling back to the legacy "Last done at … " chrome.
+ */
+export const PLAN_CACHE_SCHEMA_VERSION = 7;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -46,7 +52,23 @@ export interface TriagedItemCache {
   category?: string;
   intervalMiles?: number | null;
   intervalMonths?: number | null;
-  last?: { miles?: number | null; date?: string | null; source?: string };
+  last?: {
+    miles?: number | null;
+    date?: string | null;
+    source?: string;
+    /** Task #434: stable id of the parent service when `lastSource === "implied"`. */
+    impliedFromParentKey?: string | null;
+    /** Task #434: customer-facing parent label ("tire replacement"). */
+    impliedFromParentName?: string | null;
+  };
+  /**
+   * Task #434: anchor provenance — `"direct"` when a CARFAX / shop /
+   * Protractor record matched the canonical service key, `"implied"`
+   * when the anchor was inferred from a parent service via the
+   * `IMPLIES_RESET` map. `null`/missing for items that have never been
+   * performed.
+   */
+  lastSource?: "direct" | "implied" | null;
   dueAtMiles?: number | null;
   dueAtDate?: string | null;
   milesToGo?: number | null;

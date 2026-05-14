@@ -476,6 +476,143 @@ export function toKeyFromName(name: string): string | null {
   return null;
 }
 
+/**
+ * Task #434: Hand-curated "implies-reset" relationships. Some CARFAX
+ * lines describe a parent service whose completion implicitly resets a
+ * different child service's interval clock — e.g. "Four tires replaced"
+ * resets the rotation cadence even when no explicit "tires rotated"
+ * record exists. The triage layer falls back to the freshest matching
+ * parent record as the child's anchor when no direct child record is
+ * available.
+ *
+ * Conservative on purpose:
+ *   - Map is hand-curated (no LLM-generated relationships).
+ *   - One hop only — we do not cascade implied resets through chains.
+ *   - Children must be existing canonical service keys.
+ *   - Direct child records always beat the implied fallback.
+ *
+ * Most of these parents *also* match the canonical SERVICE_KEYS for
+ * their child via `toKeyFromFreeText` (e.g. "Battery replaced" already
+ * matches the `battery` key directly). They are listed here for
+ * documentation / safety-net coverage even when redundant — the
+ * tires-rotation pair is the one that genuinely changes behavior today.
+ */
+export const IMPLIES_RESET: Array<{
+  /** Stable id for the parent service (used by `lastSource: "implied"`). */
+  parentKey: string;
+  /** Customer-facing label for the parent service ("tire replacement"). */
+  parentName: string;
+  /** Free-text patterns that recognize the parent on a CARFAX line. */
+  parentMatchers: RegExp[];
+  /** Existing canonical service keys whose interval clock is reset. */
+  childKeys: string[];
+}> = [
+  {
+    parentKey: "tires_replaced",
+    parentName: "tire replacement",
+    parentMatchers: [
+      /\btires?\s+replaced\b/i,
+      /\b(?:four|4|two|2|all)\s+tires?\s+(?:replaced|installed|mounted)\b/i,
+      /\bnew\s+(?:set\s+of\s+)?tires?\b/i,
+      /\btire\s+replacement\b/i,
+    ],
+    childKeys: ["tire_rotation"],
+  },
+  {
+    parentKey: "front_brake_pads_replaced",
+    parentName: "front brake pad replacement",
+    parentMatchers: [
+      /\bfront\s+brake\s+pads?\s+replaced\b/i,
+      /\bfront\s+brakes?\s+replaced\b/i,
+    ],
+    childKeys: ["front_brake_pads"],
+  },
+  {
+    parentKey: "rear_brake_pads_replaced",
+    parentName: "rear brake pad replacement",
+    parentMatchers: [
+      /\brear\s+brake\s+pads?\s+replaced\b/i,
+      /\brear\s+brakes?\s+replaced\b/i,
+    ],
+    childKeys: ["rear_brake_pads"],
+  },
+  {
+    parentKey: "battery_replaced",
+    parentName: "battery replacement",
+    parentMatchers: [
+      /\bbattery\s+(?:replaced|installed|replacement)\b/i,
+      /\bnew\s+battery\b/i,
+    ],
+    childKeys: ["battery"],
+  },
+  {
+    parentKey: "spark_plugs_replaced",
+    parentName: "spark plug replacement",
+    parentMatchers: [
+      /\bspark\s+plugs?\s+replaced\b/i,
+      /\bnew\s+spark\s+plugs?\b/i,
+    ],
+    childKeys: ["spark_plugs"],
+  },
+  {
+    parentKey: "engine_air_filter_replaced",
+    parentName: "engine air filter replacement",
+    parentMatchers: [
+      /\bengine\s+air\s+filter\s+replaced\b/i,
+      /\bair\s+filter\s+replaced\b/i,
+    ],
+    childKeys: ["engine_air"],
+  },
+  {
+    parentKey: "cabin_air_filter_replaced",
+    parentName: "cabin air filter replacement",
+    parentMatchers: [
+      /\bcabin\s+air\s+filter\s+replaced\b/i,
+      /\bcabin\s+filter\s+replaced\b/i,
+    ],
+    childKeys: ["cabin_air"],
+  },
+  {
+    parentKey: "coolant_replaced",
+    parentName: "coolant service",
+    parentMatchers: [
+      /\bcoolant\s+(?:replaced|flushed?|exchange[d]?)\b/i,
+      /\bantifreeze\s+(?:replaced|flushed?)\b/i,
+      /\bradiator\s+flushed?\b/i,
+    ],
+    childKeys: ["coolant"],
+  },
+  {
+    parentKey: "trans_fluid_replaced",
+    parentName: "transmission fluid service",
+    parentMatchers: [
+      /\btransmission\s+fluid\s+(?:replaced|flushed?|exchange[d]?)\b/i,
+      /\b(?:atf|automatic\s+transmission\s+fluid)\s+(?:replaced|flushed?|exchange[d]?|service[d]?)\b/i,
+    ],
+    childKeys: ["trans_auto"],
+  },
+];
+
+/**
+ * Returns the implies-reset matches for a free-text CARFAX description.
+ * One CARFAX line can match multiple parents (rare but allowed); the
+ * caller is responsible for deduping by `(parentKey, childKey)` if needed.
+ */
+export function findImpliesResetMatches(
+  description: string,
+): Array<{ parentKey: string; parentName: string; childKey: string }> {
+  const out: Array<{ parentKey: string; parentName: string; childKey: string }> = [];
+  if (!description) return out;
+  for (const entry of IMPLIES_RESET) {
+    if (entry.parentMatchers.some((rx) => rx.test(description))) {
+      for (const child of entry.childKeys) {
+        out.push({ parentKey: entry.parentKey, parentName: entry.parentName, childKey: child });
+      }
+    }
+  }
+  return out;
+}
+
 export function toKeyFromFreeText(desc: string): string[] {
   const d = desc.toLowerCase();
   const hits: string[] = [];

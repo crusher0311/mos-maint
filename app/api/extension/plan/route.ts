@@ -545,8 +545,15 @@ export function convertCachedPlanItemForSidePanel(
     last: item.last ? {
       source: item.last.source || 'unknown',
       miles: item.last.miles || null,
-      date: item.last.date || null
+      date: item.last.date || null,
+      // Task #434: forward implied-parent provenance so the side panel
+      // overlay renders "Anchored to <parent> on <date>" instead of the
+      // misleading "Last done at …" when the anchor came from a parent
+      // service (e.g. "tires replaced" → tire_rotation).
+      impliedFromParentKey: item.last.impliedFromParentKey || null,
+      impliedFromParentName: item.last.impliedFromParentName || null,
     } : null,
+    lastSource: item.lastSource || null,
     lastPerformed: item.last ? {
       mileage: item.last.miles,
       date: item.last.date,

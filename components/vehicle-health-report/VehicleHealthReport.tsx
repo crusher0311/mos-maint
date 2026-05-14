@@ -12,6 +12,10 @@ interface LastService {
   miles: number | null;
   date: string | null;
   source: string | null;
+  /** Task #434: customer-facing parent label when `lastSource === "implied"`. */
+  impliedFromParentName?: string | null;
+  /** Task #434: stable parent id when `lastSource === "implied"`. */
+  impliedFromParentKey?: string | null;
 }
 
 interface PlanItem {
@@ -196,8 +200,14 @@ function getItemDescription(item: PlanItem): string {
   }
   const lastDate = item.last.date ? new Date(item.last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null;
   const lastMiles = item.last.miles?.toLocaleString();
+  // Task #434: when the anchor was inferred from a parent service via the
+  // implies-reset map, lead with "Anchored to <parent>" instead of the
+  // misleading "Last serviced" phrasing — the child wasn't directly
+  // performed on that date, the parent was.
+  const impliedParent = item.last.impliedFromParentName?.trim() || null;
+  const lastVerb = impliedParent ? `Anchored to ${impliedParent}` : "Last serviced";
   if (item.milesToGo !== null && item.milesToGo < 0) {
-    return appendNotes(`Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` Last serviced ${lastDate}.` : ""}`, item);
+    return appendNotes(`Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
   }
   if (item.milesToGo !== null && item.milesToGo > 0) {
     let dateEst = "";
@@ -205,10 +215,10 @@ function getItemDescription(item: PlanItem): string {
       const estDate = new Date(Date.now() + item.daysToGo * 86400000);
       dateEst = ` Estimated around ${estDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
     }
-    return appendNotes(`Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` Last serviced ${lastDate}.` : ""}`, item);
+    return appendNotes(`Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
   }
   if (lastDate) {
-    return appendNotes(`Last serviced ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`, item);
+    return appendNotes(`${lastVerb} ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`, item);
   }
   return appendNotes("Service recommended based on manufacturer schedule.", item);
 }

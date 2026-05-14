@@ -2033,7 +2033,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
         miles: item.last.miles,
         date: item.last.date ? new Date(item.last.date) : null,
         source: item.last.source as "carfax" | "protractor" | "shop" | undefined,
+        // Task #434: rehydrate the implied-parent provenance so cached
+        // reads render "Anchored to <parent> on <date>" identically to
+        // freshly-built plans.
+        impliedFromParentKey: item.last.impliedFromParentKey ?? null,
+        impliedFromParentName: item.last.impliedFromParentName ?? null,
       } : undefined,
+      lastSource: item.lastSource ?? null,
       dueAtDate: item.dueAtDate ? new Date(item.dueAtDate) : null,
     });
     
@@ -2172,7 +2178,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
         miles: item.last.miles,
         date: item.last.date?.toISOString() ?? null,
         source: item.last.source,
+        // Task #434: persist implied-parent provenance into the cache so
+        // cached reads render "Anchored to <parent> on <date>".
+        impliedFromParentKey: item.last.impliedFromParentKey ?? null,
+        impliedFromParentName: item.last.impliedFromParentName ?? null,
       } : undefined,
+      lastSource: item.lastSource ?? null,
       dueAtMiles: item.dueAtMiles,
       dueAtDate: item.dueAtDate?.toISOString() ?? null,
       milesToGo: item.milesToGo,
@@ -2663,7 +2674,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
-                      <span>Last done at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      <span>
+                        {/* Task #434: implied anchors lead with "Anchored to <parent>"
+                            so customers/advisors aren't told the child service was
+                            done on a date when only the parent (e.g. tire replacement)
+                            actually happened. */}
+                        {t.lastSource === "implied" && t.last?.impliedFromParentName
+                          ? `Anchored to ${t.last.impliedFromParentName}`
+                          : "Last done"}
+                        {" "}at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}
+                        {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                      </span>
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}
@@ -2989,7 +3010,17 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
                   {t.last?.miles != null && (
                     <div className="text-xs text-neutral-600 mt-1 flex items-center gap-1.5">
-                      <span>Last done at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}{t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}</span>
+                      <span>
+                        {/* Task #434: implied anchors lead with "Anchored to <parent>"
+                            so customers/advisors aren't told the child service was
+                            done on a date when only the parent (e.g. tire replacement)
+                            actually happened. */}
+                        {t.lastSource === "implied" && t.last?.impliedFromParentName
+                          ? `Anchored to ${t.last.impliedFromParentName}`
+                          : "Last done"}
+                        {" "}at {fmtDistance(t.last.miles, distanceUnit)} {distLabel}
+                        {t.last?.date ? ` on ${t.last.date.toLocaleDateString()}` : ""}
+                      </span>
                       {t.last?.source === "carfax" && (
                         <img src="/badges/carfax.png" alt="CARFAX" className="h-3.5" title="From CARFAX" />
                       )}

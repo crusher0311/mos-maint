@@ -1,5 +1,20 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.7 — 2026-05-14
+
+### Improved
+- **VHI overlay now surfaces "implies-reset" anchors (Task #434).** When
+  CARFAX shows a parent service that implicitly resets a child's
+  interval clock — e.g. "Four tires replaced" resets the tire-rotation
+  cycle — and there is no direct child record, the overlay now anchors
+  against the parent and labels the row "Anchored to <parent
+  service> on <date>" instead of the misleading "Last done at …"
+  phrasing. The Lexus RX350 case in the spec (rotation row had been
+  anchored at zero, screaming "184,354 mi over") now reads "Due at
+  193,908 mi · 4,536 mi to go." Hand-curated map, one hop only,
+  fallback only — direct child records still always win, and the
+  task #431 odometer-borrow rule still applies.
+
 ## 1.27.6 — 2026-05-10
 
 ### Fixed

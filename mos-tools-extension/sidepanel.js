@@ -1310,8 +1310,13 @@ function highlightCannedJob(serviceName, attempts = 0) {
 
 function formatLastDone(last, currentMileage) {
   if (!last || (!last.miles && !last.date)) return null;
-  
-  let text = 'Last done';
+
+  // Task #434: implied anchors lead with "Anchored to <parent>" so the
+  // VHI overlay matches the dashboard / printed VHR phrasing — the
+  // child service wasn't directly performed, the parent (e.g. tire
+  // replacement) was, and that's what reset the interval clock.
+  const impliedParent = last.impliedFromParentName && String(last.impliedFromParentName).trim();
+  let text = impliedParent ? `Anchored to ${impliedParent}` : 'Last done';
   if (last.miles) {
     text += ` at ${last.miles.toLocaleString()} ${getDistLabel()}`;
   }

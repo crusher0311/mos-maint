@@ -19,6 +19,7 @@ import {
   parseServiceAction,
   isLifetimeFluidItem,
   isInspectOnlyFluidItem,
+  findImpliesResetMatches,
   LIFETIME_FLUID_DEFAULT_MILES,
   type ServiceAction,
 } from "@/lib/service-keys";
@@ -224,7 +225,20 @@ import { toOEMItem as _toOEMItem, type OEMItem as _OEMItem } from "./oem-item";
 export const toOEMItem = _toOEMItem;
 export type OEMItem = _OEMItem;
 
-export type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
+export type LastDone = {
+  miles?: number | null;
+  date?: Date | null;
+  source?: "carfax" | "protractor" | "shop";
+  /**
+   * Task #434: when this anchor was inferred from a parent service that
+   * implicitly resets the child's interval clock (e.g. "Four tires
+   * replaced" → tire_rotation), these fields carry the parent's stable
+   * id and customer-facing display name. `null`/missing on every
+   * direct-record anchor.
+   */
+  impliedFromParentKey?: string | null;
+  impliedFromParentName?: string | null;
+};
 
 export type MatchedDeferred = { id: string; title: string };
 
@@ -257,6 +271,16 @@ export interface TriagedItem {
   intervalMiles?: number | null;
   intervalMonths?: number | null;
   last?: LastDone;
+  /**
+   * Task #434: provenance of the `last` anchor. `"direct"` means a CARFAX
+   * / shop / Protractor record matched the canonical service key directly.
+   * `"implied"` means the row had no direct child record and the anchor
+   * was inferred from a parent service via the `IMPLIES_RESET` map (e.g.
+   * "tires replaced" → tire_rotation). When `"implied"`,
+   * `last.impliedFromParentName` carries the customer-facing label used
+   * by the VHI panel / dashboard ("Anchored to tire replacement on …").
+   */
+  lastSource?: "direct" | "implied" | null;
   dueAtMiles?: number | null;
   dueAtDate?: Date | null;
   milesToGo?: number | null;
@@ -521,6 +545,96 @@ export function triage({
     }
   }
 
+  // Task #434: implies-reset fallback map. A small hand-curated set of
+  // parent services (e.g. "Four tires replaced") implicitly resets a
+  // child service's interval clock (rotation). When no direct child
+  // record exists, we anchor against the freshest matching parent record
+  // so the panel doesn't scream "184,354 mi over." Direct records always
+  // win over implied — the implied map is fallback-only, populated here
+  // and consumed below via `getEffectiveLast()`.
+  //
+  // Per-parent index for the same null-odometer borrow rule that the
+  // direct rollup pass uses (task #431): if a CARFAX rollup row carries
+  // the parent name with `odometerOfLastService = null`, borrow miles
+  // from a per-record CARFAX line that also matches the parent.
+  const impliedLastMap = new Map<string, LastDone>();
+  const impliedPerRecordMilesByParent = new Map<string, Array<{ date: Date | null; miles: number }>>();
+
+  for (const r of enrichedRecords) {
+    const desc = String(r.description || "").trim();
+    if (!desc) continue;
+    const matches = findImpliesResetMatches(desc);
+    if (!matches.length) continue;
+    if (r.miles != null) {
+      for (const m of matches) {
+        if (!impliedPerRecordMilesByParent.has(m.parentKey)) {
+          impliedPerRecordMilesByParent.set(m.parentKey, []);
+        }
+        impliedPerRecordMilesByParent.get(m.parentKey)!.push({ date: r.date, miles: r.miles });
+      }
+    }
+    for (const m of matches) {
+      const cand: LastDone = {
+        miles: r.miles,
+        date: r.date,
+        source: "carfax",
+        impliedFromParentKey: m.parentKey,
+        impliedFromParentName: m.parentName,
+      };
+      impliedLastMap.set(m.childKey, mergeLastDone(impliedLastMap.get(m.childKey), cand));
+    }
+  }
+
+  const findImpliedRolloverMiles = (parentKey: string, atDate: Date | null): number | null => {
+    if (!atDate) return null;
+    const list = impliedPerRecordMilesByParent.get(parentKey);
+    if (!list || !list.length) return null;
+    const at = atDate.getTime();
+    const exact = list.find((r) => r.date && r.date.getTime() === at);
+    if (exact) return exact.miles;
+    const atOrBefore = list.filter((r) => r.date && r.date.getTime() <= at);
+    if (atOrBefore.length) {
+      atOrBefore.sort((a, b) => b.date!.getTime() - a.date!.getTime());
+      return atOrBefore[0].miles;
+    }
+    return null;
+  };
+
+  for (const cat of carfaxCategories || []) {
+    const name = String(cat.serviceName || "").trim();
+    if (!name) continue;
+    const date = parseCarfaxDate(cat.date ?? null);
+    if (date && (date < earliestDate || date > today)) continue;
+    const miles: number | null = typeof cat.odometer === "number" ? cat.odometer : null;
+    const matches = findImpliesResetMatches(name);
+    if (!matches.length) continue;
+    for (const m of matches) {
+      const candMiles = miles == null ? findImpliedRolloverMiles(m.parentKey, date) : miles;
+      const cand: LastDone = {
+        miles: candMiles,
+        date,
+        source: "carfax",
+        impliedFromParentKey: m.parentKey,
+        impliedFromParentName: m.parentName,
+      };
+      impliedLastMap.set(m.childKey, mergeLastDone(impliedLastMap.get(m.childKey), cand));
+    }
+  }
+
+  // Resolve the effective `last` anchor for a service key. Returns the
+  // direct entry when available; otherwise falls back to the freshest
+  // implied parent. Returns null when neither has any record so the
+  // caller can apply the standard "never done" path.
+  const getEffectiveLast = (
+    key: string,
+  ): { last: LastDone; lastSource: "direct" | "implied" } | null => {
+    const direct = lastMap.get(key);
+    if (direct) return { last: direct, lastSource: "direct" };
+    const implied = impliedLastMap.get(key);
+    if (implied) return { last: implied, lastSource: "implied" };
+    return null;
+  };
+
   // Merge: red beats yellow; pick the longer non-empty note on ties or
   // when the higher-priority status arrives without a note.
   const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }>();
@@ -652,7 +766,9 @@ export function triage({
     usedServiceKeys.add(serviceKey);
 
     const uniqueKey = `${serviceKey}_${action ?? "any"}_${o.maintenance_id}`;
-    const last = lastMap.get(serviceKey) ?? null;
+    const effectiveLast = getEffectiveLast(serviceKey);
+    const last = effectiveLast?.last ?? null;
+    const lastSource: "direct" | "implied" | null = effectiveLast?.lastSource ?? null;
 
     const shopOverride = shopIntervals[serviceKey];
     if (shopOverride?.excluded) {
@@ -839,6 +955,7 @@ export function triage({
       intervalMiles,
       intervalMonths,
       last: last || undefined,
+      lastSource: last ? lastSource : null,
       dueAtMiles,
       dueAtDate,
       milesToGo,
@@ -1005,7 +1122,9 @@ export function triage({
     if (shopOverride?.excluded) continue;
 
     usedServiceKeys.add(cm.serviceKey);
-    const last = lastMap.get(cm.serviceKey) ?? null;
+    const effectiveLast = getEffectiveLast(cm.serviceKey);
+    const last = effectiveLast?.last ?? null;
+    const lastSource: "direct" | "implied" | null = effectiveLast?.lastSource ?? null;
     const lastPerformedAtShop = last?.source === 'shop';
     const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
     // Task #336: COMMON_MAINTENANCE.miles are real miles; convert to shop
@@ -1062,6 +1181,7 @@ export function triage({
       intervalMiles,
       intervalMonths,
       last,
+      lastSource: last ? lastSource : null,
       dueAtMiles,
       dueAtDate,
       milesToGo,
@@ -1195,7 +1315,13 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
       miles: item.last.miles,
       date: item.last.date?.toISOString() ?? null,
       source: item.last.source,
+      // Task #434: thread the implied-parent provenance through the cache
+      // so cached reads can render "Anchored to <parent> on <date>"
+      // without rebuilding the plan.
+      impliedFromParentKey: item.last.impliedFromParentKey ?? null,
+      impliedFromParentName: item.last.impliedFromParentName ?? null,
     } : undefined,
+    lastSource: item.lastSource ?? null,
     dueAtMiles: item.dueAtMiles,
     dueAtDate: item.dueAtDate?.toISOString() ?? null,
     milesToGo: item.milesToGo,
