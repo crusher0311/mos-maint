@@ -1,8 +1,15 @@
-// Automatic Protractor history backfill for all configured shops
+// One-off Protractor history backfill helper.
 // Usage: npx tsx scripts/protractor-auto-backfill.ts
-// 
-// Automatically detects shops with Protractor configured that need backfilling
-// and processes them in order (oldest first).
+//
+// NOTE (2026-05-17): This script is NOT the production backfill path.
+// The cron at `app/api/cron/protractor-backfill/route.ts` uses
+// `runProtractorBackfill` in `lib/integrations/protractor/sync.ts`,
+// which walks newest -> oldest (chunkEnd starts at today and steps
+// backwards). This script walks oldest -> newest in 3-month chunks
+// from 5 years ago and is only safe as a manual seed for legacy
+// shops where the cron path is unavailable. Do not wire it into a
+// scheduler — new shops should get the cron path so the most-recent
+// history lands first and the VHI panel is useful on day one.
 
 import crypto from "node:crypto";
 import { getDb } from "../lib/mongo";
