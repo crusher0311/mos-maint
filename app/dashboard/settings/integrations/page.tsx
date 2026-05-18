@@ -28,7 +28,15 @@ interface IntegrationStatus {
   carfax: { configured: boolean; locationId?: string };
   autoflow: { configured: boolean };
   protractor: { configured: boolean; connectionId?: string };
-  tekmetric: { configured: boolean; shopId?: number; shopName?: string; lastSync?: string };
+  tekmetric: {
+    configured: boolean;
+    shopId?: number;
+    shopName?: string;
+    lastSync?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
   shopware: { configured: boolean; tenantId?: number; swShopId?: number; shopName?: string; lastSyncAt?: string };
 }
 
@@ -82,6 +90,9 @@ export default function IntegrationsPage() {
           shopId: tekmetricData.shopId,
           shopName: tekmetricData.shopName,
           lastSync: tekmetricData.lastSync,
+          initialSyncState: tekmetricData.initialSyncState,
+          initialSyncVehicles: tekmetricData.initialSyncVehicles,
+          initialSyncError: tekmetricData.initialSyncError,
         },
         shopware: {
           configured: Boolean(shopwareData.configured),
@@ -1030,7 +1041,17 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
   );
 }
 
-function TekmetricSection({ status, onUpdate }: { status: { configured: boolean; shopId?: number; shopName?: string }; onUpdate: () => void }) {
+function TekmetricSection({ status, onUpdate }: {
+  status: {
+    configured: boolean;
+    shopId?: number;
+    shopName?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
+  onUpdate: () => void;
+}) {
   const [shopId, setShopId] = useState("");
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -1099,10 +1120,16 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Connected! Initial sync started in background." });
+        setMessage({ type: "success", text: "Connected! Syncing your first vehicles in the background." });
+        // The POST now returns the moment validation + the shops doc write
+        // are done; the initial sync runs in the background. Poll the parent
+        // status fetch for ~30s so the section flips to the Connected /
+        // webhook-URL block without a manual refresh.
         onUpdate();
-        // Fire-and-forget background sync - don't await
-        fetch("/api/tekmetric/sync", { method: "POST" }).catch(() => {});
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          onUpdate();
+        }
         return;
       } else {
         const data = await res.json();
@@ -1158,6 +1185,22 @@ function TekmetricSection({ status, onUpdate }: { status: { configured: boolean;
             <CheckCircle className="w-4 h-4" />
             <span>Connected: {status.shopName || `Shop ${status.shopId}`}</span>
           </div>
+          {status.initialSyncState === "running" && (
+            <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Syncing your first vehicles in the background. You can keep working.</span>
+            </div>
+          )}
+          {status.initialSyncState === "complete" && typeof status.initialSyncVehicles === "number" && status.initialSyncVehicles > 0 && (
+            <div className="text-xs text-green-700 mt-2">
+              Initial sync done — imported {status.initialSyncVehicles} active vehicle{status.initialSyncVehicles === 1 ? "" : "s"}.
+            </div>
+          )}
+          {status.initialSyncState === "failed" && (
+            <div className="text-xs text-amber-700 mt-2">
+              Initial sync had a hiccup{status.initialSyncError ? `: ${status.initialSyncError}` : ""}. The nightly sync will catch up — or click Sync Now below.
+            </div>
+          )}
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

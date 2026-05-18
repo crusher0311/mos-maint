@@ -5,6 +5,19 @@ import { validateShopAccess } from "@/lib/integrations/tekmetric";
 import { syncSingleShop } from "@/lib/integrations/tekmetric/sync";
 import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/integrations/tekmetric/jobs-prewarm";
 
+// Tekmetric Connect (POST) used to block the response on the full
+// `syncSingleShop` call — for a busy shop that's up to 1000 active ROs
+// plus per-RO vehicle/customer lookups (~4-5 minutes against the shared
+// rate limiter). The route had no maxDuration export, so Render killed
+// it at the platform default, the browser never saw the response, and
+// the UI sat on a spinner (Pierce's 10-15 minute hang, 2026-05-18).
+// Sync is now fire-and-forget like the job-history backfill below, the
+// shops doc is written before we return, and the UI polls GET to flip
+// itself to the "Connected" state without a manual refresh.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 async function triggerJobHistoryBackfill(shopId: number, tekmetricShopId: number) {
   try {
     const db = await getDb();
@@ -103,11 +116,39 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Watchdog: if the in-process sync promise was lost to a Render
+    // restart, the shops doc would be stuck at "running" forever. After
+    // ~15 minutes (well past the 4-5 minute worst case) treat it as
+    // failed so the UI stops spinning. The nightly cron sync will fill
+    // in the data regardless. Doesn't write — just reported as failed
+    // until the next successful sync flips it back.
+    let initialSyncState: "running" | "complete" | "failed" =
+      shop.tekmetric.initialSyncState ?? "complete";
+    let initialSyncError: string | null = shop.tekmetric.initialSyncError ?? null;
+    if (initialSyncState === "running") {
+      const startedAt = shop.tekmetric.initialSyncStartedAt
+        ? new Date(shop.tekmetric.initialSyncStartedAt).getTime()
+        : 0;
+      if (startedAt && Date.now() - startedAt > 15 * 60 * 1000) {
+        initialSyncState = "failed";
+        initialSyncError =
+          initialSyncError || "Initial sync didn't finish in 15 minutes — nightly sync will catch up.";
+      }
+    }
+
     return NextResponse.json({
       configured: true,
       shopId: shop.tekmetric.shopId,
       shopName: shop.tekmetric.shopName,
       lastSync: shop.tekmetric.lastSync,
+      // Surface async initial-sync state so the UI can show
+      // "Connected — syncing first vehicles…" while it's still running
+      // and switch to a steady state once it's done. Older shops that
+      // pre-date this field default to "complete" so we don't show a
+      // spinner forever for already-connected accounts.
+      initialSyncState,
+      initialSyncVehicles: shop.tekmetric.initialSyncVehicles ?? null,
+      initialSyncError,
     });
   } catch (error: any) {
     console.error("Error fetching Tekmetric settings:", error);
@@ -152,14 +193,31 @@ export async function POST(request: NextRequest) {
 
     const validation = await validateShopAccess(tekmetricShopId);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error || "Unable to access shop" },
-        { status: 400 }
-      );
+      // tekmetricRequest throws messages shaped
+      //   "Tekmetric API error <code> on <endpoint>: <reason>"
+      // (see lib/integrations/tekmetric/client.ts). Parse the status code
+      // explicitly so we don't misclassify unrelated errors as auth issues.
+      // 401/403 → shop hasn't authorized the MOS OAuth client.
+      // 404     → ambiguous: shop ID truly doesn't exist OR it exists but
+      //           we're not granted access; tell the user both.
+      const raw = validation.error || "";
+      const statusMatch = raw.match(/Tekmetric API error (\d{3})/);
+      const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+      let message = raw || "Unable to access shop";
+      if (status === 401 || status === 403) {
+        message = `Tekmetric won't let MOS read shop ${tekmetricShopId}. Inside Tekmetric, go to Settings → Integrations and authorize "MOS Maintenance" for this shop, then try Connect again.`;
+      } else if (status === 404) {
+        message = `Tekmetric returned "not found" for shop ${tekmetricShopId}. Double-check the Shop ID. If it's correct, the shop may not have authorized MOS yet — open Tekmetric → Settings → Integrations and authorize "MOS Maintenance".`;
+      }
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     const db = await getDb();
 
+    // Write the shops doc FIRST. The GET handler keys "configured" off
+    // this field, so once this completes the UI's poll will flip to
+    // the Connected/webhook-URL block even if the initial sync below
+    // is still running.
     await db.collection("shops").updateOne(
       { shopId: { $in: [userShopId, Number(userShopId)] } },
       {
@@ -167,19 +225,47 @@ export async function POST(request: NextRequest) {
           "tekmetric.shopId": tekmetricShopId,
           "tekmetric.shopName": validation.shop?.name,
           "tekmetric.connectedAt": new Date(),
+          "tekmetric.initialSyncState": "running",
+          "tekmetric.initialSyncStartedAt": new Date(),
           integrationProvider: "tekmetric",
         },
+        $unset: { "tekmetric.initialSyncError": "" },
       },
       { upsert: true }
     );
 
-    let syncResult: { success: boolean; synced: number; error?: string } = { success: false, synced: 0 };
-    try {
-      syncResult = await syncSingleShop(userShopId, tekmetricShopId);
-    } catch (syncErr: any) {
-      console.error("[Tekmetric Settings] Initial sync failed:", syncErr.message);
-      syncResult.error = syncErr.message;
-    }
+    // Fire-and-forget the initial active-RO sync. Was previously awaited,
+    // which made Connect block for minutes against the shared rate limiter
+    // and hit the Render route timeout (see header comment). The cron
+    // sync + the job-history backfill kicked off below will catch up
+    // anything missed if this promise loses to a process restart.
+    syncSingleShop(userShopId, tekmetricShopId)
+      .then(async (result) => {
+        await db.collection("shops").updateOne(
+          { shopId: { $in: [userShopId, Number(userShopId)] } },
+          {
+            $set: {
+              "tekmetric.initialSyncState": result.success ? "complete" : "failed",
+              "tekmetric.initialSyncFinishedAt": new Date(),
+              "tekmetric.initialSyncVehicles": result.synced ?? 0,
+              ...(result.error ? { "tekmetric.initialSyncError": result.error } : {}),
+            },
+          }
+        );
+      })
+      .catch(async (err: any) => {
+        console.error(`[Tekmetric Settings] Initial sync threw for shop ${userShopId}:`, err?.message);
+        await db.collection("shops").updateOne(
+          { shopId: { $in: [userShopId, Number(userShopId)] } },
+          {
+            $set: {
+              "tekmetric.initialSyncState": "failed",
+              "tekmetric.initialSyncFinishedAt": new Date(),
+              "tekmetric.initialSyncError": err?.message || "unknown",
+            },
+          }
+        ).catch(() => {});
+      });
 
     // Queue the 5-year job history backfill (runs via cron). The trigger
     // also pre-warms `tekmetric_jobs_cache` for recent terminal ROs so
@@ -190,12 +276,8 @@ export async function POST(request: NextRequest) {
       success: true,
       shopId: tekmetricShopId,
       shopName: validation.shop?.name,
-      initialSync: {
-        completed: syncResult.success,
-        vehiclesSynced: syncResult.synced,
-        error: syncResult.error
-      },
-      jobHistoryBackfill: "queued"
+      initialSync: { state: "running" },
+      jobHistoryBackfill: "queued",
     });
   } catch (error: any) {
     console.error("Error saving Tekmetric settings:", error);
