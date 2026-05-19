@@ -101,8 +101,8 @@ API keys are scoped to specific permissions:
             failedStage: {
               type: "string",
               nullable: true,
-              enum: ["triggerPlanBuild", "cacheReadAfterBuild"],
-              description: "Which stage of the rebuild failed. 'triggerPlanBuild' = the internal /api/plan-build call returned non-2xx or threw. 'cacheReadAfterBuild' = build succeeded but the cached plan was not visible yet.",
+              enum: ["triggerPlanBuild", "cacheReadAfterBuild", "missingMileage"],
+              description: "Which stage of the rebuild failed. 'triggerPlanBuild' = the internal /api/plan-build call returned non-2xx or threw. 'cacheReadAfterBuild' = build succeeded but the cached plan was not visible yet. 'missingMileage' = the vehicle/work-order has no usable odometer reading; partner should supply mileage in the request body or set the odometer on the RO. Returned as HTTP 400 (client-data issue) instead of 500.",
             },
             upstreamStatus: {
               type: "integer",

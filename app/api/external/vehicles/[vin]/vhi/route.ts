@@ -422,6 +422,10 @@ export const GET = createExternalEndpoint(
         `failedStage=${result.failedStage || "unknown"} upstreamStatus=${result.upstreamStatus ?? "n/a"} ` +
         `upstreamError=${typeof result.upstreamError === "string" ? result.upstreamError : JSON.stringify(result.upstreamError ?? null)}`
       );
+      // missingMileage is a client-data issue (no odometer on the RO/vehicle),
+      // not a server failure — surface as 400 so partners get an actionable
+      // error instead of HTTP 500.
+      const status = result.failedStage === "missingMileage" ? 400 : 500;
       return NextResponse.json(
         {
           success: false,
@@ -431,7 +435,7 @@ export const GET = createExternalEndpoint(
           upstreamError: result.upstreamError,
           requestId,
         },
-        { status: 500 }
+        { status }
       );
     }
 

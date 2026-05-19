@@ -16,13 +16,17 @@ export const __deps = {
 
 export type VhiRebuildFailedStage =
   | "triggerPlanBuild"
-  | "cacheReadAfterBuild";
+  | "cacheReadAfterBuild"
+  | "missingMileage";
 
 export interface PlanBuildTriggerResult {
   ok: boolean;
   status?: number;
   upstreamError?: any;
   errorMessage?: string;
+  /** Set when plan-build returned 200 with `{ skipped: true }` (e.g. no mileage). */
+  skipped?: boolean;
+  skipReason?: string;
 }
 
 export interface VhiRebuildResult {
@@ -132,6 +136,31 @@ export async function triggerPlanBuild(
       };
     }
 
+    // Task: plan-build returns 200 with { ok:true, skipped:true } when it
+    // refuses to build (e.g. no mileage). Without inspecting the body we
+    // would treat that as success, then fail later with the cryptic
+    // "Plan build completed but cache not yet available" 500. Parse the
+    // body and surface skipped responses distinctly so callers can return
+    // a clean 4xx.
+    try {
+      const body = await res.json();
+      if (body && body.skipped === true) {
+        console.warn(
+          `[VHI Rebuild] Plan build skipped shopId=${shopId} vin=${vin} mileage=${mileage} reason=${body.reason || "unspecified"}`
+        );
+        return {
+          ok: false,
+          status: res.status,
+          skipped: true,
+          skipReason: typeof body.reason === "string" ? body.reason : "skipped",
+          upstreamError: body,
+          errorMessage: typeof body.reason === "string" ? body.reason : "Plan build skipped",
+        };
+      }
+    } catch {
+      // Body wasn't JSON — treat as legacy success.
+    }
+
     return { ok: true, status: res.status };
   } catch (err: any) {
     console.error(
@@ -167,6 +196,24 @@ export async function rebuildVhi(
   const db = await __deps.getDb();
   const vinUpper = vin.toUpperCase();
 
+  // Defensive: callers are supposed to validate mileage, but if a 0 / NaN /
+  // negative slips through it would hit /api/plan-build's `skipped: true`
+  // path and return as a misleading 500 "cache not yet available". Surface
+  // the real problem (no mileage) up front so partner routes can return 4xx.
+  if (!Number.isFinite(mileage) || mileage <= 0) {
+    console.warn(
+      `[VHI Rebuild] Refusing to build with invalid mileage shopId=${shopId} vin=${vinUpper} mileage=${mileage}`
+    );
+    return {
+      success: false,
+      vin: vinUpper,
+      shopId,
+      built: false,
+      error: "This vehicle has no mileage on the work order. Add an odometer reading and try again.",
+      failedStage: "missingMileage",
+    };
+  }
+
   if (options.invalidateFirst) {
     await __deps.invalidateCachedPlan(db, vinUpper, shopId);
   }
@@ -183,6 +230,24 @@ export async function rebuildVhi(
     console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
 
     if (!built.ok) {
+      // Distinguish "plan-build refused because there's no usable input
+      // (e.g. mileage)" from a true upstream failure. The former is a
+      // client-data issue and should surface as 4xx, not 5xx.
+      if (built.skipped) {
+        return {
+          success: false,
+          vin: vinUpper,
+          shopId,
+          built: false,
+          error:
+            built.skipReason === "No mileage"
+              ? "This vehicle has no mileage on the work order. Add an odometer reading and try again."
+              : `Plan build skipped: ${built.skipReason || "unknown reason"}`,
+          failedStage: "missingMileage",
+          upstreamStatus: built.status,
+          upstreamError: built.upstreamError,
+        };
+      }
       return {
         success: false,
         vin: vinUpper,

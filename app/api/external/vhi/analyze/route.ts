@@ -114,6 +114,10 @@ export const POST = createExternalEndpoint(
         `failedStage=${result.failedStage || "unknown"} upstreamStatus=${result.upstreamStatus ?? "n/a"}` +
         (isPartner ? ` partner=${partnerId}` : "")
       );
+      // missingMileage means the vehicle/work-order has no usable odometer
+      // reading — that's a client-data issue, not a server failure. Return
+      // 400 so partners see a clear, actionable error instead of HTTP 500.
+      const status = result.failedStage === "missingMileage" ? 400 : 500;
       return NextResponse.json(
         {
           success: false,
@@ -123,7 +127,7 @@ export const POST = createExternalEndpoint(
           upstreamError: result.upstreamError,
           requestId,
         },
-        { status: 500 }
+        { status }
       );
     }
 
