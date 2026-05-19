@@ -4,6 +4,13 @@ import React from "react";
 
 interface HealthGaugeProps {
   score: number;
+  /**
+   * Task #439: render the gray "Insufficient History" treatment instead
+   * of the colored score gauge. The numeric score is still computed
+   * upstream — this just hides it from the customer when our anchors
+   * (CARFAX + shop history) are too thin for the score to be meaningful.
+   */
+  insufficient?: boolean;
 }
 
 function getScoreInfo(score: number) {
@@ -14,7 +21,21 @@ function getScoreInfo(score: number) {
   return { label: "Critical", color: "#ef4444", description: "Your vehicle requires immediate attention. Several critical systems need service." };
 }
 
-export default function HealthGauge({ score }: HealthGaugeProps) {
+export default function HealthGauge({ score, insufficient }: HealthGaugeProps) {
+  if (insufficient) {
+    return (
+      <div className="text-center px-4 py-6">
+        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-4">
+          <span className="text-4xl font-bold text-gray-500">?</span>
+        </div>
+        <p className="text-gray-800 font-semibold text-lg">Insufficient Service History</p>
+        <p className="text-gray-500 text-sm mt-2 leading-relaxed max-w-xs mx-auto">
+          We don't have enough records to calculate a health score for this vehicle yet.
+          Bring it in for an inspection so we can build an accurate maintenance plan.
+        </p>
+      </div>
+    );
+  }
   const { label, color, description } = getScoreInfo(score);
   const clampedScore = Math.max(0, Math.min(100, score));
   const rotation = -90 + (clampedScore / 100) * 180;

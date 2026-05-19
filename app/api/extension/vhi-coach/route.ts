@@ -285,5 +285,10 @@ export async function POST(request: NextRequest) {
     taskMatches,
     vhiScore: vhi.score,
     vhiBuckets: vhi.summary,
+    // Task #439: pass through the data-quality flag so the in-browser
+    // overlay can swap the red 0/CRITICAL badge for a gray
+    // "Insufficient History — bring vehicle in for inspection" badge
+    // when our anchors are too thin to be meaningful.
+    dataQuality: vhi.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
   }, { headers: corsHeaders });
 }

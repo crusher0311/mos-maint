@@ -82,6 +82,8 @@ export async function GET(
         icons: getStatusIconSet(),
         cachedAt: cached.createdAt,
         source: "cached_plan",
+        // Task #439: surface data-quality so UI can soften score display.
+        dataQuality: plan.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
       });
     }
 
@@ -96,6 +98,10 @@ export async function GET(
         ...analysisResult,
         icons: getStatusIconSet(),
         source: "analysis_cache",
+        // Task #439: analysis-cache predates the dataQuality signal —
+        // default to "sufficient" so legacy entries keep showing their
+        // score unchanged and the shape stays consistent across paths.
+        dataQuality: { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
       });
     }
 
@@ -168,6 +174,8 @@ export async function GET(
             icons: getStatusIconSet(),
             cachedAt: cached.createdAt,
             source: "fresh_build",
+            // Task #439: surface data-quality (post-build read).
+            dataQuality: plan.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
           });
         }
       }

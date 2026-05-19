@@ -232,6 +232,8 @@ export const GET = createExternalEndpoint(
         mileageEstimateDetails: cachedDetails,
         // Task #391: surface mileage rollback warning when present.
         flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null }),
+        // Task #439: data-quality signal so partner UIs can soften 0/CRITICAL.
+        dataQuality: plan.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
       });
     }
 
@@ -257,6 +259,10 @@ export const GET = createExternalEndpoint(
         // Task #391: legacy analysis-cache rows generally have no flag,
         // but the array is always present for partner-shape stability.
         flags: buildFlags({ mileageDiscrepancy: analysisResult.mileageDiscrepancy }),
+        // Task #439: analysis-cache predates the dataQuality signal —
+        // default to "sufficient" so legacy entries keep showing their
+        // score unchanged.
+        dataQuality: { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
       });
     }
 
@@ -465,6 +471,10 @@ export const GET = createExternalEndpoint(
       // Task #391: surface mileage rollback warning if the freshly built
       // plan recorded one. Always-present empty array otherwise.
       flags: buildFlags({ mileageDiscrepancy: result.mileageDiscrepancy ?? null }),
+      // Task #439: data-quality on the on-demand-build path too, so all
+      // three external response branches (cached_plan, analysis_cache,
+      // on_demand_build) carry the same shape.
+      dataQuality: result.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
     });
   }
 );

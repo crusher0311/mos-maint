@@ -167,6 +167,10 @@ export async function GET(
           upcoming: buckets.upcoming || [],
         },
         approvedServiceKeys: approvedServiceKeys.length > 0 ? approvedServiceKeys : undefined,
+        // Task #439: forward data-quality so the report page can render
+        // a gray "Insufficient History" badge instead of red 0/CRITICAL
+        // when CARFAX + shop history give us nothing to anchor against.
+        dataQuality: plan.dataQuality ?? undefined,
       },
       shopName: shop.name || shop.shopName || "",
       shopPhone: shop.phone || shop.contact?.phone || "",

@@ -1,5 +1,26 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.8 — 2026-05-19
+
+### Improved
+- **VHI overlay no longer shouts "0/CRITICAL" when we just don't have
+  enough service history (Task #439).** When CARFAX returns no records
+  (rejected VIN, no history, not configured, etc.) AND the shop has
+  fewer than three records of its own for the vehicle, the panel header
+  now shows a gray "?" badge with a tooltip reading "Insufficient
+  service history — bring vehicle in for inspection" instead of the
+  red 0/Critical badge. The footer reads "Insufficient history — bring
+  vehicle in for inspection" instead of "Score: 0 (Critical)". The
+  minimized pill goes gray with the label "Limited history" instead of
+  "X overdue". Triggered by the 2005 Ford F-150 (Schindler's Garage,
+  VIN 1FTPW145Y5KC34104) where CARFAX returned error 107 ("VIN not
+  valid") on every call, leaving the plan with zero anchors and every
+  OEM interval reading as overdue — score correctly computed at 0 but
+  presenting that as "Critical" misrepresented the situation. The
+  underlying score is still computed and logged for internal tracking;
+  only the customer-facing presentation changes. Backed by a new
+  `dataQuality` field on the plan/VHI response payloads.
+
 ## 1.27.7 — 2026-05-14
 
 ### Improved

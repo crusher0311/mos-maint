@@ -156,7 +156,18 @@ function createCoachPanel(data) {
   const titleGroup = document.createElement("div");
   applyStyles(titleGroup, COACH_STYLES.headerTitle);
 
-  if (data.score) {
+  // Task #439: when CARFAX + shop history don't give us enough anchors
+  // to score meaningfully, render a gray "?" badge instead of a red
+  // 0/CRITICAL. The underlying score is still computed and logged.
+  const insufficient = data.dataQuality && data.dataQuality.sufficient === false;
+  if (insufficient) {
+    const badge = document.createElement("div");
+    applyStyles(badge, COACH_STYLES.scoreCircle);
+    badge.style.backgroundColor = "#6b7280";
+    badge.textContent = "?";
+    badge.title = "Insufficient service history — bring vehicle in for inspection";
+    titleGroup.appendChild(badge);
+  } else if (data.score) {
     const scoreCircle = document.createElement("div");
     applyStyles(scoreCircle, COACH_STYLES.scoreCircle);
     scoreCircle.style.backgroundColor = data.score.color || "#6b7280";
@@ -256,7 +267,13 @@ function createCoachPanel(data) {
     color: "#888",
     backgroundColor: "rgba(255,255,255,0.02)",
   });
-  summaryBar.innerHTML = `<span>${data.summary.matched} of ${data.summary.totalTasks} matched</span><span>Score: ${data.score?.value ?? "—"} (${data.score?.tier ?? "—"})</span>`;
+  // Task #439: footer mirrors the badge — when data is insufficient we
+  // show the explanation instead of a misleading "Score: 0 (Critical)".
+  if (insufficient) {
+    summaryBar.innerHTML = `<span>${data.summary.matched} of ${data.summary.totalTasks} matched</span><span style="color:#9ca3af">Insufficient history — bring vehicle in for inspection</span>`;
+  } else {
+    summaryBar.innerHTML = `<span>${data.summary.matched} of ${data.summary.totalTasks} matched</span><span>Score: ${data.score?.value ?? "—"} (${data.score?.tier ?? "—"})</span>`;
+  }
   
   panel.appendChild(body);
   panel.appendChild(summaryBar);
@@ -350,14 +367,23 @@ function minimizeCoach() {
 
   const overdueCount = coachData?.summary?.overdue || 0;
   const dueSoonCount = coachData?.summary?.dueSoon || 0;
+  // Task #439: minimized bar mirrors the panel — gray "Limited history"
+  // pill instead of a misleading "X overdue" count when our anchors are
+  // too thin to be trusted.
+  const insufficient = coachData?.dataQuality && coachData.dataQuality.sufficient === false;
 
   let badgeColor = "#22c55e";
-  if (overdueCount > 0) badgeColor = "#ef4444";
+  if (insufficient) badgeColor = "#6b7280";
+  else if (overdueCount > 0) badgeColor = "#ef4444";
   else if (dueSoonCount > 0) badgeColor = "#f59e0b";
+
+  const tailText = insufficient
+    ? "Limited history"
+    : (overdueCount > 0 ? overdueCount + " overdue" : dueSoonCount > 0 ? dueSoonCount + " due soon" : "All OK");
 
   bar.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${badgeColor}"></span>
     <span>VHI Coach</span>
-    <span style="color:#888;font-size:11px">${overdueCount > 0 ? overdueCount + " overdue" : dueSoonCount > 0 ? dueSoonCount + " due soon" : "All OK"}</span>`;
+    <span style="color:#888;font-size:11px">${tailText}</span>`;
 
   bar.addEventListener("click", () => {
     bar.remove();

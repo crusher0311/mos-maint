@@ -189,6 +189,37 @@ export interface CachedPlanData {
     priorDate: string | null;
     gapMiles: number;
   } | null;
+  /**
+   * Task #439: data-quality signal so VHI surfaces can distinguish
+   * "score is low because the car needs work" from "score is low because
+   * we have no service history to anchor against".
+   *
+   * `sufficient: false` is the trigger to render the gray "Insufficient
+   * History" treatment instead of the red Critical badge. The numeric
+   * score is still computed and persisted normally for internal
+   * tracking — only the customer-facing presentation changes.
+   *
+   * Rule: sufficient = (carfaxRecords + shopServiceHistory) >= 3.
+   *
+   * `carfaxStatus` records why CARFAX did or didn't contribute:
+   *   "ok"             — call succeeded with records
+   *   "no_history"     — call succeeded but returned zero records
+   *   "vin_rejected"   — CARFAX 107 (invalid VIN)
+   *   "not_configured" — shop has no CARFAX env / location id
+   *   "error"          — any other CARFAX-side failure
+   *
+   * Legacy cached_plans rows that predate this field should be treated
+   * by readers as `{ sufficient: true, carfaxStatus: "ok" }` — they
+   * scored fine before so they don't need the softened UI.
+   */
+  dataQuality?: {
+    sufficient: boolean;
+    carfaxStatus: "ok" | "no_history" | "vin_rejected" | "not_configured" | "error";
+    anchorCount: number;
+    carfaxRecordCount: number;
+    shopHistoryCount: number;
+    reasons: string[];
+  };
 }
 
 export interface CachedPlan {

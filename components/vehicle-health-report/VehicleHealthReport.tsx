@@ -68,6 +68,17 @@ interface VHIData {
     upcoming: PlanItem[];
   };
   approvedServiceKeys?: string[];
+  /**
+   * Task #439: when present and `sufficient: false`, the report renders
+   * a gray "Insufficient Service History" badge instead of the colored
+   * gauge. Absent / `sufficient: true` keeps the normal score display.
+   */
+  dataQuality?: {
+    sufficient: boolean;
+    carfaxStatus?: string;
+    anchorCount?: number;
+    reasons?: string[];
+  };
 }
 
 interface VehicleHealthReportProps {
@@ -333,7 +344,7 @@ export default function VehicleHealthReport({
 
         {/* Health Score Gauge */}
         <div className="py-6 px-4 flex flex-col items-center">
-          <HealthGauge score={score} />
+          <HealthGauge score={score} insufficient={data.dataQuality?.sufficient === false} />
 
           <div className="flex flex-col sm:flex-row gap-3 mt-5 w-full sm:w-auto px-4">
             {onScheduleService && (

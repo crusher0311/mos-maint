@@ -925,10 +925,63 @@ export async function POST(req: NextRequest) {
       console.warn(`[PlanBuild] mileage discrepancy detection failed for ${vin}: ${err?.message}`);
     }
 
+    // Task #439: derive customer-facing data-quality signal so the VHI
+    // surfaces (Detect Dog overlay, VHR shareable report) can replace the
+    // red "0/CRITICAL" badge with a gray "Insufficient History — bring
+    // vehicle in for inspection" treatment when the score is not
+    // actually expressing vehicle condition but rather a lack of
+    // anchoring data. The score itself is still persisted untouched for
+    // internal tracking (Brandon — task #439 design call: hide from
+    // customer, keep for ops).
+    try {
+      const cfxRes = carfaxResult as any;
+      let carfaxStatus: NonNullable<CachedPlanData["dataQuality"]>["carfaxStatus"];
+      if (!carfaxCfg.configured) {
+        carfaxStatus = "not_configured";
+      } else if (cfxRes?.ok) {
+        carfaxStatus = carfaxRecords.length > 0 ? "ok" : "no_history";
+      } else {
+        const errStr = String(cfxRes?.error || "");
+        carfaxStatus = /\b107\b/.test(errStr) ? "vin_rejected" : "error";
+      }
+      const anchorCount = carfaxRecords.length + shopServiceHistory.length;
+      // Task #439 — design rule per architect review:
+      // We only flip to "insufficient" when CARFAX *definitively* lacks
+      // data (no_history / vin_rejected / not_configured) AND we have
+      // fewer than 3 shop-side anchors. A transient CARFAX "error"
+      // result is treated as fail-OPEN: the score keeps showing so a
+      // 60-second upstream blip doesn't silently degrade every shop's
+      // customer report. (Brandon — Schindler's F-150 case was
+      // vin_rejected + zero shop history, the worst combo.)
+      const carfaxDefinitelyEmpty =
+        carfaxStatus === "no_history" ||
+        carfaxStatus === "vin_rejected" ||
+        carfaxStatus === "not_configured";
+      const sufficient = !(carfaxDefinitelyEmpty && anchorCount < 3);
+      const reasons: string[] = [];
+      if (!sufficient) {
+        if (carfaxStatus === "vin_rejected") reasons.push("carfax_vin_rejected");
+        else if (carfaxStatus === "not_configured") reasons.push("carfax_not_configured");
+        else if (carfaxStatus === "no_history") reasons.push("carfax_no_history");
+        if (shopServiceHistory.length === 0) reasons.push("no_shop_history");
+        if (reasons.length === 0) reasons.push("insufficient_anchors");
+      }
+      planData.dataQuality = {
+        sufficient,
+        carfaxStatus,
+        anchorCount,
+        carfaxRecordCount: carfaxRecords.length,
+        shopHistoryCount: shopServiceHistory.length,
+        reasons,
+      };
+    } catch (dqErr: any) {
+      console.warn(`[PlanBuild] dataQuality derivation failed for ${vin}: ${dqErr?.message}`);
+    }
+
     await setCachedPlan(db, vin, shopId, mileage, planData);
 
     const duration = Date.now() - startTime;
-    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length})`);
+    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length}, dataQuality=${planData.dataQuality?.sufficient ? "sufficient" : "INSUFFICIENT"}/${planData.dataQuality?.carfaxStatus})`);
 
     return NextResponse.json({
       ok: true,

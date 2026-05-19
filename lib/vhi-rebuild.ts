@@ -78,6 +78,21 @@ export interface VhiRebuildResult {
     priorDate: string | null;
     gapMiles: number;
   } | null;
+  /**
+   * Task #439: customer-facing data-quality signal. When
+   * `sufficient: false`, the UI should replace the numeric score with a
+   * gray "Insufficient History" treatment. Legacy cached_plans rows
+   * predate this field — callers should default to
+   * `{ sufficient: true, carfaxStatus: "ok" }` if absent.
+   */
+  dataQuality?: {
+    sufficient: boolean;
+    carfaxStatus: "ok" | "no_history" | "vin_rejected" | "not_configured" | "error";
+    anchorCount: number;
+    carfaxRecordCount: number;
+    shopHistoryCount: number;
+    reasons: string[];
+  };
   error?: string;
   failedStage?: VhiRebuildFailedStage;
   upstreamStatus?: number;
@@ -382,6 +397,18 @@ export async function rebuildVhi(
     mileageEstimateDetails: resolvedDetails,
     // Task #391: surface persisted mileage rollback flag (or null).
     mileageDiscrepancy: plan.mileageDiscrepancy ?? null,
+    // Task #439: forward the data-quality signal so downstream UI can
+    // render the gray "Insufficient History" treatment when warranted.
+    // Legacy entries without the field default to "looks fine" so
+    // existing scoring keeps showing through unchanged.
+    dataQuality: plan.dataQuality ?? {
+      sufficient: true,
+      carfaxStatus: "ok",
+      anchorCount: 0,
+      carfaxRecordCount: 0,
+      shopHistoryCount: 0,
+      reasons: [],
+    },
   };
 }
 
