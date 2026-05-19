@@ -163,6 +163,50 @@ five hits its limit first when the stagger tightens.
    there too — the relevant load is whichever process is actually doing
    the chunking work.
 
+## Alerting (task #465)
+
+Once the measurement surface above is collecting, the safe-band signals
+are watched without a human loading `/admin/backfill-load`. Two layers
+of alerting:
+
+**1. In-process cron alerter — `app/api/cron/backfill-load-alerter/`.**
+Daily at 07:30 UTC (right after the 07:00 chunk-speed alerter). Reads
+`backfill_chunk_metrics` + `host_load_samples`, evaluates the three
+rules below, and emails platform admins via Resend (the existing
+on-call channel — same one the stuck-shop and chunk-speed alerters
+use). State-based dedup keyed on the breaching rule set lives in the
+`backfill_load_alerts` Mongo collection: re-paged only when the breach
+set changes, auto-cleared on recovery.
+
+| Rule | Threshold | Source | Where it lives |
+| --- | --- | --- | --- |
+| `rate_limiter_timeouts` | Any chunk with `writes.rateLimiterTimeouts > 0` (or `rateLimiterFallbacks > 0`) in the last 24h | "Tekmetric rate-limiter fallbacks 0 sustained" row in the safe-band table | `app/api/cron/backfill-load-alerter/lib.ts` (`findRateLimiterTimeoutHits`) |
+| `event_loop_lag` | Any host sample with `eventLoopLagMs.p99 > 100` in the last 24h | Task #465 brief ("event-loop lag > 100 ms") — tighter than the 200 ms responsiveness budget so a regression is caught before it actually breaks | `app/api/cron/backfill-load-alerter/lib.ts` (`findEventLoopLagHits`, constant `EVENT_LOOP_P99_MS_THRESHOLD`) |
+| `p95_doubled` | Per-provider chunk p95 over the last 24h is ≥ 2× the prior 7-day p95, and above a 2-minute noise floor, with ≥ 5 chunks in each window | Task #465 brief ("p95 chunk duration doubling") | `app/api/cron/backfill-load-alerter/lib.ts` (`findP95DoubledHits`, constants `P95_DOUBLE_MULTIPLIER` / `P95_DOUBLE_NOISE_FLOOR_MS` / `P95_MIN_SAMPLES`) |
+
+The per-shop chunk-speed alerter (`backfill-chunk-speed-health`) is
+the complement: it pages when any single shop's p95 regresses 3× vs
+its own rolling baseline, while this alerter pages when the *fleet-wide*
+p95 doubles even if no individual shop crosses the 3× threshold.
+
+**2. Better Stack log-line alert (UI-side, optional).** Both metric
+writers emit single-line JSON log entries with a unique leading token
+so a Better Stack alert can be wired without parsing free text:
+
+- `[BackfillChunkMetric] {…}` from `lib/backfill-metrics/chunk-metrics.ts`
+  per chunk. Fields include `durationMs`, `rateLimiterTimeouts`,
+  `rateLimiterFallbacks`. Suggested alert query: substring
+  `[BackfillChunkMetric]` AND JSON `rateLimiterTimeouts > 0`.
+- `[HostLoadSample] {…}` from `lib/backfill-metrics/host-load-sampler.ts`
+  every 30s. Fields include `loopP99Ms`, `cpuPercent`, `pgActive`.
+  Suggested alert query: substring `[HostLoadSample]` AND JSON
+  `loopP99Ms > 100`.
+
+The cron alerter is the system of record (state-based dedup, recovery
+detection). The Better Stack log-line alert is a redundant second
+layer for sub-day notification if a regression appears between the
+daily cron ticks.
+
 ## File map
 
 | File | Role |
@@ -181,3 +225,5 @@ five hits its limit first when the stagger tightens.
 | Modified: `app/api/cron/protractor-backfill/route.ts` | Wraps chunk in counters + `recordChunkMetric` |
 | Modified: `app/api/cron/shopware-backfill/route.ts` | Wraps chunk in counters + `recordChunkMetric` |
 | Modified: `lib/integrations/tekmetric/full-page-backfill.ts` | Wraps chunk in counters + `recordChunkMetric` |
+| `app/api/cron/backfill-load-alerter/lib.ts` | Pure threshold + dedup helpers (task #465) |
+| `app/api/cron/backfill-load-alerter/route.ts` | Cron handler that emails platform admins on safe-band breach (task #465) |

@@ -145,6 +145,32 @@ async function takeSample(s: SamplerState): Promise<void> {
 
     await db.collection(HOST_LOAD_SAMPLES_COLLECTION).insertOne(doc as any);
     s.consecutiveFailures = 0;
+
+    // Structured Better Stack log line (task #465) — mirrors the
+    // `[BackfillChunkMetric]` shape so an alert query in Better Stack can
+    // pattern-match on a single token and parse JSON without scraping free
+    // text. The alerter cron also reads the persisted doc above, but the
+    // log line lets the Better Stack UI side wire its own alert without a
+    // round-trip to Mongo.
+    try {
+      console.log(
+        "[HostLoadSample] " +
+          JSON.stringify({
+            sampledAt: sampledAt.toISOString(),
+            cpuPercent,
+            loopP50Ms,
+            loopP95Ms,
+            loopP99Ms,
+            loopMaxMs,
+            rssBytes: mem.rss,
+            heapUsedBytes: mem.heapUsed,
+            pgActive: pgActiveConnections,
+            pgWaiting: pgWaitingConnections,
+            pgIdleInTxn,
+            mongoConnectionsCurrent: mongoConnections?.current ?? null,
+          }),
+      );
+    } catch {}
   } catch (err: any) {
     s.consecutiveFailures += 1;
     // Quiet after the first failure to avoid log spam if Mongo is down,
