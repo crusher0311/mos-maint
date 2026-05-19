@@ -3,6 +3,64 @@ import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongo';
 import { shopWareRequest, isConfigured } from '@/lib/integrations/shopware/client';
 
+function isBadHost(host: string): boolean {
+  const h = host.toLowerCase().split(':')[0];
+  if (!h) return true;
+  if (h === '0.0.0.0' || h === 'localhost' || h === '127.0.0.1' || h === '::1') return true;
+  // IPv4 private / link-local ranges
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const o1 = Number(m[1]);
+    const o2 = Number(m[2]);
+    if (o1 === 10) return true;
+    if (o1 === 127) return true;
+    if (o1 === 169 && o2 === 254) return true;
+    if (o1 === 172 && o2 >= 16 && o2 <= 31) return true;
+    if (o1 === 192 && o2 === 168) return true;
+  }
+  return false;
+}
+
+function resolvePublicWebhookUrl(
+  req: NextRequest,
+  bodyUrl?: string
+): { url?: string; error?: string } {
+  const candidates: string[] = [];
+  if (bodyUrl?.trim()) candidates.push(bodyUrl.trim());
+
+  const envBase =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL;
+  if (envBase) {
+    candidates.push(`${envBase.replace(/\/$/, '')}/api/webhooks/shopware`);
+  }
+
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto') || 'https';
+  if (fwdHost) {
+    candidates.push(`${fwdProto}://${fwdHost}/api/webhooks/shopware`);
+  }
+
+  for (const raw of candidates) {
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (parsed.protocol !== 'https:') continue;
+    if (isBadHost(parsed.hostname)) continue;
+    return { url: parsed.toString().replace(/\/$/, '') };
+  }
+
+  return {
+    error:
+      'Could not determine a public HTTPS webhook URL. Configure NEXT_PUBLIC_BASE_URL (or APP_BASE_URL) to your public domain, or pass a custom HTTPS URL in the request body.',
+  };
+}
+
 const SW_EVENTS = [
   'repair_order.created',
   'repair_order.updated',
@@ -91,16 +149,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const webhookUrl: string =
-      body.url?.trim() ||
-      `${req.nextUrl.origin}/api/webhooks/shopware`;
-
-    if (!webhookUrl.startsWith('https://')) {
-      return NextResponse.json(
-        { error: 'Webhook URL must use HTTPS. Please provide a custom URL for local environments.' },
-        { status: 400 }
-      );
+    const resolved = resolvePublicWebhookUrl(req, body.url);
+    if (!resolved.url) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 });
     }
+    const webhookUrl = resolved.url;
 
     let liveWebhooks: any[] = [];
     try {
