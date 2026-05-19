@@ -77,29 +77,24 @@ export async function GET() {
       ? nowMs - new Date(lastBoot.bootedAt).getTime()
       : null;
 
-    // Pull the most recent successful run per job from cron_runs so we can
-    // compute staleness against the schedule interval. The status doc only
-    // tracks the *last* run (success or failure); we want the last *ok* one
-    // so a job that's been failing for two intervals also turns red.
+    // Pull the most recent successful run per job from
+    // `cron_status.lastSuccessByJob` (written by `lib/cron/scheduler.cjs#recordRun`
+    // on every successful run). Previously this aggregated the `cron_runs`
+    // TTL collection — in prod that collection is missing entirely (task #449
+    // / diagnosis #443), so the Cron Health tab rendered every job STALE and
+    // hid the real wedged-lock outage for 9+ days. Reading the sibling field
+    // on the same status doc we just loaded for `lastBoot` removes the dead
+    // dependency and is also one fewer round-trip. Task #458.
     const cronJobs = loadCronJobs();
-    const jobNames = cronJobs.map((j) => j.name);
-    const lastSuccessRows = await db
-      .collection("cron_runs")
-      .aggregate([
-        { $match: { jobName: { $in: jobNames }, ok: true } },
-        { $sort: { startedAt: -1 } },
-        {
-          $group: {
-            _id: "$jobName",
-            lastSuccessAt: { $first: "$startedAt" },
-            lastDurationMs: { $first: "$durationMs" },
-          },
-        },
-      ])
-      .toArray();
-    const lastSuccessByJob = new Map<string, Date>(
-      lastSuccessRows.map((r: any) => [r._id, new Date(r.lastSuccessAt)]),
-    );
+    const lastSuccessMap = ((doc as any)?.lastSuccessByJob || {}) as Record<
+      string,
+      Date | string
+    >;
+    const lastSuccessByJob = new Map<string, Date>();
+    for (const [name, ts] of Object.entries(lastSuccessMap)) {
+      const d = ts instanceof Date ? ts : new Date(ts as any);
+      if (!isNaN(d.getTime())) lastSuccessByJob.set(name, d);
+    }
 
     const jobsHealth = cronJobs.map((job) => {
       const interval = estimateScheduleInterval(job.schedule);

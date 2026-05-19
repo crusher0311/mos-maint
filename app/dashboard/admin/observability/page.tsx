@@ -670,9 +670,10 @@ export default function ObservabilityPage() {
                   <div className="p-6 pb-2">
                     <h3 className="text-lg font-semibold text-gray-900">Cron Health</h3>
                     <p className="text-xs text-gray-500 mt-1">
-                      Last successful run per registered job, sourced from <code>cron_runs</code> (TTL-7d).
-                      Red badge = no success in 2× the schedule interval. Weekend-only boost jobs are
-                      silent Mon-Fri by design and never flag stale.
+                      Last successful run per registered job, sourced from <code>cron_status.lastSuccessByJob</code>
+                      (written by the in-process scheduler on every successful tick). Red badge = no
+                      success in 2× the schedule interval. Weekend-only boost jobs are silent Mon-Fri
+                      by design and never flag stale.
                     </p>
                   </div>
                   <table className="min-w-full divide-y divide-gray-200">

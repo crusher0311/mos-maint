@@ -197,31 +197,36 @@ export async function GET(req: NextRequest) {
     schedule: "*/30 * * * *",
   };
   try {
+    // Read from `cron_status` (the same status doc the cron-status admin
+    // endpoint and the cron-health-alerter use) instead of the `cron_runs`
+    // time-series collection. `cron_runs` is missing fleet-wide in prod
+    // (task #449 / diagnosis #443), so the previous lookup always returned
+    // null and the Tekmetric webhook view rendered "polling: never" even
+    // when the safety-net cron was running every 30 min. Task #458.
     const cronDb = await getDb("mos");
-    const lastRunRow = await cronDb.collection("cron_runs").find(
-      { jobName: "tekmetric-incremental-sync" },
-      { projection: { startedAt: 1, finishedAt: 1, ok: 1, durationMs: 1 } } as any
-    ).sort({ startedAt: -1 }).limit(1).toArray();
-    const lastSuccessRow = await cronDb.collection("cron_runs").find(
-      { jobName: "tekmetric-incremental-sync", ok: true },
-      { projection: { startedAt: 1, durationMs: 1 } } as any
-    ).sort({ startedAt: -1 }).limit(1).toArray();
-    if (lastRunRow.length > 0) {
-      const lr: any = lastRunRow[0];
-      incrementalSync.lastRunAt = lr.startedAt
-        ? new Date(lr.startedAt).toISOString()
-        : null;
-      incrementalSync.lastDurationMs = lr.durationMs ?? null;
+    const statusDoc = await cronDb
+      .collection("cron_status")
+      .findOne({ _id: "global" as any });
+    const lastRun = (statusDoc as any)?.lastRuns?.[
+      "tekmetric-incremental-sync"
+    ] as { dt?: Date | string; ms?: number } | undefined;
+    const lastSuccessRaw = (statusDoc as any)?.lastSuccessByJob?.[
+      "tekmetric-incremental-sync"
+    ] as Date | string | undefined;
+    if (lastRun?.dt) {
+      const d = lastRun.dt instanceof Date ? lastRun.dt : new Date(lastRun.dt);
+      if (!isNaN(d.getTime())) incrementalSync.lastRunAt = d.toISOString();
+      incrementalSync.lastDurationMs =
+        typeof lastRun.ms === "number" ? lastRun.ms : null;
     }
-    if (lastSuccessRow.length > 0) {
-      const ls: any = lastSuccessRow[0];
-      incrementalSync.lastSuccessAt = ls.startedAt
-        ? new Date(ls.startedAt).toISOString()
-        : null;
+    if (lastSuccessRaw) {
+      const d =
+        lastSuccessRaw instanceof Date ? lastSuccessRaw : new Date(lastSuccessRaw);
+      if (!isNaN(d.getTime())) incrementalSync.lastSuccessAt = d.toISOString();
     }
   } catch (err: any) {
     console.warn(
-      "[webhook-subscription-status] cron_runs lookup failed:",
+      "[webhook-subscription-status] cron_status lookup failed:",
       err?.message,
     );
   }

@@ -1,4 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+// Per-call Tekmetric instrumentation. `trackApiRequest('tekmetric', ...)`
+// buffers and flushes to the unified `api_usage` Mongo collection (see
+// `lib/api-usage-tracker.ts#flushToDb` → `insertUsageRecords`). The admin
+// "Tekmetric usage" view at `/api/platform-admin/tekmetric-usage` reads from
+// the same collection filtered by `provider: "tekmetric"`. The legacy
+// Tekmetric-specific `tekmetric_api_usage` collection is dead — diagnosis
+// #443 found it had 0 lifetime docs because the write path migrated here
+// long ago. Run `scripts/tekmetric-usage-smoke.mjs` to confirm fresh docs
+// are landing if the admin view ever shows zeroes again (task #458).
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot, type RateLimitPriority } from "@/lib/integrations/core/rate-limiter";
 import { acquireSharedTekmetricSlot } from "./shared-rate-limiter";
