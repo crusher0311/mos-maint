@@ -6,7 +6,7 @@ import {
   Lock, Unlock, Trash2, ChevronDown, ChevronUp, MapPin, Phone, Clock,
   CheckCircle2, Clock4, Play, AlertTriangle, Pause, AlertCircle, XCircle,
   Mail, CreditCard, ShieldCheck, ShieldAlert, Flag,
-  MoreHorizontal, Users, Car, TrendingUp, Sparkles, Database, Zap,
+  MoreHorizontal, Users, Car, TrendingUp, Sparkles, Database, Zap, Pencil,
 } from "lucide-react";
 import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
 
@@ -239,6 +239,8 @@ export default function PlatformShopsPage() {
   const [extendTrialDays, setExtendTrialDays] = useState<string>("14");
   const [extendTrialMode, setExtendTrialMode] = useState<"days" | "date">("days");
   const [extendTrialDate, setExtendTrialDate] = useState<string>("");
+  const [renameShop, setRenameShop] = useState<Shop | null>(null);
+  const [renameValue, setRenameValue] = useState<string>("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [modalAction, setModalAction] = useState<"manageFeatures" | null>(null);
@@ -533,6 +535,40 @@ export default function PlatformShopsPage() {
       alert("Bulk approve failed");
     } finally {
       setBulkApproveSubmitting(false);
+    }
+  };
+
+  const submitRename = async () => {
+    if (!renameShop) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      alert("Name cannot be empty.");
+      return;
+    }
+    if (trimmed.length > 120) {
+      alert("Name must be 120 characters or fewer.");
+      return;
+    }
+    setActionLoading(`${renameShop.shopId}-rename`);
+    try {
+      const res = await fetch(`/api/platform-admin/shops/${renameShop.shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rename", name: trimmed }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRenameShop(null);
+        setRenameValue("");
+        loadShops();
+      } else {
+        alert(data.error || "Rename failed");
+      }
+    } catch (err) {
+      console.error("Rename shop error:", err);
+      alert("Rename failed");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -904,6 +940,7 @@ export default function PlatformShopsPage() {
       setReviewDialog({ shop, mode: "flag" });
     },
     triggerExtendTrial: (shop: Shop) => { setExtendTrialShop(shop); setExtendTrialDays("14"); },
+    triggerRename: (shop: Shop) => { setRenameShop(shop); setRenameValue(shop.name || ""); },
     triggerBackfill,
     triggerFullPageReindex,
   };
@@ -1603,6 +1640,71 @@ export default function PlatformShopsPage() {
         </div>
       )}
 
+      {renameShop && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Rename Shop</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Shop {renameShop.shopId} &middot; currently &ldquo;{renameShop.name}&rdquo;
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setRenameShop(null);
+                  setRenameValue("");
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <label className="block text-xs text-gray-500 mb-1">New name</label>
+            <input
+              type="text"
+              autoFocus
+              maxLength={120}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitRename();
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
+              placeholder="e.g. Telle Tire"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              Only changes the display name. The location badge ({renameShop.locationIdentifier || "n/a"}) and shop ID are unchanged.
+            </p>
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setRenameShop(null);
+                  setRenameValue("");
+                }}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRename}
+                disabled={
+                  actionLoading === `${renameShop.shopId}-rename` ||
+                  !renameValue.trim() ||
+                  renameValue.trim() === renameShop.name
+                }
+                className="px-4 py-2 bg-[#3c81c3] text-white rounded-lg hover:bg-[#2d6da8] disabled:opacity-50 flex items-center gap-2"
+              >
+                {actionLoading === `${renameShop.shopId}-rename` && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {bulkConfirmOpen && (
         <BulkCardCaptureConfirmDialog
           shops={bulkEligibleShops}
@@ -1871,6 +1973,7 @@ interface ShopRowProps {
   deleteShop: (shop: Shop) => void;
   resendCardCaptureEmail: (shop: Shop) => void;
   triggerExtendTrial: (shop: Shop) => void;
+  triggerRename: (shop: Shop) => void;
   triggerApproveReview: (shop: Shop) => void;
   triggerFlagReview: (shop: Shop) => void;
   triggerBackfill: (shop: Shop) => void;
@@ -1882,6 +1985,7 @@ function ShopRow(props: ShopRowProps) {
     shop, hideEnterpriseLine, actionLoading, impersonating, expandedShop, setExpandedShop,
     openMenuShopId, setOpenMenuShopId, accessShop, openFeatureModal,
     toggleLock, deleteShop, resendCardCaptureEmail, triggerExtendTrial,
+    triggerRename,
     triggerApproveReview, triggerFlagReview,
     triggerBackfill, triggerFullPageReindex,
   } = props;
@@ -1914,6 +2018,15 @@ function ShopRow(props: ShopRowProps) {
                 <span className={`font-medium text-sm break-words ${shop.isLocked ? "text-red-700" : "text-gray-900"}`}>
                   {shop.name}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => triggerRename(shop)}
+                  className="text-gray-400 hover:text-[#3c81c3] p-0.5 rounded"
+                  title="Rename shop"
+                  aria-label={`Rename ${shop.name}`}
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
                 {shop.locationIdentifier && (
                   <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded font-medium">
                     {shop.locationIdentifier}

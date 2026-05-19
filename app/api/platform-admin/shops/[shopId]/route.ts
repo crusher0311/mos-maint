@@ -337,6 +337,45 @@ export async function PATCH(
       });
     }
 
+    if (action === "rename") {
+      // Inline shop rename. Trims, enforces a 1–120 char range, and
+      // writes an audit_log entry capturing the before/after so we can
+      // see who renamed what and when. Keeps the existing
+      // `locationIdentifier` badge untouched — only the display `name`
+      // field is changed.
+      const rawName = typeof body.name === "string" ? body.name.trim() : "";
+      if (!rawName) {
+        return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      }
+      if (rawName.length > 120) {
+        return NextResponse.json(
+          { error: "Name must be 120 characters or fewer" },
+          { status: 400 }
+        );
+      }
+      if (rawName === shop.name) {
+        return NextResponse.json({ ok: true, message: "No change", name: rawName });
+      }
+      const previousName = shop.name;
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $set: { name: rawName, updatedAt: new Date() } }
+      );
+      await db.collection("audit_logs").insertOne({
+        type: "shop_renamed",
+        shopId,
+        previousName,
+        newName: rawName,
+        adminEmail: session.email,
+        createdAt: new Date(),
+      });
+      return NextResponse.json({
+        ok: true,
+        message: `Renamed to "${rawName}"`,
+        name: rawName,
+      });
+    }
+
     if (action === "unlock") {
       await db.collection("shops").updateOne(
         { shopId },
