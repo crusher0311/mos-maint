@@ -120,6 +120,23 @@ export async function register() {
   // are present, regardless of whether the cron scheduler is enabled.
   await ensureCriticalIndexes();
 
+  // Task #460: host-load sampler runs alongside the in-process cron so
+  // chunk metrics can be correlated with CPU/RSS/event-loop/PG-pool
+  // pressure when measuring the safe backfill cadence ceiling. Boots
+  // independently of the scheduler — if cron is disabled this still
+  // collects baseline load for the web process.
+  try {
+    const { startHostLoadSampler } = await import(
+      "@/lib/backfill-metrics/host-load-sampler"
+    );
+    startHostLoadSampler();
+  } catch (err: any) {
+    console.warn(
+      "[HostLoadSampler] failed to start:",
+      err?.message || String(err),
+    );
+  }
+
   if (process.env.ENABLE_INPROCESS_CRON !== "true") {
     console.log("[Cron] ENABLE_INPROCESS_CRON not set — scheduler disabled");
     // Persist intentional disable so the observability page shows

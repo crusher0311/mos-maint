@@ -32,6 +32,7 @@ import {
 import { updateRepairPattern } from '@/lib/repair-patterns';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
+import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
 import { enrichVinWithAces, extractShopWarePcdb, extractTekmetricPcdb } from '@/lib/job-index-aces';
 
 // =============================================================================
@@ -1805,6 +1806,11 @@ export class NormalizedIngestionService {
     }
     try {
       await upsertFn();
+      // Task #460: per-chunk PG write fan-out. AsyncLocalStorage-scoped,
+      // so it only counts when the call chain originated inside a
+      // `withChunkWriteCounters` wrapper (i.e. the backfill chunk path).
+      // Live/webhook ingestion paths are unaffected.
+      bumpPgWrites();
     } catch (err) {
       const e = err as any;
       const cause = e?.cause as any;
@@ -1847,6 +1853,8 @@ export class NormalizedIngestionService {
     if (!shouldShadowWriteMongo()) return;
     try {
       await fn();
+      // Task #460: per-chunk Mongo shadow-write fan-out (see PG sibling above).
+      bumpMongoWrites();
     } catch (err) {
       const baseMessage = err instanceof Error ? err.message : String(err);
       console.error(

@@ -113,7 +113,16 @@ async function backfillShopChunk(
   // sourced from a per-chunk AsyncLocalStorage counter (see
   // `runWithShopwareBackoffTracking` in shopware/client.ts) so concurrent
   // chunks don't leak rate-limit waits into each other's metric.
-  return runWithShopwareBackoffTracking(async (chunkBackoffCounter) => {
+  // Task #460: capture write fan-out + record into backfill_chunk_metrics.
+  const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
+  const { recordChunkMetric } = await import("@/lib/backfill-metrics/chunk-metrics");
+  return withChunkWriteCounters(async (chunkWriteCounters) => {
+  const _metricStartedAt = Date.now();
+  let _metricOutcome: "ok" | "error" | "deferred" | "complete" | "empty" = "ok";
+  let _metricRos = 0;
+  let _metricBackoffMs = 0;
+  try {
+  const _innerResult = await runWithShopwareBackoffTracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
   let vehiclesCacheHits = 0;
   let vehiclesCacheMisses = 0;
@@ -307,7 +316,29 @@ async function backfillShopChunk(
     vehiclesStored,
     customersStored,
     metrics: buildMetrics(),
-  };
+    _chunkBackoffMs: chunkBackoffCounter.ms,
+  } as any;
+  });
+  _metricRos = _innerResult.rosFetched ?? 0;
+  _metricBackoffMs = Math.round((_innerResult as any)._chunkBackoffMs ?? 0);
+  _metricOutcome = _innerResult.error ? "error" : "ok";
+  // Strip private metric field from the public return shape.
+  const { _chunkBackoffMs: _omit, ...publicResult } = _innerResult as any;
+  return publicResult;
+  } catch (err) {
+    _metricOutcome = "error";
+    throw err;
+  } finally {
+    await recordChunkMetric({
+      provider: "shopware",
+      shopId,
+      chunkStartedAt: _metricStartedAt,
+      rosProcessed: _metricRos,
+      outcome: _metricOutcome,
+      backoffMs: _metricBackoffMs,
+      counters: chunkWriteCounters,
+    });
+  }
   });
 }
 

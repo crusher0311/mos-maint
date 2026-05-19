@@ -795,7 +795,15 @@ export async function runFullPageBackfillChunk(
   tekmetricShopId: number,
   lockOwner?: string,
 ): Promise<FullPageBackfillResult> {
-  return runWithTekmetric429Tracking(async () => {
+  // Task #460: capture write fan-out + record into backfill_chunk_metrics.
+  const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
+  const { recordChunkMetric } = await import("@/lib/backfill-metrics/chunk-metrics");
+  return withChunkWriteCounters(async (chunkWriteCounters) => {
+  const _metricStartedAt = Date.now();
+  let _metricOutcome: "ok" | "error" | "deferred" | "complete" | "empty" = "ok";
+  let _metricRos = 0;
+  try {
+  const _result = await runWithTekmetric429Tracking(async () => {
     const startedAt = Date.now();
     const progress = await db
       .collection("tekmetric_backfill_progress")
@@ -1472,6 +1480,29 @@ export async function runFullPageBackfillChunk(
           : `Full-page chunk: pages ${startPage}..${page - 1} of ${totalPages}, ${jobsIndexed} jobs indexed`,
       error: lastError || undefined,
     };
+  });
+  _metricRos = _result.rosFetched ?? 0;
+  _metricOutcome = _result.error
+    ? "error"
+    : _result.complete
+      ? "complete"
+      : _result.rosFetched === 0
+        ? "empty"
+        : "ok";
+  return _result;
+  } catch (err) {
+    _metricOutcome = "error";
+    throw err;
+  } finally {
+    await recordChunkMetric({
+      provider: "tekmetric-fullpage",
+      shopId,
+      chunkStartedAt: _metricStartedAt,
+      rosProcessed: _metricRos,
+      outcome: _metricOutcome,
+      counters: chunkWriteCounters,
+    });
+  }
   });
 }
 

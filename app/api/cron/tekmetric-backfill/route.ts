@@ -464,7 +464,21 @@ async function backfillShopChunkInner(
   // `runWithTekmetric429Tracking` in tekmetric/client.ts) so concurrent
   // shops backfilling in parallel don't leak each other's 429 waits into
   // this chunk's metric.
-  return runWithTekmetric429Tracking(async (chunkBackoffCounter) => {
+  //
+  // Task #460: also wrap the chunk in `withChunkWriteCounters` so PG /
+  // Mongo / rate-limiter write-fan-out is captured in
+  // `backfill_chunk_metrics` for cadence-ceiling measurement. The
+  // counters are AsyncLocalStorage-scoped so they only fire for the
+  // chunk's own call chain.
+  const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
+  const { recordChunkMetric } = await import("@/lib/backfill-metrics/chunk-metrics");
+  return withChunkWriteCounters(async (chunkWriteCounters) => {
+  const _metricStartedAt = Date.now();
+  let _metricOutcome: "ok" | "error" | "deferred" | "complete" | "empty" = "ok";
+  let _metricRos = 0;
+  let _metricBackoffMs = 0;
+  try {
+  return await runWithTekmetric429Tracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
   let jobsCacheHits = 0;
   let jobsCacheMisses = 0;
@@ -500,6 +514,7 @@ async function backfillShopChunkInner(
     console.log(
       `[Tekmetric Backfill] Shop ${shopId}: deferring to full-page worker (fullPageMode=true, nextPage=${progress.fullPageNextPage ?? 0})`,
     );
+    _metricOutcome = "deferred";
     return {
       jobsIndexed: 0,
       skipped: 0,
@@ -573,6 +588,7 @@ async function backfillShopChunkInner(
       { shopId },
       { $set: { complete: true, completed: true, completedAt: new Date() } }
     );
+    _metricOutcome = "complete";
     return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
   }
 
@@ -1430,6 +1446,9 @@ async function backfillShopChunkInner(
     console.log(`[Tekmetric Backfill] Shop ${shopId}: Marked tekmetricBackfillComplete=true`);
   }
 
+  _metricRos = seenROIds.size;
+  _metricBackoffMs = Math.round(chunkBackoffMs);
+  _metricOutcome = chunkHadError ? "error" : isComplete ? "complete" : "ok";
   return {
     jobsIndexed,
     skipped: skippedUnchanged,
@@ -1437,6 +1456,21 @@ async function backfillShopChunkInner(
     message: `${startStr.split("T")[0]} to ${endStr.split("T")[0]}: ${jobsIndexed} jobs indexed, ${skippedUnchanged} unchanged, ${normalizedCount} normalized`,
     normalizedCount
   };
+  });
+  } catch (err) {
+    _metricOutcome = "error";
+    throw err;
+  } finally {
+    await recordChunkMetric({
+      provider: "tekmetric",
+      shopId,
+      chunkStartedAt: _metricStartedAt,
+      rosProcessed: _metricRos,
+      outcome: _metricOutcome,
+      backoffMs: _metricBackoffMs,
+      counters: chunkWriteCounters,
+    });
+  }
   });
 }
 

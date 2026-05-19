@@ -217,7 +217,18 @@ async function backfillShopChunk(
   // sourced from a per-chunk AsyncLocalStorage counter (see
   // `runWithProtractorBackoffTracking` in protractor.ts) so concurrent
   // chunks don't leak each other's retry waits into this chunk's metric.
-  return runWithProtractorBackoffTracking(async (chunkBackoffCounter) => {
+  // Task #460: wrap in `withChunkWriteCounters` so PG/Mongo/rate-limiter
+  // write fan-out is captured in `backfill_chunk_metrics` for cadence
+  // measurement. AsyncLocalStorage-scoped — only fires inside this chunk.
+  const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
+  const { recordChunkMetric } = await import("@/lib/backfill-metrics/chunk-metrics");
+  return withChunkWriteCounters(async (chunkWriteCounters) => {
+  const _metricStartedAt = Date.now();
+  let _metricOutcome: "ok" | "error" | "deferred" | "complete" | "empty" = "ok";
+  let _metricRos = 0;
+  let _metricBackoffMs = 0;
+  try {
+  return await runWithProtractorBackoffTracking(async (chunkBackoffCounter) => {
   const chunkStartedAt = Date.now();
   const vehicleCacheCounters = { hits: 0, misses: 0 };
 
@@ -635,6 +646,9 @@ async function backfillShopChunk(
     console.log(`[Backfill] Shop ${shopId}: Marked protractorBackfillComplete=true`);
   }
   
+  _metricRos = invoices.length;
+  _metricBackoffMs = Math.round(chunkBackoffCounter.ms);
+  _metricOutcome = chunkHadError ? "error" : isComplete ? "complete" : "ok";
   return {
     jobsIndexed,
     skipped: skippedUnchanged,
@@ -643,6 +657,21 @@ async function backfillShopChunk(
     vehiclesFetched,
     normalizedCount
   };
+  });
+  } catch (err) {
+    _metricOutcome = "error";
+    throw err;
+  } finally {
+    await recordChunkMetric({
+      provider: "protractor",
+      shopId,
+      chunkStartedAt: _metricStartedAt,
+      rosProcessed: _metricRos,
+      outcome: _metricOutcome,
+      backoffMs: _metricBackoffMs,
+      counters: chunkWriteCounters,
+    });
+  }
   });
 }
 

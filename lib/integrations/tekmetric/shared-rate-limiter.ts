@@ -176,7 +176,14 @@ function isFailOpenOnTimeout(): boolean {
 export async function acquireSharedTekmetricSlot(
   opts: AcquireSharedSlotOptions = {},
 ): Promise<SharedSlotResult> {
+  // Task #460: per-chunk rate-limiter wait/fallback/timeout accounting.
+  // AsyncLocalStorage-scoped (no-op outside a `withChunkWriteCounters`
+  // wrapper) so live request paths are unaffected.
+  const { bumpRateLimiterWait, bumpRateLimiterTimeout, bumpRateLimiterFallback } =
+    await import("@/lib/backfill-metrics/write-counters");
+
   if (isSharedLimiterDisabled()) {
+    bumpRateLimiterFallback();
     return { acquired: true, waitedMs: 0, fallback: true };
   }
 
@@ -195,6 +202,7 @@ export async function acquireSharedTekmetricSlot(
     console.warn(
       `[Tekmetric SharedLimiter] Mongo unavailable (getDb failed), falling back to per-process limiter: ${err?.message || err}`,
     );
+    bumpRateLimiterFallback();
     return { acquired: true, waitedMs: 0, fallback: true };
   }
 
@@ -228,11 +236,16 @@ export async function acquireSharedTekmetricSlot(
       console.warn(
         `[Tekmetric SharedLimiter] Mongo error during $inc, falling back to per-process limiter: ${err?.message || err}`,
       );
-      return { acquired: true, waitedMs: nowMs() - startedAt, fallback: true };
+      const waited = nowMs() - startedAt;
+      bumpRateLimiterWait(waited);
+      bumpRateLimiterFallback();
+      return { acquired: true, waitedMs: waited, fallback: true };
     }
 
     if (count <= cap) {
-      return { acquired: true, waitedMs: nowMs() - startedAt };
+      const waited = nowMs() - startedAt;
+      bumpRateLimiterWait(waited);
+      return { acquired: true, waitedMs: waited };
     }
 
     // Over cap. Release our slot so we don't poison the bucket for the
@@ -255,6 +268,9 @@ export async function acquireSharedTekmetricSlot(
         console.warn(
           `[Tekmetric SharedLimiter] CAP BREACH (FAIL-OPEN): waited ${elapsed}ms without slot (cap=${cap}), allowing request through because TEKMETRIC_SHARED_LIMITER_FAIL_OPEN=true. Combined attempted RPS may now exceed ${cap}; expect 429s.`,
         );
+        bumpRateLimiterWait(elapsed);
+        bumpRateLimiterTimeout();
+        bumpRateLimiterFallback();
         return { acquired: true, waitedMs: elapsed, timedOut: true };
       }
       // Default fail-closed: tell caller to skip this attempt. The retry
@@ -264,6 +280,8 @@ export async function acquireSharedTekmetricSlot(
       console.warn(
         `[Tekmetric SharedLimiter] Waited ${elapsed}ms without slot (cap=${cap}); failing closed so caller can backoff/retry instead of breaching the cap`,
       );
+      bumpRateLimiterWait(elapsed);
+      bumpRateLimiterTimeout();
       return { acquired: false, waitedMs: elapsed, timedOut: true };
     }
 
