@@ -50,15 +50,26 @@ async function getFlaggedShops(db: any): Promise<ShopRow[]> {
       tekmetricShopId: 1,
     })
     .toArray();
-  // Sort by least-recently-run so all flagged shops make progress when more
-  // than one is queued at the same time.
-  const lastRunByShop = new Map(
-    progressRows.map((r: any) => [
-      Number(r.shopId),
-      new Date(
+  // Two-tier sort: never-ran-a-page shops FIRST (oldest queue wins),
+  // then everyone else by least-recently-run. Without the tier split,
+  // the bare `lastFullPageRunAt || fullPageQueuedAt` fallback ties
+  // never-ran shops against shops that DID run yesterday — which lets
+  // the same 1-2 shops dominate the cron's per-tick budget while
+  // never-ran shops (8 of 14 in diagnosis #443, some queued 9 days ago)
+  // never get a turn. Promoting null-lastFullPageRunAt to the front
+  // guarantees every flagged shop sees a first page within a few ticks.
+  type SortKey = { tier: 0 | 1; t: number };
+  const sortKeyByShop = new Map<number, SortKey>(
+    progressRows.map((r: any) => {
+      const neverRan = !r.lastFullPageRunAt;
+      const t = new Date(
         r.lastFullPageRunAt || r.fullPageQueuedAt || 0,
-      ).getTime(),
-    ]),
+      ).getTime();
+      return [Number(r.shopId), { tier: neverRan ? 0 : 1, t }] as [
+        number,
+        SortKey,
+      ];
+    }),
   );
   return shops
     .map((s: any) => {
@@ -73,11 +84,12 @@ async function getFlaggedShops(db: any): Promise<ShopRow[]> {
       } as ShopRow;
     })
     .filter((s: ShopRow | null): s is ShopRow => s !== null)
-    .sort(
-      (a: ShopRow, b: ShopRow) =>
-        (lastRunByShop.get(a.shopId) || 0) -
-        (lastRunByShop.get(b.shopId) || 0),
-    );
+    .sort((a: ShopRow, b: ShopRow) => {
+      const ka = sortKeyByShop.get(a.shopId) || { tier: 1, t: 0 };
+      const kb = sortKeyByShop.get(b.shopId) || { tier: 1, t: 0 };
+      if (ka.tier !== kb.tier) return ka.tier - kb.tier;
+      return ka.t - kb.t;
+    });
 }
 
 async function processShops(shops: ShopRow[], deadlineMs: number) {
@@ -115,9 +127,17 @@ async function processShops(shops: ShopRow[], deadlineMs: number) {
 
 // `runFullPageBackfillChunk` accepts db as first arg but the cron resolves
 // it once and threads the resolved Db handle through. Wrap so the call
-// site stays clean.
-async function runForShop(db: any, shop: ShopRow) {
-  return runFullPageBackfillChunk(db, shop.shopId, shop.tekmetricShopId);
+// site stays clean. The `lockOwner` is forwarded so the chunker can bump
+// the in-flight-lock heartbeat after each page write — a wedged run that
+// stops writing pages within 3 minutes is now stealable by the next tick
+// (see lib/integrations/tekmetric/inflight-lock.ts).
+async function runForShop(db: any, shop: ShopRow, lockOwner: string) {
+  return runFullPageBackfillChunk(
+    db,
+    shop.shopId,
+    shop.tekmetricShopId,
+    lockOwner,
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -197,8 +217,13 @@ export async function GET(req: NextRequest) {
       });
       continue;
     }
+    if ((lock as any).stolenFromStaleHolder) {
+      console.warn(
+        `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: took over wedged lock from ${(lock as any).previousOwner} (heartbeat stale).`,
+      );
+    }
     try {
-      const result = await runForShop(db, shop);
+      const result = await runForShop(db, shop, lock.owner);
       results.push({ shopId: shop.shopId, name: shop.name, ...result });
     } catch (err: any) {
       console.error(
@@ -313,11 +338,17 @@ export async function POST(req: NextRequest) {
     // Drain pages for this single shop until either complete OR the request
     // deadline. The chunk function caps each call at MAX_PAGES_PER_RUN pages,
     // so we loop until we run out of time or hit completion.
+    if ((lock as any).stolenFromStaleHolder) {
+      console.warn(
+        `[Tekmetric Full-Page POST] Shop ${targetShopId}: took over wedged lock from ${(lock as any).previousOwner} (heartbeat stale).`,
+      );
+    }
     while (Date.now() < deadlineMs) {
       const result = await runFullPageBackfillChunk(
         db,
         targetShopId,
         tekmetricShopId,
+        lock.owner,
       );
       results.push({
         pagesProcessed: result.pagesProcessed,

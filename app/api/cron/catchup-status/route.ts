@@ -158,6 +158,12 @@ export async function GET(req: NextRequest) {
         inFlightUntil: progress.inFlightUntil || null,
         inFlightStartedAt: progress.inFlightStartedAt || null,
         inFlightOwner: progress.inFlightOwner || null,
+        // Heartbeat-staleness signal added in task #448. When the lock
+        // is held but `inFlightHeartbeatAt` is older than 3 minutes,
+        // the next acquire will steal it (the chunker bumps the
+        // heartbeat after every page write). Surface it so on-call can
+        // confirm wedged-lock recovery without grepping logs.
+        inFlightHeartbeatAt: progress.inFlightHeartbeatAt || null,
       };
     });
 

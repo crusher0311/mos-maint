@@ -42,6 +42,7 @@ import {
   getCachedJobs,
   cacheJobs,
 } from "@/lib/integrations/tekmetric/incremental-sync";
+import { bumpInFlightHeartbeat } from "@/lib/integrations/tekmetric/inflight-lock";
 
 // Each cron tick processes up to this many pages of 100 ROs each. Empirically
 // each page costs ~20-30s of wall-clock at 8 RPS once vehicle/customer/jobs
@@ -136,6 +137,7 @@ export async function runJobsPrePass(
   shopId: number,
   tekmetricShopId: number,
   deadlineMs: number,
+  lockOwner?: string,
 ): Promise<JobsPrePassResult> {
   const startedAt = Date.now();
   const progress = await db
@@ -257,19 +259,26 @@ export async function runJobsPrePass(
     pagesProcessed++;
 
     // Persist after every page so a mid-run timeout costs only one page.
+    // Only persist `prePassTotalPages` when the API reported a real value;
+    // otherwise leave the existing field alone so we don't overwrite a
+    // healthy snapshot with 0 (the same corruption pattern as full-page).
+    const prePassPageUpdate: any = {
+      prePassNextPage: page,
+      lastPrePassRunAt: new Date(),
+    };
+    if (totalPages > 0) prePassPageUpdate.prePassTotalPages = totalPages;
     await db
       .collection("tekmetric_backfill_progress")
-      .updateOne(
-        { shopId },
-        {
-          $set: {
-            prePassNextPage: page,
-            prePassTotalPages: totalPages,
-            lastPrePassRunAt: new Date(),
-          },
-        },
-      )
+      .updateOne({ shopId }, { $set: prePassPageUpdate })
       .catch(() => {});
+
+    // Heartbeat: signal the in-flight lock that we're making real
+    // progress so the next acquire attempt doesn't (rightfully) steal
+    // the lock under us as stale. See `bumpInFlightHeartbeat` for why
+    // this is owner-scoped.
+    if (lockOwner) {
+      await bumpInFlightHeartbeat(db, shopId, lockOwner);
+    }
 
     if (totalPages > 0 && page >= totalPages) {
       reachedEnd = true;
@@ -279,19 +288,15 @@ export async function runJobsPrePass(
 
   const done = reachedEnd && !lastError;
   if (done) {
+    const doneUpdate: any = {
+      prePassDone: true,
+      prePassCompletedAt: new Date(),
+      prePassNextPage: page,
+    };
+    if (totalPages > 0) doneUpdate.prePassTotalPages = totalPages;
     await db
       .collection("tekmetric_backfill_progress")
-      .updateOne(
-        { shopId },
-        {
-          $set: {
-            prePassDone: true,
-            prePassCompletedAt: new Date(),
-            prePassNextPage: page,
-            prePassTotalPages: totalPages,
-          },
-        },
-      )
+      .updateOne({ shopId }, { $set: doneUpdate })
       .catch(() => {});
   }
 
@@ -386,6 +391,7 @@ async function runEntityPrePass(opts: {
   completedAtField: string;
   lastRunAtField: string;
   logTag: string;
+  lockOwner?: string;
 }): Promise<EntityPrePassResult> {
   const {
     db,
@@ -401,6 +407,7 @@ async function runEntityPrePass(opts: {
     completedAtField,
     lastRunAtField,
     logTag,
+    lockOwner,
   } = opts;
   const startedAt = Date.now();
   const progress = await db
@@ -509,19 +516,21 @@ async function runEntityPrePass(opts: {
     page++;
     pagesProcessed++;
 
+    // See runJobsPrePass: guard totalPages=0 so a stale-API response
+    // doesn't corrupt the persisted totalPages field.
+    const entityPageUpdate: any = {
+      [nextPageField]: page,
+      [lastRunAtField]: new Date(),
+    };
+    if (totalPages > 0) entityPageUpdate[totalPagesField] = totalPages;
     await db
       .collection("tekmetric_backfill_progress")
-      .updateOne(
-        { shopId },
-        {
-          $set: {
-            [nextPageField]: page,
-            [totalPagesField]: totalPages,
-            [lastRunAtField]: new Date(),
-          },
-        },
-      )
+      .updateOne({ shopId }, { $set: entityPageUpdate })
       .catch(() => {});
+
+    if (lockOwner) {
+      await bumpInFlightHeartbeat(db, shopId, lockOwner);
+    }
 
     if (totalPages > 0 && page >= totalPages) {
       reachedEnd = true;
@@ -531,19 +540,15 @@ async function runEntityPrePass(opts: {
 
   const done = reachedEnd && !lastError;
   if (done) {
+    const entityDoneUpdate: any = {
+      [donePageField]: true,
+      [completedAtField]: new Date(),
+      [nextPageField]: page,
+    };
+    if (totalPages > 0) entityDoneUpdate[totalPagesField] = totalPages;
     await db
       .collection("tekmetric_backfill_progress")
-      .updateOne(
-        { shopId },
-        {
-          $set: {
-            [donePageField]: true,
-            [completedAtField]: new Date(),
-            [nextPageField]: page,
-            [totalPagesField]: totalPages,
-          },
-        },
-      )
+      .updateOne({ shopId }, { $set: entityDoneUpdate })
       .catch(() => {});
   }
 
@@ -570,6 +575,7 @@ export async function runVehiclesPrePass(
   shopId: number,
   tekmetricShopId: number,
   deadlineMs: number,
+  lockOwner?: string,
 ): Promise<EntityPrePassResult> {
   return runEntityPrePass({
     db,
@@ -585,6 +591,7 @@ export async function runVehiclesPrePass(
     completedAtField: "vehiclesPrePassCompletedAt",
     lastRunAtField: "lastVehiclesPrePassRunAt",
     logTag: "[Tekmetric Vehicles Pre-Pass]",
+    lockOwner,
   });
 }
 
@@ -593,6 +600,7 @@ export async function runCustomersPrePass(
   shopId: number,
   tekmetricShopId: number,
   deadlineMs: number,
+  lockOwner?: string,
 ): Promise<EntityPrePassResult> {
   return runEntityPrePass({
     db,
@@ -608,6 +616,7 @@ export async function runCustomersPrePass(
     completedAtField: "customersPrePassCompletedAt",
     lastRunAtField: "lastCustomersPrePassRunAt",
     logTag: "[Tekmetric Customers Pre-Pass]",
+    lockOwner,
   });
 }
 
@@ -784,6 +793,7 @@ export async function runFullPageBackfillChunk(
   db: any,
   shopId: number,
   tekmetricShopId: number,
+  lockOwner?: string,
 ): Promise<FullPageBackfillResult> {
   return runWithTekmetric429Tracking(async () => {
     const startedAt = Date.now();
@@ -842,6 +852,7 @@ export async function runFullPageBackfillChunk(
         shopId,
         tekmetricShopId,
         tickDeadlineMs,
+        lockOwner,
       );
       prePassDoneForShop = prePassResult.done;
       if (!prePassResult.done) {
@@ -876,6 +887,7 @@ export async function runFullPageBackfillChunk(
         shopId,
         tekmetricShopId,
         tickDeadlineMs,
+        lockOwner,
       );
       vehiclesPrePassDoneForShop = vRes.done;
       if (!vRes.done) {
@@ -902,6 +914,7 @@ export async function runFullPageBackfillChunk(
         shopId,
         tekmetricShopId,
         tickDeadlineMs,
+        lockOwner,
       );
       customersPrePassDoneForShop = cRes.done;
       if (!cRes.done) {
@@ -1326,22 +1339,26 @@ export async function runFullPageBackfillChunk(
       // which, on a fresh flag, is still 0. That's how shop 82 spent 30
       // minutes re-indexing the same first 7 pages.
       try {
+        // Guard totalPages=0: a stale or anomalous API response with
+        // totalPages=0 must NOT overwrite a previously-known good value
+        // (this is what stuck shops 112/123 — task #443 / #448).
+        const fullPagePageUpdate: any = {
+          fullPageNextPage: page,
+          lastFullPageRunAt: new Date(),
+        };
+        if (totalPages > 0) fullPagePageUpdate.fullPageTotalPages = totalPages;
         await db
           .collection("tekmetric_backfill_progress")
-          .updateOne(
-            { shopId },
-            {
-              $set: {
-                fullPageNextPage: page,
-                fullPageTotalPages: totalPages,
-                lastFullPageRunAt: new Date(),
-              },
-            },
-          );
+          .updateOne({ shopId }, { $set: fullPagePageUpdate });
       } catch (writeErr: any) {
         console.warn(
           `[Tekmetric Full-Page Backfill] Shop ${shopId} progress write failed at page ${page}: ${writeErr?.message || writeErr}`,
         );
+      }
+
+      // Heartbeat: real page progress, signal the in-flight lock.
+      if (lockOwner) {
+        await bumpInFlightHeartbeat(db, shopId, lockOwner);
       }
 
       if (totalPages > 0 && page >= totalPages) {
@@ -1389,7 +1406,6 @@ export async function runFullPageBackfillChunk(
       $set: {
         fullPageMode: !complete,
         fullPageNextPage: page,
-        fullPageTotalPages: totalPages,
         lastRunAt: now,
         lastFullPageRunAt: now,
       },
@@ -1397,6 +1413,8 @@ export async function runFullPageBackfillChunk(
         totalJobsIndexed: jobsIndexed,
       },
     };
+    // Same totalPages=0 guard as the per-page write above.
+    if (totalPages > 0) update.$set.fullPageTotalPages = totalPages;
     if (complete) {
       update.$set.completed = true;
       update.$set.complete = true;
