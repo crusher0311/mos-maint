@@ -34,6 +34,27 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Watchdog: mirrors the Tekmetric GET (task #437 / 2026-05-18 fix).
+    // If the in-process initial-sync promise was lost to a Render restart,
+    // the shops doc would be stuck at "running" forever. After ~15 minutes
+    // (well past the worst case for prewarm + first backfill batch) treat
+    // it as failed so the UI stops spinning. The nightly cron will fill
+    // in the data regardless. Read-only — just reported as failed until
+    // the next successful sync flips it back.
+    let initialSyncState: "running" | "complete" | "failed" =
+      shop?.protractor?.initialSyncState ?? "complete";
+    let initialSyncError: string | null = shop?.protractor?.initialSyncError ?? null;
+    if (initialSyncState === "running") {
+      const startedAt = shop?.protractor?.initialSyncStartedAt
+        ? new Date(shop.protractor.initialSyncStartedAt).getTime()
+        : 0;
+      if (startedAt && Date.now() - startedAt > 15 * 60 * 1000) {
+        initialSyncState = "failed";
+        initialSyncError =
+          initialSyncError || "Initial sync didn't finish in 15 minutes — nightly sync will catch up.";
+      }
+    }
+
     return NextResponse.json({
       configured: config.configured,
       connectionId: config.connectionId || null,
@@ -44,6 +65,9 @@ export async function GET(req: NextRequest) {
       updateWorkOrderPackage: shop?.protractor?.updateWorkOrderPackage ?? false,
       updateWorkOrderLine: shop?.protractor?.updateWorkOrderLine ?? false,
       webhookToken: config.configured ? webhookToken : null,
+      initialSyncState,
+      initialSyncVehicles: shop?.protractor?.initialSyncVehicles ?? null,
+      initialSyncError,
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
@@ -138,12 +162,24 @@ export async function POST(req: NextRequest) {
           "protractor.locations": testResult.locations,
           "protractor.updateWorkOrderPackage": true,
           "protractor.updateWorkOrderLine": true,
+          // Initial-sync state mirrors the Tekmetric Connect parity fix
+          // (task #437): the POST returns the instant the shops doc is
+          // written and creds are validated; the prewarm + first
+          // backfill batch run in the background and flip this to
+          // "complete"/"failed" so the UI can surface progress without
+          // a manual refresh. The GET watchdog cleans up if the
+          // in-process promise is lost to a Render restart.
+          "protractor.initialSyncState": "running",
+          "protractor.initialSyncStartedAt": new Date(),
           protractorBackfillComplete: false,
           updatedAt: new Date(),
           integrationProvider: "protractor",
         },
         $unset: {
           protractorBackfillCompletedAt: "",
+          "protractor.initialSyncError": "",
+          "protractor.initialSyncFinishedAt": "",
+          "protractor.initialSyncVehicles": "",
         },
         $setOnInsert: {
           createdAt: new Date(),
@@ -164,6 +200,7 @@ export async function POST(req: NextRequest) {
     // finishes before the backfill fans out per-invoice fetches.
     (async () => {
       const cleanupStart = Date.now();
+      let initialSyncError: string | null = null;
       try {
         await Promise.all([
           db.collection("protractor_canned_jobs").deleteOne({ shopId }),
@@ -189,11 +226,41 @@ export async function POST(req: NextRequest) {
         );
       }
       try {
-        const result = await runProtractorBackfill(shopId);
-        console.log(`[Protractor Settings] Backfill completed for shop ${shopId}:`, result);
+        // singlePass: don't wait for the full 5-year backfill chain to
+        // collapse before flipping the UI indicator. The first batch is
+        // enough to call the "initial sync" done; the cron picks up the
+        // rest. Mirrors how Tekmetric's initial-sync indicator only
+        // covers the active-RO sync, not the multi-day history backfill.
+        const result = await runProtractorBackfill(shopId, { singlePass: true });
+        console.log(`[Protractor Settings] Backfill initial batch for shop ${shopId}:`, result);
+        if (result.error) initialSyncError = result.error;
       } catch (err: any) {
         console.error(`[Protractor Settings] Backfill failed for shop ${shopId}:`, err.message);
+        initialSyncError = err?.message || "unknown";
       }
+
+      // Count vehicles fetched during onboarding (prewarm + first
+      // backfill batch populate `protractor_service_items`). Surfaces
+      // the parity "imported N vehicles" line in the UI.
+      let initialSyncVehicles = 0;
+      try {
+        initialSyncVehicles = await db
+          .collection("protractor_service_items")
+          .countDocuments({ shopId });
+      } catch {}
+
+      await db.collection("shops").updateOne(
+        { shopId },
+        {
+          $set: {
+            "protractor.initialSyncState": initialSyncError ? "failed" : "complete",
+            "protractor.initialSyncFinishedAt": new Date(),
+            "protractor.initialSyncVehicles": initialSyncVehicles,
+            ...(initialSyncError ? { "protractor.initialSyncError": initialSyncError } : {}),
+          },
+          ...(initialSyncError ? {} : { $unset: { "protractor.initialSyncError": "" } }),
+        }
+      ).catch(() => {});
     })();
 
     return NextResponse.json({

@@ -27,7 +27,13 @@ type DviChoice = "autoflow" | "tekmetric" | null;
 interface IntegrationStatus {
   carfax: { configured: boolean; locationId?: string };
   autoflow: { configured: boolean };
-  protractor: { configured: boolean; connectionId?: string };
+  protractor: {
+    configured: boolean;
+    connectionId?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
   tekmetric: {
     configured: boolean;
     shopId?: number;
@@ -37,7 +43,16 @@ interface IntegrationStatus {
     initialSyncVehicles?: number | null;
     initialSyncError?: string | null;
   };
-  shopware: { configured: boolean; tenantId?: number; swShopId?: number; shopName?: string; lastSyncAt?: string };
+  shopware: {
+    configured: boolean;
+    tenantId?: number;
+    swShopId?: number;
+    shopName?: string;
+    lastSyncAt?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
 }
 
 export default function IntegrationsPage() {
@@ -80,11 +95,14 @@ export default function IntegrationsPage() {
         autoflow: { 
           configured: Boolean(autoflowData.configured || autoflowData.autoflowApiKey) 
         },
-        protractor: { 
-          configured: Boolean(protractorData.configured), 
+        protractor: {
+          configured: Boolean(protractorData.configured),
           connectionId: protractorData.connectionId,
           webhookToken: protractorData.webhookToken,
-        },
+          initialSyncState: protractorData.initialSyncState,
+          initialSyncVehicles: protractorData.initialSyncVehicles,
+          initialSyncError: protractorData.initialSyncError,
+        } as any,
         tekmetric: {
           configured: Boolean(tekmetricData.configured),
           shopId: tekmetricData.shopId,
@@ -100,6 +118,9 @@ export default function IntegrationsPage() {
           swShopId: shopwareData.swShopId,
           shopName: shopwareData.shopName,
           lastSyncAt: shopwareData.lastSyncAt,
+          initialSyncState: shopwareData.initialSyncState,
+          initialSyncVehicles: shopwareData.initialSyncVehicles,
+          initialSyncError: shopwareData.initialSyncError,
         },
       };
 
@@ -809,7 +830,17 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
   );
 }
 
-function ProtractorSection({ status, onUpdate }: { status: { configured: boolean; connectionId?: string; webhookToken?: string }; onUpdate: () => void }) {
+function ProtractorSection({ status, onUpdate }: {
+  status: {
+    configured: boolean;
+    connectionId?: string;
+    webhookToken?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
+  onUpdate: () => void;
+}) {
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -871,10 +902,18 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Connected! Initial sync started in background." });
+        setMessage({ type: "success", text: "Connected! Syncing your first vehicles in the background." });
         onUpdate();
         // Fire-and-forget background sync - don't await
         fetch("/api/protractor/sync", { method: "POST" }).catch(() => {});
+        // Parity with the Tekmetric Connect flow: poll the parent
+        // status fetch for ~30s so the section flips to the Connected
+        // block and the initial-sync indicator transitions without a
+        // manual refresh.
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          onUpdate();
+        }
         return;
       } else {
         const data = await res.json();
@@ -930,8 +969,24 @@ function ProtractorSection({ status, onUpdate }: { status: { configured: boolean
             <CheckCircle className="w-4 h-4" />
             <span>Connected to Protractor</span>
           </div>
+          {status.initialSyncState === "running" && (
+            <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Syncing your first vehicles in the background. You can keep working.</span>
+            </div>
+          )}
+          {status.initialSyncState === "complete" && typeof status.initialSyncVehicles === "number" && status.initialSyncVehicles > 0 && (
+            <div className="text-xs text-green-700 mt-2">
+              Initial sync done — imported {status.initialSyncVehicles} vehicle{status.initialSyncVehicles === 1 ? "" : "s"}.
+            </div>
+          )}
+          {status.initialSyncState === "failed" && (
+            <div className="text-xs text-amber-700 mt-2">
+              Initial sync had a hiccup{status.initialSyncError ? `: ${status.initialSyncError}` : ""}. The nightly sync will catch up — or click Sync Now below.
+            </div>
+          )}
         </div>
-        
+
         {webhookUrl && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
             <p className="text-xs font-medium text-gray-700 mb-2">Callback URL</p>
@@ -1686,7 +1741,16 @@ function ShopWareSection({
   status,
   onUpdate,
 }: {
-  status: { configured: boolean; tenantId?: number; swShopId?: number; shopName?: string; lastSyncAt?: string };
+  status: {
+    configured: boolean;
+    tenantId?: number;
+    swShopId?: number;
+    shopName?: string;
+    lastSyncAt?: string;
+    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncVehicles?: number | null;
+    initialSyncError?: string | null;
+  };
   onUpdate: () => void;
 }) {
   const [tenantId, setTenantId] = useState("");
@@ -1707,8 +1771,16 @@ function ShopWareSection({
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: `Connected to ${data.shopName || "Shop-Ware"}` });
+        setMessage({ type: "success", text: `Connected to ${data.shopName || "Shop-Ware"} — syncing your first vehicles in the background.` });
         onUpdate();
+        // Parity with the Tekmetric Connect flow (task #437): poll the
+        // parent status fetch for ~30s so the Connected block appears
+        // and the initial-sync indicator transitions without a manual
+        // refresh.
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          onUpdate();
+        }
       } else {
         setMessage({ type: "error", text: data.error || "Failed to connect" });
       }
@@ -1749,6 +1821,22 @@ function ShopWareSection({
               <span> · Last sync {new Date(status.lastSyncAt).toLocaleDateString()}</span>
             )}
           </div>
+          {status.initialSyncState === "running" && (
+            <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>Syncing your first vehicles in the background. You can keep working.</span>
+            </div>
+          )}
+          {status.initialSyncState === "complete" && typeof status.initialSyncVehicles === "number" && status.initialSyncVehicles > 0 && (
+            <div className="text-xs text-green-700 mt-2">
+              Initial sync done — imported {status.initialSyncVehicles} vehicle{status.initialSyncVehicles === 1 ? "" : "s"}.
+            </div>
+          )}
+          {status.initialSyncState === "failed" && (
+            <div className="text-xs text-amber-700 mt-2">
+              Initial sync had a hiccup{status.initialSyncError ? `: ${status.initialSyncError}` : ""}. The nightly sync will catch up.
+            </div>
+          )}
         </div>
 
         <ShopWareWebhookPanel />

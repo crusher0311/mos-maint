@@ -53,6 +53,26 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ configured: false });
     }
 
+    // Watchdog: mirrors the Tekmetric GET (task #437 / 2026-05-18 fix).
+    // If the in-process initial-sync promise was lost to a Render restart,
+    // the shops doc would be stuck at "running" forever. After ~15 minutes
+    // flip the UI to "failed" so the spinner stops — the nightly cron
+    // catches up regardless. Read-only — just reported as failed until
+    // the next successful sync writes a steady state back.
+    let initialSyncState: "running" | "complete" | "failed" =
+      shop.shopware.initialSyncState ?? "complete";
+    let initialSyncError: string | null = shop.shopware.initialSyncError ?? null;
+    if (initialSyncState === "running") {
+      const startedAt = shop.shopware.initialSyncStartedAt
+        ? new Date(shop.shopware.initialSyncStartedAt).getTime()
+        : 0;
+      if (startedAt && Date.now() - startedAt > 15 * 60 * 1000) {
+        initialSyncState = "failed";
+        initialSyncError =
+          initialSyncError || "Initial sync didn't finish in 15 minutes — nightly sync will catch up.";
+      }
+    }
+
     return NextResponse.json({
       configured: true,
       tenantId: shop.shopware.tenantId,
@@ -60,6 +80,9 @@ export async function GET(_request: NextRequest) {
       shopName: shop.shopware.shopName ?? null,
       connectedAt: shop.shopware.connectedAt ?? null,
       lastSyncAt: shop.shopware.lastSyncAt ?? null,
+      initialSyncState,
+      initialSyncVehicles: shop.shopware.initialSyncVehicles ?? null,
+      initialSyncError,
     });
   } catch (err: any) {
     console.error('[Shop-Ware Settings] GET error:', err.message);
@@ -122,7 +145,20 @@ export async function POST(request: NextRequest) {
           'shopware.shopName': shopName,
           'shopware.connectedAt': new Date(),
           'shopware.lastSyncAt': null,
+          // Initial-sync state mirrors the Tekmetric Connect parity fix
+          // (task #437): POST returns the instant the shops doc is
+          // written; the prewarm + first backfill chunk run in the
+          // background and flip this to "complete"/"failed" so the UI
+          // can surface progress without a manual refresh. The GET
+          // watchdog cleans up if the in-process promise dies.
+          'shopware.initialSyncState': 'running',
+          'shopware.initialSyncStartedAt': new Date(),
           ...(tenantSubdomain ? { 'shopware.tenantSubdomain': tenantSubdomain } : {}),
+        },
+        $unset: {
+          'shopware.initialSyncError': '',
+          'shopware.initialSyncFinishedAt': '',
+          'shopware.initialSyncVehicles': '',
         },
       },
       { upsert: true }
@@ -141,14 +177,39 @@ export async function POST(request: NextRequest) {
     // prewarm awaits internally so the cron sees the advanced cursor.
     (async () => {
       const numericShopId = Number(userShopId);
+      let initialSyncError: string | null = null;
       try {
         await prewarmShopWareJobsCacheForOnboarding(numericShopId, tenantIdNum, swShopIdNum);
       } catch (warmErr: any) {
         console.warn(
           `[Shop-Ware Settings] Cache prewarm failed (non-fatal) for shop ${numericShopId}: ${warmErr?.message || warmErr}`
         );
+        initialSyncError = warmErr?.message || 'prewarm failed';
       }
       await triggerShopWareBackfillCron(numericShopId);
+
+      // Count vehicles imported during onboarding. Prewarm + the first
+      // backfill chunk both populate `shopware_vehicles`; we surface
+      // that count as the parity "imported N vehicles" line in the UI.
+      let initialSyncVehicles = 0;
+      try {
+        initialSyncVehicles = await db
+          .collection('shopware_vehicles')
+          .countDocuments({ mosShopId: numericShopId });
+      } catch {}
+
+      await db.collection('shops').updateOne(
+        { shopId: { $in: [userShopId, Number(userShopId)] } },
+        {
+          $set: {
+            'shopware.initialSyncState': initialSyncError ? 'failed' : 'complete',
+            'shopware.initialSyncFinishedAt': new Date(),
+            'shopware.initialSyncVehicles': initialSyncVehicles,
+            ...(initialSyncError ? { 'shopware.initialSyncError': initialSyncError } : {}),
+          },
+          ...(initialSyncError ? {} : { $unset: { 'shopware.initialSyncError': '' } }),
+        }
+      ).catch(() => {});
     })();
 
     return NextResponse.json({
@@ -156,6 +217,7 @@ export async function POST(request: NextRequest) {
       tenantId: tenantIdNum,
       swShopId: swShopIdNum,
       shopName,
+      initialSync: { state: 'running' },
       jobHistoryBackfill: 'queued',
     });
   } catch (err: any) {
