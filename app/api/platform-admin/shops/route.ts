@@ -45,7 +45,20 @@ export async function GET() {
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
     
-    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, jobHistoryCounts, jobIndexCounts, stickerCounts, stickerCountsThisMonth, cardCaptureEmailLogs, ownerEmailRows] = await Promise.all([
+    // Perf: dropped two aggregations that were scanning full collections on
+    // every page load:
+    //   - `job_history` ($group by shopId) → result (`jobHistoryCount`) was
+    //     computed but never rendered in the UI. Pure waste on a huge
+    //     collection.
+    //   - `job_index` ($group by shopId) → only used for the backfill cell's
+    //     "totalJobsIndexed" number, which already falls back to
+    //     `bf.totalJobsIndexed` from `backfill_progress`. The aggregation
+    //     was strictly redundant.
+    // The remaining $in queries still triple `shopId` via `allShopIdVariants`
+    // because those collections historically store shopId as a mix of
+    // string/number — narrowing that needs a per-collection audit before
+    // it's safe.
+    const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, stickerCounts, stickerCountsThisMonth, cardCaptureEmailLogs, ownerEmailRows] = await Promise.all([
       db.collection("users").aggregate([
         { $match: { shopId: { $in: shopIds } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -65,14 +78,6 @@ export async function GET() {
       })(),
       db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
       db.collection("tekmetric_backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
-      db.collection("job_history").aggregate([
-        { $match: { shopId: { $in: allShopIdVariants } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
-      db.collection("job_index").aggregate([
-        { $match: { shopId: { $in: allShopIdVariants } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
       db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -124,17 +129,6 @@ export async function GET() {
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
     const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shopId), b]));
     
-    const jobHistoryCountMap = new Map<string, number>();
-    for (const j of jobHistoryCounts) {
-      const key = String(j._id);
-      jobHistoryCountMap.set(key, (jobHistoryCountMap.get(key) || 0) + j.count);
-    }
-    
-    const jobIndexCountMap = new Map<string, number>();
-    for (const j of jobIndexCounts) {
-      const key = String(j._id);
-      jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + j.count);
-    }
     
     const stickerCountMap = new Map<string, number>();
     for (const s of stickerCounts) {
@@ -287,8 +281,6 @@ export async function GET() {
         : hasTekmetric ? "tekmetric" : hasProtractor ? "protractor" : null;
       const backfill = backfillMap.get(String(shop.shopId));
       const tekmetricBackfill = tekmetricBackfillMap.get(String(shop.shopId));
-      const jobHistoryCount = jobHistoryCountMap.get(String(shop.shopId)) || 0;
-      const jobIndexCount = jobIndexCountMap.get(String(shop.shopId)) || 0;
       
       const protractorLocation = shop.protractor?.locations?.[0];
       
@@ -392,7 +384,7 @@ export async function GET() {
             inProgress: inProgress || isTekmetricActive || false,
             status,
             isStale,
-            totalJobsIndexed: jobIndexCount || bf?.totalJobsIndexed || 0,
+            totalJobsIndexed: bf?.totalJobsIndexed || 0,
             currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
             source: activeIntegration,
             lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,

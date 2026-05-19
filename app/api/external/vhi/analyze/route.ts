@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi, resolveMileageFromRo } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
+import { estimateMileageWhenMissing } from "@/lib/vhi-mileage-fallbacks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,8 @@ export const POST = createExternalEndpoint(
 
     const db = await getDb();
     let mileage = providedMileage ? Number(providedMileage) : null;
+    let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
+    let mileageEstimateDetails: Record<string, unknown> | null = null;
 
     if (!mileage || isNaN(mileage)) {
       mileage = await resolveMileageFromRo(
@@ -78,11 +81,37 @@ export const POST = createExternalEndpoint(
       );
     }
 
+    // Parity with GET /api/external/vehicles/{vin}/vhi: when neither the
+    // partner-supplied mileage nor the RO odometer is usable, fall through
+    // to CARFAX projection and the model-year × 12k fallback so we never
+    // hard-fail integrators (AppFueled etc.) on a vehicle that simply
+    // hasn't been weighed yet. Estimated paths are clearly marked via
+    // `mileageSource` / `mileageEstimated` in the response.
+    if (!mileage || mileage <= 0) {
+      const vehicleDoc = await db.collection("vehicles").findOne(
+        {
+          shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] },
+          vin: { $in: [vin, vin.toUpperCase()] },
+        },
+        { projection: { year: 1 } }
+      );
+      const estimate = await estimateMileageWhenMissing({
+        shopId: resolvedShopId,
+        vin,
+        knownYear: vehicleDoc?.year ? Number(vehicleDoc.year) : null,
+      });
+      if (estimate) {
+        mileage = estimate.mileage;
+        mileageSource = estimate.source;
+        mileageEstimateDetails = estimate.estimateDetails;
+      }
+    }
+
     if (!mileage || mileage <= 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "Could not determine mileage. Provide mileage in the request body or ensure the work order has an odometer reading.",
+          error: "Could not determine mileage. Provide mileage in the request body, ensure the work order has an odometer reading, or check that we have CARFAX history / a decodable model year for this VIN.",
         },
         { status: 400 }
       );
@@ -90,16 +119,9 @@ export const POST = createExternalEndpoint(
 
     console.log(
       `[VHI Analyze] Building VHI: requestId=${requestId} VIN=${vin.toUpperCase()}, shop=${resolvedShopId}, ` +
-      `sms=${smsLower}, smsShopId=${smsShopId}, RO=${roNumber || "N/A"}, mileage=${mileage}` +
+      `sms=${smsLower}, smsShopId=${smsShopId}, RO=${roNumber || "N/A"}, mileage=${mileage}, source=${mileageSource}` +
       (isPartner ? `, partner=${partnerId}` : "")
     );
-
-    // Task #384: the analyze endpoint always uses the partner-supplied
-    // mileage or the RO odometer — both are "actual". Forward this so
-    // rebuildVhi persists it on cached_plans and the response carries the
-    // same shape as the GET endpoint.
-    const mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
-    const mileageEstimateDetails: Record<string, unknown> | null = null;
 
     const result = await rebuildVhi(resolvedShopId, vin, mileage, {
       invalidateFirst: true,
