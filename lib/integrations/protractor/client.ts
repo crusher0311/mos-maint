@@ -1954,7 +1954,11 @@ export async function testConnection(
 
   const result = await protractorFetch<{ ItemCollection?: any[] }>(
     "/Location/",
-    config
+    config,
+    {},
+    0,
+    undefined,
+    { priority: true }
   );
 
   if (!result.ok) {
