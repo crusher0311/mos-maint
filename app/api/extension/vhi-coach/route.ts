@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
+import { buildApiScore } from "@/lib/vhi-score";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
 import { getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
@@ -270,7 +271,16 @@ export async function POST(request: NextRequest) {
     vin: vin.toUpperCase(),
     shopId: resolvedShopId,
     vehicle: vhi.vehicle,
-    score: vhi.score,
+    // Task #439: API agrees with UI — when data-quality is insufficient,
+    // the score is returned as `{ value: null, tier: "Insufficient Data",
+    // color: "gray", computed: <raw> }` instead of `{ value: 0, tier:
+    // "Critical", color: "red" }`. The overlay already special-cases the
+    // gray badge from `dataQuality.sufficient`; this keeps the JSON
+    // honest for any other consumer that hits this endpoint.
+    score: buildApiScore(
+      typeof vhi.score?.value === "number" ? vhi.score.value : 0,
+      vhi.dataQuality
+    ),
     currentMiles: resolvedMileage,
     distanceUnit: shopDistanceUnit,
     summary: {
@@ -283,7 +293,12 @@ export async function POST(request: NextRequest) {
       ok: taskMatches.filter((t) => t.status === "ok").length,
     },
     taskMatches,
-    vhiScore: vhi.score,
+    // Task #439: legacy `vhiScore` field — also softened so any caller
+    // that prefers the legacy name sees the same representation.
+    vhiScore: buildApiScore(
+      typeof vhi.score?.value === "number" ? vhi.score.value : 0,
+      vhi.dataQuality
+    ),
     vhiBuckets: vhi.summary,
     // Task #439: pass through the data-quality flag so the in-browser
     // overlay can swap the red 0/CRITICAL badge for a gray

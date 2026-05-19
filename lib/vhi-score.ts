@@ -68,6 +68,56 @@ export function getScoreTier(score: number): { label: string; color: string } {
   return { label: "Critical", color: "red" };
 }
 
+/**
+ * Task #439: Shape of `score` in API responses, including the softened
+ * "Insufficient Data" representation. `value` is null when we don't
+ * have enough anchors to score the vehicle honestly; `computed` always
+ * carries the raw numeric score for ops/observability so we never lose
+ * the internal signal.
+ */
+export interface ApiScorePayload {
+  value: number | null;
+  tier: string;
+  color: string;
+  computed: number;
+}
+
+/**
+ * Task #439: produce the customer-facing `score` payload for any API
+ * response that includes a VHI score. When `dataQuality.sufficient`
+ * is explicitly false, we hide the numeric score behind a gray
+ * "Insufficient Data" tier so partner integrations, the Detect Dog
+ * overlay, the VHR shareable report, and our own dashboard all see
+ * the same softened representation — Brandon's call (2026-05-19) was
+ * that the API must agree with the UI, not just the UI hiding it.
+ *
+ * The raw computed score is always preserved on `.computed` so ops
+ * tooling and webhooks can still see what we calculated.
+ *
+ * Legacy / missing `dataQuality` is treated as sufficient so existing
+ * responses keep showing through unchanged.
+ */
+export function buildApiScore(
+  rawScore: number,
+  dataQuality?: { sufficient: boolean } | null
+): ApiScorePayload {
+  if (dataQuality && dataQuality.sufficient === false) {
+    return {
+      value: null,
+      tier: "Insufficient Data",
+      color: "gray",
+      computed: rawScore,
+    };
+  }
+  const tier = getScoreTier(rawScore);
+  return {
+    value: rawScore,
+    tier: tier.label,
+    color: tier.color,
+    computed: rawScore,
+  };
+}
+
 export interface FormatVhiItemOptions {
   /** Current odometer in the plan's distance unit. Required to emit `progress`. */
   currentMiles?: number | null;

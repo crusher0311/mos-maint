@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
 import { getStatusIconSet } from "@/lib/vhi-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
@@ -202,7 +202,11 @@ export const GET = createExternalEndpoint(
         currentMiles: plan.currentMiles,
         distanceUnit: plan.distanceUnit,
         customerName: plan.customerName ?? null,
-        score: { value: score, tier: tier.label, color: tier.color },
+        // Task #439: soften score in API when data-quality is
+        // insufficient so partner integrations see the same gray
+        // "Insufficient Data" representation as our UI. Raw value
+        // preserved on `.computed`.
+        score: buildApiScore(score, plan.dataQuality),
         summary: {
           overdue: separated.overdue.length,
           dueSoon: separated.dueSoon.length,
@@ -452,7 +456,15 @@ export const GET = createExternalEndpoint(
       currentMiles: result.currentMiles,
       distanceUnit: result.distanceUnit,
       customerName: result.customerName,
-      score: result.score,
+      // Task #439: on-demand-build path — also soften the score when
+      // the freshly built plan came back insufficient. `result.score`
+      // is the raw computed shape from rebuildVhi; we rebuild it
+      // through buildApiScore so partner consumers always see the
+      // same softened representation.
+      score: buildApiScore(
+        typeof result.score?.value === "number" ? result.score.value : 0,
+        result.dataQuality
+      ),
       summary: result.summary,
       buckets: result.buckets,
       icons: getStatusIconSet(),

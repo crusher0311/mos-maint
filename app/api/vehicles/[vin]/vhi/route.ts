@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
 import { getStatusIconSet } from "@/lib/vhi-icons";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 
@@ -150,7 +150,8 @@ export async function GET(
             currentMiles: plan.currentMiles,
             distanceUnit: plan.distanceUnit,
             customerName: plan.customerName ?? null,
-            score: { value: score, tier: tier.label, color: tier.color },
+            // Task #439: soften score in API when data is insufficient.
+            score: buildApiScore(score, plan.dataQuality),
             summary: {
               overdue: separated.overdue.length,
               dueSoon: separated.dueSoon.length,
