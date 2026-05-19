@@ -2,7 +2,11 @@
  * One-shot CARFAX diagnostic.
  *
  * Usage:
- *   npx tsx scripts/dump-carfax.ts <shopId> <VIN>
+ *   npx tsx scripts/dump-carfax.ts <shopId-or-name-substring> <VIN>
+ *
+ * Examples:
+ *   npx tsx scripts/dump-carfax.ts 96 1FTPW145Y5KC34104
+ *   npx tsx scripts/dump-carfax.ts Schindler 1FTPW145Y5KC34104
  *
  * Hits CARFAX live (same path as the plan-build route) and prints:
  *   - whether the call succeeded
@@ -19,23 +23,45 @@
  * collection the live route does — no separate config.
  */
 import { fetchCarfaxLive, resolveCarfaxConfig } from "@/lib/integrations/carfax";
+import { getDb } from "@/lib/mongo";
+
+async function resolveShopId(arg: string): Promise<number> {
+  const asNum = Number(arg);
+  if (Number.isFinite(asNum) && asNum > 0) return asNum;
+
+  const db = await getDb();
+  const regex = new RegExp(arg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const matches = await db
+    .collection("shops")
+    .find({ name: regex }, { projection: { shopId: 1, name: 1 } })
+    .limit(10)
+    .toArray();
+
+  if (matches.length === 0) {
+    throw new Error(`No shops found matching "${arg}"`);
+  }
+  if (matches.length > 1) {
+    const list = matches.map((m: any) => `  ${m.shopId}\t${m.name}`).join("\n");
+    throw new Error(
+      `Multiple shops match "${arg}" — re-run with the numeric shopId:\n${list}`,
+    );
+  }
+  console.log(`Resolved "${arg}" -> shopId ${matches[0].shopId} (${matches[0].name})`);
+  return Number(matches[0].shopId);
+}
 
 async function main() {
-  const [shopIdArg, vinArg] = process.argv.slice(2);
-  if (!shopIdArg || !vinArg) {
-    console.error("Usage: npx tsx scripts/dump-carfax.ts <shopId> <VIN>");
+  const [shopArg, vinArg] = process.argv.slice(2);
+  if (!shopArg || !vinArg) {
+    console.error("Usage: npx tsx scripts/dump-carfax.ts <shopId-or-name-substring> <VIN>");
     process.exit(1);
   }
-  const shopId = Number(shopIdArg);
   const vin = vinArg.toUpperCase().trim();
-  if (!Number.isFinite(shopId)) {
-    console.error(`Invalid shopId: ${shopIdArg}`);
-    process.exit(1);
-  }
   if (vin.length !== 17) {
     console.error(`Invalid VIN (need 17 chars): ${vin} (${vin.length} chars)`);
     process.exit(1);
   }
+  const shopId = await resolveShopId(shopArg);
 
   console.log(`\n=== Resolving CARFAX config for shop ${shopId} ===`);
   const cfg = await resolveCarfaxConfig(shopId);
