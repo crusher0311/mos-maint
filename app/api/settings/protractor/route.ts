@@ -73,16 +73,59 @@ export async function POST(req: NextRequest) {
     const cleanConnectionId = connectionId.trim().toLowerCase();
     const cleanApiKey = apiKey.trim().toLowerCase();
 
-    const testResult = await testConnection(cleanConnectionId, cleanApiKey);
+    // Perf: cap the credential-validation round-trip at 5s. Protractor's
+    // `/Location/` endpoint is the synchronous "is this real" check the
+    // user is staring at the spinner for — if it hangs, surface a
+    // friendly retry message instead of leaving the UI spinning
+    // indefinitely. The timing log lets us see real numbers in
+    // BetterStack to decide whether to tune the cap further.
+    const CONNECT_TIMEOUT_MS = 5000;
+    const tcStart = Date.now();
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    const timeoutPromise = new Promise<{ ok: false; error: string; timedOut: true }>(
+      (resolve) => {
+        timeoutHandle = setTimeout(
+          () =>
+            resolve({
+              ok: false,
+              error: `Protractor did not respond within ${CONNECT_TIMEOUT_MS}ms`,
+              timedOut: true,
+            }),
+          CONNECT_TIMEOUT_MS
+        );
+      }
+    );
+    // NOTE: when testConnection wins we clear the timer so the event
+    // loop doesn't hold an unnecessary handle. The losing
+    // testConnection request itself is not aborted (would require
+    // threading an AbortSignal through protractorFetch — separate
+    // refactor); on a timeout it continues in the background and its
+    // result is discarded.
+    const testResult = await Promise.race([
+      testConnection(cleanConnectionId, cleanApiKey).finally(() => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+      }),
+      timeoutPromise,
+    ]);
+    const tcMs = Date.now() - tcStart;
+    console.log(
+      `[Protractor Settings] testConnection for shop ${shopId} took ${tcMs}ms ok=${testResult.ok}${
+        (testResult as any).timedOut ? " (TIMEOUT)" : ""
+      }`
+    );
+
     if (!testResult.ok) {
-      return NextResponse.json(
-        { error: `Connection test failed: ${testResult.error}` },
-        { status: 400 }
-      );
+      const friendly = (testResult as any).timedOut
+        ? "Protractor's API is slow or unreachable right now. Please try again in a moment."
+        : `Connection test failed: ${testResult.error}`;
+      return NextResponse.json({ error: friendly }, { status: 400 });
     }
 
     const webhookToken = crypto.randomBytes(16).toString("hex");
-    
+
     await db.collection("shops").updateOne(
       { shopId },
       {
@@ -109,25 +152,35 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
-    // Clear all cached data and reset backfill progress for fresh start
-    await Promise.all([
-      db.collection("protractor_canned_jobs").deleteOne({ shopId }),
-      db.collection("protractor_vehicles").deleteMany({ shopId }),
-      db.collection("protractor_work_orders").deleteMany({ shopId }),
-      db.collection("protractor_deferred_work").deleteMany({ shopId }),
-      db.collection("backfill_progress").deleteOne({ shopId }),
-      db.collection("cached_plans").deleteMany({ shopId }),
-    ]);
-
-    // Pre-warm `protractor_invoice_cache` for the most recent invoices
-    // before the backfill kicks off, so the very first chunk hits Mongo
-    // for `/Invoice/{id}` instead of paying the full per-invoice API
-    // cost. Mirrors the Tekmetric onboarding pattern from task #59 (see
-    // lib/protractor-jobs-prewarm.ts). The prewarm + backfill chain is
-    // intentionally fire-and-forget so the settings POST returns
-    // promptly; the prewarm awaits internally so the cache is populated
-    // before the first backfill chunk fans out per-invoice fetches.
+    // Connect-confirm pattern: once Protractor has validated the creds
+    // and the shops doc is written, the user's spinner has earned the
+    // right to stop. Everything below — wiping any prior shop data,
+    // pre-warming the invoice cache, kicking the 5-year backfill — is
+    // moved into a single fire-and-forget block so the POST returns
+    // immediately. For a brand-new shop the deletes are near-instant;
+    // for a reconnect they can churn (cached_plans / work_orders),
+    // which used to add real seconds to the spinner the user was
+    // staring at. The async block awaits internally so the cleanup
+    // finishes before the backfill fans out per-invoice fetches.
     (async () => {
+      const cleanupStart = Date.now();
+      try {
+        await Promise.all([
+          db.collection("protractor_canned_jobs").deleteOne({ shopId }),
+          db.collection("protractor_vehicles").deleteMany({ shopId }),
+          db.collection("protractor_work_orders").deleteMany({ shopId }),
+          db.collection("protractor_deferred_work").deleteMany({ shopId }),
+          db.collection("backfill_progress").deleteOne({ shopId }),
+          db.collection("cached_plans").deleteMany({ shopId }),
+        ]);
+        console.log(
+          `[Protractor Settings] Stale-data cleanup for shop ${shopId} took ${Date.now() - cleanupStart}ms`
+        );
+      } catch (cleanupErr: any) {
+        console.error(
+          `[Protractor Settings] Stale-data cleanup failed for shop ${shopId}: ${cleanupErr?.message || cleanupErr}`
+        );
+      }
       try {
         await prewarmProtractorJobsCacheForOnboarding(shopId);
       } catch (warmErr: any) {
