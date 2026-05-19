@@ -33,23 +33,37 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
-    const hourlyUsage = await db.collection("tekmetric_api_usage").aggregate([
-      { $match: { timestamp: { $gte: oneDayAgo } } },
+    // Read from the unified `api_usage` collection with provider filter
+    // (task #449 / diagnosis #443). The Tekmetric-specific
+    // `tekmetric_api_usage` collection has been empty fleet-wide since the
+    // write path moved to `trackApiRequest('tekmetric',...)` in
+    // `lib/api-usage-tracker.ts`. Both `isRateLimited` (current) and
+    // `is429` (legacy) are accepted as the 429 flag.
+    const hourlyUsage = await db.collection("api_usage").aggregate([
+      { $match: { provider: "tekmetric", timestamp: { $gte: oneDayAgo } } },
       { 
         $group: { 
           _id: { 
             $dateToString: { format: "%Y-%m-%dT%H:00:00Z", date: "$timestamp" } 
           },
           count: { $sum: 1 },
-          errors429: { $sum: { $cond: ["$is429", 1, 0] } },
+          errors429: {
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ["$isRateLimited", true] }, { $eq: ["$is429", true] }, { $eq: ["$statusCode", 429] }] },
+                1,
+                0,
+              ],
+            },
+          },
           avgLatency: { $avg: "$latencyMs" }
         } 
       },
       { $sort: { _id: 1 } }
     ]).toArray();
 
-    const endpointBreakdown = await db.collection("tekmetric_api_usage").aggregate([
-      { $match: { timestamp: { $gte: oneDayAgo } } },
+    const endpointBreakdown = await db.collection("api_usage").aggregate([
+      { $match: { provider: "tekmetric", timestamp: { $gte: oneDayAgo } } },
       { 
         $group: { 
           _id: "$endpoint",

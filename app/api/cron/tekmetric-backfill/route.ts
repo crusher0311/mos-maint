@@ -182,8 +182,23 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   // this, a single bad chunk can hold the cursor indefinitely while the
   // shop stays out of sight.
   const autoClearCutoff = new Date(Date.now() - ERROR_AUTO_CLEAR_HOURS * 60 * 60 * 1000);
+  // Preserve `lastError` on shops at or past the force-skip threshold
+  // (task #449 / diagnosis #443). Auto-clearing the latest concrete failure
+  // message while the counter is still elevated was hiding the diagnostic
+  // signal — the sync-health view would show `lastError=null` even though
+  // the shop was repeatedly errored on the same window. Once the counter
+  // resets (chunk advances cleanly or force-skip moves the cursor past the
+  // bad window) the next run will clear `lastError` itself via the
+  // chunk-handler write below.
   await db.collection("tekmetric_backfill_progress").updateMany(
-    { lastError: { $ne: null }, lastErrorAt: { $lt: autoClearCutoff } },
+    {
+      lastError: { $ne: null },
+      lastErrorAt: { $lt: autoClearCutoff },
+      $or: [
+        { consecutiveChunkErrors: { $lt: MAX_CONSECUTIVE_CHUNK_ERRORS } },
+        { consecutiveChunkErrors: { $exists: false } },
+      ],
+    },
     { $set: { lastError: null, lastErrorAt: null, autoClearedErrorAt: new Date() } }
   );
 
@@ -1075,21 +1090,33 @@ async function backfillShopChunkInner(
   const cursorIsSameWindow =
     !!progress?.currentChunkEnd &&
     new Date(progress.currentChunkEnd).getTime() === chunkEnd.getTime();
-  const nextConsecutiveErrors = chunkHadError
+  // Raw run-of-errors-on-this-window count. Used both for the force-skip
+  // threshold check and for the human-readable "after N consecutive failures"
+  // message — we want the message to say "3" even when the persisted counter
+  // resets to 0 because we force-skipped past the bad window (see below).
+  const incrementedConsecutiveErrors = chunkHadError
     ? (cursorIsSameWindow ? priorConsecutiveErrors + 1 : 1)
     : 0;
   const forceSkipBadWindow =
-    chunkHadError && nextConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
+    chunkHadError && incrementedConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
+  // Reset the persisted counter to 0 once we force-skip past a bad window
+  // (task #449 / diagnosis #443). Without this, every subsequent run on the
+  // new chunk window finds `cursorIsSameWindow === true` (because the cursor
+  // we just wrote IS the new chunkEnd loaded next run) and increments the
+  // counter further, producing the 3-18 values observed in prod across
+  // shops 32/36/37/54/57/73/74/75. Cursor-moved-without-error already
+  // resets to 0 via the `chunkHadError ? ... : 0` branch above.
+  const nextConsecutiveErrors = forceSkipBadWindow ? 0 : incrementedConsecutiveErrors;
   let nextChunkEnd: Date;
   let advanceMode: string;
   if (chunkHadError && !forceSkipBadWindow) {
     nextChunkEnd = chunkEnd;
-    advanceMode = `HOLD (error in chunk, ${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
+    advanceMode = `HOLD (error in chunk, ${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
   } else if (forceSkipBadWindow) {
     nextChunkEnd = chunkStart;
-    advanceMode = `FORCE_SKIP (chunk errored ${nextConsecutiveErrors}x in a row, skipping window ${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]})`;
+    advanceMode = `FORCE_SKIP (chunk errored ${incrementedConsecutiveErrors}x in a row, skipping window ${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]})`;
     console.warn(
-      `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} consecutiveErrors=${nextConsecutiveErrors}`,
+      `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} consecutiveErrors=${incrementedConsecutiveErrors}`,
     );
   } else if (hitPageCap) {
     nextChunkEnd = midpoint(chunkStart, chunkEnd);
@@ -1378,10 +1405,10 @@ async function backfillShopChunkInner(
             }
           : {}),
         ...(chunkHadError && !forceSkipBadWindow
-          ? { lastError: `chunk had errors, holding cursor (${nextConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
+          ? { lastError: `chunk had errors, holding cursor (${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow
           ? {
-              lastError: `force-skipped bad window after ${nextConsecutiveErrors} consecutive failures`,
+              lastError: `force-skipped bad window after ${incrementedConsecutiveErrors} consecutive failures`,
               lastErrorAt: now,
               lastForceSkippedWindow: { start: chunkStart, end: chunkEnd, at: now },
             }

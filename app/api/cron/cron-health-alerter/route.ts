@@ -65,23 +65,21 @@ export async function GET(req: NextRequest) {
   }
 
   const cronJobs = loadCronJobs();
-  const jobNames = cronJobs.map((j) => j.name);
-  const lastSuccessRows = await db
-    .collection("cron_runs")
-    .aggregate([
-      { $match: { jobName: { $in: jobNames }, ok: true } },
-      { $sort: { startedAt: -1 } },
-      {
-        $group: {
-          _id: "$jobName",
-          lastSuccessAt: { $first: "$startedAt" },
-        },
-      },
-    ])
-    .toArray();
-  const lastSuccessByJob = new Map<string, Date>(
-    lastSuccessRows.map((r: any) => [r._id, new Date(r.lastSuccessAt)]),
-  );
+  // Read per-job last-success timestamps from the `cron_status.lastSuccessByJob`
+  // map (written by `lib/cron/scheduler.cjs#recordRun` on every successful
+  // run). Previously this aggregated the `cron_runs` TTL collection — in
+  // prod that collection is missing entirely so the alerter never paged
+  // (task #449 / diagnosis #443). The status doc is the same one we just
+  // loaded for `lastBoot`, so this is also one fewer round-trip.
+  const lastSuccessMap = ((statusDoc as any)?.lastSuccessByJob || {}) as Record<
+    string,
+    Date | string
+  >;
+  const lastSuccessByJob = new Map<string, Date>();
+  for (const [name, ts] of Object.entries(lastSuccessMap)) {
+    const d = ts instanceof Date ? ts : new Date(ts);
+    if (!isNaN(d.getTime())) lastSuccessByJob.set(name, d);
+  }
 
   const stale: Array<{
     name: string;
