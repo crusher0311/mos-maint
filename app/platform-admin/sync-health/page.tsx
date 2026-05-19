@@ -255,6 +255,12 @@ interface CatchupCoverageShop {
   lastCoveredByCatchupAt: string | null;
   catchupRunsCovered: number;
   lastCatchupOutcome: string | null;
+  // Per-shop backfill cadence (task #468). `lastRunAt` mirrors the
+  // field the chunker uses for fair-queue ordering, so it's the most
+  // truthful signal that the weekday boost is actually doing work.
+  // `hoursSinceLastRun` is null when the shop has never run.
+  lastRunAt?: string | null;
+  hoursSinceLastRun?: number | null;
 }
 
 interface CatchupCoverage {
@@ -262,6 +268,10 @@ interface CatchupCoverage {
   windowRunLimit: number;
   tekShopsTotal: number;
   uncoveredShopCount: number;
+  // Cadence summary (task #468). `incompleteShopsNotRunIn24hCount`
+  // counts incomplete shops whose lastRunAt is null OR older than 24h.
+  incompleteShopsNotRunIn24hCount?: number;
+  incompleteShopsTotal?: number;
   shops: CatchupCoverageShop[];
 }
 
@@ -769,6 +779,14 @@ export default function SyncHealthPage() {
   const [rewarmingAll, setRewarmingAll] = useState(false);
   const [rewarmingAllShopWare, setRewarmingAllShopWare] = useState(false);
   const [rewarmingAllProtractor, setRewarmingAllProtractor] = useState(false);
+  // Catch-up coverage table controls (task #468). Local to the page —
+  // intentionally not persisted, since on-call typically toggles these
+  // for a single triage session and we don't want stale "only stale"
+  // state hiding rows the next time someone opens the page.
+  const [catchupCoverageOnlyStale, setCatchupCoverageOnlyStale] =
+    useState(false);
+  const [catchupCoverageSortByHours, setCatchupCoverageSortByHours] =
+    useState(false);
   // Re-render tick so the inline run-now panel's elapsed time keeps moving
   // between chunk events (which can be 60s+ apart for slow shops).
   const [, setNowTick] = useState(0);
@@ -3473,10 +3491,42 @@ export default function SyncHealthPage() {
     coverage: CatchupCoverage | undefined,
   ) => {
     if (!coverage) return null;
-    const shops = coverage.shops || [];
+    const allShops = coverage.shops || [];
     const uncovered = coverage.uncoveredShopCount;
     const windowRuns = coverage.coverageWindowRuns;
     const windowLimit = coverage.windowRunLimit;
+    // Cadence summary (task #468). Banner shows how many incomplete
+    // shops have either never run or haven't run in 24h.
+    const notRun24h = coverage.incompleteShopsNotRunIn24hCount ?? 0;
+    const incompleteTotal = coverage.incompleteShopsTotal ?? 0;
+    // Local controls: filter to stale-only rows and sort by hours since
+    // last run so on-call can drill into the worst offenders quickly.
+    const onlyStale = catchupCoverageOnlyStale;
+    const sortByHours = catchupCoverageSortByHours;
+    const filteredShops = onlyStale
+      ? allShops.filter(
+          (s) =>
+            !s.complete &&
+            (s.hoursSinceLastRun == null ||
+              (s.hoursSinceLastRun ?? 0) >= 24),
+        )
+      : allShops;
+    const shops = sortByHours
+      ? [...filteredShops].sort((a, b) => {
+          // Treat null (never run) as the worst possible cadence so
+          // those shops sort to the top in desc order.
+          const aH =
+            a.hoursSinceLastRun == null
+              ? Number.POSITIVE_INFINITY
+              : a.hoursSinceLastRun;
+          const bH =
+            b.hoursSinceLastRun == null
+              ? Number.POSITIVE_INFINITY
+              : b.hoursSinceLastRun;
+          if (aH !== bH) return bH - aH;
+          return a.shopId - b.shopId;
+        })
+      : filteredShops;
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
@@ -3499,6 +3549,23 @@ export default function SyncHealthPage() {
             >
               {uncovered} not seen in last {windowRuns} run{windowRuns === 1 ? "" : "s"}
             </span>
+            {/* Weekday cadence banner (task #468). After the task #457
+                Tue–Fri all-hours boost, on-call needed a way to confirm
+                cadence is actually being met without waiting for the
+                stuck-shop alerter. Counts incomplete shops whose
+                lastRunAt is null OR older than 24h. */}
+            <span
+              className={
+                "px-2 py-0.5 text-xs rounded-full " +
+                (notRun24h > 0
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-green-100 text-green-700")
+              }
+              title="Incomplete Tekmetric shops whose backfill hasn't run in the last 24h (or has never run)"
+            >
+              {notRun24h} of {incompleteTotal} incomplete shop
+              {incompleteTotal === 1 ? "" : "s"} not run in 24h
+            </span>
           </div>
           <p className="text-xs text-gray-500 max-w-md">
             Per-shop coverage from the most recent {windowRuns} of {windowLimit}{" "}
@@ -3506,6 +3573,33 @@ export default function SyncHealthPage() {
             as <code className="font-mono">/api/cron/catchup-status</code>; rows
             with zero runs covered are highlighted.
           </p>
+        </div>
+
+        {/* Cadence triage controls (task #468). Toggling sort/filter is
+            local-only so refreshes don't trap on-call in a filtered view. */}
+        <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-4 flex-wrap text-xs text-gray-700">
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={onlyStale}
+              onChange={(e) =>
+                setCatchupCoverageOnlyStale(e.target.checked)
+              }
+              className="rounded border-gray-300"
+            />
+            Only show incomplete shops not run in 24h
+          </label>
+          <label className="inline-flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sortByHours}
+              onChange={(e) =>
+                setCatchupCoverageSortByHours(e.target.checked)
+              }
+              className="rounded border-gray-300"
+            />
+            Sort by hours since last run (worst first)
+          </label>
         </div>
 
         {shops.length === 0 ? (
@@ -3522,6 +3616,12 @@ export default function SyncHealthPage() {
                   <th className="px-4 py-2 text-left">Tek shop ID</th>
                   <th className="px-4 py-2 text-right">Runs covered</th>
                   <th className="px-4 py-2 text-left">Last covered at</th>
+                  <th
+                    className="px-4 py-2 text-right"
+                    title="Hours since the backfill chunker last bumped lastRunAt for this shop — the same field used for fair-queue ordering (task #468)"
+                  >
+                    Hrs since last run
+                  </th>
                   <th className="px-4 py-2 text-left">Last outcome</th>
                   <th className="px-4 py-2 text-left">Backfill</th>
                   <th className="px-4 py-2 text-right">Actions</th>
@@ -3560,6 +3660,27 @@ export default function SyncHealthPage() {
                         </td>
                         <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
                           {formatDateTime(s.lastCoveredByCatchupAt)}
+                        </td>
+                        <td
+                          className={
+                            "px-4 py-2 text-right whitespace-nowrap " +
+                            (!s.complete &&
+                            (s.hoursSinceLastRun == null ||
+                              (s.hoursSinceLastRun ?? 0) >= 24)
+                              ? "text-amber-700 font-semibold"
+                              : "text-gray-700")
+                          }
+                          title={
+                            s.lastRunAt
+                              ? `Last run: ${formatDateTime(s.lastRunAt)}`
+                              : "Backfill has never run for this shop"
+                          }
+                        >
+                          {s.hoursSinceLastRun == null
+                            ? s.complete
+                              ? "—"
+                              : "never"
+                            : `${s.hoursSinceLastRun}h`}
                         </td>
                         <td className="px-4 py-2 text-xs text-gray-700">
                           {s.lastCatchupOutcome ? (
@@ -3601,7 +3722,7 @@ export default function SyncHealthPage() {
                       </tr>
                       {runNow && (
                         <tr className="bg-blue-50/40">
-                          <td colSpan={7} className="px-4 py-3">
+                          <td colSpan={8} className="px-4 py-3">
                             {renderRunNowProgress(runNow)}
                           </td>
                         </tr>

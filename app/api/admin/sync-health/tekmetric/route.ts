@@ -164,9 +164,20 @@ export async function GET() {
     // endpoint's default of 10 runs.
     const COVERAGE_WINDOW_RUNS = 10;
     const tekmetricBackfillCompleteByShop = new Map<number, boolean>();
+    // Per-shop lastRunAt is needed for the catch-up coverage row's
+    // "hours since last run" column (task #468). Pull it from the same
+    // progress docs we already loaded so we don't fan out an extra
+    // Mongo query just to render the cadence column.
+    const tekmetricLastRunAtByShop = new Map<number, Date | null>();
     for (const p of tekmetricBackfillProgress as any[]) {
-      tekmetricBackfillCompleteByShop.set(Number(p.shopId), !!p.completed);
+      const sid = Number(p.shopId);
+      tekmetricBackfillCompleteByShop.set(sid, !!p.completed);
+      tekmetricLastRunAtByShop.set(
+        sid,
+        p?.lastRunAt ? new Date(p.lastRunAt) : null,
+      );
     }
+    const nowMsForCoverage = Date.now();
     const catchupCoverageMap = new Map<
       number,
       { lastSeenAt: Date | null; runsCovered: number; lastOutcome: string | null }
@@ -227,6 +238,15 @@ export async function GET() {
         const complete =
           s.tekmetricBackfillComplete === true ||
           tekmetricBackfillCompleteByShop.get(sid) === true;
+        const lastRunAt = tekmetricLastRunAtByShop.get(sid) || null;
+        // `hoursSinceLastRun` is rounded to 1 decimal place — the column
+        // is for at-a-glance cadence triage, not a precise SLA timer.
+        const hoursSinceLastRun = lastRunAt
+          ? Math.round(
+              ((nowMsForCoverage - lastRunAt.getTime()) / (60 * 60 * 1000)) *
+                10,
+            ) / 10
+          : null;
         return {
           shopId: sid,
           name: s.name || s.locationIdentifier || `Shop ${sid}`,
@@ -237,6 +257,11 @@ export async function GET() {
             : null,
           catchupRunsCovered: cov?.runsCovered || 0,
           lastCatchupOutcome: cov?.lastOutcome || null,
+          // Per-shop backfill cadence (task #468). `lastRunAt` is the
+          // same field the cron uses for fair-queue ordering, so this
+          // column mirrors what the chunker is actually doing.
+          lastRunAt: lastRunAt ? safeIso(lastRunAt) : null,
+          hoursSinceLastRun,
         };
       })
       // Worst-coverage first: shops never covered float to the top, then
@@ -257,6 +282,18 @@ export async function GET() {
       // don't need catch-up runs anymore.
       uncoveredShopCount: tekmetricCatchupCoverageShops.filter(
         (s: any) => s.catchupRunsCovered === 0 && !s.complete,
+      ).length,
+      // Cadence summary (task #468). Counts incomplete shops whose
+      // `lastRunAt` is either missing entirely or more than 24h old, so
+      // the dashboard banner can flag a stalled weekday boost without
+      // waiting for the stuck-shop alerter.
+      incompleteShopsNotRunIn24hCount: tekmetricCatchupCoverageShops.filter(
+        (s: any) =>
+          !s.complete &&
+          (s.hoursSinceLastRun === null || s.hoursSinceLastRun >= 24),
+      ).length,
+      incompleteShopsTotal: tekmetricCatchupCoverageShops.filter(
+        (s: any) => !s.complete,
       ).length,
       shops: tekmetricCatchupCoverageShops,
     };
