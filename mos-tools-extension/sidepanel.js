@@ -2694,6 +2694,70 @@ async function handleApplyLaborRateNow() {
 let stickerConfig = null;
 let keytagEnabled = false;
 
+const STICKER_OIL_TYPE_ORDER = ['conventional', 'synthetic', 'euro', 'diesel'];
+const STICKER_OIL_BUILTIN_LABELS = {
+  conventional: 'Conventional',
+  synthetic: 'Synthetic',
+  euro: 'European',
+  diesel: 'Diesel'
+};
+
+// Task #439: rebuild the Oil Type <select> from the shop's interval config.
+// Hidden buckets are skipped; custom labels override the built-in names.
+// "Custom..." is always appended as the last option. If the current
+// selection is no longer visible, snap to the shop's defaultOilType (if
+// visible) or the first visible bucket.
+function populateStickerIntervalOptions(config) {
+  const sel = elements.stickerInterval;
+  if (!sel) return;
+
+  const intervals = (config && config.intervals) || {};
+  // On first load the sidepanel HTML ships with only a placeholder
+  // <option value="custom"> (the rest are populated dynamically), so
+  // sel.value === 'custom' on the very first call. That's NOT a real user
+  // choice — treat it as "no prior selection" so we snap to the shop's
+  // default/first visible bucket instead of leaving the dropdown on
+  // Custom (which would silently change default print behavior).
+  const isFirstPopulation = !sel.dataset.stickerIntervalsPopulated;
+  const previousValue = isFirstPopulation ? null : sel.value;
+
+  const visible = STICKER_OIL_TYPE_ORDER.filter(
+    (key) => intervals[key]?.hidden !== true
+  );
+
+  sel.innerHTML = '';
+  visible.forEach((key) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    const custom = intervals[key]?.label && String(intervals[key].label).trim();
+    opt.textContent = custom || STICKER_OIL_BUILTIN_LABELS[key];
+    sel.appendChild(opt);
+  });
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = 'Custom...';
+  sel.appendChild(customOpt);
+  sel.dataset.stickerIntervalsPopulated = '1';
+
+  let desired = previousValue;
+  if (desired === null || (desired !== 'custom' && !visible.includes(desired))) {
+    const shopDefault = config?.defaultOilType;
+    if (shopDefault && visible.includes(shopDefault)) {
+      desired = shopDefault;
+    } else if (visible.length > 0) {
+      desired = visible[0];
+    } else {
+      desired = 'custom';
+    }
+  }
+  sel.value = desired;
+
+  // Hide/show the custom-fields panel to match the (possibly snapped) value.
+  if (elements.customIntervalFields) {
+    elements.customIntervalFields.classList.toggle('hidden', sel.value !== 'custom');
+  }
+}
+
 async function loadStickerConfig() {
   try {
     // Build endpoint with shop context if available
@@ -2731,6 +2795,13 @@ async function loadStickerConfig() {
     if (stickerConfig.useKilometers) {
       elements.stickerUnit.value = 'km';
     }
+
+    // Task #439: populate the Oil Type dropdown from the shop's interval
+    // config — skip hidden buckets, prefer the per-shop custom label, and
+    // always keep "Custom..." as the last option. Snap selection to the
+    // shop's default oil type (or the first visible bucket) if it isn't
+    // already a valid visible value.
+    populateStickerIntervalOptions(stickerConfig);
     
     // Pre-fill mileage from current context if available
     if (currentContext && currentContext.mileage) {

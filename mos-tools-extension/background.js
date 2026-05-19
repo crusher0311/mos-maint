@@ -1801,24 +1801,50 @@ async function createTekmetricJob(shopId, roId, jobData) {
 // ==================== STICKER PRINTING ====================
 const EURO_MAKES = ['bmw', 'mercedes', 'mercedes-benz', 'audi', 'volkswagen', 'vw', 'porsche', 'mini', 'volvo', 'land rover', 'jaguar', 'alfa romeo', 'fiat', 'maserati', 'ferrari', 'lamborghini', 'bentley', 'rolls-royce', 'aston martin', 'mclaren'];
 
-function detectOilType(vehicle) {
-  if (!vehicle) return 'synthetic';
-  
-  const make = (vehicle.make || '').toLowerCase();
-  const fuelType = (vehicle.fuelType || '').toLowerCase();
-  const engine = (vehicle.engine || '').toLowerCase();
-  
-  // Check for diesel
-  if (fuelType === 'diesel' || engine.includes('diesel') || engine.includes('tdi') || engine.includes('duramax') || engine.includes('powerstroke') || engine.includes('cummins')) {
-    return 'diesel';
+// Task #439: optional `intervals` argument lets us skip buckets the shop has
+// hidden in settings. Precedence is diesel → euro → synthetic → conventional;
+// if the preferred candidate is hidden we fall through to the next visible
+// match, then to `defaultOilType` (if visible), then to any remaining visible
+// bucket. Backward compatible — callers with no intervals get the prior
+// behavior.
+function detectOilType(vehicle, intervals, defaultOilType) {
+  const isHidden = (key) => intervals && intervals[key] && intervals[key].hidden === true;
+  // Precedence: diesel → euro → synthetic → conventional. When the matched
+  // bucket is hidden we walk FORWARD in this list rather than jumping to a
+  // different "match" — e.g. a BMW with `euro` hidden falls to `synthetic`,
+  // NOT to `conventional`.
+  const precedence = ['diesel', 'euro', 'synthetic', 'conventional'];
+
+  // Default starting index = synthetic (modern shop default). Promote to
+  // euro for European makes, diesel for diesel fuel/engines.
+  let startIdx = 2;
+  if (vehicle) {
+    const make = (vehicle.make || '').toLowerCase();
+    const fuelType = (vehicle.fuelType || '').toLowerCase();
+    const engine = (vehicle.engine || '').toLowerCase();
+
+    if (EURO_MAKES.includes(make)) startIdx = 1;
+    if (
+      fuelType === 'diesel' ||
+      engine.includes('diesel') ||
+      engine.includes('tdi') ||
+      engine.includes('duramax') ||
+      engine.includes('powerstroke') ||
+      engine.includes('cummins')
+    ) {
+      startIdx = 0;
+    }
   }
-  
-  // Check for European vehicles
-  if (EURO_MAKES.includes(make)) {
-    return 'euro';
+
+  for (let i = startIdx; i < precedence.length; i++) {
+    if (!isHidden(precedence[i])) return precedence[i];
   }
-  
-  // Default to synthetic for modern vehicles
+  for (const key of precedence) {
+    if (!isHidden(key)) return key;
+  }
+  if (defaultOilType && !isHidden(defaultOilType)) return defaultOilType;
+  // Spec: fall back to shop default, or 'synthetic' if the default is also
+  // hidden / absent. Never return a hidden bucket here.
   return 'synthetic';
 }
 
@@ -1836,23 +1862,29 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     throw new Error("Could not detect vehicle mileage. Use right-click to customize.");
   }
   
-  // Determine unit — check context flag first, then fetch shop config
+  // Determine unit — check context flag first, then fetch shop config. We
+  // also use the same fetched config to pass the shop's interval hide flags
+  // and defaultOilType into detectOilType (task #439) so auto-detect skips
+  // hidden buckets.
   let unit = 'mi';
+  let shopIntervals;
+  let shopDefaultOilType;
   if (context.useKilometers === true) {
     unit = 'km';
-  } else if (context.useKilometers == null) {
-    try {
-      const configResp = await fetch(
-        `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
-        { headers: { 'Authorization': `Bearer ${mosApiToken}` } }
-      );
-      if (configResp.ok) {
-        const configData = await configResp.json();
-        if (configData.config?.useKilometers) unit = 'km';
-      }
-    } catch (err) {
-      console.warn('[MOS] Could not fetch sticker config for unit, defaulting to mi:', err.message);
+  }
+  try {
+    const configResp = await fetch(
+      `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
+      { headers: { 'Authorization': `Bearer ${mosApiToken}` } }
+    );
+    if (configResp.ok) {
+      const configData = await configResp.json();
+      if (context.useKilometers == null && configData.config?.useKilometers) unit = 'km';
+      shopIntervals = configData.config?.intervals;
+      shopDefaultOilType = configData.config?.defaultOilType;
     }
+  } catch (err) {
+    console.warn('[MOS] Could not fetch sticker config for unit/intervals, using defaults:', err.message);
   }
 
   const requestBody = {
@@ -1867,7 +1899,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     requestBody.customMonths = overrideInterval.months;
     console.log(`[MOS] Using custom interval: ${overrideInterval.miles} ${unit} / ${overrideInterval.months} mo`);
   } else {
-    requestBody.intervalType = detectOilType(context.vehicle);
+    requestBody.intervalType = detectOilType(context.vehicle, shopIntervals, shopDefaultOilType);
     console.log(`[MOS] Auto-detected oil type: ${requestBody.intervalType} for ${context.vehicle?.make || 'unknown'}`);
   }
 

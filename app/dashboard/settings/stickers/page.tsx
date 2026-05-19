@@ -8,6 +8,8 @@ import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZ
 interface IntervalConfig {
   mileage: number;
   months: number;
+  label?: string;
+  hidden?: boolean;
 }
 
 interface IntervalsConfig {
@@ -449,6 +451,25 @@ export default function StickerSettingsPage() {
     });
   }
 
+  function updateIntervalField<K extends keyof IntervalConfig>(
+    oilType: keyof IntervalsConfig,
+    field: K,
+    value: IntervalConfig[K]
+  ) {
+    const currentInterval = config.intervals?.[oilType] ?? DEFAULT_INTERVALS[oilType];
+    setConfig({
+      ...config,
+      intervals: {
+        ...DEFAULT_INTERVALS,
+        ...config.intervals,
+        [oilType]: {
+          ...currentInterval,
+          [field]: value,
+        },
+      },
+    });
+  }
+
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -744,8 +765,14 @@ export default function StickerSettingsPage() {
               {OIL_TYPES.map((oilType) => {
                 const interval = config.intervals?.[oilType.key] ?? DEFAULT_INTERVALS[oilType.key];
                 const isDefault = config.defaultOilType === oilType.key;
+                const isHidden = interval.hidden === true;
                 return (
-                  <div key={oilType.key} className={`p-3 rounded-lg border-2 transition-colors ${isDefault ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-transparent"}`}>
+                  <div
+                    key={oilType.key}
+                    className={`p-3 rounded-lg border-2 transition-colors ${
+                      isDefault ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-transparent"
+                    } ${isHidden ? "opacity-60" : ""}`}
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-medium text-gray-900 text-sm">{oilType.label}</div>
                       {isDefault && (
@@ -753,6 +780,17 @@ export default function StickerSettingsPage() {
                       )}
                     </div>
                     <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-gray-600">Custom name</label>
+                        <input
+                          type="text"
+                          value={interval.label ?? ""}
+                          onChange={(e) => updateIntervalField(oilType.key, "label", e.target.value)}
+                          placeholder={oilType.label}
+                          maxLength={40}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                       <div>
                         <label className="block text-xs text-gray-600">{config.useKilometers ? "km" : "Miles"}</label>
                         <input
@@ -784,6 +822,15 @@ export default function StickerSettingsPage() {
                           className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                         />
                         <span className="text-xs text-gray-600">Set as default</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isHidden}
+                          onChange={(e) => updateIntervalField(oilType.key, "hidden", e.target.checked)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-600">Hide from pickers</span>
                       </label>
                     </div>
                   </div>

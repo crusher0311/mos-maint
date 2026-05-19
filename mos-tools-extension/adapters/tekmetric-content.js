@@ -887,38 +887,27 @@ async function showIntervalDropdown(event, buttonElement) {
       
       if (result.config.intervals) {
         const cfg = result.config.intervals;
-        if (cfg.conventional) {
-          intervals.push({ 
-            label: `Conventional: ${cfg.conventional.mileage.toLocaleString()} ${unitLabel} / ${cfg.conventional.months} mo`, 
-            miles: cfg.conventional.mileage, 
-            months: cfg.conventional.months,
-            type: 'conventional'
+        // Task #439: each bucket may carry an optional per-shop `label`
+        // override and a `hidden` flag. Skip hidden buckets and prefer the
+        // custom label when present, otherwise fall back to the built-in
+        // default.
+        const BUILTIN_LABELS = {
+          conventional: 'Conventional',
+          synthetic: 'Synthetic',
+          euro: 'Euro',
+          diesel: 'Diesel'
+        };
+        ['conventional', 'synthetic', 'euro', 'diesel'].forEach((type) => {
+          const entry = cfg[type];
+          if (!entry || entry.hidden === true) return;
+          const name = (entry.label && entry.label.trim()) || BUILTIN_LABELS[type];
+          intervals.push({
+            label: `${name}: ${entry.mileage.toLocaleString()} ${unitLabel} / ${entry.months} mo`,
+            miles: entry.mileage,
+            months: entry.months,
+            type
           });
-        }
-        if (cfg.synthetic) {
-          intervals.push({ 
-            label: `Synthetic: ${cfg.synthetic.mileage.toLocaleString()} ${unitLabel} / ${cfg.synthetic.months} mo`, 
-            miles: cfg.synthetic.mileage, 
-            months: cfg.synthetic.months,
-            type: 'synthetic'
-          });
-        }
-        if (cfg.euro) {
-          intervals.push({ 
-            label: `Euro: ${cfg.euro.mileage.toLocaleString()} ${unitLabel} / ${cfg.euro.months} mo`, 
-            miles: cfg.euro.mileage, 
-            months: cfg.euro.months,
-            type: 'euro'
-          });
-        }
-        if (cfg.diesel) {
-          intervals.push({ 
-            label: `Diesel: ${cfg.diesel.mileage.toLocaleString()} ${unitLabel} / ${cfg.diesel.months} mo`, 
-            miles: cfg.diesel.mileage, 
-            months: cfg.diesel.months,
-            type: 'diesel'
-          });
-        }
+        });
       }
     }
   } catch (err) {

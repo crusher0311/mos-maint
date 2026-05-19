@@ -9,6 +9,14 @@ export const POST = createExternalEndpoint(
   async (req: NextRequest, { shopId }) => {
     const body = await req.json();
     
+    // Task #439: `oilType` is a free-form string from the caller (typically
+    // one of conventional/synthetic/euro/diesel, but not enforced). The
+    // per-shop "Hide from pickers" flag added in task #439 is UI-only: it
+    // only suppresses buckets from the dashboard + extension dropdowns and
+    // intentionally does NOT validate/reject external callers passing a
+    // hidden oilType here. External integrations are expected to know what
+    // they want regardless of which buckets the shop chose to surface in
+    // its own UI.
     const {
       vin,
       vehicleYear,

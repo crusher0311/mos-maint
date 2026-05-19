@@ -504,11 +504,11 @@
                 </div>
                 <div class="print-field">
                   <label for="sticker-interval">Oil Type</label>
+                  <!-- Options populated dynamically from the shop's sticker
+                       config in sidepanel.js loadStickerConfig() (task #439).
+                       Hidden buckets are omitted and custom labels are
+                       honored. The "Custom..." option is always last. -->
                   <select id="sticker-interval" class="select-modern">
-                    <option value="conventional">Conventional</option>
-                    <option value="synthetic" selected>Synthetic</option>
-                    <option value="euro">European</option>
-                    <option value="diesel">Diesel</option>
                     <option value="custom">Custom...</option>
                   </select>
                 </div>

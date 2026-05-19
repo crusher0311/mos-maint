@@ -10,6 +10,12 @@ export type OilType = "diesel" | "euro" | "synthetic" | "conventional";
 export interface IntervalConfig {
   mileage: number;
   months: number;
+  // Per-shop overrides added in task #439. When `label` is unset we render the
+  // built-in display name (Conventional/Synthetic/European/Diesel). When
+  // `hidden` is true the bucket is hidden from settings UIs and oil-type
+  // pickers; external API callers can still pass the type explicitly.
+  label?: string;
+  hidden?: boolean;
 }
 
 export interface IntervalsConfig {
@@ -26,6 +32,13 @@ export const DEFAULT_INTERVALS: IntervalsConfig = {
   conventional: { mileage: 3000, months: 3 },
 };
 
+export const BUILTIN_OIL_TYPE_LABELS: Record<OilType, string> = {
+  diesel: "Diesel",
+  euro: "European",
+  synthetic: "Synthetic",
+  conventional: "Conventional",
+};
+
 export interface VehicleContext {
   make?: string;
   fuelType?: string;
@@ -33,30 +46,61 @@ export interface VehicleContext {
   oilType?: string;
 }
 
-export function determineOilType(context: VehicleContext): OilType {
+// Auto-detect precedence: diesel → euro → synthetic → conventional.
+// When the shop has hidden buckets we skip them and fall through to the next
+// match. If every bucket is hidden we fall back to `fallbackDefault` (or
+// `synthetic` when that is itself hidden).
+export function determineOilType(
+  context: VehicleContext,
+  intervals?: Partial<IntervalsConfig>,
+  fallbackDefault?: OilType
+): OilType {
   const { make, fuelType, jobDescription, oilType } = context;
 
-  if (fuelType?.toLowerCase().includes("diesel")) {
-    return "diesel";
-  }
+  const isHidden = (key: OilType): boolean =>
+    intervals?.[key]?.hidden === true;
 
+  // Full precedence order — when the matched bucket is hidden we walk
+  // FORWARD from that position rather than jumping to a different "match".
+  // e.g. a BMW with `euro` hidden falls to `synthetic` (next in
+  // precedence), NOT to `conventional`.
+  const precedence: OilType[] = ["diesel", "euro", "synthetic", "conventional"];
+
+  // Default starting index = conventional (3). Promote up the precedence
+  // chain based on what the vehicle/job indicates.
+  let startIdx = 3;
+  const textToCheck = [jobDescription, oilType]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (textToCheck.includes("synthetic") || textToCheck.includes("full syn")) {
+    startIdx = 2;
+  }
   if (make) {
     const normalizedMake = make.trim().toUpperCase();
-    const isEuropean = EUROPEAN_MAKES.some(
-      (euroMake) => normalizedMake.includes(euroMake.toUpperCase())
+    const isEuropean = EUROPEAN_MAKES.some((euroMake) =>
+      normalizedMake.includes(euroMake.toUpperCase())
     );
-    if (isEuropean) {
-      return "euro";
-    }
+    if (isEuropean) startIdx = 1;
+  }
+  if (fuelType?.toLowerCase().includes("diesel")) {
+    startIdx = 0;
   }
 
-  const textToCheck = [jobDescription, oilType].filter(Boolean).join(" ").toLowerCase();
-  
-  if (textToCheck.includes("synthetic") || textToCheck.includes("full syn")) {
-    return "synthetic";
+  // Walk forward in precedence from the starting index — return the first
+  // visible bucket.
+  for (let i = startIdx; i < precedence.length; i++) {
+    if (!isHidden(precedence[i])) return precedence[i];
   }
 
-  return "conventional";
+  // All forward buckets are hidden — fall back to any visible bucket in
+  // precedence order, then the shop default, then synthetic. Never return
+  // a hidden bucket here.
+  for (const key of precedence) {
+    if (!isHidden(key)) return key;
+  }
+  if (fallbackDefault && !isHidden(fallbackDefault)) return fallbackDefault;
+  return "synthetic";
 }
 
 export function getIntervalForOilType(
@@ -74,11 +118,24 @@ export function getIntervalForOilType(
 }
 
 export function getOilTypeLabel(oilType: OilType): string {
-  const labels: Record<OilType, string> = {
-    diesel: "Diesel",
-    euro: "European",
-    synthetic: "Synthetic",
-    conventional: "Conventional",
-  };
-  return labels[oilType];
+  return BUILTIN_OIL_TYPE_LABELS[oilType];
+}
+
+// Resolve the user-facing label for a bucket, preferring the shop's custom
+// label when set, otherwise falling back to the built-in name.
+export function resolveOilTypeLabel(
+  oilType: OilType,
+  intervals?: Partial<IntervalsConfig>
+): string {
+  const custom = intervals?.[oilType]?.label?.trim();
+  return custom && custom.length > 0 ? custom : BUILTIN_OIL_TYPE_LABELS[oilType];
+}
+
+// Returns the ordered list of buckets the shop wants to see in pickers
+// (i.e. the four built-in keys minus any marked hidden).
+export function getVisibleOilTypes(
+  intervals?: Partial<IntervalsConfig>
+): OilType[] {
+  const order: OilType[] = ["conventional", "synthetic", "euro", "diesel"];
+  return order.filter((key) => intervals?.[key]?.hidden !== true);
 }

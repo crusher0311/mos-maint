@@ -1,5 +1,21 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.9 — 2026-05-19
+
+### Improved
+- **Oil sticker buckets can now be renamed and hidden per shop (Task
+  #439).** The four built-in interval types (Conventional, Synthetic,
+  European, Diesel) each now accept an optional custom name and a
+  "Hide from pickers" toggle in the web app's sticker settings. The
+  Detect Dog side-panel "Oil Type" dropdown, the Tekmetric right-click
+  oil-sticker menu, and the Shop-Ware right-click oil-sticker menu all
+  honor those flags — hidden buckets disappear and visible ones display
+  the shop's custom label (e.g. "Full Syn 0W-20" instead of
+  "Synthetic"). The right-click auto-print path also skips hidden
+  buckets when picking an oil type (e.g. if "Euro" is hidden, a BMW
+  falls through to Synthetic). Existing shops with no custom labels see
+  the original four names unchanged.
+
 ## 1.27.8 — 2026-05-19
 
 ### Improved

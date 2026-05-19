@@ -2,33 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { X, Loader2, Printer } from "lucide-react";
-
-interface IntervalConfig {
-  mileage: number;
-  months: number;
-}
-
-interface IntervalsConfig {
-  diesel: IntervalConfig;
-  euro: IntervalConfig;
-  synthetic: IntervalConfig;
-  conventional: IntervalConfig;
-}
-
-const DEFAULT_INTERVALS: IntervalsConfig = {
-  diesel: { mileage: 7500, months: 6 },
-  euro: { mileage: 10000, months: 12 },
-  synthetic: { mileage: 7500, months: 6 },
-  conventional: { mileage: 3000, months: 3 },
-};
-
-const INTERVAL_OPTIONS = [
-  { key: "conventional", label: "Conventional" },
-  { key: "synthetic", label: "Synthetic" },
-  { key: "euro", label: "European" },
-  { key: "diesel", label: "Diesel" },
-  { key: "custom", label: "Custom" },
-] as const;
+import {
+  DEFAULT_INTERVALS,
+  getVisibleOilTypes,
+  resolveOilTypeLabel,
+  type IntervalsConfig,
+} from "@/lib/sticker-defaults";
 
 type UnitType = "mi" | "km" | "hrs";
 
@@ -370,6 +349,17 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     return parseInt(numericValue, 10).toLocaleString();
   }
 
+  const visibleOilTypes = getVisibleOilTypes(intervals);
+
+  useEffect(() => {
+    if (intervalType === "custom") return;
+    const isVisible = visibleOilTypes.includes(intervalType as keyof IntervalsConfig);
+    if (!isVisible) {
+      setIntervalType(visibleOilTypes[0] ?? "custom");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intervals, intervalType]);
+
   if (!isOpen) return null;
 
   const unitLabel = unit === "hrs" ? "hrs" : unit;
@@ -436,14 +426,16 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
                   onChange={(e) => setIntervalType(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                 >
-                  {INTERVAL_OPTIONS.map((opt) => (
-                    <option key={opt.key} value={opt.key}>
-                      {opt.label}
-                      {opt.key !== "custom" && intervals[opt.key as keyof IntervalsConfig] && (
-                        ` (${intervals[opt.key as keyof IntervalsConfig].mileage.toLocaleString()} ${unitLabel} / ${intervals[opt.key as keyof IntervalsConfig].months} mo)`
-                      )}
-                    </option>
-                  ))}
+                  {visibleOilTypes.map((key) => {
+                    const interval = intervals[key];
+                    const label = resolveOilTypeLabel(key, intervals);
+                    return (
+                      <option key={key} value={key}>
+                        {label} ({interval.mileage.toLocaleString()} {unitLabel} / {interval.months} mo)
+                      </option>
+                    );
+                  })}
+                  <option value="custom">Custom</option>
                 </select>
               </div>
 

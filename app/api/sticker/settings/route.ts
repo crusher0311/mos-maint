@@ -28,6 +28,12 @@ async function updateHovercodeDestination(
 interface IntervalConfig {
   mileage: number;
   months: number;
+  // Task #439: per-shop rename + hide. `label` overrides the built-in display
+  // name; `hidden` removes the bucket from settings UI + oil-type pickers.
+  // External API callers can still pass a hidden type explicitly — the hide
+  // flag is UI-only.
+  label?: string;
+  hidden?: boolean;
 }
 
 interface IntervalsConfig {
