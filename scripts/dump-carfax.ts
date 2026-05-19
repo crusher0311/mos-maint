@@ -22,8 +22,19 @@
  * Reads same env CARFAX_POST_URL + CARFAX_PDI and same Mongo `shops`
  * collection the live route does — no separate config.
  */
-import { fetchCarfaxLive, resolveCarfaxConfig } from "@/lib/integrations/carfax";
-import { getDb } from "@/lib/mongo";
+// Stub the "server-only" guard so this standalone tsx script can import
+// modules (e.g. lib/mongo) that include it. Must run BEFORE any imports
+// that transitively touch them — hence the require()-based loading below.
+require("module")._cache[require.resolve("server-only")] = {
+  id: require.resolve("server-only"),
+  exports: {},
+  loaded: true,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { fetchCarfaxLive, resolveCarfaxConfig } = require("@/lib/integrations/carfax") as typeof import("@/lib/integrations/carfax");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { getDb } = require("@/lib/mongo") as typeof import("@/lib/mongo");
 
 async function resolveShopId(arg: string): Promise<number> {
   const asNum = Number(arg);
