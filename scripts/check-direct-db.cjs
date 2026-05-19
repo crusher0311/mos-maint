@@ -30,6 +30,7 @@ const ALLOWLIST = new Set([
   "app/admin/system/page.tsx",
   "app/admin/users/page.tsx",
   "app/api/admin/api-usage/route.ts",
+  "app/api/admin/backfill-load/route.ts",
   "app/api/admin/billing/extend-grace/route.ts",
   "app/api/admin/billing/grace-period-check/route.ts",
   "app/api/admin/billing/settings/route.ts",
@@ -77,6 +78,7 @@ const ALLOWLIST = new Set([
   "app/api/carfax/debug/[vin]/route.ts",
   "app/api/communications/caller-lookup/route.ts",
   "app/api/cron/backfill-chunk-speed-health/route.ts",
+  "app/api/cron/backfill-load-alerter/route.ts",
   "app/api/cron/backfill-reconcile/route.ts",
   "app/api/cron/catchup-status/route.ts",
   "app/api/cron/cron-health-alerter/route.ts",
@@ -383,6 +385,8 @@ const ALLOWED_PREFIXES = [
   'lib/data/',
   'lib/mongo.ts',
   'scripts/drain-',
+  'lib/backfill-metrics/',
+  'scripts/reregister-',
 ];
 
 const ALLOWED_SUBSTRINGS = [
