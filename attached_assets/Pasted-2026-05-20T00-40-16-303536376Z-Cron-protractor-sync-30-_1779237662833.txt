@@ -1,0 +1,50 @@
+2026-05-20T00:40:16.303536376Z [Cron]   • protractor-sync              */30 * * * *    GET   /api/cron/protractor-sync
+2026-05-20T00:40:16.305888062Z [Cron]   • shopware-sync                */30 * * * *    GET   /api/cron/shopware-sync
+2026-05-20T00:40:16.307924788Z [Cron]   • tekmetric-backfill           0 1 * * *       GET   /api/cron/tekmetric-backfill
+2026-05-20T00:40:16.314021764Z [Cron]   • weekend-backfill-boost       0,15,30,45 * * * 6,0 GET   /api/cron/tekmetric-backfill
+2026-05-20T00:40:16.318739916Z [Cron]   • monday-backfill-catchup-boost 0,15,30,45 0-11 * * 1 GET   /api/cron/tekmetric-backfill
+2026-05-20T00:40:16.320640793Z [Cron]   • weekday-backfill-boost       0,15,30,45 * * * 2-5 GET   /api/cron/tekmetric-backfill
+2026-05-20T00:40:16.322670029Z [Cron]   • protractor-backfill          0 2 * * *       GET   /api/cron/protractor-backfill
+2026-05-20T00:40:16.327588382Z [Cron]   • protractor-weekend-boost     5,20,35,50 * * * 6,0 GET   /api/cron/protractor-backfill
+2026-05-20T00:40:16.330240386Z [Cron]   • protractor-weekday-boost     5,20,35,50 2-11 * * 2-5 GET   /api/cron/protractor-backfill
+2026-05-20T00:40:16.332181286Z [Cron]   • shopware-backfill            0 3 * * *       GET   /api/cron/shopware-backfill
+2026-05-20T00:40:16.336879296Z [Cron]   • shopware-weekend-boost       10,25,40,55 * * * 6,0 GET   /api/cron/shopware-backfill
+2026-05-20T00:40:16.338747982Z [Cron]   • new-shop-backfill-fastpath   */5 * * * *     GET   /api/cron/tekmetric-backfill?fastpath=newShops
+2026-05-20T00:40:16.340570624Z [Cron]   • fullpage-backfill-tekmetric  */2 * * * *     GET   /api/cron/tekmetric-fullpage-backfill
+2026-05-20T00:40:16.342541676Z [Cron]   • shopware-enrich              15 * * * *      GET   /api/cron/shopware-enrich
+2026-05-20T00:40:16.34454334Z [Cron]   • backfill-reconcile           30 * * * *      GET   /api/cron/backfill-reconcile
+2026-05-20T00:40:16.34632946Z [Cron]   • log-sync                     */15 * * * *    GET   /api/cron/log-sync
+2026-05-20T00:40:16.348094259Z [Cron]   • dashboard-refresh            */10 * * * *    GET   /api/cron/dashboard-refresh
+2026-05-20T00:40:16.35005545Z [Cron]   • daily-grace-check            0 8 * * *       GET   /api/cron/daily-grace-check
+2026-05-20T00:40:16.35200569Z [Cron]   • tekmetric-webhook-health     7 * * * *       GET   /api/cron/tekmetric-webhook-health
+2026-05-20T00:40:16.354049757Z [Cron]   • tekmetric-ro-retry           30 5 * * *      GET   /api/cron/tekmetric-ro-retry
+2026-05-20T00:40:16.356010838Z [Cron]   • tekmetric-backfill-health    30 6 * * *      GET   /api/cron/tekmetric-backfill-health
+2026-05-20T00:40:16.35799365Z [Cron]   • backfill-chunk-speed-health  0 7 * * *       GET   /api/cron/backfill-chunk-speed-health
+2026-05-20T00:40:16.360143143Z [Cron]   • cron-health-alerter          */30 * * * *    GET   /api/cron/cron-health-alerter
+2026-05-20T00:40:16.362123255Z [Cron]   • backfill-load-alerter        30 7 * * *      GET   /api/cron/backfill-load-alerter
+2026-05-20T00:40:16.364014882Z [Cron]   • data-quality                 0 2 * * *       POST  /api/cron/data-quality
+2026-05-20T00:40:16.365939071Z [Cron]   • daily-all                    0 4 * * *       GET   /api/cron/daily-all
+2026-05-20T00:40:16.365948092Z [Cron] 27 jobs registered and scheduled
+2026-05-20T00:40:16.982613041Z [Cron] lastSuccessByJob seed: nothing to backfill
+2026-05-20T00:40:17.70596725Z [Startup] Waiting for server... (attempt 1/30)
+2026-05-20T00:40:17.787186736Z [Startup] Server is ready! (status: 401)
+2026-05-20T00:40:17.787988056Z [2/3] Starting Tekmetric Sync Worker...
+2026-05-20T00:40:17.789760255Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-05-20T00:40:17.789775046Z [4/5] Starting Plan Prefetch Worker...
+2026-05-20T00:40:17.791258568Z 
+2026-05-20T00:40:17.791271749Z ============================================================
+2026-05-20T00:40:17.791285Z All services started!
+2026-05-20T00:40:17.79128954Z - Next.js server on port 10000
+2026-05-20T00:40:17.79129333Z - Tekmetric Sync Worker (every 60s)
+2026-05-20T00:40:17.79129692Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-20T00:40:17.791303241Z - Plan Prefetch Worker (every 30m)
+2026-05-20T00:40:17.791306531Z ============================================================
+2026-05-20T00:40:18.567489303Z Tekmetric Incremental Sync Worker started
+2026-05-20T00:40:18.567520915Z Base sync interval: 60 seconds
+2026-05-20T00:40:18.567535726Z Max retries: 3
+2026-05-20T00:40:18.567556557Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-05-20T00:40:18.567570268Z 
+2026-05-20T00:40:18.658983184Z [PlanPrefetch] Script loaded
+2026-05-20T00:40:18.65908947Z [PlanPrefetch] Worker starting...
+2026-05-20T00:40:18.659128863Z [PlanPrefetch] Will run every 30 minutes
+2026-05-20T00:40:18.659162625Z [PlanPrefetch] Waiting 120s for server warmup...
