@@ -874,6 +874,16 @@ export async function findAndResumeStaleBackfills(): Promise<{
         { lastAttemptedAt: { $lt: staleThreshold } },
         { lastAttemptedAt: { $exists: false }, lastRunAt: { $lt: staleThreshold } },
         { inProgress: true, lastAttemptedAt: { $lt: staleThreshold } },
+        // Catch docs that crashed before writing any chunk-completion timestamp.
+        // These have `inProgress: true` + `startedAt` from months ago but no
+        // `lastRunAt` / `lastAttemptedAt`. Without this branch the previous
+        // three clauses can never match them and the doc is stuck forever.
+        {
+          inProgress: true,
+          lastAttemptedAt: { $exists: false },
+          lastRunAt: { $exists: false },
+          startedAt: { $lt: staleThreshold },
+        },
       ]
     }).toArray(),
     db.collection("shops").find({ "protractor.configured": true }).project({ shopId: 1 }).toArray()
