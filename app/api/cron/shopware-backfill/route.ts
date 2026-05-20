@@ -398,9 +398,16 @@ export async function GET(req: NextRequest) {
   const db = await getDb();
 
   const targetShopId = req.nextUrl.searchParams.get("shopId");
-  const shopQuery: any = { "shopware.tenantId": { $exists: true, $ne: null } };
+  const shopQuery: any = {
+    "shopware.tenantId": { $exists: true, $ne: null },
+    // Skip shops flagged as sandbox / non-prod credentials (e.g. shop 77 uses
+    // separate Shop-Ware sandbox auth and returns 404 against the prod tenant).
+    // Targeted `?shopId=` calls bypass this so on-call can still force-run.
+    "shopware.backfillDisabled": { $ne: true },
+  };
   if (targetShopId) {
     shopQuery.shopId = { $in: [Number(targetShopId), String(targetShopId)] };
+    delete shopQuery["shopware.backfillDisabled"];
   }
 
   const swShops = await db
