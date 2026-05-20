@@ -125,6 +125,11 @@ export async function register() {
   // pressure when measuring the safe backfill cadence ceiling. Boots
   // independently of the scheduler — if cron is disabled this still
   // collects baseline load for the web process.
+  //
+  // mongodb is marked as a webpack external in next.config.js so the
+  // instrumentation bundle doesn't try to resolve mongodb's Node-only
+  // deps (`net`, `crypto`, etc.) at build time. The dynamic import
+  // below is what triggers the chain at runtime.
   try {
     const { startHostLoadSampler } = await import(
       "@/lib/backfill-metrics/host-load-sampler"

@@ -1,0 +1,50 @@
+2026-05-19T23:57:43.566669284Z ./node_modules/socks/build/index.js
+2026-05-19T23:57:43.566672664Z ./node_modules/mongodb/lib/deps.js
+2026-05-19T23:57:43.566674824Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-19T23:57:43.566676774Z ./node_modules/mongodb/lib/index.js
+2026-05-19T23:57:43.566678774Z ./lib/mongo.ts
+2026-05-19T23:57:43.566680714Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-19T23:57:43.566682624Z ./src/instrumentation.ts
+2026-05-19T23:57:43.566684525Z 
+2026-05-19T23:57:43.566686434Z ./node_modules/socks/build/common/helpers.js:8:1
+2026-05-19T23:57:43.566688334Z Module not found: Can't resolve 'net'
+2026-05-19T23:57:43.566690194Z 
+2026-05-19T23:57:43.566692214Z https://nextjs.org/docs/messages/module-not-found
+2026-05-19T23:57:43.566694035Z 
+2026-05-19T23:57:43.566695925Z Import trace for requested module:
+2026-05-19T23:57:43.566697855Z ./node_modules/socks/build/client/socksclient.js
+2026-05-19T23:57:43.566699755Z ./node_modules/socks/build/index.js
+2026-05-19T23:57:43.566701635Z ./node_modules/mongodb/lib/deps.js
+2026-05-19T23:57:43.566703635Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-19T23:57:43.566705585Z ./node_modules/mongodb/lib/index.js
+2026-05-19T23:57:43.566707525Z ./lib/mongo.ts
+2026-05-19T23:57:43.566709455Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-19T23:57:43.566711365Z ./src/instrumentation.ts
+2026-05-19T23:57:43.566713195Z 
+2026-05-19T23:57:43.566715385Z ./node_modules/mongodb/lib/client-side-encryption/auto_encrypter.js:6:1
+2026-05-19T23:57:43.566717315Z Module not found: Can't resolve 'net'
+2026-05-19T23:57:43.566719165Z 
+2026-05-19T23:57:43.566721055Z https://nextjs.org/docs/messages/module-not-found
+2026-05-19T23:57:43.566722875Z 
+2026-05-19T23:57:43.566724775Z Import trace for requested module:
+2026-05-19T23:57:43.566726755Z ./node_modules/mongodb/lib/index.js
+2026-05-19T23:57:43.566728695Z ./lib/mongo.ts
+2026-05-19T23:57:43.566730575Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-19T23:57:43.566732485Z ./src/instrumentation.ts
+2026-05-19T23:57:43.566734326Z 
+2026-05-19T23:57:43.566736235Z ./node_modules/mongodb/lib/client-side-encryption/crypto_callbacks.js:9:1
+2026-05-19T23:57:43.566738175Z Module not found: Can't resolve 'crypto'
+2026-05-19T23:57:43.566739966Z 
+2026-05-19T23:57:43.566741886Z https://nextjs.org/docs/messages/module-not-found
+2026-05-19T23:57:43.566743706Z 
+2026-05-19T23:57:43.566745576Z Import trace for requested module:
+2026-05-19T23:57:43.566747486Z ./node_modules/mongodb/lib/client-side-encryption/client_encryption.js
+2026-05-19T23:57:43.566749476Z ./node_modules/mongodb/lib/index.js
+2026-05-19T23:57:43.566751426Z ./lib/mongo.ts
+2026-05-19T23:57:43.566753326Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-19T23:57:43.566755256Z ./src/instrumentation.ts
+2026-05-19T23:57:43.566765926Z 
+2026-05-19T23:57:43.567552882Z 
+2026-05-19T23:57:43.567640124Z > Build failed because of webpack errors
+2026-05-19T23:57:43.951978745Z ==> Build failed 😞
+2026-05-19T23:57:43.952005066Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

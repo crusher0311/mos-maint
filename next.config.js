@@ -20,6 +20,35 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer, dev }) => {
+    // Next 14's instrumentation hook is bundled separately and does NOT
+    // honor `experimental.serverComponentsExternalPackages`. The host-load
+    // sampler (task #460) imports `mongodb` transitively via `lib/mongo.ts`,
+    // and without an explicit external here webpack tries to resolve
+    // mongodb's Node-only deps (`net`, `crypto`, `tls`) at build time and
+    // fails the build. Marking these as commonjs externals on the server
+    // bundle leaves them to Node's runtime resolver, which is what we want.
+    if (isServer) {
+      const serverExternals = [
+        'mongodb',
+        'mongodb-client-encryption',
+        'kerberos',
+        'aws4',
+        'snappy',
+        '@mongodb-js/zstd',
+        'gcp-metadata',
+        'socks',
+      ];
+      const externalize = ({ request }, callback) => {
+        if (request && serverExternals.includes(request)) {
+          return callback(null, 'commonjs ' + request);
+        }
+        callback();
+      };
+      config.externals = Array.isArray(config.externals)
+        ? [...config.externals, externalize]
+        : [config.externals, externalize].filter(Boolean);
+    }
+
     // The instrumentation hook intentionally uses dynamic require() to load
     // the cron scheduler at runtime (so the scheduler stays out of the
     // bundle when ENABLE_INPROCESS_CRON is unset). Webpack can't statically
