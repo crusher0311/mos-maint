@@ -112,18 +112,18 @@ async function main(): Promise<void> {
   while (!stopRequested) {
     iteration += 1;
     log(`=== iteration ${iteration} start ===`);
-    let anyFailed = false;
-    for (const provider of PROVIDERS) {
-      if (stopRequested) break;
-      const exitCode = await runDrain(provider.script);
-      if (exitCode !== 0) {
-        anyFailed = true;
-        log(`provider=${provider.name} drain exited non-zero (${exitCode})`);
-      }
-      if (stopRequested) break;
-      log(`sleeping ${IDLE_BETWEEN_PROVIDERS_MS}ms before next provider`);
-      await sleep(IDLE_BETWEEN_PROVIDERS_MS);
-    }
+    log(`spawning ${PROVIDERS.length} providers in parallel: ${PROVIDERS.map((p) => p.name).join(", ")}`);
+    const results = await Promise.all(
+      PROVIDERS.map(async (provider) => {
+        if (stopRequested) return { provider, exitCode: 0 };
+        const exitCode = await runDrain(provider.script);
+        if (exitCode !== 0) {
+          log(`provider=${provider.name} drain exited non-zero (${exitCode})`);
+        }
+        return { provider, exitCode };
+      }),
+    );
+    const anyFailed = results.some((r) => r.exitCode !== 0);
     if (stopRequested) break;
     const sleepMs = anyFailed ? BACKOFF_ON_FAILURE_MS : IDLE_BETWEEN_LOOPS_MS;
     log(
