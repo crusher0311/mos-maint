@@ -1,6 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { updateHovercodeLogo } from "@/lib/hovercode";
+
+function getAppointmentLogoUrl(): string {
+  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools").replace(/\/$/, "");
+  return `${baseUrl}/appointment-logo.png`;
+}
+
+async function ensureConfiguredQRHasLogo(
+  db: any,
+  shopId: number,
+  configuredQRId: string,
+  alreadyPatched: boolean,
+  forceRefresh: boolean = false
+): Promise<boolean> {
+  if (alreadyPatched && !forceRefresh) return false;
+
+  // Atomically claim the patch slot so two concurrent GETs don't both PATCH.
+  // Winner: the request that flips qrLogoPatchedAt from absent to present.
+  // Force refresh (explicit POST) bypasses this and always patches.
+  if (!forceRefresh) {
+    const claim = await db.collection("shops").updateOne(
+      { shopId, "stickerConfig.qrLogoPatchedAt": { $exists: false } },
+      { $set: { "stickerConfig.qrLogoPatchedAt": new Date() } }
+    );
+    if (claim.modifiedCount === 0) {
+      // Another request beat us to it — let it handle the PATCH + cache invalidation.
+      return false;
+    }
+  }
+
+  const logoUrl = getAppointmentLogoUrl();
+  console.log("[QR Cache] Patching existing HoverCode QR with calendar logo:", configuredQRId);
+  const result = await updateHovercodeLogo(configuredQRId, logoUrl, shopId);
+  if (!result.success) {
+    console.warn("[QR Cache] Failed to patch logo on existing QR:", result.error);
+    // Release the claim so a future request can retry.
+    if (!forceRefresh) {
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $unset: { "stickerConfig.qrLogoPatchedAt": "" } }
+      );
+    }
+    return false;
+  }
+
+  if (forceRefresh) {
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { "stickerConfig.qrLogoPatchedAt": new Date() } }
+    );
+  }
+  await db.collection("shop_media").deleteOne({ shopId, type: "qr_code" });
+  return true;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -286,17 +340,25 @@ export async function GET(req: NextRequest) {
     // Get shop config first to check for configured hovercodeQRId
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
+      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1, "stickerConfig.qrLogoPatchedAt": 1 } }
     );
 
     const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
     const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+    const qrLogoPatchedAt = shop?.stickerConfig?.qrLogoPatchedAt;
 
-    // Check for cached QR code
-    const cached = await db.collection("shop_media").findOne({
-      shopId,
-      type: "qr_code",
-    });
+    // One-time: patch the existing HoverCode QR with the calendar logo so
+    // shops with a pre-existing logo-less QR don't have to abandon it. Same
+    // HoverCode ID + short URL, so printed stickers keep working.
+    let cacheInvalidated = false;
+    if (configuredQRId) {
+      cacheInvalidated = await ensureConfiguredQRHasLogo(db, shopId, configuredQRId, !!qrLogoPatchedAt);
+    }
+
+    // Check for cached QR code (re-read if we just invalidated it)
+    const cached = cacheInvalidated
+      ? null
+      : await db.collection("shop_media").findOne({ shopId, type: "qr_code" });
 
     // If there's a configured QR ID in platform admin, use that
     if (configuredQRId) {
@@ -417,7 +479,7 @@ export async function POST(req: NextRequest) {
     // Get shop's config
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1 } }
+      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1, "stickerConfig.qrLogoPatchedAt": 1 } }
     );
 
     const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
@@ -425,6 +487,12 @@ export async function POST(req: NextRequest) {
 
     await db.collection("shop_media").deleteOne({ shopId, type: "qr_code" });
     console.log("[QR Cache POST] Cleared cached QR for fresh re-fetch");
+
+    // Explicit refresh always re-patches the logo, even if previously patched,
+    // to recover from any HoverCode-side drift.
+    if (configuredQRId) {
+      await ensureConfiguredQRHasLogo(db, shopId, configuredQRId, false, true);
+    }
 
     if (configuredQRId) {
       console.log("[QR Cache POST] Re-fetching configured QR ID:", configuredQRId);
