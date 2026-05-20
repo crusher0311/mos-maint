@@ -10,6 +10,22 @@ import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
+import { resolveOpenRoMileage } from "@/lib/plan-build/open-ro-mileage";
+
+/**
+ * Task #476: provenance label for the actual odometer reading the partner
+ * endpoint fed into the plan engine. Distinct from `mileageSource`
+ * (Task #384), which describes whether the value itself is actual vs
+ * estimated. AppFueled uses this to confirm "we're computing against the
+ * same number Detect Dog is showing in the overlay".
+ */
+type MileageInputSource =
+  | "open_ro"
+  | "vehicles_collection"
+  | "expired_cache"
+  | "analysis_cache_recovered"
+  | "carfax_estimated"
+  | "annual_estimated";
 
 /**
  * Task #391: build the partner-facing `flags` array. Always present on
@@ -160,17 +176,57 @@ export const GET = createExternalEndpoint(
       { projection: { currentMileage: 1, lastMileage: 1, mileage: 1, odometer: 1, year: 1 } }
     );
 
-    let mileage =
+    const vehicleDocMileage =
       vehicleDoc?.currentMileage ??
       vehicleDoc?.lastMileage ??
       vehicleDoc?.mileage ??
       vehicleDoc?.odometer ??
       null;
-    if (mileage) {
-      console.log(
-        `[VHI External] Loaded actual mileage ${mileage} from vehicles doc for ${vin} (shop=${resolvedShopId})`
+
+    // Task #476: prefer the most-recent RO's odometer over the
+    // `vehicles.currentMileage` snapshot so the partner response matches
+    // what the Detect Dog overlay shows. If both are present we take the
+    // larger value (an odometer is monotonic — the smaller of the two is
+    // by definition stale). Setting `mileageInputSource = "open_ro"` lets
+    // AppFueled confirm "yes, we're computing against the same odometer
+    // the advisor is looking at right now" without dumping logs.
+    let mileage: number | null = vehicleDocMileage ?? null;
+    let mileageInputSource: MileageInputSource | null =
+      vehicleDocMileage ? "vehicles_collection" : null;
+    let openRoLookup: Awaited<ReturnType<typeof resolveOpenRoMileage>> | null = null;
+    try {
+      openRoLookup = await resolveOpenRoMileage({
+        db,
+        shopIdVariants,
+        vin,
+        provider: shopRecord?.integrationProvider ?? null,
+      });
+    } catch (err) {
+      console.warn(
+        `[PartnerVHI] open_ro_lookup_error requestId=${requestId} vin=${vin}:`,
+        err instanceof Error ? err.message : err,
       );
     }
+    if (openRoLookup && openRoLookup.miles > 0) {
+      if (mileage == null || openRoLookup.miles > mileage) {
+        mileage = openRoLookup.miles;
+        mileageInputSource = "open_ro";
+      }
+    }
+    if (mileage) {
+      console.log(
+        `[VHI External] Resolved mileage ${mileage} for ${vin} (shop=${resolvedShopId}) source=${mileageInputSource}` +
+        (openRoLookup ? ` openRo=${openRoLookup.miles}/${openRoLookup.integration}/${openRoLookup.roIdentifier ?? "n/a"}` : "") +
+        ` vehiclesDoc=${vehicleDocMileage ?? "null"}`
+      );
+    }
+    console.log(
+      `[PartnerVHI] mileage_resolved requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+      `shopId=${resolvedShopId} vin=${vin} mileage=${mileage ?? "null"} ` +
+      `mileageInputSource=${mileageInputSource ?? "none"} ` +
+      `openRoMiles=${openRoLookup?.miles ?? "null"} ` +
+      `vehiclesDocMiles=${vehicleDocMileage ?? "null"}`
+    );
     let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
     let mileageEstimateDetails: Record<string, unknown> | null = null;
 
@@ -234,6 +290,12 @@ export const GET = createExternalEndpoint(
         mileageSource: cachedSource,
         mileageEstimated: cachedSource !== "actual",
         mileageEstimateDetails: cachedDetails,
+        // Task #476: tell partners where the actual reading came from. On the
+        // cached_plan branch we serve whatever the prior build was anchored
+        // against; that prior build itself emitted `mileageInputSource` so
+        // the cache row hit/miss decision is the right place to surface
+        // today's resolution.
+        mileageInputSource: mileageInputSource ?? "vehicles_collection",
         // Task #391: surface mileage rollback warning when present.
         flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null }),
         // Task #439: data-quality signal so partner UIs can soften 0/CRITICAL.
@@ -257,6 +319,8 @@ export const GET = createExternalEndpoint(
         mileageSource: aSource,
         mileageEstimated: aSource !== "actual",
         mileageEstimateDetails: aDetails,
+        // Task #476: same provenance field on the analysis-cache branch.
+        mileageInputSource: mileageInputSource ?? "vehicles_collection",
         icons: getStatusIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
@@ -277,6 +341,7 @@ export const GET = createExternalEndpoint(
       );
       if (expiredEntry) {
         mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
+        if (mileage) mileageInputSource = "expired_cache";
         console.log(`[VHI External] Recovered mileage ${mileage} from expired cache for ${vin}`);
       }
     }
@@ -288,42 +353,16 @@ export const GET = createExternalEndpoint(
       );
       if (analysisDoc?.mileageAtAnalysis) {
         mileage = analysisDoc.mileageAtAnalysis;
+        mileageInputSource = "analysis_cache_recovered";
         console.log(`[VHI External] Recovered mileage ${mileage} from analysis cache for ${vin}`);
       }
     }
 
-    if (!mileage) {
-      const provider = shopRecord?.integrationProvider || "tekmetric";
-
-      if (provider === "tekmetric") {
-        const wo = await db.collection("tekmetric_work_orders").findOne(
-          { shopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
-          { sort: { createdAt: -1 }, projection: { odometer: 1 } }
-        );
-        if (wo?.odometer) {
-          mileage = wo.odometer;
-          console.log(`[VHI External] Recovered mileage ${mileage} from tekmetric_work_orders for ${vin}`);
-        }
-      } else if (provider === "shopware") {
-        const ro = await db.collection("shopware_repair_orders").findOne(
-          { mosShopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
-          { sort: { updatedAt: -1 }, projection: { odometer: 1, "raw.odometer": 1, "raw.odometer_out": 1 } }
-        );
-        if (ro) {
-          mileage = ro?.raw?.odometer_out ?? ro?.raw?.odometer ?? ro?.odometer ?? null;
-          if (mileage) console.log(`[VHI External] Recovered mileage ${mileage} from shopware_repair_orders for ${vin}`);
-        }
-      } else if (provider === "protractor") {
-        const wo = await db.collection("protractor_work_orders").findOne(
-          { shopId: { $in: shopIdVariants }, vin: vin.toUpperCase() },
-          { sort: { updatedAt: -1 }, projection: { OutUsage: 1, InUsage: 1, Odometer: 1, "data.OutUsage": 1, "data.InUsage": 1, "data.Odometer": 1 } }
-        );
-        if (wo) {
-          mileage = wo?.OutUsage ?? wo?.InUsage ?? wo?.Odometer ?? wo?.data?.OutUsage ?? wo?.data?.InUsage ?? wo?.data?.Odometer ?? null;
-          if (mileage) console.log(`[VHI External] Recovered mileage ${mileage} from protractor_work_orders for ${vin}`);
-        }
-      }
-    }
+    // Task #476: the open-RO lookup above is the primary path. The
+    // per-provider work-order fallback that used to live here was
+    // redundant once we hoisted the lookup before getCachedPlan — it
+    // would only fire when the open-RO query already returned null, in
+    // which case those same collections were just queried. Removed.
 
     // Fallback 1: estimate from CARFAX service history (rolling miles/day projection)
     if (!mileage || mileage <= 0) {
@@ -332,6 +371,7 @@ export const GET = createExternalEndpoint(
         if (est.estimated && est.mileage && est.mileage > 0) {
           mileage = est.mileage;
           mileageSource = "estimated_carfax";
+          mileageInputSource = "carfax_estimated";
           mileageEstimateDetails = {
             confidence: est.confidence,
             dataPoints: est.dataPoints,
@@ -385,6 +425,7 @@ export const GET = createExternalEndpoint(
         const estimated = Math.min(250000, Math.max(12000, age * 12000));
         mileage = estimated;
         mileageSource = "estimated_annual";
+        mileageInputSource = "annual_estimated";
         mileageEstimateDetails = {
           confidence: "very-low",
           method: "model_year_x_12k",
@@ -480,6 +521,11 @@ export const GET = createExternalEndpoint(
         (result.mileageSource ?? mileageSource) === "actual"
           ? null
           : result.mileageEstimateDetails ?? mileageEstimateDetails,
+      // Task #476: forward the resolved mileage provenance on the
+      // on-demand-build branch too so all three response branches
+      // (cached_plan, analysis_cache, on_demand_build) carry the same
+      // `mileageInputSource` shape AppFueled can read.
+      mileageInputSource: mileageInputSource ?? "vehicles_collection",
       // Task #391: surface mileage rollback warning if the freshly built
       // plan recorded one. Always-present empty array otherwise.
       flags: buildFlags({ mileageDiscrepancy: result.mileageDiscrepancy ?? null }),

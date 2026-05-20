@@ -146,8 +146,18 @@ export function computeIntervalProgress(
 
       miles = { used, interval, percent, remaining, status, headline };
     }
-  } else if (item.dueAtMiles != null && currentMiles != null) {
+  } else if (item.dueAtMiles != null && item.dueAtMiles > 0 && currentMiles != null) {
     // No interval known; still emit a directional label (mirrors UI fallback).
+    //
+    // Task #476: require `dueAtMiles > 0` here. A stored `dueAtMiles === 0`
+    // on a time-only OEM rule (e.g. brake fluid: 36 months, no
+    // intervalMiles) used to fall through this branch and compute
+    // `remaining = 0 - currentMiles`, producing nonsense "111,961 mi over"
+    // headlines anchored to zero even when `last.miles` was non-null. Time-
+    // only rules must report only the time axis — mirror how triage.ts
+    // already leaves `dueAtMiles = null` for these rows in the live build
+    // path, and defend against legacy cached plans / external callers that
+    // serialized a literal 0 instead of null.
     const remaining = item.dueAtMiles - currentMiles;
     let status: ProgressStatus;
     let headline: string;
