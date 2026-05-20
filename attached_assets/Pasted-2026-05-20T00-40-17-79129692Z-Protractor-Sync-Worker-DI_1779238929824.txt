@@ -1,0 +1,50 @@
+2026-05-20T00:40:17.79129692Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-20T00:40:23.501778462Z [InternalAPI] Shop 37: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:41:55.585651473Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=56548614-9ca2-463b-b5cd-84d0a3ca1f40&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:41:55.714766484Z [Protractor:DeferredWork] SUCCESS — 0 items
+2026-05-20T00:42:44.813760141Z [Cron]   • protractor-sync              */30 * * * *    GET   /api/cron/protractor-sync
+2026-05-20T00:42:44.836485876Z [Cron]   • protractor-backfill          0 2 * * *       GET   /api/cron/protractor-backfill
+2026-05-20T00:42:44.844022222Z [Cron]   • protractor-weekend-boost     5,20,35,50 * * * 6,0 GET   /api/cron/protractor-backfill
+2026-05-20T00:42:44.847942829Z [Cron]   • protractor-weekday-boost     5,20,35,50 2-11 * * 2-5 GET   /api/cron/protractor-backfill
+2026-05-20T00:42:45.44059796Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-05-20T00:42:45.442614337Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-20T00:42:46.550275614Z [Cron]   • protractor-sync              */30 * * * *    GET   /api/cron/protractor-sync
+2026-05-20T00:42:46.581228688Z [Cron]   • protractor-backfill          0 2 * * *       GET   /api/cron/protractor-backfill
+2026-05-20T00:42:46.581231438Z [Cron]   • protractor-weekend-boost     5,20,35,50 * * * 6,0 GET   /api/cron/protractor-backfill
+2026-05-20T00:42:46.593270125Z [Cron]   • protractor-weekday-boost     5,20,35,50 2-11 * * 2-5 GET   /api/cron/protractor-backfill
+2026-05-20T00:42:46.818598296Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-05-20T00:42:46.824205753Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-05-20T00:43:07.768294511Z [Protractor Backfill Cron] Checking for stale backfills...
+2026-05-20T00:43:07.837911675Z [Protractor Backfill Cron] Resumed 0 stale backfills: []
+2026-05-20T00:43:31.815692974Z [InternalAPI] Shop 54: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-05-20T00:43:32.181454036Z [InternalAPI] Shop 57: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:43:40.044898335Z [InternalAPI] Shop 63: Found 0 Protractor, 0 Tekmetric, 20 cached, returning 20
+2026-05-20T00:43:49.324373733Z [InternalAPI] Shop 66: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:43:55.615137922Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=e84762f7-ccaa-4cd9-b932-6b197a09fbc1&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:43:55.744800503Z [Protractor:DeferredWork] SUCCESS — 1 items
+2026-05-20T00:46:17.570614539Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:46:19.099636937Z [InternalAPI] Shop 28: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:47:37.131904504Z [Protractor Backfill Cron] Checking for stale backfills...
+2026-05-20T00:47:37.200887189Z [Protractor Backfill Cron] Resumed 0 stale backfills: []
+2026-05-20T00:47:56.128712702Z [InternalAPI] Shop 32: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:49:34.426040571Z [InternalAPI] Shop 36: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:49:42.767707195Z [InternalAPI] Shop 37: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:50:55.028389668Z [Protractor Backfill Cron] Checking for stale backfills...
+2026-05-20T00:50:55.099612668Z [Protractor Backfill Cron] Resumed 0 stale backfills: []
+2026-05-20T00:52:50.991346248Z [InternalAPI] Shop 54: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-05-20T00:52:51.341687746Z [InternalAPI] Shop 57: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:52:59.195054024Z [InternalAPI] Shop 63: Found 0 Protractor, 0 Tekmetric, 20 cached, returning 20
+2026-05-20T00:53:08.548178895Z [InternalAPI] Shop 66: Found 0 Protractor, 0 Tekmetric, 50 cached, returning 50
+2026-05-20T00:53:55.557014055Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=67f22c2a-de18-47a3-9457-21d9caa7bbc3&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:53:55.690957018Z [Protractor:DeferredWork] SUCCESS — 0 items
+2026-05-20T00:54:56.154522013Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=c9dc1e2a-952a-4f25-a8ca-25a27179fb0d&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:54:56.346039823Z [Protractor:DeferredWork] SUCCESS — 12 items
+2026-05-20T00:55:55.780801059Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=33d198ef-6606-4abd-8cf5-9659d5965e99&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:55:55.91146914Z [Protractor:DeferredWork] SUCCESS — 3 items
+2026-05-20T00:55:56.107855518Z [PlanBuild] Mileage discrepancy for 1C6RR7ST7KS712856: current=106542 prior=108103 from Protractor (gap=1561)
+2026-05-20T00:56:55.496049236Z [Protractor:DeferredWork] GET /ServicePackage/DeferredWorks?serviceItemID=693fe2a3-d138-4fa9-bd96-0d2c2b05ccb4&startDate=2024-05-20&endDate=2026-05-20 for shop 109...
+2026-05-20T00:56:55.636223182Z [Protractor:DeferredWork] SUCCESS — 2 items
+2026-05-20T00:56:55.830094042Z [PlanBuild] Mileage discrepancy for 1GC2KUEG1JZ330842: current=197317 prior=213671 from Protractor (gap=16354)
+2026-05-20T00:58:30.592203429Z [InternalAPI] Shop 70: Found 0 Protractor, 0 Tekmetric, 0 cached, returning 0
+2026-05-20T01:00:00.283164047Z [Cron] ▶ protractor-sync GET /api/cron/protractor-sync
+2026-05-20T01:00:59.753552322Z [Protractor] Fetched work orders page: skip=0, got 69, total so far: 69
