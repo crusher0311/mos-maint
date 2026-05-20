@@ -1,0 +1,55 @@
+services:
+  # Dedicated Background Worker for clearing the backfill backlog (protractor + tekmetric).
+  #
+  # Why a separate service:
+  #   - The web service (mos-tools) restarts often from deploys + OOMs, which kills
+  #     long-running drain scripts mid-chunk and leaves shops stuck.
+  #   - This worker has no HTTP traffic, no deploy piggybacking, and a larger memory
+  #     budget, so the drain loop can run uninterrupted.
+  #
+  # The worker runs scripts/backfill-drain-worker.ts in a loop:
+  #   protractor drain -> sleep 60s -> tekmetric drain -> sleep 5m -> repeat
+  #
+  # Drain scripts use Mongo-backed leases so this is safe to run alongside the
+  # existing web cron — only one drain process per provider can hold the lease.
+  #
+  # IMPORTANT — Blueprint scope:
+  # This file intentionally declares ONLY the worker. The existing web service
+  # (mos-tools) is managed in the Render dashboard, NOT here. If you attach
+  # this file to a Blueprint environment that already manages mos-tools via
+  # Blueprint, Render's reconciliation will treat the web service as removed
+  # and may suspend/replace it. Do not do that.
+  #
+  # Safe setup (manual, leaves mos-tools alone):
+  #   1. In Render dashboard: New + -> Blueprint -> connect this repo on main.
+  #      Render will offer to create only `backfill-drain-worker`. The
+  #      dashboard-managed web service is unaffected because it isn't in
+  #      this Blueprint's scope.
+  #   2. Attach every env var the web service uses (Mongo, Tekmetric/Protractor
+  #      creds, BetterStack token, etc) — easiest via Render's "Copy from another
+  #      service" picker.
+  #   3. Deploy. Watch the worker's logs in Render or BetterStack for
+  #      `[backfill-drain-worker ...] starting`.
+  - type: worker
+    name: backfill-drain-worker
+    env: node
+    region: oregon
+    plan: standard
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm run worker:backfill-drain
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # All other env vars (MONGODB_*, TEKMETRIC_*, PROTRACTOR_*, BETTERSTACK_*,
+      # CRON_SECRET, DATABASE_URL, OPENAI_API_KEY, etc.) must be added in the
+      # Render dashboard. Easiest path: "Copy from another service" -> mos-tools.
+      #
+      # Optional tuning (defaults in scripts/backfill-drain-worker.ts):
+      # - key: BACKFILL_WORKER_IDLE_BETWEEN_PROVIDERS_MS
+      #   value: "60000"
+      # - key: BACKFILL_WORKER_IDLE_BETWEEN_LOOPS_MS
+      #   value: "300000"
+      # - key: BACKFILL_WORKER_BACKOFF_ON_FAILURE_MS
+      #   value: "120000"

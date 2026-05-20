@@ -92,7 +92,8 @@
     "db:migrate:normalized": "tsx scripts/apply-normalized-migration.ts",
     "db:studio": "npx drizzle-kit studio",
     "drain:tekmetric-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts",
-    "drain:protractor-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts"
+    "drain:protractor-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts",
+    "worker:backfill-drain": "tsx scripts/backfill-drain-worker.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
