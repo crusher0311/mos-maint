@@ -1,0 +1,50 @@
+2026-05-20T00:11:03.520514971Z     at Hook.CALL_ASYNC_DELEGATE [as _callAsync] (/opt/render/project/src/node_modules/next/dist/compiled/webpack/bundle5.js:13:26012)
+2026-05-20T00:11:03.520517461Z     at Object.processResource (/opt/render/project/src/node_modules/next/dist/compiled/webpack/bundle5.js:28:401682)
+2026-05-20T00:11:03.520519961Z     at processResource (/opt/render/project/src/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:5308)
+2026-05-20T00:11:03.520522401Z     at iteratePitchingLoaders (/opt/render/project/src/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:4667)
+2026-05-20T00:11:03.520524831Z     at runLoaders (/opt/render/project/src/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:8590)
+2026-05-20T00:11:03.520527241Z     at NormalModule._doBuild (/opt/render/project/src/node_modules/next/dist/compiled/webpack/bundle5.js:28:401544)
+2026-05-20T00:11:03.520529612Z     at NormalModule.build (/opt/render/project/src/node_modules/next/dist/compiled/webpack/bundle5.js:28:403572)
+2026-05-20T00:11:03.520532112Z     at /opt/render/project/src/node_modules/next/dist/compiled/webpack/bundle5.js:28:82055
+2026-05-20T00:11:03.520534372Z 
+2026-05-20T00:11:03.520536832Z Import trace for requested module:
+2026-05-20T00:11:03.520539332Z node:perf_hooks
+2026-05-20T00:11:03.520541872Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:11:03.520544232Z 
+2026-05-20T00:11:03.520546662Z ./node_modules/postgres/src/connection.js:1:1
+2026-05-20T00:11:03.520549092Z Module not found: Can't resolve 'net'
+2026-05-20T00:11:03.520551372Z 
+2026-05-20T00:11:03.520556122Z https://nextjs.org/docs/messages/module-not-found
+2026-05-20T00:11:03.520558522Z 
+2026-05-20T00:11:03.520560962Z Import trace for requested module:
+2026-05-20T00:11:03.520563352Z ./node_modules/postgres/src/index.js
+2026-05-20T00:11:03.520565882Z ./lib/db/drizzle.ts
+2026-05-20T00:11:03.520568312Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:11:03.520570832Z ./src/instrumentation.ts
+2026-05-20T00:11:03.520577093Z 
+2026-05-20T00:11:03.520579593Z ./node_modules/postgres/src/connection.js:2:1
+2026-05-20T00:11:03.520582013Z Module not found: Can't resolve 'tls'
+2026-05-20T00:11:03.520584333Z 
+2026-05-20T00:11:03.520586753Z https://nextjs.org/docs/messages/module-not-found
+2026-05-20T00:11:03.520589073Z 
+2026-05-20T00:11:03.520591423Z Import trace for requested module:
+2026-05-20T00:11:03.520593883Z ./node_modules/postgres/src/index.js
+2026-05-20T00:11:03.520596393Z ./lib/db/drizzle.ts
+2026-05-20T00:11:03.520598853Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:11:03.520601263Z ./src/instrumentation.ts
+2026-05-20T00:11:03.520603613Z 
+2026-05-20T00:11:03.520605983Z ./node_modules/postgres/src/connection.js:3:1
+2026-05-20T00:11:03.520608433Z Module not found: Can't resolve 'crypto'
+2026-05-20T00:11:03.520610793Z 
+2026-05-20T00:11:03.520613143Z https://nextjs.org/docs/messages/module-not-found
+2026-05-20T00:11:03.520615453Z 
+2026-05-20T00:11:03.520617823Z Import trace for requested module:
+2026-05-20T00:11:03.520620234Z ./node_modules/postgres/src/index.js
+2026-05-20T00:11:03.520622703Z ./lib/db/drizzle.ts
+2026-05-20T00:11:03.520625103Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:11:03.520627584Z ./src/instrumentation.ts
+2026-05-20T00:11:03.520640284Z 
+2026-05-20T00:11:03.521217517Z 
+2026-05-20T00:11:03.521283258Z > Build failed because of webpack errors
+2026-05-20T00:11:03.899410755Z ==> Build failed 😞
+2026-05-20T00:11:03.899430365Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

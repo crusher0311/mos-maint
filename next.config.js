@@ -28,7 +28,7 @@ const nextConfig = {
     // fails the build. Marking these as commonjs externals on the server
     // bundle leaves them to Node's runtime resolver, which is what we want.
     if (isServer) {
-      const serverExternals = [
+      const serverExternals = new Set([
         'mongodb',
         'mongodb-client-encryption',
         'kerberos',
@@ -37,9 +37,21 @@ const nextConfig = {
         '@mongodb-js/zstd',
         'gcp-metadata',
         'socks',
-      ];
+        'postgres',
+        'pg',
+        'pg-native',
+        'pg-cloudflare',
+        'drizzle-orm',
+      ]);
       const externalize = ({ request }, callback) => {
-        if (request && serverExternals.includes(request)) {
+        if (!request) return callback();
+        // `node:`-prefixed builtins must be externalized for the
+        // instrumentation bundle (it doesn't get the same Node target as the
+        // main server bundle, so `node:perf_hooks` etc. fail to resolve).
+        if (request.startsWith('node:')) {
+          return callback(null, 'commonjs ' + request);
+        }
+        if (serverExternals.has(request)) {
           return callback(null, 'commonjs ' + request);
         }
         callback();
