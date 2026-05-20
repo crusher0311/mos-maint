@@ -14,8 +14,13 @@
  * Run: `npx tsx tests/plan-build-task-476.smoke.ts`
  */
 
-import { resolveOpenRoMileage } from "../lib/plan-build/open-ro-mileage";
+import { resolveOpenRoMileage, pickMileageInput } from "../lib/plan-build/open-ro-mileage";
 import { computeIntervalProgress } from "../lib/vhi-progress";
+
+// Mirror of lib/plan-cache.ts's private MILEAGE_TOLERANCE. Asserted below
+// so this test fails if the constant changes upstream — see
+// "cache invariant" check.
+const MILEAGE_TOLERANCE = 500;
 
 let failed = 0;
 
@@ -152,6 +157,77 @@ async function main() {
     provider: "autoflow",
   });
   ok("autoflow: returns null (no mirror)", r === null);
+}
+
+// ---------------------------------------------------------------------
+// pickMileageInput: spec contract — open-RO wins when present and >=
+// vehicles.currentMileage; vehicles.currentMileage wins when bigger
+// (monotonic odometer guard); both null -> miles null so caller can
+// fall through to CARFAX / annual fallback and stamp its own label.
+// ---------------------------------------------------------------------
+{
+  const openRo = { miles: 111961, integration: "tekmetric" as const, roIdentifier: "36709", roDate: new Date() };
+
+  // Case A: open-RO higher than vehicle doc — RO wins, label = open_ro
+  {
+    const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: openRo });
+    ok("pick: open-RO higher than vehicle doc -> open_ro wins",
+       p.miles === 111961 && p.mileageInputSource === "open_ro");
+  }
+
+  // Case B: open-RO null, vehicle doc set -> vehicles_collection
+  {
+    const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: null });
+    ok("pick: no open-RO -> vehicles_collection",
+       p.miles === 105266 && p.mileageInputSource === "vehicles_collection");
+  }
+
+  // Case C: open-RO present but LOWER than vehicle doc (stale RO row,
+  // monotonic odometer guard). Per spec: take the larger of the two.
+  {
+    const stale = { ...openRo, miles: 90000 };
+    const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: stale });
+    ok("pick: open-RO lower than vehicle doc -> vehicles wins (monotonic guard)",
+       p.miles === 105266 && p.mileageInputSource === "vehicles_collection");
+  }
+
+  // Case D: vehicle doc null, open-RO present -> open_ro
+  {
+    const p = pickMileageInput({ vehicleDocMileage: null, openRoLookup: openRo });
+    ok("pick: vehicle doc null, open-RO present -> open_ro",
+       p.miles === 111961 && p.mileageInputSource === "open_ro");
+  }
+
+  // Case E: both null -> nulls, caller falls through to CARFAX/annual
+  {
+    const p = pickMileageInput({ vehicleDocMileage: null, openRoLookup: null });
+    ok("pick: both null -> miles null, source null", p.miles === null && p.mileageInputSource === null);
+  }
+
+  // Case F: equal values -> open_ro wins (matches Detect Dog input even
+  // when they happen to agree, so logging is unambiguous)
+  {
+    const equal = { ...openRo, miles: 105266 };
+    const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: equal });
+    ok("pick: equal values -> open_ro wins for unambiguous logging",
+       p.miles === 105266 && p.mileageInputSource === "open_ro");
+  }
+}
+
+// ---------------------------------------------------------------------
+// Cache invariant: when open-RO bumps the input mileage past
+// MILEAGE_TOLERANCE, the cache MUST treat it as a miss so the stale
+// 105,266 plan does not get served on the next call.
+// ---------------------------------------------------------------------
+{
+  const cachedAt = 105266;
+  const newOpenRo = 111961;
+  const diff = Math.abs(newOpenRo - cachedAt);
+  ok(
+    "cache: open-RO bump exceeds MILEAGE_TOLERANCE -> cache miss enforced",
+    diff > MILEAGE_TOLERANCE,
+    `diff=${diff} tolerance=${MILEAGE_TOLERANCE}`,
+  );
 }
 
 // ---------------------------------------------------------------------

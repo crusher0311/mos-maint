@@ -10,22 +10,19 @@ import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
-import { resolveOpenRoMileage } from "@/lib/plan-build/open-ro-mileage";
+import { resolveOpenRoMileage, pickMileageInput, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
 
 /**
  * Task #476: provenance label for the actual odometer reading the partner
  * endpoint fed into the plan engine. Distinct from `mileageSource`
  * (Task #384), which describes whether the value itself is actual vs
- * estimated. AppFueled uses this to confirm "we're computing against the
- * same number Detect Dog is showing in the overlay".
+ * estimated — this field describes *where the actual reading came from*.
+ * Contract is constrained to four values per the partner schema doc
+ * (`docs/PARTNER_VHI_API.md`); the route-internal recovery paths
+ * (expired cache / analysis cache) collapse to `"vehicles_collection"`
+ * because they are all snapshot-derived from the same upstream.
  */
-type MileageInputSource =
-  | "open_ro"
-  | "vehicles_collection"
-  | "expired_cache"
-  | "analysis_cache_recovered"
-  | "carfax_estimated"
-  | "annual_estimated";
 
 /**
  * Task #391: build the partner-facing `flags` array. Always present on
@@ -185,18 +182,17 @@ export const GET = createExternalEndpoint(
 
     // Task #476: prefer the most-recent RO's odometer over the
     // `vehicles.currentMileage` snapshot so the partner response matches
-    // what the Detect Dog overlay shows. If both are present we take the
-    // larger value (an odometer is monotonic — the smaller of the two is
-    // by definition stale). Setting `mileageInputSource = "open_ro"` lets
-    // AppFueled confirm "yes, we're computing against the same odometer
-    // the advisor is looking at right now" without dumping logs.
-    let mileage: number | null = vehicleDocMileage ?? null;
-    let mileageInputSource: MileageInputSource | null =
-      vehicleDocMileage ? "vehicles_collection" : null;
+    // what the Detect Dog overlay shows. Selection logic lives in the
+    // pure `pickMileageInput` helper so it can be regression-tested
+    // without standing up Mongo + Postgres.
     let openRoLookup: Awaited<ReturnType<typeof resolveOpenRoMileage>> | null = null;
     try {
+      // PG handle is lazy — only initialized for AutoFlow shops since
+      // they're the only path that hits `normalized_work_orders`.
+      const needsPg = (shopRecord?.integrationProvider ?? "").toLowerCase() === "autoflow";
       openRoLookup = await resolveOpenRoMileage({
         db,
+        pg: needsPg ? getPgDb() : undefined,
         shopIdVariants,
         vin,
         provider: shopRecord?.integrationProvider ?? null,
@@ -207,12 +203,12 @@ export const GET = createExternalEndpoint(
         err instanceof Error ? err.message : err,
       );
     }
-    if (openRoLookup && openRoLookup.miles > 0) {
-      if (mileage == null || openRoLookup.miles > mileage) {
-        mileage = openRoLookup.miles;
-        mileageInputSource = "open_ro";
-      }
-    }
+    const picked = pickMileageInput({
+      vehicleDocMileage: vehicleDocMileage ?? null,
+      openRoLookup,
+    });
+    let mileage: number | null = picked.miles;
+    let mileageInputSource: MileageInputSource | null = picked.mileageInputSource;
     if (mileage) {
       console.log(
         `[VHI External] Resolved mileage ${mileage} for ${vin} (shop=${resolvedShopId}) source=${mileageInputSource}` +
@@ -341,7 +337,11 @@ export const GET = createExternalEndpoint(
       );
       if (expiredEntry) {
         mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
-        if (mileage) mileageInputSource = "expired_cache";
+        // Task #476: expired-cache and analysis-cache recoveries are both
+        // snapshot-derived from the same upstream that fills
+        // vehicles.currentMileage, so they collapse to the same partner-
+        // facing label rather than expanding the enum.
+        if (mileage) mileageInputSource = "vehicles_collection";
         console.log(`[VHI External] Recovered mileage ${mileage} from expired cache for ${vin}`);
       }
     }
@@ -353,7 +353,7 @@ export const GET = createExternalEndpoint(
       );
       if (analysisDoc?.mileageAtAnalysis) {
         mileage = analysisDoc.mileageAtAnalysis;
-        mileageInputSource = "analysis_cache_recovered";
+        mileageInputSource = "vehicles_collection";
         console.log(`[VHI External] Recovered mileage ${mileage} from analysis cache for ${vin}`);
       }
     }
