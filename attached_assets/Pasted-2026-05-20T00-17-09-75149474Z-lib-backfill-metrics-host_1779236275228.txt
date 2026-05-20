@@ -1,0 +1,50 @@
+2026-05-20T00:17:09.75149474Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:17:09.75149666Z 
+2026-05-20T00:17:09.7514986Z ./lib/db/schema/index.ts
+2026-05-20T00:17:09.75150069Z The requested module './wave4' contains conflicting star exports for the name 'platformPlans' with the previous requested module './wave2'
+2026-05-20T00:17:09.75150261Z 
+2026-05-20T00:17:09.75150457Z Import trace for requested module:
+2026-05-20T00:17:09.75150659Z ./lib/db/schema/index.ts
+2026-05-20T00:17:09.75150855Z ./lib/db/drizzle.ts
+2026-05-20T00:17:09.7515106Z ./lib/backfill-metrics/host-load-sampler.ts
+2026-05-20T00:17:09.751512511Z 
+2026-05-20T00:17:09.75250021Z    Skipping validation of types
+2026-05-20T00:17:09.75251272Z    Skipping linting
+2026-05-20T00:17:10.072919151Z    Collecting page data ...
+2026-05-20T00:17:28.433195992Z Error: Cannot find module 'gcp-metadata'
+2026-05-20T00:17:28.433228063Z Require stack:
+2026-05-20T00:17:28.433234153Z - /opt/render/project/src/.next/server/app/api/extension/sticker/route.js
+2026-05-20T00:17:28.433239343Z - /opt/render/project/src/node_modules/next/dist/server/require.js
+2026-05-20T00:17:28.433283064Z - /opt/render/project/src/node_modules/next/dist/server/load-components.js
+2026-05-20T00:17:28.433291844Z - /opt/render/project/src/node_modules/next/dist/build/utils.js
+2026-05-20T00:17:28.433295064Z - /opt/render/project/src/node_modules/next/dist/build/worker.js
+2026-05-20T00:17:28.433298744Z - /opt/render/project/src/node_modules/next/dist/compiled/jest-worker/processChild.js
+2026-05-20T00:17:28.433301654Z     at Function.<anonymous> (node:internal/modules/cjs/loader:1401:15)
+2026-05-20T00:17:28.433305284Z     at /opt/render/project/src/node_modules/next/dist/server/require-hook.js:55:36
+2026-05-20T00:17:28.433308164Z     at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+2026-05-20T00:17:28.433311324Z     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+2026-05-20T00:17:28.433314604Z     at Function._load (node:internal/modules/cjs/loader:1211:37)
+2026-05-20T00:17:28.433317715Z     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-05-20T00:17:28.433320555Z     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+2026-05-20T00:17:28.433323355Z     at Module.<anonymous> (node:internal/modules/cjs/loader:1487:12)
+2026-05-20T00:17:28.433326595Z     at mod.require (/opt/render/project/src/node_modules/next/dist/server/require-hook.js:65:28)
+2026-05-20T00:17:28.433329565Z     at require (node:internal/modules/helpers:135:16) {
+2026-05-20T00:17:28.433333355Z   code: 'MODULE_NOT_FOUND',
+2026-05-20T00:17:28.433337285Z   requireStack: [
+2026-05-20T00:17:28.433340735Z     '/opt/render/project/src/.next/server/app/api/extension/sticker/route.js',
+2026-05-20T00:17:28.433343675Z     '/opt/render/project/src/node_modules/next/dist/server/require.js',
+2026-05-20T00:17:28.433346655Z     '/opt/render/project/src/node_modules/next/dist/server/load-components.js',
+2026-05-20T00:17:28.433349775Z     '/opt/render/project/src/node_modules/next/dist/build/utils.js',
+2026-05-20T00:17:28.433353735Z     '/opt/render/project/src/node_modules/next/dist/build/worker.js',
+2026-05-20T00:17:28.433356615Z     '/opt/render/project/src/node_modules/next/dist/compiled/jest-worker/processChild.js'
+2026-05-20T00:17:28.433359615Z   ]
+2026-05-20T00:17:28.433362525Z }
+2026-05-20T00:17:28.532011739Z 
+2026-05-20T00:17:28.53205952Z > Build error occurred
+2026-05-20T00:17:28.533913276Z Error: Failed to collect page data for /api/extension/sticker
+2026-05-20T00:17:28.533930097Z     at /opt/render/project/src/node_modules/next/dist/build/utils.js:1268:15
+2026-05-20T00:17:28.533934377Z     at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+2026-05-20T00:17:28.533937827Z   type: 'Error'
+2026-05-20T00:17:28.533941397Z }
+2026-05-20T00:17:29.957777561Z ==> Build failed 😞
+2026-05-20T00:17:29.957823482Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

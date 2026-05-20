@@ -28,14 +28,14 @@ const nextConfig = {
     // fails the build. Marking these as commonjs externals on the server
     // bundle leaves them to Node's runtime resolver, which is what we want.
     if (isServer) {
+      // Only externalize packages that are ACTUALLY installed — externalizing
+      // mongodb's optional peer deps (kerberos, gcp-metadata, snappy,
+      // @mongodb-js/zstd, mongodb-client-encryption, aws4) converts webpack's
+      // harmless "can't resolve" warnings into hard runtime require failures
+      // because mongodb's try/catch around them only protects the initial
+      // load, not the externalized commonjs runtime require.
       const serverExternals = new Set([
         'mongodb',
-        'mongodb-client-encryption',
-        'kerberos',
-        'aws4',
-        'snappy',
-        '@mongodb-js/zstd',
-        'gcp-metadata',
         'socks',
         'postgres',
         'pg',
