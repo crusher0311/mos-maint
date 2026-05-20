@@ -1,0 +1,50 @@
+2026-05-20T16:33:23.369806966Z [2026-05-20T16:33:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=61.5min
+2026-05-20T16:33:53.369702375Z [2026-05-20T16:33:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=62.0min
+2026-05-20T16:34:23.370413812Z [2026-05-20T16:34:23.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=62.5min
+2026-05-20T16:34:53.369871341Z [2026-05-20T16:34:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=63.0min
+2026-05-20T16:35:23.369532622Z [2026-05-20T16:35:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=63.5min
+2026-05-20T16:35:53.370398862Z [2026-05-20T16:35:53.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=64.0min
+2026-05-20T16:36:23.372385188Z [2026-05-20T16:36:23.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=64.5min
+2026-05-20T16:36:53.370452053Z [2026-05-20T16:36:53.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=65.0min
+2026-05-20T16:37:23.369948712Z [2026-05-20T16:37:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=65.5min
+2026-05-20T16:37:53.369809637Z [2026-05-20T16:37:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=66.0min
+2026-05-20T16:38:23.369945605Z [2026-05-20T16:38:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=66.5min
+2026-05-20T16:38:53.369700988Z [2026-05-20T16:38:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=67.0min
+2026-05-20T16:39:23.370209476Z [2026-05-20T16:39:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=67.5min
+2026-05-20T16:39:53.370449801Z [2026-05-20T16:39:53.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=68.0min
+2026-05-20T16:40:23.369919241Z [2026-05-20T16:40:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=68.5min
+2026-05-20T16:40:53.369631573Z [2026-05-20T16:40:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=69.0min
+2026-05-20T16:41:23.369549394Z [2026-05-20T16:41:23.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=69.5min
+2026-05-20T16:41:53.370001825Z [2026-05-20T16:41:53.369Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=70.0min
+2026-05-20T16:42:23.370525132Z [2026-05-20T16:42:23.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=70.5min
+2026-05-20T16:42:53.370950691Z [2026-05-20T16:42:53.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=71.0min
+2026-05-20T16:43:23.371245511Z [2026-05-20T16:43:23.371Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=71.5min
+2026-05-20T16:43:53.370881947Z [2026-05-20T16:43:53.370Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=72.0min
+2026-05-20T16:44:23.371551425Z [2026-05-20T16:44:23.371Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=72.5min
+2026-05-20T16:44:53.372530536Z [2026-05-20T16:44:53.372Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=73.0min
+2026-05-20T16:45:23.372813971Z [2026-05-20T16:45:23.372Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=73.5min
+2026-05-20T16:45:45.568183176Z [Backfill] Shop 72: Normalized 1 WOs
+2026-05-20T16:45:45.568237198Z [Backfill] Shop 72: FULL — currentChunkEnd 2021-12-01 -> 2021-11-01
+2026-05-20T16:45:45.568743691Z [Backfill] Shop 72: chunk metrics duration=3259252ms ros=485 invoiceCache=485/485 vehiclesCache=0/0 backoff=0ms
+2026-05-20T16:45:45.633231426Z [BackfillChunkMetric] {"provider":"protractor","shopId":72,"durationMs":3259317,"rosProcessed":485,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":1463,"pgWrites":2121,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T16:45:45.884112651Z [Backfill] Shop 72 chunk 1: 2021-11-01 to 2021-12-01: 0 jobs, 0 vehicles fetched, 1 normalized, 30d chunk
+2026-05-20T16:45:46.046671663Z [Backfill] Shop 72: Wall clock limit reached after 1 chunks
+2026-05-20T16:45:46.046700544Z [Backfill] Shop 72: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-05-20T16:45:46.11015431Z [Backfill] Shop 72: Not complete, starting next run immediately
+2026-05-20T16:45:46.175638722Z [Backfill] Starting inline backfill for shop 72
+2026-05-20T16:45:46.493586712Z [Backfill] Shop 72: Resuming from 2021-11-01 (logicVersion=4)
+2026-05-20T16:45:46.493645013Z [Backfill] Shop 72: 2021-09-17 to 2021-11-01 (45 days)
+2026-05-20T16:45:48.860426892Z [Backfill] Shop 72: 856 invoices pace=DAYTIME tz=America/Chicago hour=11 conc=3 chunkDays=60 maxPages=50 
+2026-05-20T16:45:53.373286786Z [2026-05-20T16:45:53.372Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=74.0min
+2026-05-20T16:46:23.373227629Z [2026-05-20T16:46:23.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=74.5min
+2026-05-20T16:46:53.373547776Z [2026-05-20T16:46:53.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=75.0min
+2026-05-20T16:47:01.43766302Z [Backfill] Shop 72: 856 jobs, 0 unique vehicles to fetch (invoice cache: 856/856 hit)
+2026-05-20T16:47:23.372593663Z [2026-05-20T16:47:23.372Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=75.5min
+2026-05-20T16:47:53.373450312Z [2026-05-20T16:47:53.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=76.0min
+2026-05-20T16:48:23.373526947Z [2026-05-20T16:48:23.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=76.5min
+2026-05-20T16:48:53.373816733Z [2026-05-20T16:48:53.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=77.0min
+2026-05-20T16:49:23.373888389Z [2026-05-20T16:49:23.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=77.5min
+2026-05-20T16:49:53.374159446Z [2026-05-20T16:49:53.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=78.0min
+2026-05-20T16:50:23.373654238Z [2026-05-20T16:50:23.373Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=78.5min
+2026-05-20T16:50:53.374530091Z [2026-05-20T16:50:53.374Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=79.0min
+2026-05-20T16:51:23.374651878Z [2026-05-20T16:51:23.374Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=79.5min
