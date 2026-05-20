@@ -1,0 +1,350 @@
+2026-05-20T15:24:54.171882078Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.224211588Z [2026-05-20T15:24:54.224Z] CHUNK shop=57 #138 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.234107976Z [2026-05-20T15:24:54.233Z] CHUNK shop=90 #114 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.236938957Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.236949967Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":65,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.242355222Z [2026-05-20T15:24:54.242Z] CHUNK shop=94 #112 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.291310968Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.291332069Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.303568145Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.303589425Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.304046027Z [2026-05-20T15:24:54.303Z] CHUNK shop=92 #139 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.312262412Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.312274763Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.358715215Z [2026-05-20T15:24:54.358Z] CHUNK shop=57 #139 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.370717306Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.370752846Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.374651564Z [2026-05-20T15:24:54.374Z] CHUNK shop=90 #115 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.382989673Z [2026-05-20T15:24:54.382Z] CHUNK shop=94 #113 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.425752253Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.425784134Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.438449751Z [2026-05-20T15:24:54.438Z] CHUNK shop=92 #140 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.444278687Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.444298498Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.453315593Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.453329313Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.493348165Z [2026-05-20T15:24:54.493Z] CHUNK shop=57 #140 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.505250673Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.505274734Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.514510955Z [2026-05-20T15:24:54.514Z] CHUNK shop=90 #116 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.524233108Z [2026-05-20T15:24:54.524Z] CHUNK shop=94 #114 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.560453025Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.560474156Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.573736078Z [2026-05-20T15:24:54.573Z] CHUNK shop=92 #141 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.584514477Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.584543848Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.595035851Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.595058651Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.628084688Z [2026-05-20T15:24:54.627Z] CHUNK shop=57 #141 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.641226447Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.641253218Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.654871979Z [2026-05-20T15:24:54.654Z] CHUNK shop=90 #117 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.66568738Z [2026-05-20T15:24:54.665Z] CHUNK shop=94 #115 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.695053084Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.695070045Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.708376598Z [2026-05-20T15:24:54.708Z] CHUNK shop=92 #142 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.724726097Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.724746248Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.735667061Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.735707732Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.762461002Z [2026-05-20T15:24:54.762Z] CHUNK shop=57 #142 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.775372855Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.775395746Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.796024602Z [2026-05-20T15:24:54.795Z] CHUNK shop=90 #118 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.806423922Z [2026-05-20T15:24:54.806Z] CHUNK shop=94 #116 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.829475689Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.82949294Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.842857764Z [2026-05-20T15:24:54.842Z] CHUNK shop=92 #143 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.865920472Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.865948133Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.876726552Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.876743213Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.896948329Z [2026-05-20T15:24:54.896Z] CHUNK shop=57 #143 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.910757274Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.910774575Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.936357975Z [2026-05-20T15:24:54.936Z] CHUNK shop=90 #119 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.947931955Z [2026-05-20T15:24:54.947Z] CHUNK shop=94 #117 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.963917995Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.963933855Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.978242073Z [2026-05-20T15:24:54.978Z] CHUNK shop=92 #144 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.006326136Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.006351837Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.018724897Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.018742927Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.031381434Z [2026-05-20T15:24:55.031Z] CHUNK shop=57 #144 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.045072296Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.045093487Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":65,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.077431426Z [2026-05-20T15:24:55.077Z] CHUNK shop=90 #120 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.08957524Z [2026-05-20T15:24:55.089Z] CHUNK shop=94 #118 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.098196116Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.098219447Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.112155286Z [2026-05-20T15:24:55.112Z] CHUNK shop=92 #145 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.147522141Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.147554292Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.160062395Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.160079586Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.166515266Z [2026-05-20T15:24:55.166Z] CHUNK shop=57 #145 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.17903808Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.179062911Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.217986646Z [2026-05-20T15:24:55.217Z] CHUNK shop=90 #121 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.231989446Z [2026-05-20T15:24:55.231Z] CHUNK shop=94 #119 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.233515255Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.233530915Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.246647193Z [2026-05-20T15:24:55.246Z] CHUNK shop=92 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.287996608Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.288017639Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.300752247Z [2026-05-20T15:24:55.300Z] CHUNK shop=57 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.302565443Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.302581503Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.315785904Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.315806255Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:27:38.597859524Z [2026-05-20T15:27:38.597Z] WAITING shop=72 cron-holds-lock waited=4.0min lockAge=6.6min
+2026-05-20T15:27:38.666849549Z [Tekmetric SharedLimiter] Waited 5133ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:27:38.667085045Z [Tekmetric] Shared rate limiter saturated for inspection fetch RO 101054465; skipping to avoid cap breach
+2026-05-20T15:27:41.132568789Z [2026-05-20T15:27:41.132Z] HEARTBEAT done=16/61 complete=1 error=0 elapsed=4.1min
+2026-05-20T15:27:41.291653614Z [Tekmetric] 429 on /vehicles/47568089 (attempt 1/5), backing off 2679ms
+2026-05-20T15:27:41.327580457Z [Tekmetric] 429 on /vehicles/3213978 (attempt 1/5), backing off 2542ms
+2026-05-20T15:27:43.686233254Z [Tekmetric SharedLimiter] Waited 5142ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:27:43.686261495Z [Tekmetric] shared rate limiter saturated on /customers/2105542 (attempt 1/5), backing off 2174ms before retry
+2026-05-20T15:27:44.123561297Z [Tekmetric SharedLimiter] Waited 5133ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:27:44.123588997Z [Tekmetric] Shared rate limiter saturated for inspection fetch RO 100857969; skipping to avoid cap breach
+2026-05-20T15:27:45.943913861Z [Tekmetric SharedLimiter] Waited 5143ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:27:45.943952362Z [Tekmetric] shared rate limiter saturated on /vehicles/47496738 (attempt 1/5), backing off 2247ms before retry
+2026-05-20T15:27:49.004620032Z [Tekmetric Backfill] Shop 36 page 9/16: 100 ROs
+2026-05-20T15:27:53.363543109Z [Tekmetric Backfill] Shop 37 page 10/20: 100 ROs
+2026-05-20T15:27:59.587186494Z [RateLimit] tekmetric at 601/600, waiting 1500ms (attempt 1/8, exponential backoff)
+2026-05-20T15:28:00.661913513Z [Tekmetric SharedLimiter] Waited 5130ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:00.661941653Z [Tekmetric] shared rate limiter saturated on /customers/34125378 (attempt 1/5), backing off 2317ms before retry
+2026-05-20T15:28:02.807377001Z [Tekmetric SharedLimiter] Waited 5135ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:02.807405092Z [Tekmetric] shared rate limiter saturated on /customers/34203804 (attempt 1/5), backing off 2372ms before retry
+2026-05-20T15:28:05.106051259Z [Tekmetric Backfill] Shop 36 page 10/16: 100 ROs
+2026-05-20T15:28:07.984293075Z [2026-05-20T15:28:07.984Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=4.5min
+2026-05-20T15:28:08.496886899Z [Tekmetric Backfill] Shop 37 page 11/20: 100 ROs
+2026-05-20T15:28:09.680586207Z [Tekmetric SharedLimiter] Waited 5137ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:09.680619038Z [Tekmetric] Shared rate limiter saturated for inspection fetch RO 100502756; skipping to avoid cap breach
+2026-05-20T15:28:10.682960897Z [Tekmetric SharedLimiter] Waited 5133ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:10.682984988Z [Tekmetric] shared rate limiter saturated on /vehicles/47288300 (attempt 1/5), backing off 2586ms before retry
+2026-05-20T15:28:11.132993776Z [2026-05-20T15:28:11.132Z] HEARTBEAT done=16/61 complete=1 error=0 elapsed=4.6min
+2026-05-20T15:28:11.300615543Z [Tekmetric SharedLimiter] Waited 5137ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:11.300643674Z [Tekmetric] shared rate limiter saturated on /vehicles/43370673 (attempt 1/5), backing off 2233ms before retry
+2026-05-20T15:28:13.738606155Z [Tekmetric SharedLimiter] Waited 5136ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:13.738635105Z [Tekmetric] shared rate limiter saturated on /vehicles/47289266 (attempt 1/5), backing off 2941ms before retry
+2026-05-20T15:28:16.648476738Z [Tekmetric SharedLimiter] Waited 5136ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:16.648512709Z [Tekmetric] shared rate limiter saturated on /customers/2245269 (attempt 1/5), backing off 2658ms before retry
+2026-05-20T15:28:17.647876595Z [Tekmetric SharedLimiter] Waited 5132ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:17.647897885Z [Tekmetric] shared rate limiter saturated on /vehicles/47192664 (attempt 1/5), backing off 2515ms before retry
+2026-05-20T15:28:18.696558086Z [Tekmetric SharedLimiter] Waited 5143ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:18.696586317Z [Tekmetric] Shared rate limiter saturated for inspection fetch RO 100496566; skipping to avoid cap breach
+2026-05-20T15:28:21.882134325Z [Tekmetric SharedLimiter] Waited 5133ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:21.882162936Z [Tekmetric] shared rate limiter saturated on /vehicles/47289266 (attempt 2/5), backing off 4611ms before retry
+2026-05-20T15:28:24.148356646Z [Tekmetric Backfill] Shop 37 page 12/20: 100 ROs
+2026-05-20T15:28:25.304440559Z [Tekmetric SharedLimiter] Waited 5072ms without slot (cap=8); failing closed so caller can backoff/retry instead of breaching the cap
+2026-05-20T15:28:25.30446641Z [Tekmetric] shared rate limiter saturated on /vehicles/47192664 (attempt 2/5), backing off 4255ms before retry
+2026-05-20T15:28:29.29613482Z [Tekmetric Backfill] Shop 36 page 11/16: 100 ROs
+2026-05-20T15:28:37.984735875Z [2026-05-20T15:28:37.984Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=5.0min
+2026-05-20T15:28:38.528858743Z [Tekmetric Backfill] Shop 37 page 13/20: 100 ROs
+2026-05-20T15:28:41.13353085Z [2026-05-20T15:28:41.133Z] HEARTBEAT done=16/61 complete=1 error=0 elapsed=5.1min
+2026-05-20T15:28:44.320974737Z [Tekmetric Backfill] Shop 36 page 12/16: 100 ROs
+2026-05-20T15:28:50.320988932Z [Tekmetric Backfill] Shop 37 page 14/20: 100 ROs
+2026-05-20T15:28:54.932035933Z [Tekmetric Backfill] Shop 36 page 13/16: 100 ROs
+2026-05-20T15:29:00.251001547Z [Tekmetric Backfill] Shop 37 page 15/20: 100 ROs
+2026-05-20T15:29:05.448067861Z [Tekmetric Backfill] Shop 36 page 14/16: 100 ROs
+2026-05-20T15:29:07.984571126Z [2026-05-20T15:29:07.984Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=5.5min
+2026-05-20T15:29:08.310781726Z [Tekmetric Backfill] Shop 37 page 16/20: 100 ROs
+2026-05-20T15:29:11.13320233Z [2026-05-20T15:29:11.133Z] HEARTBEAT done=16/61 complete=1 error=0 elapsed=5.6min
+2026-05-20T15:29:15.353606812Z [Tekmetric Backfill] Shop 36 page 15/16: 100 ROs
+2026-05-20T15:29:17.107965301Z [Tekmetric Backfill] Shop 37 page 17/20: 100 ROs
+2026-05-20T15:29:25.17727868Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:25.177306991Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:25.177312691Z [Tekmetric Backfill] Shop 108: chunk metrics duration=172445ms ros=59 jobsCache=47/47 vehiclesCache=0/47 vehiclesPrePass=off customersCache=6/47 customersPrePass=off 429backoff=46503ms
+2026-05-20T15:29:25.311359284Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":172579,"rosProcessed":59,"pagesProcessed":null,"outcome":"ok","backoffMs":46503,"mongoWrites":0,"pgWrites":123,"rateLimiterWaitsMs":338966,"rateLimiterTimeouts":18,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:25.381157499Z [2026-05-20T15:29:25.378Z] CHUNK shop=108 #1 jobs=0 skipped=76 complete=false elapsed=172.6s msg="2023-03-14 to 2023-06-12: 0 jobs indexed, 76 unchanged, 0 normalized"
+2026-05-20T15:29:25.416253812Z [Tekmetric Backfill] Shop 36 page 16/16: 92 ROs
+2026-05-20T15:29:25.839770852Z [Tekmetric Backfill] Shop 108: 2022-12-14 to 2023-03-14 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:26.237270175Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:26.437158995Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:26.437187706Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:26.437192366Z [Tekmetric Backfill] Shop 108: chunk metrics duration=1058ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:26.570848639Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":1191,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":68,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:26.638250285Z [2026-05-20T15:29:26.638Z] CHUNK shop=108 #2 jobs=0 skipped=0 complete=false elapsed=1.3s msg="2022-12-14 to 2023-03-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:26.839067278Z [Tekmetric Backfill] Shop 108: 2022-09-15 to 2022-12-14 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:27.274204337Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:27.475484041Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:27.475500442Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:27.475503942Z [Tekmetric Backfill] Shop 108: chunk metrics duration=836ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:27.538008976Z [Tekmetric Backfill] Shop 37 page 18/20: 100 ROs
+2026-05-20T15:29:27.610794365Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":970,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":68,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:27.676382686Z [2026-05-20T15:29:27.676Z] CHUNK shop=108 #3 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2022-09-15 to 2022-12-14: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:28.087893868Z [Tekmetric Backfill] Shop 108: 2022-06-17 to 2022-09-15 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:28.55374461Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:28.753542078Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:28.753577849Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:28.753585839Z [Tekmetric Backfill] Shop 108: chunk metrics duration=1076ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:28.886772031Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":1209,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":69,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:28.953799367Z [2026-05-20T15:29:28.953Z] CHUNK shop=108 #4 jobs=0 skipped=0 complete=false elapsed=1.3s msg="2022-06-17 to 2022-09-15: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:29.286309245Z [Tekmetric Backfill] Shop 108: 2022-03-19 to 2022-06-17 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:29.713853625Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:29.914317089Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:29.91433657Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:29.91434059Z [Tekmetric Backfill] Shop 108: chunk metrics duration=960ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:30.047843729Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":1093,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":68,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:30.115601784Z [2026-05-20T15:29:30.115Z] CHUNK shop=108 #5 jobs=0 skipped=0 complete=false elapsed=1.2s msg="2022-03-19 to 2022-06-17: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:30.315832342Z [Tekmetric Backfill] Shop 108: 2021-12-19 to 2022-03-19 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:30.743750802Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:30.943085308Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:30.943109989Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:30.943122489Z [Tekmetric Backfill] Shop 108: chunk metrics duration=827ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:31.077321446Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":960,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":67,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:31.145109641Z [2026-05-20T15:29:31.144Z] CHUNK shop=108 #6 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-12-19 to 2022-03-19: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:31.345110204Z [Tekmetric Backfill] Shop 108: 2021-09-20 to 2021-12-19 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:31.767064435Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:31.967916099Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:31.967936699Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:31.96794776Z [Tekmetric Backfill] Shop 108: chunk metrics duration=822ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:32.10150706Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":956,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":67,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:32.169262265Z [2026-05-20T15:29:32.169Z] CHUNK shop=108 #7 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-09-20 to 2021-12-19: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:32.368886468Z [Tekmetric Backfill] Shop 108: 2021-06-22 to 2021-09-20 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:32.81416473Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:33.015798463Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:33.015827324Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:33.015833994Z [Tekmetric Backfill] Shop 108: chunk metrics duration=846ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:33.149343853Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":980,"rosProcessed":0,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":68,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:33.216596725Z [2026-05-20T15:29:33.216Z] CHUNK shop=108 #8 jobs=0 skipped=0 complete=false elapsed=1.0s msg="2021-06-22 to 2021-09-20: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:33.418142787Z [Tekmetric Backfill] Shop 108: 2021-05-20 to 2021-06-22 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:33.837153685Z [Tekmetric Backfill] Shop 108 page 1/0: 0 ROs
+2026-05-20T15:29:34.037163318Z [Tekmetric Backfill] Shop 108: Normalized 0 WOs (0 new), payments: 0, inspections: 0, recs: 0
+2026-05-20T15:29:34.480091811Z [Tekmetric Backfill] Shop 108: cursor advance FULL
+2026-05-20T15:29:34.480178583Z [Tekmetric Backfill] Shop 108: chunk metrics duration=1263ms ros=0 jobsCache=0/0 vehiclesCache=0/0 vehiclesPrePass=off customersCache=0/0 customersPrePass=off 429backoff=0ms
+2026-05-20T15:29:34.681764785Z [Tekmetric Backfill] Shop 108: Marked tekmetricBackfillComplete=true
+2026-05-20T15:29:34.681797396Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":108,"durationMs":1464,"rosProcessed":0,"pagesProcessed":null,"outcome":"complete","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":136,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:29:34.749466418Z [2026-05-20T15:29:34.749Z] CHUNK shop=108 #9 jobs=0 skipped=0 complete=true elapsed=1.5s msg="2021-05-20 to 2021-06-22: 0 jobs indexed, 0 unchanged, 0 normalized"
+2026-05-20T15:29:34.74953539Z [2026-05-20T15:29:34.749Z] DONE shop=108 (Auto Dynamic Services) chunks=9 jobs=0 skipped=76
+2026-05-20T15:29:34.749634332Z [2026-05-20T15:29:34.749Z] START shop=73 (Oneway Automotive) tek=524
+2026-05-20T15:29:34.88345419Z [Tekmetric Backfill] Shop 73: 2023-08-22 to 2023-11-20 (reverse) pace=DAYTIME tz=America/Chicago hour=10 conc=4 chunkDays=90 maxPages=50
+2026-05-20T15:29:37.984146024Z [2026-05-20T15:29:37.983Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=6.0min
+2026-05-20T15:29:38.244910528Z [Tekmetric Backfill] Shop 37 page 19/20: 100 ROs
+2026-05-20T15:29:38.385526754Z [Tekmetric Backfill] Shop 73 page 1/8: 100 ROs
+2026-05-20T15:29:38.867405895Z [2026-05-20T15:29:38.867Z] WAITING shop=35 cron-holds-lock waited=6.0min lockAge=8.9min
+2026-05-20T15:29:38.868057912Z [2026-05-20T15:29:38.867Z] WAITING shop=72 cron-holds-lock waited=6.0min lockAge=8.6min
+2026-05-20T15:29:38.869455406Z [2026-05-20T15:29:38.869Z] WAITING shop=50 cron-holds-lock waited=6.0min lockAge=7.4min
+2026-05-20T15:29:41.134017712Z [2026-05-20T15:29:41.133Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=6.1min
+2026-05-20T15:29:48.032964597Z [Tekmetric Backfill] Shop 37 page 20/20: 54 ROs
+2026-05-20T15:30:02.348957893Z [Tekmetric Backfill] Shop 73 page 2/8: 100 ROs
+2026-05-20T15:30:07.794332639Z [Tekmetric] 429 on /vehicles/22483559 (attempt 1/5), backing off 2749ms
+2026-05-20T15:30:07.985595035Z [2026-05-20T15:30:07.983Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=6.5min
+2026-05-20T15:30:11.134779468Z [2026-05-20T15:30:11.134Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=6.6min
+2026-05-20T15:30:31.86046191Z [Tekmetric Backfill] Shop 73 page 3/8: 100 ROs
+2026-05-20T15:30:37.98427568Z [2026-05-20T15:30:37.984Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=7.0min
+2026-05-20T15:30:41.13482902Z [2026-05-20T15:30:41.134Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=7.1min
+2026-05-20T15:31:05.159242017Z ==> Deploying...
+2026-05-20T15:31:07.984606221Z [2026-05-20T15:31:07.984Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=7.5min
+2026-05-20T15:31:09.144980266Z [Tekmetric Backfill] Shop 73 page 4/8: 100 ROs
+2026-05-20T15:31:11.134930848Z [2026-05-20T15:31:11.134Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=7.6min
+2026-05-20T15:31:37.956144301Z [Tekmetric Backfill] Shop 73 page 5/8: 100 ROs
+2026-05-20T15:31:37.985823199Z [2026-05-20T15:31:37.985Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=8.0min
+2026-05-20T15:31:39.131877148Z [2026-05-20T15:31:39.131Z] WAITING shop=50 cron-holds-lock waited=8.0min lockAge=9.4min
+2026-05-20T15:31:39.135728264Z [2026-05-20T15:31:39.135Z] WAITING shop=72 cron-holds-lock waited=8.0min lockAge=10.6min
+2026-05-20T15:31:39.136917713Z [2026-05-20T15:31:39.136Z] WAITING shop=35 cron-holds-lock waited=8.0min lockAge=10.9min
+2026-05-20T15:31:41.135284007Z [2026-05-20T15:31:41.135Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=8.1min
+2026-05-20T15:31:48.333362564Z ==> Your service is live 🎉
+2026-05-20T15:31:48.139807455Z ==> Running 'npm run worker:backfill-drain'
+2026-05-20T15:31:48.404333271Z 
+2026-05-20T15:31:48.404349422Z > mos-maintenance-mvp@1.8.0 worker:backfill-drain
+2026-05-20T15:31:48.404354542Z > tsx scripts/backfill-drain-worker.ts
+2026-05-20T15:31:48.404356962Z 
+2026-05-20T15:31:48.778197344Z [backfill-drain-worker 2026-05-20T15:31:48.777Z] starting
+2026-05-20T15:31:48.778468991Z [backfill-drain-worker 2026-05-20T15:31:48.778Z] config: idleBetweenProviders=60000ms idleBetweenLoops=300000ms backoffOnFailure=120000ms
+2026-05-20T15:31:48.778480952Z [backfill-drain-worker 2026-05-20T15:31:48.778Z] === iteration 1 start ===
+2026-05-20T15:31:48.778534383Z [backfill-drain-worker 2026-05-20T15:31:48.778Z] spawning 2 providers in parallel: protractor, tekmetric
+2026-05-20T15:31:48.778715348Z [backfill-drain-worker 2026-05-20T15:31:48.778Z] spawning: npm run drain:protractor-backfill
+2026-05-20T15:31:48.782652726Z [backfill-drain-worker 2026-05-20T15:31:48.782Z] spawning: npm run drain:tekmetric-backfill
+2026-05-20T15:31:48.912360234Z 
+2026-05-20T15:31:48.912382604Z > mos-maintenance-mvp@1.8.0 drain:tekmetric-backfill
+2026-05-20T15:31:48.912402525Z > NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts
+2026-05-20T15:31:48.912407015Z 
+2026-05-20T15:31:48.912819316Z 
+2026-05-20T15:31:48.912832697Z > mos-maintenance-mvp@1.8.0 drain:protractor-backfill
+2026-05-20T15:31:48.912836437Z > NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts
+2026-05-20T15:31:48.912839247Z 
+2026-05-20T15:31:50.477057119Z [2026-05-20T15:31:50.476Z] ===== Protractor Backfill Drain Worker =====
+2026-05-20T15:31:50.477266915Z [2026-05-20T15:31:50.477Z] parallelism=3 heartbeatMs=30000 shopIdFilter=ALL_INCOMPLETE
+2026-05-20T15:31:50.619435005Z [2026-05-20T15:31:50.618Z] ===== Tekmetric Backfill Drain Worker =====
+2026-05-20T15:31:50.619674921Z [2026-05-20T15:31:50.619Z] parallelism=4 maxChunksPerShop=200 heartbeatMs=30000 owner=drain-150-1779291110618-plvhbz shopIdFilter=ALL_INCOMPLETE
+2026-05-20T15:31:51.348400954Z [2026-05-20T15:31:51.348Z] FATAL: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+2026-05-20T15:31:51.356137507Z MongoServerError: Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }
+2026-05-20T15:31:51.356172788Z     at Connection.sendCommand (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:558:17)
+2026-05-20T15:31:51.356176498Z     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-05-20T15:31:51.356179708Z     at async Connection.command (/opt/render/project/src/node_modules/mongodb/src/cmap/connection.ts:632:22)
+2026-05-20T15:31:51.356182078Z     at async Server.command (/opt/render/project/src/node_modules/mongodb/src/sdam/server.ts:350:21)
+2026-05-20T15:31:51.356185158Z     at async tryOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:289:24)
+2026-05-20T15:31:51.356187528Z     at async executeOperation (/opt/render/project/src/node_modules/mongodb/src/operations/execute_operation.ts:119:12)
+2026-05-20T15:31:51.356189768Z     at async Collection.findOneAndUpdate (/opt/render/project/src/node_modules/mongodb/src/collection.ts:1035:12)
+2026-05-20T15:31:51.356192089Z     at async acquireDrainLock (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:146:18)
+2026-05-20T15:31:51.356194469Z     at async main (/opt/render/project/src/scripts/drain-tekmetric-backfill.ts:474:3) {
+2026-05-20T15:31:51.356216519Z   errorLabelSet: Set(0) {},
+2026-05-20T15:31:51.356219969Z   errorResponse: {
+2026-05-20T15:31:51.356222319Z     ok: 0,
+2026-05-20T15:31:51.356225729Z     errmsg: 'Plan executor error during findAndModify :: caused by :: E11000 duplicate key error collection: mos-maintenance-mvp.tekmetric_drain_lock index: _id_ dup key: { _id: "global" }',
+2026-05-20T15:31:51.356228079Z     code: 11000,
+2026-05-20T15:31:51.35623041Z     codeName: 'DuplicateKey',
+2026-05-20T15:31:51.356232919Z     keyPattern: { _id: 1 },
+2026-05-20T15:31:51.35623526Z     keyValue: { _id: 'global' },
+2026-05-20T15:31:51.35623797Z     '$clusterTime': {
+2026-05-20T15:31:51.35624107Z       clusterTime: new Timestamp({ t: 1779291111, i: 20 }),
+2026-05-20T15:31:51.35624336Z       signature: [Object]
+2026-05-20T15:31:51.35624567Z     },
+2026-05-20T15:31:51.35624802Z     operationTime: new Timestamp({ t: 1779291111, i: 20 })
+2026-05-20T15:31:51.35625051Z   },
+2026-05-20T15:31:51.35625281Z   ok: 0,
+2026-05-20T15:31:51.35625523Z   code: 11000,
+2026-05-20T15:31:51.35625762Z   codeName: 'DuplicateKey',
+2026-05-20T15:31:51.35625997Z   keyPattern: { _id: 1 },
+2026-05-20T15:31:51.35626279Z   keyValue: { _id: 'global' },
+2026-05-20T15:31:51.356265191Z   '$clusterTime': {
+2026-05-20T15:31:51.35626756Z     clusterTime: new Timestamp({ t: 1779291111, i: 20 }),
+2026-05-20T15:31:51.35626994Z     signature: {
+2026-05-20T15:31:51.356273341Z       hash: Binary.createFromBase64('4ub8hqDnpjM/DkgH29BTBiu1eZc=', 0),
+2026-05-20T15:31:51.356276211Z       keyId: new Long('7581182958992621569')
+2026-05-20T15:31:51.356278551Z     }
+2026-05-20T15:31:51.356280881Z   },
+2026-05-20T15:31:51.356283261Z   operationTime: new Timestamp({ t: 1779291111, i: 20 })
+2026-05-20T15:31:51.356285581Z }
+2026-05-20T15:31:51.401129434Z [backfill-drain-worker 2026-05-20T15:31:51.400Z] child exited: script=drain:tekmetric-backfill code=2 signal=none
+2026-05-20T15:31:51.401479924Z [backfill-drain-worker 2026-05-20T15:31:51.401Z] provider=tekmetric drain exited non-zero (2)
+2026-05-20T15:31:53.358152519Z [2026-05-20T15:31:53.357Z] Found 23 incomplete Protractor shops to drain
+2026-05-20T15:31:53.358576601Z [2026-05-20T15:31:53.358Z] START shop=50 (Harrell's Tire and Auto)
+2026-05-20T15:31:53.35888485Z [2026-05-20T15:31:53.358Z] START shop=72 (Harrell's Tire and Auto)
+2026-05-20T15:31:53.35889128Z [2026-05-20T15:31:53.358Z] START shop=35 (Precision Auto Service Ltd.)
+2026-05-20T15:31:53.43017149Z [Backfill] Shop 35: Skipping - another instance already in progress (lock is fresh)
+2026-05-20T15:31:53.430257803Z [2026-05-20T15:31:53.430Z] LOCKED shop=35 (Precision Auto Service Ltd.) cron has lock — polling for release (attempt 1/8)
+2026-05-20T15:31:53.431040234Z [Backfill] Shop 50: Skipping - another instance already in progress (lock is fresh)
+2026-05-20T15:31:53.431142867Z [2026-05-20T15:31:53.431Z] LOCKED shop=50 (Harrell's Tire and Auto) cron has lock — polling for release (attempt 1/8)
+2026-05-20T15:31:53.43162567Z [Backfill] Shop 72: Skipping - another instance already in progress (lock is fresh)
+2026-05-20T15:31:53.431650251Z [2026-05-20T15:31:53.431Z] LOCKED shop=72 (Harrell's Tire and Auto) cron has lock — polling for release (attempt 1/8)
+2026-05-20T15:32:04.848619606Z [Tekmetric Backfill] Shop 73 page 6/8: 100 ROs
+2026-05-20T15:32:07.985948304Z [2026-05-20T15:32:07.985Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=8.5min
+2026-05-20T15:32:11.135742002Z [2026-05-20T15:32:11.135Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=8.6min
+2026-05-20T15:32:23.358386156Z [2026-05-20T15:32:23.358Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=0.5min
+2026-05-20T15:32:28.885142216Z [Tekmetric Backfill] Shop 73 page 7/8: 100 ROs
+2026-05-20T15:32:37.986506434Z [2026-05-20T15:32:37.986Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=9.0min
+2026-05-20T15:32:41.135398713Z [2026-05-20T15:32:41.135Z] HEARTBEAT done=17/61 complete=2 error=0 elapsed=9.1min
+2026-05-20T15:32:53.358579932Z [2026-05-20T15:32:53.358Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=1.0min
+2026-05-20T15:33:23.35886539Z [2026-05-20T15:33:23.358Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=1.5min
+2026-05-20T15:33:53.359601481Z [2026-05-20T15:33:53.359Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=2.0min
+2026-05-20T15:33:53.701566083Z [2026-05-20T15:33:53.701Z] WAITING shop=50 cron-holds-lock waited=2.0min lockAge=11.6min
+2026-05-20T15:33:53.703328382Z [2026-05-20T15:33:53.703Z] WAITING shop=72 cron-holds-lock waited=2.0min lockAge=12.8min
+2026-05-20T15:33:53.707108586Z [2026-05-20T15:33:53.707Z] WAITING shop=35 cron-holds-lock waited=2.0min lockAge=13.2min
+2026-05-20T15:34:23.36054345Z [2026-05-20T15:34:23.360Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=2.5min
+2026-05-20T15:34:53.360615037Z [2026-05-20T15:34:53.360Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=3.0min
+2026-05-20T15:35:23.361003595Z [2026-05-20T15:35:23.360Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=3.5min
+2026-05-20T15:35:53.361284132Z [2026-05-20T15:35:53.361Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=4.0min
+2026-05-20T15:35:53.97502512Z [2026-05-20T15:35:53.974Z] WAITING shop=50 cron-holds-lock waited=4.0min lockAge=13.6min
+2026-05-20T15:35:53.975635817Z [2026-05-20T15:35:53.975Z] WAITING shop=72 cron-holds-lock waited=4.0min lockAge=14.8min
+2026-05-20T15:35:53.978037983Z [2026-05-20T15:35:53.977Z] WAITING shop=35 cron-holds-lock waited=4.0min lockAge=15.2min
+2026-05-20T15:36:23.361458811Z [2026-05-20T15:36:23.361Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=4.5min
+2026-05-20T15:36:53.361364865Z [2026-05-20T15:36:53.361Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=5.0min
+2026-05-20T15:37:23.360914579Z [2026-05-20T15:37:23.360Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=5.5min
+2026-05-20T15:37:53.361172088Z [2026-05-20T15:37:53.361Z] HEARTBEAT done=0/23 complete=0 error=0 lockWait=0 elapsed=6.0min
+2026-05-20T15:37:54.247679903Z [2026-05-20T15:37:54.247Z] WAITING shop=50 cron-holds-lock waited=6.0min lockAge=15.7min
+2026-05-20T15:37:54.24864777Z [2026-05-20T15:37:54.248Z] WAITING shop=35 cron-holds-lock waited=6.0min lockAge=17.2min
+2026-05-20T15:37:54.249258106Z [2026-05-20T15:37:54.249Z] WAITING shop=72 cron-holds-lock waited=6.0min lockAge=16.8min
