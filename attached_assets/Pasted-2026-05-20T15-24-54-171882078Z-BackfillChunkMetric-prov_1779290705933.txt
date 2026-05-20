@@ -1,0 +1,350 @@
+2026-05-20T15:24:54.171882078Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.224211588Z [2026-05-20T15:24:54.224Z] CHUNK shop=57 #138 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.234107976Z [2026-05-20T15:24:54.233Z] CHUNK shop=90 #114 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.236938957Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.236949967Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":65,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.242355222Z [2026-05-20T15:24:54.242Z] CHUNK shop=94 #112 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.291310968Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.291332069Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.303568145Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.303589425Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.304046027Z [2026-05-20T15:24:54.303Z] CHUNK shop=92 #139 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.312262412Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.312274763Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.358715215Z [2026-05-20T15:24:54.358Z] CHUNK shop=57 #139 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.370717306Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.370752846Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.374651564Z [2026-05-20T15:24:54.374Z] CHUNK shop=90 #115 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.382989673Z [2026-05-20T15:24:54.382Z] CHUNK shop=94 #113 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.425752253Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.425784134Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.438449751Z [2026-05-20T15:24:54.438Z] CHUNK shop=92 #140 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.444278687Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.444298498Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.453315593Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.453329313Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.493348165Z [2026-05-20T15:24:54.493Z] CHUNK shop=57 #140 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.505250673Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.505274734Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.514510955Z [2026-05-20T15:24:54.514Z] CHUNK shop=90 #116 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.524233108Z [2026-05-20T15:24:54.524Z] CHUNK shop=94 #114 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.560453025Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.560474156Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.573736078Z [2026-05-20T15:24:54.573Z] CHUNK shop=92 #141 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.584514477Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.584543848Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.595035851Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.595058651Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.628084688Z [2026-05-20T15:24:54.627Z] CHUNK shop=57 #141 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.641226447Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.641253218Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.654871979Z [2026-05-20T15:24:54.654Z] CHUNK shop=90 #117 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.66568738Z [2026-05-20T15:24:54.665Z] CHUNK shop=94 #115 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.695053084Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.695070045Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.708376598Z [2026-05-20T15:24:54.708Z] CHUNK shop=92 #142 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.724726097Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.724746248Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.735667061Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.735707732Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.762461002Z [2026-05-20T15:24:54.762Z] CHUNK shop=57 #142 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.775372855Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.775395746Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.796024602Z [2026-05-20T15:24:54.795Z] CHUNK shop=90 #118 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.806423922Z [2026-05-20T15:24:54.806Z] CHUNK shop=94 #116 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.829475689Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.82949294Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.842857764Z [2026-05-20T15:24:54.842Z] CHUNK shop=92 #143 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.865920472Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.865948133Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.876726552Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.876743213Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.896948329Z [2026-05-20T15:24:54.896Z] CHUNK shop=57 #143 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.910757274Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.910774575Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.936357975Z [2026-05-20T15:24:54.936Z] CHUNK shop=90 #119 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.947931955Z [2026-05-20T15:24:54.947Z] CHUNK shop=94 #117 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:54.963917995Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:54.963933855Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:54.978242073Z [2026-05-20T15:24:54.978Z] CHUNK shop=92 #144 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.006326136Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.006351837Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.018724897Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.018742927Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.031381434Z [2026-05-20T15:24:55.031Z] CHUNK shop=57 #144 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.045072296Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.045093487Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":65,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.077431426Z [2026-05-20T15:24:55.077Z] CHUNK shop=90 #120 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.08957524Z [2026-05-20T15:24:55.089Z] CHUNK shop=94 #118 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.098196116Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.098219447Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.112155286Z [2026-05-20T15:24:55.112Z] CHUNK shop=92 #145 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.147522141Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.147554292Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.160062395Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.160079586Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.166515266Z [2026-05-20T15:24:55.166Z] CHUNK shop=57 #145 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.17903808Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.179062911Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.217986646Z [2026-05-20T15:24:55.217Z] CHUNK shop=90 #121 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.231989446Z [2026-05-20T15:24:55.231Z] CHUNK shop=94 #119 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.233515255Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.233530915Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.246647193Z [2026-05-20T15:24:55.246Z] CHUNK shop=92 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.287996608Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.288017639Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.300752247Z [2026-05-20T15:24:55.300Z] CHUNK shop=57 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:55.302565443Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.302581503Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:55.315785904Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:55.315806255Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:58.975558678Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:58.975586419Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:58.996982584Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:58.997018775Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.016292268Z [2026-05-20T15:24:59.015Z] CHUNK shop=92 #174 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.025643192Z [2026-05-20T15:24:59.025Z] CHUNK shop=90 #148 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.046464223Z [2026-05-20T15:24:59.046Z] CHUNK shop=94 #146 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.063900299Z [2026-05-20T15:24:59.063Z] CHUNK shop=57 #174 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.082326301Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.082349281Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.095527371Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.095545312Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.116947077Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.116967178Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.130480006Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.130501627Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.149194684Z [2026-05-20T15:24:59.149Z] CHUNK shop=92 #175 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.165510513Z [2026-05-20T15:24:59.165Z] CHUNK shop=90 #149 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.187308218Z [2026-05-20T15:24:59.187Z] CHUNK shop=94 #147 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.197246967Z [2026-05-20T15:24:59.197Z] CHUNK shop=57 #175 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.216091839Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.21611645Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.235540996Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.235564926Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.257987968Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.258011879Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.263893886Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.263913176Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.282751758Z [2026-05-20T15:24:59.282Z] CHUNK shop=92 #176 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.305941268Z [2026-05-20T15:24:59.305Z] CHUNK shop=90 #150 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.330604066Z [2026-05-20T15:24:59.329Z] CHUNK shop=94 #148 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.331373895Z [2026-05-20T15:24:59.331Z] CHUNK shop=57 #176 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.349667983Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.349707804Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.376251898Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.376270959Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.398388782Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.398413753Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.400424213Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.400439404Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.418081715Z [2026-05-20T15:24:59.416Z] CHUNK shop=92 #177 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.446538788Z [2026-05-20T15:24:59.446Z] CHUNK shop=90 #151 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.465520563Z [2026-05-20T15:24:59.465Z] CHUNK shop=57 #177 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.47099131Z [2026-05-20T15:24:59.470Z] CHUNK shop=94 #149 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.484208271Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.484229541Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.517232987Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.517255458Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.532385907Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.532404867Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.542769156Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.542792017Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":71,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.551209098Z [2026-05-20T15:24:59.551Z] CHUNK shop=92 #178 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.587006944Z [2026-05-20T15:24:59.586Z] CHUNK shop=90 #152 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.599183069Z [2026-05-20T15:24:59.599Z] CHUNK shop=57 #178 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.613269712Z [2026-05-20T15:24:59.613Z] CHUNK shop=94 #150 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.62161326Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.621630401Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.657092018Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.657114379Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.6663464Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.666365041Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.683390547Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.683408037Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.688836623Z [2026-05-20T15:24:59.688Z] CHUNK shop=92 #179 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.727147862Z [2026-05-20T15:24:59.726Z] CHUNK shop=90 #153 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.732560448Z [2026-05-20T15:24:59.732Z] CHUNK shop=57 #179 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.753940533Z [2026-05-20T15:24:59.753Z] CHUNK shop=94 #151 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.755781649Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.755799309Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.797699008Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.797725229Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.799525354Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.799541394Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.823067863Z [2026-05-20T15:24:59.822Z] CHUNK shop=92 #180 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.825128645Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.825149025Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.866571282Z [2026-05-20T15:24:59.866Z] CHUNK shop=57 #180 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.868411118Z [2026-05-20T15:24:59.868Z] CHUNK shop=90 #154 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.890962893Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.890986883Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.895436295Z [2026-05-20T15:24:59.895Z] CHUNK shop=94 #152 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.934205595Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.934225786Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.938311388Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.938330989Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:24:59.957793886Z [2026-05-20T15:24:59.957Z] CHUNK shop=92 #181 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:24:59.966455522Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:24:59.966473013Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.001392977Z [2026-05-20T15:25:00.001Z] CHUNK shop=57 #181 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.008066344Z [2026-05-20T15:25:00.007Z] CHUNK shop=90 #155 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.026915536Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.026940837Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.039747087Z [2026-05-20T15:25:00.037Z] CHUNK shop=94 #153 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.069083182Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.069117012Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.079236346Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.079272687Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.093057432Z [2026-05-20T15:25:00.092Z] CHUNK shop=92 #182 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.108625332Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.108645142Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.135869533Z [2026-05-20T15:25:00.135Z] CHUNK shop=57 #182 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.149762401Z [2026-05-20T15:25:00.149Z] CHUNK shop=90 #156 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.160247604Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.160273914Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.179631559Z [2026-05-20T15:25:00.179Z] CHUNK shop=94 #154 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.203417454Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.203439835Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.220484132Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.220533983Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.227510867Z [2026-05-20T15:25:00.227Z] CHUNK shop=92 #183 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.250738109Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.250761269Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.270336849Z [2026-05-20T15:25:00.270Z] CHUNK shop=57 #183 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.290605867Z [2026-05-20T15:25:00.290Z] CHUNK shop=90 #157 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.295623522Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.295642693Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.321751836Z [2026-05-20T15:25:00.321Z] CHUNK shop=94 #155 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.337836989Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.33785601Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.361090661Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.361117232Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.361779749Z [2026-05-20T15:25:00.361Z] CHUNK shop=92 #184 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.393370949Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.3933871Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.404758624Z [2026-05-20T15:25:00.404Z] CHUNK shop=57 #184 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.429008491Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.429045132Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.430313994Z [2026-05-20T15:25:00.430Z] CHUNK shop=90 #158 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.464179642Z [2026-05-20T15:25:00.463Z] CHUNK shop=94 #156 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.471858904Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.472005288Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.496147922Z [2026-05-20T15:25:00.495Z] CHUNK shop=92 #185 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.50048111Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.500498031Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.534848131Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.534874222Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.539552239Z [2026-05-20T15:25:00.539Z] CHUNK shop=57 #185 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.563778605Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.563810916Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.571068008Z [2026-05-20T15:25:00.570Z] CHUNK shop=90 #159 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.605632993Z [2026-05-20T15:25:00.605Z] CHUNK shop=94 #157 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.60751301Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.607546641Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.631396838Z [2026-05-20T15:25:00.631Z] CHUNK shop=92 #186 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.643288375Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.643310576Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.675128612Z [2026-05-20T15:25:00.674Z] CHUNK shop=57 #186 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.676990199Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.677004989Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.69860324Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.698624641Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.713195355Z [2026-05-20T15:25:00.713Z] CHUNK shop=90 #160 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.742233382Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.742253203Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.747820562Z [2026-05-20T15:25:00.747Z] CHUNK shop=94 #158 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.765446923Z [2026-05-20T15:25:00.765Z] CHUNK shop=92 #187 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.783393172Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.783415003Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.809711781Z [2026-05-20T15:25:00.809Z] CHUNK shop=57 #187 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.818422649Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.81844473Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.832320487Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.832343058Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.853782365Z [2026-05-20T15:25:00.853Z] CHUNK shop=90 #161 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.87677904Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.876799211Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.888858203Z [2026-05-20T15:25:00.888Z] CHUNK shop=94 #159 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.900514324Z [2026-05-20T15:25:00.899Z] CHUNK shop=92 #188 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.923862129Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.923879609Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.943716776Z [2026-05-20T15:25:00.943Z] CHUNK shop=57 #188 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:00.95944203Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.95946843Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.966852585Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:00.966873405Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:00.99422029Z [2026-05-20T15:25:00.994Z] CHUNK shop=90 #162 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.010810985Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.010834136Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.031245657Z [2026-05-20T15:25:01.030Z] CHUNK shop=94 #160 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.033559225Z [2026-05-20T15:25:01.033Z] CHUNK shop=92 #189 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.06452498Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.064550061Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.078950861Z [2026-05-20T15:25:01.078Z] CHUNK shop=57 #189 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.100313036Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.100343467Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.101381853Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.101395183Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.135561478Z [2026-05-20T15:25:01.135Z] CHUNK shop=90 #163 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.1460328Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.146060411Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.167263102Z [2026-05-20T15:25:01.167Z] CHUNK shop=92 #190 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.17158046Z [2026-05-20T15:25:01.171Z] CHUNK shop=94 #161 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.20554701Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.205576081Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.213285794Z [2026-05-20T15:25:01.213Z] CHUNK shop=57 #190 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.23429388Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.23431564Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.241850479Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.2418795Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.276230289Z [2026-05-20T15:25:01.276Z] CHUNK shop=90 #164 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.280399444Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.280420454Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.301253476Z [2026-05-20T15:25:01.301Z] CHUNK shop=92 #191 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.312767294Z [2026-05-20T15:25:01.312Z] CHUNK shop=94 #162 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.347659977Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.347706639Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.347713299Z [2026-05-20T15:25:01.347Z] CHUNK shop=57 #191 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.368315465Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.368341655Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.383405582Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.383462544Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.414756347Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.414776228Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.416918711Z [2026-05-20T15:25:01.416Z] CHUNK shop=90 #165 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.435064016Z [2026-05-20T15:25:01.434Z] CHUNK shop=92 #192 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.453959329Z [2026-05-20T15:25:01.453Z] CHUNK shop=94 #163 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.481713013Z [2026-05-20T15:25:01.481Z] CHUNK shop=57 #192 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.486748889Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.48677062Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.501609121Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.501631572Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.524567236Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.524596147Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.548608178Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.548646789Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.556557697Z [2026-05-20T15:25:01.556Z] CHUNK shop=90 #166 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.5690887Z [2026-05-20T15:25:01.568Z] CHUNK shop=92 #193 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.59502891Z [2026-05-20T15:25:01.594Z] CHUNK shop=94 #164 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.616773884Z [2026-05-20T15:25:01.616Z] CHUNK shop=57 #193 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.626436926Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.626467607Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.636075947Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.636096688Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.665620057Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.665644988Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.684027248Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.684051578Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.696382317Z [2026-05-20T15:25:01.696Z] CHUNK shop=90 #167 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.703880305Z [2026-05-20T15:25:01.703Z] CHUNK shop=92 #194 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.736191563Z [2026-05-20T15:25:01.736Z] CHUNK shop=94 #165 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.751144438Z [2026-05-20T15:25:01.750Z] CHUNK shop=57 #194 jobs=0 skipped=0 complete=false elapsed=0.1s msg="deferred to full-page worker (page 0)"
+2026-05-20T15:25:01.766521693Z [Tekmetric Backfill] Shop 90: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.766539563Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":90,"durationMs":69,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.770236686Z [Tekmetric Backfill] Shop 92: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.770250556Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":92,"durationMs":66,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.809061487Z [Tekmetric Backfill] Shop 94: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.809085948Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":94,"durationMs":70,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-20T15:25:01.818431802Z [Tekmetric Backfill] Shop 57: deferring to full-page worker (fullPageMode=true, nextPage=0)
+2026-05-20T15:25:01.818455163Z [BackfillChunkMetric] {"provider":"tekmetric","shopId":57,"durationMs":67,"rosProcessed":0,"pagesProcessed":null,"outcome":"deferred","backoffMs":0,"mongoWrites":0,"pgWrites":0,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}

@@ -232,6 +232,14 @@ async function loadIncompleteShops(): Promise<ShopJob[]> {
       .collection("tekmetric_backfill_progress")
       .findOne({ shopId });
     if (progress?.completed === true && progress?.logicVersion === 2) continue;
+    // Skip shops in full-page reindex mode — the per-RO chunker no-ops for
+    // them (returns complete=false with "deferred to full-page worker"), so
+    // including them here just burns MAX_CHUNKS_PER_SHOP iterations doing
+    // nothing per pass. Full-page work runs out of the web service's
+    // in-process cron via /api/cron/tekmetric-fullpage-backfill.
+    if (progress?.fullPageMode === true && progress?.completed !== true) {
+      continue;
+    }
 
     jobs.push({
       shopId,
