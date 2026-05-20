@@ -37,11 +37,29 @@ function buildFlags(opts: {
     priorDate: string | null;
     gapMiles: number;
   } | null;
+  openRoMileageDiscrepancy?: {
+    currentMiles: number;
+    priorMiles: number;
+    priorSource: string;
+    priorDate: string | null;
+    gapMiles: number;
+  } | null;
 }) {
   const flags: Array<ReturnType<typeof buildMileageDiscrepancyFlag>> = [];
-  if (opts.mileageDiscrepancy) {
-    flags.push(buildMileageDiscrepancyFlag(opts.mileageDiscrepancy));
-  }
+  // Task #476: open-RO-vs-vehicles discrepancy fires whether or not the
+  // plan-level CARFAX/shop-history discrepancy already fired — they
+  // describe different evidence sources and the partner may want to act
+  // on each separately. De-dup is by (priorSource, priorMiles).
+  const pushed = new Set<string>();
+  const consider = (d: typeof opts.mileageDiscrepancy) => {
+    if (!d) return;
+    const k = `${d.priorSource}|${d.priorMiles}`;
+    if (pushed.has(k)) return;
+    pushed.add(k);
+    flags.push(buildMileageDiscrepancyFlag(d));
+  };
+  consider(opts.mileageDiscrepancy ?? null);
+  consider(opts.openRoMileageDiscrepancy ?? null);
   return flags;
 }
 
@@ -209,6 +227,9 @@ export const GET = createExternalEndpoint(
     });
     let mileage: number | null = picked.miles;
     let mileageInputSource: MileageInputSource | null = picked.mileageInputSource;
+    // Task #476: surface advisor-typed-low / stale-RO discrepancy via the
+    // existing Task #391 flags channel on every response branch.
+    const openRoMileageDiscrepancy = picked.discrepancy;
     if (mileage) {
       console.log(
         `[VHI External] Resolved mileage ${mileage} for ${vin} (shop=${resolvedShopId}) source=${mileageInputSource}` +
@@ -293,7 +314,7 @@ export const GET = createExternalEndpoint(
         // today's resolution.
         mileageInputSource: mileageInputSource ?? "vehicles_collection",
         // Task #391: surface mileage rollback warning when present.
-        flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null }),
+        flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null, openRoMileageDiscrepancy }),
         // Task #439: data-quality signal so partner UIs can soften 0/CRITICAL.
         dataQuality: plan.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
       });
@@ -322,7 +343,7 @@ export const GET = createExternalEndpoint(
         source: "analysis_cache",
         // Task #391: legacy analysis-cache rows generally have no flag,
         // but the array is always present for partner-shape stability.
-        flags: buildFlags({ mileageDiscrepancy: analysisResult.mileageDiscrepancy }),
+        flags: buildFlags({ mileageDiscrepancy: analysisResult.mileageDiscrepancy, openRoMileageDiscrepancy }),
         // Task #439: analysis-cache predates the dataQuality signal —
         // default to "sufficient" so legacy entries keep showing their
         // score unchanged.
@@ -528,7 +549,7 @@ export const GET = createExternalEndpoint(
       mileageInputSource: mileageInputSource ?? "vehicles_collection",
       // Task #391: surface mileage rollback warning if the freshly built
       // plan recorded one. Always-present empty array otherwise.
-      flags: buildFlags({ mileageDiscrepancy: result.mileageDiscrepancy ?? null }),
+      flags: buildFlags({ mileageDiscrepancy: result.mileageDiscrepancy ?? null, openRoMileageDiscrepancy }),
       // Task #439: data-quality on the on-demand-build path too, so all
       // three external response branches (cached_plan, analysis_cache,
       // on_demand_build) carry the same shape.

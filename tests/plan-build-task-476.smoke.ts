@@ -183,12 +183,26 @@ async function main() {
   }
 
   // Case C: open-RO present but LOWER than vehicle doc (stale RO row,
-  // monotonic odometer guard). Per spec: take the larger of the two.
+  // monotonic odometer guard). Per spec: take the larger of the two
+  // AND fire `mileage_discrepancy`.
   {
     const stale = { ...openRo, miles: 90000 };
     const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: stale });
     ok("pick: open-RO lower than vehicle doc -> vehicles wins (monotonic guard)",
        p.miles === 105266 && p.mileageInputSource === "vehicles_collection");
+    ok("pick: open-RO lower -> mileage_discrepancy fires",
+       p.discrepancy != null && p.discrepancy.currentMiles === 105266 && p.discrepancy.priorMiles === 90000 && p.discrepancy.gapMiles === 15266,
+       JSON.stringify(p.discrepancy));
+    ok("pick: discrepancy source labeled by integration",
+       p.discrepancy?.priorSource === "Tekmetric");
+  }
+
+  // Case C2: open-RO lower but within tolerance -> no discrepancy (rounding noise)
+  {
+    const close = { ...openRo, miles: 105250 };
+    const p = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: close });
+    ok("pick: open-RO lower within tolerance -> no discrepancy",
+       p.discrepancy == null && p.mileageInputSource === "vehicles_collection");
   }
 
   // Case D: vehicle doc null, open-RO present -> open_ro

@@ -24,6 +24,8 @@
  */
 
 import { sql } from "drizzle-orm";
+import type { MileageDiscrepancy } from "./mileage-discrepancy";
+import { MILEAGE_DISCREPANCY_TOLERANCE_MILES, shopHistoryLabelFromProvider } from "./mileage-discrepancy";
 
 export type OpenRoMileageIntegration =
   | "tekmetric"
@@ -185,15 +187,41 @@ export async function resolveOpenRoMileage(opts: {
 export function pickMileageInput(input: {
   vehicleDocMileage: number | null | undefined;
   openRoLookup: OpenRoMileageResult | null;
-}): { miles: number | null; mileageInputSource: MileageInputSource | null } {
+  discrepancyToleranceMiles?: number;
+}): {
+  miles: number | null;
+  mileageInputSource: MileageInputSource | null;
+  /**
+   * Task #476 spec: when the open RO is the LOWER of the two readings the
+   * larger (vehicles.currentMileage) wins, but it's also evidence that the
+   * advisor either typed a wrong odometer or the SMS row is stale —
+   * surface a `mileage_discrepancy` for the partner's flags array.
+   * Reuses the existing Task #391 plumbing.
+   */
+  discrepancy: MileageDiscrepancy | null;
+} {
   const vehicle = input.vehicleDocMileage && input.vehicleDocMileage > 0 ? input.vehicleDocMileage : null;
-  const ro = input.openRoLookup && input.openRoLookup.miles > 0 ? input.openRoLookup.miles : null;
+  const roLookup = input.openRoLookup && input.openRoLookup.miles > 0 ? input.openRoLookup : null;
+  const ro = roLookup ? roLookup.miles : null;
+  const tolerance = input.discrepancyToleranceMiles ?? MILEAGE_DISCREPANCY_TOLERANCE_MILES;
 
   if (ro != null && (vehicle == null || ro >= vehicle)) {
-    return { miles: ro, mileageInputSource: "open_ro" };
+    return { miles: ro, mileageInputSource: "open_ro", discrepancy: null };
   }
   if (vehicle != null) {
-    return { miles: vehicle, mileageInputSource: "vehicles_collection" };
+    let discrepancy: MileageDiscrepancy | null = null;
+    if (ro != null && vehicle - ro > tolerance && roLookup != null) {
+      // Open-RO odometer is below the vehicles snapshot by more than the
+      // rounding tolerance. We use the larger value (vehicle) but warn.
+      discrepancy = {
+        currentMiles: vehicle,
+        priorMiles: ro,
+        priorSource: shopHistoryLabelFromProvider(roLookup.integration),
+        priorDate: roLookup.roDate ? new Date(roLookup.roDate).toISOString() : null,
+        gapMiles: vehicle - ro,
+      };
+    }
+    return { miles: vehicle, mileageInputSource: "vehicles_collection", discrepancy };
   }
-  return { miles: null, mileageInputSource: null };
+  return { miles: null, mileageInputSource: null, discrepancy: null };
 }
