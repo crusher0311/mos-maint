@@ -501,8 +501,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (!shop) {
-      console.log(`[Protractor Callback] Rejected: Unknown connectionId ${connectionId}`);
-      return NextResponse.json({ ok: false, error: "Unknown connectionId" }, { status: 403 });
+      // Return 200 (not 403) for unknown connectionIds. Protractor's delivery
+      // worker very likely uses a per-endpoint-URL circuit breaker — a flood of
+      // 4xx from one stale/pre-provisioned connectionId can mute deliveries for
+      // ALL our shops sharing this URL. We log + drop instead. See 2026-05-14
+      // incident: 509 403s in 20min for a not-yet-provisioned Total True
+      // Automotive connectionId, then 6+ days of system-wide silence.
+      console.log(`[Protractor Callback] Ignored: Unknown connectionId ${connectionId}`);
+      return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
 
     if (!workOrderId) {
@@ -662,8 +668,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (!shop) {
-      console.log(`[Protractor Callback GET] Unknown connectionId: ${connectionId}`);
-      return NextResponse.json({ ok: false, error: "Unknown connectionId" }, { status: 403 });
+      // Return 200 (not 403) — see POST handler for full rationale.
+      // 4xx flood from a stale/pre-provisioned connectionId can trip
+      // Protractor's per-URL circuit breaker and mute all shops.
+      console.log(`[Protractor Callback GET] Ignored: Unknown connectionId: ${connectionId}`);
+      return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
 
     const shopId = Number(shop.shopId);
