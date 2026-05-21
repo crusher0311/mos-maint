@@ -1,0 +1,500 @@
+2026-05-21T11:45:42.098809135Z [2026-05-21T11:45:42.098Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=717.5min
+2026-05-21T11:46:12.099857326Z [2026-05-21T11:46:12.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=718.0min
+2026-05-21T11:46:42.100030139Z [2026-05-21T11:46:42.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=718.5min
+2026-05-21T11:47:12.100670954Z [2026-05-21T11:47:12.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=719.0min
+2026-05-21T11:47:42.099958921Z [2026-05-21T11:47:42.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=719.5min
+2026-05-21T11:48:12.099991167Z [2026-05-21T11:48:12.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=720.0min
+2026-05-21T11:48:42.099996024Z [2026-05-21T11:48:42.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=720.5min
+2026-05-21T11:49:12.100749771Z [2026-05-21T11:49:12.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=721.0min
+2026-05-21T11:49:42.100350734Z [2026-05-21T11:49:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=721.5min
+2026-05-21T11:50:12.09993688Z [2026-05-21T11:50:12.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=722.0min
+2026-05-21T11:50:42.100048998Z [2026-05-21T11:50:42.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=722.5min
+2026-05-21T11:51:12.100057016Z [2026-05-21T11:51:12.099Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=723.0min
+2026-05-21T11:51:42.100474013Z [2026-05-21T11:51:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=723.5min
+2026-05-21T11:52:12.100755418Z [2026-05-21T11:52:12.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=724.0min
+2026-05-21T11:52:42.100189695Z [2026-05-21T11:52:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=724.5min
+2026-05-21T11:53:12.100673195Z [2026-05-21T11:53:12.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=725.0min
+2026-05-21T11:53:42.100812987Z [2026-05-21T11:53:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=725.5min
+2026-05-21T11:54:12.101753557Z [2026-05-21T11:54:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=726.0min
+2026-05-21T11:54:42.101019988Z [2026-05-21T11:54:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=726.5min
+2026-05-21T11:55:12.1016479Z [2026-05-21T11:55:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=727.0min
+2026-05-21T11:55:42.10093977Z [2026-05-21T11:55:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=727.5min
+2026-05-21T11:56:12.101749532Z [2026-05-21T11:56:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=728.0min
+2026-05-21T11:56:42.101814735Z [2026-05-21T11:56:42.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=728.5min
+2026-05-21T11:57:12.101663802Z [2026-05-21T11:57:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=729.0min
+2026-05-21T11:57:42.103753045Z [2026-05-21T11:57:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=729.5min
+2026-05-21T11:58:12.101805478Z [2026-05-21T11:58:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=730.0min
+2026-05-21T11:58:42.101070823Z [2026-05-21T11:58:42.100Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=730.5min
+2026-05-21T11:59:12.101760617Z [2026-05-21T11:59:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=731.0min
+2026-05-21T11:59:42.102527019Z [2026-05-21T11:59:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=731.5min
+2026-05-21T12:00:12.102773846Z [2026-05-21T12:00:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=732.0min
+2026-05-21T12:00:42.102090748Z [2026-05-21T12:00:42.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=732.5min
+2026-05-21T12:01:12.102599661Z [2026-05-21T12:01:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=733.0min
+2026-05-21T12:01:42.102565448Z [2026-05-21T12:01:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=733.5min
+2026-05-21T12:02:12.102553241Z [2026-05-21T12:02:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=734.0min
+2026-05-21T12:02:42.102166301Z [2026-05-21T12:02:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=734.5min
+2026-05-21T12:03:12.102647185Z [2026-05-21T12:03:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=735.0min
+2026-05-21T12:03:42.101970117Z [2026-05-21T12:03:42.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=735.5min
+2026-05-21T12:04:12.102088462Z [2026-05-21T12:04:12.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=736.0min
+2026-05-21T12:04:42.102095557Z [2026-05-21T12:04:42.101Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=736.5min
+2026-05-21T12:05:12.102888053Z [2026-05-21T12:05:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=737.0min
+2026-05-21T12:05:42.10356262Z [2026-05-21T12:05:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=737.5min
+2026-05-21T12:06:12.10331299Z [2026-05-21T12:06:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=738.0min
+2026-05-21T12:06:42.103807669Z [2026-05-21T12:06:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=738.5min
+2026-05-21T12:07:12.103707028Z [2026-05-21T12:07:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=739.0min
+2026-05-21T12:07:42.103189981Z [2026-05-21T12:07:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=739.5min
+2026-05-21T12:08:12.103601695Z [2026-05-21T12:08:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=740.0min
+2026-05-21T12:08:42.102883371Z [2026-05-21T12:08:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=740.5min
+2026-05-21T12:09:12.103685547Z [2026-05-21T12:09:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=741.0min
+2026-05-21T12:09:42.103122238Z [2026-05-21T12:09:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=741.5min
+2026-05-21T12:10:12.10319903Z [2026-05-21T12:10:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=742.0min
+2026-05-21T12:10:42.10380409Z [2026-05-21T12:10:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=742.5min
+2026-05-21T12:11:12.102945134Z [2026-05-21T12:11:12.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=743.0min
+2026-05-21T12:11:42.103049257Z [2026-05-21T12:11:42.102Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=743.5min
+2026-05-21T12:12:12.10333141Z [2026-05-21T12:12:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=744.0min
+2026-05-21T12:12:42.103790033Z [2026-05-21T12:12:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=744.5min
+2026-05-21T12:13:12.104521689Z [2026-05-21T12:13:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=745.0min
+2026-05-21T12:13:42.104311491Z [2026-05-21T12:13:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=745.5min
+2026-05-21T12:14:12.104686043Z [2026-05-21T12:14:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=746.0min
+2026-05-21T12:14:42.104755025Z [2026-05-21T12:14:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=746.5min
+2026-05-21T12:15:12.104062158Z [2026-05-21T12:15:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=747.0min
+2026-05-21T12:15:42.104625054Z [2026-05-21T12:15:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=747.5min
+2026-05-21T12:16:12.104391949Z [2026-05-21T12:16:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=748.0min
+2026-05-21T12:16:42.104528749Z [2026-05-21T12:16:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=748.5min
+2026-05-21T12:17:12.104082574Z [2026-05-21T12:17:12.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=749.0min
+2026-05-21T12:17:42.103500222Z [2026-05-21T12:17:42.103Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=749.5min
+2026-05-21T12:18:12.104563184Z [2026-05-21T12:18:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=750.0min
+2026-05-21T12:18:42.104544086Z [2026-05-21T12:18:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=750.5min
+2026-05-21T12:19:12.10465549Z [2026-05-21T12:19:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=751.0min
+2026-05-21T12:19:42.104393833Z [2026-05-21T12:19:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=751.5min
+2026-05-21T12:20:12.104545052Z [2026-05-21T12:20:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=752.0min
+2026-05-21T12:20:42.104861002Z [2026-05-21T12:20:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=752.5min
+2026-05-21T12:21:12.105281101Z [2026-05-21T12:21:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=753.0min
+2026-05-21T12:21:42.105513403Z [2026-05-21T12:21:42.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=753.5min
+2026-05-21T12:22:12.105763282Z [2026-05-21T12:22:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=754.0min
+2026-05-21T12:22:42.105495907Z [2026-05-21T12:22:42.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=754.5min
+2026-05-21T12:23:12.105062984Z [2026-05-21T12:23:12.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=755.0min
+2026-05-21T12:23:42.105786024Z [2026-05-21T12:23:42.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=755.5min
+2026-05-21T12:24:12.105187915Z [2026-05-21T12:24:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=756.0min
+2026-05-21T12:24:42.105105082Z [2026-05-21T12:24:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=756.5min
+2026-05-21T12:25:12.105334274Z [2026-05-21T12:25:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=757.0min
+2026-05-21T12:25:42.105073899Z [2026-05-21T12:25:42.104Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=757.5min
+2026-05-21T12:26:12.105645077Z [2026-05-21T12:26:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=758.0min
+2026-05-21T12:26:42.105799081Z [2026-05-21T12:26:42.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=758.5min
+2026-05-21T12:27:12.105917599Z [2026-05-21T12:27:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=759.0min
+2026-05-21T12:27:42.106641155Z [2026-05-21T12:27:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=759.5min
+2026-05-21T12:28:12.106233791Z [2026-05-21T12:28:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=760.0min
+2026-05-21T12:28:42.106649692Z [2026-05-21T12:28:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=760.5min
+2026-05-21T12:29:12.106176309Z [2026-05-21T12:29:12.105Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=761.0min
+2026-05-21T12:29:42.1064765Z [2026-05-21T12:29:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=761.5min
+2026-05-21T12:30:12.106389659Z [2026-05-21T12:30:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=762.0min
+2026-05-21T12:30:42.106305837Z [2026-05-21T12:30:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=762.5min
+2026-05-21T12:31:12.106548138Z [2026-05-21T12:31:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=763.0min
+2026-05-21T12:31:42.106738897Z [2026-05-21T12:31:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=763.5min
+2026-05-21T12:32:12.106414761Z [2026-05-21T12:32:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=764.0min
+2026-05-21T12:32:42.10641436Z [2026-05-21T12:32:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=764.5min
+2026-05-21T12:33:12.106452329Z [2026-05-21T12:33:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=765.0min
+2026-05-21T12:33:42.106509347Z [2026-05-21T12:33:42.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=765.5min
+2026-05-21T12:34:12.106455514Z [2026-05-21T12:34:12.106Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=766.0min
+2026-05-21T12:34:42.109011457Z [2026-05-21T12:34:42.107Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=766.5min
+2026-05-21T12:35:12.108857749Z [2026-05-21T12:35:12.108Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=767.0min
+2026-05-21T12:35:42.109770145Z [2026-05-21T12:35:42.109Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=767.5min
+2026-05-21T12:36:12.10969104Z [2026-05-21T12:36:12.109Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=768.0min
+2026-05-21T12:36:42.109465474Z [2026-05-21T12:36:42.109Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=768.5min
+2026-05-21T12:37:12.109436931Z [2026-05-21T12:37:12.109Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=769.0min
+2026-05-21T12:37:42.109491422Z [2026-05-21T12:37:42.109Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=769.5min
+2026-05-21T12:38:12.113663576Z [2026-05-21T12:38:12.111Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=770.0min
+2026-05-21T12:38:42.112746849Z [2026-05-21T12:38:42.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=770.5min
+2026-05-21T12:39:12.112751144Z [2026-05-21T12:39:12.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=771.0min
+2026-05-21T12:39:42.112699611Z [2026-05-21T12:39:42.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=771.5min
+2026-05-21T12:40:12.112729731Z [2026-05-21T12:40:12.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=772.0min
+2026-05-21T12:40:42.112399678Z [2026-05-21T12:40:42.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=772.5min
+2026-05-21T12:41:12.11222916Z [2026-05-21T12:41:12.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=773.0min
+2026-05-21T12:41:42.11225027Z [2026-05-21T12:41:42.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=773.5min
+2026-05-21T12:42:12.112884957Z [2026-05-21T12:42:12.112Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=774.0min
+2026-05-21T12:42:42.113319864Z [2026-05-21T12:42:42.113Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=774.5min
+2026-05-21T12:43:12.113805907Z [2026-05-21T12:43:12.113Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=775.0min
+2026-05-21T12:43:42.114299644Z [2026-05-21T12:43:42.114Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=775.5min
+2026-05-21T12:44:12.114812797Z [2026-05-21T12:44:12.114Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=776.0min
+2026-05-21T12:44:42.115406586Z [2026-05-21T12:44:42.115Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=776.5min
+2026-05-21T12:45:12.115200863Z [2026-05-21T12:45:12.114Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=777.0min
+2026-05-21T12:45:42.115803443Z [2026-05-21T12:45:42.115Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=777.5min
+2026-05-21T12:46:12.115928769Z [2026-05-21T12:46:12.115Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=778.0min
+2026-05-21T12:46:42.117686326Z [2026-05-21T12:46:42.116Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=778.5min
+2026-05-21T12:47:12.11676298Z [2026-05-21T12:47:12.116Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=779.0min
+2026-05-21T12:47:42.115974795Z [2026-05-21T12:47:42.115Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=779.5min
+2026-05-21T12:48:12.116400823Z [2026-05-21T12:48:12.116Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=780.0min
+2026-05-21T12:48:42.115937278Z [2026-05-21T12:48:42.115Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=780.5min
+2026-05-21T12:49:12.116444882Z [2026-05-21T12:49:12.116Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=781.0min
+2026-05-21T12:49:42.116837541Z [2026-05-21T12:49:42.116Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=781.5min
+2026-05-21T12:50:12.117625647Z [2026-05-21T12:50:12.117Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=782.0min
+2026-05-21T12:50:42.118046552Z [2026-05-21T12:50:42.117Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=782.5min
+2026-05-21T12:51:12.118346753Z [2026-05-21T12:51:12.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=783.0min
+2026-05-21T12:51:42.118724464Z [2026-05-21T12:51:42.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=783.5min
+2026-05-21T12:52:12.117849026Z [2026-05-21T12:52:12.117Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=784.0min
+2026-05-21T12:52:42.118507931Z [2026-05-21T12:52:42.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=784.5min
+2026-05-21T12:53:12.118858498Z [2026-05-21T12:53:12.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=785.0min
+2026-05-21T12:53:42.119222735Z [2026-05-21T12:53:42.119Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=785.5min
+2026-05-21T12:54:12.119125552Z [2026-05-21T12:54:12.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=786.0min
+2026-05-21T12:54:42.119390656Z [2026-05-21T12:54:42.119Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=786.5min
+2026-05-21T12:55:12.119135528Z [2026-05-21T12:55:12.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=787.0min
+2026-05-21T12:55:42.11971763Z [2026-05-21T12:55:42.119Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=787.5min
+2026-05-21T12:56:12.118955192Z [2026-05-21T12:56:12.118Z] HEARTBEAT done=3/27 complete=1 error=0 lockWait=0 elapsed=788.0min
+2026-05-21T12:56:36.02348263Z [Backfill] Shop 115: Normalized 0 WOs
+2026-05-21T12:56:36.02351511Z [Backfill] Shop 115: FULL — currentChunkEnd 2021-09-12 -> 2021-05-21
+2026-05-21T12:56:36.023785426Z [Backfill] Shop 115: chunk metrics duration=9096122ms ros=552 invoiceCache=552/552 vehiclesCache=0/0 backoff=0ms
+2026-05-21T12:56:36.165243447Z [Backfill] Shop 115: Marked protractorBackfillComplete=true
+2026-05-21T12:56:36.165267108Z [BackfillChunkMetric] {"provider":"protractor","shopId":115,"durationMs":9096264,"rosProcessed":552,"pagesProcessed":null,"outcome":"complete","backoffMs":0,"mongoWrites":0,"pgWrites":4803,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T12:56:36.23583816Z [Backfill] Shop 115 chunk 1: 2021-05-21 to 2021-09-12: 0 jobs, 0 vehicles fetched, 0 normalized, 120d chunk
+2026-05-21T12:56:36.305818069Z [Backfill] Shop 115: Run finished - 1 chunks, 0 jobs indexed, complete: true
+2026-05-21T12:56:36.375959731Z [Backfill] Shop 115: FULLY COMPLETE!
+2026-05-21T12:56:36.376205247Z [Backfill] Shop 115: Next run result: COMPLETE
+2026-05-21T12:56:36.376221857Z [Backfill] Shop 115: Next run result: 1 more chunks
+2026-05-21T12:56:36.376231147Z [Backfill] Shop 115: Next run result: 1 more chunks
+2026-05-21T12:56:36.376259308Z [Backfill] Shop 115: Next run result: 1 more chunks
+2026-05-21T12:56:36.376264598Z [Backfill] Shop 115: Next run result: 1 more chunks
+2026-05-21T12:56:36.376323869Z [2026-05-21T12:56:36.376Z] INCOMPLETE shop=115 (Foreman Auto) chunks=1 jobs=0
+2026-05-21T12:56:36.37635921Z [2026-05-21T12:56:36.376Z] START shop=76 (Toledo Tire & Auto Care)
+2026-05-21T12:56:36.447870133Z [Backfill] Starting inline backfill for shop 76
+2026-05-21T12:56:36.862055259Z [Backfill] Shop 76: Resuming from 2023-09-22 (logicVersion=4)
+2026-05-21T12:56:36.86207921Z [Backfill] Shop 76: 2023-07-24 to 2023-09-22 (60 days)
+2026-05-21T12:56:40.018738588Z [Backfill] Shop 76: 357 invoices pace=DAYTIME tz=America/Chicago hour=7 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T12:56:42.119033123Z [2026-05-21T12:56:42.118Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=788.5min
+2026-05-21T12:56:59.573081582Z [Backfill] Shop 76: 3557 jobs, 0 unique vehicles to fetch (invoice cache: 357/357 hit)
+2026-05-21T12:57:01.42618302Z [Backfill] Shop 76: Bulk wrote 664 jobs (0 new, 664 updated, 2893 skipped)
+2026-05-21T12:57:12.119884743Z [2026-05-21T12:57:12.119Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=789.0min
+2026-05-21T12:57:42.120757725Z [2026-05-21T12:57:42.120Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=789.5min
+2026-05-21T12:58:12.12041969Z [2026-05-21T12:58:12.120Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=790.0min
+2026-05-21T12:58:42.120450306Z [2026-05-21T12:58:42.120Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=790.5min
+2026-05-21T12:59:12.120746619Z [2026-05-21T12:59:12.120Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=791.0min
+2026-05-21T12:59:42.120919921Z [2026-05-21T12:59:42.120Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=791.5min
+2026-05-21T13:00:12.121258639Z [2026-05-21T13:00:12.121Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=792.0min
+2026-05-21T13:00:42.121855874Z [2026-05-21T13:00:42.121Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=792.5min
+2026-05-21T13:01:12.122614263Z [2026-05-21T13:01:12.122Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=793.0min
+2026-05-21T13:01:42.122389515Z [2026-05-21T13:01:42.122Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=793.5min
+2026-05-21T13:02:12.122250035Z [2026-05-21T13:02:12.122Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=794.0min
+2026-05-21T13:02:42.122759324Z [2026-05-21T13:02:42.122Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=794.5min
+2026-05-21T13:03:12.1229036Z [2026-05-21T13:03:12.122Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=795.0min
+2026-05-21T13:03:25.980601784Z [PgCanonical] Postgres write failed — entity: vehicle, id: 698f6a7ee281f1e8e0418da0, action: update, shop: 76, pgCode: 23505, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: Key (shop_id, vin)=(76, 5FNYF48529B048171) already exists., pgHint: null, causeMessage: duplicate key value violates unique constraint "nv_shop_id_vin_idx", error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+2026-05-21T13:03:25.980664945Z params: 698f6a7ee281f1e8e0418da0,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"6fb29a9a-470f-4b38-9def-e25120911af9","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41646","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:03:25.970Z","lastSyncedAt":"2026-05-21T13:03:25.970Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:03:25.972Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"6fb29a9a-470f-4b38-9def-e25120911af9","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41646","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:03:25.970Z","lastSyncedAt":"2026-05-21T13:03:25.970Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:03:25.970Z"},2026-02-13T18:16:30.694Z,2026-05-21T13:03:25.970Z,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"6fb29a9a-470f-4b38-9def-e25120911af9","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41646","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:03:25.970Z","lastSyncedAt":"2026-05-21T13:03:25.970Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:03:25.972Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"6fb29a9a-470f-4b38-9def-e25120911af9","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41646","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:03:25.970Z","lastSyncedAt":"2026-05-21T13:03:25.970Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:03:25.970Z"},2026-05-21T13:03:25.970Z
+2026-05-21T13:03:42.123694608Z [2026-05-21T13:03:42.123Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=795.5min
+2026-05-21T13:04:12.123592302Z [2026-05-21T13:04:12.123Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=796.0min
+2026-05-21T13:04:42.123847271Z [2026-05-21T13:04:42.123Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=796.5min
+2026-05-21T13:05:12.124611139Z [2026-05-21T13:05:12.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=797.0min
+2026-05-21T13:05:42.124371593Z [2026-05-21T13:05:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=797.5min
+2026-05-21T13:06:12.1239033Z [2026-05-21T13:06:12.123Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=798.0min
+2026-05-21T13:06:42.124675004Z [2026-05-21T13:06:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=798.5min
+2026-05-21T13:07:12.124630048Z [2026-05-21T13:07:12.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=799.0min
+2026-05-21T13:07:42.12440898Z [2026-05-21T13:07:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=799.5min
+2026-05-21T13:08:08.555354652Z [Backfill] Shop 116: Normalized 999 WOs
+2026-05-21T13:08:08.555402913Z [Backfill] Shop 116: FULL — currentChunkEnd 2023-04-18 -> 2023-01-18
+2026-05-21T13:08:08.555615217Z [Backfill] Shop 116: chunk metrics duration=13238234ms ros=999 invoiceCache=0/999 vehiclesCache=0/0 backoff=0ms
+2026-05-21T13:08:08.620223007Z [BackfillChunkMetric] {"provider":"protractor","shopId":116,"durationMs":13238299,"rosProcessed":999,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":11764,"pgWrites":11764,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T13:08:08.686774159Z [Backfill] Shop 116 chunk 1: 2023-01-18 to 2023-04-18: 6138 jobs, 0 vehicles fetched, 999 normalized, 90d chunk
+2026-05-21T13:08:08.851429022Z [Backfill] Shop 116: Wall clock limit reached after 1 chunks
+2026-05-21T13:08:08.851445703Z [Backfill] Shop 116: Run finished - 1 chunks, 6138 jobs indexed, complete: false
+2026-05-21T13:08:08.915697324Z [Backfill] Shop 116: Not complete, starting next run immediately
+2026-05-21T13:08:08.981556161Z [Backfill] Starting inline backfill for shop 116
+2026-05-21T13:08:09.297966558Z [Backfill] Shop 116: Resuming from 2023-01-18 (logicVersion=4)
+2026-05-21T13:08:09.297989599Z [Backfill] Shop 116: 2022-12-19 to 2023-01-18 (30 days)
+2026-05-21T13:08:11.795230832Z [Backfill] Shop 116: 292 invoices pace=DAYTIME tz=America/Chicago hour=8 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T13:08:12.124698822Z [2026-05-21T13:08:12.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=800.0min
+2026-05-21T13:08:42.124596957Z [2026-05-21T13:08:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=800.5min
+2026-05-21T13:09:12.124026403Z [2026-05-21T13:09:12.123Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=801.0min
+2026-05-21T13:09:42.124717439Z [2026-05-21T13:09:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=801.5min
+2026-05-21T13:09:49.420961638Z [Backfill] Shop 116: 2168 jobs, 0 unique vehicles to fetch (invoice cache: 0/292 hit)
+2026-05-21T13:09:52.619637144Z [Backfill] Shop 116: Bulk wrote 2168 jobs (2168 new, 0 updated, 0 skipped)
+2026-05-21T13:10:12.124708821Z [2026-05-21T13:10:12.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=802.0min
+2026-05-21T13:10:42.125705038Z [2026-05-21T13:10:42.124Z] HEARTBEAT done=4/27 complete=1 error=0 lockWait=0 elapsed=802.5min
+2026-05-21T13:10:57.530823186Z [Backfill] Shop 35: Normalized 653 WOs
+2026-05-21T13:10:57.530854257Z [Backfill] Shop 35: FULL — currentChunkEnd 2021-08-03 -> 2021-05-21
+2026-05-21T13:10:57.531059182Z [Backfill] Shop 35: chunk metrics duration=11051596ms ros=653 invoiceCache=0/653 vehiclesCache=0/0 backoff=0ms
+2026-05-21T13:10:57.648488364Z [Backfill] Shop 35: Marked protractorBackfillComplete=true
+2026-05-21T13:10:57.648517695Z [BackfillChunkMetric] {"provider":"protractor","shopId":35,"durationMs":11051714,"rosProcessed":653,"pagesProcessed":null,"outcome":"complete","backoffMs":0,"mongoWrites":9526,"pgWrites":9526,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T13:10:57.706805172Z [Backfill] Shop 35 chunk 1: 2021-05-21 to 2021-08-03: 3864 jobs, 0 vehicles fetched, 653 normalized, 120d chunk
+2026-05-21T13:10:57.76516672Z [Backfill] Shop 35: Run finished - 1 chunks, 3864 jobs indexed, complete: true
+2026-05-21T13:10:57.823265833Z [Backfill] Shop 35: FULLY COMPLETE!
+2026-05-21T13:10:57.823534189Z [Backfill] Shop 35: Next run result: COMPLETE
+2026-05-21T13:10:57.823563109Z [Backfill] Shop 35: Next run result: 1 more chunks
+2026-05-21T13:10:57.82360771Z [Backfill] Shop 35: Next run result: 1 more chunks
+2026-05-21T13:10:57.823691242Z [2026-05-21T13:10:57.823Z] INCOMPLETE shop=35 (Precision Auto Service Ltd.) chunks=1 jobs=0
+2026-05-21T13:10:57.823713133Z [2026-05-21T13:10:57.823Z] START shop=69 (Harrell's Tire and Auto)
+2026-05-21T13:10:57.883198306Z [Backfill] Starting inline backfill for shop 69
+2026-05-21T13:10:58.226884292Z [Backfill] Shop 69: Resuming from 2023-09-29 (logicVersion=4)
+2026-05-21T13:10:58.226906312Z [Backfill] Shop 69: 2023-08-15 to 2023-09-29 (45 days)
+2026-05-21T13:11:00.715671128Z [Backfill] Shop 69: 428 invoices pace=DAYTIME tz=America/Chicago hour=8 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T13:11:12.124523569Z [2026-05-21T13:11:12.124Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=803.0min
+2026-05-21T13:11:25.663967375Z [Backfill] Shop 69: 2262 jobs, 0 unique vehicles to fetch (invoice cache: 428/428 hit)
+2026-05-21T13:11:42.124866429Z [2026-05-21T13:11:42.124Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=803.5min
+2026-05-21T13:12:12.125682132Z [2026-05-21T13:12:12.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=804.0min
+2026-05-21T13:12:42.12564526Z [2026-05-21T13:12:42.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=804.5min
+2026-05-21T13:13:12.125292726Z [2026-05-21T13:13:12.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=805.0min
+2026-05-21T13:13:42.125146011Z [2026-05-21T13:13:42.124Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=805.5min
+2026-05-21T13:14:12.125638366Z [2026-05-21T13:14:12.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=806.0min
+2026-05-21T13:14:42.1258271Z [2026-05-21T13:14:42.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=806.5min
+2026-05-21T13:15:12.126120133Z [2026-05-21T13:15:12.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=807.0min
+2026-05-21T13:15:42.125984953Z [2026-05-21T13:15:42.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=807.5min
+2026-05-21T13:16:12.12680022Z [2026-05-21T13:16:12.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=808.0min
+2026-05-21T13:16:42.127565744Z [2026-05-21T13:16:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=808.5min
+2026-05-21T13:17:12.126995855Z [2026-05-21T13:17:12.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=809.0min
+2026-05-21T13:17:42.127030089Z [2026-05-21T13:17:42.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=809.5min
+2026-05-21T13:18:12.127408617Z [2026-05-21T13:18:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=810.0min
+2026-05-21T13:18:42.127779456Z [2026-05-21T13:18:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=810.5min
+2026-05-21T13:19:12.127805835Z [2026-05-21T13:19:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=811.0min
+2026-05-21T13:19:42.125983113Z [2026-05-21T13:19:42.125Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=811.5min
+2026-05-21T13:20:12.127858393Z [2026-05-21T13:20:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=812.0min
+2026-05-21T13:20:42.127105674Z [2026-05-21T13:20:42.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=812.5min
+2026-05-21T13:21:12.127540344Z [2026-05-21T13:21:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=813.0min
+2026-05-21T13:21:42.127302099Z [2026-05-21T13:21:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=813.5min
+2026-05-21T13:22:05.971225037Z [PgCanonical] Postgres write failed — entity: vehicle, id: 698f6a7ee281f1e8e0418da0, action: update, shop: 76, pgCode: 23505, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: Key (shop_id, vin)=(76, 5FNYF48529B048171) already exists., pgHint: null, causeMessage: duplicate key value violates unique constraint "nv_shop_id_vin_idx", error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+2026-05-21T13:22:05.971275389Z params: 698f6a7ee281f1e8e0418da0,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"e395b733-c4dc-474c-8efd-01518b3da3cf","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41730","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:22:05.963Z","lastSyncedAt":"2026-05-21T13:22:05.963Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:22:05.966Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"e395b733-c4dc-474c-8efd-01518b3da3cf","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41730","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:22:05.963Z","lastSyncedAt":"2026-05-21T13:22:05.963Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:22:05.963Z"},2026-02-13T18:16:30.694Z,2026-05-21T13:22:05.963Z,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"e395b733-c4dc-474c-8efd-01518b3da3cf","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41730","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:22:05.963Z","lastSyncedAt":"2026-05-21T13:22:05.963Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:22:05.966Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"e395b733-c4dc-474c-8efd-01518b3da3cf","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41730","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:22:05.963Z","lastSyncedAt":"2026-05-21T13:22:05.963Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:22:05.963Z"},2026-05-21T13:22:05.963Z
+2026-05-21T13:22:12.127466805Z [2026-05-21T13:22:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=814.0min
+2026-05-21T13:22:42.127350685Z [2026-05-21T13:22:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=814.5min
+2026-05-21T13:23:12.127665899Z [2026-05-21T13:23:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=815.0min
+2026-05-21T13:23:42.127543644Z [2026-05-21T13:23:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=815.5min
+2026-05-21T13:24:12.127299919Z [2026-05-21T13:24:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=816.0min
+2026-05-21T13:24:42.127267093Z [2026-05-21T13:24:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=816.5min
+2026-05-21T13:25:12.127419065Z [2026-05-21T13:25:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=817.0min
+2026-05-21T13:25:42.127387176Z [2026-05-21T13:25:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=817.5min
+2026-05-21T13:26:12.12767372Z [2026-05-21T13:26:12.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=818.0min
+2026-05-21T13:26:42.127418425Z [2026-05-21T13:26:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=818.5min
+2026-05-21T13:27:12.127506763Z [2026-05-21T13:27:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=819.0min
+2026-05-21T13:27:42.127418482Z [2026-05-21T13:27:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=819.5min
+2026-05-21T13:28:12.127606164Z [2026-05-21T13:28:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=820.0min
+2026-05-21T13:28:42.127611196Z [2026-05-21T13:28:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=820.5min
+2026-05-21T13:29:12.127425961Z [2026-05-21T13:29:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=821.0min
+2026-05-21T13:29:12.141063636Z [PgCanonical] Postgres write failed — entity: vehicle, id: 698f6a7ee281f1e8e0418da0, action: update, shop: 76, pgCode: 23505, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: Key (shop_id, vin)=(76, 5FNYF48529B048171) already exists., pgHint: null, causeMessage: duplicate key value violates unique constraint "nv_shop_id_vin_idx", error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+2026-05-21T13:29:12.141124437Z params: 698f6a7ee281f1e8e0418da0,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:29:12.131Z","lastSyncedAt":"2026-05-21T13:29:12.131Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:29:12.134Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:29:12.131Z","lastSyncedAt":"2026-05-21T13:29:12.131Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:29:12.131Z"},2026-02-13T18:16:30.694Z,2026-05-21T13:29:12.131Z,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:29:12.131Z","lastSyncedAt":"2026-05-21T13:29:12.131Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,5FNYF48529B048171,true,100867858,261107,2026-05-21T13:29:12.134Z,2009,Honda,Pilot,,,,V6 3.5L 3471CC,,,,,Silver,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"5FNYF48529B048171","vinDecoded":false,"year":2009,"make":"Honda","model":"Pilot","engineDescription":"V6 3.5L 3471CC","exteriorColor":"Silver","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6a7ee281f1e8e0418da0","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"efb08fe0-e286-4a88-80c9-6980bc6b2e88","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"42027","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"2faf930f-b7cd-46c2-ae0b-ad0d7580a19e","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"39195","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"55d2e77d-35ba-4abe-beae-c279dc8b11e3","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41785","isPrimary":false}],"firstSeenAt":"2026-02-13T18:16:30.694Z","lastSeenAt":"2026-05-21T13:29:12.131Z","lastSyncedAt":"2026-05-21T13:29:12.131Z","syncRunId":"backfill-1779368196792","contentHash":"b8058ff8e3c4cb14","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:16:30.694Z","updatedAt":"2026-05-21T13:29:12.131Z"},2026-05-21T13:29:12.131Z
+2026-05-21T13:29:42.127357764Z [2026-05-21T13:29:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=821.5min
+2026-05-21T13:30:12.127161222Z [2026-05-21T13:30:12.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=822.0min
+2026-05-21T13:30:42.127080868Z [2026-05-21T13:30:42.126Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=822.5min
+2026-05-21T13:31:12.127594576Z [2026-05-21T13:31:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=823.0min
+2026-05-21T13:31:42.127807294Z [2026-05-21T13:31:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=823.5min
+2026-05-21T13:32:12.128158694Z [2026-05-21T13:32:12.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=824.0min
+2026-05-21T13:32:42.127907369Z [2026-05-21T13:32:42.127Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=824.5min
+2026-05-21T13:33:12.128771048Z [2026-05-21T13:33:12.128Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=825.0min
+2026-05-21T13:33:42.129724497Z [2026-05-21T13:33:42.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=825.5min
+2026-05-21T13:34:12.129707325Z [2026-05-21T13:34:12.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=826.0min
+2026-05-21T13:34:42.129723762Z [2026-05-21T13:34:42.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=826.5min
+2026-05-21T13:35:12.129235549Z [2026-05-21T13:35:12.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=827.0min
+2026-05-21T13:35:42.129655156Z [2026-05-21T13:35:42.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=827.5min
+2026-05-21T13:36:12.129623214Z [2026-05-21T13:36:12.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=828.0min
+2026-05-21T13:36:42.131830468Z [2026-05-21T13:36:42.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=828.5min
+2026-05-21T13:37:12.130081236Z [2026-05-21T13:37:12.129Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=829.0min
+2026-05-21T13:37:42.130198602Z [2026-05-21T13:37:42.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=829.5min
+2026-05-21T13:38:12.130873185Z [2026-05-21T13:38:12.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=830.0min
+2026-05-21T13:38:42.131353827Z [2026-05-21T13:38:42.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=830.5min
+2026-05-21T13:39:12.131637021Z [2026-05-21T13:39:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=831.0min
+2026-05-21T13:39:42.130929359Z [2026-05-21T13:39:42.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=831.5min
+2026-05-21T13:40:12.131744147Z [2026-05-21T13:40:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=832.0min
+2026-05-21T13:40:42.131074339Z [2026-05-21T13:40:42.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=832.5min
+2026-05-21T13:41:12.131347999Z [2026-05-21T13:41:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=833.0min
+2026-05-21T13:41:42.131447412Z [2026-05-21T13:41:42.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=833.5min
+2026-05-21T13:42:12.130923732Z [2026-05-21T13:42:12.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=834.0min
+2026-05-21T13:42:42.133405586Z [2026-05-21T13:42:42.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=834.5min
+2026-05-21T13:43:12.130912458Z [2026-05-21T13:43:12.130Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=835.0min
+2026-05-21T13:43:42.131838095Z [2026-05-21T13:43:42.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=835.5min
+2026-05-21T13:44:12.132345485Z [2026-05-21T13:44:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=836.0min
+2026-05-21T13:44:42.132622879Z [2026-05-21T13:44:42.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=836.5min
+2026-05-21T13:45:12.131918122Z [2026-05-21T13:45:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=837.0min
+2026-05-21T13:45:42.132783441Z [2026-05-21T13:45:42.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=837.5min
+2026-05-21T13:46:12.13215232Z [2026-05-21T13:46:12.131Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=838.0min
+2026-05-21T13:46:42.132833579Z [2026-05-21T13:46:42.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=838.5min
+2026-05-21T13:47:12.132878846Z [2026-05-21T13:47:12.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=839.0min
+2026-05-21T13:47:42.132971348Z [2026-05-21T13:47:42.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=839.5min
+2026-05-21T13:48:12.133056452Z [2026-05-21T13:48:12.132Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=840.0min
+2026-05-21T13:48:42.133747654Z [2026-05-21T13:48:42.133Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=840.5min
+2026-05-21T13:49:12.133867607Z [2026-05-21T13:49:12.133Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=841.0min
+2026-05-21T13:49:42.134841113Z [2026-05-21T13:49:42.134Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=841.5min
+2026-05-21T13:50:12.135304334Z [2026-05-21T13:50:12.135Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=842.0min
+2026-05-21T13:50:42.134873519Z [2026-05-21T13:50:42.134Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=842.5min
+2026-05-21T13:51:12.135423122Z [2026-05-21T13:51:12.135Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=843.0min
+2026-05-21T13:51:42.135811348Z [2026-05-21T13:51:42.135Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=843.5min
+2026-05-21T13:52:12.136864606Z [2026-05-21T13:52:12.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=844.0min
+2026-05-21T13:52:42.137084642Z [2026-05-21T13:52:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=844.5min
+2026-05-21T13:53:12.137095924Z [2026-05-21T13:53:12.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=845.0min
+2026-05-21T13:53:42.137742796Z [2026-05-21T13:53:42.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=845.5min
+2026-05-21T13:54:12.137232482Z [2026-05-21T13:54:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=846.0min
+2026-05-21T13:54:42.136942021Z [2026-05-21T13:54:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=846.5min
+2026-05-21T13:55:12.137236893Z [2026-05-21T13:55:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=847.0min
+2026-05-21T13:55:42.136520842Z [2026-05-21T13:55:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=847.5min
+2026-05-21T13:56:12.137366503Z [2026-05-21T13:56:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=848.0min
+2026-05-21T13:56:42.137003018Z [2026-05-21T13:56:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=848.5min
+2026-05-21T13:57:12.140689019Z [2026-05-21T13:57:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=849.0min
+2026-05-21T13:57:42.137023089Z [2026-05-21T13:57:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=849.5min
+2026-05-21T13:58:12.137659881Z [2026-05-21T13:58:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=850.0min
+2026-05-21T13:58:42.137731059Z [2026-05-21T13:58:42.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=850.5min
+2026-05-21T13:59:12.136960507Z [2026-05-21T13:59:12.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=851.0min
+2026-05-21T13:59:42.137655796Z [2026-05-21T13:59:42.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=851.5min
+2026-05-21T14:00:07.820738476Z [Backfill] Shop 76: Normalized 0 WOs
+2026-05-21T14:00:07.820761797Z [Backfill] Shop 76: FULL — currentChunkEnd 2023-09-22 -> 2023-07-24
+2026-05-21T14:00:07.821006292Z [Backfill] Shop 76: chunk metrics duration=3811167ms ros=357 invoiceCache=357/357 vehiclesCache=0/0 backoff=0ms
+2026-05-21T14:00:07.885208275Z [BackfillChunkMetric] {"provider":"protractor","shopId":76,"durationMs":3811232,"rosProcessed":357,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":1,"pgWrites":4527,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T14:00:07.949144722Z [Backfill] Shop 76 chunk 1: 2023-07-24 to 2023-09-22: 664 jobs, 0 vehicles fetched, 0 normalized, 60d chunk
+2026-05-21T14:00:08.112187181Z [Backfill] Shop 76: Wall clock limit reached after 1 chunks
+2026-05-21T14:00:08.112209241Z [Backfill] Shop 76: Run finished - 1 chunks, 664 jobs indexed, complete: false
+2026-05-21T14:00:08.175593236Z [Backfill] Shop 76: Not complete, starting next run immediately
+2026-05-21T14:00:08.240193008Z [Backfill] Starting inline backfill for shop 76
+2026-05-21T14:00:08.674122948Z [Backfill] Shop 76: Resuming from 2023-07-24 (logicVersion=4)
+2026-05-21T14:00:08.67419799Z [Backfill] Shop 76: 2023-05-25 to 2023-07-24 (60 days)
+2026-05-21T14:00:12.136797709Z [2026-05-21T14:00:12.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=852.0min
+2026-05-21T14:00:16.048906612Z [Backfill] Shop 76: 390 invoices pace=DAYTIME tz=America/Chicago hour=9 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T14:00:42.136909683Z [2026-05-21T14:00:42.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=852.5min
+2026-05-21T14:00:43.358474799Z [Backfill] Shop 76: 3155 jobs, 0 unique vehicles to fetch (invoice cache: 390/390 hit)
+2026-05-21T14:00:45.000738064Z [Backfill] Shop 76: Bulk wrote 627 jobs (0 new, 627 updated, 2528 skipped)
+2026-05-21T14:01:12.137085405Z [2026-05-21T14:01:12.136Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=853.0min
+2026-05-21T14:01:42.138762259Z [2026-05-21T14:01:42.138Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=853.5min
+2026-05-21T14:02:12.138107839Z [2026-05-21T14:02:12.137Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=854.0min
+2026-05-21T14:02:42.13843327Z [2026-05-21T14:02:42.138Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=854.5min
+2026-05-21T14:03:12.138381472Z [2026-05-21T14:03:12.138Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=855.0min
+2026-05-21T14:03:42.138876452Z [2026-05-21T14:03:42.138Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=855.5min
+2026-05-21T14:04:12.139442744Z [2026-05-21T14:04:12.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=856.0min
+2026-05-21T14:04:42.139184484Z [2026-05-21T14:04:42.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=856.5min
+2026-05-21T14:05:12.139334181Z [2026-05-21T14:05:12.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=857.0min
+2026-05-21T14:05:42.139566787Z [2026-05-21T14:05:42.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=857.5min
+2026-05-21T14:06:12.139754921Z [2026-05-21T14:06:12.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=858.0min
+2026-05-21T14:06:42.140658919Z [2026-05-21T14:06:42.139Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=858.5min
+2026-05-21T14:07:12.140160052Z [2026-05-21T14:07:12.140Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=859.0min
+2026-05-21T14:07:42.142212Z [2026-05-21T14:07:42.142Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=859.5min
+2026-05-21T14:08:12.141951744Z [2026-05-21T14:08:12.141Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=860.0min
+2026-05-21T14:08:42.145879577Z [2026-05-21T14:08:42.145Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=860.5min
+2026-05-21T14:09:12.146047235Z [2026-05-21T14:09:12.145Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=861.0min
+2026-05-21T14:09:42.146101328Z [2026-05-21T14:09:42.145Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=861.5min
+2026-05-21T14:10:12.14622249Z [2026-05-21T14:10:12.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=862.0min
+2026-05-21T14:10:42.146775059Z [2026-05-21T14:10:42.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=862.5min
+2026-05-21T14:11:12.146311292Z [2026-05-21T14:11:12.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=863.0min
+2026-05-21T14:11:42.14617325Z [2026-05-21T14:11:42.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=863.5min
+2026-05-21T14:12:12.146137557Z [2026-05-21T14:12:12.145Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=864.0min
+2026-05-21T14:12:42.146746994Z [2026-05-21T14:12:42.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=864.5min
+2026-05-21T14:13:12.146985271Z [2026-05-21T14:13:12.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=865.0min
+2026-05-21T14:13:42.146954589Z [2026-05-21T14:13:42.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=865.5min
+2026-05-21T14:14:12.147437788Z [2026-05-21T14:14:12.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=866.0min
+2026-05-21T14:14:42.147507505Z [2026-05-21T14:14:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=866.5min
+2026-05-21T14:15:12.147254986Z [2026-05-21T14:15:12.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=867.0min
+2026-05-21T14:15:42.147739021Z [2026-05-21T14:15:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=867.5min
+2026-05-21T14:16:12.14713804Z [2026-05-21T14:16:12.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=868.0min
+2026-05-21T14:16:42.147122711Z [2026-05-21T14:16:42.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=868.5min
+2026-05-21T14:17:12.147064622Z [2026-05-21T14:17:12.146Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=869.0min
+2026-05-21T14:17:42.147224558Z [2026-05-21T14:17:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=869.5min
+2026-05-21T14:18:12.147858135Z [2026-05-21T14:18:12.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=870.0min
+2026-05-21T14:18:42.15024498Z [2026-05-21T14:18:42.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=870.5min
+2026-05-21T14:19:12.148795611Z [2026-05-21T14:19:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=871.0min
+2026-05-21T14:19:42.147979028Z [2026-05-21T14:19:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=871.5min
+2026-05-21T14:20:12.147997863Z [2026-05-21T14:20:12.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=872.0min
+2026-05-21T14:20:42.147866267Z [2026-05-21T14:20:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=872.5min
+2026-05-21T14:21:12.148187343Z [2026-05-21T14:21:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=873.0min
+2026-05-21T14:21:42.148492759Z [2026-05-21T14:21:42.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=873.5min
+2026-05-21T14:22:02.157882355Z [Backfill] Shop 116: Normalized 292 WOs
+2026-05-21T14:22:02.157918505Z [Backfill] Shop 116: FULL — currentChunkEnd 2023-01-18 -> 2022-12-19
+2026-05-21T14:22:02.15811392Z [Backfill] Shop 116: chunk metrics duration=4433049ms ros=292 invoiceCache=0/292 vehiclesCache=0/0 backoff=0ms
+2026-05-21T14:22:02.222855445Z [BackfillChunkMetric] {"provider":"protractor","shopId":116,"durationMs":4433115,"rosProcessed":292,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":3851,"pgWrites":3851,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T14:22:02.288083402Z [Backfill] Shop 116 chunk 1: 2022-12-19 to 2023-01-18: 2168 jobs, 0 vehicles fetched, 292 normalized, 30d chunk
+2026-05-21T14:22:02.452157721Z [Backfill] Shop 116: Wall clock limit reached after 1 chunks
+2026-05-21T14:22:02.452182001Z [Backfill] Shop 116: Run finished - 1 chunks, 2168 jobs indexed, complete: false
+2026-05-21T14:22:02.51659712Z [Backfill] Shop 116: Not complete, starting next run immediately
+2026-05-21T14:22:02.581714004Z [Backfill] Starting inline backfill for shop 116
+2026-05-21T14:22:02.90077287Z [Backfill] Shop 116: Resuming from 2022-12-19 (logicVersion=4)
+2026-05-21T14:22:02.90079756Z [Backfill] Shop 116: 2022-10-20 to 2022-12-19 (60 days)
+2026-05-21T14:22:06.6698791Z [Backfill] Shop 116: 631 invoices pace=DAYTIME tz=America/Chicago hour=9 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T14:22:12.148747447Z [2026-05-21T14:22:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=874.0min
+2026-05-21T14:22:40.975964452Z [RateLimit] protractor at 301/300, waiting 2617ms (attempt 1/8, exponential backoff)
+2026-05-21T14:22:41.073389512Z [RateLimit] protractor at 302/300, waiting 2119ms (attempt 1/8, exponential backoff)
+2026-05-21T14:22:41.594703303Z [RateLimit] protractor at 301/300, waiting 2749ms (attempt 1/8, exponential backoff)
+2026-05-21T14:22:42.147919072Z [2026-05-21T14:22:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=874.5min
+2026-05-21T14:22:43.313215093Z [RateLimit] protractor at 301/300, waiting 4807ms (attempt 2/8, exponential backoff)
+2026-05-21T14:22:43.713530051Z [RateLimit] protractor at 302/300, waiting 4007ms (attempt 2/8, exponential backoff)
+2026-05-21T14:22:44.462663834Z [RateLimit] protractor at 301/300, waiting 4965ms (attempt 2/8, exponential backoff)
+2026-05-21T14:22:47.839223473Z [RateLimit] protractor at 301/300, waiting 8056ms (attempt 3/8, exponential backoff)
+2026-05-21T14:22:48.240999963Z [RateLimit] protractor at 302/300, waiting 8058ms (attempt 3/8, exponential backoff)
+2026-05-21T14:22:49.547774532Z [RateLimit] protractor at 301/300, waiting 8817ms (attempt 3/8, exponential backoff)
+2026-05-21T14:22:56.014598Z [RateLimit] protractor at 301/300, waiting 5500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:22:56.418958127Z [RateLimit] protractor at 301/300, waiting 4500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:22:58.487030158Z [RateLimit] protractor at 301/300, waiting 2500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:23:12.148621522Z [2026-05-21T14:23:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=875.0min
+2026-05-21T14:23:39.58216711Z [RateLimit] protractor at 301/300, waiting 2367ms (attempt 1/8, exponential backoff)
+2026-05-21T14:23:39.779108647Z [RateLimit] protractor at 301/300, waiting 2229ms (attempt 1/8, exponential backoff)
+2026-05-21T14:23:40.134551539Z [RateLimit] protractor at 301/300, waiting 2944ms (attempt 1/8, exponential backoff)
+2026-05-21T14:23:42.088701301Z [RateLimit] protractor at 301/300, waiting 4672ms (attempt 2/8, exponential backoff)
+2026-05-21T14:23:42.133898793Z [RateLimit] protractor at 302/300, waiting 4382ms (attempt 2/8, exponential backoff)
+2026-05-21T14:23:42.148226991Z [2026-05-21T14:23:42.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=875.5min
+2026-05-21T14:23:43.206108319Z [RateLimit] protractor at 301/300, waiting 4760ms (attempt 2/8, exponential backoff)
+2026-05-21T14:23:46.642883557Z [RateLimit] protractor at 301/300, waiting 8761ms (attempt 3/8, exponential backoff)
+2026-05-21T14:23:46.886812586Z [RateLimit] protractor at 302/300, waiting 8742ms (attempt 3/8, exponential backoff)
+2026-05-21T14:23:48.092965012Z [RateLimit] protractor at 301/300, waiting 8368ms (attempt 3/8, exponential backoff)
+2026-05-21T14:23:53.377804509Z [Backfill] Shop 69: Normalized 0 WOs
+2026-05-21T14:23:53.377829559Z [Backfill] Shop 69: FULL — currentChunkEnd 2023-09-29 -> 2023-08-15
+2026-05-21T14:23:53.378094785Z [Backfill] Shop 69: chunk metrics duration=4375323ms ros=428 invoiceCache=428/428 vehiclesCache=0/0 backoff=0ms
+2026-05-21T14:23:53.443868804Z [BackfillChunkMetric] {"provider":"protractor","shopId":69,"durationMs":4375389,"rosProcessed":428,"pagesProcessed":null,"outcome":"ok","backoffMs":0,"mongoWrites":659,"pgWrites":2445,"rateLimiterWaitsMs":0,"rateLimiterTimeouts":0,"rateLimiterFallbacks":0,"retries":0}
+2026-05-21T14:23:53.509133761Z [Backfill] Shop 69 chunk 1: 2023-08-15 to 2023-09-29: 0 jobs, 0 vehicles fetched, 0 normalized, 45d chunk
+2026-05-21T14:23:53.674449017Z [Backfill] Shop 69: Wall clock limit reached after 1 chunks
+2026-05-21T14:23:53.674470708Z [Backfill] Shop 69: Run finished - 1 chunks, 0 jobs indexed, complete: false
+2026-05-21T14:23:53.740160474Z [Backfill] Shop 69: Not complete, starting next run immediately
+2026-05-21T14:23:53.80671839Z [Backfill] Starting inline backfill for shop 69
+2026-05-21T14:23:54.253402595Z [Backfill] Shop 69: Resuming from 2023-08-15 (logicVersion=4)
+2026-05-21T14:23:54.253431305Z [Backfill] Shop 69: 2023-07-01 to 2023-08-15 (45 days)
+2026-05-21T14:23:55.54167312Z [RateLimit] protractor at 302/300, waiting 5500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:23:55.761383752Z [RateLimit] protractor at 301/300, waiting 5500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:23:56.592046432Z [RateLimit] protractor at 301/300, waiting 4500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:24:03.495972219Z [Backfill] Shop 69: 295 invoices pace=DAYTIME tz=America/Chicago hour=9 conc=3 chunkDays=60 maxPages=50 
+2026-05-21T14:24:12.147957305Z [2026-05-21T14:24:12.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=876.0min
+2026-05-21T14:24:20.7611849Z [Backfill] Shop 69: 1418 jobs, 0 unique vehicles to fetch (invoice cache: 295/295 hit)
+2026-05-21T14:24:37.084985008Z [RateLimit] protractor at 301/300, waiting 2757ms (attempt 1/8, exponential backoff)
+2026-05-21T14:24:37.235968946Z [RateLimit] protractor at 301/300, waiting 2431ms (attempt 1/8, exponential backoff)
+2026-05-21T14:24:37.454204405Z [RateLimit] protractor at 301/300, waiting 2342ms (attempt 1/8, exponential backoff)
+2026-05-21T14:24:39.78836517Z [RateLimit] protractor at 301/300, waiting 4006ms (attempt 2/8, exponential backoff)
+2026-05-21T14:24:39.916972331Z [RateLimit] protractor at 301/300, waiting 4563ms (attempt 2/8, exponential backoff)
+2026-05-21T14:24:39.972236867Z [RateLimit] protractor at 302/300, waiting 4349ms (attempt 2/8, exponential backoff)
+2026-05-21T14:24:42.147931898Z [2026-05-21T14:24:42.147Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=876.5min
+2026-05-21T14:24:43.92499609Z [RateLimit] protractor at 301/300, waiting 8887ms (attempt 3/8, exponential backoff)
+2026-05-21T14:24:44.450976622Z [RateLimit] protractor at 301/300, waiting 8726ms (attempt 3/8, exponential backoff)
+2026-05-21T14:24:44.609799454Z [RateLimit] protractor at 301/300, waiting 8790ms (attempt 3/8, exponential backoff)
+2026-05-21T14:24:52.94968131Z [RateLimit] protractor at 301/300, waiting 8500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:24:53.309682522Z [RateLimit] protractor at 301/300, waiting 7500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:24:53.531628403Z [RateLimit] protractor at 301/300, waiting 7500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:25:12.148351694Z [2026-05-21T14:25:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=877.0min
+2026-05-21T14:25:41.480926596Z [RateLimit] protractor at 302/300, waiting 2065ms (attempt 1/8, exponential backoff)
+2026-05-21T14:25:42.066729264Z [RateLimit] protractor at 301/300, waiting 2237ms (attempt 1/8, exponential backoff)
+2026-05-21T14:25:42.149019528Z [2026-05-21T14:25:42.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=877.5min
+2026-05-21T14:25:42.314822144Z [RateLimit] protractor at 301/300, waiting 2685ms (attempt 1/8, exponential backoff)
+2026-05-21T14:25:43.677125878Z [RateLimit] protractor at 301/300, waiting 4561ms (attempt 2/8, exponential backoff)
+2026-05-21T14:25:44.434437668Z [RateLimit] protractor at 302/300, waiting 4798ms (attempt 2/8, exponential backoff)
+2026-05-21T14:25:45.131055322Z [RateLimit] protractor at 301/300, waiting 4948ms (attempt 2/8, exponential backoff)
+2026-05-21T14:25:48.369263756Z [RateLimit] protractor at 301/300, waiting 8359ms (attempt 3/8, exponential backoff)
+2026-05-21T14:25:49.36312929Z [RateLimit] protractor at 301/300, waiting 8940ms (attempt 3/8, exponential backoff)
+2026-05-21T14:25:50.199531634Z [RateLimit] protractor at 301/300, waiting 8693ms (attempt 3/8, exponential backoff)
+2026-05-21T14:25:56.848432194Z [RateLimit] protractor at 301/300, waiting 4500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:25:58.423711298Z [RateLimit] protractor at 301/300, waiting 2500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:25:59.012065502Z [RateLimit] protractor at 301/300, waiting 2500ms (attempt 4/8, exponential backoff)
+2026-05-21T14:26:12.149619754Z [2026-05-21T14:26:12.149Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=878.0min
+2026-05-21T14:26:42.149189342Z [2026-05-21T14:26:42.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=878.5min
+2026-05-21T14:26:45.078035172Z [RateLimit] protractor at 301/300, waiting 2340ms (attempt 1/8, exponential backoff)
+2026-05-21T14:26:45.744057147Z [RateLimit] protractor at 302/300, waiting 2803ms (attempt 1/8, exponential backoff)
+2026-05-21T14:26:46.277718968Z [RateLimit] protractor at 301/300, waiting 2746ms (attempt 1/8, exponential backoff)
+2026-05-21T14:26:47.54352519Z [RateLimit] protractor at 301/300, waiting 4419ms (attempt 2/8, exponential backoff)
+2026-05-21T14:26:48.671651529Z [RateLimit] protractor at 301/300, waiting 4534ms (attempt 2/8, exponential backoff)
+2026-05-21T14:26:49.146085837Z [RateLimit] protractor at 301/300, waiting 4705ms (attempt 2/8, exponential backoff)
+2026-05-21T14:26:52.098729343Z [RateLimit] protractor at 301/300, waiting 8306ms (attempt 3/8, exponential backoff)
+2026-05-21T14:26:53.341830861Z [RateLimit] protractor at 301/300, waiting 7500ms (attempt 3/8, exponential backoff)
+2026-05-21T14:26:53.988036077Z [RateLimit] protractor at 301/300, waiting 7500ms (attempt 3/8, exponential backoff)
+2026-05-21T14:27:12.149601412Z [2026-05-21T14:27:12.149Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=879.0min
+2026-05-21T14:27:21.494127282Z [Backfill] Shop 116: 4249 jobs, 0 unique vehicles to fetch (invoice cache: 0/631 hit)
+2026-05-21T14:27:26.303950566Z [Backfill] Shop 116: Bulk wrote 4249 jobs (4249 new, 0 updated, 0 skipped)
+2026-05-21T14:27:29.600337789Z [PgCanonical] Postgres write failed — entity: vehicle, id: 698f6d13e281f1e8e041a583, action: update, shop: 76, pgCode: 23505, pgConstraint: null, pgColumn: null, pgTable: null, pgDetail: Key (shop_id, vin)=(76, KL4CJBSB4HB124576) already exists., pgHint: null, causeMessage: duplicate key value violates unique constraint "nv_shop_id_vin_idx", error: Failed query: insert into "normalized_vehicles" ("id", "enterprise_id", "shop_id", "location_id", "provenance", "soft_delete", "version", "vin", "vin_decoded", "vin_decode_data", "aces_vehicle_id", "aces_engine_id", "aces_decoded_at", "year", "make", "model", "submodel", "trim", "body_style", "engine_code", "engine_description", "engine_displacement", "engine_displacement_unit", "engine_cylinders", "engine_configuration", "fuel_type", "transmission", "transmission_speeds", "drivetrain", "exterior_color", "interior_color", "license_plate", "license_plate_state", "ownership_type", "is_fleet", "fleet_id", "fleet_unit_number", "current_odometer", "odometer_unit", "odometer_history", "estimated_annual_mileage", "purchase_date", "in_service_date", "warranty_expiration_date", "warranty_expiration_mileage", "telematics_provider", "telematics_device_id", "notes", "tags", "custom_fields", "customer_ids", "primary_customer_id", "last_service_date", "last_service_mileage", "total_services_count", "total_services_amount", "raw_data", "created_at", "updated_at") values ($1, $2, $3, default, $4, $5, $6, $7, $8, default, $9, $10, $11, $12, $13, $14, $15, $16, $17, default, $18, default, default, $19, default, $20, $21, default, $22, $23, default, $24, $25, default, $26, $27, default, $28, $29, default, default, default, default, default, default, default, default, $30, $31, $32, $33, $34, $35, default, $36, $37, $38, $39, $40) on conflict ("id") do update set "enterprise_id" = $41, "shop_id" = $42, "provenance" = $43, "soft_delete" = $44, "version" = $45, "vin" = $46, "vin_decoded" = $47, "aces_vehicle_id" = $48, "aces_engine_id" = $49, "aces_decoded_at" = $50, "year" = $51, "make" = $52, "model" = $53, "submodel" = $54, "trim" = $55, "body_style" = $56, "engine_description" = $57, "engine_cylinders" = $58, "fuel_type" = $59, "transmission" = $60, "drivetrain" = $61, "exterior_color" = $62, "license_plate" = $63, "license_plate_state" = $64, "is_fleet" = $65, "fleet_id" = $66, "current_odometer" = $67, "odometer_unit" = $68, "notes" = $69, "tags" = $70, "custom_fields" = $71, "customer_ids" = $72, "primary_customer_id" = $73, "last_service_date" = $74, "total_services_count" = $75, "total_services_amount" = $76, "raw_data" = $77, "updated_at" = $78
+2026-05-21T14:27:29.60038332Z params: 698f6d13e281f1e8e041a583,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"3c212b1f-3561-44a6-bb12-b41797de0485","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41317","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"09ef85fd-62c5-4bc8-9d0a-2dc2f33b41a6","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"38020","isPrimary":false}],"firstSeenAt":"2026-02-13T18:27:31.493Z","lastSeenAt":"2026-05-21T14:27:29.586Z","lastSyncedAt":"2026-05-21T14:27:29.586Z","syncRunId":"backfill-1779372008611","contentHash":"ce0d2f895ef0be18","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,KL4CJBSB4HB124576,true,400895065,300000924,2026-05-21T14:27:29.590Z,2017,Buick,Encore,,,,L4 1.6L 1591CC 97CID VIN 3,,,,,Black,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"KL4CJBSB4HB124576","vinDecoded":false,"year":2022,"make":"Hyundai","model":"Kona","engineDescription":"L4 1.6L 1591CC 97CID VIN 3","exteriorColor":"Black","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6d13e281f1e8e041a583","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"3c212b1f-3561-44a6-bb12-b41797de0485","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41317","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"09ef85fd-62c5-4bc8-9d0a-2dc2f33b41a6","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"38020","isPrimary":false}],"firstSeenAt":"2026-02-13T18:27:31.493Z","lastSeenAt":"2026-05-21T14:27:29.586Z","lastSyncedAt":"2026-05-21T14:27:29.586Z","syncRunId":"backfill-1779372008611","contentHash":"ce0d2f895ef0be18","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:27:31.493Z","updatedAt":"2026-05-21T14:27:29.586Z"},2026-02-13T18:27:31.493Z,2026-05-21T14:27:29.586Z,,76,{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"3c212b1f-3561-44a6-bb12-b41797de0485","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41317","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"09ef85fd-62c5-4bc8-9d0a-2dc2f33b41a6","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"38020","isPrimary":false}],"firstSeenAt":"2026-02-13T18:27:31.493Z","lastSeenAt":"2026-05-21T14:27:29.586Z","lastSyncedAt":"2026-05-21T14:27:29.586Z","syncRunId":"backfill-1779372008611","contentHash":"ce0d2f895ef0be18","writebackStatus":{"status":"not_applicable","retryCount":0}},{"isDeleted":false},5,KL4CJBSB4HB124576,true,400895065,300000924,2026-05-21T14:27:29.590Z,2017,Buick,Encore,,,,L4 1.6L 1591CC 97CID VIN 3,,,,,Black,,,false,,,miles,,[],{},[],,,0,0,{"shopId":76,"vin":"KL4CJBSB4HB124576","vinDecoded":false,"year":2022,"make":"Hyundai","model":"Kona","engineDescription":"L4 1.6L 1591CC 97CID VIN 3","exteriorColor":"Black","odometerUnit":"miles","odometerHistory":[],"isFleet":false,"tags":[],"customFields":{},"customerIds":[],"totalServicesCount":0,"totalServicesAmount":0,"_id":"698f6d13e281f1e8e041a583","provenance":{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"3c212b1f-3561-44a6-bb12-b41797de0485","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"41317","isPrimary":false},{"system":"protractor","idType":"invoice_id","idValue":"09ef85fd-62c5-4bc8-9d0a-2dc2f33b41a6","isPrimary":true},{"system":"protractor","idType":"invoice_number","idValue":"38020","isPrimary":false}],"firstSeenAt":"2026-02-13T18:27:31.493Z","lastSeenAt":"2026-05-21T14:27:29.586Z","lastSyncedAt":"2026-05-21T14:27:29.586Z","syncRunId":"backfill-1779372008611","contentHash":"ce0d2f895ef0be18","writebackStatus":{"status":"not_applicable","retryCount":0}},"softDelete":{"isDeleted":false},"version":5,"createdAt":"2026-02-13T18:27:31.493Z","updatedAt":"2026-05-21T14:27:29.586Z"},2026-05-21T14:27:29.586Z
+2026-05-21T14:27:42.149785391Z [2026-05-21T14:27:42.149Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=879.5min
+2026-05-21T14:28:12.148986961Z [2026-05-21T14:28:12.148Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=880.0min
+2026-05-21T14:28:42.149718361Z [2026-05-21T14:28:42.149Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=880.5min
+2026-05-21T14:29:12.150360993Z [2026-05-21T14:29:12.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=881.0min
+2026-05-21T14:29:42.150752923Z [2026-05-21T14:29:42.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=881.5min
+2026-05-21T14:30:12.15027565Z [2026-05-21T14:30:12.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=882.0min
+2026-05-21T14:30:42.15106965Z [2026-05-21T14:30:42.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=882.5min
+2026-05-21T14:31:12.151305883Z [2026-05-21T14:31:12.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=883.0min
+2026-05-21T14:31:42.151285835Z [2026-05-21T14:31:42.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=883.5min
+2026-05-21T14:32:12.15105866Z [2026-05-21T14:32:12.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=884.0min
+2026-05-21T14:32:42.151639968Z [2026-05-21T14:32:42.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=884.5min
+2026-05-21T14:33:12.151341523Z [2026-05-21T14:33:12.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=885.0min
+2026-05-21T14:33:42.151712188Z [2026-05-21T14:33:42.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=885.5min
+2026-05-21T14:34:12.151407015Z [2026-05-21T14:34:12.150Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=886.0min
+2026-05-21T14:34:42.151274912Z [2026-05-21T14:34:42.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=886.5min
+2026-05-21T14:35:12.152956855Z [2026-05-21T14:35:12.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=887.0min
+2026-05-21T14:35:42.152736803Z [2026-05-21T14:35:42.151Z] HEARTBEAT done=5/27 complete=1 error=0 lockWait=0 elapsed=887.5min
