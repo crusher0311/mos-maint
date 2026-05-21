@@ -134,6 +134,11 @@ function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
+// Special exit code used when another live drain owns the lock. The
+// background worker's per-provider loop treats this as "expected,
+// short-backoff retry" rather than a real failure (no stack-trace spam).
+export const DRAIN_LOCK_HELD_EXIT_CODE = 75;
+
 async function acquireDrainLock(): Promise<void> {
   const db = await getDb();
   const now = new Date();
@@ -143,36 +148,46 @@ async function acquireDrainLock(): Promise<void> {
   // expired, OR if we already own it (defensive — same owner re-acquiring
   // shouldn't fail). Anything else (a fresh, valid lease owned by another
   // worker) means we refuse to start.
-  const result = await db.collection("tekmetric_drain_lock").findOneAndUpdate(
-    {
-      _id: "global" as any,
-      $or: [
-        { expiresAt: { $lte: now } },
-        { expiresAt: { $exists: false } },
-        { owner: LOCK_OWNER },
-      ],
-    },
-    {
-      $set: {
-        owner: LOCK_OWNER,
-        acquiredAt: now,
-        expiresAt,
-        lastRefreshAt: now,
+  try {
+    await db.collection("tekmetric_drain_lock").findOneAndUpdate(
+      {
+        _id: "global" as any,
+        $or: [
+          { expiresAt: { $lte: now } },
+          { expiresAt: { $exists: false } },
+          { owner: LOCK_OWNER },
+        ],
       },
-    },
-    { upsert: true, returnDocument: "after" }
-  );
-
-  // findOneAndUpdate with upsert+filter that doesn't match throws E11000
-  // on the upsert attempt; the catch below surfaces it as a clear error.
-  if (!result || (result as any).value === null) {
-    // Re-read to find out who has it
-    const existing = await db
-      .collection("tekmetric_drain_lock")
-      .findOne({ _id: "global" as any });
-    throw new Error(
-      `Could not acquire drain lock — held by owner=${existing?.owner} until ${existing?.expiresAt}`
+      {
+        $set: {
+          owner: LOCK_OWNER,
+          acquiredAt: now,
+          expiresAt,
+          lastRefreshAt: now,
+        },
+      },
+      { upsert: true, returnDocument: "after" }
     );
+  } catch (err: any) {
+    // E11000 = filter didn't match AND upsert attempt tripped the unique
+    // _id index. This is the normal "another live drain owns the lock"
+    // path. Log a single-line reason and exit with the dedicated code so
+    // the worker loop can short-backoff retry without surfacing a stack
+    // trace on every iteration.
+    if (err?.code === 11000) {
+      const existing = await db
+        .collection("tekmetric_drain_lock")
+        .findOne({ _id: "global" as any })
+        .catch(() => null);
+      const expISO = existing?.expiresAt
+        ? new Date(existing.expiresAt).toISOString()
+        : "?";
+      log(
+        `LOCK HELD by owner=${existing?.owner ?? "?"} until ${expISO} — exiting (code ${DRAIN_LOCK_HELD_EXIT_CODE}); worker will retry after backoff`
+      );
+      process.exit(DRAIN_LOCK_HELD_EXIT_CODE);
+    }
+    throw err;
   }
   log(`Lock acquired owner=${LOCK_OWNER} expiresAt=${expiresAt.toISOString()}`);
 }

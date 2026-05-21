@@ -7,8 +7,13 @@ services:
   #   - This worker has no HTTP traffic, no deploy piggybacking, and a larger memory
   #     budget, so the drain loop can run uninterrupted.
   #
-  # The worker runs scripts/backfill-drain-worker.ts in a loop:
-  #   protractor drain -> sleep 60s -> tekmetric drain -> sleep 5m -> repeat
+  # The worker runs scripts/backfill-drain-worker.ts with one INDEPENDENT
+  # loop per provider, both running in parallel:
+  #   per provider: spawn drain -> wait for exit -> sleep -> repeat
+  # Sleep is 5m on success, 90s on "lock held by another live drain"
+  # (exit code 75), 2m on any other non-zero exit. A crash or rate-limit
+  # stall in one provider does NOT delay the other (this was the old
+  # Promise.all-per-iteration bug — see history of this file).
   #
   # Drain scripts use Mongo-backed leases so this is safe to run alongside the
   # existing web cron — only one drain process per provider can hold the lease.
@@ -47,9 +52,9 @@ services:
       # Render dashboard. Easiest path: "Copy from another service" -> mos-tools.
       #
       # Optional tuning (defaults in scripts/backfill-drain-worker.ts):
-      # - key: BACKFILL_WORKER_IDLE_BETWEEN_PROVIDERS_MS
-      #   value: "60000"
       # - key: BACKFILL_WORKER_IDLE_BETWEEN_LOOPS_MS
       #   value: "300000"
       # - key: BACKFILL_WORKER_BACKOFF_ON_FAILURE_MS
       #   value: "120000"
+      # - key: BACKFILL_WORKER_LOCK_HELD_RETRY_MS
+      #   value: "90000"
