@@ -1,0 +1,28 @@
+May 21 at 11:54:38am CDT
+2026-05-21 12:03:58.635 CDT
+MOS Production
+syslog.host:mos-tools-qa syslog.appname:bld-9qm6t syslog.procid:1 ├ ƒ /api/callbacks/protractor                                         0 B                0 B
+2026-05-21 12:04:08.496 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:bld-h72x8 syslog.procid:1 ├ ƒ /api/callbacks/protractor                                         0 B                0 B
+2026-05-21 12:15:08.466 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"34.63.21.166","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor?test=brandon-29","requestId":"38967588-6509-40ff","responseBytes":353,"responseTimeMS":8,"statusCode":200,"time":"2026-05-21T17:15:08.4667112Z","userAgent":"curl/8.14.1"}1 result found
+2026-05-21 12:15:08.653 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-2dw8w syslog.procid:1 [Protractor Callback] Content-Type: application/json
+2026-05-21 12:15:08.654 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-2dw8w syslog.procid:1 [Protractor Callback] Received:
+2026-05-21 12:15:08.654 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:web-2dw8w syslog.procid:1 [Protractor Callback] Rejected: No connectionId in payload
+2026-05-21 12:15:08.655 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"34.63.21.166","host":"mos.tools","method":"POST","path":"/api/callbacks/protractor","requestId":"e4355f1e-5e13-4dd9","responseBytes":295,"responseTimeMS":7,"statusCode":400,"time":"2026-05-21T17:15:08.655897601Z","userAgent":"curl/8.14.1"}1 result found
+2026-05-21 12:34:49.589 CDT
+MOS Production
+syslog.host:mos-maintenance-mvp-main syslog.appname:http-request syslog.procid:1 {"clientIP":"3.237.92.32","host":"mos.tools","method":"GET","path":"/api/callbacks/protractor","requestId":"e576d891-31c8-4030","responseBytes":353,"responseTimeMS":4,"statusCode":200,"time":"2026-05-21T17:34:49.589868947Z","userAgent":"Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"}1 result found
+
+
+Waiting for logs...
