@@ -202,18 +202,25 @@ export async function GET(req: NextRequest) {
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
 
-    for (const shop of shops) {
+    // pLimit(4) across shops — see lib/cron/jobs.cjs comment on protractor-sync.
+    // Previously this was a sequential `for (const shop of shops)` loop that
+    // only reached the first 5 of 27 shops before the scheduler aborted at
+    // 5 min. With 4-way concurrency + the 25-min scheduler timeout we cover
+    // the full fleet on every tick. Each Protractor shop has its own API
+    // creds so there is no shared rate-limit ceiling to coordinate.
+    const shopLimit = pLimit(4);
+    await Promise.all(shops.map((shop) => shopLimit(async () => {
       const shopId = Number(shop.shopId);
       const config = await resolveProtractorConfig(shopId);
       
-      if (!config.configured) continue;
+      if (!config.configured) return;
 
       try {
         const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
         
         if (!activeResult.ok || !activeResult.workOrders) {
           results.push({ shopId, synced: 0, removed: 0, error: activeResult.error });
-          continue;
+          return;
         }
 
         const activeWOs = activeResult.workOrders;
@@ -450,7 +457,7 @@ export async function GET(req: NextRequest) {
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
-    }
+    })));
 
     const duration = Date.now() - startTime;
     console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
