@@ -1,0 +1,30 @@
+Hi there, hmm, the 134 exit codes are OOM-kills from our infra or the Linux kernel level, they are from the NodeJS v8 Javascript engine:
+<--- Last few GCs --->
+[71:0x452ca000] 12337257 ms: Mark-Compact 3021.5 (3105.9) -> 3007.2 (3105.1) MB, pooled: 3 MB, 789.55 / 0.04 ms  (average mu = 0.308, current mu = 0.326) task; scavenge might not succeed
+[71:0x452ca000] 12338340 ms: Mark-Compact 3021.3 (3105.7) -> 3007.2 (3104.9) MB, pooled: 3 MB, 773.94 / 0.10 ms  (average mu = 0.297, current mu = 0.286) task; scavenge might not succeed
+<--- JS stacktrace --->
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+ 1: 0xe13fde node::OOMErrorHandler(char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+ 2: 0x11d5070 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+ 3: 0x11d5347 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [next-server (v14.2.5)]
+ 4: 0x1402c05  [next-server (v14.2.5)]
+ 5: 0x1402c33  [next-server (v14.2.5)]
+ 6: 0x141bd0a  [next-server (v14.2.5)]
+ 7: 0x141eed8  [next-server (v14.2.5)]
+ 8: 0x1c84ba1  [next-server (v14.2.5)]
+Aborted (core dumped)
+[2026-05-21T21:58:30.446Z] Attempt 2/3 failed: fetch failed
+[2026-05-21T21:58:30.446Z] Retrying in 10s...
+[Next.js] Exited with code 134
+
+This is purely a service-level OOM. They will not be graceful shutdowns, as your service is exiting outside of when we expect it to.
+
+I'm not sure why it would have just started, but I see it going back as far as April:
+
+
+I'm unsure why the TLS handshake would differ, since TLS for clients is terminated in Cloudflare. It is possible something has changed here without our knowledge, but I think you should first look into why you are hitting Node OOMs.
+
+I see you set --max-old-space-size=3072 but you are running a 16GB instance. That is a lot of memory left unused. Try setting it to --max-old-space-size=12288 (maybe even higher depending on how much non-heap memory your service uses). Though if your service is leaking memory somewhere, this may just delay the crash.
+
+Note, I wouldn't recommend setting max-old-space-size in a NODE_OPTIONS env var. This means it applies to both build and runtime environments, which have different amounts of memory. I would recommend setting it specifically in your build and start commands.
