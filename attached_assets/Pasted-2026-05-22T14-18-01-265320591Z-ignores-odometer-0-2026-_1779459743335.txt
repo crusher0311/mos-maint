@@ -1,0 +1,50 @@
+2026-05-22T14:18:01.265320591Z   ✓ ignores odometer === 0
+2026-05-22T14:18:01.265329101Z   ✓ autoflow: returns null (no mirror)
+2026-05-22T14:18:01.265470616Z   ✓ pick: open-RO higher than vehicle doc -> open_ro wins
+2026-05-22T14:18:01.265478646Z   ✓ pick: no open-RO -> vehicles_collection
+2026-05-22T14:18:01.265789815Z   ✓ pick: open-RO lower than vehicle doc -> vehicles wins (monotonic guard)
+2026-05-22T14:18:01.265796825Z   ✓ pick: open-RO lower -> mileage_discrepancy fires
+2026-05-22T14:18:01.265807826Z   ✓ pick: discrepancy source labeled by integration
+2026-05-22T14:18:01.265845587Z   ✓ pick: open-RO lower within tolerance -> no discrepancy
+2026-05-22T14:18:01.265849957Z   ✓ pick: vehicle doc null, open-RO present -> open_ro
+2026-05-22T14:18:01.265873388Z   ✓ pick: both null -> miles null, source null
+2026-05-22T14:18:01.265879738Z   ✓ pick: equal values -> open_ro wins for unambiguous logging
+2026-05-22T14:18:01.26595333Z   ✓ cache: open-RO bump exceeds MILEAGE_TOLERANCE -> cache miss enforced
+2026-05-22T14:18:01.26630237Z   ✓ brake-fluid time-only: miles axis is suppressed (status null)
+2026-05-22T14:18:01.26630733Z   ✓ brake-fluid time-only: no 'mi over' headline emitted
+2026-05-22T14:18:01.26631053Z   ✓ brake-fluid time-only: time axis still reports (interval lapsed)
+2026-05-22T14:18:01.266325831Z   ✓ brake-fluid time-only: overall headline anchored to time axis
+2026-05-22T14:18:01.27968944Z   ✓ non-zero dueAtMiles still computes 'mi over'
+2026-05-22T14:18:01.27971538Z 
+2026-05-22T14:18:01.279724071Z All task #476 checks passed
+2026-05-22T14:18:01.44031135Z 
+2026-05-22T14:18:01.440345851Z > mos-maintenance-mvp@1.8.0 test:plan-build-triage-time-only
+2026-05-22T14:18:01.440349831Z > tsx tests/plan-build-triage-time-only.smoke.ts
+2026-05-22T14:18:01.440352521Z 
+2026-05-22T14:18:02.186088221Z Plan-build triage time-only OEM rule smoke checks
+2026-05-22T14:18:02.204200001Z   ✓ brake-fluid row present in some bucket
+2026-05-22T14:18:02.204222162Z   ✓ time-only OEM: dueAtMiles is null (no miles axis)
+2026-05-22T14:18:02.204234752Z   ✓ time-only OEM: milesToGo is null
+2026-05-22T14:18:02.204242393Z   ✓ time-only OEM: dueAtDate is populated
+2026-05-22T14:18:02.204254643Z   ✓ time-only OEM: last.miles preserved as anchor for display
+2026-05-22T14:18:02.204378286Z 
+2026-05-22T14:18:02.204382937Z All task #476 triage checks passed
+2026-05-22T14:18:02.385151448Z 
+2026-05-22T14:18:02.385169418Z > mos-maintenance-mvp@1.8.0 test:smoke
+2026-05-22T14:18:02.385176978Z > npm run lint:direct-db && npm run lint:no-migrate-tab && npm run test:tekmig-api-auth && npm run test:extension-guard && npm run test:extension-auth-no-plaintext && npm run test:extension-manifest-version-bump && npm run test:oe-logo && npm run test:unit-format && npm run test:sticker-defaults && npm run test:protractor-canned-jobs-filter && npm run test:fuel-type-label && npm run test:backfill-chunk-speed-health && npm run test:chunk-speed-email-html && npm run test:backfill-chunk-speed-health:route && npm run test:tekmetric-backfill-health:route && npm run test:tekmetric-webhook-health:route && npm run test:tekmetric-endpoint-health:route && npm run test:tekmetric-endpoint-health && npm run test:tekmetric-catchup && npm run test:tekmetric-shared-rate-limiter && npm run test:vhr-engine-risk && npm run test:engine-risk-csv && npm run test:enhance-corrections-mos-shop-id && npm run test:concern-conversations-mos-shop-id && npm run test:hovercode-drift && npm run test:hovercode-create-payload && npm run test:vhi-score-snapshot && npm run test:vhi-rebuild-snapshot && npm run test:tekmetric-webhook-signature && npm run test:stripe-webhook-signature && npm run test:extension-shop-lookup && npm run test:stripe-webhook-idempotency && npm run test:tekmetric-webhook-idempotency && npm run test:jobs-search-canonical && npm run test:jobs-search-shape && npm run test:job-scoring-aces-tiers && npm run test:job-index-aces-coverage
+2026-05-22T14:18:02.385181009Z 
+2026-05-22T14:18:02.517988109Z 
+2026-05-22T14:18:02.51801133Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-05-22T14:18:02.51801508Z > node scripts/check-direct-db.cjs
+2026-05-22T14:18:02.51801781Z 
+2026-05-22T14:18:03.315956037Z 
+2026-05-22T14:18:03.315997068Z [check-direct-db] 2 file(s) call getDb()/getMongoClient() directly without being on the allowlist:
+2026-05-22T14:18:03.316001438Z 
+2026-05-22T14:18:03.316161513Z   - app/api/cron/protractor-af-log-tail/route.ts
+2026-05-22T14:18:03.316169654Z   - app/api/cron/protractor-stage-refresh/route.ts
+2026-05-22T14:18:03.316184894Z 
+2026-05-22T14:18:03.316188554Z Add a function in lib/data/repositories/<entity>.ts and call it from these files instead.
+2026-05-22T14:18:03.316203355Z See docs/data-access.md for details.
+2026-05-22T14:18:03.316205855Z 
+2026-05-22T14:18:03.378225014Z ==> Build failed 😞
+2026-05-22T14:18:03.378261035Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
