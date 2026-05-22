@@ -58,9 +58,19 @@ function waitForServer(url, maxAttempts = 30) {
 
 async function main() {
   console.log('[1/3] Starting Next.js server...');
+  // Bump Next.js heap from the Node default (~4 GB) to 12 GB on Render's
+  // 16 GB instance. Set NODE_OPTIONS here (in the child env) instead of
+  // as a Render service-level env var so the larger heap applies ONLY
+  // at runtime (this start script) and NEVER at build time — Render's
+  // build container is smaller and doesn't need 12 GB. Per Render
+  // support advisory 2026-05-22 after recurring 134/OOM kills in the
+  // Next server child (v8 stack: `next-server (v14.2.5)`).
   const nextServer = spawn('npx', ['next', 'start', '-p', PORT, '-H', '0.0.0.0'], {
     stdio: 'inherit',
-    env: process.env
+    env: {
+      ...process.env,
+      NODE_OPTIONS: `--max-old-space-size=12288 ${process.env.NODE_OPTIONS || ''}`.trim(),
+    }
   });
 
   nextServer.on('error', (err) => {
