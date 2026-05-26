@@ -322,11 +322,95 @@ const shopPrefetchInProgress = new Set<number>();
 const tekmetricRoCache = new Map<string, { data: any; fetchedAt: number }>();
 const TEKMETRIC_RO_CACHE_TTL = 30 * 1000;
 
+// Cross-instance negative cache for Tekmetric RO timeouts. The in-memory
+// `tekmetricRoCache` above is per-process, so when Tekmetric stalls a single
+// RO (e.g. heart-shop saturation), every advisor refresh on a different
+// Render instance re-pays the 6s `withUpstreamTimeout` ceiling, and the
+// refresh-storm visible in Better Stack (5+ timeouts on the same RO within
+// 20s across `web-2hnt7` / `web-9n8vh`) amplifies the upstream pressure that
+// caused the timeout in the first place. This Mongo-backed TTL collection
+// remembers "RO X just timed out" for 30s across every instance so repeat
+// hits return null immediately and the caller falls back to its existing
+// `tekmetric_work_orders` Mongo cache without restalling.
+const TEKMETRIC_RO_NEG_CACHE_COLL = "tekmetric_ro_negative_cache";
+const TEKMETRIC_RO_NEG_CACHE_TTL_MS = 30 * 1000;
+let tekmetricRoNegIndexEnsured = false;
+
+async function ensureNegCacheIndex(db: any): Promise<void> {
+  if (tekmetricRoNegIndexEnsured) return;
+  try {
+    await db
+      .collection(TEKMETRIC_RO_NEG_CACHE_COLL)
+      .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+    tekmetricRoNegIndexEnsured = true;
+  } catch {
+    // index ensure failures are non-fatal — fall through to fail-open behavior
+  }
+}
+
+// Shop-scope the negative-cache key. Tekmetric RO IDs appear globally unique
+// today (9-10 digit ascending counters across the SMS), but the rest of this
+// codebase routinely treats `{shopId, roId}` as the safe composite key, so we
+// match that contract here to avoid one shop's timeout suppressing another
+// shop's live fetch if Tekmetric ever recycles IDs per-shop. Callers without
+// a mosShopId (legacy paths) fall back to `_:roId` and behave as before.
+function negCacheKey(roId: string, mosShopId?: number): string {
+  return `${mosShopId ?? "_"}:${roId}`;
+}
+
+async function isRoNegativelyCached(roId: string, mosShopId?: number): Promise<boolean> {
+  try {
+    const db = await getDb();
+    await ensureNegCacheIndex(db);
+    const doc = await db
+      .collection(TEKMETRIC_RO_NEG_CACHE_COLL)
+      .findOne({ _id: negCacheKey(roId, mosShopId), expiresAt: { $gt: new Date() } } as any);
+    return !!doc;
+  } catch {
+    // Mongo unavailable → fail-open (pretend no negative entry) so we don't
+    // accidentally hide a working API behind a degraded cache layer.
+    return false;
+  }
+}
+
+// Note: this records both upstream timeouts AND thrown errors (anything that
+// makes the wrapped `withUpstreamTimeout` return `null`). The 30s window is
+// intentionally short so a transient blip recovers on its own; longer
+// outages benefit from the same suppression so we don't repeatedly burn 6s
+// per advisor refresh while the upstream is sick.
+async function recordRoNegativeCache(roId: string, mosShopId?: number): Promise<void> {
+  try {
+    const db = await getDb();
+    await ensureNegCacheIndex(db);
+    await db.collection(TEKMETRIC_RO_NEG_CACHE_COLL).updateOne(
+      { _id: negCacheKey(roId, mosShopId) } as any,
+      {
+        $set: {
+          expiresAt: new Date(Date.now() + TEKMETRIC_RO_NEG_CACHE_TTL_MS),
+          cachedAt: new Date(),
+          shopId: mosShopId ?? null,
+          roId,
+        },
+      },
+      { upsert: true },
+    );
+  } catch {
+    // best-effort
+  }
+}
+
 async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosShopId?: number): Promise<any | null> {
   if (!forceRefresh) {
     const cached = tekmetricRoCache.get(roId);
     if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
       return cached.data;
+    }
+    // Cross-instance short-circuit: if another worker just timed out on this
+    // RO within the last 30s, don't re-pay the 6s ceiling — bail immediately
+    // and let the caller use its Mongo fallback.
+    if (await isRoNegativelyCached(roId, mosShopId)) {
+      console.log(`[Extension] Tekmetric RO ${roId} (shop ${mosShopId ?? "?"}) negative-cached (recent timeout) — skipping live call`);
+      return null;
     }
   }
   try {
@@ -341,7 +425,12 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
       `tekmetric /repair-orders/${roId}`,
       null,
     );
-    if (data == null) return null;
+    if (data == null) {
+      // Negative-cache the timeout so concurrent advisors on other Render
+      // instances don't all repay the 6s wait for the same RO.
+      await recordRoNegativeCache(roId, mosShopId);
+      return null;
+    }
     tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
     if (tekmetricRoCache.size > 200) {
       const oldest = Array.from(tekmetricRoCache.entries())
@@ -351,6 +440,7 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
     return data;
   } catch (e: any) {
     console.error(`[Extension] Tekmetric RO fetch failed for ${roId}:`, e.message);
+    await recordRoNegativeCache(roId, mosShopId);
   }
   return null;
 }
