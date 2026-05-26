@@ -78,6 +78,9 @@ DEV_USER_EMAIL = "brandoncrusha+1@gmail.com"
 E2E_TEST_SECRET = "e2e-test-secret-at-least-16-chars"
 NEXT_PUBLIC_BASE_URL = "https://a5a4005c-4e3d-4ce9-896c-c46425944606-00-30ggbdzp2bkb6.riker.replit.dev"
 
+[userenv.production]
+VHI_REALTIME_PUSH_ENABLED = "true"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
