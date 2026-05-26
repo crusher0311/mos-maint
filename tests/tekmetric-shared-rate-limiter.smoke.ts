@@ -23,7 +23,9 @@ import {
   __deps,
   __resetIndexEnsuredForTest,
   acquireSharedTekmetricSlot,
+  effectiveCapForPriority,
   getSharedTekmetricRpsCap,
+  getSharedTekmetricUserReserve,
   isSharedLimiterDisabled,
 } from "../lib/integrations/tekmetric/shared-rate-limiter";
 import { makeFakeDb } from "./utils/fake-mongo";
@@ -338,6 +340,129 @@ async function run() {
         delete process.env.TEKMETRIC_SHARED_LIMITER_FAIL_OPEN;
       else process.env.TEKMETRIC_SHARED_LIMITER_FAIL_OPEN = prev;
     }
+  }
+
+  // 5b. Priority lane: helpers, user-reserve env, and effective-cap math.
+  {
+    const prev = process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE;
+    try {
+      delete process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE;
+      ok("default user reserve is 3", getSharedTekmetricUserReserve() === 3);
+      process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE = "0";
+      ok("user reserve env=0 disables the reserve", getSharedTekmetricUserReserve() === 0);
+      process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE = "5";
+      ok("user reserve env=5 honored", getSharedTekmetricUserReserve() === 5);
+      process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE = "-2";
+      ok("negative user reserve falls back to default 3", getSharedTekmetricUserReserve() === 3);
+      process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE = "garbage";
+      ok("garbage user reserve falls back to default 3", getSharedTekmetricUserReserve() === 3);
+    } finally {
+      if (prev === undefined) delete process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE;
+      else process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE = prev;
+    }
+    ok("interactive sees full cap (8 reserve=3 → 8)", effectiveCapForPriority(8, 3, "interactive") === 8);
+    ok("background sees cap - reserve (8 reserve=3 → 5)", effectiveCapForPriority(8, 3, "background") === 5);
+    ok("background reserve=0 sees full cap (8 → 8)", effectiveCapForPriority(8, 0, "background") === 8);
+    ok("background clamps to >=1 when reserve == cap (8 reserve=8 → 1)", effectiveCapForPriority(8, 8, "background") === 1);
+    ok("background clamps to >=1 when reserve > cap (8 reserve=999 → 1)", effectiveCapForPriority(8, 999, "background") === 1);
+    ok("background ignores negative reserve (8 reserve=-3 → 8)", effectiveCapForPriority(8, -3, "background") === 8);
+  }
+
+  // 5c. Priority lane: background callers back off once usage exceeds
+  //     `cap - userReserve`, even when bucket has interactive headroom.
+  //     This is the whole point — backfills cannot starve VHI loads.
+  {
+    __resetIndexEnsuredForTest();
+    const fake = withLimiterFakeDb();
+    await withClock(1_700_000_100, async (clock) => {
+      const sleep = async (ms: number) => {
+        clock.sleeps.push(ms);
+        clock.advance(ms);
+      };
+      // cap=8, userReserve=3 → background effectiveCap=5. Fire 5 background
+      // calls in the same bucket; all should acquire. The 6th must wait
+      // for the next bucket because background hit its lane ceiling.
+      for (let i = 0; i < 5; i++) {
+        const r = await acquireSharedTekmetricSlot({
+          capOverride: 8,
+          userReserveOverride: 3,
+          priority: "background",
+          dbOverride: fake.db,
+          nowMs: clock.now,
+          sleep,
+        });
+        ok(`background call ${i + 1}/5 acquired in first bucket`, r.acquired && !r.fallback);
+      }
+      const sleepsBefore = clock.sleeps.length;
+      const sixth = await acquireSharedTekmetricSlot({
+        capOverride: 8,
+        userReserveOverride: 3,
+        priority: "background",
+        dbOverride: fake.db,
+        nowMs: clock.now,
+        sleep,
+      });
+      ok(
+        "6th background call rolled to next bucket (lane ceiling enforced)",
+        sixth.acquired && !sixth.fallback && clock.sleeps.length > sleepsBefore,
+        `sleeps=${JSON.stringify(clock.sleeps)}`,
+      );
+      // First bucket settled at 5 (the 6th caller released its slot).
+      const firstBucket = fake.collections.tekmetric_rate_buckets[0];
+      ok(
+        "first bucket settled at background lane ceiling (5)",
+        firstBucket?.count === 5,
+        `firstBucket=${JSON.stringify(firstBucket)}`,
+      );
+    });
+  }
+
+  // 5d. Interactive callers can still climb above the background lane
+  //     ceiling, all the way to the full cap. The reserve is one-way.
+  {
+    __resetIndexEnsuredForTest();
+    const fake = withLimiterFakeDb();
+    await withClock(1_700_000_120, async (clock) => {
+      const sleep = async (ms: number) => {
+        clock.sleeps.push(ms);
+        clock.advance(ms);
+      };
+      // Pre-fill bucket with 5 background calls (the lane ceiling).
+      for (let i = 0; i < 5; i++) {
+        await acquireSharedTekmetricSlot({
+          capOverride: 8,
+          userReserveOverride: 3,
+          priority: "background",
+          dbOverride: fake.db,
+          nowMs: clock.now,
+          sleep,
+        });
+      }
+      const sleepsBefore = clock.sleeps.length;
+      // Three interactive calls should land in the SAME bucket — they own
+      // the reserved 3 RPS of headroom and shouldn't wait.
+      for (let i = 0; i < 3; i++) {
+        const r = await acquireSharedTekmetricSlot({
+          capOverride: 8,
+          userReserveOverride: 3,
+          priority: "interactive",
+          dbOverride: fake.db,
+          nowMs: clock.now,
+          sleep,
+        });
+        ok(
+          `interactive call ${i + 1}/3 used reserved headroom (no sleep)`,
+          r.acquired && !r.fallback && clock.sleeps.length === sleepsBefore,
+          JSON.stringify(r),
+        );
+      }
+      const firstBucket = fake.collections.tekmetric_rate_buckets[0];
+      ok(
+        "first bucket at full cap (8) after interactive used the reserve",
+        firstBucket?.count === 8,
+        `firstBucket=${JSON.stringify(firstBucket)}`,
+      );
+    });
   }
 
   // 6. Disable flag short-circuits.

@@ -319,7 +319,13 @@ export async function tekmetricRequest<T = any>(
     // the full rationale. Fail-closed on timeout: treat it like a 429 — back
     // off and retry within the existing loop instead of issuing the request
     // and breaching the cap.
-    const sharedSlot = await acquireSharedTekmetricSlot();
+    //
+    // Priority is forwarded so the cross-process bucket honors the same
+    // interactive/background split as the in-process two-lane queue:
+    // background calls only consume up to `cap - userReserve` of the shared
+    // bucket, leaving guaranteed headroom for VHI/dashboard/extension calls
+    // even when a fleet of backfill workers is hammering the same key.
+    const sharedSlot = await acquireSharedTekmetricSlot({ priority });
     if (!sharedSlot.acquired) {
       if (attempt > MAX_429_RETRIES) {
         throw new Error(`[Tekmetric] Shared rate limiter timed out after ${MAX_429_RETRIES} attempts on ${endpoint}; refusing to breach the cap.`);
@@ -712,7 +718,12 @@ export async function getRepairOrderInspectionsWithXAuth(
       // (caller already handles `[]` as "no inspections") so degrading to
       // empty here is acceptable; the alternative would be issuing the
       // request and contributing to a 429 storm.
-      const sharedSlot = await acquireSharedTekmetricSlot();
+      //
+      // This path serves the Detect Dog DVI overlay — a tech is staring at
+      // the screen waiting for it — so it's explicitly interactive priority
+      // and gets the full shared cap (not the background `cap - userReserve`
+      // lane). Same as the default, just declared for clarity.
+      const sharedSlot = await acquireSharedTekmetricSlot({ priority: 'interactive' });
       if (!sharedSlot.acquired) {
         console.warn(`[Tekmetric] Shared rate limiter saturated for inspection fetch RO ${repairOrderId}; skipping to avoid cap breach`);
         return [];

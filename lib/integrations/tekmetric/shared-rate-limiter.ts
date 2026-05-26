@@ -55,6 +55,19 @@
  *     RPS budget across all processes/services using these credentials.
  *     Set to 8 in steady state to stay 20% under Tekmetric's documented
  *     10 RPS cap.
+ *   - `TEKMETRIC_SHARED_RPS_USER_RESERVE` (default 3): number of RPS
+ *     within the shared cap that ONLY interactive (user-waiting) calls
+ *     may consume. Background backfill/cron calls see an effective cap
+ *     of `cap - userReserve` and back off once usage exceeds that
+ *     threshold — even when interactive callers aren't using their
+ *     reserved headroom yet. This is the "priority lane" that prevents
+ *     a fleet-wide backfill storm from starving every advisor's VHI
+ *     load. The in-process two-lane queue in `lib/integrations/core/
+ *     rate-limiter.ts` already orders interactive ahead of background
+ *     within one Node process; this env extends that guarantee
+ *     cross-process at the Mongo bucket layer. Set to 0 to disable
+ *     the reserve (every call sees the full cap, FIFO). Effective
+ *     backfill cap is always clamped to at least 1.
  *   - `TEKMETRIC_SHARED_LIMITER_DISABLED=true` short-circuits the limiter
  *     for break-glass debugging (falls back to per-process behavior).
  *
@@ -72,8 +85,11 @@ import { getDb } from "@/lib/mongo";
 const COLLECTION = "tekmetric_rate_buckets";
 const HARD_CEILING_RPS = 10;
 const DEFAULT_CAP_RPS = 8;
+const DEFAULT_USER_RESERVE_RPS = 3;
 const MAX_WAIT_MS = 5_000;
 const BUCKET_TTL_MS = 10_000;
+
+export type SharedSlotPriority = "interactive" | "background";
 
 let indexEnsured = false;
 let indexEnsureFailedLogged = false;
@@ -120,6 +136,40 @@ export function getSharedTekmetricRpsCap(): number {
   return Math.min(raw, HARD_CEILING_RPS);
 }
 
+/**
+ * RPS within the shared cap that ONLY interactive callers may consume.
+ * Background calls back off once bucket usage exceeds `cap - userReserve`.
+ *
+ * Reads `TEKMETRIC_SHARED_RPS_USER_RESERVE` (default 3). Negative values
+ * and NaN fall back to the default; zero disables the reserve (every
+ * call sees the full cap, FIFO). The reserve is bounded above by
+ * `cap - 1` at evaluation time so background never collapses to 0
+ * effective cap — see `effectiveCapForPriority`.
+ */
+export function getSharedTekmetricUserReserve(): number {
+  const rawEnv = process.env.TEKMETRIC_SHARED_RPS_USER_RESERVE;
+  if (rawEnv === undefined || rawEnv === "") return DEFAULT_USER_RESERVE_RPS;
+  const raw = parseInt(rawEnv, 10);
+  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_USER_RESERVE_RPS;
+  return raw;
+}
+
+/**
+ * Effective per-second cap a caller of `priority` sees. Interactive sees
+ * the full `cap`; background sees `cap - userReserve`, clamped to at
+ * least 1 so a misconfigured reserve cannot wedge backfill traffic to
+ * zero. Exported for tests and observability.
+ */
+export function effectiveCapForPriority(
+  cap: number,
+  userReserve: number,
+  priority: SharedSlotPriority,
+): number {
+  if (priority === "interactive") return cap;
+  const reserved = Math.max(0, Math.min(userReserve, cap - 1));
+  return Math.max(1, cap - reserved);
+}
+
 export function isSharedLimiterDisabled(): boolean {
   return process.env.TEKMETRIC_SHARED_LIMITER_DISABLED === "true";
 }
@@ -138,6 +188,19 @@ export interface SharedSlotResult {
 export interface AcquireSharedSlotOptions {
   /** Override the cap for this call (still bounded by HARD_CEILING_RPS). */
   capOverride?: number;
+  /**
+   * Priority lane. `interactive` (default) sees the full shared cap and
+   * is what VHI loads, dashboard fetches, extension calls, and anything
+   * a human is waiting on should use. `background` sees an effective
+   * cap of `cap - userReserve` (default 8 - 3 = 5) so backfills/cron
+   * sweeps yield headroom even when the bucket has room. Default is
+   * `interactive` so unaudited callers keep their current behavior;
+   * backfill paths must opt in explicitly. See
+   * `effectiveCapForPriority` for the math.
+   */
+  priority?: SharedSlotPriority;
+  /** Override the per-call user reserve. Default reads env. */
+  userReserveOverride?: number;
   /** Test seam: clock source. */
   nowMs?: () => number;
   /** Test seam: sleep function. */
@@ -191,6 +254,9 @@ export async function acquireSharedTekmetricSlot(
     opts.capOverride ?? getSharedTekmetricRpsCap(),
     HARD_CEILING_RPS,
   );
+  const priority: SharedSlotPriority = opts.priority ?? "interactive";
+  const userReserve = opts.userReserveOverride ?? getSharedTekmetricUserReserve();
+  const effectiveCap = effectiveCapForPriority(cap, userReserve, priority);
   const nowMs = opts.nowMs ?? (() => Date.now());
   const sleep =
     opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
@@ -242,7 +308,7 @@ export async function acquireSharedTekmetricSlot(
       return { acquired: true, waitedMs: waited, fallback: true };
     }
 
-    if (count <= cap) {
+    if (count <= effectiveCap) {
       const waited = nowMs() - startedAt;
       bumpRateLimiterWait(waited);
       return { acquired: true, waitedMs: waited };
@@ -266,7 +332,7 @@ export async function acquireSharedTekmetricSlot(
         // cap breach immediately — under fail-open, this log line is
         // proof the limiter is no longer protecting the upstream API.
         console.warn(
-          `[Tekmetric SharedLimiter] CAP BREACH (FAIL-OPEN): waited ${elapsed}ms without slot (cap=${cap}), allowing request through because TEKMETRIC_SHARED_LIMITER_FAIL_OPEN=true. Combined attempted RPS may now exceed ${cap}; expect 429s.`,
+          `[Tekmetric SharedLimiter] CAP BREACH (FAIL-OPEN): waited ${elapsed}ms without slot (priority=${priority}, effectiveCap=${effectiveCap}, cap=${cap}), allowing request through because TEKMETRIC_SHARED_LIMITER_FAIL_OPEN=true. Combined attempted RPS may now exceed ${cap}; expect 429s.`,
         );
         bumpRateLimiterWait(elapsed);
         bumpRateLimiterTimeout();
@@ -278,7 +344,7 @@ export async function acquireSharedTekmetricSlot(
       // existing 429 backoff handles the case where pressure is so
       // sustained that the retry budget is exhausted.
       console.warn(
-        `[Tekmetric SharedLimiter] Waited ${elapsed}ms without slot (cap=${cap}); failing closed so caller can backoff/retry instead of breaching the cap`,
+        `[Tekmetric SharedLimiter] Waited ${elapsed}ms without slot (priority=${priority}, effectiveCap=${effectiveCap}, cap=${cap}); failing closed so caller can backoff/retry instead of breaching the cap`,
       );
       bumpRateLimiterWait(elapsed);
       bumpRateLimiterTimeout();
