@@ -499,6 +499,65 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Task #484: extension requests a short-lived Supabase Realtime token
+  // scoped to a single shop. Server returns 503 when the feature flag is
+  // off or env is missing — we surface that as success:false so the
+  // overlay knows to fall back to polling.
+  if (message.action === "GET_VHI_REALTIME_TOKEN") {
+    (async () => {
+      await _stateReady;
+      if (!mosApiToken || !mosApiUrl) {
+        sendResponse({ success: false, reason: "not_connected" });
+        return;
+      }
+      try {
+        const res = await fetch(`${mosApiUrl}/api/extension/realtime-token`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${mosApiToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            provider: "tekmetric",
+            smsShopId: message.smsShopId,
+          }),
+        });
+        if (!res.ok) {
+          sendResponse({ success: false, reason: `http_${res.status}` });
+          return;
+        }
+        const data = await res.json();
+        sendResponse({
+          success: true,
+          supabaseUrl: data.supabaseUrl,
+          supabaseAnonKey: data.supabaseAnonKey,
+          token: data.token,
+          shopId: data.shopId,
+          topicPrefix: data.topicPrefix,
+          expiresAt: data.expiresAt,
+        });
+      } catch (err) {
+        sendResponse({ success: false, reason: "fetch_error" });
+      }
+    })();
+    return true;
+  }
+
+  // Task #484: realtime broadcast received in the content script → force
+  // a refetch of the VHI coach for the current SMS context. Resetting
+  // lastCoachRoId lets fetchVhiCoachData run again for the same RO.
+  if (message.action === "REFETCH_VHI_COACH") {
+    lastCoachRoId = null;
+    lastInspectionFetchRoId = null;
+    if (currentSmsContext?.roId && currentSmsContext?.provider === "tekmetric") {
+      fetchAndRelayInspections(currentSmsContext).catch((err) => {
+        console.warn("[VHI Coach] Realtime-triggered refetch error:", err.message);
+      });
+    }
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "BUILD_RO_FROM_VHI") {
     console.log("[Build RO from VHI] Preview requested");
     const tabId = sender?.tab?.id || currentSmsContext?._tabId;

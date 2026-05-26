@@ -1,5 +1,21 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.10 — 2026-05-26
+
+### Improved
+- **VHI overlay now updates live when service history changes (Task
+  #484).** The Detect Dog overlay subscribes to a per-shop, per-VIN
+  Supabase Realtime channel while it's open and re-fetches within a
+  second whenever the server invalidates the plan cache, a Tekmetric
+  webhook fires (RO posted/invoiced or DVI complete), or the full-page
+  backfill lands a job change for that VIN. Previously a tech had to
+  reload or navigate away and back to see fresh recommendations after a
+  service was added or a DVI was completed in another tab. If the
+  realtime push is unavailable (feature flag off, missing config, or
+  the WebSocket can't connect), the overlay silently falls back to the
+  existing polling cadence — no visible change for the tech. The
+  subscription closes automatically on VIN change or overlay dismiss.
+
 ## 1.27.9 — 2026-05-19
 
 ### Improved

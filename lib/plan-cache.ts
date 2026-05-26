@@ -362,11 +362,33 @@ export async function setCachedPlan(
   console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
 }
 
-export async function invalidateCachedPlan(db: Db, vin: string, shopId: number): Promise<void> {
+/**
+ * Drops cached plan rows for (vin, shopId).
+ *
+ * Task #484: also fires a live-push broadcast so the Detect Dog overlay
+ * re-fetches within a second. The optional `reason` lets callers tag the
+ * broadcast with their own observability label (e.g. the Tekmetric
+ * webhook route passes `"tekmetric_webhook"` so the dashboard can
+ * attribute the refresh to the webhook, not the generic invalidate).
+ * Defaults to `"plan_cache_invalidate"`. Fire-and-forget — the
+ * broadcaster never throws and the in-process debounce coalesces bursts.
+ */
+export async function invalidateCachedPlan(
+  db: Db,
+  vin: string,
+  shopId: number,
+  reason: "plan_cache_invalidate" | "tekmetric_webhook" = "plan_cache_invalidate"
+): Promise<void> {
   await db.collection("cached_plans").deleteMany({
     vin: vin.toUpperCase(),
     shopId: { $in: [String(shopId), Number(shopId)] },
   });
+  try {
+    const { broadcastVhiUpdated } = await import("@/lib/realtime/broadcast-vhi");
+    broadcastVhiUpdated({ vin, shopId, reason }).catch(() => {});
+  } catch {
+    // module load failed — non-fatal, polling fallback handles it
+  }
 }
 
 /**

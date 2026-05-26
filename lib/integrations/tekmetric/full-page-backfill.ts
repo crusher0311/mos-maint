@@ -1189,6 +1189,13 @@ export async function runFullPageBackfillChunk(
 
           if (jobs.length === 0) continue;
 
+          // Task #484: snapshot the indexed counter so we can decide at the
+          // end of this RO whether the broadcast should fire. The whole point
+          // of the per-RO broadcast is to nudge the overlay when content
+          // ACTUALLY changed — firing on every RO would inflate
+          // /api/extension/plan volume and defeat the goal.
+          const jobsIndexedBeforeRo = jobsIndexed;
+
           for (const job of jobs) {
             const laborAmountDollars = (job.laborTotal || 0) / 100;
             const partsAmountDollars = (job.partsTotal || 0) / 100;
@@ -1283,6 +1290,28 @@ export async function runFullPageBackfillChunk(
                 { upsert: true },
               );
             jobsIndexed++;
+          }
+
+          // Task #484: nudge the Detect Dog overlay so a tech viewing this
+          // VIN sees fresh VHI within a second of the backfill landing a
+          // change. Fire only when at least one job ACTUALLY changed for
+          // this RO (jobsIndexed delta > 0) — content-hash matches that
+          // bump `jobsSkipped++` instead must not trigger a refresh — and
+          // only when we know the VIN. Fire-and-forget; the broadcaster
+          // also debounces per (shop,vin) as a second safety net.
+          if (jobsIndexed > jobsIndexedBeforeRo && vehicle?.vin) {
+            try {
+              const { broadcastVhiUpdated } = await import(
+                "@/lib/realtime/broadcast-vhi"
+              );
+              broadcastVhiUpdated({
+                vin: String(vehicle.vin),
+                shopId,
+                reason: "fullpage_backfill",
+              }).catch(() => {});
+            } catch {
+              // module load failed — non-fatal
+            }
           }
 
           rosForNormalized.push({

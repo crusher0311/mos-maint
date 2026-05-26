@@ -5,6 +5,106 @@ let coachVisible = false;
 let lastCoachVin = null;
 let lastCoachRoId = null;
 
+// Task #484: live Supabase Realtime subscription to vhi:{shopId}:{vin}.
+// One handle per open overlay; closed on hide or VIN change. Token + URL
+// are fetched lazily from the background service worker the first time
+// an overlay mounts for a (shop, vin). On any broadcast we ask background
+// to re-run the VHI coach fetch, which pushes a fresh VHI_COACH_DATA
+// message back to us and createCoachPanel re-renders.
+let coachRealtimeHandle = null;
+let coachRealtimeVin = null;
+let coachRealtimeShopId = null;
+
+function closeCoachRealtime() {
+  if (coachRealtimeHandle) {
+    try { coachRealtimeHandle.close(); } catch (_) {}
+  }
+  coachRealtimeHandle = null;
+  coachRealtimeVin = null;
+  coachRealtimeShopId = null;
+}
+
+function ensureCoachRealtime(vin, shopId) {
+  if (!vin || !shopId) return;
+  if (typeof window === "undefined" || !window.MosVhiRealtime) return;
+  // Same channel already open → keep it.
+  if (
+    coachRealtimeHandle &&
+    coachRealtimeVin === vin &&
+    String(coachRealtimeShopId) === String(shopId)
+  ) {
+    return;
+  }
+  closeCoachRealtime();
+  try {
+    chrome.runtime.sendMessage(
+      { action: "GET_VHI_REALTIME_TOKEN", smsShopId: shopId, vin },
+      (resp) => {
+        if (chrome.runtime.lastError) return;
+        if (!resp || !resp.success) return; // disabled / not configured → fall back to polling
+        // Race guard: overlay may have moved on while we awaited the token.
+        if (!coachVisible || lastCoachVin !== vin) return;
+        try {
+          coachRealtimeHandle = window.MosVhiRealtime.subscribe({
+            supabaseUrl: resp.supabaseUrl,
+            supabaseAnonKey: resp.supabaseAnonKey,
+            token: resp.token,
+            topic: `vhi:${resp.shopId}:${vin}`,
+            // Task #484: token-refresh hook used by the subscriber when the
+            // Supabase realtime server replies to phx_join with an
+            // auth/jwt/expired error. One-shot per channel lifetime.
+            refreshToken: function () {
+              return new Promise(function (resolve) {
+                try {
+                  chrome.runtime.sendMessage(
+                    { action: "GET_VHI_REALTIME_TOKEN", smsShopId: shopId, vin },
+                    function (r) {
+                      if (chrome.runtime.lastError || !r || !r.success) {
+                        resolve(null);
+                        return;
+                      }
+                      resolve(r.token || null);
+                    }
+                  );
+                } catch (_) {
+                  resolve(null);
+                }
+              });
+            },
+            onMessage: function () {
+              // Ask the background to refetch this RO's coach data and
+              // push it back via VHI_COACH_DATA. The subscriber already
+              // coalesced any inbound broadcast burst into one delivery.
+              chrome.runtime.sendMessage(
+                { action: "REFETCH_VHI_COACH", reason: "realtime" },
+                () => {
+                  if (chrome.runtime.lastError) return;
+                }
+              );
+            },
+            onStatus: function (s) {
+              if (s === "joined") {
+                console.log("[VHI Coach] Realtime channel joined:", vin);
+              } else if (s === "gave_up") {
+                console.warn(
+                  "[VHI Coach] Realtime gave up after repeated failures — falling back to polling for VIN",
+                  vin
+                );
+              }
+            },
+          });
+          coachRealtimeVin = vin;
+          coachRealtimeShopId = shopId;
+        } catch (err) {
+          console.warn("[VHI Coach] Realtime subscribe failed:", err && err.message);
+        }
+      }
+    );
+  } catch (_) {
+    // chrome.runtime unavailable — polling fallback handles it
+  }
+}
+
 const COACH_STYLES = {
   panel: {
     position: "fixed",
@@ -144,6 +244,19 @@ function createCoachPanel(data) {
   coachData = data;
   coachMinimized = false;
   coachVisible = true;
+
+  // Task #484: open the live-push channel for this VIN/shop the first time
+  // the overlay mounts (and reuse it on subsequent re-renders for the same
+  // VIN). Best-effort — failures fall back to polling.
+  const realtimeVin = data && data.vehicle && data.vehicle.vin
+    ? String(data.vehicle.vin).toUpperCase()
+    : (lastCoachVin ? String(lastCoachVin).toUpperCase() : null);
+  const realtimeShopId =
+    (data && (data.shopId || data.mosShopId)) || coachRealtimeShopId || null;
+  if (realtimeVin) lastCoachVin = realtimeVin;
+  if (realtimeVin && realtimeShopId) {
+    ensureCoachRealtime(realtimeVin, realtimeShopId);
+  }
 
   const panel = document.createElement("div");
   panel.id = "mos-vhi-coach-panel";
@@ -408,6 +521,8 @@ function removeCoachPanel() {
   coachPanel = null;
   coachVisible = false;
   coachMinimized = false;
+  // Task #484: tear down the live-push channel when the overlay goes away.
+  closeCoachRealtime();
 }
 
 function createHeaderBtn(text, onClick) {

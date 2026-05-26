@@ -623,7 +623,10 @@ export async function POST(req: NextRequest) {
           
           if (vin) {
             if (isTerminal || isInvoicePosted) {
-              await invalidateCachedPlan(db, vin, Number(shop.shopId));
+              // Task #484: tag the broadcast with `tekmetric_webhook` so
+              // observability can attribute the refresh to the webhook, not
+              // the generic plan-cache invalidate.
+              await invalidateCachedPlan(db, vin, Number(shop.shopId), "tekmetric_webhook");
               console.log(`[Tekmetric Webhook] Invalidated plan cache for VIN ${vin} (shop ${shop.shopId})`);
 
               const authorizedJobs = extractAuthorizedJobsFromTekmetricRo(repairOrder);
@@ -745,7 +748,10 @@ export async function POST(req: NextRequest) {
             { projection: { vin: 1, shopId: 1 } }
           );
           if (woForDvi?.vin && woForDvi?.shopId) {
-            await invalidateCachedPlan(db, woForDvi.vin, Number(woForDvi.shopId));
+            // Task #484: tag the broadcast with `tekmetric_webhook` so the
+            // overlay update is attributed to the DVI-complete event, not
+            // the generic plan-cache invalidate.
+            await invalidateCachedPlan(db, woForDvi.vin, Number(woForDvi.shopId), "tekmetric_webhook");
             console.log(`[Tekmetric Webhook] Invalidated plan cache for DVI complete on VIN ${woForDvi.vin}`);
           }
         } catch (err: any) {
