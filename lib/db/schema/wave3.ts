@@ -1141,23 +1141,14 @@ export const jobs = pgTable(
   }),
 );
 
-export const smsHistoricalWorkOrders = pgTable(
-  "sms_historical_work_orders",
-  {
-    id: serial("id").primaryKey(),
-    backfillMongoId: text("backfill_mongo_id"),
-    shopId: integer("shop_id"),
-    vin: text("vin"),
-    roNumber: text("ro_number"),
-    provider: text("provider"),
-    payload: jsonb("payload"),
-    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    shopVinIdx: index("smshwo_shop_vin_idx").on(t.shopId, t.vin),
-    backfillUniq: uniqueIndex("smshwo_backfill_uniq").on(t.backfillMongoId),
-  }),
-);
+/* `smsHistoricalWorkOrders` is defined in `./wave1.ts` (composite-PK shape:
+ * shopId + sourceSystem + workOrderId + data jsonb). An earlier wave3 raw-mirror
+ * draft re-declared the same physical table here with an incompatible serial-PK
+ * shape; it had zero readers/writers and the duplicate star-export silently
+ * dropped one definition at runtime (task #497). The wave3 draft was removed;
+ * the wave1 definition is the single source of truth. The corresponding DDL in
+ * `drizzle/0014_wave3.sql` is a no-op against prod because `0011_wave1_*` already
+ * created the table with `IF NOT EXISTS`. */
 
 /* ========================================================================== */
 /* Carfax mirrors  (sub-group: carfax — schema-only)                          */
