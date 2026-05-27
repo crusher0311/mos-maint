@@ -1,5 +1,40 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.11 — 2026-05-27
+
+### Fixed
+- **Specs tab now honors the shop's kilometers preference (Task #491).**
+  For shops set to kilometers, the Detect Dog Specs tab previously
+  rendered every dimension, wheel diameter, brake diameter, cargo
+  volume and passenger volume with hardcoded imperial labels (`"`,
+  `cu ft`). The server now reads `shop.preferences.distanceUnit` (with
+  legacy `settings.distanceUnit` fallback) on `/api/extension/specs`
+  and sends `unitDisplay: "imperial" | "metric"` back to the
+  extension; the renderer formats every value from that field so a
+  metric shop sees `cm` and `L` everywhere instead of `"` / `cu ft`.
+  Fuel tank (`gal/L`) and weights (`lbs/kg`) — which were already
+  dual — now also respect the same preference. Matches the dashboard
+  Specs tab toggle from task #331.
+- **Oil sticker now defaults to the shop's main km toggle (Task
+  #491).** Previously the sticker had its own `useKilometers` boolean
+  that started life as `false` even after a shop flipped the main
+  distance preference to kilometers, so a Canadian shop's stickers
+  would still print in miles until someone hunted down the second
+  toggle in Settings → Stickers. The extension sticker config now
+  falls back to `shop.preferences.distanceUnit === "kilometers"` when
+  `stickerConfig.useKilometers` is unset. An explicit sticker-config
+  value (`true` or `false`) still wins so shops that intentionally
+  diverge keep working unchanged.
+- **Specs tab is more resilient to DataOne hiccups (Task #491).** The
+  `/api/extension/specs` route now wraps both DataOne calls
+  (`getVehicleSpecsLocal` + `decodeVinLocal`) in an 8s per-call
+  timeout, retries the pair once after a short backoff if the first
+  attempt fails, and logs `vin`, `hasHint`, elapsed ms, and which
+  call (specs / decode / both) hit the error so the next sporadic
+  failure is debuggable from Better Stack. The user-facing error
+  message also now surfaces the real reason instead of a stringified
+  Error object.
+
 ## 1.27.10 — 2026-05-26
 
 ### Improved

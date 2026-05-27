@@ -18,6 +18,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+import { resolveStickerUseKilometers } from "./unit-resolver";
+export { resolveStickerUseKilometers } from "./unit-resolver";
+
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
 const storage = new Storage({
@@ -554,11 +557,16 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Extension Sticker] Shop ${mosShopId}: hasOilStickerFeature=${hasOilStickerFeature}, enabledFeatures=${JSON.stringify(shop.enabledFeatures)}`);
 
+    // Task #491: when the sticker config doesn't explicitly pin a unit, fall
+    // back to the shop's main distance preference. An explicit sticker-config
+    // value (true or false) still wins.
+    const resolvedUseKilometers = resolveStickerUseKilometers(stickerConfig, shop);
+
     return NextResponse.json({
       enabled: hasOilStickerFeature,
       config: {
         defaultSize: stickerConfig.defaultSize || "2x2.5",
-        useKilometers: stickerConfig.useKilometers || false,
+        useKilometers: resolvedUseKilometers,
         roundMileage: stickerConfig.roundMileage ?? true,
         usePredictiveDate: stickerConfig.usePredictiveDate || false,
         intervals: {

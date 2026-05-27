@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
 import { getVehicleSpecsLocal, decodeVinLocal, type DecodeHint } from "@/lib/integrations/dataone-local";
 import { deriveFuelTypeLabel } from "@/lib/fuel-type-label";
 import { getCarfaxDecodeHint } from "@/lib/integrations/carfax";
+import {
+  resolveSpecsUnitDisplayFromShop,
+  callDataOneWithRetry,
+  DataOneCallError,
+  type DataOneCallers,
+} from "./unit-resolver";
+
+// Re-export so other code paths can import from the route module if needed.
+export { resolveSpecsUnitDisplayFromShop, callDataOneWithRetry } from "./unit-resolver";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +22,30 @@ const corsHeaders = {
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
+type SpecsResult = Awaited<ReturnType<typeof getVehicleSpecsLocal>>;
+type DecodeResult = Awaited<ReturnType<typeof decodeVinLocal>>;
+
+const REAL_CALLERS: DataOneCallers<SpecsResult, DecodeResult, DecodeHint> = {
+  getSpecs: getVehicleSpecsLocal,
+  decode: decodeVinLocal,
+};
+
+async function loadShopDoc(shopId: number): Promise<any | null> {
+  if (shopId <= 0) return null;
+  try {
+    const db = await getDb();
+    return await db
+      .collection("shops")
+      .findOne(
+        { shopId: { $in: [shopId, String(shopId)] } as any },
+        { projection: { preferences: 1, settings: 1 } },
+      );
+  } catch (err) {
+    console.warn(`[Extension specs] shop preference lookup failed for shop ${shopId}:`, err);
+    return null;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -39,12 +73,16 @@ export async function GET(req: NextRequest) {
   const upperVin = vin.toUpperCase();
   const shopId = Number(auth.user?.shopId ?? 0);
 
+  const requestStarted = Date.now();
   try {
+    const shopDoc = await loadShopDoc(shopId);
+    const { distanceUnit, unitDisplay } = resolveSpecsUnitDisplayFromShop(shopDoc);
+
     let activeHint: DecodeHint | undefined = hasSmsHint ? smsHint : undefined;
-    let [specsResult, decodeResult] = await Promise.all([
-      getVehicleSpecsLocal(upperVin, activeHint),
-      decodeVinLocal(upperVin, activeHint),
-    ]);
+    let { specsResult, decodeResult } = await callDataOneWithRetry(upperVin, activeHint, {
+      vin: upperVin,
+      hasHint: hasSmsHint,
+    }, { callers: REAL_CALLERS });
 
     // Backstop: if still ambiguous, mine the cached CARFAX report (if any).
     // CARFAX's serviceHistory.model bakes in the trim ("VERSA SV") and gives
@@ -64,10 +102,10 @@ export async function GET(req: NextRequest) {
           transmissionType: pick(smsHint.transmissionType, null),
           engineDescription: pick(smsHint.engineDescription, cf.engineDescription),
         };
-        [specsResult, decodeResult] = await Promise.all([
-          getVehicleSpecsLocal(upperVin, merged),
-          decodeVinLocal(upperVin, merged),
-        ]);
+        ({ specsResult, decodeResult } = await callDataOneWithRetry(upperVin, merged, {
+          vin: upperVin,
+          hasHint: true,
+        }, { callers: REAL_CALLERS }));
       }
     }
 
@@ -106,13 +144,22 @@ export async function GET(req: NextRequest) {
       vehicleInfo,
       grouped: specsResult.grouped,
       specsCount: specsResult.specs.length,
+      // Task #491: tell the extension which units to render with so the
+      // Specs tab stops hardcoding imperial (`"`, `cu ft`) for metric shops.
+      distanceUnit,
+      unitDisplay,
     }, { headers: corsHeaders });
   } catch (error) {
-    console.error("Extension specs API error:", error);
+    const elapsed = Date.now() - requestStarted;
+    const which = error instanceof DataOneCallError ? error.which : "unknown";
+    console.error(
+      `[Extension specs] API error (vin=${upperVin}, hasHint=${hasSmsHint}, shopId=${shopId}, elapsedMs=${elapsed}, which=${which}):`,
+      error,
+    );
     return NextResponse.json({
       ok: false,
       vin: vin.toUpperCase(),
-      error: String(error),
+      error: error instanceof Error ? error.message : String(error),
     }, { status: 500, headers: corsHeaders });
   }
 }

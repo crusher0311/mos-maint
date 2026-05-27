@@ -1,5 +1,7 @@
 export const GAL_TO_L = 3.785411784;
 export const LBS_TO_KG = 0.45359237;
+export const IN_TO_CM = 2.54;
+export const CUFT_TO_L = 28.316846592;
 
 export type UnitDisplay = "imperial" | "metric" | "both";
 
@@ -45,4 +47,22 @@ export function formatGallonsDual(value: unknown): string | null {
 
 export function formatPoundsDual(value: unknown): string | null {
   return formatPounds(value, "both");
+}
+
+export function formatInches(value: unknown, mode: UnitDisplay = "both"): string | null {
+  const n = toNum(value);
+  if (n === null) return null;
+  const cm = n * IN_TO_CM;
+  if (mode === "imperial") return `${fmtDecimal(n, 1)}"`;
+  if (mode === "metric") return `${fmtDecimal(cm, 1)} cm`;
+  return `${fmtDecimal(n, 1)}" / ${fmtDecimal(cm, 1)} cm`;
+}
+
+export function formatCubicFeet(value: unknown, mode: UnitDisplay = "both"): string | null {
+  const n = toNum(value);
+  if (n === null) return null;
+  const liters = n * CUFT_TO_L;
+  if (mode === "imperial") return `${fmtDecimal(n, 1)} cu ft`;
+  if (mode === "metric") return `${fmtInt(liters)} L`;
+  return `${fmtDecimal(n, 1)} cu ft / ${fmtInt(liters)} L`;
 }

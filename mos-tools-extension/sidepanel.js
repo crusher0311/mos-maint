@@ -3344,9 +3344,11 @@ function showNotification(message, type = 'info') {
 let specsCache = {};
 
 // Mirror of lib/unit-format.ts so the extension renders dual imperial/metric
-// values consistently with the dashboard Specs tab (task #321).
+// values consistently with the dashboard Specs tab (task #321 / #491).
 const GAL_TO_L = 3.785411784;
 const LBS_TO_KG = 0.45359237;
+const IN_TO_CM = 2.54;
+const CUFT_TO_L = 28.316846592;
 
 function _toNum(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -3354,20 +3356,48 @@ function _toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-function formatGallonsDual(value) {
+function _fmtDec(n, d) {
+  return Number(n.toFixed(d)).toLocaleString(undefined, { maximumFractionDigits: d });
+}
+
+// `mode` is "imperial" | "metric" | "both". Defaults to "both" so unspecified
+// callers preserve the legacy dual-rendering behavior. Task #491 wires the
+// server-supplied `unitDisplay` through here so a metric shop never sees `"`
+// or `cu ft` on the Specs tab.
+function formatGallonsDual(value, mode = 'both') {
   const n = _toNum(value);
   if (n === null) return '';
   const liters = n * GAL_TO_L;
-  const galStr = Number(n.toFixed(1)).toLocaleString(undefined, { maximumFractionDigits: 1 });
-  const lStr = Number(liters.toFixed(1)).toLocaleString(undefined, { maximumFractionDigits: 1 });
-  return `${galStr} gal / ${lStr} L`;
+  if (mode === 'imperial') return `${_fmtDec(n, 1)} gal`;
+  if (mode === 'metric') return `${_fmtDec(liters, 1)} L`;
+  return `${_fmtDec(n, 1)} gal / ${_fmtDec(liters, 1)} L`;
 }
 
-function formatPoundsDual(value) {
+function formatPoundsDual(value, mode = 'both') {
   const n = _toNum(value);
   if (n === null) return '';
   const kg = n * LBS_TO_KG;
+  if (mode === 'imperial') return `${Math.round(n).toLocaleString()} lbs`;
+  if (mode === 'metric') return `${Math.round(kg).toLocaleString()} kg`;
   return `${Math.round(n).toLocaleString()} lbs / ${Math.round(kg).toLocaleString()} kg`;
+}
+
+function formatInchesDual(value, mode = 'both') {
+  const n = _toNum(value);
+  if (n === null) return '';
+  const cm = n * IN_TO_CM;
+  if (mode === 'imperial') return `${_fmtDec(n, 1)}"`;
+  if (mode === 'metric') return `${_fmtDec(cm, 1)} cm`;
+  return `${_fmtDec(n, 1)}" / ${_fmtDec(cm, 1)} cm`;
+}
+
+function formatCuFtDual(value, mode = 'both') {
+  const n = _toNum(value);
+  if (n === null) return '';
+  const liters = n * CUFT_TO_L;
+  if (mode === 'imperial') return `${_fmtDec(n, 1)} cu ft`;
+  if (mode === 'metric') return `${Math.round(liters).toLocaleString()} L`;
+  return `${_fmtDec(n, 1)} cu ft / ${Math.round(liters).toLocaleString()} L`;
 }
 
 async function loadVehicleSpecs() {
@@ -3499,13 +3529,19 @@ function renderSpecs(data) {
   }
 
   const g = data.grouped || {};
+  // Task #491: server now tells us which unit system the shop prefers.
+  // Default to "both" if absent (older server, in-flight upgrade) so we
+  // never silently strip metric values from a shop that needs them.
+  const unitMode = (data.unitDisplay === 'imperial' || data.unitDisplay === 'metric' || data.unitDisplay === 'both')
+    ? data.unitDisplay
+    : 'both';
 
   if (g.wheelsAndTires && Object.keys(g.wheelsAndTires).length > 0) {
     const items = [];
     if (g.wheelsAndTires.frontTireDescription) items.push({ label: 'Front Tires', value: g.wheelsAndTires.frontTireDescription });
     if (g.wheelsAndTires.rearTireDescription) items.push({ label: 'Rear Tires', value: g.wheelsAndTires.rearTireDescription });
-    if (g.wheelsAndTires.frontWheelDiameter) items.push({ label: 'Front Wheel', value: g.wheelsAndTires.frontWheelDiameter + '"' });
-    if (g.wheelsAndTires.rearWheelDiameter) items.push({ label: 'Rear Wheel', value: g.wheelsAndTires.rearWheelDiameter + '"' });
+    if (g.wheelsAndTires.frontWheelDiameter) items.push({ label: 'Front Wheel', value: formatInchesDual(g.wheelsAndTires.frontWheelDiameter, unitMode) });
+    if (g.wheelsAndTires.rearWheelDiameter) items.push({ label: 'Rear Wheel', value: formatInchesDual(g.wheelsAndTires.rearWheelDiameter, unitMode) });
     if (g.wheelsAndTires.frontWheelSize) items.push({ label: 'Front Wheel Size', value: g.wheelsAndTires.frontWheelSize });
     if (g.wheelsAndTires.rearWheelSize) items.push({ label: 'Rear Wheel Size', value: g.wheelsAndTires.rearWheelSize });
     if (g.wheelsAndTires.tireType) items.push({ label: 'Tire Type', value: g.wheelsAndTires.tireType });
@@ -3514,32 +3550,32 @@ function renderSpecs(data) {
 
   if (g.brakes && Object.keys(g.brakes).length > 0) {
     const items = [];
-    if (g.brakes.frontBrakeDiameter) items.push({ label: 'Front Brake', value: g.brakes.frontBrakeDiameter + '"' });
-    if (g.brakes.rearBrakeDiameter) items.push({ label: 'Rear Brake', value: g.brakes.rearBrakeDiameter + '"' });
+    if (g.brakes.frontBrakeDiameter) items.push({ label: 'Front Brake', value: formatInchesDual(g.brakes.frontBrakeDiameter, unitMode) });
+    if (g.brakes.rearBrakeDiameter) items.push({ label: 'Rear Brake', value: formatInchesDual(g.brakes.rearBrakeDiameter, unitMode) });
     if (items.length > 0) html += renderSpecsSection('Brakes', items, 'brake');
   }
 
   if (g.dimensions && Object.keys(g.dimensions).length > 0) {
     const items = [];
-    if (g.dimensions.wheelbase) items.push({ label: 'Wheelbase', value: g.dimensions.wheelbase + '"' });
-    if (g.dimensions.length) items.push({ label: 'Length', value: g.dimensions.length + '"' });
-    if (g.dimensions.width) items.push({ label: 'Width', value: g.dimensions.width + '"' });
-    if (g.dimensions.height) items.push({ label: 'Height', value: g.dimensions.height + '"' });
-    if (g.dimensions.groundClearance) items.push({ label: 'Ground Clearance', value: g.dimensions.groundClearance + '"' });
-    if (g.dimensions.frontTrackWidth) items.push({ label: 'Front Track', value: g.dimensions.frontTrackWidth + '"' });
-    if (g.dimensions.rearTrackWidth) items.push({ label: 'Rear Track', value: g.dimensions.rearTrackWidth + '"' });
+    if (g.dimensions.wheelbase) items.push({ label: 'Wheelbase', value: formatInchesDual(g.dimensions.wheelbase, unitMode) });
+    if (g.dimensions.length) items.push({ label: 'Length', value: formatInchesDual(g.dimensions.length, unitMode) });
+    if (g.dimensions.width) items.push({ label: 'Width', value: formatInchesDual(g.dimensions.width, unitMode) });
+    if (g.dimensions.height) items.push({ label: 'Height', value: formatInchesDual(g.dimensions.height, unitMode) });
+    if (g.dimensions.groundClearance) items.push({ label: 'Ground Clearance', value: formatInchesDual(g.dimensions.groundClearance, unitMode) });
+    if (g.dimensions.frontTrackWidth) items.push({ label: 'Front Track', value: formatInchesDual(g.dimensions.frontTrackWidth, unitMode) });
+    if (g.dimensions.rearTrackWidth) items.push({ label: 'Rear Track', value: formatInchesDual(g.dimensions.rearTrackWidth, unitMode) });
     if (items.length > 0) html += renderSpecsSection('Dimensions', items, 'ruler');
   }
 
   if (g.weightsAndCapacities && Object.keys(g.weightsAndCapacities).length > 0) {
     const items = [];
-    if (g.weightsAndCapacities.fuelTankCapacity) items.push({ label: 'Fuel Tank', value: formatGallonsDual(g.weightsAndCapacities.fuelTankCapacity) });
-    if (g.weightsAndCapacities.curbWeight) items.push({ label: 'Curb Weight', value: formatPoundsDual(g.weightsAndCapacities.curbWeight) });
-    if (g.weightsAndCapacities.gvwr) items.push({ label: 'GVWR', value: formatPoundsDual(g.weightsAndCapacities.gvwr) });
-    if (g.weightsAndCapacities.gcwr) items.push({ label: 'GCWR', value: formatPoundsDual(g.weightsAndCapacities.gcwr) });
-    if (g.weightsAndCapacities.baseTowingCapacity) items.push({ label: 'Base Towing', value: formatPoundsDual(g.weightsAndCapacities.baseTowingCapacity) });
-    if (g.weightsAndCapacities.maxTowingCapacity) items.push({ label: 'Max Towing', value: formatPoundsDual(g.weightsAndCapacities.maxTowingCapacity) });
-    if (g.weightsAndCapacities.maxPayload) items.push({ label: 'Max Payload', value: formatPoundsDual(g.weightsAndCapacities.maxPayload) });
+    if (g.weightsAndCapacities.fuelTankCapacity) items.push({ label: 'Fuel Tank', value: formatGallonsDual(g.weightsAndCapacities.fuelTankCapacity, unitMode) });
+    if (g.weightsAndCapacities.curbWeight) items.push({ label: 'Curb Weight', value: formatPoundsDual(g.weightsAndCapacities.curbWeight, unitMode) });
+    if (g.weightsAndCapacities.gvwr) items.push({ label: 'GVWR', value: formatPoundsDual(g.weightsAndCapacities.gvwr, unitMode) });
+    if (g.weightsAndCapacities.gcwr) items.push({ label: 'GCWR', value: formatPoundsDual(g.weightsAndCapacities.gcwr, unitMode) });
+    if (g.weightsAndCapacities.baseTowingCapacity) items.push({ label: 'Base Towing', value: formatPoundsDual(g.weightsAndCapacities.baseTowingCapacity, unitMode) });
+    if (g.weightsAndCapacities.maxTowingCapacity) items.push({ label: 'Max Towing', value: formatPoundsDual(g.weightsAndCapacities.maxTowingCapacity, unitMode) });
+    if (g.weightsAndCapacities.maxPayload) items.push({ label: 'Max Payload', value: formatPoundsDual(g.weightsAndCapacities.maxPayload, unitMode) });
     if (g.weightsAndCapacities.tonnage) items.push({ label: 'Tonnage', value: g.weightsAndCapacities.tonnage });
     if (items.length > 0) html += renderSpecsSection('Weights & Capacities', items, 'weight');
   }
@@ -3559,8 +3595,8 @@ function renderSpecs(data) {
 
   if (g.interior && Object.keys(g.interior).length > 0) {
     const items = [];
-    if (g.interior.cargoVolume) items.push({ label: 'Cargo Volume', value: g.interior.cargoVolume + ' cu ft' });
-    if (g.interior.passengerVolume) items.push({ label: 'Passenger Volume', value: g.interior.passengerVolume + ' cu ft' });
+    if (g.interior.cargoVolume) items.push({ label: 'Cargo Volume', value: formatCuFtDual(g.interior.cargoVolume, unitMode) });
+    if (g.interior.passengerVolume) items.push({ label: 'Passenger Volume', value: formatCuFtDual(g.interior.passengerVolume, unitMode) });
     if (items.length > 0) html += renderSpecsSection('Interior', items, 'interior');
   }
 
