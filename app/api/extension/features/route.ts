@@ -2,7 +2,7 @@
 // extension. Gating it on a feature would be circular — the extension calls it
 // to learn which features are enabled.
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       console.log(`[Extension Features] AUTH FAIL: smsShopId=${smsShopId}, error=${auth.error}`);
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
+      return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));

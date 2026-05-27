@@ -1,7 +1,7 @@
 // gate-exempt: extension UI preferences (toggles, layout, etc.) — not tied to
 // any specific shop feature; should remain available regardless of plan.
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getDb } from "@/lib/mongo";
 
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
+      return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
+      return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const body = await request.json();

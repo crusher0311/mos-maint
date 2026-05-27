@@ -3,6 +3,7 @@ import {
   validateExtensionToken,
   getAuthErrorStatus,
   getUserShopIds,
+  buildAuthErrorBody,
 } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getFeatureEntitlements, type FeatureKey } from "@/lib/featureResolver";
@@ -70,7 +71,7 @@ export async function guardExtensionShopRequest(
     return {
       ok: false,
       response: NextResponse.json(
-        { error: auth.error || "Unauthorized" },
+        buildAuthErrorBody(auth),
         { status: getAuthErrorStatus(auth), headers: corsHeaders },
       ),
     };

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { insertSupportTicket } from "@/lib/data/repositories/support-tickets";
 import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 import {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   const auth = await validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
-      { ok: false, error: auth.error || "Unauthorized" },
+      buildAuthErrorBody(auth, { ok: false }),
       { status: getAuthErrorStatus(auth), headers: CORS_HEADERS }
     );
   }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   const auth = await validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
-      { ok: false, error: auth.error || "Unauthorized" },
+      buildAuthErrorBody(auth, { ok: false }),
       { status: getAuthErrorStatus(auth), headers: CORS_HEADERS }
     );
   }

@@ -1307,15 +1307,31 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
 
     console.log("[MOS] Login successful:", data.user?.email, "| token:", data.token?.substring(0, 20) + "...");
 
-    // Verify token works immediately
+    // Verify token works immediately. Task #502: a single 401 here used
+    // to log "Token INVALID immediately after login" with no retry —
+    // misleading because the only PG identity drift we're trying to
+    // tolerate elsewhere shows up here too. Give the server one quick
+    // retry before logging the alarming line.
     try {
-      const verifyRes = await fetch(`${mosApiUrl}/api/extension/features?shopId=${data.user?.shopId || ''}&_token=${encodeURIComponent(data.token)}`, {
+      const verifyUrl = `${mosApiUrl}/api/extension/features?shopId=${data.user?.shopId || ''}&_token=${encodeURIComponent(data.token)}`;
+      let verifyRes = await fetch(verifyUrl, {
         headers: { 'Authorization': `Bearer ${data.token}` }
       });
       console.log("[MOS] Token verify:", verifyRes.status);
       if (verifyRes.status === 401) {
-        const body = await verifyRes.json().catch(() => ({}));
-        console.error("[MOS] Token INVALID immediately after login!", body);
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 250));
+        verifyRes = await fetch(verifyUrl, {
+          headers: { 'Authorization': `Bearer ${data.token}` }
+        });
+        console.log("[MOS] Token verify retry:", verifyRes.status);
+        if (verifyRes.status === 401) {
+          const body = await verifyRes.json().catch(() => ({}));
+          if (body?.code === 'TOKEN_INVALID' || body?.code === 'TOKEN_EXPIRED' || body?.code === 'TOKEN_MISSING') {
+            console.error("[MOS] Token INVALID immediately after login!", body);
+          } else {
+            console.warn("[MOS] Token verify transient 401 after retry — leaving token in place", body);
+          }
+        }
       }
     } catch (e) {
       console.warn("[MOS] Token verify fetch failed:", e.message);
@@ -1328,50 +1344,142 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
   }
 }
 
-async function handleMosApiRequest(endpoint, options = {}, _retried = false) {
+// Task #502: 401 retry policy.
+//
+// Old behavior: first 401 → silently re-login once → if that fails (or
+// no saved creds), null out `mosApiToken` and remove it from
+// `chrome.storage.local`. Every transient blip on /api/extension/*
+// (PG identity lookup miss, DB hiccup, race with token-refresh writes)
+// became a hard logout for the user.
+//
+// New behavior:
+//   1. On 401, peek at the response body's `code` field
+//      (TOKEN_MISSING | TOKEN_INVALID | TOKEN_EXPIRED | SHOP_FORBIDDEN
+//      | AUTH_LOOKUP_FAILED). SHOP_FORBIDDEN is treated as terminal
+//      (re-auth wouldn't help — caller error), AUTH_LOOKUP_FAILED is
+//      treated as transient.
+//   2. Retry the original request with exponential backoff + jitter
+//      up to MOS_AUTH_RETRY_DELAYS_MS.length times. Each retry uses
+//      the same token (we want the upstream blip to clear).
+//   3. If 401s continue AND saved creds exist, attempt a SINGLE silent
+//      re-auth and retry once with the new token.
+//   4. Only when (a) the retry budget is exhausted AND (b) the silent
+//      re-auth either failed or wasn't attempted AND (c) the most
+//      recent 401's code is a terminal token code do we clear
+//      mosApiToken from chrome.storage.local. Otherwise we leave the
+//      token in place and surface a session-may-have-expired error to
+//      the popup/overlay so the user can opt in to re-login.
+// 503 / AUTH_LOOKUP_FAILED never clears the token under any
+// circumstance.
+const MOS_AUTH_RETRY_DELAYS_MS = [500, 1500, 4000];
+// Only TOKEN_INVALID is treated as a real "your credentials are dead,
+// log out now" signal after the retry budget + silent re-auth both
+// fail. Everything else (TOKEN_EXPIRED, TOKEN_MISSING, SHOP_FORBIDDEN,
+// AUTH_LOOKUP_FAILED, unknown codes) is soft — we surface a session-
+// may-have-expired error but leave the token in place so the user
+// chooses to re-login rather than being silently bounced. Per task
+// #502: SHOP_FORBIDDEN is a route-scope mismatch (re-auth won't fix
+// it), TOKEN_EXPIRED is recoverable via the popup login flow.
+const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID']);
+
+function _jitter(ms) { return ms + Math.floor(Math.random() * (ms / 3)); }
+
+async function _doMosFetch(endpoint, options, token) {
+  const separator = endpoint.includes('?') ? '&' : '?';
+  const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(token)}`;
+  return fetch(urlWithToken, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+}
+
+async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS");
   }
 
-  const tokenUsed = mosApiToken;
+  const tokenAtStart = mosApiToken;
+  let tokenUsed = tokenAtStart;
+  let response = await _doMosFetch(endpoint, options, tokenUsed);
 
-  const separator = endpoint.includes('?') ? '&' : '?';
-  const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(tokenUsed)}`;
+  let lastErrBody = null;
+  let lastCode = null;
 
-  const response = await fetch(urlWithToken, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${tokenUsed}`,
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
-  });
-
-  // Handle 401 - retry once with saved credentials before giving up
   if (response.status === 401) {
-    const errBody = await response.json().catch(() => ({}));
-    console.error("[MOS] 401 on", endpoint, "| server:", errBody.error || "no detail", "| token match:", mosApiToken === tokenUsed, "| retried:", _retried);
+    lastErrBody = await response.clone().json().catch(() => ({}));
+    lastCode = lastErrBody?.code || null;
 
-    // If we haven't retried yet, try re-authenticating with saved credentials
-    if (!_retried) {
-      const stored = await new Promise(resolve => chrome.storage.local.get(['mosLoginEmail', 'mosLoginPass'], resolve));
-      if (stored.mosLoginEmail && stored.mosLoginPass) {
-        console.log("[MOS] 401 received, attempting silent re-auth...");
-        try {
-          await handleMosLogin(stored.mosLoginEmail, stored.mosLoginPass, mosApiUrl);
-          return handleMosApiRequest(endpoint, options, true);
-        } catch (e) {
-          console.error("[MOS] Silent re-auth failed:", e.message);
+    // Retry-with-backoff loop. We retry transient and terminal codes
+    // alike — the point of the retry is to absorb upstream blips, and
+    // a TOKEN_INVALID from a single PG identity-lookup race should not
+    // be trusted on the first hit.
+    for (let attempt = 0; attempt < MOS_AUTH_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delay = _jitter(MOS_AUTH_RETRY_DELAYS_MS[attempt]);
+      console.log(`[MOS] 401 transient retry ${attempt + 1}/${MOS_AUTH_RETRY_DELAYS_MS.length} on ${endpoint} | code=${lastCode || 'none'} | sleep=${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+
+      response = await _doMosFetch(endpoint, options, tokenUsed);
+      if (response.status !== 401) break;
+
+      lastErrBody = await response.clone().json().catch(() => ({}));
+      lastCode = lastErrBody?.code || null;
+    }
+  }
+
+  // Silent re-auth attempt — only if retries didn't recover and saved
+  // credentials exist. Same as before, but now gated on the retry
+  // budget being exhausted.
+  if (response.status === 401) {
+    const stored = await new Promise(resolve => chrome.storage.local.get(['mosLoginEmail', 'mosLoginPass'], resolve));
+    if (stored.mosLoginEmail && stored.mosLoginPass) {
+      console.log("[MOS] 401 silent re-auth attempted on", endpoint);
+      try {
+        await handleMosLogin(stored.mosLoginEmail, stored.mosLoginPass, mosApiUrl);
+        tokenUsed = mosApiToken;
+        response = await _doMosFetch(endpoint, options, tokenUsed);
+        if (response.status === 401) {
+          lastErrBody = await response.clone().json().catch(() => ({}));
+          lastCode = lastErrBody?.code || null;
         }
+      } catch (e) {
+        console.error("[MOS] Silent re-auth failed:", e.message);
       }
     }
+  }
 
-    if (mosApiToken === tokenUsed) {
+  if (response.status === 401) {
+    // Terminal vs transient decision. AUTH_LOOKUP_FAILED comes back as
+    // 503 from the server normally, but if for any reason it arrives
+    // as a 401 we still treat it as transient. Anything we don't
+    // recognize is treated as transient too — better a stale "session
+    // may have expired" prompt than a wrongful logout.
+    const isTerminal = TERMINAL_AUTH_CODES.has(lastCode);
+    if (isTerminal && mosApiToken === tokenAtStart) {
+      console.log(`[MOS] 401 terminal — prompting user (code=${lastCode}) on ${endpoint}`);
       mosApiToken = null;
       chrome.storage.local.remove(['mosApiToken']);
+      throw new Error("Session expired. Please login again.");
     }
-    throw new Error("Session expired. Please login again.");
+    console.warn(`[MOS] 401 unresolved on ${endpoint} (code=${lastCode || 'none'}) — keeping token, surfacing soft session-expired`);
+    const err = new Error("Session may have expired — click to re-login");
+    err.code = "MOS_SESSION_SOFT_EXPIRED";
+    err.serverCode = lastCode || null;
+    throw err;
+  }
+
+  if (response.status === 503) {
+    // Auth lookup transient failure on the server — surface but never
+    // clear the token.
+    const errorData = await response.json().catch(() => ({}));
+    const err = new Error(errorData.error || "Server temporarily unavailable");
+    err.code = "MOS_SERVER_TRANSIENT";
+    err.serverCode = errorData?.code || null;
+    throw err;
   }
 
   if (!response.ok) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { getDb } from "@/lib/mongo";
 import {
   applyCannedJobToWorkOrder,
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     const auth = await validateExtensionToken(req);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
+        buildAuthErrorBody(auth),
         { status: getAuthErrorStatus(auth), headers: corsHeaders }
       );
     }

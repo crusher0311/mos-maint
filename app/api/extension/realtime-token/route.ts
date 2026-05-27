@@ -3,7 +3,7 @@
 // feature is disabled so the extension treats it as "fall back to polling".
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isVhiRealtimeEnabled } from "@/lib/realtime/broadcast-vhi";
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
+        buildAuthErrorBody(auth),
         { status: getAuthErrorStatus(auth), headers: corsHeaders }
       );
     }

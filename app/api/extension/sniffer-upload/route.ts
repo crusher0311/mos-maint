@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, buildAuthErrorBody } from "@/lib/extension-auth";
 import { getDb } from "@/lib/db/drizzle";
 import { snifferSessions } from "@/lib/db/schema/sniffer";
 
@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: 401, headers: corsHeaders }
+        buildAuthErrorBody(auth),
+        { status: getAuthErrorStatus(auth), headers: corsHeaders }
       );
     }
 

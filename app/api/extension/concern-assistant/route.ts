@@ -13,7 +13,7 @@ import {
   renderHintsForPrompt,
   type RoundResult,
 } from "@/lib/concernSkipLearning";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
-      return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
+      return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
     const searchParams = request.nextUrl.searchParams;

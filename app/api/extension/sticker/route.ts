@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import QRCode from "qrcode";
@@ -522,7 +522,7 @@ export async function GET(request: NextRequest) {
     const authResult = await validateExtensionToken(request);
     if (!authResult.authorized || !authResult.user) {
       return NextResponse.json(
-        { error: authResult.error || "Unauthorized" },
+        buildAuthErrorBody(authResult),
         { status: getAuthErrorStatus(authResult), headers: corsHeaders }
       );
     }
@@ -591,7 +591,7 @@ export async function POST(request: NextRequest) {
     const authResult = await validateExtensionToken(request);
     if (!authResult.authorized || !authResult.user) {
       return NextResponse.json(
-        { error: authResult.error || "Unauthorized" },
+        buildAuthErrorBody(authResult),
         { status: getAuthErrorStatus(authResult), headers: corsHeaders }
       );
     }

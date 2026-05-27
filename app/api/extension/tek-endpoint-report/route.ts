@@ -8,6 +8,7 @@ import {
   validateExtensionToken,
   getUserShopIds,
   getAuthErrorStatus,
+  buildAuthErrorBody,
 } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
     const auth = await __deps.validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
       return NextResponse.json(
-        { error: auth.error || "Unauthorized" },
+        buildAuthErrorBody(auth),
         { status: getAuthErrorStatus(auth), headers: corsHeaders },
       );
     }

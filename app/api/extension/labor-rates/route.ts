@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getDb } from "@/lib/mongo";
@@ -21,7 +21,7 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
-    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
+    return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
   }
 
   const db = await getDb();
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
-    return NextResponse.json({ ok: false, error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
+    return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
   }
 
   const body = await req.json();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   const authResult = await validateExtensionToken(req);
   if (!authResult.authorized) {
     return NextResponse.json(
-      { error: authResult.error || "Unauthorized" },
+      buildAuthErrorBody(authResult),
       { status: getAuthErrorStatus(authResult), headers: corsHeaders }
     );
   }
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   const authResult = await validateExtensionToken(req);
   if (!authResult.authorized) {
     return NextResponse.json(
-      { error: authResult.error || "Unauthorized" },
+      buildAuthErrorBody(authResult),
       { status: getAuthErrorStatus(authResult), headers: corsHeaders }
     );
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getAuthErrorStatus } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { getVehicleSpecsLocal, decodeVinLocal, type DecodeHint } from "@/lib/integrations/dataone-local";
 import { deriveFuelTypeLabel } from "@/lib/fuel-type-label";
 import { getCarfaxDecodeHint } from "@/lib/integrations/carfax";
@@ -51,7 +51,7 @@ async function loadShopDoc(shopId: number): Promise<any | null> {
 export async function GET(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized) {
-    return NextResponse.json({ error: auth.error || "Unauthorized" }, { status: getAuthErrorStatus(auth), headers: corsHeaders });
+    return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
   }
 
   const sp = req.nextUrl.searchParams;
