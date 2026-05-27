@@ -137,6 +137,13 @@ async function isMustChangePasswordCookieValid(
   }
 }
 
+function redirectToLogin(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = `?next=${encodeURIComponent(pathname)}`;
+  return NextResponse.redirect(url);
+}
+
 // --- Middleware -------------------------------------------------------------
 
 export async function middleware(req: NextRequest) {
