@@ -308,33 +308,53 @@ export async function upsertDviSnapshot(
 ) {
   const db = await getDb();
   const now = new Date();
-  await db.collection("dvi_results").updateOne(
-    { shopId, roNumber: String(roNumber) },
-    {
-      $set: {
-        shopId,
-        roNumber: String(roNumber),
-        fetchedAt: now,
-        vin: dvi.vin ?? null,
-        mileage: dvi.mileage ?? null,
-        sheetName: dvi.sheetName ?? null,
-        timestamp: dvi.timestamp ?? null,
-        advisor: dvi.advisor ?? null,
-        technician: dvi.technician ?? null,
-        pdfUrl: dvi.pdfUrl ?? null,
-        shopUrl: dvi.shopUrl ?? null,
-        customerUrl: dvi.customerUrl ?? null,
-        categories: dvi.categories ?? null,
-        hunter: dvi.hunter ?? null,
-        ok: dvi.ok,
-        error: dvi.error ?? null,
-        raw: dvi.raw ?? null,
-        source: "autoflow",
+  try {
+    await db.collection("dvi_results").updateOne(
+      { shopId, roNumber: String(roNumber) },
+      {
+        $set: {
+          shopId,
+          roNumber: String(roNumber),
+          fetchedAt: now,
+          vin: dvi.vin ?? null,
+          mileage: dvi.mileage ?? null,
+          sheetName: dvi.sheetName ?? null,
+          timestamp: dvi.timestamp ?? null,
+          advisor: dvi.advisor ?? null,
+          technician: dvi.technician ?? null,
+          pdfUrl: dvi.pdfUrl ?? null,
+          shopUrl: dvi.shopUrl ?? null,
+          customerUrl: dvi.customerUrl ?? null,
+          categories: dvi.categories ?? null,
+          hunter: dvi.hunter ?? null,
+          ok: dvi.ok,
+          error: dvi.error ?? null,
+          raw: dvi.raw ?? null,
+          source: "autoflow",
+        },
+        $setOnInsert: { createdAt: now },
       },
-      $setOnInsert: { createdAt: now },
-    },
-    { upsert: true }
-  );
+      { upsert: true }
+    );
+  } catch (err: any) {
+    // Task #510: AutoFlow write failure marker. Snapshot upserts are
+    // the only AutoFlow write path we currently exercise; everything
+    // else is a read. Surface per-shop so a Better Stack rule can page
+    // when one shop's writes fall over for a sustained window.
+    try {
+      const { emitShopErrorEvent } = await import("@/lib/alerts/shop-error-marker");
+      emitShopErrorEvent({
+        group: "AUTOFLOW_WRITE_FAIL",
+        shopId,
+        status: "mongo_upsert_error",
+        path: "dvi_results.updateOne",
+        method: "UPSERT",
+        message: err?.message,
+        extra: { roNumber: String(roNumber) },
+      });
+    } catch {}
+    throw err;
+  }
 }
 
 function snapshotToResult(doc: any): DviResult {

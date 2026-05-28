@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // gate-exempt: pre-feature plumbing — issues short-lived Supabase Realtime
 // credentials for the Detect Dog overlay. Returns 503 (not 4xx) when the
 // feature is disabled so the extension treats it as "fall back to polling".
@@ -61,7 +62,7 @@ function signSupabaseJwt(shopId: number, jwtSecret: string): { token: string; ex
   return { token: `${head}.${body}.${sig}`, expiresAt };
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     if (!isVhiRealtimeEnabled()) {
       return NextResponse.json(
@@ -137,3 +138,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

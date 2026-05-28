@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
@@ -50,7 +51,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const authResult = await validateExtensionToken(req);
   if (!authResult.authorized) {
     return NextResponse.json(
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const authResult = await validateExtensionToken(req);
   if (!authResult.authorized) {
     return NextResponse.json(
@@ -231,3 +232,7 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

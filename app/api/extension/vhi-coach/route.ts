@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
@@ -37,7 +38,7 @@ interface TaskMatch {
   progress: IntervalProgress | null;
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   let body: any;
   try {
     body = await request.json();
@@ -307,3 +308,6 @@ export async function POST(request: NextRequest) {
     dataQuality: vhi.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
   }, { headers: corsHeaders });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

@@ -1,7 +1,8 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = await request.json();
     
@@ -45,3 +46,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

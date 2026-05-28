@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
@@ -517,7 +518,7 @@ async function resolveMosShopId(
   return { mosShopId: null, shop: null };
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   try {
     const authResult = await validateExtensionToken(request);
     if (!authResult.authorized || !authResult.user) {
@@ -586,7 +587,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const authResult = await validateExtensionToken(request);
     if (!authResult.authorized || !authResult.user) {
@@ -878,3 +879,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

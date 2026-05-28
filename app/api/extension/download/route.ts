@@ -1,8 +1,9 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-export async function GET() {
+async function _GET() {
   try {
     const zipPath = path.join(process.cwd(), "public", "mos-tools-extension.zip");
     
@@ -24,3 +25,6 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to download extension" }, { status: 500 });
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);

@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
@@ -15,7 +16,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const smsShopId = searchParams.get("shopId");
@@ -222,3 +223,6 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);

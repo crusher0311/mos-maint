@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextResponse } from "next/server";
 
 const CURRENT_EXTENSION_VERSION = "1.3.1";
@@ -20,7 +21,7 @@ function compareVersions(v1: string, v2: string): number {
   return 0;
 }
 
-export async function GET(request: Request) {
+async function _GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const clientVersion = searchParams.get('v') || '0.0.0';
   
@@ -41,3 +42,6 @@ export async function GET(request: Request) {
         : `A new version (${CURRENT_EXTENSION_VERSION}) is available.`
   });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);

@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
@@ -66,7 +67,7 @@ ${conversationText}
 Return ONLY the cleaned paragraph, no extra commentary.`;
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { action } = body;
@@ -355,3 +356,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || "Failed to process request" }, { status: 500, headers: corsHeaders });
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

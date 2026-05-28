@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { insertSupportTicket } from "@/lib/data/repositories/support-tickets";
@@ -25,7 +26,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: CORS_HEADERS });
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const auth = await validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const auth = await validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(
@@ -347,3 +348,7 @@ async function handleTicket(user: any, body: any) {
     { headers: CORS_HEADERS }
   );
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

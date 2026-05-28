@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // gate-exempt: pre-feature plumbing — issues/refreshes the extension auth
 // token itself, so it must work even for shops with zero feature entitlements.
 import { NextRequest, NextResponse } from "next/server";
@@ -15,7 +16,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
@@ -97,3 +98,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

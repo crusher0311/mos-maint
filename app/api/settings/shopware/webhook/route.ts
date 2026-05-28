@@ -192,6 +192,17 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ url: webhookUrl, events: SW_EVENTS }),
       });
     } catch (err: any) {
+      try {
+        const { emitShopErrorEvent } = await import("@/lib/alerts/shop-error-marker");
+        emitShopErrorEvent({
+          group: "SHOPWARE_WRITE_FAIL",
+          shopId,
+          status: 502,
+          path: "/webhooks",
+          method: "POST",
+          message: err?.message,
+        });
+      } catch {}
       return NextResponse.json({ error: `Failed to register webhook: ${err.message}` }, { status: 502 });
     }
 
@@ -243,6 +254,17 @@ export async function DELETE(req: NextRequest) {
       await shopWareRequest(`/webhooks/${webhookId}`, { method: 'DELETE' });
     } catch (err: any) {
       if (!err.message?.includes('404')) {
+        try {
+          const { emitShopErrorEvent } = await import("@/lib/alerts/shop-error-marker");
+          emitShopErrorEvent({
+            group: "SHOPWARE_WRITE_FAIL",
+            shopId,
+            status: 502,
+            path: `/webhooks/${webhookId}`,
+            method: "DELETE",
+            message: err?.message,
+          });
+        } catch {}
         return NextResponse.json({ error: `Failed to delete webhook: ${err.message}` }, { status: 502 });
       }
     }

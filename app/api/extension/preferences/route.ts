@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // gate-exempt: extension UI preferences (toggles, layout, etc.) — not tied to
 // any specific shop feature; should remain available regardless of plan.
 import { NextRequest, NextResponse } from "next/server";
@@ -18,7 +19,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest) {
+async function _PUT(request: NextRequest) {
   try {
     const auth = await validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
@@ -95,3 +96,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Failed to save preference" }, { status: 500, headers: corsHeaders });
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const PUT = withExtensionErrorMarker(_PUT as any);

@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 /**
  * Detect Dog migration — run detail (GET) including audit log + counts.
  */
@@ -19,7 +20,7 @@ import {
 
 export const OPTIONS = () => migOptions();
 
-export async function GET(
+async function _GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
@@ -73,3 +74,6 @@ export async function GET(
 
   return migJson({ run, dump: dump || null, mapping: mapping || null, audit });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);

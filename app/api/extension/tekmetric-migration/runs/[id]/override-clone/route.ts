@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 /**
  * Detect Dog migration — POST runs the per-RO override clone (snippet 06).
  *
@@ -31,7 +32,7 @@ import { getRun, setRunStatus, logAudit } from "@/lib/tekmetric-migration/audit"
 export const OPTIONS = () => migOptions();
 export const maxDuration = 300;
 
-export async function POST(
+async function _POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
@@ -158,3 +159,6 @@ export async function POST(
     return migError(`override-clone failed: ${e.message}`, 500);
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

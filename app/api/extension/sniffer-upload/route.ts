@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, buildAuthErrorBody } from "@/lib/extension-auth";
 import { getDb } from "@/lib/db/drizzle";
@@ -53,7 +54,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const contentLength = request.headers.get("content-length");
     if (contentLength && parseInt(contentLength) > 5 * 1024 * 1024) {
@@ -146,3 +147,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

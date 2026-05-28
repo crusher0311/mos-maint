@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { logAdminAction } from "@/lib/audit-log";
@@ -15,7 +16,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   let body: any;
   try {
     body = await request.json();
@@ -69,3 +70,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ success: true }, { headers: corsHeaders });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

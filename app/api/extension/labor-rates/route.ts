@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
@@ -18,7 +19,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: CORS_HEADERS });
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [], shopId: shop?.shopId }, { headers: CORS_HEADERS });
 }
 
-export async function PUT(req: NextRequest) {
+async function _PUT(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
@@ -145,3 +146,7 @@ export async function PUT(req: NextRequest) {
 
   return NextResponse.json({ ok: true, rules: sanitized, shopId: targetShopId }, { headers: CORS_HEADERS });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const PUT = withExtensionErrorMarker(_PUT as any);

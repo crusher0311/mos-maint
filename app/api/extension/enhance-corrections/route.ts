@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getDb as getSupabaseDb } from "@/lib/db/drizzle";
@@ -18,7 +19,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   let body: any;
   try {
     body = await request.json();
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const shopId = request.nextUrl.searchParams.get("shopId");
   const provider = request.nextUrl.searchParams.get("provider");
 
@@ -123,3 +124,7 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

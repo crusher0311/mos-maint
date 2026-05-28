@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 /**
  * Detect Dog migration — GET ?smsShopId=N
  * Returns whether a Tekmetric x-auth-token has been cached recently for
@@ -23,7 +24,7 @@ export const __deps = {
 
 export const OPTIONS = () => migOptions();
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const auth = await requireMigAdmin(request);
   if (!auth.ok) return auth.response;
   const url = new URL(request.url);
@@ -33,3 +34,6 @@ export async function GET(request: NextRequest) {
   const status = await __deps.getTokenStatus(smsShopId);
   return migJson(status);
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);

@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
@@ -15,7 +16,7 @@ export async function OPTIONS() {
 
 const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { shopId, workOrderId, contactId, serviceItemId, concernText, provider } = body;
@@ -164,3 +165,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

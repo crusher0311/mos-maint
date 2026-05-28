@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 /**
  * Detect Dog migration — list runs (GET) / create run (POST).
  */
@@ -15,7 +16,7 @@ import { getTokenStatus } from "@/lib/tekmetric-migration/tokenCache";
 
 export const OPTIONS = () => migOptions();
 
-export async function GET(request: NextRequest) {
+async function _GET(request: NextRequest) {
   const auth = await requireMigAdmin(request);
   if (!auth.ok) return auth.response;
   const db = getDb();
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   return migJson({ runs: rows });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   const auth = await requireMigAdmin(request);
   if (!auth.ok) return auth.response;
   let body: any;
@@ -73,3 +74,7 @@ export async function POST(request: NextRequest) {
     tokens: { source: srcStatus, dest: dstStatus },
   });
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const GET = withExtensionErrorMarker(_GET as any);
+export const POST = withExtensionErrorMarker(_POST as any);

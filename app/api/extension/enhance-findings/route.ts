@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, DEFAULT_MODEL, trackOpenAiCall } from "@/lib/ai";
@@ -58,7 +59,7 @@ Examples:
 - "ac blowing warm needs recharge" → "A/C system is blowing warm air. Recommend evacuating and recharging the refrigerant."
 - "all good" → "Inspected and found to be in good condition."`;
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   let body: any;
   try {
     body = await request.json();
@@ -242,3 +243,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

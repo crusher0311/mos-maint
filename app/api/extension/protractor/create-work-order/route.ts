@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { checkExtensionWritePermission } from "@/lib/extension-write-guard";
@@ -17,7 +18,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
@@ -96,3 +97,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Internal error" }, { status: 500, headers: corsHeaders });
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);

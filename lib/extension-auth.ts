@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { emitShopErrorEvent } from "@/lib/alerts/shop-error-marker";
 import {
   isIdentityPgCanonical,
   shadowWriteMongoIdentity,
@@ -78,6 +79,14 @@ export async function validateExtensionToken(
     const hasAuthHeader = !!authHeader;
     const hasQueryToken = !!request.nextUrl.searchParams.get("_token");
     console.log(`[Extension Auth] No valid token: hasAuthHeader=${hasAuthHeader}, hasQueryToken=${hasQueryToken}, path=${request.nextUrl.pathname}`);
+    emitShopErrorEvent({
+      group: "EXT_AUTH_401",
+      shopId: requiredShopId ?? null,
+      status: 401,
+      code: "TOKEN_MISSING",
+      path: request.nextUrl.pathname,
+      method: request.method,
+    });
     return { user: null, authorized: false, error: "Missing authorization", code: "TOKEN_MISSING" };
   }
 
@@ -142,6 +151,15 @@ export async function validateExtensionToken(
     }
   } catch (err) {
     console.error("[Extension Auth] Token lookup failed:", err);
+    emitShopErrorEvent({
+      group: "EXT_5XX",
+      shopId: requiredShopId ?? null,
+      status: 503,
+      code: "AUTH_LOOKUP_FAILED",
+      path: request.nextUrl.pathname,
+      method: request.method,
+      message: (err as any)?.message,
+    });
     return {
       user: null,
       authorized: false,
@@ -153,6 +171,14 @@ export async function validateExtensionToken(
 
   if (!user) {
     console.log(`[Extension Auth] Token not found in DB, path=${request.nextUrl.pathname}`);
+    emitShopErrorEvent({
+      group: "EXT_AUTH_401",
+      shopId: requiredShopId ?? null,
+      status: 401,
+      code: "TOKEN_INVALID",
+      path: request.nextUrl.pathname,
+      method: request.method,
+    });
     return { user: null, authorized: false, error: "Invalid token", code: "TOKEN_INVALID" };
   }
 
@@ -178,6 +204,14 @@ export async function validateExtensionToken(
     if (tokenAge > MAX_TOKEN_AGE_MS) {
       const maskedEmail = user.email ? user.email.replace(/(.{2}).*(@.*)/, '$1***$2') : 'unknown';
       console.log(`[Extension Auth] Token expired: user=${maskedEmail}, age=${Math.round(tokenAge / 86400000)}d, max=${MAX_TOKEN_AGE_MS / 86400000}d, path=${request.nextUrl.pathname}`);
+      emitShopErrorEvent({
+        group: "EXT_AUTH_401",
+        shopId: requiredShopId ?? (user as any)?.shopId ?? null,
+        status: 401,
+        code: "TOKEN_EXPIRED",
+        path: request.nextUrl.pathname,
+        method: request.method,
+      });
       return { user: null, authorized: false, error: "Token expired", code: "TOKEN_EXPIRED" };
     }
 
@@ -229,6 +263,14 @@ export async function validateExtensionToken(
     
     if (!hasAccess && !isPlatformAdmin) {
       console.warn(`[Extension Auth] Unauthorized shop access: user ${user.email} (shop ${userShopId}) tried shop ${requiredShopId}`);
+      emitShopErrorEvent({
+        group: "EXT_AUTH_401",
+        shopId: requiredShopId,
+        status: 401,
+        code: "SHOP_FORBIDDEN",
+        path: request.nextUrl.pathname,
+        method: request.method,
+      });
       return { user, authorized: false, error: "Unauthorized shop access", code: "SHOP_FORBIDDEN" };
     }
   }

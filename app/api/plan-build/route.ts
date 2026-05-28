@@ -56,10 +56,14 @@ const DVI_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  
+  // Captured so the 500 catch (task #510) can stamp the shop on the
+  // structured `[ShopErrorRate]` marker — declaring `shopId` only
+  // inside the try block would leave the alert un-grouped per shop.
+  let shopIdForError: number | null = null;
+
   try {
     let shopId: number;
-    
+
     const internalSecret = req.headers.get("x-internal-secret");
     const internalShopId = req.headers.get("x-internal-shop-id");
     if (
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest) {
       }
       shopId = Number(session.shopId);
     }
+    shopIdForError = shopId;
 
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
     const mileageParam = req.nextUrl.searchParams.get("mileage");
@@ -998,6 +1003,21 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error("[PlanBuild] Error:", err);
+    // Task #510: per-shop error-rate alerting — emit a single
+    // structured marker that the Better Stack PLAN_BUILD_5XX rule
+    // groups by shopId. Wrapped in try/catch so a logging failure
+    // never replaces the real 500 response.
+    try {
+      const { emitShopErrorEvent } = await import("@/lib/alerts/shop-error-marker");
+      emitShopErrorEvent({
+        group: "PLAN_BUILD_5XX",
+        shopId: shopIdForError,
+        status: 500,
+        path: "/api/plan-build",
+        method: "POST",
+        message: err?.message,
+      });
+    } catch {}
     return NextResponse.json(
       { error: "Plan build failed", details: err.message },
       { status: 500 }

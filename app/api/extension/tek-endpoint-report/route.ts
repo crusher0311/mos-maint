@@ -1,3 +1,4 @@
+import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // gate-exempt: pure observability — accepts best-effort, sanitized
 // telemetry from the Chrome extension's tekmetricFetch helper. Failure
 // to authenticate must not block the extension's foreground work, so
@@ -142,7 +143,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export async function POST(request: NextRequest) {
+async function _POST(request: NextRequest) {
   try {
     const auth = await __deps.validateExtensionToken(request);
     if (!auth.authorized || !auth.user) {
@@ -300,3 +301,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Task #510: per-shop error-rate alerting — wrap all extension handlers
+export const POST = withExtensionErrorMarker(_POST as any);
