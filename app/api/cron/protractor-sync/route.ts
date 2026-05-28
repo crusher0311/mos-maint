@@ -238,23 +238,32 @@ export async function GET(req: NextRequest) {
         const shopSyncedVins: string[] = [];
         const limit = pLimit(3);
 
-        const detailedWOs = await Promise.all(
-          activeWOs.map((wo) =>
-            limit(async () => {
-              try {
-                const detailResult = await fetchWorkOrderById(shopId, wo.ID);
-                if (detailResult.ok && detailResult.workOrder) {
-                  return detailResult.workOrder;
-                }
-              } catch (err) {
-                console.log(`[Cron] Failed to fetch WO ${wo.ID} details`);
-              }
-              return wo;
-            })
-          )
-        );
+        // Streaming fetch+process to bound heap: previously we built a full
+        // `detailedWOs` array via Promise.all then iterated. With up to 5,000
+        // active WOs per shop × pLimit(4) shops in parallel and ~100KB-1MB per
+        // hydrated WO, that array regularly OOM'd the Render process (V8 SIGABRT,
+        // heap 12.6 GB). We now fetch each detail, process it, hand it to the
+        // normalized ingestion service, and let it be GC'd before moving on.
+        // Peak heap is now O(pLimit) hydrated WOs per shop instead of O(5000).
+        let syncedCount = 0;
 
-        for (const wo of detailedWOs) {
+        // Resolve shop/enterprise once for per-WO normalized ingestion.
+        let ingestionService: NormalizedIngestionService | null = null;
+        try {
+          const shopDoc = await db.collection("shops").findOne({ shopId: String(shopId) });
+          const enterpriseId = shopDoc?.enterpriseId as string | undefined;
+          ingestionService = new NormalizedIngestionService(
+            db,
+            'protractor',
+            shopId,
+            enterpriseId,
+            { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
+          );
+        } catch (e: any) {
+          console.log(`[Cron] Protractor sync: failed to init normalized ingestion for shop ${shopId}:`, e.message);
+        }
+
+        const processOne = async (wo: any) => {
           const stage = wo.WorkflowStage || (wo as any).Status || "";
           let vin = wo.ServiceItem?.VIN?.toUpperCase() || wo.ServiceItem?.Lookup?.toUpperCase() || (wo as any).VIN?.toUpperCase();
           let vehicle = wo.ServiceItem;
@@ -289,61 +298,55 @@ export async function GET(req: NextRequest) {
                 addedAt: new Date(),
               };
 
-              const existingVehicle = await db.collection("vehicles").findOne({
-                $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+              // Atomic source-array merge. The previous read-modify-write
+              // (findOne → splice in app code → updateOne) was safe only
+              // because processing was sequential. With the streaming
+              // pLimit(3) refactor, two WOs for the same VIN can land in
+              // parallel and would race on `status.sources`, dropping an
+              // entry. We now (1) `$pull` any existing entry for this exact
+              // (provider, workOrderId) and (2) `$push` the fresh one, both
+              // as atomic Mongo ops. Different WOs for the same VIN no
+              // longer collide; identical (shop, WO) repeats are idempotent.
+              const vehicleFilter = {
                 vin,
-              });
+                $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
+              };
 
-              if (existingVehicle) {
-                const existingSources = existingVehicle.status?.sources || [];
-                const sourceIndex = existingSources.findIndex(
-                  (s: any) => s.provider === "protractor" && String(s.workOrderId) === String(wo.ID)
-                );
-                
-                let updatedSources;
-                if (sourceIndex >= 0) {
-                  updatedSources = [...existingSources];
-                  updatedSources[sourceIndex] = workOrderSource;
-                } else {
-                  updatedSources = [...existingSources, workOrderSource];
-                }
-
-                await db.collection("vehicles").updateOne(
-                  { _id: existingVehicle._id },
-                  {
-                    $set: {
-                      year: vehicle.Year,
-                      make: vehicle.Make,
-                      model: vehicle.Model,
-                      license: vehicle.LicensePlate,
-                      lastMileage: currentOdometer,
-                      updatedAt: new Date(),
-                      protractorId: vehicle.ID,
-                      "status.active": true,
-                      "status.sources": updatedSources,
-                      "status.updatedAt": new Date(),
+              await db.collection("vehicles").updateOne(
+                vehicleFilter,
+                {
+                  $pull: {
+                    "status.sources": {
+                      provider: "protractor",
+                      workOrderId: String(wo.ID),
                     },
-                  }
-                );
-              } else {
-                await db.collection("vehicles").insertOne({
-                  shopId: String(shopId),
-                  vin,
-                  year: vehicle.Year,
-                  make: vehicle.Make,
-                  model: vehicle.Model,
-                  license: vehicle.LicensePlate,
-                  lastMileage: currentOdometer,
-                  protractorId: vehicle.ID,
-                  status: {
-                    active: true,
-                    sources: [workOrderSource],
-                    updatedAt: new Date(),
                   },
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                });
-              }
+                } as any
+              );
+
+              await db.collection("vehicles").updateOne(
+                vehicleFilter,
+                {
+                  $set: {
+                    year: vehicle.Year,
+                    make: vehicle.Make,
+                    model: vehicle.Model,
+                    license: vehicle.LicensePlate,
+                    lastMileage: currentOdometer,
+                    updatedAt: new Date(),
+                    protractorId: vehicle.ID,
+                    "status.active": true,
+                    "status.updatedAt": new Date(),
+                  },
+                  $push: { "status.sources": workOrderSource } as any,
+                  $setOnInsert: {
+                    shopId: String(shopId),
+                    vin,
+                    createdAt: new Date(),
+                  },
+                },
+                { upsert: true }
+              );
               vehiclesUpdated++;
               shopSyncedVins.push(vin);
             }
@@ -396,7 +399,37 @@ export async function GET(req: NextRequest) {
               }
             }
           }
-        }
+
+          // Per-WO normalized ingestion (replaces the old post-loop batch call).
+          // Keeping this inline means we never hold all hydrated WOs in memory.
+          if (ingestionService && wo.ServiceItem?.VIN) {
+            try {
+              await ingestionService.ingestWorkOrderWithAllEntities(wo);
+            } catch (normErr: any) {
+              console.log(`[Cron] Protractor sync normalized ingestion error for shop ${shopId} WO ${wo.ID}:`, normErr.message);
+            }
+          }
+
+          syncedCount++;
+        };
+
+        await Promise.all(activeWOs.map((stubWO) =>
+          limit(async () => {
+            let detailedWO: any = stubWO;
+            try {
+              const detailResult = await fetchWorkOrderById(shopId, stubWO.ID);
+              if (detailResult.ok && detailResult.workOrder) {
+                detailedWO = detailResult.workOrder;
+              }
+            } catch (err) {
+              console.log(`[Cron] Failed to fetch WO ${stubWO.ID} details`);
+            }
+            await processOne(detailedWO);
+            // Drop reference so V8 can reclaim the hydrated WO before the next
+            // task runs through this slot.
+            detailedWO = null;
+          })
+        ));
 
         const cachedWOs = await db.collection("protractor_work_orders").find({
           shopId: { $in: [String(shopId), Number(shopId)] },
@@ -426,34 +459,18 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        results.push({ shopId, synced: detailedWOs.length, removed: removedCount, vehiclesUpdated });
+        results.push({ shopId, synced: syncedCount, removed: removedCount, vehiclesUpdated });
         
         if (shopSyncedVins.length > 0) {
           syncedVinsPerShop.push({ shopId, vins: shopSyncedVins });
         }
         
-        // Dual-write to normalized collections (pass full work order payloads)
-        try {
-          const workOrdersForNormalized = detailedWOs.filter(wo => wo.ServiceItem?.VIN);
-          
-          if (workOrdersForNormalized.length > 0) {
-            const shop = await db.collection("shops").findOne({ shopId: String(shopId) });
-            const enterpriseId = shop?.enterpriseId as string | undefined;
-            
-            const ingestionService = new NormalizedIngestionService(
-              db,
-              'protractor',
-              shopId,
-              enterpriseId,
-              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true }
-            );
-            
-            const result = await ingestionService.ingestWorkOrderBatchWithAllEntities(workOrdersForNormalized);
-            console.log(`[Cron] Protractor sync normalized: shop ${shopId}, WOs: ${result.workOrders.created}/${result.workOrders.updated}/${result.workOrders.skipped}, serviceJobs: ${result.serviceJobs.created}c/${result.serviceJobs.updated}u/${result.serviceJobs.skipped}s/${result.serviceJobs.errors}e, lineItems: ${result.lineItems.created}c/${result.lineItems.updated}u/${result.lineItems.skipped}s/${result.lineItems.errors}e, payments: ${result.payments.created}, inspections: ${result.inspections.created}, recommendations: ${result.recommendations.created}`);
-          }
-        } catch (normErr: any) {
-          console.log(`[Cron] Protractor sync normalized ingestion error for shop ${shopId}:`, normErr.message);
-        }
+        // Normalized ingestion is now per-WO inside processOne above so the
+        // hydrated work-order payload is GC'd as soon as it's been ingested.
+        // The prior batch call here built a full `detailedWOs` array in heap,
+        // which on fat shops + pLimit(4)-parallel sync was the dominant
+        // contributor to the V8 OOM SIGABRT crashes.
+        console.log(`[Cron] Protractor sync shop ${shopId}: processed=${syncedCount} vehiclesUpdated=${vehiclesUpdated} (streaming)`);
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
       }
