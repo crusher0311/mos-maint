@@ -1,5 +1,30 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.13 — 2026-05-28
+
+### Fixed
+- **Specs tab now disambiguates multi-variant VIN squishes.**
+  Pierce reported the Specs tab showing "No specifications found for
+  this vehicle" on a 2020 INFINITI Q50 (VIN JN1EV7AR3LM253178) even
+  though the rest of the panel correctly displayed year/make/model and
+  the engine description. Root cause: that VIN's DataOne squish
+  (`JN1EV7AR_L`) matches multiple variants (Pure 3.0L V6 Twin-Turbo vs
+  Red Sport 400 with the higher-output VR30, plus AWD vs RWD), so the
+  decoder refuses to attach trim-specific specs to an arbitrary
+  variant and returns "VIN matches multiple vehicle variants — pass
+  trim or transmission to disambiguate". The `/api/extension/specs`
+  route has accepted `?engine=`, `?trim=`, `?subModel=`,
+  `?transmission=`, `?transmissionType=` hints all along, but the
+  Specs tab was only sending `?vin=`. The Failures and Job Lookup
+  tabs were already forwarding the engine description from
+  `currentContext.vehicle`, so this brings Specs in line with them.
+  The fix forwards every disambiguation field that's actually
+  populated in `currentContext.vehicle` (today engine is the one that
+  always lands; the others are passed only if a future SMS adapter
+  surfaces them, so this is forward-compatible). Failed responses are
+  not cached, so anyone who hit the empty state before will get a
+  fresh call as soon as they reopen the tab on v1.27.13.
+
 ## 1.27.12 — 2026-05-27
 
 ### Fixed

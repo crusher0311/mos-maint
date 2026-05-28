@@ -3469,9 +3469,21 @@ async function loadVehicleSpecs() {
   specsContent.classList.add('hidden');
 
   try {
+    // Pass available disambiguation hints so DataOne can pick the right
+    // variant for VIN squishes that match multiple trims/engines
+    // (e.g. 2020 INFINITI Q50 Pure vs Red Sport 400 share JN1EV7AR_L).
+    // The /api/extension/specs route accepts engine/trim/subModel/transmission
+    // and falls back to "VIN matches multiple vehicle variants" without them.
+    const specsParams = new URLSearchParams({ vin });
+    const v = currentContext?.vehicle || {};
+    if (v.engine) specsParams.set('engine', v.engine);
+    if (v.trim) specsParams.set('trim', v.trim);
+    if (v.subModel) specsParams.set('subModel', v.subModel);
+    if (v.transmission) specsParams.set('transmission', v.transmission);
+    if (v.transmissionType) specsParams.set('transmissionType', v.transmissionType);
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/specs?vin=${encodeURIComponent(vin)}`
+      endpoint: `/api/extension/specs?${specsParams.toString()}`
     });
 
     specsLoading.classList.add('hidden');
