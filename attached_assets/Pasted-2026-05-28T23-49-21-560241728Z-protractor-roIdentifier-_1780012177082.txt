@@ -1,0 +1,50 @@
+2026-05-28T23:49:21.560241728Z   ✓ protractor: roIdentifier is workOrderNumber
+2026-05-28T23:49:21.560245918Z   ✓ returns null when mirror is empty
+2026-05-28T23:49:21.560250548Z   ✓ ignores odometer === 0
+2026-05-28T23:49:21.560254748Z   ✓ autoflow: returns null (no mirror)
+2026-05-28T23:49:21.560258818Z   ✓ pick: open-RO higher than vehicle doc -> open_ro wins
+2026-05-28T23:49:21.560263529Z   ✓ pick: no open-RO -> vehicles_collection
+2026-05-28T23:49:21.560268239Z   ✓ pick: open-RO lower than vehicle doc -> vehicles wins (monotonic guard)
+2026-05-28T23:49:21.560272629Z   ✓ pick: open-RO lower -> mileage_discrepancy fires
+2026-05-28T23:49:21.560276989Z   ✓ pick: discrepancy source labeled by integration
+2026-05-28T23:49:21.560281089Z   ✓ pick: open-RO lower within tolerance -> no discrepancy
+2026-05-28T23:49:21.560285349Z   ✓ pick: vehicle doc null, open-RO present -> open_ro
+2026-05-28T23:49:21.560289419Z   ✓ pick: both null -> miles null, source null
+2026-05-28T23:49:21.560293769Z   ✓ pick: equal values -> open_ro wins for unambiguous logging
+2026-05-28T23:49:21.560298169Z   ✓ cache: open-RO bump exceeds MILEAGE_TOLERANCE -> cache miss enforced
+2026-05-28T23:49:21.560451073Z   ✓ brake-fluid time-only: miles axis is suppressed (status null)
+2026-05-28T23:49:21.560460563Z   ✓ brake-fluid time-only: no 'mi over' headline emitted
+2026-05-28T23:49:21.560523584Z   ✓ brake-fluid time-only: time axis still reports (interval lapsed)
+2026-05-28T23:49:21.560564415Z   ✓ brake-fluid time-only: overall headline anchored to time axis
+2026-05-28T23:49:21.580577481Z   ✓ non-zero dueAtMiles still computes 'mi over'
+2026-05-28T23:49:21.580590161Z 
+2026-05-28T23:49:21.580593861Z All task #476 checks passed
+2026-05-28T23:49:21.803225189Z 
+2026-05-28T23:49:21.803239859Z > mos-maintenance-mvp@1.8.0 test:plan-build-triage-time-only
+2026-05-28T23:49:21.803244309Z > tsx tests/plan-build-triage-time-only.smoke.ts
+2026-05-28T23:49:21.803247529Z 
+2026-05-28T23:49:22.438730382Z Plan-build triage time-only OEM rule smoke checks
+2026-05-28T23:49:22.456420799Z   ✓ brake-fluid row present in some bucket
+2026-05-28T23:49:22.456447399Z   ✓ time-only OEM: dueAtMiles is null (no miles axis)
+2026-05-28T23:49:22.456451479Z   ✓ time-only OEM: milesToGo is null
+2026-05-28T23:49:22.456454759Z   ✓ time-only OEM: dueAtDate is populated
+2026-05-28T23:49:22.456457919Z   ✓ time-only OEM: last.miles preserved as anchor for display
+2026-05-28T23:49:22.456521701Z 
+2026-05-28T23:49:22.456528841Z All task #476 triage checks passed
+2026-05-28T23:49:22.596680183Z 
+2026-05-28T23:49:22.596705834Z > mos-maintenance-mvp@1.8.0 test:smoke
+2026-05-28T23:49:22.596712474Z > npm run lint:lockfile && npm run test:queue-feature-flag && npm run lint:direct-db && npm run lint:no-migrate-tab && npm run test:sms-historical-work-orders-schema && npm run test:tekmig-api-auth && npm run test:extension-telemetry && npm run test:extension-guard && npm run test:extension-auth-no-plaintext && npm run test:extension-manifest-version-bump && npm run test:vhi-realtime-broadcast && npm run test:oe-logo && npm run test:middleware-static-asset-bypass && npm run test:unit-format && npm run test:extension-specs-units && npm run test:sticker-defaults && npm run test:protractor-canned-jobs-filter && npm run test:fuel-type-label && npm run test:backfill-chunk-speed-health && npm run test:chunk-speed-email-html && npm run test:backfill-chunk-speed-health:route && npm run test:tekmetric-backfill-health:route && npm run test:tekmetric-webhook-health:route && npm run test:tekmetric-endpoint-health:route && npm run test:tekmetric-endpoint-health && npm run test:tekmetric-catchup && npm run test:tekmetric-shared-rate-limiter && npm run test:vhr-engine-risk && npm run test:engine-risk-csv && npm run test:enhance-corrections-mos-shop-id && npm run test:concern-conversations-mos-shop-id && npm run test:hovercode-drift && npm run test:hovercode-create-payload && npm run test:vhi-score-snapshot && npm run test:vhi-rebuild-snapshot && npm run test:tekmetric-webhook-signature && npm run test:stripe-webhook-signature && npm run test:extension-shop-lookup && npm run test:stripe-webhook-idempotency && npm run test:tekmetric-webhook-idempotency && npm run test:jobs-search-canonical && npm run test:jobs-search-shape && npm run test:job-scoring-aces-tiers && npm run test:job-index-aces-coverage && npm run test:synthetic-prod-smoke
+2026-05-28T23:49:22.596716694Z 
+2026-05-28T23:49:22.712061748Z 
+2026-05-28T23:49:22.712095409Z > mos-maintenance-mvp@1.8.0 lint:lockfile
+2026-05-28T23:49:22.712100089Z > node scripts/check-lockfile-sync.cjs
+2026-05-28T23:49:22.712102969Z 
+2026-05-28T23:49:23.65294271Z [lockfile-sync] FAIL — package.json and package-lock.json are out of sync.
+2026-05-28T23:49:23.653155865Z [lockfile-sync] Render builds with `npm ci` and will fail this exact way.
+2026-05-28T23:49:23.653170895Z [lockfile-sync] Fix: run `npm install --package-lock-only`, then commit package-lock.json.
+2026-05-28T23:49:23.653186305Z [lockfile-sync] --- npm output ---
+2026-05-28T23:49:23.653193566Z npm error code EUSAGE
+2026-05-28T23:49:23.653197115Z npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+2026-05-28T23:49:23.653200435Z npm error Missing: openapi-types@12.1.3 from lock file
+2026-05-28T23:49:23.721448668Z ==> Build failed 😞
+2026-05-28T23:49:23.721468788Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
