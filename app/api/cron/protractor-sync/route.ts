@@ -79,6 +79,29 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
         const result = await fetchWorkOrderById(shopId, objectId);
         if (result.ok && result.workOrder) {
           await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+
+          // Task #517 — Queue replay path must normalize too, otherwise
+          // any callback event that the webhook handler failed to
+          // process inline (and got queued for retry) would still leave
+          // `normalized_work_orders` stale.
+          try {
+            const shopDoc = await db.collection("shops").findOne(
+              { shopId: { $in: [String(shopId), Number(shopId)] } },
+              { projection: { enterpriseId: 1 } }
+            );
+            const enterpriseId = shopDoc?.enterpriseId as string | undefined;
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'protractor',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'webhook-queue-replay' }
+            );
+            await ingestionService.ingestWorkOrderWithAllEntities(result.workOrder);
+          } catch (normErr: any) {
+            console.error(`[Queue] Normalization error for WO ${objectId}:`, normErr?.message || normErr);
+          }
+
           
           const queueWoStage = (result.workOrder.WorkflowStage || "").toLowerCase();
           const queueIsCompleted = result.workOrder.Completed || 

@@ -2,6 +2,86 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { Db } from "mongodb";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+
+const DRIFT_THRESHOLD_MS = 2 * 60 * 1000;
+const DRIFT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+async function reconcileProtractorDrift(db: Db, shopId: number): Promise<void> {
+  const lookbackCutoff = new Date(Date.now() - DRIFT_LOOKBACK_MS);
+  const recentSnapshots = await db.collection("protractor_work_orders").find(
+    {
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      fetchedAt: { $gte: lookbackCutoff },
+      completed: { $ne: true },
+    },
+    { projection: { workOrderId: 1, workOrderNumber: 1, fetchedAt: 1, rawPayload: 1 } }
+  ).toArray();
+
+  if (recentSnapshots.length === 0) return;
+
+  const sourceIds = recentSnapshots
+    .map((s: any) => String(s.workOrderId || s.rawPayload?.ID || ""))
+    .filter(Boolean);
+
+  const normalizedRows = await db.collection("normalized_work_orders").find(
+    {
+      shopId,
+      'provenance.sourceIds': { $elemMatch: { sourceSystem: 'protractor', sourceId: { $in: sourceIds } } },
+    },
+    { projection: { updatedAt: 1, 'provenance.sourceIds': 1 } }
+  ).toArray();
+
+  const normalizedByWoId = new Map<string, Date>();
+  for (const row of normalizedRows) {
+    const pids = (row as any).provenance?.sourceIds || [];
+    for (const sid of pids) {
+      if (sid?.sourceSystem === 'protractor' && sid?.sourceId) {
+        normalizedByWoId.set(String(sid.sourceId), row.updatedAt as Date);
+      }
+    }
+  }
+
+  const drifted: any[] = [];
+  for (const snap of recentSnapshots) {
+    const woId = String(snap.workOrderId || snap.rawPayload?.ID || "");
+    if (!woId) continue;
+    const snapTs = snap.fetchedAt instanceof Date ? snap.fetchedAt.getTime() : new Date(snap.fetchedAt).getTime();
+    const normTs = normalizedByWoId.get(woId);
+    const normMs = normTs ? (normTs instanceof Date ? normTs.getTime() : new Date(normTs).getTime()) : 0;
+    if (!normMs || snapTs - normMs > DRIFT_THRESHOLD_MS) {
+      drifted.push({ snap, lagMs: normMs ? snapTs - normMs : -1, woId });
+    }
+  }
+
+  if (drifted.length === 0) return;
+
+  const shopDoc = await db.collection("shops").findOne(
+    { shopId: { $in: [String(shopId), Number(shopId)] } },
+    { projection: { enterpriseId: 1 } }
+  );
+  const enterpriseId = shopDoc?.enterpriseId as string | undefined;
+  const ingestionService = new NormalizedIngestionService(
+    db,
+    'protractor',
+    shopId,
+    enterpriseId,
+    { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'drift-backstop' }
+  );
+
+  for (const { snap, lagMs, woId } of drifted) {
+    const payload = snap.rawPayload;
+    if (!payload || !payload.ID) continue;
+    try {
+      const r = await ingestionService.ingestWorkOrderWithAllEntities(payload);
+      console.log(
+        `[Protractor Drift] shop=${shopId} ro=${snap.workOrderNumber ?? woId} lagMs=${lagMs} action=${r.workOrder.action}`
+      );
+    } catch (err: any) {
+      console.error(`[Protractor Drift] re-normalize failed shop=${shopId} ro=${snap.workOrderNumber ?? woId}:`, err?.message || err);
+    }
+  }
+}
 
 async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
   const noMileageVins = rows
@@ -186,11 +266,32 @@ export async function GET(request: NextRequest) {
       vin: { $exists: true, $ne: null }
     };
 
-    if (shopPrefs.showOnlyWithMileage !== false) {
+    // Task #517 — Flip default: brand-new ROs without an odometer entry
+    // (e.g. RO 3578 at CAR Experts) should still appear on the dashboard
+    // so the advisor knows the job exists. The Mileage column renders a
+    // "no mileage" indicator when `displayMiles` is null. Shops can still
+    // opt INTO the legacy hide-zero-mileage behavior by explicitly
+    // setting `preferences.showOnlyWithMileage = true`.
+    if (shopPrefs.showOnlyWithMileage === true) {
       activeQuery.$or = [
         { mileageIn: { $gt: 0 } },
         { mileageOut: { $gt: 0 } }
       ];
+    }
+
+    // Task #517 — Drift backstop. If `protractor_work_orders` has a
+    // snapshot that is newer than its `normalized_work_orders`
+    // counterpart by more than 2 minutes, re-normalize on the spot so
+    // the dashboard read never serves stale data after a webhook that
+    // updated the snapshot but failed to normalize (e.g. server
+    // restarted mid fire-and-forget). Cheap: bounded to active
+    // protractor snapshots touched in the last 24h.
+    if (shop?.protractor?.configured) {
+      try {
+        await reconcileProtractorDrift(db, shopId);
+      } catch (driftErr: any) {
+        console.error(`[Protractor Drift] reconcile error shop=${shopId}:`, driftErr?.message || driftErr);
+      }
     }
 
     let workOrders = await db.collection("normalized_work_orders")

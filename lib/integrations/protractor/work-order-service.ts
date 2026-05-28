@@ -15,6 +15,8 @@
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import { upsertProtractorWorkOrderSnapshot } from "@/lib/integrations/protractor";
 import { touchDashboardUpdate } from "@/lib/data/repositories/shopware-cache";
+import { getDb } from "@/lib/mongo";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 
 export async function finalizeProtractorWorkOrderCreation(
   shopId: number,
@@ -37,6 +39,30 @@ export async function finalizeProtractorWorkOrderCreation(
         if (woResult.ok && woResult.data) {
           await upsertProtractorWorkOrderSnapshot(shopId, woResult.data);
           console.log(`${prefix} Snapshotted WO ${workOrderId} to dashboard`);
+
+          // Task #517 — Normalize on creation too, so a brand-new RO
+          // (e.g. CAR Experts RO 3578) is visible in
+          // `normalized_work_orders` immediately instead of waiting for
+          // the next 2 AM cron tick.
+          try {
+            const db = await getDb();
+            const shopDoc = await db.collection("shops").findOne(
+              { shopId: { $in: [String(shopId), Number(shopId)] } },
+              { projection: { enterpriseId: 1 } }
+            );
+            const enterpriseId = shopDoc?.enterpriseId as string | undefined;
+            const ingestionService = new NormalizedIngestionService(
+              db,
+              'protractor',
+              shopId,
+              enterpriseId,
+              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'create-work-order' }
+            );
+            const r = await ingestionService.ingestWorkOrderWithAllEntities(woResult.data);
+            console.log(`${prefix} Normalized WO ${workOrderId} action=${r.workOrder.action}`);
+          } catch (normErr: any) {
+            console.error(`${prefix} Normalize error (non-fatal):`, normErr?.message);
+          }
         }
       }
     } catch (snapErr: any) {

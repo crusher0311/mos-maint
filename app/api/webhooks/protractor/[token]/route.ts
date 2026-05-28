@@ -10,6 +10,7 @@ import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
 import { insertEvent } from "@/lib/data/repositories/events";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,13 +153,45 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     } else if (objectType === "WorkOrder" && objectId) {
       const result = await fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
+        const woNum = result.workOrder.WorkOrderNumber || objectId;
+        console.log(`[Protractor Webhook] received WO=${woNum} shop=${shopId} op=${operation}`);
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+        console.log(`[Protractor Webhook] enriched WO=${woNum} (protractor_work_orders upserted)`);
+
+        // Task #517 — Webhook normalization durability: previously the
+        // webhook only wrote to `protractor_work_orders`, leaving
+        // `normalized_work_orders` (what the dashboard actually reads)
+        // stale until the next 2 AM cron. RO 3575 (line-item-only edit)
+        // disappeared from the CAR Experts dashboard for this reason.
+        // Run normalization inline before bumping `dashboard_updates`
+        // so dashboard refresh truly reflects the new state.
+        try {
+          const shopDoc = await db.collection("shops").findOne(
+            { shopId: { $in: [String(shopId), Number(shopId)] } },
+            { projection: { enterpriseId: 1 } }
+          );
+          const enterpriseId = shopDoc?.enterpriseId as string | undefined;
+          const ingestionService = new NormalizedIngestionService(
+            db,
+            'protractor',
+            shopId,
+            enterpriseId,
+            { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'webhook' }
+          );
+          const normResult = await ingestionService.ingestWorkOrderWithAllEntities(result.workOrder);
+          console.log(
+            `[Protractor Webhook] normalized WO=${woNum} action=${normResult.workOrder.action} entityId=${normResult.workOrder.entityId || 'n/a'}`
+          );
+        } catch (normErr: any) {
+          console.error(`[Protractor Webhook] normalization failed for WO=${woNum}:`, normErr?.message || normErr);
+        }
+
         await db.collection("dashboard_updates").updateOne(
           { _id: "lastUpdate" } as any,
           { $set: { timestamp: Date.now() } },
           { upsert: true }
         );
-        console.log(`[Protractor Webhook] Updated work order snapshot ${objectId}`);
+        console.log(`[Protractor Webhook] dashboard-bumped WO=${woNum}`);
 
         const woStage = (result.workOrder.WorkflowStage || "").toLowerCase();
         const isCompleted = result.workOrder.Completed || 
