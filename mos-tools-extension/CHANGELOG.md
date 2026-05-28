@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.14 — 2026-05-28
+
+### Changed
+- **Floating tab now shows the Detect Dog mascot.** Replaced the
+  generic MOS logo on the draggable side-rail launcher (Tekmetric +
+  Shop-Ware) with the detective-bear-with-magnifying-glass artwork
+  Brandon supplied so the FAB matches the rest of the Detect Dog
+  brand. No code changes — `icons/mos-fab.png` was swapped; the
+  48×48 rounded-white-square container and 40×40 `object-fit:contain`
+  render rules are unchanged so the new artwork sizes correctly.
+
 ## 1.27.13 — 2026-05-28
 
 ### Fixed
