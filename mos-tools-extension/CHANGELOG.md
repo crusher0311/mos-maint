@@ -1,5 +1,27 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.12 — 2026-05-27
+
+### Fixed
+- **Stop logging users out on a single transient 401 (Task #502).**
+  The extension previously destroyed the saved login token the first
+  time any MOS API call came back 401 (after one silent re-auth
+  attempt). A single upstream blip, a brief network hiccup, or a
+  routine identity-store miss was enough to kick the user back to the
+  "Please sign in again" screen mid-shift — exactly the symptom Mason
+  reported, where closing Chrome, reinstalling the extension, and
+  re-syncing didn't stop the logouts. The background worker now
+  retries 401s with exponential backoff (500ms / 1.5s / 4s + jitter)
+  before attempting a silent re-auth, and only clears the token when
+  the server explicitly says the token itself is invalid
+  (`TOKEN_INVALID`). Expired tokens, shop-scope mismatches, lookup
+  failures, and 503s all leave the saved token in place so the user
+  isn't bounced for recoverable conditions. Pairs with a server-side
+  change that tags every 401 with a stable error code and adds a
+  Postgres-miss → MongoDB fallback for the identity lookup so drift
+  between the two stores stops manifesting as customer-visible
+  logouts.
+
 ## 1.27.11 — 2026-05-27
 
 ### Fixed
