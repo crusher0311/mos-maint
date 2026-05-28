@@ -46,19 +46,78 @@ Steps:
 
 ## Sentinel configuration (env vars on Render)
 
+### Per-vendor sentinels (task #525)
+
+Task #512 v1 shipped with one sentinel shop on Tekmetric. That caught
+Tekmetric-side and shared-code regressions, but a Protractor- or
+Shop-Ware-specific regression (e.g. canned-jobs cache shape change,
+Protractor stage-refresh outage) would not fire. Task #525 adds one
+dedicated sentinel shop **per SMS vendor**, each with its own sentinel
+VIN + extension token. Every step runs once per configured vendor and
+consecutive-failure state is tracked per **(step × vendor)** so a
+Protractor regression pages independently of a healthy Tekmetric run of
+the same step.
+
+For each vendor `<V>` in `TEKMETRIC` / `PROTRACTOR` / `SHOPWARE`:
+
+- `SYNTHETIC_<V>_SHOP_ID` — MOS shopId of that vendor's sentinel shop.
+- `SYNTHETIC_<V>_SMS_SHOP_ID` — sentinel shop's SMS-side shopId
+  (Tekmetric numeric id / Protractor / Shop-Ware shop id).
+- `SYNTHETIC_<V>_VIN` — 17-character sentinel VIN. Pick one that has
+  history in CARFAX so the VHI path actually exercises a real plan
+  build.
+- `SYNTHETIC_<V>_EXT_TOKEN` — extension token (`ext_...`) for that
+  vendor's sentinel test user. Treat as a secret.
+- `SYNTHETIC_<V>_PARTNER_API_KEY` — partner API key for `/api/external/*`
+  (optional; falls back to the shared `SYNTHETIC_PARTNER_API_KEY`).
+
+A vendor is **configured** (and therefore exercised) when ANY of its
+identity vars (`SHOP_ID` / `SMS_SHOP_ID` / `EXT_TOKEN` / `VIN`) is set.
+Configure as many vendors as you have sentinel shops for — partially
+configured fleets are fine (e.g. Tekmetric + Protractor only).
+
+Example (all three vendors):
+
+```sh
+SYNTHETIC_TEKMETRIC_SHOP_ID=901
+SYNTHETIC_TEKMETRIC_SMS_SHOP_ID=12345
+SYNTHETIC_TEKMETRIC_VIN=1HGCM82633A123456
+SYNTHETIC_TEKMETRIC_EXT_TOKEN=ext_...
+
+SYNTHETIC_PROTRACTOR_SHOP_ID=902
+SYNTHETIC_PROTRACTOR_SMS_SHOP_ID=pt-67890
+SYNTHETIC_PROTRACTOR_VIN=2FMDK3GC4BBA00001
+SYNTHETIC_PROTRACTOR_EXT_TOKEN=ext_...
+
+SYNTHETIC_SHOPWARE_SHOP_ID=903
+SYNTHETIC_SHOPWARE_SMS_SHOP_ID=sw-24680
+SYNTHETIC_SHOPWARE_VIN=3VWFE21C04M000002
+SYNTHETIC_SHOPWARE_EXT_TOKEN=ext_...
+```
+
+> Note: `tekmetric_open_ros` only runs for the Tekmetric vendor; it
+> auto-skips with `ok=true` for Protractor / Shop-Ware (the upstream
+> open-RO call is Tekmetric-specific). `tekmetric_labor_rates` runs for
+> every vendor via the provider-aware `/api/extension/labor-rates` route.
+
+### Shared
+
 - `SYNTHETIC_BASE_URL` — defaults to `http://127.0.0.1:${PORT||5000}`.
   Set to the public Render URL if you also want an external uptime
   monitor to curl the route from outside the box.
-- `SYNTHETIC_SHOP_ID` — MOS shopId of the sentinel shop.
-- `SYNTHETIC_SMS_SHOP_ID` — sentinel shop's SMS-side shopId (Tekmetric
-  numeric id).
-- `SYNTHETIC_PROVIDER` — `tekmetric` (default) | `protractor` | `shopware`.
-- `SYNTHETIC_VIN` — 17-character sentinel VIN. Pick one that has
-  history in CARFAX so the VHI path actually exercises a real plan
-  build.
-- `SYNTHETIC_EXT_TOKEN` — extension token (`ext_...`) for the sentinel
-  test user. Treat as a secret.
-- `SYNTHETIC_PARTNER_API_KEY` — partner API key for `/api/external/*`.
+- `SYNTHETIC_PARTNER_API_KEY` — shared partner API key for
+  `/api/external/*` (used by any vendor without its own
+  `SYNTHETIC_<V>_PARTNER_API_KEY`).
+
+### Legacy single-sentinel (back-compat)
+
+If **no** per-vendor vars are configured, the runner falls back to the
+original single-sentinel env so existing deployments keep working
+unchanged:
+
+- `SYNTHETIC_SHOP_ID`, `SYNTHETIC_SMS_SHOP_ID`, `SYNTHETIC_VIN`,
+  `SYNTHETIC_EXT_TOKEN`, and `SYNTHETIC_PROVIDER`
+  (`tekmetric` (default) | `protractor` | `shopware`).
 
 The sentinel shop should be a dedicated test shop. Every synthetic
 write carries `synthetic: true` so analytics/billing pipelines can
@@ -69,13 +128,16 @@ filter it out; today the only write is the run record in
 
 - Single failure → marker emitted, no email. Single failures are
   treated as transient.
-- Two consecutive failures of the **same step** → marker emitted +
-  email to `getPlatformAdminEmails()` with the step name, error,
-  sentinel ids, and a re-run command. State-based dedup: while the
-  step is still in the "alerted" state, additional failures do NOT
-  re-page.
-- Recovery (a previously-alerted step returns ok) → state cleared +
-  recovery email.
+- Two consecutive failures of the **same (step × vendor)** → marker
+  emitted + email to `getPlatformAdminEmails()` with the step name,
+  **vendor**, error, sentinel ids, and a re-run command. State-based
+  dedup: while that (step × vendor) is still in the "alerted" state,
+  additional failures do NOT re-page. State docs are keyed
+  `step:<name>:<vendor>` in `synthetic_state`.
+- Recovery (a previously-alerted (step × vendor) returns ok) → state
+  cleared + recovery email.
+- Each failure marker carries `extra.provider` so Better Stack can
+  group/filter by vendor in addition to step (`code`).
 
 This mirrors the dedup pattern in `app/api/cron/cron-health-alerter/route.ts`.
 
@@ -88,10 +150,13 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 ## Status surface
 
-`/admin/synthetic-prod-smoke` — 24h pass rate, currently-paged steps,
-per-step state, last 50 runs.
+`/admin/synthetic-prod-smoke` — 24h pass rate, currently-paged
+(step × vendor) pairs, per-(step × vendor) state grouped by vendor, and
+the last 50 runs with step latencies grouped by vendor.
 
 JSON: `GET /api/admin/synthetic-prod-smoke` (admin/platform_admin only).
+Each `state` entry carries a `provider` field; each `runs` entry carries
+a `vendors[]` array (plus the legacy flattened `steps[]` for back-compat).
 
 ## Break glass
 

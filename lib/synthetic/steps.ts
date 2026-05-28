@@ -9,18 +9,30 @@
  * orchestrates the steps, persists results, and triggers alerts.
  *
  * Sentinel configuration (env vars):
- *   - `SYNTHETIC_BASE_URL`      — base URL for HTTP fetches
- *                                (default: `http://127.0.0.1:${PORT||5000}`).
- *   - `SYNTHETIC_SHOP_ID`       — MOS shopId of the sentinel shop.
- *   - `SYNTHETIC_SMS_SHOP_ID`   — sentinel shop's SMS-provider shopId
- *                                (e.g. Tekmetric numeric id) used by every
- *                                extension route that takes `smsShopId`.
- *   - `SYNTHETIC_PROVIDER`      — `tekmetric` | `protractor` | `shopware`
- *                                (default: `tekmetric`).
- *   - `SYNTHETIC_VIN`           — 17-char sentinel VIN.
- *   - `SYNTHETIC_EXT_TOKEN`     — extension token (`ext_...`) for the
- *                                sentinel test user. Treat as a secret.
- *   - `SYNTHETIC_PARTNER_API_KEY` — partner API key for `/api/external/*`.
+ *
+ *   Per-vendor (task #525 — one dedicated sentinel shop per SMS vendor so a
+ *   Protractor- or Shop-Ware-specific regression fires even when Tekmetric
+ *   is healthy). For each vendor `<V>` in {TEKMETRIC, PROTRACTOR, SHOPWARE}:
+ *     - `SYNTHETIC_<V>_SHOP_ID`        — MOS shopId of that vendor's sentinel.
+ *     - `SYNTHETIC_<V>_SMS_SHOP_ID`    — sentinel shop's SMS-provider shopId.
+ *     - `SYNTHETIC_<V>_VIN`            — 17-char sentinel VIN.
+ *     - `SYNTHETIC_<V>_EXT_TOKEN`      — extension token (`ext_...`). Secret.
+ *     - `SYNTHETIC_<V>_PARTNER_API_KEY` — partner API key for `/api/external/*`
+ *                                        (falls back to the shared
+ *                                        `SYNTHETIC_PARTNER_API_KEY`).
+ *   A vendor is "configured" (and therefore exercised) when ANY of its
+ *   identity vars (`SHOP_ID` / `SMS_SHOP_ID` / `EXT_TOKEN` / `VIN`) is set.
+ *
+ *   Shared:
+ *     - `SYNTHETIC_BASE_URL`      — base URL for HTTP fetches
+ *                                  (default: `http://127.0.0.1:${PORT||5000}`).
+ *     - `SYNTHETIC_PARTNER_API_KEY` — shared partner API key fallback.
+ *
+ *   Legacy single-sentinel (back-compat — used only when NO per-vendor
+ *   vars are configured):
+ *     - `SYNTHETIC_SHOP_ID`, `SYNTHETIC_SMS_SHOP_ID`, `SYNTHETIC_VIN`,
+ *       `SYNTHETIC_EXT_TOKEN`, `SYNTHETIC_PROVIDER`
+ *       (`tekmetric` | `protractor` | `shopware`, default `tekmetric`).
  *
  * Out-of-scope writes: steps 4/5 deliberately exercise read paths and
  * synthetic-tagged short-circuits — they NEVER push fake jobs / concerns
@@ -40,6 +52,18 @@ export type StepName =
   | "save_concern"
   | "sticker_print";
 
+export type Vendor = "tekmetric" | "protractor" | "shopware";
+
+/** Vendors exercised by the synthetic, in display order. */
+export const VENDORS: Vendor[] = ["tekmetric", "protractor", "shopware"];
+
+/** Env-var prefix per vendor (task #525). */
+const VENDOR_ENV_PREFIX: Record<Vendor, string> = {
+  tekmetric: "SYNTHETIC_TEKMETRIC_",
+  protractor: "SYNTHETIC_PROTRACTOR_",
+  shopware: "SYNTHETIC_SHOPWARE_",
+};
+
 export interface StepResult {
   name: StepName;
   ok: boolean;
@@ -47,18 +71,25 @@ export interface StepResult {
   status?: number | null;
   error?: string | null;
   extra?: Record<string, unknown>;
+  // Tagged by the runner so per-(step × vendor) state can be tracked.
+  provider?: Vendor;
 }
 
 export interface SyntheticEnv {
   baseUrl: string;
   shopId: number | null;
   smsShopId: string | null;
-  provider: "tekmetric" | "protractor" | "shopware";
+  provider: Vendor;
   vin: string | null;
   extToken: string | null;
   partnerApiKey: string | null;
 }
 
+/**
+ * Legacy single-sentinel loader. Kept for back-compat: it is only used as
+ * the fallback when NO per-vendor vars are configured (see
+ * `loadSyntheticEnvs`).
+ */
 export function loadSyntheticEnv(): SyntheticEnv {
   const port = process.env.PORT || "5000";
   return {
@@ -76,6 +107,49 @@ export function loadSyntheticEnv(): SyntheticEnv {
     extToken: process.env.SYNTHETIC_EXT_TOKEN || null,
     partnerApiKey: process.env.SYNTHETIC_PARTNER_API_KEY || null,
   };
+}
+
+/**
+ * Load one sentinel env per CONFIGURED vendor (task #525).
+ *
+ * A vendor is configured when any of its identity vars
+ * (`SYNTHETIC_<V>_SHOP_ID` / `_SMS_SHOP_ID` / `_EXT_TOKEN` / `_VIN`) is set.
+ * The partner API key falls back to the shared `SYNTHETIC_PARTNER_API_KEY`.
+ *
+ * If NO per-vendor vars are configured at all, falls back to the legacy
+ * single-sentinel env so existing deployments keep working unchanged.
+ */
+export function loadSyntheticEnvs(): SyntheticEnv[] {
+  const port = process.env.PORT || "5000";
+  const baseUrl =
+    process.env.SYNTHETIC_BASE_URL || `http://127.0.0.1:${port}`;
+  const sharedPartnerKey = process.env.SYNTHETIC_PARTNER_API_KEY || null;
+
+  const envs: SyntheticEnv[] = [];
+  for (const vendor of VENDORS) {
+    const prefix = VENDOR_ENV_PREFIX[vendor];
+    const shopIdRaw = process.env[`${prefix}SHOP_ID`];
+    const smsShopId = process.env[`${prefix}SMS_SHOP_ID`] || null;
+    const extToken = process.env[`${prefix}EXT_TOKEN`] || null;
+    const vin = process.env[`${prefix}VIN`] || null;
+    const configured = Boolean(shopIdRaw || smsShopId || extToken || vin);
+    if (!configured) continue;
+    envs.push({
+      baseUrl,
+      shopId: shopIdRaw ? Number(shopIdRaw) : null,
+      smsShopId,
+      provider: vendor,
+      vin,
+      extToken,
+      partnerApiKey:
+        process.env[`${prefix}PARTNER_API_KEY`] || sharedPartnerKey,
+    });
+  }
+
+  if (envs.length === 0) {
+    return [loadSyntheticEnv()];
+  }
+  return envs;
 }
 
 async function timed<T>(

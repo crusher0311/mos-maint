@@ -25,10 +25,11 @@ import { sendEmail } from "@/lib/email";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import {
   ALL_STEPS,
-  loadSyntheticEnv,
+  loadSyntheticEnvs,
   type StepName,
   type StepResult,
   type SyntheticEnv,
+  type Vendor,
 } from "./steps";
 
 const RUNS_COLLECTION = "synthetic_runs";
@@ -52,19 +53,33 @@ async function ensureIndexes(db: Db) {
   }
 }
 
+export interface VendorRun {
+  provider: Vendor;
+  shopId: number | null;
+  vin: string | null;
+  ok: boolean;
+  steps: StepResult[];
+}
+
 export interface RunSummary {
   ok: boolean;
   ts: Date;
   durationMs: number;
   baseUrl: string;
+  vendors: VendorRun[];
+  alerts: Array<{ step: StepName; provider: Vendor; kind: "page" | "recover" }>;
+  // Legacy single-sentinel compatibility fields (first vendor's values + a
+  // flattened step list across every vendor).
   shopId: number | null;
   vin: string | null;
   steps: StepResult[];
-  alerts: Array<{ step: StepName; kind: "page" | "recover" }>;
 }
 
 export interface RunnerDeps {
+  // Single-env seam (back-compat). When set, treated as a one-vendor run.
   env?: SyntheticEnv;
+  // Multi-vendor seam (task #525). Takes precedence over `env`.
+  envs?: SyntheticEnv[];
   steps?: typeof ALL_STEPS;
   // Test seam — when provided, skips Mongo + email.
   inMemory?: boolean;
@@ -80,42 +95,65 @@ export interface RunnerDeps {
 export async function runSyntheticSmoke(
   deps: RunnerDeps = {},
 ): Promise<RunSummary> {
-  const env = deps.env ?? loadSyntheticEnv();
+  const envs =
+    deps.envs ?? (deps.env ? [deps.env] : loadSyntheticEnvs());
   const steps = deps.steps ?? ALL_STEPS;
   const emit = deps.emit ?? emitShopErrorEvent;
   const send = deps.send ?? sendEmail;
   const getAdmins = deps.getAdmins ?? getPlatformAdminEmails;
 
   const t0 = Date.now();
-  const results: StepResult[] = [];
-  for (const fn of steps) {
-    results.push(await fn(env));
+  // Run every step once per configured vendor. Each result is tagged with
+  // the vendor so per-(step × vendor) state can be tracked downstream.
+  const vendorRuns: VendorRun[] = [];
+  for (const env of envs) {
+    const results: StepResult[] = [];
+    for (const fn of steps) {
+      const res = await fn(env);
+      res.provider = env.provider;
+      results.push(res);
+    }
+    vendorRuns.push({
+      provider: env.provider,
+      shopId: env.shopId,
+      vin: env.vin,
+      ok: results.every((r) => r.ok),
+      steps: results,
+    });
   }
   const durationMs = Date.now() - t0;
-  const ok = results.every((r) => r.ok);
+  const ok = vendorRuns.every((v) => v.ok);
   const summary: RunSummary = {
     ok,
     ts: new Date(),
     durationMs,
-    baseUrl: env.baseUrl,
-    shopId: env.shopId,
-    vin: env.vin,
-    steps: results,
+    baseUrl: envs[0]?.baseUrl ?? "",
+    vendors: vendorRuns,
     alerts: [],
+    // Legacy single-sentinel compatibility fields.
+    shopId: vendorRuns[0]?.shopId ?? null,
+    vin: vendorRuns[0]?.vin ?? null,
+    steps: vendorRuns.flatMap((v) => v.steps),
   };
 
-  // Emit per-step failure markers immediately (the Better Stack rule
-  // counts these — alerting/email is the SECONDARY signal for humans).
-  for (const r of results) {
-    if (!r.ok) {
-      emit({
-        group: "SYNTHETIC_FAIL",
-        shopId: env.shopId,
-        status: r.status ?? null,
-        code: r.name,
-        message: r.error || null,
-        extra: { latencyMs: r.latencyMs, vin: env.vin || null },
-      });
+  // Emit per-(vendor × step) failure markers immediately (the Better Stack
+  // rule counts these — alerting/email is the SECONDARY signal for humans).
+  for (const v of vendorRuns) {
+    for (const r of v.steps) {
+      if (!r.ok) {
+        emit({
+          group: "SYNTHETIC_FAIL",
+          shopId: v.shopId,
+          status: r.status ?? null,
+          code: r.name,
+          message: r.error || null,
+          extra: {
+            latencyMs: r.latencyMs,
+            vin: v.vin || null,
+            provider: v.provider,
+          },
+        });
+      }
     }
   }
 
@@ -126,6 +164,15 @@ export async function runSyntheticSmoke(
   const db = deps.getDb ? await deps.getDb() : await getDb();
   await ensureIndexes(db);
 
+  const serializeStep = (r: StepResult) => ({
+    name: r.name,
+    ok: r.ok,
+    latencyMs: r.latencyMs,
+    status: r.status ?? null,
+    error: r.error ?? null,
+    extra: r.extra ?? null,
+  });
+
   // Persist the run record.
   try {
     await db.collection(RUNS_COLLECTION).insertOne({
@@ -133,16 +180,18 @@ export async function runSyntheticSmoke(
       ok: summary.ok,
       durationMs: summary.durationMs,
       baseUrl: summary.baseUrl,
+      // Per-vendor grouping (task #525) — powers the by-vendor status surface.
+      vendors: summary.vendors.map((v) => ({
+        provider: v.provider,
+        shopId: v.shopId,
+        vin: v.vin,
+        ok: v.ok,
+        steps: v.steps.map(serializeStep),
+      })),
+      // Legacy flattened fields kept so older readers/aggregations keep working.
       shopId: summary.shopId,
       vin: summary.vin,
-      steps: summary.steps.map((r) => ({
-        name: r.name,
-        ok: r.ok,
-        latencyMs: r.latencyMs,
-        status: r.status ?? null,
-        error: r.error ?? null,
-        extra: r.extra ?? null,
-      })),
+      steps: summary.steps.map(serializeStep),
       synthetic: true, // billing/analytics tag — every synthetic write carries this
     });
   } catch (err: any) {
@@ -151,59 +200,78 @@ export async function runSyntheticSmoke(
     );
   }
 
-  // State-based consecutive-failure tracking + paging.
+  // State-based consecutive-failure tracking + paging, keyed per
+  // (step × vendor) so a Protractor regression pages independently of a
+  // healthy Tekmetric run of the same step.
   const admins = ok
     ? []
     : await getAdmins().catch(() => [] as string[]);
-  for (const r of results) {
-    const stateId = `step:${r.name}`;
-    const prior = (await db
-      .collection(STATE_COLLECTION)
-      .findOne({ _id: stateId as any })) as any;
-    const priorConsecutive: number = prior?.consecutiveFailures || 0;
-    const priorAlerted: boolean = !!prior?.alertedAt;
+  for (const v of vendorRuns) {
+    for (const r of v.steps) {
+      const stateId = `step:${r.name}:${v.provider}`;
+      const prior = (await db
+        .collection(STATE_COLLECTION)
+        .findOne({ _id: stateId as any })) as any;
+      const priorConsecutive: number = prior?.consecutiveFailures || 0;
+      const priorAlerted: boolean = !!prior?.alertedAt;
 
-    if (!r.ok) {
-      const consecutive = priorConsecutive + 1;
-      const shouldPage =
-        consecutive >= PAGE_AFTER_CONSECUTIVE_FAILURES && !priorAlerted;
-      await db.collection(STATE_COLLECTION).updateOne(
-        { _id: stateId as any },
-        {
-          $set: {
-            stepName: r.name,
-            consecutiveFailures: consecutive,
-            lastFailureAt: summary.ts,
-            lastError: r.error || null,
-            lastStatus: r.status ?? null,
-            ...(shouldPage ? { alertedAt: summary.ts } : {}),
+      if (!r.ok) {
+        const consecutive = priorConsecutive + 1;
+        const shouldPage =
+          consecutive >= PAGE_AFTER_CONSECUTIVE_FAILURES && !priorAlerted;
+        await db.collection(STATE_COLLECTION).updateOne(
+          { _id: stateId as any },
+          {
+            $set: {
+              stepName: r.name,
+              provider: v.provider,
+              consecutiveFailures: consecutive,
+              lastFailureAt: summary.ts,
+              lastError: r.error || null,
+              lastStatus: r.status ?? null,
+              ...(shouldPage ? { alertedAt: summary.ts } : {}),
+            },
           },
-        },
-        { upsert: true },
-      );
-      if (shouldPage) {
-        summary.alerts.push({ step: r.name, kind: "page" });
-        await sendPage(send, admins, r, env);
-      }
-    } else if (priorConsecutive > 0 || priorAlerted) {
-      await db.collection(STATE_COLLECTION).updateOne(
-        { _id: stateId as any },
-        {
-          $set: {
-            stepName: r.name,
-            consecutiveFailures: 0,
-            lastRecoveredAt: summary.ts,
+          { upsert: true },
+        );
+        if (shouldPage) {
+          summary.alerts.push({
+            step: r.name,
+            provider: v.provider,
+            kind: "page",
+          });
+          await sendPage(send, admins, r, {
+            baseUrl: summary.baseUrl,
+            shopId: v.shopId,
+            vin: v.vin,
+            provider: v.provider,
+          });
+        }
+      } else if (priorConsecutive > 0 || priorAlerted) {
+        await db.collection(STATE_COLLECTION).updateOne(
+          { _id: stateId as any },
+          {
+            $set: {
+              stepName: r.name,
+              provider: v.provider,
+              consecutiveFailures: 0,
+              lastRecoveredAt: summary.ts,
+            },
+            $unset: { alertedAt: "", lastError: "", lastStatus: "" },
           },
-          $unset: { alertedAt: "", lastError: "", lastStatus: "" },
-        },
-        { upsert: true },
-      );
-      if (priorAlerted) {
-        summary.alerts.push({ step: r.name, kind: "recover" });
-        const recipients = admins.length
-          ? admins
-          : await getAdmins().catch(() => [] as string[]);
-        await sendRecover(send, recipients, r);
+          { upsert: true },
+        );
+        if (priorAlerted) {
+          summary.alerts.push({
+            step: r.name,
+            provider: v.provider,
+            kind: "recover",
+          });
+          const recipients = admins.length
+            ? admins
+            : await getAdmins().catch(() => [] as string[]);
+          await sendRecover(send, recipients, r, v.provider);
+        }
       }
     }
   }
@@ -211,22 +279,30 @@ export async function runSyntheticSmoke(
   return summary;
 }
 
+interface PageContext {
+  baseUrl: string;
+  shopId: number | null;
+  vin: string | null;
+  provider: Vendor;
+}
+
 async function sendPage(
   send: typeof sendEmail,
   to: string[],
   r: StepResult,
-  env: SyntheticEnv,
+  ctx: PageContext,
 ) {
   if (!to.length) return;
-  const rerun = `curl -H "Authorization: Bearer $CRON_SECRET" ${env.baseUrl}/api/cron/synthetic-prod-smoke`;
-  const subject = `[Synthetic PAGE] ${r.name} failed twice in a row`;
+  const rerun = `curl -H "Authorization: Bearer $CRON_SECRET" ${ctx.baseUrl}/api/cron/synthetic-prod-smoke`;
+  const subject = `[Synthetic PAGE] ${r.name} (${ctx.provider}) failed twice in a row`;
   const html = `
-    <h2>Synthetic prod smoke: ${r.name} failed twice in a row</h2>
+    <h2>Synthetic prod smoke: ${r.name} (${ctx.provider}) failed twice in a row</h2>
+    <p><strong>Vendor:</strong> ${ctx.provider}</p>
     <p><strong>Status:</strong> ${r.status ?? "n/a"}</p>
     <p><strong>Latency:</strong> ${r.latencyMs} ms</p>
     <p><strong>Error:</strong></p>
     <pre>${escapeHtml(r.error || "")}</pre>
-    <p><strong>Sentinel:</strong> shop=${env.shopId ?? "?"} vin=${env.vin ?? "?"}</p>
+    <p><strong>Sentinel:</strong> shop=${ctx.shopId ?? "?"} vin=${ctx.vin ?? "?"}</p>
     <p><strong>Re-run command:</strong></p>
     <pre>${rerun}</pre>
     <p>Runbook: <code>docs/runbooks/synthetic-prod-smoke.md</code></p>
@@ -248,13 +324,14 @@ async function sendRecover(
   send: typeof sendEmail,
   to: string[],
   r: StepResult,
+  provider: Vendor,
 ) {
   if (!to.length) return;
   try {
     await send({
       to: to.join(","),
-      subject: `[Synthetic OK] ${r.name} recovered`,
-      html: `<p>Synthetic step <strong>${r.name}</strong> returned ok after a previous page.</p>`,
+      subject: `[Synthetic OK] ${r.name} (${provider}) recovered`,
+      html: `<p>Synthetic step <strong>${r.name}</strong> (${provider}) returned ok after a previous page.</p>`,
     });
   } catch {
     /* never fail a run on a recovery email */

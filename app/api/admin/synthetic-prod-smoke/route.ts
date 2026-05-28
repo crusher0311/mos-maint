@@ -64,7 +64,15 @@ export async function GET(req: NextRequest) {
       avgDurationMs: Math.round(dayStats.avgDurationMs || 0),
     },
     state: state.map((s: any) => ({
-      step: s.stepName ?? String(s._id).replace(/^step:/, ""),
+      step: s.stepName ?? String(s._id).replace(/^step:/, "").replace(/:[^:]+$/, ""),
+      // task #525 — per-(step × vendor) state. Derive vendor from the stored
+      // field or the `step:<name>:<vendor>` id; older single-sentinel docs
+      // keyed `step:<name>` have no vendor suffix.
+      provider:
+        s.provider ??
+        (/:/.test(String(s._id).replace(/^step:/, ""))
+          ? String(s._id).split(":").pop()
+          : null),
       consecutiveFailures: s.consecutiveFailures || 0,
       alertedAt: s.alertedAt || null,
       lastFailureAt: s.lastFailureAt || null,
@@ -76,6 +84,38 @@ export async function GET(req: NextRequest) {
       ts: r.ts,
       ok: r.ok,
       durationMs: r.durationMs,
+      // Per-vendor grouping (task #525). Fall back to a single synthetic
+      // "vendor" built from the legacy flattened `steps` for older run docs.
+      vendors: Array.isArray(r.vendors)
+        ? r.vendors.map((v: any) => ({
+            provider: v.provider,
+            shopId: v.shopId ?? null,
+            vin: v.vin ?? null,
+            ok: v.ok,
+            steps: (v.steps || []).map((s: any) => ({
+              name: s.name,
+              ok: s.ok,
+              latencyMs: s.latencyMs,
+              status: s.status ?? null,
+              error: s.error ?? null,
+            })),
+          }))
+        : [
+            {
+              provider: r.provider ?? "legacy",
+              shopId: r.shopId ?? null,
+              vin: r.vin ?? null,
+              ok: r.ok,
+              steps: (r.steps || []).map((s: any) => ({
+                name: s.name,
+                ok: s.ok,
+                latencyMs: s.latencyMs,
+                status: s.status ?? null,
+                error: s.error ?? null,
+              })),
+            },
+          ],
+      // Legacy flattened step list retained for back-compat consumers.
       steps: (r.steps || []).map((s: any) => ({
         name: s.name,
         ok: s.ok,

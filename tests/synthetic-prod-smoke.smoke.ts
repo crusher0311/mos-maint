@@ -32,6 +32,58 @@ function fakeStep(name: any, ok: boolean): any {
   });
 }
 
+// A step that fails only for a specific vendor — used to prove per-vendor
+// failure isolation (task #525).
+function vendorAwareStep(name: any, failProvider: string): any {
+  return async (env: any): Promise<StepResult> => {
+    const ok = env.provider !== failProvider;
+    return {
+      name,
+      ok,
+      latencyMs: 1,
+      status: ok ? 200 : 500,
+      error: ok ? null : `boom:${env.provider}`,
+    };
+  };
+}
+
+function makeFakeDb() {
+  type FakeDoc = Record<string, any>;
+  const collections: Record<string, FakeDoc[]> = {};
+  function coll(name: string) {
+    collections[name] = collections[name] || [];
+    const docs = collections[name];
+    return {
+      createIndex: async () => undefined,
+      insertOne: async (d: FakeDoc) => {
+        docs.push({ ...d });
+        return { insertedId: docs.length };
+      },
+      findOne: async (q: any) => {
+        if (q && q._id) return docs.find((d) => d._id === q._id) || null;
+        return docs[0] || null;
+      },
+      updateOne: async (q: any, u: any) => {
+        let doc = docs.find((d) => q._id == null || d._id === q._id);
+        if (!doc) {
+          doc = { _id: q._id };
+          docs.push(doc);
+        }
+        if (u.$set) Object.assign(doc, u.$set);
+        if (u.$unset) {
+          for (const k of Object.keys(u.$unset)) delete doc[k];
+        }
+        return { matchedCount: 1, modifiedCount: 1 };
+      },
+      find: () => ({
+        sort: () => ({ limit: () => ({ toArray: async () => docs }) }),
+        toArray: async () => docs,
+      }),
+    };
+  }
+  return { fakeDb: { collection: coll } as any, collections };
+}
+
 (async () => {
   // 1) All-ok: no markers emitted, summary.ok = true.
   {
@@ -95,40 +147,7 @@ function fakeStep(name: any, ok: boolean): any {
   // from "@/lib/mongo" — we shim by replacing it at module scope via
   // a re-require trick.
   {
-    type FakeDoc = Record<string, any>;
-    const collections: Record<string, FakeDoc[]> = {};
-    function coll(name: string) {
-      collections[name] = collections[name] || [];
-      const docs = collections[name];
-      return {
-        createIndex: async () => undefined,
-        insertOne: async (d: FakeDoc) => {
-          docs.push({ ...d });
-          return { insertedId: docs.length };
-        },
-        findOne: async (q: any) => {
-          if (q && q._id) return docs.find((d) => d._id === q._id) || null;
-          return docs[0] || null;
-        },
-        updateOne: async (q: any, u: any, _opts?: any) => {
-          let doc = docs.find((d) => q._id == null || d._id === q._id);
-          if (!doc) {
-            doc = { _id: q._id };
-            docs.push(doc);
-          }
-          if (u.$set) Object.assign(doc, u.$set);
-          if (u.$unset) {
-            for (const k of Object.keys(u.$unset)) delete doc[k];
-          }
-          return { matchedCount: 1, modifiedCount: 1 };
-        },
-        find: () => ({
-          sort: () => ({ limit: () => ({ toArray: async () => docs }) }),
-          toArray: async () => docs,
-        }),
-      };
-    }
-    const fakeDb: any = { collection: coll };
+    const { fakeDb, collections } = makeFakeDb();
 
     const runReal = runSyntheticSmoke;
     const emitted: EmittedMarker[] = [];
@@ -185,6 +204,71 @@ function fakeStep(name: any, ok: boolean): any {
     for (const doc of persisted) {
       assert(doc.synthetic === true, "every persisted run is tagged synthetic:true");
     }
+
+    // task #525 — state is keyed per (step × vendor): `step:<name>:<vendor>`.
+    const stateDocs = collections["synthetic_state"] || [];
+    assert(
+      stateDocs.some((d) => d._id === "step:apply_canned_job:tekmetric"),
+      `state keyed per (step × vendor), got ${JSON.stringify(stateDocs.map((d) => d._id))}`,
+    );
+  }
+
+  // 4) Multi-vendor isolation (task #525): a step that fails ONLY for
+  // Protractor pages just the Protractor (step × vendor) on the 2nd
+  // consecutive failure — Tekmetric + Shop-Ware stay green and never page.
+  {
+    const { fakeDb, collections } = makeFakeDb();
+    const sent: any[] = [];
+    const emitted: EmittedMarker[] = [];
+    const envs = [
+      { baseUrl: "http://x", shopId: 1, smsShopId: "1", provider: "tekmetric" as const, vin: "1HGCM82633A123456", extToken: "ext_t", partnerApiKey: "k" },
+      { baseUrl: "http://x", shopId: 2, smsShopId: "2", provider: "protractor" as const, vin: "2FMDK3GC4BBA00001", extToken: "ext_p", partnerApiKey: "k" },
+      { baseUrl: "http://x", shopId: 3, smsShopId: "3", provider: "shopware" as const, vin: "3VWFE21C04M000002", extToken: "ext_s", partnerApiKey: "k" },
+    ];
+    const baseDeps = {
+      envs,
+      steps: [vendorAwareStep("apply_canned_job", "protractor")],
+      emit: ((e: any) => emitted.push({ args: [e] })) as any,
+      send: (async (a: any) => { sent.push(a); return { ok: true }; }) as any,
+      getAdmins: async () => ["oncall@mos.dev"],
+      getDb: async () => fakeDb,
+    };
+
+    // Run #1: protractor fails once → marker emitted, no page.
+    const m1 = await runSyntheticSmoke({ ...baseDeps });
+    assert(m1.ok === false, "run with a failing vendor => summary.ok=false");
+    assert(m1.alerts.length === 0, "1st protractor failure does NOT page");
+    assert(
+      emitted.length === 1 && emitted[0].args[0].extra.provider === "protractor",
+      `exactly one marker, tagged provider=protractor (got ${JSON.stringify(emitted.map((e) => e.args[0].extra?.provider))})`,
+    );
+
+    // Run #2: protractor fails again → pages exactly once, for protractor only.
+    const m2 = await runSyntheticSmoke({ ...baseDeps });
+    const pages = m2.alerts.filter((a: any) => a.kind === "page");
+    assert(pages.length === 1, `exactly 1 page on 2nd consecutive failure, got ${pages.length}`);
+    assert(
+      pages[0].step === "apply_canned_job" && pages[0].provider === "protractor",
+      `page is for (apply_canned_job × protractor), got ${JSON.stringify(pages[0])}`,
+    );
+    assert(sent.length === 1, `exactly 1 email sent, got ${sent.length}`);
+    assert(/protractor/i.test(sent[0].subject), "page email names the vendor");
+
+    // The persisted run groups results by vendor, with only protractor failing.
+    const runDoc = (collections["synthetic_runs"] || [])[0];
+    assert(Array.isArray(runDoc.vendors) && runDoc.vendors.length === 3,
+      `run persists 3 vendor groups, got ${runDoc.vendors?.length}`);
+    const tek = runDoc.vendors.find((v: any) => v.provider === "tekmetric");
+    const pro = runDoc.vendors.find((v: any) => v.provider === "protractor");
+    assert(tek.ok === true, "tekmetric vendor group is ok");
+    assert(pro.ok === false, "protractor vendor group is not ok");
+
+    // State exists per vendor, but only protractor is in an alerted state.
+    const stateDocs = collections["synthetic_state"] || [];
+    const proState = stateDocs.find((d) => d._id === "step:apply_canned_job:protractor");
+    const tekState = stateDocs.find((d) => d._id === "step:apply_canned_job:tekmetric");
+    assert(proState && proState.alertedAt, "protractor (step × vendor) is alerted");
+    assert(!tekState || !tekState.alertedAt, "tekmetric (step × vendor) never alerts");
   }
 
   console.log("✓ synthetic-prod-smoke.smoke.ts passed");
