@@ -53,6 +53,25 @@ async function run() {
       return {
         findOne: async (filter: any) => {
           if (mongoThrows) throw new Error("mongo down");
+          // Multi-token support: validator now passes
+          // `{ $or: [{ extensionToken }, { extensionTokens: { $elemMatch: { token } } }] }`.
+          // Honor both shapes so this older smoke test keeps working.
+          if (filter?.$or) {
+            for (const cond of filter.$or) {
+              if (cond.extensionToken) {
+                const hit = mongoUsers.find((u) => u.extensionToken === cond.extensionToken);
+                if (hit) return hit;
+              }
+              if (cond.extensionTokens?.$elemMatch?.token) {
+                const t = cond.extensionTokens.$elemMatch.token;
+                const hit = mongoUsers.find((u: any) =>
+                  Array.isArray(u.extensionTokens) && u.extensionTokens.some((e: any) => e?.token === t)
+                );
+                if (hit) return hit;
+              }
+            }
+            return null;
+          }
           return mongoUsers.find((u) => u.extensionToken === filter.extensionToken) ?? null;
         },
         updateOne: async () => ({ matchedCount: 1 }),

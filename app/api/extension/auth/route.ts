@@ -120,15 +120,46 @@ export async function POST(request: NextRequest) {
     }
 
     const extensionToken = `ext_${user._id.toString()}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-    
+    const issuedAt = new Date();
+
+    // Task: multi-device concurrent sessions. Before this change the user doc
+    // had a single `extensionToken` slot, so every re-login (or login from a
+    // second tab/device) invalidated the previous device's token within
+    // seconds — Detect Dog's silent re-auth would then mint a new token,
+    // killing this one, and the two tabs would ping-pong forever (74x
+    // `Token not found in DB` for /labor-rates etc. observed in prod).
+    //
+    // We now ALSO push every issued token into `extensionTokens[]` (capped,
+    // pruned by age). `validateExtensionToken` checks both the legacy single
+    // field AND the array, so older tokens that are still within their 30-day
+    // TTL keep working until the device that issued them logs out or
+    // re-auths. The legacy `extensionToken` field is still written to the
+    // newest token so PG-canonical reads and back-compat code keep finding
+    // the latest session.
+    const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+    const MAX_CONCURRENT_TOKENS = 10;
+    const existingTokens: Array<{ token?: string; createdAt?: Date | string; lastUsedAt?: Date | string }> =
+      Array.isArray((user as any).extensionTokens) ? (user as any).extensionTokens : [];
+    const freshTokens = existingTokens.filter((t) => {
+      if (!t?.token || !t?.createdAt) return false;
+      if (t.token === extensionToken) return false; // shouldn't collide, but be safe
+      const age = Date.now() - new Date(t.createdAt).getTime();
+      return age >= 0 && age < MAX_TOKEN_AGE_MS;
+    });
+    const nextTokens = [
+      { token: extensionToken, createdAt: issuedAt, lastUsedAt: issuedAt },
+      ...freshTokens,
+    ].slice(0, MAX_CONCURRENT_TOKENS);
+
     await usersCollection.updateOne(
       { _id: user._id },
-      { 
-        $set: { 
+      {
+        $set: {
           extensionToken,
-          extensionTokenCreatedAt: new Date(),
+          extensionTokenCreatedAt: issuedAt,
+          extensionTokens: nextTokens,
           shopIds: allShopIds
-        } 
+        }
       }
     );
 

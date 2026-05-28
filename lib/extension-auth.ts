@@ -91,6 +91,20 @@ export async function validateExtensionToken(
     | MongoShapedUser
     | { _id?: unknown; id?: unknown; extensionTokenCreatedAt?: Date; email?: string; shopId?: unknown }
     | null = null;
+  // Multi-device concurrent-sessions support: a user may have several active
+  // tokens at once (one per device/tab). Tokens live both in the legacy
+  // `extensionToken` scalar (most-recent) AND in `extensionTokens[]`
+  // (history, capped + pruned by /api/extension/auth). Every Mongo lookup
+  // accepts either shape so a tab whose token is no longer the most recent
+  // one keeps working until its own 30-day TTL elapses or the user
+  // explicitly logs that device out. Locked in by
+  // `tests/extension-auth-multi-token.smoke.ts`.
+  const mongoTokenFilter = {
+    $or: [
+      { extensionToken: token },
+      { extensionTokens: { $elemMatch: { token } } },
+    ],
+  } as const;
   try {
     if (pgCanonical) {
       user = await __deps.findUserByExtensionToken(token);
@@ -100,13 +114,15 @@ export async function validateExtensionToken(
       // mid-shift. Fall back to a Mongo read on PG-miss and log it so
       // we can quantify the drift. This is intentionally additive — the
       // cutover stays in place; this is just a "don't bounce real
-      // customers" net.
+      // customers" net. The same fallback now also catches multi-device
+      // tokens that live in `extensionTokens[]` but not in the PG
+      // single-token column.
       if (!user) {
         try {
           db = await __deps.getDb();
           const mongoUser = await db
             .collection("users")
-            .findOne({ extensionToken: token });
+            .findOne(mongoTokenFilter);
           if (mongoUser) {
             const maskedEmail = mongoUser.email
               ? String(mongoUser.email).replace(/(.{2}).*(@.*)/, "$1***$2")
@@ -122,7 +138,7 @@ export async function validateExtensionToken(
       }
     } else {
       db = await __deps.getDb();
-      user = await db.collection("users").findOne({ extensionToken: token });
+      user = await db.collection("users").findOne(mongoTokenFilter);
     }
   } catch (err) {
     console.error("[Extension Auth] Token lookup failed:", err);
@@ -140,9 +156,25 @@ export async function validateExtensionToken(
     return { user: null, authorized: false, error: "Invalid token", code: "TOKEN_INVALID" };
   }
 
-  if (user.extensionTokenCreatedAt) {
-    const tokenAge = Date.now() - new Date(user.extensionTokenCreatedAt).getTime();
-    
+  // Resolve the createdAt for *this specific* token. If the presented token
+  // is the user's most-recent one (i.e. equal to the legacy `extensionToken`
+  // scalar), use `extensionTokenCreatedAt`. Otherwise look it up in
+  // `extensionTokens[]` so older concurrent-device tokens have their own
+  // independent TTL — without this, a stale entry would inherit the latest
+  // login's createdAt and never expire even if it had been unused for weeks.
+  const matchedTokenEntry: { token: string; createdAt?: Date | string; lastUsedAt?: Date | string } | null =
+    (user as any).extensionToken === token
+      ? null
+      : (Array.isArray((user as any).extensionTokens)
+        ? (user as any).extensionTokens.find((t: any) => t?.token === token) ?? null
+        : null);
+  const effectiveCreatedAt: Date | null = matchedTokenEntry?.createdAt
+    ? new Date(matchedTokenEntry.createdAt)
+    : (user.extensionTokenCreatedAt ? new Date(user.extensionTokenCreatedAt) : null);
+
+  if (effectiveCreatedAt) {
+    const tokenAge = Date.now() - effectiveCreatedAt.getTime();
+
     if (tokenAge > MAX_TOKEN_AGE_MS) {
       const maskedEmail = user.email ? user.email.replace(/(.{2}).*(@.*)/, '$1***$2') : 'unknown';
       console.log(`[Extension Auth] Token expired: user=${maskedEmail}, age=${Math.round(tokenAge / 86400000)}d, max=${MAX_TOKEN_AGE_MS / 86400000}d, path=${request.nextUrl.pathname}`);
@@ -152,7 +184,17 @@ export async function validateExtensionToken(
     if (tokenAge > TOKEN_REFRESH_THRESHOLD_MS) {
       const ts = new Date();
       try {
-        if (pgCanonical) {
+        if (matchedTokenEntry) {
+          // Refresh only the per-device entry — don't touch the scalar
+          // `extensionToken`/`extensionTokenCreatedAt`, which belong to a
+          // different (newer) device's session.
+          if (!db) db = await __deps.getDb();
+          await db.collection("users").updateOne(
+            { _id: user._id ?? user.id },
+            { $set: { "extensionTokens.$[t].lastUsedAt": ts, "extensionTokens.$[t].createdAt": ts } },
+            { arrayFilters: [{ "t.token": token }] }
+          );
+        } else if (pgCanonical) {
           await __deps.updateUserExtensionTokenTimestamp(String(user.id ?? user._id), ts);
           await shadowWriteMongoIdentity(
             "users.extensionTokenCreatedAt",

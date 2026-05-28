@@ -91,16 +91,42 @@ export async function getSession(): Promise<SessionInfo | null> {
       const extToken = authHeader.substring(7);
       try {
         // W4 cutover (#346): PG-canonical when the flag is on.
-        const user = isIdentityPgCanonical()
-          ? await pgFindUserByExtensionToken(extToken)
-          : await (async () => {
-              const db = await getDb();
-              return db.collection("users").findOne({ extensionToken: extToken });
-            })();
+        // Multi-device sessions: a token can live in either the legacy
+        // `users.extensionToken` scalar OR in `users.extensionTokens[]`
+        // (per /api/extension/auth). Mirror `lib/extension-auth.ts`: try the
+        // PG single-token column first, then fall back to a Mongo `$or` that
+        // covers both shapes so older concurrent-device tokens still pass
+        // the cookie-less Bearer path.
+        const mongoFilter = {
+          $or: [
+            { extensionToken: extToken },
+            { extensionTokens: { $elemMatch: { token: extToken } } },
+          ],
+        };
+        let user: any = null;
+        if (isIdentityPgCanonical()) {
+          user = await pgFindUserByExtensionToken(extToken);
+          if (!user) {
+            const db = await getDb();
+            user = await db.collection("users").findOne(mongoFilter);
+          }
+        } else {
+          const db = await getDb();
+          user = await db.collection("users").findOne(mongoFilter);
+        }
         if (user) {
           // Optional 30-day token age check (mirror lib/extension-auth.ts).
-          const createdAt = user.extensionTokenCreatedAt
-            ? new Date(user.extensionTokenCreatedAt).getTime()
+          // Use the matched array entry's createdAt when the presented token
+          // is not the most-recent one, so older device tokens get their own
+          // independent TTL instead of inheriting the newest login's.
+          const matchedEntry: any = user.extensionToken === extToken
+            ? null
+            : (Array.isArray(user.extensionTokens)
+              ? user.extensionTokens.find((t: any) => t?.token === extToken) ?? null
+              : null);
+          const createdAtSource = matchedEntry?.createdAt ?? user.extensionTokenCreatedAt;
+          const createdAt = createdAtSource
+            ? new Date(createdAtSource).getTime()
             : null;
           const expired =
             createdAt !== null &&
