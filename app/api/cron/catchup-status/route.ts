@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { getAllQueueSnapshots } from "@/lib/queue/metrics";
+import { isQueueEnabled } from "@/lib/queue/connection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -218,6 +220,17 @@ export async function GET(req: NextRequest) {
       catchupRuns: trimmedRuns,
       shops: shopRows,
       uncoveredShops,
+      // Task #513: BullMQ worker-queue snapshot. Null when REDIS_URL
+      // isn't set so callers can distinguish "queue disabled" from
+      // "queue empty". Counts are best-effort and never fail the
+      // overall request — a Redis hiccup shows as null counts on the
+      // affected queue, not a 500.
+      queue: isQueueEnabled()
+        ? {
+            enabled: true,
+            snapshots: await getAllQueueSnapshots(),
+          }
+        : { enabled: false, snapshots: [] },
     });
   } catch (err: any) {
     console.error("[catchup-status] error:", err);

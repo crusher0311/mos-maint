@@ -19,6 +19,8 @@ import {
   acquireInFlightLock,
   releaseInFlightLock,
 } from "@/lib/integrations/tekmetric/inflight-lock";
+import { enqueueTekmetricFullPage } from "@/lib/queue/producer";
+import { decideQueueFor } from "@/lib/queue/feature-flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -194,6 +196,37 @@ export async function GET(req: NextRequest) {
       );
       break;
     }
+    // Task #513: feature-flagged hand-off to BullMQ. When the queue is
+    // enabled for this shop, enqueue the chunk and continue without
+    // running it inline — the worker service owns it now. Falls back to
+    // the in-process path when the flag is off, Redis is missing, or
+    // BullMQ rejects the enqueue (see `producer.ts` for the fail-open
+    // contract). The in-flight-lock path below is the legacy guard;
+    // the queue's jobId-based uniqueness replaces it for queued shops.
+    const decision = decideQueueFor(shop.shopId);
+    if (decision.useQueue) {
+      const enq = await enqueueTekmetricFullPage({
+        shopId: shop.shopId,
+        tekmetricShopId: shop.tekmetricShopId,
+        enqueuedAt: new Date().toISOString(),
+        trigger: "cron",
+      });
+      if (enq.enqueued || enq.reason === "duplicate") {
+        results.push({
+          shopId: shop.shopId,
+          name: shop.name,
+          ok: true,
+          routedTo: "queue",
+          jobId: enq.enqueued ? enq.jobId : undefined,
+          duplicate: !enq.enqueued && enq.reason === "duplicate",
+        });
+        continue;
+      }
+      // queue_unavailable — fall through to the in-process path.
+      console.warn(
+        `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: queue unavailable (${enq.reason}), falling back to in-process path`,
+      );
+    }
     // Per-shop in-flight lock. If a manual POST or a slow previous tick
     // is still running this shop, skip and move on rather than racing.
     const lock = await acquireInFlightLock(db, shop.shopId);
@@ -281,6 +314,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Shop has no Tekmetric shopId configured" },
       { status: 400 },
+    );
+  }
+
+  // Task #513: feature-flagged queue hand-off for manual POST triggers,
+  // same contract as the GET cron path above. When the flag is on for
+  // this shop, the request returns 202 immediately and the worker
+  // picks up the chunk. Operators see the job in `/admin/queues`.
+  const queueDecision = decideQueueFor(targetShopId);
+  if (queueDecision.useQueue) {
+    const enq = await enqueueTekmetricFullPage({
+      shopId: targetShopId,
+      tekmetricShopId,
+      enqueuedAt: new Date().toISOString(),
+      trigger: "admin",
+    });
+    if (enq.enqueued) {
+      return NextResponse.json(
+        {
+          ok: true,
+          routedTo: "queue",
+          jobId: enq.jobId,
+          shopId: targetShopId,
+          message: `Enqueued to ${enq.queue} queue. Track progress at /admin/queues.`,
+        },
+        { status: 202 },
+      );
+    }
+    if (enq.reason === "duplicate") {
+      return NextResponse.json(
+        {
+          ok: true,
+          routedTo: "queue",
+          duplicate: true,
+          shopId: targetShopId,
+          message: `A job is already queued or in-flight for shop ${targetShopId}. See /admin/queues.`,
+        },
+        { status: 202 },
+      );
+    }
+    console.warn(
+      `[Tekmetric Full-Page POST] Shop ${targetShopId}: queue unavailable (${enq.reason}), falling back to in-process path`,
     );
   }
 
