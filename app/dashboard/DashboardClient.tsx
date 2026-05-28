@@ -1570,6 +1570,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   engine: commonFailuresVehicle.engine,
                   mileage: commonFailuresVehicle.mileage,
                 }}
+                distanceUnit={data.distanceUnit}
               />
             </div>
           </div>

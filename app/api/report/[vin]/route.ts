@@ -155,12 +155,21 @@ export async function GET(
       if (vehicle?.customerName) customerName = vehicle.customerName;
     }
 
+    // Shop's distance preference — propagate to the customer VHR so km-shops
+    // (CA / metric) render "km" instead of hardcoded "mi". Triage at build
+    // time already converted OEM miles → shop unit (Task #333), so the
+    // numbers stored in `buckets` are in `distanceUnit` already; we just
+    // need to label them correctly here.
+    const distanceUnit: "miles" | "kilometers" =
+      shop?.preferences?.distanceUnit === "kilometers" ? "kilometers" : "miles";
+
     return NextResponse.json({
       plan: {
         vehicle: plan.vehicle || {},
         vin,
         currentMiles: plan.currentMiles || cachedPlan.mileage || 0,
         customerName: customerName || "Vehicle Owner",
+        distanceUnit,
         buckets: {
           overdue: buckets.overdue || [],
           dueSoon: buckets.dueSoon || [],

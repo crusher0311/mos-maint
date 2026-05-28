@@ -69,6 +69,15 @@ interface VHIData {
   };
   approvedServiceKeys?: string[];
   /**
+   * Shop's distance preference. When "kilometers", every distance label on
+   * this report renders "km" / "kilometers" instead of "mi" / "miles". The
+   * underlying numeric values in `currentMiles`, `item.intervalMiles`,
+   * `item.last.miles`, etc. are ALREADY in this unit — triage converts OEM
+   * miles → shop unit once at plan-build time (Task #333). Defaulted at the
+   * API boundary so the legacy report path keeps rendering "miles".
+   */
+  distanceUnit?: "miles" | "kilometers";
+  /**
    * Task #439: when present and `sufficient: false`, the report renders
    * a gray "Insufficient Service History" badge instead of the colored
    * gauge. Absent / `sufficient: true` keeps the normal score display.
@@ -201,12 +210,13 @@ function appendNotes(base: string, item: PlanItem): string {
   return `${trimmedBase}${trimmedBase && !trimmedBase.endsWith(".") ? "." : ""} ${extras.join(" ")}`.trim();
 }
 
-function getItemDescription(item: PlanItem): string {
+function getItemDescription(item: PlanItem, unit: DistanceUnit = "miles"): string {
+  const dWord = distWord(unit);
   if (item.category === "DVI Finding") {
     return appendNotes("Identified during vehicle inspection. Repair recommended.", item);
   }
   if (!item.last) {
-    const base = `No record of this service being performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} miles.` : ""}`;
+    const base = `No record of this service being performed. ${item.intervalMiles ? `Recommended every ${item.intervalMiles.toLocaleString()} ${dWord}.` : ""}`;
     return appendNotes(base, item);
   }
   const lastDate = item.last.date ? new Date(item.last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null;
@@ -218,7 +228,7 @@ function getItemDescription(item: PlanItem): string {
   const impliedParent = item.last.impliedFromParentName?.trim() || null;
   const lastVerb = impliedParent ? `Anchored to ${impliedParent}` : "Last serviced";
   if (item.milesToGo !== null && item.milesToGo < 0) {
-    return appendNotes(`Overdue by ${Math.abs(item.milesToGo).toLocaleString()} miles.${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
+    return appendNotes(`Overdue by ${Math.abs(item.milesToGo).toLocaleString()} ${dWord}.${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
   }
   if (item.milesToGo !== null && item.milesToGo > 0) {
     let dateEst = "";
@@ -226,10 +236,10 @@ function getItemDescription(item: PlanItem): string {
       const estDate = new Date(Date.now() + item.daysToGo * 86400000);
       dateEst = ` Estimated around ${estDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`;
     }
-    return appendNotes(`Due in approximately ${item.milesToGo.toLocaleString()} miles.${dateEst}${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
+    return appendNotes(`Due in approximately ${item.milesToGo.toLocaleString()} ${dWord}.${dateEst}${lastDate ? ` ${lastVerb} ${lastDate}.` : ""}`, item);
   }
   if (lastDate) {
-    return appendNotes(`${lastVerb} ${lastDate}${lastMiles ? ` at ${lastMiles} miles` : ""}.`, item);
+    return appendNotes(`${lastVerb} ${lastDate}${lastMiles ? ` at ${lastMiles} ${dWord}` : ""}.`, item);
   }
   return appendNotes("Service recommended based on manufacturer schedule.", item);
 }
@@ -237,6 +247,18 @@ function getItemDescription(item: PlanItem): string {
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+/**
+ * Distance unit helpers. Triage stores distances in shop units already
+ * (Task #333), so these only swap labels — no numeric conversion.
+ */
+type DistanceUnit = "miles" | "kilometers";
+function distAbbrev(unit: DistanceUnit | undefined): string {
+  return unit === "kilometers" ? "km" : "mi";
+}
+function distWord(unit: DistanceUnit | undefined): string {
+  return unit === "kilometers" ? "kilometers" : "miles";
 }
 
 function getBucketColor(bucket: "overdue" | "dueSoon" | "upcoming"): string {
@@ -262,6 +284,8 @@ export default function VehicleHealthReport({
   const [activeTab, setActiveTab] = useState<ReportTab>("recommendations");
   const score = scoreProp ?? computeScore(data);
   const { vehicle, currentMiles, customerName, buckets } = data;
+  const distanceUnit: DistanceUnit = data.distanceUnit === "kilometers" ? "kilometers" : "miles";
+  const dAbbrev = distAbbrev(distanceUnit);
   const ymm = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ");
   // Resolve once so any unmatched-make miss is recorded a single time per
   // render instead of twice (once for the conditional, once for `src`).
@@ -336,7 +360,7 @@ export default function VehicleHealthReport({
               <p className="text-xs sm:text-sm text-gray-500">
                 {customerName && <><span className="font-medium text-gray-700">{customerName}</span> &bull; </>}
                 VIN <code className="text-xs">{data.vin}</code>
-                {currentMiles > 0 && <> &bull; Current: <span className="font-medium">{currentMiles.toLocaleString()} mi</span></>}
+                {currentMiles > 0 && <> &bull; Current: <span className="font-medium">{currentMiles.toLocaleString()} {dAbbrev}</span></>}
               </p>
             </div>
           </div>
@@ -377,16 +401,28 @@ export default function VehicleHealthReport({
                 ⚠
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-amber-900 leading-tight">
-                  Why we added a 3,000-mile oil-level safety check
-                </p>
-                <p className="text-xs sm:text-sm text-amber-900/90 mt-1 leading-relaxed">
-                  Your vehicle&apos;s factory oil-change interval is on the
-                  longer side, which can let oil run low or wear out before the
-                  next full change. To help catch that early, we&apos;ve added a
-                  quick complimentary oil-level check at about 3,000 miles since
-                  your last oil change.
-                </p>
+                {(() => {
+                  // Task #194 anchors this safety check at 3,000 mi in the
+                  // engine-risk classifier; render the rounded km equivalent
+                  // (~4,800 km) for metric shops so the copy matches the
+                  // values customers see elsewhere on the report.
+                  const safetyCheckLabel = distanceUnit === "kilometers" ? "4,800-km" : "3,000-mile";
+                  const safetyCheckValue = distanceUnit === "kilometers" ? "4,800 km" : "3,000 miles";
+                  return (
+                    <>
+                      <p className="text-sm font-semibold text-amber-900 leading-tight">
+                        Why we added a {safetyCheckLabel} oil-level safety check
+                      </p>
+                      <p className="text-xs sm:text-sm text-amber-900/90 mt-1 leading-relaxed">
+                        Your vehicle&apos;s factory oil-change interval is on the
+                        longer side, which can let oil run low or wear out before the
+                        next full change. To help catch that early, we&apos;ve added a
+                        quick complimentary oil-level check at about {safetyCheckValue} since
+                        your last oil change.
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -449,7 +485,7 @@ export default function VehicleHealthReport({
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
                               <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                                {getItemDescription(item)}
+                                {getItemDescription(item, distanceUnit)}
                               </p>
                               <div className="mt-2 flex items-center gap-2 flex-wrap">
                                 <span
@@ -480,7 +516,7 @@ export default function VehicleHealthReport({
                                     className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded"
                                     title={item.inspectOnlyReason ?? "OEM only schedules an inspection (not a replacement) for this fluid."}
                                   >
-                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} mi` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
+                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} ${dAbbrev}` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
                                   </span>
                                 )}
                                 {item.declined && (
@@ -528,7 +564,7 @@ export default function VehicleHealthReport({
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-sm text-gray-900 leading-tight">{item.title}</h4>
                               <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                                {getItemDescription(item)}
+                                {getItemDescription(item, distanceUnit)}
                               </p>
                               <div className="mt-2 flex items-center gap-2 flex-wrap">
                                 <span
@@ -559,7 +595,7 @@ export default function VehicleHealthReport({
                                     className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded"
                                     title={item.inspectOnlyReason ?? "OEM only schedules an inspection (not a replacement) for this fluid."}
                                   >
-                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} mi` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
+                                    OEM: Inspect{item.intervalMiles ? ` every ${item.intervalMiles.toLocaleString()} ${dAbbrev}` : (item.intervalMonths ? ` every ${item.intervalMonths} mo` : "")}
                                   </span>
                                 )}
                               </div>

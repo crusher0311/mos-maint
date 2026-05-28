@@ -42,9 +42,18 @@ interface CommonFailuresPanelProps {
     engine?: string;
     mileage?: number;
   };
+  /**
+   * Shop's distance preference. Drives both the "@ X mi/km" header AND the
+   * `unit` query param sent to the API (which the API uses to label the
+   * `typicalMileageRange` returned for each failure). Defaulted at the
+   * boundary so older callers keep rendering "mi".
+   */
+  distanceUnit?: "miles" | "kilometers";
 }
 
-export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProps) {
+export default function CommonFailuresPanel({ vehicle, distanceUnit }: CommonFailuresPanelProps) {
+  const isMetric = distanceUnit === "kilometers";
+  const distAbbrev = isMetric ? "km" : "mi";
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CommonFailuresResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +62,7 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
     if (vehicle.year && vehicle.make && vehicle.model && vehicle.mileage && vehicle.mileage > 0) {
       fetchFailures();
     }
-  }, [vehicle.year, vehicle.make, vehicle.model, vehicle.mileage]);
+  }, [vehicle.year, vehicle.make, vehicle.model, vehicle.mileage, isMetric]);
 
   const fetchFailures = async () => {
     if (!vehicle.year || !vehicle.make || !vehicle.model || !vehicle.mileage) {
@@ -71,6 +80,7 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
         model: vehicle.model,
         mileage: String(vehicle.mileage),
         enterprise: "true",
+        unit: isMetric ? "kilometers" : "miles",
       });
       if (vehicle.engine) params.set("engine", vehicle.engine);
 
@@ -158,7 +168,7 @@ export default function CommonFailuresPanel({ vehicle }: CommonFailuresPanelProp
   return (
     <div className="space-y-3 sm:space-y-4">
       <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 pb-2 border-b">
-        <span>@ {result.vehicle.mileage.toLocaleString()} mi</span>
+        <span>@ {result.vehicle.mileage.toLocaleString()} {distAbbrev}</span>
         <div className="flex items-center gap-1 sm:gap-2">
           {result.dataSource === "shop_patterns" && (
             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
