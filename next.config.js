@@ -32,6 +32,16 @@ const nextConfig = {
         source: '/badges/:path*',
         headers: staticAssetHeaders,
       },
+      // Root-of-public brand images that are content-stable (we never rewrite
+      // these PNGs in place — a new logo means a new filename). Explicitly
+      // allowlisted so we DON'T accidentally immutable-cache republish-in-
+      // place files in the same folder like api-docs.html, api-inventory.json,
+      // api-inventory.md, mos-tools-extension.zip, or the swagger-ui/ bundle.
+      {
+        source:
+          '/:file(favicon\\.png|icon\\.png|mos-icon\\.png|mos-logo\\.png|appointment-logo\\.png|sticker-qr-logo\\.png|sticker-qr-logo\\.svg|tekmetric-logo\\.png|protractor-icon\\.png)',
+        headers: staticAssetHeaders,
+      },
     ];
   },
   experimental: {
