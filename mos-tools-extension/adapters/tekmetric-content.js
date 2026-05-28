@@ -11,6 +11,15 @@ function safeSendMessage(msg, callback) {
   } catch (e) {}
 }
 
+// Task #511: relay user-action drops to the background worker for the
+// /api/extension/telemetry endpoint. Fire-and-forget; never throws.
+function reportActionDropped(action, reason, extra) {
+  try {
+    const payload = Object.assign({ action: action, reason: reason || null, provider: "tekmetric" }, extra || {});
+    safeSendMessage({ action: "REPORT_TELEMETRY", event: "action.dropped", payload: payload });
+  } catch (_) { /* no-op */ }
+}
+
 let lastContext = null;
 let contextCheckInterval = null;
 
@@ -524,6 +533,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "PREFILL_DVI_FAILED") {
     resetPrefillButton();
+    reportActionDropped("prefill_dvi", "background_failed");
     sendResponse({ success: true });
     return false;
   }
@@ -549,6 +559,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "ENHANCE_FINDINGS_FAILED") {
     resetEnhanceButton();
+    reportActionDropped("enhance_findings", "background_failed");
     sendResponse({ success: true });
     return false;
   }
@@ -600,6 +611,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const names = failedItems.slice(0, 2).map(f => f.title).filter(Boolean);
       const detail = names.length ? `: ${names.join(', ')}${failed > names.length ? '…' : ''}` : '';
       showToast(`Failed to add ${failed} concern${failed === 1 ? '' : 's'}${detail}`, 'error');
+      reportActionDropped("build_ro_from_vhi", "concerns_failed", { attempt: failed });
     } else {
       showToast('No concerns added', 'info');
     }
@@ -612,6 +624,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "BUILD_RO_FROM_VHI_FAILED") {
+    reportActionDropped("build_ro_from_vhi", "background_failed", { reason: message.error || null });
     resetBuildRoFromVhiButton();
     const modal = document.getElementById('mos-build-ro-vhi-modal');
     if (modal) modal.remove();
@@ -832,6 +845,7 @@ function handleImmediatePrint() {
       printStickerFromContentScript(response.sticker);
     } else {
       showToast(response?.error || 'Failed to generate sticker', 'error');
+      reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
     }
   });
 }
@@ -994,6 +1008,7 @@ function handleImmediatePrintWithInterval(miles, months, useKm) {
       printStickerFromContentScript(response.sticker);
     } else {
       showToast(response?.error || 'Failed to generate sticker', 'error');
+      reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
     }
   });
 }

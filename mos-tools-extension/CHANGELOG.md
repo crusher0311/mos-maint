@@ -1,5 +1,31 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.16 — 2026-05-28
+
+### Added
+- **Client-side telemetry reporter (task #511).** The extension now
+  sends privacy-safe events to the new `/api/extension/telemetry`
+  endpoint so platform admins can see how often soft session expiry,
+  terminal token clears, API fetch failures, and user-action drops
+  happen in the wild. Events are buffered in the background worker
+  and flushed in small batches (≤50 events, ~3s debounce, capped at
+  120 req/min/shop on the server) so a retry storm doesn't fan out
+  to one HTTP call per event. Payloads carry only `code`, `status`,
+  `attempt`, `retryBudgetRemaining`, `elapsedMs`, `action`, `reason`,
+  `provider`, plus a sanitized endpoint shape (numeric IDs and query
+  strings stripped) — no inspection text, no VINs, no tokens. The
+  reporter never throws and never recurses into itself. Wired into:
+  the 401 terminal/soft path and non-2xx branches in
+  `handleMosApiRequest`; pre-fill DVI / enhance findings / build-RO
+  failure handlers in `tekmetric-content.js`; sticker print failures
+  on all three adapters; "add job" and "add finding" failures on
+  Shop-Ware. Content scripts relay via a new `REPORT_TELEMETRY`
+  background message since they don't have direct access to the API
+  token. View at `/admin/extension-telemetry` (platform-admin only;
+  link added to the Admin sidebar). 30-day TTL on the Mongo
+  collection. **Not auto-published** — Brandon must say "publish it"
+  before this ships to Google.
+
 ## 1.27.15 — 2026-05-28
 
 ### Fixed

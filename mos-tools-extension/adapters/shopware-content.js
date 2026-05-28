@@ -3,6 +3,17 @@
 
 console.log("[MOS Tools] Shop-Ware content script loaded");
 
+// Task #511: relay user-action drops to the background worker for the
+// /api/extension/telemetry endpoint. Fire-and-forget; never throws.
+function reportActionDropped(action, reason, extra) {
+  try {
+    if (!chrome.runtime?.id) return;
+    const payload = Object.assign({ action: action, reason: reason || null, provider: "shopware" }, extra || {});
+    const p = chrome.runtime.sendMessage({ action: "REPORT_TELEMETRY", event: "action.dropped", payload: payload });
+    if (p && p.catch) p.catch(() => {});
+  } catch (_) { /* no-op */ }
+}
+
 let lastContext = null;
 let contextCheckInterval = null;
 
@@ -529,6 +540,7 @@ function createPrintButton() {
         printStickerFromContentScript(response.sticker);
       } else {
         showToast(response?.error || 'Failed to generate sticker', 'error');
+        reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
       }
     });
   });
@@ -651,6 +663,7 @@ async function showIntervalDropdown(event, buttonElement) {
             printStickerFromContentScript(response.sticker);
           } else {
             showToast(response?.error || 'Failed to generate sticker', 'error');
+        reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
           }
         });
       }
@@ -936,6 +949,7 @@ async function addServiceToRO(serviceName, workOrderId, vehicle) {
     return { success: true, jobName: jobTitle };
   } else {
     showToast(`Failed to add "${jobTitle}": ${importResult.error}`, 'error');
+    reportActionDropped("add_job", "import_failed", { reason: importResult.error || null });
     return { success: false, error: importResult.error };
   }
 }
@@ -1068,6 +1082,7 @@ async function addFindingToRO(text, workOrderId, isDraft = false, serviceName = 
     const noteId = await createNote(workOrderId, text, isDraft, csrfToken);
     if (!noteId) {
       showToast('Failed to add finding. Try adding it manually.', 'error');
+      reportActionDropped("add_finding", "import_failed");
       return { success: false, error: 'Note creation failed' };
     }
 

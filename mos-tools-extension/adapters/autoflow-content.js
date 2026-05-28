@@ -1,6 +1,17 @@
 console.log("[MOS Tools] AutoFlow content script loaded");
 console.log("[Autoflow] content script loaded");
 
+// Task #511: relay user-action drops to the background worker for the
+// /api/extension/telemetry endpoint. Fire-and-forget; never throws.
+function reportActionDropped(action, reason, extra) {
+  try {
+    if (!chrome.runtime?.id) return;
+    const payload = Object.assign({ action: action, reason: reason || null, provider: "autoflow" }, extra || {});
+    const p = chrome.runtime.sendMessage({ action: "REPORT_TELEMETRY", event: "action.dropped", payload: payload });
+    if (p && p.catch) p.catch(() => {});
+  } catch (_) { /* no-op */ }
+}
+
 let lastContext = null;
 let contextCheckInterval = null;
 
@@ -444,6 +455,7 @@ function createPrintButton() {
           printStickerFromContentScript(response.sticker);
         } else {
           showToast(response?.error || 'Failed to generate sticker', 'error');
+          reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
         }
       }
     );

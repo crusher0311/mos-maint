@@ -243,6 +243,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   console.log("[MOS] Message received:", message.action);
 
+  // -------------------- Telemetry (task #511) --------------------
+  // Content scripts can't talk to /api/extension/telemetry directly (no
+  // mosApiToken in their scope), so they relay via the background worker.
+  if (message.action === "REPORT_TELEMETRY") {
+    try {
+      reportTelemetry(message.event, message.payload || {});
+    } catch (_) { /* never throw from telemetry */ }
+    sendResponse({ ok: true });
+    return false;
+  }
+
   // -------------------- MOS Authentication --------------------
   if (message.action === "MOS_LOGIN") {
     handleMosLogin(message.email, message.password, message.apiUrl, message.rememberMe !== false)
@@ -1344,6 +1355,77 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
   }
 }
 
+// Task #511: client-side telemetry. Best-effort, fire-and-forget POST to
+// /api/extension/telemetry. Events are buffered and flushed in small
+// batches so a burst (e.g. a retry storm) doesn't fan out to one HTTP
+// call per event. NEVER throws — observability must not break the
+// foreground call site. Payloads are intentionally tiny: event name,
+// shop/user ids, endpoint shape, codes/counters. No inspection text, no
+// PII, no full tokens.
+const TELEMETRY_FLUSH_INTERVAL_MS = 3000;
+const TELEMETRY_MAX_BUFFER = 50;
+let _telemetryBuffer = [];
+let _telemetryFlushTimer = null;
+let _telemetryExtVersion = null;
+function _getExtensionVersion() {
+  if (_telemetryExtVersion) return _telemetryExtVersion;
+  try {
+    _telemetryExtVersion = chrome.runtime.getManifest().version;
+  } catch (_) {
+    _telemetryExtVersion = "unknown";
+  }
+  return _telemetryExtVersion;
+}
+async function _flushTelemetry() {
+  _telemetryFlushTimer = null;
+  if (_telemetryBuffer.length === 0) return;
+  if (!mosApiToken || !mosApiUrl) {
+    // Not signed in yet — drop buffered events rather than queueing
+    // forever; a soft_expired on a logged-out client is meaningless.
+    _telemetryBuffer = [];
+    return;
+  }
+  const events = _telemetryBuffer.splice(0, TELEMETRY_MAX_BUFFER);
+  try {
+    const ua = (typeof navigator !== "undefined" && navigator.userAgent) || null;
+    await fetch(`${mosApiUrl}/api/extension/telemetry`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        extensionVersion: _getExtensionVersion(),
+        userAgent: ua,
+        events,
+      }),
+    }).catch(() => {});
+  } catch (_) { /* swallow */ }
+}
+function reportTelemetry(name, payload) {
+  try {
+    if (!name) return;
+    const ctx = currentSmsContext || {};
+    const ev = {
+      event: String(name),
+      occurredAt: Date.now(),
+      provider: (payload && payload.provider) || ctx.provider || null,
+      smsShopId: (payload && payload.smsShopId) || ctx.shopId || null,
+      endpoint: (payload && payload.endpoint) || null,
+      payload: payload || {},
+    };
+    _telemetryBuffer.push(ev);
+    if (_telemetryBuffer.length >= TELEMETRY_MAX_BUFFER) {
+      if (_telemetryFlushTimer) { clearTimeout(_telemetryFlushTimer); _telemetryFlushTimer = null; }
+      _flushTelemetry();
+      return;
+    }
+    if (!_telemetryFlushTimer) {
+      _telemetryFlushTimer = setTimeout(_flushTelemetry, TELEMETRY_FLUSH_INTERVAL_MS);
+    }
+  } catch (_) { /* never throw from telemetry */ }
+}
+
 // Task #502: 401 retry policy.
 //
 // Old behavior: first 401 → silently re-login once → if that fails (or
@@ -1461,11 +1543,18 @@ async function handleMosApiRequest(endpoint, options = {}) {
     const isTerminal = TERMINAL_AUTH_CODES.has(lastCode);
     if (isTerminal && mosApiToken === tokenAtStart) {
       console.log(`[MOS] 401 terminal — prompting user (code=${lastCode}) on ${endpoint}`);
+      reportTelemetry("auth.token_invalid_cleared", { endpoint, code: lastCode, status: 401 });
       mosApiToken = null;
       chrome.storage.local.remove(['mosApiToken']);
       throw new Error("Session expired. Please login again.");
     }
     console.warn(`[MOS] 401 unresolved on ${endpoint} (code=${lastCode || 'none'}) — keeping token, surfacing soft session-expired`);
+    reportTelemetry("auth.soft_expired", {
+      endpoint,
+      code: lastCode,
+      status: 401,
+      retryBudgetRemaining: 0,
+    });
     const err = new Error("Session may have expired — click to re-login");
     err.code = "MOS_SESSION_SOFT_EXPIRED";
     err.serverCode = lastCode || null;
@@ -1476,6 +1565,12 @@ async function handleMosApiRequest(endpoint, options = {}) {
     // Auth lookup transient failure on the server — surface but never
     // clear the token.
     const errorData = await response.json().catch(() => ({}));
+    reportTelemetry("api.fetch_failure", {
+      endpoint,
+      status: 503,
+      code: errorData?.code || null,
+      reason: errorData?.error || null,
+    });
     const err = new Error(errorData.error || "Server temporarily unavailable");
     err.code = "MOS_SERVER_TRANSIENT";
     err.serverCode = errorData?.code || null;
@@ -1484,6 +1579,14 @@ async function handleMosApiRequest(endpoint, options = {}) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    // Skip telemetry on the telemetry endpoint itself to avoid feedback loops.
+    if (!endpoint || endpoint.indexOf("/api/extension/telemetry") === -1) {
+      reportTelemetry("api.fetch_failure", {
+        endpoint,
+        status: response.status,
+        reason: errorData?.error || null,
+      });
+    }
     throw new Error(errorData.error || `API error: ${response.status}`);
   }
 
