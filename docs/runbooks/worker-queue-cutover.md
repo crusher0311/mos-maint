@@ -101,7 +101,10 @@ identical pre-task-513 behavior with no further intervention.
 ## Known gaps left for follow-ups
 
 - BullBoard UI is not mounted (uses our JSON+React admin page instead).
-- The drain-protractor processor spawns the legacy script as a child
-  process; a follow-up should factor that script into a chunk function
-  matching `backfillShopChunk`.
 - No automated retry-from-failed action in the dashboard yet.
+
+> Resolved (task #523): the drain-protractor processor no longer spawns
+> the legacy script as a child process. `scripts/drain-protractor-backfill.ts`
+> now exports `drainProtractorShopChunk` / `loadIncompleteProtractorShops`,
+> which the processor calls in-process (matching drain-tekmetric). The
+> script still runs as a CLI for the legacy Render Background Worker.

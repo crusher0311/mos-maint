@@ -12,7 +12,7 @@ the web tier — see task #513.
 | `tekmetric-fullpage` | `processors/tekmetric-fullpage.ts` | wraps `runFullPageBackfillChunk` |
 | `tekmetric-prepass` | `processors/tekmetric-prepass.ts` | jobs / vehicles / customers variants |
 | `drain-tekmetric` | `processors/drain-tekmetric.ts` | wraps the existing drain script logic |
-| `drain-protractor` | `processors/drain-protractor.ts` | wraps the existing drain script logic |
+| `drain-protractor` | `processors/drain-protractor.ts` | calls `drainProtractorShopChunk` in-process |
 
 Concurrency is set per-queue inside `worker.ts`. Per-shop uniqueness
 comes from BullMQ's `jobId` (set in `lib/queue/producer.ts`).

@@ -38,12 +38,12 @@ const SHOP_ID_FILTER = (process.env.DRAIN_SHOP_IDS || "")
   .map((s) => Number(s.trim()))
   .filter((n) => Number.isFinite(n) && n > 0);
 
-type ShopJob = {
+export type ShopJob = {
   shopId: number;
   name: string;
 };
 
-type ShopOutcome = {
+export type ShopOutcome = {
   shopId: number;
   name: string;
   chunksProcessed: number;
@@ -85,7 +85,11 @@ function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
-async function loadIncompleteShops(): Promise<ShopJob[]> {
+export async function loadIncompleteProtractorShops(
+  filterShopIds?: number[]
+): Promise<ShopJob[]> {
+  const filter =
+    filterShopIds && filterShopIds.length > 0 ? filterShopIds : SHOP_ID_FILTER;
   const db = await getDb();
   const shops = await db
     .collection("shops")
@@ -101,7 +105,7 @@ async function loadIncompleteShops(): Promise<ShopJob[]> {
   const jobs: ShopJob[] = [];
   for (const shop of shops) {
     const shopId = Number(shop.shopId);
-    if (SHOP_ID_FILTER.length > 0 && !SHOP_ID_FILTER.includes(shopId)) continue;
+    if (filter.length > 0 && !filter.includes(shopId)) continue;
 
     // Skip shops already marked complete in backfill_progress (defensive —
     // protractorBackfillComplete on the shops doc is the canonical signal,
@@ -156,13 +160,14 @@ function isLockHeldError(err: string | undefined): boolean {
  *   - SIGINT/SIGTERM                                          → "stopped"
  */
 async function waitForLockOrCompletion(
-  shopId: number
+  shopId: number,
+  shouldStop: () => boolean
 ): Promise<"ready" | "completed" | "timeout" | "stopped"> {
   const db = await getDb();
   const startedAt = Date.now();
   let pollCount = 0;
   while (Date.now() - startedAt < LOCK_WAIT_MAX_MS) {
-    if (stopRequested) return "stopped";
+    if (shouldStop()) return "stopped";
     await new Promise((r) => setTimeout(r, LOCK_WAIT_POLL_MS));
     pollCount++;
     const doc = await db.collection("backfill_progress").findOne({ shopId });
@@ -188,7 +193,22 @@ async function waitForLockOrCompletion(
   return "timeout";
 }
 
-async function drainShop(job: ShopJob): Promise<ShopOutcome> {
+export type DrainProtractorShopChunkOptions = {
+  /**
+   * Cooperative cancellation. Returns true when the caller wants the
+   * per-shop drain to stop at the next safe checkpoint. Defaults to the
+   * CLI's module-level SIGINT/SIGTERM flag so the standalone script keeps
+   * its existing graceful-stop behavior. The BullMQ processor passes a
+   * deadline-based predicate so each queue attempt is bounded.
+   */
+  shouldStop?: () => boolean;
+};
+
+export async function drainProtractorShopChunk(
+  job: ShopJob,
+  options: DrainProtractorShopChunkOptions = {}
+): Promise<ShopOutcome> {
+  const shouldStop = options.shouldStop ?? (() => stopRequested);
   const startedAt = new Date();
   log(`START shop=${job.shopId} (${job.name})`);
 
@@ -198,7 +218,7 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
   const MAX_ATTEMPTS = 8;
 
   while (attempt < MAX_ATTEMPTS) {
-    if (stopRequested) {
+    if (shouldStop()) {
       return {
         shopId: job.shopId,
         name: job.name,
@@ -242,7 +262,7 @@ async function drainShop(job: ShopJob): Promise<ShopOutcome> {
       log(
         `LOCKED shop=${job.shopId} (${job.name}) cron has lock — polling for release (attempt ${attempt}/${MAX_ATTEMPTS})`
       );
-      const waitResult = await waitForLockOrCompletion(job.shopId);
+      const waitResult = await waitForLockOrCompletion(job.shopId, shouldStop);
       if (waitResult === "completed") {
         log(
           `COMPLETED_BY_OTHER shop=${job.shopId} (${job.name}) — cron finished it while we waited`
@@ -389,7 +409,7 @@ async function main() {
     stopRequested = true;
   });
 
-  const jobs = await loadIncompleteShops();
+  const jobs = await loadIncompleteProtractorShops();
   log(`Found ${jobs.length} incomplete Protractor shops to drain`);
   if (jobs.length === 0) {
     log("Nothing to do. Exiting.");
@@ -407,7 +427,12 @@ async function main() {
       `elapsed=${((Date.now() - startedAt) / 1000 / 60).toFixed(1)}min`
   );
 
-  await runWithParallelism(jobs, PARALLELISM, drainShop, outcomes);
+  await runWithParallelism(
+    jobs,
+    PARALLELISM,
+    (job) => drainProtractorShopChunk(job),
+    outcomes
+  );
   clearInterval(heartbeat);
 
   const totalJobs = outcomes.reduce((s, o) => s + o.totalJobsIndexed, 0);
@@ -445,8 +470,18 @@ async function main() {
   process.exit(errored.length > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
-  log(`FATAL: ${err?.message || String(err)}`);
-  console.error(err);
-  process.exit(2);
-});
+// Only run the standalone drain loop when invoked directly as a CLI
+// (`tsx scripts/drain-protractor-backfill.ts` / `npm run
+// drain:protractor-backfill`). When the BullMQ worker imports this module
+// for `drainProtractorShopChunk`, argv[1] is the worker entry point, so
+// main() stays dormant and never kicks off a competing forever-loop.
+const invokedAsCli =
+  !!process.argv[1] && /drain-protractor-backfill(\.[cm]?[jt]s)?$/.test(process.argv[1]);
+
+if (invokedAsCli) {
+  main().catch((err) => {
+    log(`FATAL: ${err?.message || String(err)}`);
+    console.error(err);
+    process.exit(2);
+  });
+}
