@@ -1,0 +1,50 @@
+2026-05-28T00:52:08.365021994Z npm error
+2026-05-28T00:52:08.365024324Z npm error   --omit
+2026-05-28T00:52:08.365026764Z npm error     Dependency types to omit from the installation tree on disk.
+2026-05-28T00:52:08.365029124Z npm error
+2026-05-28T00:52:08.365031494Z npm error   --include
+2026-05-28T00:52:08.365033904Z npm error     Option that allows for defining which types of dependencies to install.
+2026-05-28T00:52:08.365036294Z npm error
+2026-05-28T00:52:08.365038704Z npm error   --strict-peer-deps
+2026-05-28T00:52:08.365041094Z npm error     If set to `true`, and `--legacy-peer-deps` is not set, then _any_
+2026-05-28T00:52:08.365055284Z npm error
+2026-05-28T00:52:08.365057944Z npm error   --foreground-scripts
+2026-05-28T00:52:08.365060404Z npm error     Run all build scripts (ie, `preinstall`, `install`, and
+2026-05-28T00:52:08.365062854Z npm error
+2026-05-28T00:52:08.365065635Z npm error   --ignore-scripts
+2026-05-28T00:52:08.365068064Z npm error     If true, npm does not run scripts specified in package.json files.
+2026-05-28T00:52:08.365070524Z npm error
+2026-05-28T00:52:08.365072955Z npm error   --allow-git
+2026-05-28T00:52:08.365075335Z npm error     Limits the ability for npm to fetch dependencies from git references.
+2026-05-28T00:52:08.365077745Z npm error
+2026-05-28T00:52:08.365080135Z npm error   --audit
+2026-05-28T00:52:08.365082555Z npm error     When "true" submit audit reports alongside the current npm command to the
+2026-05-28T00:52:08.365084965Z npm error
+2026-05-28T00:52:08.365087325Z npm error   --bin-links
+2026-05-28T00:52:08.365089775Z npm error     Tells npm to create symlinks (or `.cmd` shims on Windows) for package
+2026-05-28T00:52:08.365092145Z npm error
+2026-05-28T00:52:08.365094515Z npm error   --fund
+2026-05-28T00:52:08.365097025Z npm error     When "true" displays the message at the end of each `npm install`
+2026-05-28T00:52:08.365099385Z npm error
+2026-05-28T00:52:08.365101735Z npm error   --dry-run
+2026-05-28T00:52:08.365104285Z npm error     Indicates that you don't want npm to make any changes and that it should
+2026-05-28T00:52:08.365106675Z npm error
+2026-05-28T00:52:08.365109105Z npm error   -w|--workspace
+2026-05-28T00:52:08.365111795Z npm error     Enable running a command in the context of the configured workspaces of the
+2026-05-28T00:52:08.365114205Z npm error
+2026-05-28T00:52:08.365116576Z npm error   --workspaces
+2026-05-28T00:52:08.365119056Z npm error     Set to true to run the command in the context of **all** configured
+2026-05-28T00:52:08.365121445Z npm error
+2026-05-28T00:52:08.365123886Z npm error   --include-workspace-root
+2026-05-28T00:52:08.365126326Z npm error     Include the workspace root when workspaces are enabled for a command.
+2026-05-28T00:52:08.365128766Z npm error
+2026-05-28T00:52:08.365131216Z npm error   --install-links
+2026-05-28T00:52:08.365133696Z npm error     When set file: protocol dependencies will be packed and installed as
+2026-05-28T00:52:08.365136156Z npm error
+2026-05-28T00:52:08.365138626Z npm error
+2026-05-28T00:52:08.365141126Z npm error aliases: clean-install, ic, install-clean, isntall-clean
+2026-05-28T00:52:08.365143606Z npm error
+2026-05-28T00:52:08.365158176Z npm error Run "npm help ci" for more info
+2026-05-28T00:52:08.366255389Z npm error A complete log of this run can be found in: /opt/render/.cache/_logs/2026-05-28T00_52_07_218Z-debug-0.log
+2026-05-28T00:52:08.481394369Z ==> Build failed 😞
+2026-05-28T00:52:08.48142244Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
