@@ -1,0 +1,50 @@
+2026-05-28T11:14:07.315756191Z [Tekmetric Webhook] Received event: {
+2026-05-28T11:14:07.315776121Z   "data": {
+2026-05-28T11:14:07.315780591Z     "id": 332327328,
+2026-05-28T11:14:07.315784661Z     "repairOrderNumber": 23308,
+2026-05-28T11:14:07.315788251Z     "shopId": 1301,
+2026-05-28T11:14:07.315791662Z     "repairOrderStatus": {
+2026-05-28T11:14:07.315794791Z       "id": 1,
+2026-05-28T11:14:07.315797982Z       "code": "ESTIMATE",
+2026-05-28T11:14:07.315801242Z       "name": "Estimate",
+2026-05-28T11:14:07.315804422Z       "postedOrAccrecv": false
+2026-05-28T11:14:07.315807732Z     },
+2026-05-28T11:14:07.315811052Z     "repairOrderLabel": {
+2026-05-28T11:14:07.315813912Z       "id": 1,
+2026-05-28T11:14:07.315816862Z       "code": "NOTSTRTD",
+2026-05-28T11:14:07.315819832Z       "name": "Not Started",
+2026-05-28T11:14:07.315822522Z       "status": {
+2026-05-28T11:14:07.315825252Z         "id": 1,
+2026-05-28T11:14:07.315828322Z         "code": "ESTIMATE",
+2026-05-28T11:14:07.315831242Z         "name": "Estimate",
+2026-05-28T11:14:07.315833902Z         "postedOrAccrecv": false
+2026-05-28T11:14:07.315836762Z       }
+2026-05-28T11:14:07.315839663Z     },
+2026-05-28T11:14:07.315842472Z     "color": "#536D78",
+2026-05-28T11:14:07.315845303Z     "repairOrderCustomLabel": {
+2026-05-28T11:14:07.315848112Z       "name": "Not Started"
+2026-05-28T11:14:07.315851083Z     },
+2026-05-28T11:14:07.315853723Z     "customerId": 68044087,
+2026-05-28T11:14:07.315856473Z     "technicianId": null,
+2026-05-28T11:14:07.315859663Z     "serviceWriterId": 246838,
+2026-05-28T11:14:07.315862763Z     "vehicleId": 156819924,
+2026-05-28T11:14:07.315865793Z     "milesIn": null,
+2026-05-28T11:14:07.315868703Z     "milesOut": null,
+2026-05-28T11:14:07.315871663Z     "keytag": null,
+2026-05-28T11:14:07.315874403Z     "completedDate": null,
+2026-05-28T11:14:07.315876793Z     "postedDate": null,
+2026-05-28T11:14:07.315879693Z     "laborSales": 0,
+2026-05-28T11:14:07.315886233Z     "partsSales": 0,
+2026-05-28T11:14:07.315889264Z     "subletSales": 0,
+2026-05-28T11:14:07.315892124Z     "discountTotal": 0,
+2026-05-28T11:14:07.315894784Z     "feeTotal": 0,
+2026-05-28T11:14:07.315897684Z     "taxes": 0,
+2026-05-28T11:14:07.315900364Z     "amountPaid": 0,
+2026-05-28T11:14:07.315903424Z     "totalSales": 0,
+2026-05-28T11:14:07.315906214Z     "jobs": [],
+2026-05-28T11:14:07.315909034Z     "sublets": [],
+2026-05-28T11:14:07.315911634Z     "fees": [],
+2026-05-28T11:14:07.315914594Z     "discoun
+2026-05-28T11:14:07.315918024Z [Tekmetric Webhook] Parsed - eventType: "Repair Order #23308 created by tye.credeur@gmail.com", repairOrder found: true, isRepairOrderUpdate: [object Object]
+2026-05-28T11:14:07.315935394Z [Tekmetric Webhook] RO Update: #23308 (ID: 332327328), Status: Estimate (ESTIMATE)
+2026-05-28T11:14:07.769009858Z [Tekmetric Webhook] Upserted RO #23308: INSERT status=Estimate, label=Not Started, odometer=unchanged, customer=unchanged, shop=127
