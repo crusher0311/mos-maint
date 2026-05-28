@@ -1,5 +1,21 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.17 — 2026-05-28
+
+### Fixed
+- **Floating button mascot no longer has white letterbox bands.** The
+  FAB source icon (`icons/mos-fab.png`) was 127×110 (not square), so
+  inside the 48×48 white FAB container with `object-fit: contain` it
+  got letterboxed — leaving visible white space above and below the
+  detective-dog artwork. Swapped in Brandon's square 100×100 mascot
+  (mascot on a solid blue background) so the art fills the rounded
+  button edge-to-edge with no banding, no distortion, and no awkward
+  crop. No FAB CSS changes — the existing `width:100%; height:100%;
+  object-fit: contain; overflow:hidden` rules already render a square
+  source cleanly. Applies to Tekmetric and the Shop-Ware / AutoFlow /
+  Protractor FABs that reuse the same icon path. **Not auto-published**
+  — Brandon must say "publish it" before this ships to Google.
+
 ## 1.27.16 — 2026-05-28
 
 ### Added
