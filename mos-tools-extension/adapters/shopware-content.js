@@ -1155,7 +1155,7 @@ function injectFAB() {
   fab.type = 'button';
 
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
-  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width:40px;height:40px;" />`;
+  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width:100%;height:100%;object-fit:contain;display:block;border-radius:50%;" />`;
   const FAB_RIGHT = 20;
   const defaultBottom = 20;
   const fabBaseStyle = 'position:fixed !important; z-index:999998 !important; background:transparent !important; border:none !important; padding:0 !important; border-radius:50% !important; box-shadow:0 4px 12px rgba(0,0,0,0.3) !important; display:block !important; width:48px !important; height:48px !important;';

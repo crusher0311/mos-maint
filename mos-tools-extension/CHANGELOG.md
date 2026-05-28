@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.15 — 2026-05-28
+
+### Fixed
+- **Floating tab mascot now fills the button.** v1.27.14 swapped in
+  the detective-bear artwork but the FAB's inner `<img>` was still
+  hard-capped at 40×40 inside a 48×48 container with 2px padding, so
+  the 127×110-aspect source rendered at ~40×34 — visibly dwarfed by
+  the surrounding white card, especially against Tekmetric's bold
+  refer-and-earn promo art. Now the img is `width:100%; height:100%`
+  with `object-fit: contain`, container padding is 0, and the new
+  `overflow:hidden` keeps everything inside the rounded corner. Same
+  rule applied to the Shop-Ware FAB (which was also stretching the
+  source because it lacked `object-fit`).
+
 ## 1.27.14 — 2026-05-28
 
 ### Changed

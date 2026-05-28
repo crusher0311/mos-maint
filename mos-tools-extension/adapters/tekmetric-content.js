@@ -1919,7 +1919,13 @@ function injectFloatingButton() {
   fab.type = 'button';
   
   const imgUrl = chrome.runtime.getURL('icons/mos-fab.png');
-  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px;" />`;
+  // Fill the FAB with the mascot — earlier sizing (40×40 inside 48×48 with
+  // 2px padding) left the detective bear visibly dwarfed by the white
+  // container, which made the brand mark hard to read against bold pages
+  // like Tekmetric's refer-and-earn promo. We now stretch the img to the
+  // full container with `object-fit: contain` so any aspect-ratio source
+  // still renders without distortion but uses every available pixel.
+  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width: 100%; height: 100%; object-fit: contain; border-radius: 4px; display: block;" />`;
   
   // Get saved position or default
   const savedTop = localStorage.getItem('mos-fab-top');
@@ -1940,7 +1946,8 @@ function injectFloatingButton() {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '2px',
+    padding: '0',
+    overflow: 'hidden',
     transition: 'transform 0.15s, box-shadow 0.15s',
     userSelect: 'none'
   });
