@@ -7,6 +7,27 @@ import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-i
 const DRIFT_THRESHOLD_MS = 2 * 60 * 1000;
 const DRIFT_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Test seam (Task #520): tests override these to drive the dashboard read
+ * against an in-memory Mongo (with a seeded session) and to assert the
+ * drift backstop re-normalizes a stale `normalized_work_orders` row when
+ * its `protractor_work_orders` snapshot is newer. Production must keep the
+ * drift reconcile (and its inline `ingestWorkOrderWithAllEntities`) so the
+ * dashboard never serves stale data after a webhook that updated the
+ * snapshot but failed to normalize.
+ */
+export const __deps = {
+  getDb,
+  cookies,
+  createIngestionService: (
+    db: Db,
+    sourceSystem: "protractor",
+    shopId: number,
+    enterpriseId: string | undefined,
+    options: ConstructorParameters<typeof NormalizedIngestionService>[4],
+  ) => new NormalizedIngestionService(db, sourceSystem, shopId, enterpriseId, options),
+};
+
 async function reconcileProtractorDrift(db: Db, shopId: number): Promise<void> {
   const lookbackCutoff = new Date(Date.now() - DRIFT_LOOKBACK_MS);
   const recentSnapshots = await db.collection("protractor_work_orders").find(
@@ -61,7 +82,7 @@ async function reconcileProtractorDrift(db: Db, shopId: number): Promise<void> {
     { projection: { enterpriseId: 1 } }
   );
   const enterpriseId = shopDoc?.enterpriseId as string | undefined;
-  const ingestionService = new NormalizedIngestionService(
+  const ingestionService = __deps.createIngestionService(
     db,
     'protractor',
     shopId,
@@ -158,13 +179,13 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')?.toLowerCase() || '';
     const showArchived = searchParams.get('archived') === 'true';
 
-    const store = await cookies();
+    const store = await __deps.cookies();
     const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
     if (!sid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     const now = new Date();
 
     const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });

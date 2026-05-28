@@ -48,6 +48,13 @@ export function matchesFilter(doc: Doc, filter: any): boolean {
         if ("$in" in v) {
           if (!(v as any).$in.includes(fieldVal)) return false;
         }
+        if ("$nin" in v) {
+          if ((v as any).$nin.includes(fieldVal)) return false;
+        }
+        if ("$elemMatch" in v) {
+          if (!Array.isArray(fieldVal)) return false;
+          if (!fieldVal.some((el) => matchesFilter(el, (v as any).$elemMatch))) return false;
+        }
         if ("$exists" in v) {
           const exists = fieldVal !== undefined && fieldVal !== null;
           if (exists !== (v as any).$exists) return false;
@@ -192,10 +199,37 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
         return {
           find(filter: any = {}, opts?: any) {
             ops.push({ op: "find", collection: name, filter, opts });
-            const matched = data.filter((d) => matchesFilter(d, filter));
-            return {
+            let matched = data.filter((d) => matchesFilter(d, filter));
+            // Chainable cursor: real callers do `.find().sort().skip().limit().toArray()`.
+            // `.toArray()` alone (the cron tests) keeps working unchanged.
+            const cursor: any = {
+              sort(spec: any) {
+                const entries = Object.entries(spec || {});
+                matched = [...matched].sort((a, b) => {
+                  for (const [k, dir] of entries) {
+                    const av = getPath(a, k);
+                    const bv = getPath(b, k);
+                    if (av == null && bv == null) continue;
+                    if (av == null) return 1;
+                    if (bv == null) return -1;
+                    if (av < bv) return (dir as number) === 1 ? -1 : 1;
+                    if (av > bv) return (dir as number) === 1 ? 1 : -1;
+                  }
+                  return 0;
+                });
+                return cursor;
+              },
+              skip(n: number) {
+                matched = matched.slice(n);
+                return cursor;
+              },
+              limit(n: number) {
+                matched = matched.slice(0, n);
+                return cursor;
+              },
               toArray: async () => matched.map((d) => ({ ...d })),
             };
+            return cursor;
           },
           async findOne(filter: any = {}, opts?: any) {
             ops.push({ op: "findOne", collection: name, filter, opts });

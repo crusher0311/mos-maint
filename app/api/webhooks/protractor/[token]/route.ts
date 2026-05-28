@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import {
   fetchVehicleById,
@@ -15,8 +16,35 @@ import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-i
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Test seam (Task #520): tests override these to drive the webhook handler
+ * end-to-end against an in-memory Mongo without hitting the real Protractor
+ * API or Postgres. `createIngestionService` is the critical one — it lets a
+ * regression test assert that the WorkOrder normalization runs INLINE (and
+ * therefore the row is visible to `/api/dashboard/data-v2` within the same
+ * request). Production code must keep calling `__deps.createIngestionService`
+ * and awaiting `ingestWorkOrderWithAllEntities` synchronously; moving it back
+ * to fire-and-forget re-introduces the "RO disappears from dashboard" bug
+ * that Task #517 fixed.
+ */
+export const __deps = {
+  getDb,
+  insertEvent,
+  fetchWorkOrderById,
+  upsertProtractorWorkOrderSnapshot,
+  triggerVhiOnWorkOrderCreate,
+  triggerVhiOnWorkOrderClose,
+  createIngestionService: (
+    db: Db,
+    sourceSystem: "protractor",
+    shopId: number,
+    enterpriseId: string | undefined,
+    options: ConstructorParameters<typeof NormalizedIngestionService>[4],
+  ) => new NormalizedIngestionService(db, sourceSystem, shopId, enterpriseId, options),
+};
+
 async function findShopByToken(token: string) {
-  const db = await getDb();
+  const db = await __deps.getDb();
   return db
     .collection("shops")
     .findOne({ protractorWebhookToken: token }, { projection: { shopId: 1, name: 1 } });
@@ -63,7 +91,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
     payload = null;
   }
 
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   const connectionId = req.nextUrl.searchParams.get("connectionId") ?? null;
   const apiKey = req.nextUrl.searchParams.get("apiKey") ?? null;
@@ -75,7 +103,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   // repository; Mongo `events` is shadow-mirrored during soak so the
   // legacy aggregate readers (vehicle page / dashboards / debug
   // routes) still see the row until they're flipped over.
-  await insertEvent({
+  await __deps.insertEvent({
     provider: "protractor",
     shopId: shop.shopId,
     token,
@@ -151,11 +179,11 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
       );
       console.log(`[Protractor Webhook] Deleted work order ${objectId} (WO#${existingWO?.workOrderNumber || '?'}) from dashboard`);
     } else if (objectType === "WorkOrder" && objectId) {
-      const result = await fetchWorkOrderById(shopId, objectId);
+      const result = await __deps.fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
         const woNum = result.workOrder.WorkOrderNumber || objectId;
         console.log(`[Protractor Webhook] received WO=${woNum} shop=${shopId} op=${operation}`);
-        await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
+        await __deps.upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
         console.log(`[Protractor Webhook] enriched WO=${woNum} (protractor_work_orders upserted)`);
 
         // Task #517 — Webhook normalization durability: previously the
@@ -171,7 +199,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
             { projection: { enterpriseId: 1 } }
           );
           const enterpriseId = shopDoc?.enterpriseId as string | undefined;
-          const ingestionService = new NormalizedIngestionService(
+          const ingestionService = __deps.createIngestionService(
             db,
             'protractor',
             shopId,
@@ -201,7 +229,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
           const woVin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || "")?.toUpperCase() || null;
           const woMileageCreate = result.workOrder.InUsage || result.workOrder.ServiceItem?.Odometer || null;
           if (woVin && woVin.length >= 11 && woMileageCreate && woMileageCreate > 0) {
-            triggerVhiOnWorkOrderCreate(db, {
+            __deps.triggerVhiOnWorkOrderCreate(db, {
               vin: woVin,
               shopId,
               provider: "protractor",
@@ -277,7 +305,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
             const authorizedJobs = extractAuthorizedJobsFromProtractorRo(result.workOrder);
             const woMileage = result.workOrder.OutUsage || result.workOrder.InUsage || 
               result.workOrder.ServiceItem?.Odometer || null;
-            triggerVhiOnWorkOrderClose(db, {
+            __deps.triggerVhiOnWorkOrderClose(db, {
               vin,
               shopId,
               provider: "protractor",
