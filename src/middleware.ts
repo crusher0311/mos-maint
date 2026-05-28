@@ -271,7 +271,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * Also exclude requests for static assets served from `public/` —
+     * any path ending in a common static-asset extension bypasses
+     * auth entirely (logos, icons, fonts, etc.). See Task #506.
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|gif|css|js|woff|woff2|ttf|otf|eot|map|txt|xml|json|mp4|webm)$).*)",
   ],
 };
