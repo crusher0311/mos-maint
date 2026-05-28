@@ -981,7 +981,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const stats = {
     total: pagination.totalCount,
     dviComplete: data.rows.filter(r => r.dviDone).length,
-    inProgress: data.rows.filter(r => !r.dviDone).length
+    inProgress: data.rows.filter(r => !r.dviDone).length,
+    noMileage: data.rows.filter(r => r.displayMiles == null).length
   };
 
   return (
@@ -1073,6 +1074,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-500 truncate">Total Vehicles</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination.totalCount}</p>
+                {stats.noMileage > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 mt-1 text-[10px] sm:text-xs font-medium text-amber-700 cursor-help"
+                    title="These ROs have no odometer reading yet. Enter the mileage in your shop management system to unlock recommendations, stickers, and VHI."
+                  >
+                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                    {stats.noMileage} missing mileage
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1212,7 +1222,15 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           >
                             {Number(r.displayMiles).toLocaleString()}{r.mileageEstimated ? ' (est.)' : ''}
                           </span>
-                        ) : "—"}
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 cursor-help"
+                            title="No mileage on this RO yet. Enter the odometer reading in your shop management system to unlock recommendations, stickers, and VHI."
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            No mileage
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-1 sm:gap-2">
