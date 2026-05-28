@@ -2,6 +2,38 @@
 const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  async headers() {
+    // Long-lived caching for purely-static public/ assets. The customer-facing
+    // Vehicle Health Report at /report/[vin] (and AppFueled white-label
+    // viewers) re-fetches the same VHI logo + make logo + service-card icon
+    // set on every share-link open; without these headers the browser/CDN
+    // re-validates every request. Task #506 made sure these paths return 200
+    // from the auth middleware; task #508 makes them actually cacheable.
+    //
+    // Filenames in these folders are content-stable (we don't rewrite a
+    // logo PNG in place — we add a new file), so `immutable` is safe.
+    const oneYear = 60 * 60 * 24 * 365;
+    const staticAssetHeaders = [
+      {
+        key: 'Cache-Control',
+        value: `public, max-age=${oneYear}, immutable`,
+      },
+    ];
+    return [
+      {
+        source: '/logos/:path*',
+        headers: staticAssetHeaders,
+      },
+      {
+        source: '/icons/:path*',
+        headers: staticAssetHeaders,
+      },
+      {
+        source: '/badges/:path*',
+        headers: staticAssetHeaders,
+      },
+    ];
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ['*'],
