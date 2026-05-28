@@ -33,7 +33,8 @@ export type ShopErrorGroup =
   | "TEK_BACKFILL_CHUNK_FAIL"
   | "SHOPWARE_WRITE_FAIL"
   | "AUTOFLOW_WRITE_FAIL"
-  | "PLAN_BUILD_5XX";
+  | "PLAN_BUILD_5XX"
+  | "SYNTHETIC_FAIL";
 
 export interface ShopErrorEvent {
   group: ShopErrorGroup;

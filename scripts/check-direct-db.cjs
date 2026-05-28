@@ -82,6 +82,15 @@ const ALLOWLIST = new Set([
   "app/api/cron/backfill-reconcile/route.ts",
   "app/api/cron/catchup-status/route.ts",
   "app/api/cron/cron-health-alerter/route.ts",
+  // Task #512 — synthetic prod smoke. The runner writes per-run records
+  // to a synthetic-only collection (`synthetic_runs`) and tracks
+  // alert-dedup state in `synthetic_state`. Both collections are
+  // operational telemetry, not entity data — they have no place in
+  // `lib/data/repositories/`. Matches the precedent for the other
+  // alerter/health crons above.
+  "lib/synthetic/runner.ts",
+  "app/api/admin/synthetic-prod-smoke/route.ts",
+  "app/admin/synthetic-prod-smoke/page.tsx",
   "app/api/cron/data-quality/route.ts",
   "app/api/cron/invoice-cache-refresh/route.ts",
   "app/api/cron/protractor-af-log-tail/route.ts",

@@ -18,6 +18,18 @@ async function _POST(request: NextRequest) {
     const body = await request.json();
     const { provider, smsShopId, roId, vin, inspections } = body;
 
+    // Task #512 — synthetic prod smoke. When the synthetic runner hits
+    // this endpoint it passes `_synthetic=1` (query) OR `_synthetic: true`
+    // (body) and uses a sentinel `roId` of `synthetic-smoke-<smsShopId>`.
+    // We DO run the full Mongo upsert below so the smoke catches write
+    // regressions end-to-end; safety comes from fixture scoping (the
+    // sentinel roId never collides with a real Tekmetric workOrderId)
+    // and tagging the written doc with `synthetic: true` so
+    // analytics/billing pipelines exclude it.
+    const isSynthetic =
+      request.nextUrl.searchParams.get("_synthetic") === "1" ||
+      body?._synthetic === true;
+
     if (!roId) {
       return NextResponse.json(
         { error: "roId is required" },
@@ -42,6 +54,15 @@ async function _POST(request: NextRequest) {
     if (!guard.ok) return guard.response;
 
     const internalShopId = guard.mosShopId;
+
+    // Task #512 — synthetic prod smoke. When `_synthetic` is set the
+    // runner uses a sentinel `roId` (e.g. `synthetic-smoke-<shopId>`)
+    // that does not match any real Tekmetric work order. The upsert
+    // below lands on a dedicated synthetic doc, which we explicitly
+    // tag `synthetic: true` so analytics/billing pipelines exclude it
+    // and operators can spot/clean these rows. We DO let the write
+    // happen end-to-end so the smoke catches Mongo write regressions
+    // (the original failure mode for "save concern").
     const db = await getDb();
 
     let taskCount = 0;
@@ -60,6 +81,8 @@ async function _POST(request: NextRequest) {
       }
     }
 
+    const syntheticTag = isSynthetic ? { synthetic: true } : {};
+
     const result = await db.collection("tekmetric_work_orders").updateOne(
       {
         shopId: { $in: [String(internalShopId), Number(internalShopId)] },
@@ -73,6 +96,7 @@ async function _POST(request: NextRequest) {
           inspectionsCachedAt: new Date(),
           inspectionsCachedVia: "extension",
           ...(vin ? { vin: vin.toUpperCase() } : {}),
+          ...syntheticTag,
         },
       }
     );
@@ -93,6 +117,7 @@ async function _POST(request: NextRequest) {
             inspectionsCachedAt: new Date(),
             inspectionsCachedVia: "extension",
             ...(vin ? { vin: vin.toUpperCase() } : {}),
+            ...syntheticTag,
             fetchedAt: new Date(),
           },
           $setOnInsert: {
