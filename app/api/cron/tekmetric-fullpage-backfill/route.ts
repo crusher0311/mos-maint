@@ -158,26 +158,21 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
 
-  // Defer to drain lock, mirroring the regular backfill cron. The drain
-  // worker's lease covers ALL Tekmetric backfill writes, including the
-  // full-page progress fields.
-  const drainLock = await db
-    .collection("tekmetric_drain_lock")
-    .findOne({ _id: "global" as any });
-  if (
-    drainLock &&
-    drainLock.expiresAt &&
-    new Date(drainLock.expiresAt) > new Date()
-  ) {
-    return NextResponse.json({
-      ok: true,
-      skipped: true,
-      reason: "drain_in_progress",
-      message:
-        "Tekmetric drain worker holds an exclusive lease; full-page cron tick is a no-op.",
-    });
-  }
-
+  // NOTE 2026-05-28: removed the `tekmetric_drain_lock` early-return
+  // here. The original deferral assumed the drain worker also drives
+  // the full-page worker, but `scripts/backfill-drain-worker.ts` only
+  // spawns the date-window chunker (`drain:tekmetric-backfill`), and
+  // the chunker explicitly early-returns for shops where
+  // `fullPageMode === true`. Net effect: with the drain worker holding
+  // the global lease ~continuously, the full-page cron was a no-op on
+  // every tick and shops 82 / 118 / 122 (and others) never advanced
+  // past their 2026-05-10 cursor despite 23 shops being flagged.
+  //
+  // Safety: this route uses a per-shop in-flight lock
+  // (`acquireInFlightLock` on the progress doc) so it does not race
+  // the chunker drain — the two paths touch disjoint shops (chunker
+  // skips `fullPageMode=true`; this route ONLY runs `fullPageMode=true`
+  // via `getFlaggedShops`'s filter).
   const startTime = Date.now();
   const deadlineMs = startTime + 270 * 1000; // leave ~30s headroom under maxDuration
   const shops = await getFlaggedShops(db);
