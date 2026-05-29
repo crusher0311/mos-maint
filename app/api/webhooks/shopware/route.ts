@@ -196,7 +196,17 @@ async function handleRepairOrderEvent(
     syncedAt: new Date(),
   });
 
+  console.log(`[SW Webhook] enriched RO ${roId} (${ro.number}) — shopware_repair_orders upserted for shop ${mosShopId}`);
+
   await touchDashboardUpdate();
+
+  // Task #519 — per-RO lifecycle marker (received → enriched → dashboard-bumped)
+  // mirroring the Protractor/Tekmetric webhooks. Shop-Ware has no
+  // NormalizedIngestionService adapter (`shopware: null` in the adapter
+  // registry), so there is no "normalized" step and no normalized_work_orders
+  // drift backstop: the active dashboard reads the shopware_repair_orders
+  // snapshot this webhook keeps fresh directly. See the Task #519 commit notes.
+  console.log(`[SW Webhook] dashboard-bumped RO ${roId} (${ro.number}) for shop ${mosShopId}`);
 
   console.log(`[SW Webhook] Upserted RO ${roId} (${ro.number}) for shop ${mosShopId} — state: ${ro.state}`);
 

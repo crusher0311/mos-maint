@@ -126,6 +126,15 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   try {
     const eventName = String(getEventName(payload)).toLowerCase();
 
+    // Task #519 — per-event diagnostic marker. AutoFlow is a DVI-only provider:
+    // it has no work-order snapshot collection, no NormalizedIngestionService
+    // adapter (`autoflow: null` in the adapter registry), and never bumps
+    // `dashboard_updates`. Its DVI snapshots are cross-referenced onto the
+    // primary SMS work order (Tekmetric/Protractor/Shop-Ware) which already
+    // drives dashboard visibility, so there is no normalized drift backstop to
+    // add here. The marker just lets a DVI event be traced. See Task #519 notes.
+    console.log(`[autoflow-webhook] received event=${eventName || "(none)"} shop=${shop.shopId}`);
+
     // 1) Ensure/refresh a customer row for dashboard lists
     await upsertCustomerFromEvent(db, Number(shop.shopId), payload);
 

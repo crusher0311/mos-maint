@@ -303,6 +303,13 @@ export async function POST(req: NextRequest) {
       const statusName = repairOrder.repairOrderStatus?.name || "";
       const statusCode = repairOrder.repairOrderStatus?.code || "";
       
+      // Task #519 — per-RO lifecycle marker (received → enriched → normalized →
+      // dashboard-bumped) mirroring the Protractor webhook so a single RO can be
+      // traced through the pipeline in the logs. "enriched" is the existing
+      // cache-upsert log below; "normalized" is the [Tekmetric Webhook NIS] log
+      // emitted by the deferred runWebhookNormalizedIngestion; "dashboard-bumped"
+      // is at the end of the handler.
+      console.log(`[Tekmetric Webhook] received RO #${roNumber} shop=${tekmetricShopId} event=${eventType}`);
       console.log(`[Tekmetric Webhook] RO Update: #${roNumber} (ID: ${roId}), Status: ${statusName} (${statusCode})`);
       
       const isTerminal = TERMINAL_STATUSES.some(s => 
@@ -800,6 +807,7 @@ export async function POST(req: NextRequest) {
       { $set: { timestamp: Date.now() } },
       { upsert: true }
     );
+    console.log(`[Tekmetric Webhook] dashboard-bumped event=${eventType}`);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
