@@ -39,14 +39,17 @@ async function getTekmetricShopId(shopId: number): Promise<number | null> {
 }
 
 /**
- * Task #333: Tekmetric returns odometer values in whatever unit the shop
- * operates in. Look up the shop's distance preference so the normalized
- * `mileageUnit` field is honest (kilometers for Canadian shops) instead of
- * being hardcoded to "miles".
+ * Tekmetric is a US-only platform that always reports odometer readings in
+ * miles. Per the central distance-unit policy (lib/shop-distance-unit.ts,
+ * `MILES_ONLY_PROVIDERS`), a Tekmetric shop is always miles — a "kilometers"
+ * preference on such a shop is a misconfiguration we must not honor, since it
+ * would mark normalized mileage as km and inflate VHI scores.
+ *
+ * (Supersedes Task #333's per-shop lookup, which let a stray km preference bleed
+ * into Tekmetric-sourced data.)
  */
-async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
-  const shop = await findShopByShopId<TekmetricShopDoc>(shopId, { "preferences.distanceUnit": 1 });
-  return shop?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
+async function getMileageUnit(_shopId: number): Promise<'miles' | 'kilometers'> {
+  return 'miles';
 }
 
 export class TekmetricAdapter implements IIntegrationAdapter {

@@ -45,6 +45,7 @@ import {
   detectMileageDiscrepancy,
   shopHistoryLabelFromProvider,
 } from "@/lib/plan-build/mileage-discrepancy";
+import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,9 +117,10 @@ export async function POST(req: NextRequest) {
     // Task #336: align with the dashboard + extension which both read
     // `preferences.distanceUnit`. Old `settings.distanceUnit` kept as a
     // legacy fallback so any pre-migration shop docs still resolve.
-    const distanceUnit = (shopDoc?.preferences?.distanceUnit
-      ?? shopDoc?.settings?.distanceUnit
-      ?? "miles") as "miles" | "kilometers";
+    // Resolved through the central policy so a miles-only provider (Tekmetric /
+    // Shop-Ware) can never build a plan in kilometers even if a stale/bad
+    // preference is present — that would inflate the VHI score.
+    const distanceUnit = resolveShopDistanceUnit(shopDoc);
     const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
     const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
     const LEGACY_KEY_MAP: Record<string, string[]> = {

@@ -41,17 +41,12 @@ async function getSwConfig(shopId: number): Promise<{ tenantId: number; swShopId
   return { tenantId: cfg.tenantId, swShopId: cfg.swShopId };
 }
 
-async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
-  try {
-    const db = await getDb();
-    const shop = await db.collection('shops').findOne(
-      { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-      { projection: { 'preferences.distanceUnit': 1 } }
-    );
-    return shop?.preferences?.distanceUnit === 'kilometers' ? 'kilometers' : 'miles';
-  } catch {
-    return 'miles';
-  }
+// Shop-Ware is a US-only platform that always reports odometer readings in
+// miles. Per the central distance-unit policy (lib/shop-distance-unit.ts,
+// `MILES_ONLY_PROVIDERS`), a Shop-Ware shop is always miles — we must not honor
+// a stray "kilometers" preference, which would inflate VHI scores.
+async function getMileageUnit(_shopId: number): Promise<'miles' | 'kilometers'> {
+  return 'miles';
 }
 
 export class ShopWareAdapter implements IIntegrationAdapter {

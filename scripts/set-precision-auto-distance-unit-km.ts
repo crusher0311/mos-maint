@@ -13,6 +13,7 @@
  */
 
 import { getDb } from "../lib/mongo";
+import { getShopProvider, providerIsMilesOnly } from "../lib/shop-distance-unit";
 
 async function main() {
   const apply = process.argv.includes("--apply");
@@ -21,7 +22,7 @@ async function main() {
   const matchedShops = await db
     .collection("shops")
     .find({ name: { $regex: /precision auto service/i } })
-    .project({ _id: 1, shopId: 1, name: 1, enterpriseId: 1, "preferences.distanceUnit": 1 })
+    .project({ _id: 1, shopId: 1, name: 1, enterpriseId: 1, integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1 })
     .toArray();
 
   if (matchedShops.length === 0) {
@@ -43,7 +44,7 @@ async function main() {
     const siblings = await db
       .collection("shops")
       .find({ enterpriseId: { $in: matchedShops.map((s) => s.enterpriseId).filter(Boolean) } })
-      .project({ _id: 1, shopId: 1, name: 1, enterpriseId: 1, "preferences.distanceUnit": 1 })
+      .project({ _id: 1, shopId: 1, name: 1, enterpriseId: 1, integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1 })
       .toArray();
     const byKey = new Map<string, any>();
     for (const s of [...matchedShops, ...siblings]) byKey.set(String(s._id), s);
@@ -60,9 +61,27 @@ async function main() {
       .join("\n")
   );
 
-  const targets = allShops.filter((s) => s.preferences?.distanceUnit !== "kilometers");
+  // Guardrail: never flip a shop on a miles-only platform (Tekmetric /
+  // Shop-Ware are US-only) to kilometers, even if it happens to match the name
+  // regex or share an enterprise. This is the over-match that previously set
+  // US Tekmetric shops to km and inflated their VHI scores.
+  const milesOnly = allShops.filter((s) => providerIsMilesOnly(getShopProvider(s)));
+  if (milesOnly.length > 0) {
+    console.log(
+      `\nSkipping ${milesOnly.length} miles-only-provider shop(s) (cannot be kilometers):\n` +
+        milesOnly
+          .map((s) => `  - shopId=${s.shopId} name="${s.name}" provider=${getShopProvider(s)}`)
+          .join("\n")
+    );
+  }
+
+  const targets = allShops.filter(
+    (s) =>
+      s.preferences?.distanceUnit !== "kilometers" &&
+      !providerIsMilesOnly(getShopProvider(s))
+  );
   if (targets.length === 0) {
-    console.log("\nAll matched shops already have distanceUnit=kilometers. Nothing to do.");
+    console.log("\nNo eligible shops need flipping to kilometers. Nothing to do.");
     return;
   }
 
