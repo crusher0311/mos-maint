@@ -22,6 +22,9 @@ import {
   inferCountryFromAddress,
   unitForCountry,
   isDistanceUnitAllowed,
+  isOverrideUnit,
+  getOwnerUnitOverride,
+  normalizeDistanceUnit,
   providerIsMilesOnly,
   getShopProvider,
   MILES_ONLY_PROVIDERS,
@@ -142,6 +145,65 @@ eq("miles NOT allowed on CA Tekmetric (known country)", isDistanceUnitAllowed({ 
 eq("km NOT allowed on unknown-country Tekmetric (safe default)", isDistanceUnitAllowed({ integrationProvider: "tekmetric" }, "kilometers"), false);
 eq("km allowed on unknown-country Protractor", isDistanceUnitAllowed({ integrationProvider: "protractor" }, "kilometers"), true);
 eq("km allowed on unknown provider", isDistanceUnitAllowed({}, "kilometers"), true);
+
+// --- normalizeDistanceUnit ---
+eq("normalize km", normalizeDistanceUnit("km"), "kilometers");
+eq("normalize KILOMETERS", normalizeDistanceUnit("KILOMETERS"), "kilometers");
+eq("normalize mi", normalizeDistanceUnit("mi"), "miles");
+eq("normalize garbage -> null", normalizeDistanceUnit("furlongs"), null);
+eq("normalize null -> null", normalizeDistanceUnit(null), null);
+
+// --- getOwnerUnitOverride: ONLY explicit source="owner" counts ---
+eq(
+  "owner override returns the chosen unit",
+  getOwnerUnitOverride({ preferences: { distanceUnit: "miles", distanceUnitSource: "owner" } }),
+  "miles",
+);
+eq(
+  "bare distanceUnit (no source) is NOT an override",
+  getOwnerUnitOverride({ preferences: { distanceUnit: "kilometers" } }),
+  null,
+);
+eq(
+  "source='auto' is NOT an override",
+  getOwnerUnitOverride({ preferences: { distanceUnit: "kilometers", distanceUnitSource: "auto" } }),
+  null,
+);
+
+// --- resolveShopDistanceUnit: explicit owner override beats country ---
+eq(
+  "owner override (miles) beats Canadian country",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    geo: { country: "CA", state: "ON" },
+    preferences: { distanceUnit: "miles", distanceUnitSource: "owner" },
+  }),
+  "miles",
+);
+eq(
+  "owner override (km) beats US country",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    geo: { country: "US", state: "OK" },
+    preferences: { distanceUnit: "kilometers", distanceUnitSource: "owner" },
+  }),
+  "kilometers",
+);
+eq(
+  "legacy bad stored value (no owner flag) does NOT override country",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    geo: { country: "CA", state: "ON" },
+    preferences: { distanceUnit: "miles" },
+  }),
+  "kilometers",
+);
+
+// --- isOverrideUnit: diverges from the automatic/country default ---
+eq("miles on Canadian shop IS an override", isOverrideUnit({ integrationProvider: "tekmetric", geo: { country: "CA" } }, "miles"), true);
+eq("km on Canadian shop is NOT an override", isOverrideUnit({ integrationProvider: "tekmetric", geo: { country: "CA" } }, "kilometers"), false);
+eq("km on unknown-country Tekmetric IS an override", isOverrideUnit({ integrationProvider: "tekmetric" }, "kilometers"), true);
+eq("km on Protractor (unknown) is NOT an override", isOverrideUnit({ integrationProvider: "protractor" }, "kilometers"), false);
 
 if (failed > 0) {
   console.error(`\n${failed} assertion(s) failed.`);

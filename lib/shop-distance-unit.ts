@@ -9,11 +9,18 @@
  * skews VHI health scores, so we resolve the unit the same way everywhere.
  *
  * Policy (in priority order):
- *   1. Known country wins. If we know the shop's country (from its integration's
+ *   0. Explicit owner override wins. An owner may DELIBERATELY choose their unit
+ *      in shop settings. We record that intent as `preferences.distanceUnitSource
+ *      = "owner"`; when that flag is present the saved `preferences.distanceUnit`
+ *      is honored above everything else. Crucially, only this explicit flag
+ *      counts — a bare/legacy `preferences.distanceUnit` left over from an old
+ *      import or a script mislabel does NOT qualify, so the historical bad values
+ *      can't masquerade as an intentional override.
+ *   1. Known country. If we know the shop's country (from its integration's
  *      address — see `resolveShopCountry`), the unit is derived from it:
- *      Canada -> kilometers, US -> miles. This OVERRIDES any stored preference,
- *      so a stray "kilometers" on a US shop (or "miles" on a Canadian shop)
- *      can never inflate/deflate scores.
+ *      Canada -> kilometers, US -> miles. This is the smart default that, absent
+ *      an owner override, keeps a stray "kilometers" on a US shop (or "miles" on
+ *      a Canadian shop) from inflating/deflating scores.
  *   2. Unknown country on a single-market provider. Providers that operate in
  *      exactly one metric market (`MILES_ONLY_PROVIDERS`) fall back to that
  *      market's unit (miles) until their country is backfilled. This is the
@@ -22,12 +29,15 @@
  *      DOES have Canadian shops — those are handled by rule 1 once their country
  *      is known (see scripts/backfill-tekmetric-shop-country.ts).
  *   3. Unknown country, other providers (e.g. Protractor): honor the shop's
- *      explicit `preferences.distanceUnit` (legacy `settings.distanceUnit`),
+ *      stored `preferences.distanceUnit` (legacy `settings.distanceUnit`),
  *      defaulting to "miles".
  */
 
 export type DistanceUnit = "miles" | "kilometers";
 export type ShopCountry = "US" | "CA";
+
+/** Marks a `preferences.distanceUnit` value as a deliberate owner choice. */
+export const OWNER_UNIT_SOURCE = "owner";
 
 /**
  * Providers that PREDOMINANTLY operate in a miles-reporting market. Used only as
@@ -69,10 +79,41 @@ export interface ShopGeo {
 export interface ShopDistanceDoc {
   integrationProvider?: string | null;
   smsProvider?: string | null;
-  preferences?: { distanceUnit?: string | null } | null;
+  preferences?: {
+    distanceUnit?: string | null;
+    /** "owner" when the saved unit is a deliberate owner choice (see policy). */
+    distanceUnitSource?: string | null;
+  } | null;
   settings?: { distanceUnit?: string | null } | null;
   /** Backfilled location, e.g. from the integration's shop address. */
   geo?: ShopGeo | null;
+}
+
+/** Normalize a free-form unit string to a canonical `DistanceUnit`, or null. */
+export function normalizeDistanceUnit(
+  unit: string | null | undefined
+): DistanceUnit | null {
+  if (!unit) return null;
+  const u = String(unit).trim().toLowerCase();
+  if (u === "kilometers" || u === "kilometres" || u === "km") return "kilometers";
+  if (u === "miles" || u === "mi") return "miles";
+  return null;
+}
+
+/**
+ * The unit an owner has DELIBERATELY chosen, or null if there is no explicit
+ * override. Only `preferences.distanceUnitSource === "owner"` counts — a bare
+ * `preferences.distanceUnit` (legacy import / script value) does NOT, so old bad
+ * values can't impersonate an intentional override.
+ */
+export function getOwnerUnitOverride(
+  shopDoc: ShopDistanceDoc | null | undefined
+): DistanceUnit | null {
+  const src = shopDoc?.preferences?.distanceUnitSource;
+  if (src && String(src).trim().toLowerCase() === OWNER_UNIT_SOURCE) {
+    return normalizeDistanceUnit(shopDoc?.preferences?.distanceUnit);
+  }
+  return null;
 }
 
 /** The canonical integration provider for a shop, lower-cased. */
@@ -136,11 +177,16 @@ export function resolveShopCountry(
 }
 
 /**
- * Whether a given unit may be assigned to a shop. A unit is rejected only when
- * it contradicts the shop's KNOWN country, or — when the country is unknown —
- * when it is "kilometers" on a single-market miles provider (the safe default
- * that blocks the historical mislabel). When the country is unknown and the
- * provider is multi-market, any unit is allowed.
+ * Whether a unit matches what the shop would resolve to AUTOMATICALLY (its
+ * country, or the single-market safe default) — i.e. without a deliberate owner
+ * override. Use this for AUTOMATED writes (sync jobs, backfill scripts) that
+ * must not introduce the historical mislabel. It does NOT gate owner-driven
+ * settings changes: an owner may deliberately override their unit (recorded via
+ * `distanceUnitSource = "owner"`), which `resolveShopDistanceUnit` honors above
+ * country. A unit is rejected only when it contradicts the shop's KNOWN country,
+ * or — when the country is unknown — when it is "kilometers" on a single-market
+ * miles provider. When the country is unknown and the provider is multi-market,
+ * any unit matches.
  */
 export function isDistanceUnitAllowed(
   shopDoc: ShopDistanceDoc | null | undefined,
@@ -155,6 +201,18 @@ export function isDistanceUnitAllowed(
 }
 
 /**
+ * True when setting `unit` would diverge from the shop's automatic (country /
+ * safe-default) unit — i.e. it is a genuine override the owner is opting into.
+ * Used to decide whether to stamp `distanceUnitSource = "owner"`.
+ */
+export function isOverrideUnit(
+  shopDoc: ShopDistanceDoc | null | undefined,
+  unit: DistanceUnit
+): boolean {
+  return !isDistanceUnitAllowed(shopDoc, unit);
+}
+
+/**
  * Resolve a shop's effective distance unit per the policy above. This is the
  * function every consumer should use instead of reading
  * `preferences.distanceUnit` directly.
@@ -162,7 +220,11 @@ export function isDistanceUnitAllowed(
 export function resolveShopDistanceUnit(
   shopDoc: ShopDistanceDoc | null | undefined
 ): DistanceUnit {
-  // 1. Known country is authoritative.
+  // 0. Explicit owner override wins.
+  const override = getOwnerUnitOverride(shopDoc);
+  if (override) return override;
+
+  // 1. Known country is the smart default.
   const country = resolveShopCountry(shopDoc);
   if (country) return unitForCountry(country);
 
@@ -170,7 +232,7 @@ export function resolveShopDistanceUnit(
   const provider = getShopProvider(shopDoc);
   if (providerIsMilesOnly(provider)) return "miles";
 
-  // 3. Unknown country, multi-market provider -> honor explicit preference.
+  // 3. Unknown country, multi-market provider -> honor stored preference.
   const stored =
     shopDoc?.preferences?.distanceUnit ?? shopDoc?.settings?.distanceUnit;
   return stored === "kilometers" ? "kilometers" : "miles";

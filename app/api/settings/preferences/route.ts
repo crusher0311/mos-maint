@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
-import { getShopProvider, isDistanceUnitAllowed } from "@/lib/shop-distance-unit";
+import { isOverrideUnit } from "@/lib/shop-distance-unit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,33 +68,29 @@ export async function PUT(req: NextRequest) {
 
   const db = await getDb();
 
-  // Guardrail: a shop's unit must follow where the shop actually is. A US shop
-  // reports miles, a Canadian shop reports kilometers. We reject a unit that
-  // contradicts the shop's known country (and, when the country isn't known yet,
-  // block "kilometers" on a single-market miles provider — the historical
-  // mislabel that inflated VHI scores). This stops bad data at the write path.
-  if (distanceUnit) {
-    const shopForGuard = await db.collection("shops").findOne(
-      { shopId: Number(sess.shopId) },
-      { projection: { integrationProvider: 1, smsProvider: 1, geo: 1 } }
-    );
-    if (!isDistanceUnitAllowed(shopForGuard, distanceUnit)) {
-      const provider = getShopProvider(shopForGuard);
-      const country = shopForGuard?.geo?.country;
-      const reason = country
-        ? `This shop is in ${country}, so its distance unit can't be set to ${distanceUnit}.`
-        : `This shop's integration (${provider}) reports in miles, so its distance unit can't be set to ${distanceUnit}.`;
-      return NextResponse.json({ error: reason }, { status: 400 });
-    }
-  }
-
   if (workflowStages && (!Array.isArray(workflowStages) || !workflowStages.every(s => VALID_WORKFLOW_STAGES.includes(s)))) {
     return NextResponse.json({ error: "Invalid workflow stages" }, { status: 400 });
   }
 
   const updates: Record<string, any> = {};
 
-  if (distanceUnit) updates["preferences.distanceUnit"] = distanceUnit;
+  // Distance unit: owners MAY deliberately override their unit. We don't block
+  // them — but we only record an explicit owner override when their choice
+  // diverges from the shop's automatic (country / safe-default) unit. When the
+  // choice matches the default, we mark the source "auto" so an incidental save
+  // (e.g. changing timezone) never silently pins the unit and the shop keeps
+  // following its location. This is the deliberate-intent flag the resolver
+  // (resolveShopDistanceUnit) honors above country.
+  if (distanceUnit) {
+    const shopForGuard = await db.collection("shops").findOne(
+      { shopId: Number(sess.shopId) },
+      { projection: { integrationProvider: 1, smsProvider: 1, geo: 1 } }
+    );
+    updates["preferences.distanceUnit"] = distanceUnit;
+    updates["preferences.distanceUnitSource"] = isOverrideUnit(shopForGuard, distanceUnit)
+      ? "owner"
+      : "auto";
+  }
   if (timezone) updates["preferences.timezone"] = timezone;
   if (workflowStages !== undefined) updates["preferences.workflowStages"] = workflowStages;
   if (showInspectItems !== undefined) updates["preferences.showInspectItems"] = showInspectItems;

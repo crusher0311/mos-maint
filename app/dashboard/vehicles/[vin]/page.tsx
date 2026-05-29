@@ -672,7 +672,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   // read — that would let a shop's display drift from how its scores are built).
   const shopWithPrefs = await db.collection("shops").findOne(
     { shopId },
-    { projection: { integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1, geo: 1 } }
+    { projection: { integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1, "preferences.distanceUnitSource": 1, geo: 1 } }
   );
   const distanceUnit: "miles" | "kilometers" = resolveShopDistanceUnit(shopWithPrefs);
 

@@ -51,6 +51,7 @@ async function main() {
       name: 1,
       "tekmetric.shopId": 1,
       "preferences.distanceUnit": 1,
+      "preferences.distanceUnitSource": 1,
       "settings.distanceUnit": 1,
       geo: 1,
     })
@@ -82,6 +83,9 @@ async function main() {
   for (const s of shops) {
     const tekId = s.tekmetric?.shopId;
     const stored = s.preferences?.distanceUnit ?? s.settings?.distanceUnit ?? "(unset)";
+    // A deliberate owner override is intentional — never auto-correct it.
+    const ownerOverride =
+      String(s.preferences?.distanceUnitSource ?? "").toLowerCase() === "owner";
     let country: ShopCountry | null = null;
     let state = "";
     let zip = "";
@@ -105,8 +109,11 @@ async function main() {
     else unknownCount++;
 
     const impliedUnit = country ? unitForCountry(country) : null;
+    // A conflict needs correcting only when it is NOT a deliberate owner
+    // override — owners may intentionally run a unit that differs from their
+    // country (the override Brandon asked for).
     const conflict =
-      impliedUnit && stored !== "(unset)" && stored !== impliedUnit;
+      !!impliedUnit && stored !== "(unset)" && stored !== impliedUnit && !ownerOverride;
     if (conflict) {
       conflicts.push({ shopId: s.shopId, name: s.name, stored, impliedUnit, country, state, zip });
     }
@@ -118,9 +125,9 @@ async function main() {
       state,
       zip,
       country: country ?? "(unknown)",
-      stored,
+      stored: ownerOverride ? `${stored} (owner)` : stored,
       impliedUnit: impliedUnit ?? "(n/a)",
-      conflict: conflict ? "CONFLICT" : "",
+      conflict: conflict ? "CONFLICT" : ownerOverride ? "owner-override" : "",
       err,
     });
 
@@ -136,10 +143,12 @@ async function main() {
       // overlay endpoints) read `preferences.distanceUnit` RAW, not through the
       // policy. So when the stored unit disagrees with the shop's real country,
       // correct the stored value too — otherwise those surfaces keep showing the
-      // wrong unit even after geo is written. Then drop the shop's caches so its
-      // VHI scores rebuild with the right unit.
+      // wrong unit even after geo is written. Mark the source "auto" (this is a
+      // location-driven correction, NOT an owner override) and drop the shop's
+      // caches so its VHI scores rebuild with the right unit.
       if (impliedUnit && conflict) {
         set["preferences.distanceUnit"] = impliedUnit;
+        set["preferences.distanceUnitSource"] = "auto";
         const planRes = await db
           .collection("cached_plans")
           .deleteMany({ shopId: s.shopId });

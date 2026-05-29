@@ -51,7 +51,7 @@ async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
   const db = await getDb();
   const shop = await db.collection('shops').findOne(
     { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-    { projection: { integrationProvider: 1, smsProvider: 1, 'preferences.distanceUnit': 1, geo: 1 } }
+    { projection: { integrationProvider: 1, smsProvider: 1, 'preferences.distanceUnit': 1, 'preferences.distanceUnitSource': 1, geo: 1 } }
   );
   return resolveShopDistanceUnit(shop as any);
 }

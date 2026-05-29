@@ -33,6 +33,7 @@ interface TekmetricShopDoc {
   };
   preferences?: {
     distanceUnit?: 'miles' | 'kilometers';
+    distanceUnitSource?: string | null;
   };
   geo?: { country?: string | null; state?: string | null; zip?: string | null } | null;
 }
@@ -57,6 +58,7 @@ async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
     integrationProvider: 1,
     smsProvider: 1,
     "preferences.distanceUnit": 1,
+    "preferences.distanceUnitSource": 1,
     geo: 1,
   });
   return resolveShopDistanceUnit(shop);
