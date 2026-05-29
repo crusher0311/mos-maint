@@ -9,6 +9,7 @@ import { searchVehiclesByVin, getRepairOrders } from "@/lib/integrations/tekmetr
 import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVehicle as fetchProtractorInvoices, fetchWorkOrdersForVehicle as fetchProtractorWorkOrders } from "@/lib/integrations/protractor";
 import VehicleDetailClient from "./VehicleDetailClient";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -666,13 +667,14 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const shop = await db.collection("shops").findOne({});
   const tekmetricConnected = !!shop?.tekmetric?.shopId;
 
-  // Resolve shop preference for distance/units (used as default for the Specs tab unit display)
+  // Resolve shop distance unit through the central country-aware policy so the
+  // dashboard agrees with plan-build / the extension overlay (no raw preference
+  // read — that would let a shop's display drift from how its scores are built).
   const shopWithPrefs = await db.collection("shops").findOne(
     { shopId },
-    { projection: { preferences: 1 } }
+    { projection: { integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1, geo: 1 } }
   );
-  const distanceUnit: "miles" | "kilometers" =
-    shopWithPrefs?.preferences?.distanceUnit === "kilometers" ? "kilometers" : "miles";
+  const distanceUnit: "miles" | "kilometers" = resolveShopDistanceUnit(shopWithPrefs);
 
   // Protractor inspections (DVI data from AutoVitals pushed to Protractor)
   let protractorDvi: any = null;

@@ -22,15 +22,19 @@ import {
   getJobs,
 } from './client';
 import { transformVehicle, transformRepairOrder, transformCannedJob } from './transform';
+import { resolveShopDistanceUnit } from '@/lib/shop-distance-unit';
 
 interface TekmetricShopDoc {
   shopId: number | string;
+  integrationProvider?: string | null;
+  smsProvider?: string | null;
   tekmetric?: {
     shopId?: number;
   };
   preferences?: {
     distanceUnit?: 'miles' | 'kilometers';
   };
+  geo?: { country?: string | null; state?: string | null; zip?: string | null } | null;
 }
 
 async function getTekmetricShopId(shopId: number): Promise<number | null> {
@@ -39,17 +43,23 @@ async function getTekmetricShopId(shopId: number): Promise<number | null> {
 }
 
 /**
- * Tekmetric is a US-only platform that always reports odometer readings in
- * miles. Per the central distance-unit policy (lib/shop-distance-unit.ts,
- * `MILES_ONLY_PROVIDERS`), a Tekmetric shop is always miles — a "kilometers"
- * preference on such a shop is a misconfiguration we must not honor, since it
- * would mark normalized mileage as km and inflate VHI scores.
+ * Resolve the normalized odometer unit for a Tekmetric shop via the central
+ * distance-unit policy (lib/shop-distance-unit.ts). Tekmetric predominantly
+ * serves the US (miles) but DOES have Canadian shops (kilometers); the policy
+ * derives the unit from the shop's known country and falls back to miles when
+ * the country isn't backfilled yet — so a stray "kilometers" preference on a
+ * US shop can no longer bleed into normalized mileage and inflate VHI scores.
  *
- * (Supersedes Task #333's per-shop lookup, which let a stray km preference bleed
- * into Tekmetric-sourced data.)
+ * (Supersedes Task #333's preference-only lookup.)
  */
-async function getMileageUnit(_shopId: number): Promise<'miles' | 'kilometers'> {
-  return 'miles';
+async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
+  const shop = await findShopByShopId<TekmetricShopDoc>(shopId, {
+    integrationProvider: 1,
+    smsProvider: 1,
+    "preferences.distanceUnit": 1,
+    geo: 1,
+  });
+  return resolveShopDistanceUnit(shop);
 }
 
 export class TekmetricAdapter implements IIntegrationAdapter {

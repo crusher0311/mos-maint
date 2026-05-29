@@ -3,18 +3,24 @@
  *
  * Run: `npx tsx tests/shop-distance-unit.smoke.ts`
  *
- * Locks in the rule that a shop's unit follows how its own integration reports:
- *   - Miles-only providers (Tekmetric, Shop-Ware) can NEVER be kilometers,
- *     regardless of a stored preference (a misconfiguration that inflates VHI
- *     scores by ~38%).
- *   - Multi-market providers (Protractor) honor the shop's explicit preference.
- *   - Unknown / no provider honors the preference, defaulting to miles.
+ * Locks in the rule that a shop's unit follows WHERE THE SHOP IS:
+ *   - Known country is authoritative: US -> miles, Canada -> kilometers. This
+ *     OVERRIDES any stored preference (the historical mislabel that inflated /
+ *     deflated VHI scores by ~38%).
+ *   - Tekmetric/Shop-Ware are NOT US-only: a Tekmetric shop confirmed to be in
+ *     Canada must resolve to kilometers (shops 86 "Access Automotive" and 155
+ *     "Equipfix Auto Repair" are real Ontario Tekmetric shops).
+ *   - Unknown country on a single-market miles provider -> miles (safe default).
+ *   - Unknown country on a multi-market provider -> honor explicit preference.
  *
- * Do not regress to trusting `preferences.distanceUnit` for miles-only shops.
+ * Do not regress to "Tekmetric/Shop-Ware = always miles regardless of country".
  */
 
 import {
   resolveShopDistanceUnit,
+  resolveShopCountry,
+  inferCountryFromAddress,
+  unitForCountry,
   isDistanceUnitAllowed,
   providerIsMilesOnly,
   getShopProvider,
@@ -36,31 +42,71 @@ function eq(name: string, got: unknown, want: unknown) {
 
 console.log("shop-distance-unit policy");
 
-// --- providerIsMilesOnly ---
-eq("tekmetric is miles-only", providerIsMilesOnly("tekmetric"), true);
-eq("shopware is miles-only", providerIsMilesOnly("shopware"), true);
-eq("shop-ware (hyphen) is miles-only", providerIsMilesOnly("shop-ware"), true);
-eq("TEKMETRIC uppercase is miles-only", providerIsMilesOnly("TEKMETRIC"), true);
-eq("protractor is NOT miles-only", providerIsMilesOnly("protractor"), false);
-eq("null provider is NOT miles-only", providerIsMilesOnly(null), false);
+// --- providerIsMilesOnly (fallback signal only) ---
+eq("tekmetric is single-market miles", providerIsMilesOnly("tekmetric"), true);
+eq("shopware is single-market miles", providerIsMilesOnly("shopware"), true);
+eq("shop-ware (hyphen) is single-market miles", providerIsMilesOnly("shop-ware"), true);
+eq("TEKMETRIC uppercase", providerIsMilesOnly("TEKMETRIC"), true);
+eq("protractor is NOT single-market", providerIsMilesOnly("protractor"), false);
+eq("null provider is NOT single-market", providerIsMilesOnly(null), false);
 eq("MILES_ONLY_PROVIDERS has tekmetric", MILES_ONLY_PROVIDERS.has("tekmetric"), true);
 
-// --- getShopProvider (integrationProvider wins, smsProvider fallback) ---
-eq(
-  "provider from integrationProvider",
-  getShopProvider({ integrationProvider: "Tekmetric", smsProvider: "x" }),
-  "tekmetric",
-);
-eq(
-  "provider falls back to smsProvider",
-  getShopProvider({ smsProvider: "Protractor" }),
-  "protractor",
-);
+// --- getShopProvider ---
+eq("provider from integrationProvider", getShopProvider({ integrationProvider: "Tekmetric", smsProvider: "x" }), "tekmetric");
+eq("provider falls back to smsProvider", getShopProvider({ smsProvider: "Protractor" }), "protractor");
 eq("provider null when absent", getShopProvider({}), null);
 
-// --- resolveShopDistanceUnit: miles-only providers forced to miles ---
+// --- inferCountryFromAddress ---
+eq("ON province -> CA", inferCountryFromAddress({ state: "ON" }), "CA");
+eq("OK state -> US", inferCountryFromAddress({ state: "OK" }), "US");
+eq("Canadian postal -> CA", inferCountryFromAddress({ zip: "K7R 3Z9" }), "CA");
+eq("Canadian postal no space -> CA", inferCountryFromAddress({ zip: "L0M1S0" }), "CA");
+eq("US zip -> US", inferCountryFromAddress({ zip: "73099" }), "US");
+eq("US zip+4 -> US", inferCountryFromAddress({ zip: "73099-1234" }), "US");
+eq("empty address -> null", inferCountryFromAddress({}), null);
+eq("garbage -> null", inferCountryFromAddress({ state: "ZZ", zip: "????" }), null);
+
+// --- unitForCountry ---
+eq("CA -> kilometers", unitForCountry("CA"), "kilometers");
+eq("US -> miles", unitForCountry("US"), "miles");
+
+// --- resolveShopCountry (geo.country wins, then inference) ---
+eq("geo.country US", resolveShopCountry({ geo: { country: "US" } }), "US");
+eq("geo.country Canada word", resolveShopCountry({ geo: { country: "Canada" } }), "CA");
+eq("geo state inference", resolveShopCountry({ geo: { state: "QC" } }), "CA");
+eq("no geo -> null", resolveShopCountry({ integrationProvider: "tekmetric" }), null);
+
+// --- resolveShopDistanceUnit: KNOWN COUNTRY IS AUTHORITATIVE ---
 eq(
-  "tekmetric + km preference -> miles (the bug we fixed)",
+  "Canadian Tekmetric shop (shop 86) -> kilometers, even with stored miles",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    preferences: { distanceUnit: "miles" },
+    geo: { country: "CA", state: "ON", zip: "K7R 3Z9" },
+  }),
+  "kilometers",
+);
+eq(
+  "US Tekmetric shop (shop 63) -> miles, even with stored kilometers",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    preferences: { distanceUnit: "kilometers" },
+    geo: { country: "US", state: "OK", zip: "73099" },
+  }),
+  "miles",
+);
+eq(
+  "Canadian Tekmetric inferred from state only -> kilometers",
+  resolveShopDistanceUnit({
+    integrationProvider: "tekmetric",
+    geo: { state: "ON" },
+  }),
+  "kilometers",
+);
+
+// --- resolveShopDistanceUnit: UNKNOWN COUNTRY fallbacks ---
+eq(
+  "unknown-country Tekmetric -> miles (safe default)",
   resolveShopDistanceUnit({
     integrationProvider: "tekmetric",
     preferences: { distanceUnit: "kilometers" },
@@ -68,56 +114,34 @@ eq(
   "miles",
 );
 eq(
-  "shopware + km preference -> miles",
-  resolveShopDistanceUnit({
-    integrationProvider: "shopware",
-    preferences: { distanceUnit: "kilometers" },
-  }),
+  "unknown-country shopware -> miles (safe default)",
+  resolveShopDistanceUnit({ integrationProvider: "shopware" }),
   "miles",
 );
-
-// --- resolveShopDistanceUnit: protractor honors preference ---
 eq(
   "protractor + km preference -> kilometers",
-  resolveShopDistanceUnit({
-    integrationProvider: "protractor",
-    preferences: { distanceUnit: "kilometers" },
-  }),
+  resolveShopDistanceUnit({ integrationProvider: "protractor", preferences: { distanceUnit: "kilometers" } }),
   "kilometers",
 );
 eq(
-  "protractor + miles preference -> miles",
-  resolveShopDistanceUnit({
-    integrationProvider: "protractor",
-    preferences: { distanceUnit: "miles" },
-  }),
-  "miles",
-);
-eq(
-  "protractor + unset preference -> miles default",
+  "protractor + unset -> miles default",
   resolveShopDistanceUnit({ integrationProvider: "protractor" }),
   "miles",
 );
 eq(
-  "legacy settings.distanceUnit honored for protractor",
-  resolveShopDistanceUnit({
-    integrationProvider: "protractor",
-    settings: { distanceUnit: "kilometers" },
-  }),
-  "kilometers",
-);
-eq(
-  "no provider + km preference -> kilometers",
-  resolveShopDistanceUnit({ preferences: { distanceUnit: "kilometers" } }),
+  "protractor honors known CA country over preference",
+  resolveShopDistanceUnit({ integrationProvider: "protractor", preferences: { distanceUnit: "miles" }, geo: { country: "CA" } }),
   "kilometers",
 );
 eq("null shopDoc -> miles", resolveShopDistanceUnit(null), "miles");
 
-// --- isDistanceUnitAllowed (write-path guard) ---
-eq("km NOT allowed on tekmetric", isDistanceUnitAllowed("tekmetric", "kilometers"), false);
-eq("miles allowed on tekmetric", isDistanceUnitAllowed("tekmetric", "miles"), true);
-eq("km allowed on protractor", isDistanceUnitAllowed("protractor", "kilometers"), true);
-eq("km allowed on unknown provider", isDistanceUnitAllowed(null, "kilometers"), true);
+// --- isDistanceUnitAllowed (write-path guard, takes the shop doc) ---
+eq("km NOT allowed on US Tekmetric (known country)", isDistanceUnitAllowed({ integrationProvider: "tekmetric", geo: { country: "US" } }, "kilometers"), false);
+eq("km allowed on CA Tekmetric (known country)", isDistanceUnitAllowed({ integrationProvider: "tekmetric", geo: { country: "CA" } }, "kilometers"), true);
+eq("miles NOT allowed on CA Tekmetric (known country)", isDistanceUnitAllowed({ integrationProvider: "tekmetric", geo: { country: "CA" } }, "miles"), false);
+eq("km NOT allowed on unknown-country Tekmetric (safe default)", isDistanceUnitAllowed({ integrationProvider: "tekmetric" }, "kilometers"), false);
+eq("km allowed on unknown-country Protractor", isDistanceUnitAllowed({ integrationProvider: "protractor" }, "kilometers"), true);
+eq("km allowed on unknown provider", isDistanceUnitAllowed({}, "kilometers"), true);
 
 if (failed > 0) {
   console.error(`\n${failed} assertion(s) failed.`);

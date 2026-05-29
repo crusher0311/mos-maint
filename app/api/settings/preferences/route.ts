@@ -68,23 +68,23 @@ export async function PUT(req: NextRequest) {
 
   const db = await getDb();
 
-  // Guardrail: a shop's unit must follow how its own integration reports.
-  // Miles-only platforms (Tekmetric / Shop-Ware are US-only) can never be set
-  // to kilometers — that misconfiguration understates mileage and inflates
-  // VHI health scores. Reject the change instead of silently storing bad data.
-  if (distanceUnit === "kilometers") {
+  // Guardrail: a shop's unit must follow where the shop actually is. A US shop
+  // reports miles, a Canadian shop reports kilometers. We reject a unit that
+  // contradicts the shop's known country (and, when the country isn't known yet,
+  // block "kilometers" on a single-market miles provider — the historical
+  // mislabel that inflated VHI scores). This stops bad data at the write path.
+  if (distanceUnit) {
     const shopForGuard = await db.collection("shops").findOne(
       { shopId: Number(sess.shopId) },
-      { projection: { integrationProvider: 1, smsProvider: 1 } }
+      { projection: { integrationProvider: 1, smsProvider: 1, geo: 1 } }
     );
-    const provider = getShopProvider(shopForGuard);
-    if (!isDistanceUnitAllowed(provider, "kilometers")) {
-      return NextResponse.json(
-        {
-          error: `This shop's integration (${provider}) reports in miles, so its distance unit can't be set to kilometers.`,
-        },
-        { status: 400 }
-      );
+    if (!isDistanceUnitAllowed(shopForGuard, distanceUnit)) {
+      const provider = getShopProvider(shopForGuard);
+      const country = shopForGuard?.geo?.country;
+      const reason = country
+        ? `This shop is in ${country}, so its distance unit can't be set to ${distanceUnit}.`
+        : `This shop's integration (${provider}) reports in miles, so its distance unit can't be set to ${distanceUnit}.`;
+      return NextResponse.json({ error: reason }, { status: 400 });
     }
   }
 

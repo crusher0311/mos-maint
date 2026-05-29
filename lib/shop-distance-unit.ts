@@ -3,25 +3,37 @@
  *
  * Background: a shop's odometer/interval unit must follow how its own
  * shop-management integration actually reports mileage — never a value copied
- * or cross-referenced from another shop. Some platforms operate only in markets
- * that report in miles, so a "kilometers" preference on those shops is always a
- * misconfiguration (it understates effective mileage ~38% and inflates VHI
- * health scores). This module encodes that policy so every read/write resolves
- * the unit the same way.
+ * or cross-referenced from another shop. The unit a shop reports in is a
+ * function of WHERE the shop is: US shops report miles, Canadian shops report
+ * kilometers. A wrong unit understates/overstates effective mileage ~38% and
+ * skews VHI health scores, so we resolve the unit the same way everywhere.
  *
- * Policy:
- *   - Miles-only providers (Tekmetric, Shop-Ware — US-only platforms) ALWAYS
- *     resolve to "miles", regardless of any stored preference.
- *   - Multi-market providers (e.g. Protractor, which serves US + Canada) honor
- *     the shop's explicit `preferences.distanceUnit` (legacy `settings.distanceUnit`).
- *   - Unknown / no provider: honor the stored preference, defaulting to "miles".
+ * Policy (in priority order):
+ *   1. Known country wins. If we know the shop's country (from its integration's
+ *      address — see `resolveShopCountry`), the unit is derived from it:
+ *      Canada -> kilometers, US -> miles. This OVERRIDES any stored preference,
+ *      so a stray "kilometers" on a US shop (or "miles" on a Canadian shop)
+ *      can never inflate/deflate scores.
+ *   2. Unknown country on a single-market provider. Providers that operate in
+ *      exactly one metric market (`MILES_ONLY_PROVIDERS`) fall back to that
+ *      market's unit (miles) until their country is backfilled. This is the
+ *      safe default that prevents score inflation for not-yet-geocoded shops.
+ *      NOTE: Tekmetric and Shop-Ware predominantly serve the US but Tekmetric
+ *      DOES have Canadian shops — those are handled by rule 1 once their country
+ *      is known (see scripts/backfill-tekmetric-shop-country.ts).
+ *   3. Unknown country, other providers (e.g. Protractor): honor the shop's
+ *      explicit `preferences.distanceUnit` (legacy `settings.distanceUnit`),
+ *      defaulting to "miles".
  */
 
 export type DistanceUnit = "miles" | "kilometers";
+export type ShopCountry = "US" | "CA";
 
 /**
- * Providers that operate exclusively in miles-reporting markets. Their shops
- * can never legitimately be kilometers.
+ * Providers that PREDOMINANTLY operate in a miles-reporting market. Used only as
+ * a fallback when a shop's actual country is not yet known. A shop on one of
+ * these providers can still be kilometers if its country is confirmed to be
+ * Canada (rule 1 in `resolveShopDistanceUnit`).
  */
 export const MILES_ONLY_PROVIDERS: ReadonlySet<string> = new Set([
   "tekmetric",
@@ -29,11 +41,38 @@ export const MILES_ONLY_PROVIDERS: ReadonlySet<string> = new Set([
   "shop-ware",
 ]);
 
+/** Canadian province / territory two-letter codes. */
+export const CA_PROVINCES: ReadonlySet<string> = new Set([
+  "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT",
+]);
+
+/** US state / territory two-letter codes (incl. DC + common territories). */
+export const US_STATES: ReadonlySet<string> = new Set([
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL",
+  "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT",
+  "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
+  "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+  "DC", "PR", "VI", "GU", "AS", "MP",
+]);
+
+/** Canadian postal code: A1A 1A1 (letter-digit-letter [space] digit-letter-digit). */
+const CA_POSTAL = /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/;
+/** US ZIP: 5 digits, optional +4. */
+const US_ZIP = /^\d{5}(-\d{4})?$/;
+
+export interface ShopGeo {
+  country?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}
+
 export interface ShopDistanceDoc {
   integrationProvider?: string | null;
   smsProvider?: string | null;
   preferences?: { distanceUnit?: string | null } | null;
   settings?: { distanceUnit?: string | null } | null;
+  /** Backfilled location, e.g. from the integration's shop address. */
+  geo?: ShopGeo | null;
 }
 
 /** The canonical integration provider for a shop, lower-cased. */
@@ -44,35 +83,94 @@ export function getShopProvider(
   return raw ? String(raw).toLowerCase() : null;
 }
 
-/** True when the provider only ever reports odometer readings in miles. */
+/**
+ * True when the provider only ever reports in miles in the markets it serves.
+ * Used only as a fallback for shops whose actual country is unknown.
+ */
 export function providerIsMilesOnly(provider?: string | null): boolean {
   if (!provider) return false;
   return MILES_ONLY_PROVIDERS.has(String(provider).toLowerCase());
 }
 
+/** Map a country to the unit that country reports odometers in. */
+export function unitForCountry(country: ShopCountry): DistanceUnit {
+  return country === "CA" ? "kilometers" : "miles";
+}
+
 /**
- * Whether a given unit may be assigned to a shop on this provider. Used by
- * write paths (settings API, maintenance scripts) to reject illegal units
- * before they ever reach the database.
+ * Infer a shop's country from an address (state/province code or postal/ZIP
+ * format). Returns null when the signal is absent or ambiguous.
+ */
+export function inferCountryFromAddress(
+  addr: { state?: string | null; zip?: string | null } | null | undefined
+): ShopCountry | null {
+  const state = addr?.state ? String(addr.state).trim().toUpperCase() : "";
+  const zip = addr?.zip ? String(addr.zip).trim().toUpperCase() : "";
+
+  // State/province code is the strongest signal.
+  if (state) {
+    if (CA_PROVINCES.has(state)) return "CA";
+    if (US_STATES.has(state)) return "US";
+  }
+  // Fall back to postal/ZIP format.
+  if (zip) {
+    if (CA_POSTAL.test(zip)) return "CA";
+    if (US_ZIP.test(zip)) return "US";
+  }
+  return null;
+}
+
+/**
+ * Resolve a shop's country: prefer an explicit backfilled `geo.country`, then
+ * infer from a stored `geo` address. Returns null when unknown.
+ */
+export function resolveShopCountry(
+  shopDoc: ShopDistanceDoc | null | undefined
+): ShopCountry | null {
+  const c = shopDoc?.geo?.country
+    ? String(shopDoc.geo.country).trim().toUpperCase()
+    : "";
+  if (c === "CA" || c === "CAN" || c === "CANADA") return "CA";
+  if (c === "US" || c === "USA" || c === "UNITED STATES") return "US";
+  return inferCountryFromAddress(shopDoc?.geo ?? null);
+}
+
+/**
+ * Whether a given unit may be assigned to a shop. A unit is rejected only when
+ * it contradicts the shop's KNOWN country, or — when the country is unknown —
+ * when it is "kilometers" on a single-market miles provider (the safe default
+ * that blocks the historical mislabel). When the country is unknown and the
+ * provider is multi-market, any unit is allowed.
  */
 export function isDistanceUnitAllowed(
-  provider: string | null | undefined,
+  shopDoc: ShopDistanceDoc | null | undefined,
   unit: DistanceUnit
 ): boolean {
-  if (unit === "kilometers" && providerIsMilesOnly(provider)) return false;
+  const country = resolveShopCountry(shopDoc);
+  if (country) return unit === unitForCountry(country);
+  if (unit === "kilometers" && providerIsMilesOnly(getShopProvider(shopDoc))) {
+    return false;
+  }
   return true;
 }
 
 /**
- * Resolve a shop's effective distance unit, enforcing the provider policy.
- * This is the function every consumer should use instead of reading
+ * Resolve a shop's effective distance unit per the policy above. This is the
+ * function every consumer should use instead of reading
  * `preferences.distanceUnit` directly.
  */
 export function resolveShopDistanceUnit(
   shopDoc: ShopDistanceDoc | null | undefined
 ): DistanceUnit {
+  // 1. Known country is authoritative.
+  const country = resolveShopCountry(shopDoc);
+  if (country) return unitForCountry(country);
+
+  // 2. Unknown country on a single-market miles provider -> safe default.
   const provider = getShopProvider(shopDoc);
   if (providerIsMilesOnly(provider)) return "miles";
+
+  // 3. Unknown country, multi-market provider -> honor explicit preference.
   const stored =
     shopDoc?.preferences?.distanceUnit ?? shopDoc?.settings?.distanceUnit;
   return stored === "kilometers" ? "kilometers" : "miles";

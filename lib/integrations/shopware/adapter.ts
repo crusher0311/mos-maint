@@ -28,6 +28,7 @@ import {
   transformCannedJob,
   transformPastRecommendation,
 } from './transform';
+import { resolveShopDistanceUnit } from '@/lib/shop-distance-unit';
 
 async function getSwConfig(shopId: number): Promise<{ tenantId: number; swShopId: number } | null> {
   const db = await getDb();
@@ -41,12 +42,18 @@ async function getSwConfig(shopId: number): Promise<{ tenantId: number; swShopId
   return { tenantId: cfg.tenantId, swShopId: cfg.swShopId };
 }
 
-// Shop-Ware is a US-only platform that always reports odometer readings in
-// miles. Per the central distance-unit policy (lib/shop-distance-unit.ts,
-// `MILES_ONLY_PROVIDERS`), a Shop-Ware shop is always miles — we must not honor
-// a stray "kilometers" preference, which would inflate VHI scores.
-async function getMileageUnit(_shopId: number): Promise<'miles' | 'kilometers'> {
-  return 'miles';
+// Resolve the normalized odometer unit for a Shop-Ware shop via the central
+// distance-unit policy (lib/shop-distance-unit.ts). Shop-Ware serves the US
+// (miles); the policy derives the unit from the shop's known country and falls
+// back to miles when the country isn't backfilled — so a stray "kilometers"
+// preference can no longer bleed into normalized mileage and inflate VHI scores.
+async function getMileageUnit(shopId: number): Promise<'miles' | 'kilometers'> {
+  const db = await getDb();
+  const shop = await db.collection('shops').findOne(
+    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+    { projection: { integrationProvider: 1, smsProvider: 1, 'preferences.distanceUnit': 1, geo: 1 } }
+  );
+  return resolveShopDistanceUnit(shop as any);
 }
 
 export class ShopWareAdapter implements IIntegrationAdapter {
