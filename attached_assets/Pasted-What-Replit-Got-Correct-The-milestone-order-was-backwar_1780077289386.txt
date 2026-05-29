@@ -1,0 +1,24 @@
+What Replit Got Correct
+The milestone order was backwards. The cloud-to-LAN problem isn't a detail — it's the whole problem. A cloud server on Render literally cannot reach zink.local or any private LAN IP. Milestone 3 (the agent) isn't downstream of Milestone 1 — it is the foundation. Without it, Milestone 1 is a local curiosity that can never run in production.
+The SSRF vulnerability is real and serious. An unauthenticated endpoint that accepts a caller-supplied host and opens a raw TCP socket to it is a textbook exploit path. That can't ship.
+The lockfile issue is a legitimate build risk. A broken lockfile kills your entire Render deployment, not just the new feature.
+
+The Corrected Architecture
+The actual execution order needs to flip:
+Milestone 1 — Local Print Agent (the real foundation)
+A lightweight Node.js process that runs at the shop, on a machine on the same LAN as the printer. It connects outbound to your MOS Tools cloud via WebSocket — no inbound firewall issues, no LAN routing problems. It receives print jobs from your cloud queue and executes them locally via the TCP socket to zink.local:9100. This is the piece that makes everything else possible.
+Milestone 2 — Cloud Print Queue + Auth
+The MOS Tools server-side component. Authenticated endpoints that accept print jobs from your web app or extension, queue them in MongoDB scoped to shop_id, and push them to the correct agent via the persistent WebSocket connection. Printer address config stored per shop. SSRF protection built in — the cloud never opens a socket to a printer directly, it only talks to authenticated agents.
+Milestone 3 — Per-Device Print Routing
+The UX layer. Any device — tablet, phone, browser — triggers a print through MOS Tools cloud UI. Job routes to the right shop's agent, to the right printer, with the right cut mode and speed. Admin dashboard showing printer status, paper level, job history.
+
+What To Tell Replit
+Accept their recommended reframe, with this addition: the agent is a standalone Node.js executable that shops install once — not another Replit-hosted service. It needs to be packageable as a simple installer (Windows .exe or cross-platform via pkg) so deployment across 330 rooftops is a one-time download, not a technical setup at each location.
+The spec for Milestone 1 (now the agent) needs:
+
+Outbound WebSocket connection to MOS Tools cloud (authenticated with shop API key)
+mDNS resolution for zink.local
+TCP socket sender using the ZINK XML+JPEG protocol
+Auto-reconnect on dropped WebSocket connection
+Local job execution with success/failure reporting back to cloud
+Packaged as a standalone executable with a simple config file (shop API key + printer address)

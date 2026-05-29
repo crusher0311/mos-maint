@@ -1,0 +1,331 @@
+Here's the Milestone 1 spec, written for Replit to execute directly.
+
+MOS Tools — Milestone 1: Direct ZINK Print via Port 9100
+Objective
+Add a net-new server-side print path that takes the existing sticker image output and sends it directly to a ZINK hAppy / Brother VC-500W printer over TCP port 9100 using the ZINK XML+JPEG protocol. No UI changes. No database changes. No agent. Prove the full path: API call → image generation → TCP socket → printer prints.
+
+Background: The ZINK Port 9100 Protocol
+The ZINK hAppy and Brother VC-500W printers accept print jobs over TCP port 9100. The protocol is XML-wrapped JPEG — not ESC/POS, not PCL. A print job consists of two parts sent sequentially over the socket:
+Part 1 — XML header (sent first as a string):
+xml<?xml version="1.0" encoding="UTF-8"?>
+<print>
+  <width>640</width>
+  <cut>1</cut>
+  <speed>0</speed>
+</print>
+Part 2 — JPEG image bytes (sent immediately after, as raw binary)
+Key parameters:
+
+<width> — always 640 (the print head is exactly 640 pixels wide; any other value causes scaling artifacts)
+<cut> — 1 = full cut, 0 = kiss cut
+<speed> — 0 = vivid (0.1 ips, better quality), 1 = draft (0.15 ips, faster)
+
+The printer address is zink.local (mDNS hostname used by the majority of shops) or a static IP where mDNS is unavailable. Port is always 9100.
+Because zink.local is an mDNS address, standard Node.js DNS resolution won't handle it. The agent must use the multicast-dns npm package to resolve zink.local to an IP before opening the TCP socket.
+
+What Already Exists (Do Not Modify)
+
+app/api/extension/sticker/route.ts — generates sticker image, returns Base64 data URL
+app/api/extension/keytag/route.ts — generates keytag image, returns Base64 data URL
+lib/sticker-pdf.ts — physical size PDF layout for AirPrint
+lib/print-mobile.ts — mobile/AirPrint tab orchestration
+All existing window.print() browser flows — leave completely untouched
+
+This milestone adds a new parallel path. Nothing existing is modified or removed.
+
+What To Build
+1. Install Dependencies
+bashnpm install multicast-dns
+No other new dependencies required. Node.js net module (built-in) handles the TCP socket.
+
+2. Create lib/zink-print.ts
+This is the core module. It does three things: resolves the printer address, builds the XML header, sends XML + JPEG over TCP.
+typescriptimport * as net from 'net';
+import * as mdns from 'multicast-dns';
+
+interface ZinkPrintOptions {
+  printerAddress: string;  // 'zink.local' or a static IP string
+  imageBase64: string;     // Base64 JPEG data URL from existing generation modules
+  cut?: 0 | 1;            // 0 = kiss cut, 1 = full cut (default: 1)
+  speed?: 0 | 1;          // 0 = vivid, 1 = draft (default: 0)
+  width?: number;          // always 640, included for explicitness
+}
+
+interface ZinkPrintResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Resolves an mDNS .local hostname to an IP address.
+ * Falls through immediately if printerAddress is already an IP.
+ */
+async function resolveAddress(address: string): Promise<string> {
+  // If it's already an IP address, return immediately
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(address)) {
+    return address;
+  }
+
+  return new Promise((resolve, reject) => {
+    const mdnsInstance = mdns();
+    const hostname = address.replace(/\.local$/, '');
+    const timeout = setTimeout(() => {
+      mdnsInstance.destroy();
+      reject(new Error(`mDNS resolution timeout for ${address}`));
+    }, 5000);
+
+    mdnsInstance.query({
+      questions: [{ name: `${hostname}.local`, type: 'A' }]
+    });
+
+    mdnsInstance.on('response', (response: any) => {
+      const answer = response.answers.find(
+        (a: any) => a.name === `${hostname}.local` && a.type === 'A'
+      );
+      if (answer) {
+        clearTimeout(timeout);
+        mdnsInstance.destroy();
+        resolve(answer.data);
+      }
+    });
+  });
+}
+
+/**
+ * Builds the ZINK XML print header.
+ */
+function buildXmlHeader(options: {
+  cut: number;
+  speed: number;
+  width: number;
+}): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<print>',
+    `  <width>${options.width}</width>`,
+    `  <cut>${options.cut}</cut>`,
+    `  <speed>${options.speed}</speed>`,
+    '</print>'
+  ].join('\n');
+}
+
+/**
+ * Strips the data URL prefix from a Base64 image string
+ * and returns a raw Buffer of JPEG bytes.
+ */
+function base64ToJpegBuffer(dataUrl: string): Buffer {
+  const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+  return Buffer.from(base64Data, 'base64');
+}
+
+/**
+ * Sends a print job to a ZINK hAppy or Brother VC-500W printer
+ * over TCP port 9100 using the ZINK XML+JPEG protocol.
+ */
+export async function sendZinkPrintJob(
+  options: ZinkPrintOptions
+): Promise<ZinkPrintResult> {
+  const {
+    printerAddress,
+    imageBase64,
+    cut = 1,
+    speed = 0,
+    width = 640,
+  } = options;
+
+  try {
+    // Step 1: Resolve address (handles both zink.local and static IPs)
+    const resolvedIp = await resolveAddress(printerAddress);
+
+    // Step 2: Build XML header
+    const xmlHeader = buildXmlHeader({ cut, speed, width });
+
+    // Step 3: Convert Base64 image to JPEG buffer
+    const jpegBuffer = base64ToJpegBuffer(imageBase64);
+
+    // Step 4: Send over TCP port 9100
+    await new Promise<void>((resolve, reject) => {
+      const socket = net.createConnection({ host: resolvedIp, port: 9100 });
+
+      socket.setTimeout(10000);
+
+      socket.on('connect', () => {
+        // Send XML header first, then JPEG bytes immediately after
+        socket.write(xmlHeader, 'utf8', () => {
+          socket.write(jpegBuffer, () => {
+            socket.end();
+          });
+        });
+      });
+
+      socket.on('end', () => resolve());
+      socket.on('close', () => resolve());
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        reject(new Error('Socket timeout — printer may be offline'));
+      });
+
+      socket.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[ZinkPrint] Print job failed:', message);
+    return { success: false, error: message };
+  }
+}
+
+3. Create app/api/print/zink/route.ts
+New API endpoint. Accepts a print request, calls the existing sticker/keytag generation, passes the result to sendZinkPrintJob.
+typescriptimport { NextRequest, NextResponse } from 'next/server';
+import { sendZinkPrintJob } from '@/lib/zink-print';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    const {
+      imageBase64,   // Base64 JPEG data URL — caller generates this
+                     // using existing /api/extension/sticker or /api/extension/keytag
+      printerAddress = 'zink.local',
+      cut = 1,
+      speed = 0,
+    } = body;
+
+    // Validate required fields
+    if (!imageBase64) {
+      return NextResponse.json(
+        { success: false, error: 'imageBase64 is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!imageBase64.startsWith('data:image/')) {
+      return NextResponse.json(
+        { success: false, error: 'imageBase64 must be a valid data URL' },
+        { status: 400 }
+      );
+    }
+
+    const result = await sendZinkPrintJob({
+      printerAddress,
+      imageBase64,
+      cut,
+      speed,
+    });
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
+  }
+}
+
+4. Create app/api/print/zink/test/route.ts
+A test endpoint that generates a real sticker and sends it to the printer. Used to verify the full path works end to end without touching any UI.
+typescriptimport { NextRequest, NextResponse } from 'next/server';
+import { sendZinkPrintJob } from '@/lib/zink-print';
+
+// Minimal test: sends a solid color JPEG to confirm
+// the TCP socket path and printer response work.
+// Replace with a real sticker Base64 for full integration test.
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const printerAddress = searchParams.get('printer') ?? 'zink.local';
+
+  // 640x384 white JPEG — smallest valid test image at correct width
+  // In production testing, swap this for output from /api/extension/sticker
+  const testImageBase64 = await generateTestImage();
+
+  const result = await sendZinkPrintJob({
+    printerAddress,
+    imageBase64: testImageBase64,
+    cut: 1,
+    speed: 1, // draft speed for test prints
+  });
+
+  return NextResponse.json({
+    success: result.success,
+    error: result.error ?? null,
+    printer: printerAddress,
+  });
+}
+
+async function generateTestImage(): Promise<string> {
+  // Uses the canvas package already in the project if available,
+  // otherwise falls back to a hardcoded minimal JPEG Base64.
+  try {
+    const { createCanvas } = await import('canvas');
+    const canvas = createCanvas(640, 384);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 640, 384);
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('MOS Tools Test Print', 320, 180);
+    ctx.font = '32px sans-serif';
+    ctx.fillText(new Date().toISOString(), 320, 240);
+    return canvas.toDataURL('image/jpeg');
+  } catch {
+    // Fallback: return a hardcoded 1x1 white JPEG Base64
+    return 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARC AABAAEDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABgUEA/8QAIxAAAQMEAgMBAAAAAAAAAAAAAQIDBAAFEiExBhNBUf/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwdR1exfiring+lGNWtNPqocUlIcWCCEjuQPPbvUoooA//2Q==';
+  }
+}
+
+File Summary
+Two new files, zero modifications to existing code:
+lib/zink-print.ts                    ← Core print module
+app/api/print/zink/route.ts          ← Production print endpoint
+app/api/print/zink/test/route.ts     ← Test endpoint
+
+How To Test
+Once built, verify in this order:
+Step 1 — Test endpoint with printer on same network:
+GET /api/print/zink/test?printer=zink.local
+Expected response: { "success": true, "printer": "zink.local" } and a test page prints.
+Step 2 — Test with static IP if mDNS fails:
+GET /api/print/zink/test?printer=10.15.130.25
+Use the IP shown on the printer's test print page (magic keys R,R,R,C).
+Step 3 — Full sticker print:
+Call /api/extension/sticker to get a real Base64 sticker image, then POST that to /api/print/zink with the result. Confirm a real sticker prints correctly at the right size.
+
+Success Criteria
+Milestone 1 is complete when:
+
+GET /api/print/zink/test returns success: true and the printer produces output
+POST /api/print/zink with a real sticker Base64 from the existing generation module prints a correctly sized, correctly cut sticker
+No existing print flows are broken — all window.print() paths work exactly as before
+Errors (printer offline, mDNS timeout, bad image data) return structured JSON with a meaningful error message, not unhandled exceptions
+
+
+What This Does Not Include
+Intentionally out of scope for Milestone 1 — covered in Milestones 2 and 3:
+
+Per-shop printer config storage in the database
+Admin UI for printer management
+WebSocket print bridge agent
+Print job queue or retry logic
+Paper level monitoring
+Multi-printer routing
+Key tag printer routing (same module, separate config — Milestone 2)
+
+
+That's the full Milestone 1 spec. Hand it to Replit as-is. When it comes back working, Milestone 2 is the database config layer and Milestone 3 is the agent. Want me to write those now or wait until Milestone 1 proves out?
