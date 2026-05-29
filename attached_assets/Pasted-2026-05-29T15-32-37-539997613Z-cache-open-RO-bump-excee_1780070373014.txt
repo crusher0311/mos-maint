@@ -1,0 +1,50 @@
+2026-05-29T15:32:37.539997613Z   ✓ cache: open-RO bump exceeds MILEAGE_TOLERANCE -> cache miss enforced
+2026-05-29T15:32:37.540492464Z   ✓ brake-fluid time-only: miles axis is suppressed (status null)
+2026-05-29T15:32:37.540518935Z   ✓ brake-fluid time-only: no 'mi over' headline emitted
+2026-05-29T15:32:37.540556686Z   ✓ brake-fluid time-only: time axis still reports (interval lapsed)
+2026-05-29T15:32:37.540597976Z   ✓ brake-fluid time-only: overall headline anchored to time axis
+2026-05-29T15:32:37.55844647Z   ✓ non-zero dueAtMiles still computes 'mi over'
+2026-05-29T15:32:37.558474411Z 
+2026-05-29T15:32:37.558483941Z All task #476 checks passed
+2026-05-29T15:32:37.704172467Z 
+2026-05-29T15:32:37.704184678Z > mos-maintenance-mvp@1.8.0 test:plan-build-triage-time-only
+2026-05-29T15:32:37.704187818Z > tsx tests/plan-build-triage-time-only.smoke.ts
+2026-05-29T15:32:37.704190058Z 
+2026-05-29T15:32:38.267442012Z Plan-build triage time-only OEM rule smoke checks
+2026-05-29T15:32:38.285495811Z   ✓ brake-fluid row present in some bucket
+2026-05-29T15:32:38.285532131Z   ✓ time-only OEM: dueAtMiles is null (no miles axis)
+2026-05-29T15:32:38.285549462Z   ✓ time-only OEM: milesToGo is null
+2026-05-29T15:32:38.285551802Z   ✓ time-only OEM: dueAtDate is populated
+2026-05-29T15:32:38.285553782Z   ✓ time-only OEM: last.miles preserved as anchor for display
+2026-05-29T15:32:38.285559182Z 
+2026-05-29T15:32:38.285561752Z All task #476 triage checks passed
+2026-05-29T15:32:38.434881078Z 
+2026-05-29T15:32:38.434898349Z > mos-maintenance-mvp@1.8.0 test:smoke
+2026-05-29T15:32:38.434902539Z > npm run lint:lockfile && npm run test:queue-feature-flag && npm run lint:direct-db && npm run lint:no-migrate-tab && npm run test:sms-historical-work-orders-schema && npm run test:tekmig-api-auth && npm run test:extension-telemetry && npm run test:extension-guard && npm run test:extension-auth-no-plaintext && npm run test:extension-manifest-version-bump && npm run test:vhi-realtime-broadcast && npm run test:oe-logo && npm run test:middleware-static-asset-bypass && npm run test:unit-format && npm run test:shop-distance-unit && npm run test:extension-specs-units && npm run test:sticker-defaults && npm run test:protractor-canned-jobs-filter && npm run test:fuel-type-label && npm run test:backfill-chunk-speed-health && npm run test:chunk-speed-email-html && npm run test:backfill-chunk-speed-health:route && npm run test:tekmetric-backfill-health:route && npm run test:tekmetric-webhook-health:route && npm run test:tekmetric-endpoint-health:route && npm run test:tekmetric-endpoint-health && npm run test:tekmetric-catchup && npm run test:tekmetric-shared-rate-limiter && npm run test:vhr-engine-risk && npm run test:engine-risk-csv && npm run test:enhance-corrections-mos-shop-id && npm run test:concern-conversations-mos-shop-id && npm run test:hovercode-drift && npm run test:hovercode-create-payload && npm run test:vhi-score-snapshot && npm run test:vhi-rebuild-snapshot && npm run test:tekmetric-webhook-signature && npm run test:stripe-webhook-signature && npm run test:extension-shop-lookup && npm run test:stripe-webhook-idempotency && npm run test:tekmetric-webhook-idempotency && npm run test:jobs-search-canonical && npm run test:jobs-search-shape && npm run test:job-scoring-aces-tiers && npm run test:job-index-aces-coverage && npm run test:synthetic-prod-smoke && npm run test:synthetic-browser-smoke
+2026-05-29T15:32:38.434907279Z 
+2026-05-29T15:32:38.555531892Z 
+2026-05-29T15:32:38.555555162Z > mos-maintenance-mvp@1.8.0 lint:lockfile
+2026-05-29T15:32:38.555558572Z > node scripts/check-lockfile-sync.cjs
+2026-05-29T15:32:38.555561392Z 
+2026-05-29T15:32:39.968984556Z [lockfile-sync] OK — package.json and package-lock.json are in sync.
+2026-05-29T15:32:40.095189932Z 
+2026-05-29T15:32:40.095213103Z > mos-maintenance-mvp@1.8.0 test:queue-feature-flag
+2026-05-29T15:32:40.095230473Z > tsx tests/queue-feature-flag.smoke.ts
+2026-05-29T15:32:40.095233283Z 
+2026-05-29T15:32:40.452612373Z queue-feature-flag.smoke.ts: OK
+2026-05-29T15:32:40.593281619Z 
+2026-05-29T15:32:40.593299179Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-05-29T15:32:40.593302549Z > node scripts/check-direct-db.cjs
+2026-05-29T15:32:40.593305139Z 
+2026-05-29T15:32:41.409905398Z 
+2026-05-29T15:32:41.409930498Z [check-direct-db] 3 file(s) call getDb()/getMongoClient() directly without being on the allowlist:
+2026-05-29T15:32:41.409933958Z 
+2026-05-29T15:32:41.410258165Z   - app/admin/extension-telemetry/page.tsx
+2026-05-29T15:32:41.410266236Z   - app/api/extension/telemetry/route.ts
+2026-05-29T15:32:41.410276456Z   - lib/integrations/protractor/work-order-service.ts
+2026-05-29T15:32:41.410279056Z 
+2026-05-29T15:32:41.410282446Z Add a function in lib/data/repositories/<entity>.ts and call it from these files instead.
+2026-05-29T15:32:41.410285026Z See docs/data-access.md for details.
+2026-05-29T15:32:41.410287386Z 
+2026-05-29T15:32:41.475283621Z ==> Build failed 😞
+2026-05-29T15:32:41.475297681Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

@@ -91,6 +91,13 @@ const ALLOWLIST = new Set([
   "lib/synthetic/runner.ts",
   "app/api/admin/synthetic-prod-smoke/route.ts",
   "app/admin/synthetic-prod-smoke/page.tsx",
+  // Task #511 — extension client-side telemetry. The route ingests and the
+  // admin page reads privacy-safe operational events (collection
+  // `extension_telemetry`). Like the synthetic-smoke collections above, this
+  // is operational telemetry, not entity data — it has no place in
+  // `lib/data/repositories/`. Same precedent as the alerter/health crons.
+  "app/api/extension/telemetry/route.ts",
+  "app/admin/extension-telemetry/page.tsx",
   "app/api/cron/data-quality/route.ts",
   "app/api/cron/invoice-cache-refresh/route.ts",
   "app/api/cron/protractor-af-log-tail/route.ts",
@@ -357,6 +364,7 @@ const ALLOWLIST = new Set([
   "lib/integrations/protractor/client.ts",
   "lib/integrations/protractor/jobs-prewarm.ts",
   "lib/integrations/protractor/sync.ts",
+  "lib/integrations/protractor/work-order-service.ts",
   "lib/integrations/shopware/adapter.ts",
   "lib/integrations/tekmetric/auth.ts",
   "lib/integrations/tekmetric/incremental-sync.ts",
