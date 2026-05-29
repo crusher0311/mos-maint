@@ -137,6 +137,14 @@ async function ensureIndexes() {
       { collection: "normalized_vehicles", index: { shopId: 1 } },
       { collection: "normalized_vehicles", index: { vin: 1 } },
       { collection: "normalized_customers", index: { shopId: 1 } },
+
+      // print_jobs - ZINK cloud print queue (task #542). Agents claim the
+      // next pending job per shop (FIFO), so the hot path is
+      // (shopId, status, createdAt). Device routing keys on printerId.
+      { collection: "print_jobs", index: { shopId: 1, status: 1, createdAt: 1 } },
+      { collection: "print_jobs", index: { shopId: 1, printerId: 1, status: 1 } },
+      // print_printer_configs - one config row per (shopId, printerId).
+      { collection: "print_printer_configs", index: { shopId: 1, printerId: 1 }, options: { unique: true } },
     ];
 
     for (const { collection, index, options } of indexes) {
