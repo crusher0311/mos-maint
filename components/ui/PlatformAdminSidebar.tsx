@@ -37,6 +37,7 @@ import {
   HeartPulse,
   ScrollText,
   CreditCard,
+  Printer,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -201,6 +202,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/billing" icon={CreditCard} label="Billing" />
           <NavLink href="/platform-admin/client-health" icon={HeartPulse} label="Client Health" />
           <NavLink href="/platform-admin/sync-health" icon={Activity} label="Sync Health" />
+          <NavLink href="/platform-admin/zink-print" icon={Printer} label="ZINK Print" />
           <NavLink href="/platform-admin/tekmetric-webhook-health" icon={Activity} label="Tek Webhook Health" />
           <NavLink href="/platform-admin/concern-skip-stats" icon={MessageCircle} label="Concern Skip Stats" />
           <NavLink href="/platform-admin/tekmetric-migrations" icon={ArrowRightLeft} label="Tek Migrations" />

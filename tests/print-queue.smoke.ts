@@ -124,6 +124,13 @@ class FakeCollection {
     applyUpdate(target, update);
     return { matchedCount: 1, modifiedCount: 1 };
   }
+
+  async deleteOne(filter: any) {
+    const idx = this.docs.findIndex((x) => matchFilter(x, filter));
+    if (idx < 0) return { deletedCount: 0 };
+    this.docs.splice(idx, 1);
+    return { deletedCount: 1 };
+  }
 }
 
 class FakeDb {
@@ -222,6 +229,44 @@ async function run() {
   ok("resolveJobOptions: default fills the rest", opts.speed === 1 && opts.width === 640);
   const optsNoCfg = repo.resolveJobOptions(null);
   ok("resolveJobOptions: hardware defaults with no config", optsNoCfg.cut === 1 && optsNoCfg.speed === 0 && optsNoCfg.width === 640);
+
+  // --- admin: re-queue a failed job (Milestone 3) ---
+  const reqJob = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "RRRR" });
+  await repo.claimNextJob(SHOP_A); // -> in-flight
+  await repo.ackJob(SHOP_A, reqJob, "failure", { error: "offline" });
+  const reqDoc = jobsCol.docs.find((d) => String(d._id) === reqJob);
+  ok("job is failed before requeue", reqDoc.status === "failed");
+  const requeued = await repo.requeueJob(SHOP_A, reqJob);
+  ok("requeue returns requeued", requeued === "requeued");
+  ok("requeue resets to pending + clears error/attempts", reqDoc.status === "pending" && reqDoc.error === null && reqDoc.attempts === 0);
+  ok("requeue clears terminal timestamps", reqDoc.failedAt === null && reqDoc.completedAt === null && reqDoc.claimedAt === null);
+  ok("requeued job is re-claimable", (await repo.claimNextJob(SHOP_A))?.id === reqJob);
+
+  // --- admin: cross-shop isolation on requeue/clear ---
+  ok("shop B cannot requeue shop A's job", (await repo.requeueJob(SHOP_B, reqJob)) === "not_found");
+  ok("requeue of malformed id -> not_found", (await repo.requeueJob(SHOP_A, "nope")) === "not_found");
+
+  // --- admin: clear a job (Milestone 3) ---
+  const clrJob = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "CCCC" });
+  ok("shop B cannot clear shop A's job", (await repo.clearJob(SHOP_B, clrJob)) === "not_found");
+  const cleared = await repo.clearJob(SHOP_A, clrJob);
+  ok("clear returns cleared", cleared === "cleared");
+  ok("cleared job is gone", !jobsCol.docs.some((d) => String(d._id) === clrJob));
+  ok("clear of unknown id -> not_found", (await repo.clearJob(SHOP_A, String(new ObjectId()))) === "not_found");
+
+  // --- agent heartbeat recording (Milestone 3) ---
+  const hbCol = db.collection(repo.__collections.HEARTBEAT_COLLECTION);
+  await repo.recordAgentPoll(SHOP_A, null, "1.2.3");
+  ok("heartbeat upserts a row", hbCol.docs.length === 1);
+  ok("null printerId collapses to default bucket", hbCol.docs[0].printerId === "default");
+  ok("heartbeat records lastPollAt + version", !!hbCol.docs[0].lastPollAt && hbCol.docs[0].agentVersion === "1.2.3");
+  const firstPoll = hbCol.docs[0].lastPollAt;
+  await new Promise((r) => setTimeout(r, 5));
+  await repo.recordAgentPoll(SHOP_A, null);
+  ok("re-poll updates same row (no duplicate)", hbCol.docs.length === 1);
+  ok("re-poll advances lastPollAt", hbCol.docs[0].lastPollAt > firstPoll);
+  await repo.recordAgentPoll(SHOP_A, "front-counter");
+  ok("distinct printerId gets its own heartbeat row", hbCol.docs.length === 2);
 
   // --- no printer socket opened server-side (static guard) ---
   const SRC_DIR = path.resolve(__dirname, "..", "lib", "print-queue");

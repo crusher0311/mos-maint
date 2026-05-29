@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, Printer } from "lucide-react";
+import { X, Loader2, Printer, Wifi, Check, AlertCircle } from "lucide-react";
 import {
   DEFAULT_INTERVALS,
   getVisibleOilTypes,
@@ -34,12 +34,33 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
   const [roundMileage, setRoundMileage] = useState(true);
   const [intervals, setIntervals] = useState<IntervalsConfig>(DEFAULT_INTERVALS);
   const [error, setError] = useState<string | null>(null);
+  // ZINK "send to shop printer" — only offered once a printer is configured.
+  const [zinkConfigured, setZinkConfigured] = useState(false);
+  const [zinkOnline, setZinkOnline] = useState(false);
+  const [zinkStatus, setZinkStatus] = useState<"idle" | "queuing" | "queued" | "error">("idle");
 
   useEffect(() => {
     if (isOpen) {
       fetchSettings();
+      checkZink();
+      setZinkStatus("idle");
     }
   }, [isOpen]);
+
+  async function checkZink() {
+    try {
+      const res = await fetch("/api/print/enqueue");
+      if (!res.ok) {
+        setZinkConfigured(false);
+        return;
+      }
+      const data = await res.json();
+      setZinkConfigured(Boolean(data?.configured));
+      setZinkOnline(Boolean(data?.agentOnline));
+    } catch {
+      setZinkConfigured(false);
+    }
+  }
 
   async function fetchSettings() {
     setLoading(true);
@@ -343,6 +364,59 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
     }
   }
 
+  // Send the rendered sticker to the shop's local ZINK printer via the
+  // cloud print queue. Reuses the existing PNG generation, then hands the
+  // image to the session-authed enqueue front door — the shop agent prints
+  // it locally. No popup / browser print dialog involved.
+  async function handleQueueToPrinter() {
+    if (!currentMileage || parseInt(currentMileage.replace(/,/g, ""), 10) <= 0) {
+      setError("Please enter a valid current reading");
+      return;
+    }
+    setError(null);
+    setZinkStatus("queuing");
+    try {
+      const { nextServiceMileage, nextServiceDate } = calculateServiceValues();
+      const res = await fetch("/api/sticker/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          size: stickerSize,
+          currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
+          nextServiceMileage,
+          nextServiceDate,
+          includeQR: true,
+          useKilometers: unit === "km",
+          useHours: unit === "hrs",
+          format: "png",
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to generate sticker");
+      const blob = await res.blob();
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read sticker image"));
+        reader.readAsDataURL(blob);
+      });
+
+      const enqueueRes = await fetch("/api/print/enqueue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl, type: "sticker" }),
+      });
+      if (!enqueueRes.ok) {
+        const j = await enqueueRes.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to queue print");
+      }
+      setZinkStatus("queued");
+    } catch (err: any) {
+      console.error("Failed to queue sticker to printer:", err);
+      setZinkStatus("error");
+      setError(err?.message || "Failed to queue print. Please try again.");
+    }
+  }
+
   function formatMileageInput(value: string): string {
     const numericValue = value.replace(/[^\d]/g, "");
     if (!numericValue) return "";
@@ -493,7 +567,41 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
           )}
         </div>
 
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t bg-gray-50 flex flex-wrap justify-end items-center gap-3">
+          {zinkConfigured && (
+            <button
+              onClick={handleQueueToPrinter}
+              disabled={zinkStatus === "queuing" || loading || !currentMileage}
+              title={
+                zinkOnline
+                  ? "Send to your shop's ZINK printer"
+                  : "Queue for your shop's ZINK printer (agent currently offline — it will print when back online)"
+              }
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {zinkStatus === "queuing" ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : zinkStatus === "queued" ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Queued
+                </>
+              ) : zinkStatus === "error" ? (
+                <>
+                  <AlertCircle className="w-4 h-4" />
+                  Retry Send
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-4 h-4" />
+                  Send to Shop Printer
+                </>
+              )}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium"

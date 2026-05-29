@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import { claimNextJob } from "@/lib/print-queue/repository";
+import { claimNextJob, recordAgentPoll } from "@/lib/print-queue/repository";
 import type { PollJobsResponse } from "@/lib/print-queue/types";
 
 export const runtime = "nodejs";
@@ -24,6 +24,16 @@ export const GET = createExternalEndpoint(
   "print:agent",
   async (req: NextRequest, { shopId }) => {
     const printerId = req.nextUrl.searchParams.get("printerId");
+
+    // Best-effort heartbeat so the platform-admin dashboard (Milestone 3)
+    // can show "agent online / last seen". Never block a poll on it.
+    try {
+      const agentVersion =
+        req.headers.get("x-agent-version") || req.nextUrl.searchParams.get("agentVersion");
+      await recordAgentPoll(shopId, printerId, agentVersion);
+    } catch (err: any) {
+      console.warn("[Print Agent] heartbeat record failed:", err?.message);
+    }
 
     const job = await claimNextJob(shopId, printerId);
     const body: PollJobsResponse = { jobs: job ? [job] : [] };

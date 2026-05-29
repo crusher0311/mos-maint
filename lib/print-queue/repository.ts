@@ -13,8 +13,11 @@ import type { Collection, Document } from "mongodb";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import {
+  AGENT_ONLINE_THRESHOLD_MS,
+  DEFAULT_PRINTER_ID,
   PRINTER_DEFAULTS,
   STALE_INFLIGHT_MS,
+  type AgentHeartbeatDoc,
   type AgentPrintJob,
   type JobOutcome,
   type PrintJobDoc,
@@ -24,6 +27,7 @@ import {
 
 const JOBS_COLLECTION = "print_jobs";
 const CONFIG_COLLECTION = "print_printer_configs";
+const HEARTBEAT_COLLECTION = "print_agent_heartbeats";
 
 /**
  * Test seam — the smoke suite swaps in an in-memory fake DB without
@@ -279,8 +283,250 @@ export function resolveJobOptions(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Agent heartbeats (Milestone 3) — observability only, never gates claiming.
+// ---------------------------------------------------------------------------
+
+async function heartbeatCol(): Promise<Collection<Document>> {
+  const db = await __deps.getDb();
+  return db.collection<Document>(HEARTBEAT_COLLECTION);
+}
+
+/**
+ * Record that a shop's agent polled. Best-effort observability used by the
+ * platform-admin dashboard to show "agent online / last seen". One row per
+ * (shopId, printerId); a null/empty printerId collapses to
+ * `DEFAULT_PRINTER_ID`.
+ */
+export async function recordAgentPoll(
+  shopId: number,
+  printerId?: string | null,
+  agentVersion?: string | null,
+): Promise<void> {
+  const pid = printerId && printerId.trim() !== "" ? printerId.trim() : DEFAULT_PRINTER_ID;
+  const now = new Date();
+  const set: Document = { shopId, printerId: pid, lastPollAt: now };
+  if (agentVersion && agentVersion.trim() !== "") set.agentVersion = agentVersion.trim();
+  const col = await heartbeatCol();
+  await col.updateOne({ shopId, printerId: pid }, { $set: set }, { upsert: true });
+}
+
+// ---------------------------------------------------------------------------
+// Admin controls (Milestone 3) — every op is shopId-scoped so a foreign id
+// can never be mutated cross-shop.
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-queue a job: reset any non-pending job back to pending so the next
+ * polling agent re-claims it. Used by an admin to retry a failed or stuck
+ * print. Clears the prior terminal/claim timestamps and error.
+ */
+export async function requeueJob(
+  shopId: number,
+  jobId: string,
+): Promise<"requeued" | "not_found"> {
+  let oid: ObjectId;
+  try {
+    oid = new ObjectId(jobId);
+  } catch {
+    return "not_found";
+  }
+  const now = new Date();
+  const col = await jobsCol();
+  const res = await col.updateOne(
+    { _id: oid, shopId },
+    {
+      $set: {
+        status: "pending",
+        updatedAt: now,
+        claimedAt: null,
+        completedAt: null,
+        failedAt: null,
+        error: null,
+        attempts: 0,
+      },
+    },
+  );
+  return res.matchedCount > 0 ? "requeued" : "not_found";
+}
+
+/** Permanently remove a job from the queue (admin clear of clutter/stuck). */
+export async function clearJob(
+  shopId: number,
+  jobId: string,
+): Promise<"cleared" | "not_found"> {
+  let oid: ObjectId;
+  try {
+    oid = new ObjectId(jobId);
+  } catch {
+    return "not_found";
+  }
+  const col = await jobsCol();
+  const res = await col.deleteOne({ _id: oid, shopId });
+  return res.deletedCount && res.deletedCount > 0 ? "cleared" : "not_found";
+}
+
+export interface FleetAgentRow {
+  printerId: string;
+  lastPollAt: Date;
+  agentVersion: string | null;
+  online: boolean;
+}
+
+export interface FleetJobRow {
+  id: string;
+  status: PrintJobDoc["status"];
+  kind: PrintJobDoc["kind"] | null;
+  printerId: string | null;
+  attempts: number;
+  error: string | null;
+  durationMs: number | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+  meta: Record<string, unknown> | null;
+}
+
+export interface FleetShopRow {
+  shopId: number;
+  shopName: string | null;
+  configs: PrinterConfigDoc[];
+  agents: FleetAgentRow[];
+  counts: { pending: number; inFlight: number; done: number; failed: number; total: number };
+  recentJobs: FleetJobRow[];
+}
+
+/**
+ * Build the platform-admin fleet overview: every shop that has any ZINK
+ * print footprint (a configured printer, an agent heartbeat, or queued
+ * jobs), with its printer config(s), agent online status, job status
+ * counts, and a recent-job sample. The image payload is projected OUT — the
+ * admin UI never needs (and should never ship) the base64 blob.
+ */
+export async function getFleetPrintOverview(
+  opts?: { recentLimit?: number },
+): Promise<FleetShopRow[]> {
+  const recentLimit = Math.max(1, Math.min(opts?.recentLimit ?? 15, 50));
+  const db = await __deps.getDb();
+  const jobs = db.collection<Document>(JOBS_COLLECTION);
+  const configs = db.collection<Document>(CONFIG_COLLECTION);
+  const heartbeats = db.collection<Document>(HEARTBEAT_COLLECTION);
+
+  const [allConfigs, allHeartbeats, countAgg] = await Promise.all([
+    configs.find({}).toArray() as Promise<PrinterConfigDoc[]>,
+    heartbeats.find({}).toArray() as Promise<AgentHeartbeatDoc[]>,
+    jobs
+      .aggregate([
+        { $group: { _id: { shopId: "$shopId", status: "$status" }, count: { $sum: 1 } } },
+      ])
+      .toArray(),
+  ]);
+
+  const shopIds = new Set<number>();
+  for (const c of allConfigs) if (typeof c.shopId === "number") shopIds.add(c.shopId);
+  for (const h of allHeartbeats) if (typeof h.shopId === "number") shopIds.add(h.shopId);
+  for (const r of countAgg as any[]) {
+    if (typeof r?._id?.shopId === "number") shopIds.add(r._id.shopId);
+  }
+
+  const ids = [...shopIds];
+  if (ids.length === 0) return [];
+
+  const shopDocs = (await db
+    .collection("shops")
+    .find({ shopId: { $in: ids } }, { projection: { shopId: 1, name: 1, shopName: 1 } })
+    .toArray()) as any[];
+  const nameById = new Map<number, string | null>();
+  for (const s of shopDocs) {
+    nameById.set(s.shopId, s.name ?? s.shopName ?? null);
+  }
+
+  // Per-shop counts from the aggregate.
+  const countsByShop = new Map<number, FleetShopRow["counts"]>();
+  for (const r of countAgg as any[]) {
+    const sid = r._id.shopId as number;
+    const status = r._id.status as PrintJobDoc["status"];
+    const cur =
+      countsByShop.get(sid) ?? { pending: 0, inFlight: 0, done: 0, failed: 0, total: 0 };
+    if (status === "pending") cur.pending += r.count;
+    else if (status === "in-flight") cur.inFlight += r.count;
+    else if (status === "done") cur.done += r.count;
+    else if (status === "failed") cur.failed += r.count;
+    cur.total += r.count;
+    countsByShop.set(sid, cur);
+  }
+
+  const now = Date.now();
+  const heartbeatsByShop = new Map<number, FleetAgentRow[]>();
+  for (const h of allHeartbeats) {
+    const arr = heartbeatsByShop.get(h.shopId) ?? [];
+    arr.push({
+      printerId: h.printerId,
+      lastPollAt: h.lastPollAt,
+      agentVersion: h.agentVersion ?? null,
+      online: h.lastPollAt
+        ? now - new Date(h.lastPollAt).getTime() < AGENT_ONLINE_THRESHOLD_MS
+        : false,
+    });
+    heartbeatsByShop.set(h.shopId, arr);
+  }
+
+  const configsByShop = new Map<number, PrinterConfigDoc[]>();
+  for (const c of allConfigs) {
+    const arr = configsByShop.get(c.shopId) ?? [];
+    arr.push(c);
+    configsByShop.set(c.shopId, arr);
+  }
+
+  const rows: FleetShopRow[] = await Promise.all(
+    ids.map(async (sid) => {
+      const recent = (await jobs
+        .find({ shopId: sid }, { projection: { imageBase64: 0 } })
+        .sort({ createdAt: -1 })
+        .limit(recentLimit)
+        .toArray()) as PrintJobDoc[];
+      const recentJobs: FleetJobRow[] = recent.map((j) => ({
+        id: String(j._id),
+        status: j.status,
+        kind: j.kind ?? null,
+        printerId: j.printerId ?? null,
+        attempts: j.attempts ?? 0,
+        error: j.error ?? null,
+        durationMs: j.durationMs ?? null,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt ?? null,
+        meta: (j.meta as Record<string, unknown>) ?? null,
+      }));
+      return {
+        shopId: sid,
+        shopName: nameById.get(sid) ?? null,
+        configs: configsByShop.get(sid) ?? [],
+        agents: heartbeatsByShop.get(sid) ?? [],
+        counts:
+          countsByShop.get(sid) ?? {
+            pending: 0,
+            inFlight: 0,
+            done: 0,
+            failed: 0,
+            total: 0,
+          },
+        recentJobs,
+      };
+    }),
+  );
+
+  // Surface shops needing attention first: most failed, then most pending.
+  rows.sort((a, b) => {
+    if (b.counts.failed !== a.counts.failed) return b.counts.failed - a.counts.failed;
+    if (b.counts.pending !== a.counts.pending) return b.counts.pending - a.counts.pending;
+    return a.shopId - b.shopId;
+  });
+
+  return rows;
+}
+
 /** Test seam — exposes collection names so smoke tests can assert scoping. */
 export const __collections = {
   JOBS_COLLECTION,
   CONFIG_COLLECTION,
+  HEARTBEAT_COLLECTION,
 };

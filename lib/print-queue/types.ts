@@ -145,3 +145,30 @@ export const PRINTER_DEFAULTS = {
  * visibility-timeout idea — a crashed agent self-heals on the next poll.
  */
 export const STALE_INFLIGHT_MS = 5 * 60 * 1000;
+
+/**
+ * Per-agent poll heartbeat (task #543, Milestone 3). Every time a shop
+ * agent polls `/api/print-agent/jobs` the cloud records the moment so the
+ * platform-admin dashboard can show "agent online / last seen". One row
+ * per (shopId, printerId) — agents polling without a printerId collapse to
+ * the `DEFAULT_PRINTER_ID` bucket. This is observability only; it never
+ * gates job claiming.
+ */
+export interface AgentHeartbeatDoc {
+  _id?: ObjectId;
+  shopId: number;
+  /** Normalized device id — `DEFAULT_PRINTER_ID` when the agent polls untagged. */
+  printerId: string;
+  lastPollAt: Date;
+  agentVersion?: string | null;
+}
+
+/** Bucket a null/empty printerId collapses to for config + heartbeat rows. */
+export const DEFAULT_PRINTER_ID = "default";
+
+/**
+ * An agent is considered "online" if its last poll landed within this
+ * window. Agents poll on a short interval (seconds), so a 2-minute window
+ * tolerates a few missed ticks before flagging it offline in the admin UI.
+ */
+export const AGENT_ONLINE_THRESHOLD_MS = 2 * 60 * 1000;

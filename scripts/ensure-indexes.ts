@@ -145,6 +145,9 @@ async function ensureIndexes() {
       { collection: "print_jobs", index: { shopId: 1, printerId: 1, status: 1 } },
       // print_printer_configs - one config row per (shopId, printerId).
       { collection: "print_printer_configs", index: { shopId: 1, printerId: 1 }, options: { unique: true } },
+      // print_agent_heartbeats - one row per (shopId, printerId); the admin
+      // dashboard (task #543) reads "last seen" to derive online/offline.
+      { collection: "print_agent_heartbeats", index: { shopId: 1, printerId: 1 }, options: { unique: true } },
     ];
 
     for (const { collection, index, options } of indexes) {
