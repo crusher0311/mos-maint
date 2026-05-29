@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.18 — 2026-05-29
+
+### Maintenance
+- **Version bump to guarantee the Chrome Web Store build matches HEAD.**
+  No functional code changes — the working tree was identical to the
+  already-live 1.27.17 build. Brandon asked to bump and republish "just
+  to be sure all new items are deployed," so this ships the current
+  committed extension under a fresh version number (Google rejects
+  re-uploading an identical version). Published to Google at Brandon's
+  explicit "publish it" instruction.
+
 ## 1.27.17 — 2026-05-28
 
 ### Fixed
