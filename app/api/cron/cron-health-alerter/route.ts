@@ -3,9 +3,20 @@ import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import path from "path";
-import { estimateScheduleInterval } from "@/lib/cron/schedule-interval";
+import { decideJobStale } from "@/lib/cron/staleness";
 
-type CronJobDef = { name: string; schedule: string; path: string };
+type CronJobDef = {
+  name: string;
+  schedule: string;
+  path: string;
+  // Optional per-job overrides declared in lib/cron/jobs.cjs.
+  // `stalenessMs`: explicit staleness threshold (else 2× the schedule interval).
+  // `tolerateTimeouts`: for self-throttling long-running jobs, a *recent
+  //   timeout attempt* counts as a liveness heartbeat so the job isn't flagged
+  //   stuck merely for never returning a clean 200 while it drains a backlog.
+  stalenessMs?: number;
+  tolerateTimeouts?: boolean;
+};
 let cachedJobs: CronJobDef[] | null = null;
 function loadCronJobs(): CronJobDef[] {
   if (cachedJobs) return cachedJobs;
@@ -81,6 +92,31 @@ export async function GET(req: NextRequest) {
     if (!isNaN(d.getTime())) lastSuccessByJob.set(name, d);
   }
 
+  // Latest *attempt* (regardless of outcome) from `cron_status.lastRuns`,
+  // written by `lib/cron/scheduler.cjs#recordRun`. Used by the
+  // `tolerateTimeouts` heartbeat below: a long, self-throttling backfill that
+  // times out every pass while draining a backlog is still alive — only a
+  // wedged scheduler (no recent attempt) or a real handler error (non-timeout
+  // failure) should page for such a job.
+  const lastRunsMap = ((statusDoc as any)?.lastRuns || {}) as Record<
+    string,
+    { dt?: Date | string; ok?: boolean; status?: number; error?: string }
+  >;
+  const lastAttemptByJob = new Map<
+    string,
+    { atMs: number; ok: boolean; timedOut: boolean }
+  >();
+  for (const [name, run] of Object.entries(lastRunsMap)) {
+    if (!run || typeof run !== "object") continue;
+    const dt = run.dt instanceof Date ? run.dt : new Date(run.dt ?? NaN);
+    if (isNaN(dt.getTime())) continue;
+    lastAttemptByJob.set(name, {
+      atMs: dt.getTime(),
+      ok: run.ok === true,
+      timedOut: run.error === "timeout",
+    });
+  }
+
   const stale: Array<{
     name: string;
     schedule: string;
@@ -90,23 +126,22 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   for (const job of cronJobs) {
-    const interval = estimateScheduleInterval(job.schedule);
-    if (!interval.intervalMs || interval.weekendOnly) continue;
-    const threshold = interval.intervalMs * 2;
     const last = lastSuccessByJob.get(job.name) ?? null;
-    const ageMs = last ? nowMs - last.getTime() : null;
-    const isStale = last
-      ? ageMs! > threshold
-      : sinceBootMs !== null && sinceBootMs > threshold;
-    if (isStale) {
-      stale.push({
-        name: job.name,
-        schedule: job.schedule,
-        intervalMs: interval.intervalMs,
-        lastSuccessAt: last,
-        ageMs,
-      });
-    }
+    const decision = decideJobStale({
+      job,
+      lastSuccessAtMs: last ? last.getTime() : null,
+      lastAttempt: lastAttemptByJob.get(job.name) ?? null,
+      sinceBootMs,
+      nowMs,
+    });
+    if (!decision.evaluated || !decision.stale) continue;
+    stale.push({
+      name: job.name,
+      schedule: job.schedule,
+      intervalMs: decision.intervalMs!,
+      lastSuccessAt: last,
+      ageMs: decision.ageMs,
+    });
   }
 
   // Auto-clear: any alert row whose underlying job has recovered (newer
