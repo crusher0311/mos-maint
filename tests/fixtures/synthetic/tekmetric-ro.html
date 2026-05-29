@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  Recorded Tekmetric repair-order page for the task #527 browser synthetic.
+
+  This is a deliberately minimal, sanitized snapshot of the parts of a
+  Tekmetric RO page that the Detect Dog content script (`tekmetric-content.js`)
+  reads in `detectContext()` and uses to find an injection container in
+  `injectPrefillButton()`:
+
+    - URL provides shopId + roId (the probe navigates to
+      https://shop.tekmetric.com/shop/<shopId>/repair-orders/<roId>).
+    - A printer icon button (SVG with <polyline> + <rect>) gives the
+      content script a `targetContainer` (it appends the MOS buttons next
+      to Tekmetric's print button).
+    - VIN + mileage + year/make/model text so detectContext() resolves a
+      complete context (the click handler bails early without them).
+
+  Keep this in sync with the selectors in `detectContext()` /
+  `injectPrefillButton()`. When Tekmetric changes its DOM, this fixture is
+  the place to re-record so the synthetic keeps mirroring production.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RO #4477: 2018 Toyota Camry LE</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; }
+      .ro-header { display: flex; align-items: center; gap: 12px; }
+      .action-bar { display: flex; align-items: center; gap: 8px; }
+      .icon-btn { width: 36px; height: 36px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; }
+      .meta { margin-top: 24px; line-height: 1.8; }
+    </style>
+  </head>
+  <body>
+    <div class="ro-header">
+      <h1>RO #4477: 2018 Toyota Camry LE</h1>
+      <div class="action-bar">
+        <!-- Tekmetric printer icon button — content script anchors next to this -->
+        <button class="icon-btn" title="Print" aria-label="Print" data-testid="print-ro">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor">
+            <polyline points="6 9 6 2 18 2 18 9" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <rect x="6" y="14" width="12" height="8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div data-testid="vehicle-info">2018 Toyota Camry LE</div>
+      <div data-testid="vehicle-vin">VIN: 4T1B11HK5JU123456</div>
+      <div data-testid="ro-mileage">Mileage: 62,500 mi</div>
+      <div data-testid="customer-name">Synthetic Sentinel</div>
+    </div>
+  </body>
+</html>

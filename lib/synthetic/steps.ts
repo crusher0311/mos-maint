@@ -50,7 +50,12 @@ export type StepName =
   | "tekmetric_open_ros"
   | "apply_canned_job"
   | "save_concern"
-  | "sticker_print";
+  | "sticker_print"
+  // Browser-driven steps (task #527) — exercised by the separate
+  // `runner: "browser"` synthetic that loads the Chrome extension against a
+  // recorded Tekmetric RO page. Kept in the same union so the runner's
+  // per-step state/marker plumbing is shared.
+  | "overlay_prefill_dvi";
 
 export type Vendor = "tekmetric" | "protractor" | "shopware";
 

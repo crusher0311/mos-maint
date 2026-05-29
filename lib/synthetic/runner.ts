@@ -10,10 +10,19 @@
  * real regression worth waking on-call for. Auto-clears (and emails a
  * recovery notice) when the step returns ok after a paged state.
  *
+ * Task #525 generalized the runner to run every step once per configured
+ * VENDOR (Tekmetric / Protractor / Shop-Ware), tagging each result + alert
+ * with `provider` so one vendor's regression pages independently.
+ *
+ * Task #527 added a `runner` discriminator: the default `"api"` runner is
+ * the multi-vendor HTTP smoke above, while the `"browser"` runner is the
+ * Chrome-extension overlay synthetic. The two never share consecutive-
+ * failure dedup state (state keys are namespaced by runner).
+ *
  * Collections:
  *   - `synthetic_runs` — one doc per run, TTL 14 days. Powers the admin
  *     status tile.
- *   - `synthetic_state` — one doc keyed `{ _id: stepName }` tracking
+ *   - `synthetic_state` — one doc keyed `{ _id: stepKey }` tracking
  *     consecutive failure count + last-alerted timestamp for state-based
  *     alert dedup. Mirrors the cron-health alerter pattern.
  */
@@ -68,6 +77,9 @@ export interface RunSummary {
   baseUrl: string;
   vendors: VendorRun[];
   alerts: Array<{ step: StepName; provider: Vendor; kind: "page" | "recover" }>;
+  // Distinguishes the API-level synthetic (task #512/#525, `"api"`) from the
+  // browser-driven overlay synthetic (task #527, `"browser"`).
+  runner: string;
   // Legacy single-sentinel compatibility fields (first vendor's values + a
   // flattened step list across every vendor).
   shopId: number | null;
@@ -80,7 +92,13 @@ export interface RunnerDeps {
   env?: SyntheticEnv;
   // Multi-vendor seam (task #525). Takes precedence over `env`.
   envs?: SyntheticEnv[];
-  steps?: typeof ALL_STEPS;
+  steps?: Array<(env: SyntheticEnv) => Promise<StepResult>>;
+  // Distinguishes the API-level synthetic (task #512/#525, default `"api"`)
+  // from the browser-driven overlay synthetic (task #527, `"browser"`).
+  // Persisted on every `synthetic_runs` doc and used to namespace
+  // `synthetic_state` keys so the two runners never share consecutive-failure
+  // dedup state.
+  runner?: string;
   // Test seam — when provided, skips Mongo + email.
   inMemory?: boolean;
   emit?: typeof emitShopErrorEvent;
@@ -92,12 +110,24 @@ export interface RunnerDeps {
   getDb?: () => Promise<Db>;
 }
 
+// State-key namespacing. Task #525 keys per (step × vendor):
+// `step:<name>:<vendor>`. Task #527 layers the runner in front for non-api
+// runners so the browser synthetic gets its own state docs without resetting
+// the existing api-runner dedup on deploy:
+//   - api:     `step:<name>:<vendor>`            (unchanged from task #525)
+//   - browser: `step:browser:<name>:<vendor>`
+function stateKey(runner: string, name: string, provider: Vendor): string {
+  return runner === "api"
+    ? `step:${name}:${provider}`
+    : `step:${runner}:${name}:${provider}`;
+}
+
 export async function runSyntheticSmoke(
   deps: RunnerDeps = {},
 ): Promise<RunSummary> {
-  const envs =
-    deps.envs ?? (deps.env ? [deps.env] : loadSyntheticEnvs());
+  const envs = deps.envs ?? (deps.env ? [deps.env] : loadSyntheticEnvs());
   const steps = deps.steps ?? ALL_STEPS;
+  const runner = deps.runner ?? "api";
   const emit = deps.emit ?? emitShopErrorEvent;
   const send = deps.send ?? sendEmail;
   const getAdmins = deps.getAdmins ?? getPlatformAdminEmails;
@@ -130,6 +160,7 @@ export async function runSyntheticSmoke(
     baseUrl: envs[0]?.baseUrl ?? "",
     vendors: vendorRuns,
     alerts: [],
+    runner,
     // Legacy single-sentinel compatibility fields.
     shopId: vendorRuns[0]?.shopId ?? null,
     vin: vendorRuns[0]?.vin ?? null,
@@ -151,6 +182,7 @@ export async function runSyntheticSmoke(
             latencyMs: r.latencyMs,
             vin: v.vin || null,
             provider: v.provider,
+            runner,
           },
         });
       }
@@ -180,6 +212,7 @@ export async function runSyntheticSmoke(
       ok: summary.ok,
       durationMs: summary.durationMs,
       baseUrl: summary.baseUrl,
+      runner: summary.runner,
       // Per-vendor grouping (task #525) — powers the by-vendor status surface.
       vendors: summary.vendors.map((v) => ({
         provider: v.provider,
@@ -201,14 +234,13 @@ export async function runSyntheticSmoke(
   }
 
   // State-based consecutive-failure tracking + paging, keyed per
-  // (step × vendor) so a Protractor regression pages independently of a
-  // healthy Tekmetric run of the same step.
-  const admins = ok
-    ? []
-    : await getAdmins().catch(() => [] as string[]);
+  // (runner × step × vendor) so a Protractor regression pages independently
+  // of a healthy Tekmetric run of the same step, and the browser runner
+  // never collides with the api runner's dedup.
+  const admins = ok ? [] : await getAdmins().catch(() => [] as string[]);
   for (const v of vendorRuns) {
     for (const r of v.steps) {
-      const stateId = `step:${r.name}:${v.provider}`;
+      const stateId = stateKey(runner, r.name, v.provider);
       const prior = (await db
         .collection(STATE_COLLECTION)
         .findOne({ _id: stateId as any })) as any;
@@ -225,6 +257,7 @@ export async function runSyntheticSmoke(
             $set: {
               stepName: r.name,
               provider: v.provider,
+              runner,
               consecutiveFailures: consecutive,
               lastFailureAt: summary.ts,
               lastError: r.error || null,
@@ -245,6 +278,7 @@ export async function runSyntheticSmoke(
             shopId: v.shopId,
             vin: v.vin,
             provider: v.provider,
+            runner,
           });
         }
       } else if (priorConsecutive > 0 || priorAlerted) {
@@ -254,6 +288,7 @@ export async function runSyntheticSmoke(
             $set: {
               stepName: r.name,
               provider: v.provider,
+              runner,
               consecutiveFailures: 0,
               lastRecoveredAt: summary.ts,
             },
@@ -284,6 +319,7 @@ interface PageContext {
   shopId: number | null;
   vin: string | null;
   provider: Vendor;
+  runner: string;
 }
 
 async function sendPage(
@@ -293,10 +329,19 @@ async function sendPage(
   ctx: PageContext,
 ) {
   if (!to.length) return;
-  const rerun = `curl -H "Authorization: Bearer $CRON_SECRET" ${ctx.baseUrl}/api/cron/synthetic-prod-smoke`;
+  // The browser synthetic (task #527) is a distinct cron route from the
+  // API one (task #512/#525); point the re-run command at the right endpoint.
+  const cronPath =
+    ctx.runner === "browser"
+      ? "/api/cron/synthetic-overlay-smoke"
+      : "/api/cron/synthetic-prod-smoke";
+  const rerun = `curl -H "Authorization: Bearer $CRON_SECRET" ${ctx.baseUrl}${cronPath}`;
+  const label =
+    ctx.runner === "api" ? "Synthetic prod smoke" : `Synthetic ${ctx.runner} smoke`;
   const subject = `[Synthetic PAGE] ${r.name} (${ctx.provider}) failed twice in a row`;
   const html = `
-    <h2>Synthetic prod smoke: ${r.name} (${ctx.provider}) failed twice in a row</h2>
+    <h2>${label}: ${r.name} (${ctx.provider}) failed twice in a row</h2>
+    <p><strong>Runner:</strong> ${ctx.runner}</p>
     <p><strong>Vendor:</strong> ${ctx.provider}</p>
     <p><strong>Status:</strong> ${r.status ?? "n/a"}</p>
     <p><strong>Latency:</strong> ${r.latencyMs} ms</p>

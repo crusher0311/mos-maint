@@ -186,3 +186,104 @@ The two incidents that motivated this task:
 When adding a new step, add the corresponding incident to this list
 so we keep evidence that the synthetic catches the regressions it
 was built to catch.
+
+---
+
+# Browser Overlay Synthetic (task #527)
+
+## What
+
+The API synthetic above never loads the Chrome extension, so it cannot
+catch a regression that lives in the content script itself — a Tekmetric
+DOM selector change that stops the button from injecting, a content-script
+↔ background message-wiring break, or a UI state machine that never
+re-enables the button. The browser synthetic closes that gap.
+
+`app/api/cron/synthetic-overlay-smoke/route.ts` runs every **30 minutes**
+(entry `synthetic-overlay-smoke` in `lib/cron/jobs.cjs` — lower cadence than
+the 5-min API smoke because launching a headless Chromium with the
+extension loaded is far heavier than an HTTP fetch). It drives a real
+Chromium with the Detect Dog extension (`mos-tools-extension/`) loaded
+against a **recorded** Tekmetric RO page, clicks "Pre-fill DVI", and
+asserts:
+
+1. the content script injected `#mos-prefill-dvi-btn` (DOM selectors still
+   match the recorded RO page),
+2. clicking it caused the background worker to fire
+   `POST /api/extension/prefill-dvi` (content-script → background → API
+   wiring is intact — "the request fired"),
+3. the button re-enabled afterwards (the COMPLETE/FAILED message
+   round-tripped back to the content script — "the UI updated").
+
+It shares the runner (`lib/synthetic/runner.ts`) with the API smoke but is
+invoked with `{ runner: "browser" }`, so:
+
+- every `synthetic_runs` doc is tagged `runner: "browser"` (the API smoke's
+  docs are `runner: "api"`),
+- `synthetic_state` dedup keys are namespaced `step:browser:<name>` (the API
+  runner keeps its original bare `step:<name>` keys — no one-time dedup
+  reset on deploy),
+- the **same 2-consecutive-failures paging dedup** is reused; the page email
+  points at the overlay cron route for re-runs.
+
+## Hermetic by construction
+
+The probe (`lib/synthetic/overlay-probe.ts`) NEVER touches the real
+Tekmetric site or the real mos.tools API. A single local HTTPS server
+stands in for BOTH hosts (Chromium maps `shop.tekmetric.com` and the MOS
+API host to it; `--ignore-certificate-errors` accepts the committed
+self-signed cert at `tests/fixtures/synthetic/localhost-{cert,key}.pem`).
+The server serves the recorded RO HTML
+(`tests/fixtures/synthetic/tekmetric-ro.html`), returns a canned inspection
++ canned `prefill-dvi` updates, records the prefill-dvi hit, and 200s the
+task PUTs — so no real customer RO is ever read or written.
+
+When Tekmetric changes its DOM, re-record `tekmetric-ro.html` to match the
+selectors `detectContext()` / `injectPrefillButton()` read.
+
+## Dormant by default
+
+The overlay step short-circuits to `{ ok: true, extra.skipped }` unless
+`SYNTHETIC_BROWSER_ENABLED=true`. This keeps the 30-min cron a safe no-op
+on hosts without an extension-capable Chromium. **Loading an unpacked
+extension requires a full (non-single-process) Chromium** — confirm the
+Render host ships one (or set `CHROMIUM_PATH`) before flipping the flag.
+
+## Configuration (env vars on Render)
+
+- `SYNTHETIC_BROWSER_ENABLED` — `true` to actually launch Chromium.
+  Defaults off (dormant).
+- `CHROMIUM_PATH` — Chromium executable (defaults to `/usr/bin/chromium`).
+- `SYNTHETIC_BROWSER_API_HOST` — MOS API host the extension talks to
+  (default `mos.tools`). Mapped to the local stand-in server.
+- `SYNTHETIC_BROWSER_TEK_HOST` — Tekmetric host (default
+  `shop.tekmetric.com`).
+- `SYNTHETIC_BROWSER_RO_ID` — sentinel RO id baked into the recorded URL
+  (default `4477`).
+- `SYNTHETIC_BROWSER_MILEAGE` — sentinel mileage (default `62500`).
+- `SYNTHETIC_BROWSER_TIMEOUT_MS` — hard cap so a hung Chromium can't block
+  the cron (default `120000`).
+
+Reuses `SYNTHETIC_SMS_SHOP_ID`, `SYNTHETIC_EXT_TOKEN`, and `SYNTHETIC_VIN`
+from the API smoke for the sentinel identity.
+
+## Re-run command
+
+```sh
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://<render-host>/api/cron/synthetic-overlay-smoke
+```
+
+## Break glass
+
+- `SYNTHETIC_SMOKE_DISABLED=true` mutes BOTH synthetics (shared kill switch).
+- Unsetting `SYNTHETIC_BROWSER_ENABLED` instantly returns the overlay cron
+  to a clean no-op without disabling the API smoke.
+
+## Test
+
+`tests/synthetic-browser-smoke.smoke.ts` (wired into `npm run test:smoke`)
+exercises the wiring with the puppeteer probe dependency-injected — no
+Chromium, Mongo, or email. It locks in the dormant-by-default skip, the
+`runner:"browser"` tagging on runs + markers, the `step:browser:*` state
+namespacing, and the reused 2-consecutive-failures paging.
