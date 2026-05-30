@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { upsertPlatformPlan } from "@/lib/data/repositories/pg/identity";
 
 const DEFAULT_PLANS = [
   {
@@ -68,6 +70,9 @@ export async function POST() {
           }
         },
         { upsert: true }
+      );
+      await dualWritePgIdentity(`platform_plans.upsert(${plan.slug})`, () =>
+        upsertPlatformPlan(plan)
       );
     }
 

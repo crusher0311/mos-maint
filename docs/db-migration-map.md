@@ -180,6 +180,28 @@ Grouped by domain. "PG plan" calls out the wave each one belongs to.
 > `app/api/billing/portal` (4), `app/api/platform-admin/plans` (4).
 > While `WRITE_MONGO_IDENTITY=1` these stay in Mongo and the post-window
 > backfill brings PG back in sync.
+>
+> **W4 status (2026-05-30, task #554): remaining direct-Mongo identity
+> writers refactored to dual-write.** Every Mongo identity write below now
+> keeps Mongo primary and adds `await dualWritePgIdentity("label", () =>
+> pgRepoFn(...))` immediately after (no-op when `IDENTITY_PG_CANONICAL=0`,
+> re-throws when `=1`), so PG stays in lockstep without changing default
+> behavior. Routes refactored: `app/api/stripe/webhook/route.ts` (all
+> `shops`/`users` insert + update sites — signup, CRM provisioning, card
+> capture, subscription updated/deleted, payment succeeded/failed,
+> trial-conversion failure; the two fire-and-forget `stickerConfig`
+> hovercode writes are intentionally **not** mirrored — non-identity sticker
+> config, out of scope), `app/api/settings/users/[userId]/route.ts` (PATCH
+> update + DELETE), `app/api/enterprise/shops/route.ts` (shop insert, cloned
+> user insert, `$unset enterpriseId` clear), `app/api/platform-admin/plans/
+> seed/route.ts` (plan upsert). `app/api/stripe/billing-portal/route.ts` was
+> a read-only `shops.findOne`, now routed through the flag-aware
+> `getShopById` instead of a direct Mongo read. New repo helpers added to
+> `lib/data/repositories/pg/identity.ts`: `insertShop`, `updateUserFields`,
+> `deleteUserById`, `upsertPlatformPlan` (plus `updateShopFields` extended so
+> `enabledFeatures.*` dot-paths write the real `enabled_features` column
+> rather than the `settings` catch-all). Out of scope: flipping flags,
+> dropping Mongo (downstream "flip PG canonical & retire Mongo shadow" task).
 
 | Collection | Source of truth | Readers | Writers | Notes |
 | --- | --- | --- | --- | --- |

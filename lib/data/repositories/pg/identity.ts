@@ -195,11 +195,20 @@ const SHOP_TOP_LEVEL = new Set([
   "enabledFeatures",
 ]);
 
-const SHOP_JSONB_CONTAINERS: Record<string, "billing" | "settings" | "sticker" | "metadata"> = {
+const SHOP_JSONB_CONTAINERS: Record<
+  string,
+  "billing" | "settings" | "sticker" | "metadata" | "enabledFeatures"
+> = {
   billing: "billing",
   settings: "settings",
   sticker: "sticker",
   metadata: "metadata",
+  // Per-feature toggles live in their own jsonb column. Legacy updates
+  // targeted top-level dot-paths (`enabledFeatures.maintenance`); route
+  // those into the `enabled_features` jsonb column rather than dumping
+  // them in `settings` (where the read-time spread would shadow the
+  // canonical column).
+  enabledFeatures: "enabledFeatures",
   // Per-integration settings live under `settings` jsonb. Legacy
   // updates targeted top-level (`autoflow.apiKey`); we route those
   // into `settings.autoflow.apiKey`.
@@ -212,6 +221,15 @@ const SHOP_JSONB_CONTAINERS: Record<string, "billing" | "settings" | "sticker" |
   inspection: "settings",
   preferences: "settings",
   carfax: "settings",
+};
+
+/** Maps a jsonb container bucket to its physical column name. */
+const BUCKET_TO_COLUMN: Record<string, string> = {
+  billing: "billing",
+  settings: "settings",
+  sticker: "sticker",
+  metadata: "metadata",
+  enabledFeatures: "enabled_features",
 };
 
 export async function updateShopFields(
@@ -284,7 +302,8 @@ export async function updateShopFields(
     }
     for (const [bucket, writes] of Object.entries(jsonbWrites)) {
       // Build chained jsonb_set on the existing column.
-      let expr = sql`COALESCE(${sql.identifier(bucket === "billing" ? "billing" : bucket === "settings" ? "settings" : bucket === "sticker" ? "sticker" : "metadata")}, '{}'::jsonb)`;
+      const columnName = BUCKET_TO_COLUMN[bucket] ?? "settings";
+      let expr = sql`COALESCE(${sql.identifier(columnName)}, '{}'::jsonb)`;
       for (const w of writes) {
         if (w.path.length === 0) {
           // whole-container replace
@@ -294,9 +313,7 @@ export async function updateShopFields(
           expr = sql`jsonb_set(${expr}, ${pathLit}::text[], ${JSON.stringify(w.value)}::jsonb, true)`;
         }
       }
-      const colName = sql.identifier(
-        bucket === "billing" ? "billing" : bucket === "settings" ? "settings" : bucket === "sticker" ? "sticker" : "metadata",
-      );
+      const colName = sql.identifier(columnName);
       await tx.execute(
         sql`UPDATE shops SET ${colName} = ${expr}, updated_at = now() WHERE mos_shop_id = ${id}`,
       );
@@ -307,6 +324,62 @@ export async function updateShopFields(
   // updates here, so we approximate from existence.
   const exists = await db.select({ id: shops.mosShopId }).from(shops).where(eq(shops.mosShopId, id)).limit(1);
   return { matchedCount: exists.length, modifiedCount: exists.length };
+}
+
+/**
+ * Mirror a Mongo `shops.insertOne(doc)` into PG. Known columns are
+ * promoted; the `billing.plan` / `billing.status` / stripe-customer-id
+ * indexed columns are derived from the `billing` subdoc; everything
+ * else lands in the `settings` catch-all (which `shopRowToDoc` spreads
+ * back to top-level on read, so legacy flat reads keep working).
+ * `onConflictDoNothing` keeps the insert idempotent across retries.
+ */
+export async function insertShop(doc: Record<string, unknown>): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+  const {
+    shopId,
+    _id,
+    id: legacyId,
+    name,
+    locationIdentifier,
+    enterpriseId,
+    enabledFeatures,
+    billing,
+    stripeCustomerId,
+    settings,
+    sticker,
+    metadata,
+    createdAt,
+    updatedAt,
+    ...rest
+  } = doc as Record<string, any>;
+  const id = Number(shopId);
+  if (!Number.isFinite(id)) return;
+  const mergedSettings = { ...((settings as Json) ?? {}), ...rest };
+  await db
+    .insert(shops)
+    .values({
+      mosShopId: id,
+      legacyId: typeof legacyId === "number" ? legacyId : null,
+      name: name ?? null,
+      locationIdentifier: locationIdentifier ?? null,
+      enterpriseId: enterpriseId != null ? String(enterpriseId) : null,
+      enabledFeatures: (enabledFeatures ?? null) as unknown as Json,
+      billing: (billing ?? null) as unknown as Json,
+      billingPlan: (billing?.plan as string | undefined) ?? null,
+      billingStatus: (billing?.status as string | undefined) ?? null,
+      stripeCustomerId:
+        (stripeCustomerId as string | undefined) ??
+        (billing?.stripeCustomerId as string | undefined) ??
+        null,
+      settings: (Object.keys(mergedSettings).length ? mergedSettings : null) as unknown as Json,
+      sticker: (sticker ?? null) as unknown as Json,
+      metadata: (metadata ?? null) as unknown as Json,
+      createdAt: (createdAt as Date | undefined) ?? now,
+      updatedAt: (updatedAt as Date | undefined) ?? now,
+    })
+    .onConflictDoNothing({ target: shops.mosShopId });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -618,6 +691,75 @@ export async function insertUser(u: {
     .onConflictDoNothing({ target: users.id });
 }
 
+const USER_TOP_LEVEL = new Set([
+  "email",
+  "emailLower",
+  "passwordHash",
+  "role",
+  "shopId",
+  "shopIds",
+  "isPlatformAdmin",
+  "mustChangePassword",
+  "extensionToken",
+]);
+
+/**
+ * Mirror a Mongo `users.updateOne({_id}, {$set})` into PG. Known
+ * columns are promoted to their column (and `email` keeps `emailLower`
+ * in sync); every other loose key (audit fields like `updatedBy`)
+ * lands in the `audit_meta` jsonb so the table doesn't have to widen
+ * for each audit field Mongo carried. `userId` is the Mongo `_id`
+ * stringified — the PG `users.id` is that hex string.
+ */
+export async function updateUserFields(
+  userId: string,
+  set: Record<string, unknown>,
+): Promise<void> {
+  const db = getDb();
+  const colWrites: Record<string, unknown> = { updatedAt: new Date() };
+  const auditWrites: Array<{ path: string[]; value: unknown }> = [];
+  for (const [k, v] of Object.entries(set)) {
+    if (k === "updatedAt") {
+      colWrites.updatedAt = v;
+      continue;
+    }
+    if (USER_TOP_LEVEL.has(k)) {
+      colWrites[k] = v;
+      if (k === "email" && typeof v === "string") {
+        colWrites.emailLower = v.toLowerCase();
+      }
+      continue;
+    }
+    const dot = k.indexOf(".");
+    auditWrites.push({
+      path: dot > 0 ? k.split(".") : [k],
+      value: v,
+    });
+  }
+  await db.transaction(async (tx) => {
+    await tx
+      .update(users)
+      .set(colWrites as Partial<typeof users.$inferInsert>)
+      .where(eq(users.id, String(userId)));
+    if (auditWrites.length > 0) {
+      let expr = sql`COALESCE(audit_meta, '{}'::jsonb)`;
+      for (const w of auditWrites) {
+        const pathLit = `{${w.path.map((p) => p.replace(/"/g, '\\"')).join(",")}}`;
+        expr = sql`jsonb_set(${expr}, ${pathLit}::text[], ${JSON.stringify(w.value)}::jsonb, true)`;
+      }
+      await tx.execute(
+        sql`UPDATE users SET audit_meta = ${expr}, updated_at = now() WHERE id = ${String(userId)}`,
+      );
+    }
+  });
+}
+
+/** Mirror a Mongo `users.deleteOne({_id})` into PG (cascades sessions). */
+export async function deleteUserById(userId: string): Promise<void> {
+  const db = getDb();
+  await db.delete(users).where(eq(users.id, String(userId)));
+}
+
 /* -------------------------------------------------------------------------- */
 /* enterprise_accounts                                                        */
 /* -------------------------------------------------------------------------- */
@@ -820,6 +962,40 @@ export async function upsertPlatformSetting(type: string, payload: Json): Promis
 export async function listPlatformPlans() {
   const db = getDb();
   return db.select().from(platformPlans).where(eq(platformPlans.active, true));
+}
+
+/**
+ * Mirror a Mongo `platform_plans.updateOne({slug}, {$set}, {upsert})`
+ * into PG. The Mongo plan doc carries display fields (`monthlyPrice`,
+ * `order`, `status`, `features`, ...); the full doc is preserved in the
+ * `payload` jsonb while the hot columns (`name`, `description`,
+ * `pricePerMonth`, `sortOrder`, `active`) are promoted. Keyed on the
+ * `slug` primary key.
+ */
+export async function upsertPlatformPlan(plan: {
+  slug: string;
+  name: string;
+  description?: string | null;
+  monthlyPrice?: number | null;
+  order?: number | null;
+  status?: string | null;
+  [k: string]: unknown;
+}): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+  const promoted = {
+    name: plan.name,
+    description: plan.description ?? null,
+    pricePerMonth: typeof plan.monthlyPrice === "number" ? plan.monthlyPrice : null,
+    payload: plan as unknown as Json,
+    active: plan.status != null ? plan.status === "active" : true,
+    sortOrder: typeof plan.order === "number" ? plan.order : 0,
+    updatedAt: now,
+  };
+  await db
+    .insert(platformPlans)
+    .values({ slug: plan.slug, ...promoted })
+    .onConflictDoUpdate({ target: platformPlans.slug, set: promoted });
 }
 
 /* -------------------------------------------------------------------------- */

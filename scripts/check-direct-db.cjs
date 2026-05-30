@@ -308,7 +308,6 @@ const ALLOWLIST = new Set([
   "app/api/sticker/regenerate-qr/route.ts",
   "app/api/sticker/settings/route.ts",
   "app/api/sticker/upload-logo/route.ts",
-  "app/api/stripe/billing-portal/route.ts",
   "app/api/stripe/change-plan/route.ts",
   "app/api/stripe/create-checkout/route.ts",
   "app/api/stripe/invoices/route.ts",

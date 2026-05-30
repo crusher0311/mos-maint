@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertShop, insertUser, updateShopFields } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -144,6 +146,9 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await db.collection("shops").insertOne(shopDoc);
+    await dualWritePgIdentity(`shops.insert(${shopId})`, () =>
+      insertShop(shopDoc)
+    );
     
     await addShopToEnterprise(enterpriseId, shopId);
 
@@ -187,7 +192,20 @@ export async function POST(req: NextRequest) {
           updatedAt: new Date()
         };
         assertNoLegacyPasswordField(newUserDoc);
-        await db.collection("users").insertOne(newUserDoc);
+        const newUserResult = await db.collection("users").insertOne(newUserDoc);
+        await dualWritePgIdentity(`users.insert(${newUserDoc.email})`, () =>
+          insertUser({
+            id: String(newUserResult.insertedId),
+            email: newUserDoc.email,
+            emailLower: newUserDoc.email.toLowerCase(),
+            passwordHash: newUserDoc.passwordHash,
+            role: newUserDoc.role,
+            shopId: newUserDoc.shopId,
+            profile: newUserDoc.name ? { name: newUserDoc.name } : undefined,
+            createdAt: newUserDoc.createdAt,
+            updatedAt: newUserDoc.updatedAt,
+          })
+        );
       }
     }
 
@@ -232,6 +250,9 @@ export async function DELETE(req: NextRequest) {
     await db.collection("shops").updateOne(
       { shopId },
       { $unset: { enterpriseId: "" }, $set: { updatedAt: new Date() } }
+    );
+    await dualWritePgIdentity(`shops.update(unset enterpriseId ${shopId})`, () =>
+      updateShopFields(shopId, { enterpriseId: null })
     );
 
     return NextResponse.json({ ok: true });

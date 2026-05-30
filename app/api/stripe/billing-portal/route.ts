@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { getShopById } from "@/lib/shops";
 import { stripe, getBaseUrl } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -12,8 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({ shopId: Number(sess.shopId) });
+  const shop = await getShopById(Number(sess.shopId));
 
   if (!shop?.stripeCustomerId) {
     return NextResponse.json(

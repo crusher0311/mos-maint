@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { updateUserFields, deleteUserById } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -199,6 +201,9 @@ export async function PATCH(
       { _id: objectId },
       { $set: updateFields }
     );
+    await dualWritePgIdentity(`users.update(${userId})`, () =>
+      updateUserFields(userId, updateFields)
+    );
 
     console.log(`[Settings] User ${sess.email} updated user ${user.email}:`, updateFields);
 
@@ -258,6 +263,9 @@ export async function DELETE(
   }
 
   await users.deleteOne({ _id: new ObjectId(userId) });
+  await dualWritePgIdentity(`users.delete(${userId})`, () =>
+    deleteUserById(userId)
+  );
 
   console.log(`[Settings] User ${sess.email} deleted user ${user.email}`);
 

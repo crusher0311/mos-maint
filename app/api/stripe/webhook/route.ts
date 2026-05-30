@@ -19,6 +19,12 @@ import {
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { createHovercodeQR } from "@/lib/hovercode";
 import { getNextShopId } from "@/lib/ids";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import {
+  insertShop,
+  insertUser,
+  updateShopFields,
+} from "@/lib/data/repositories/pg/identity";
 import { computeAutoFlagReasons } from "@/lib/shop-review";
 import Stripe from "stripe";
 import crypto from "node:crypto";
@@ -190,20 +196,22 @@ export async function POST(req: NextRequest) {
               }
 
               const now = new Date();
+              const cardCaptureSet = {
+                cardOnFile: true,
+                "billing.cardOnFile": true,
+                ...(customerId ? { stripeCustomerId: customerId, "billing.stripeCustomerId": customerId } : {}),
+                ...(paymentMethodId ? { stripePaymentMethodId: paymentMethodId, "billing.stripePaymentMethodId": paymentMethodId } : {}),
+                cardCapturedAt: now,
+                cardCaptureSessionId: session.id,
+                "trial.cardOnFile": true,
+                updatedAt: now,
+              };
               await db.collection("shops").updateOne(
                 { shopId: setupShopId },
-                {
-                  $set: {
-                    cardOnFile: true,
-                    "billing.cardOnFile": true,
-                    ...(customerId ? { stripeCustomerId: customerId, "billing.stripeCustomerId": customerId } : {}),
-                    ...(paymentMethodId ? { stripePaymentMethodId: paymentMethodId, "billing.stripePaymentMethodId": paymentMethodId } : {}),
-                    cardCapturedAt: now,
-                    cardCaptureSessionId: session.id,
-                    "trial.cardOnFile": true,
-                    updatedAt: now,
-                  },
-                }
+                { $set: cardCaptureSet }
+              );
+              await dualWritePgIdentity(`shops.update(card-capture ${setupShopId})`, () =>
+                updateShopFields(setupShopId, cardCaptureSet)
               );
 
               await db.collection("audit_logs").insertOne({
@@ -283,6 +291,9 @@ export async function POST(req: NextRequest) {
           };
           
           await db.collection("shops").insertOne(shopDoc);
+          await dualWritePgIdentity(`shops.insert(${shopId})`, () =>
+            insertShop(shopDoc)
+          );
           console.log(`[Stripe] Created shop ${shopId} (${pending.shopName}) from signup`);
           
           const userDoc = {
@@ -296,7 +307,19 @@ export async function POST(req: NextRequest) {
           };
           
           assertNoLegacyPasswordField(userDoc);
-          await db.collection("users").insertOne(userDoc);
+          const signupUserResult = await db.collection("users").insertOne(userDoc);
+          await dualWritePgIdentity(`users.insert(${userDoc.email})`, () =>
+            insertUser({
+              id: String(signupUserResult.insertedId),
+              email: userDoc.email,
+              emailLower: userDoc.emailLower,
+              passwordHash: userDoc.passwordHash,
+              role: userDoc.role,
+              shopId: userDoc.shopId,
+              createdAt: userDoc.createdAt,
+              updatedAt: userDoc.updatedAt,
+            })
+          );
           console.log(`[Stripe] Created user ${pending.adminEmail} for shop ${shopId}`);
 
           await seedDefaultAdmins(db, shopId);
@@ -361,6 +384,9 @@ export async function POST(req: NextRequest) {
           await db.collection("shops").updateOne(
             { shopId },
             { $set: updateData }
+          );
+          await dualWritePgIdentity(`shops.update(checkout-upgrade ${shopId})`, () =>
+            updateShopFields(shopId, updateData)
           );
           console.log(`[Stripe] Shop ${shopId} upgraded to ${plan}${skippedTrial ? " (skipTrial flag set)" : ""}`);
         } else if (session.customer_details?.email) {
@@ -482,8 +508,25 @@ export async function POST(req: NextRequest) {
             };
 
             await db.collection("shops").insertOne(shopDoc);
+            await dualWritePgIdentity(`shops.insert(${newShopId})`, () =>
+              insertShop(shopDoc)
+            );
             assertNoLegacyPasswordField(userDoc);
-            await db.collection("users").insertOne(userDoc);
+            const crmUserResult = await db.collection("users").insertOne(userDoc);
+            await dualWritePgIdentity(`users.insert(${userDoc.email})`, () =>
+              insertUser({
+                id: String(crmUserResult.insertedId),
+                email: userDoc.email,
+                emailLower: userDoc.emailLower,
+                passwordHash: userDoc.passwordHash,
+                role: userDoc.role,
+                shopId: userDoc.shopId,
+                mustChangePassword: userDoc.mustChangePassword,
+                profile: userDoc.name ? { name: userDoc.name } : undefined,
+                createdAt: userDoc.createdAt,
+                updatedAt: userDoc.updatedAt,
+              })
+            );
             await seedDefaultAdmins(db, newShopId);
             await db.collection("crm_provisions").insertOne({
               stripeSessionId: (session as any).id,
@@ -590,6 +633,9 @@ export async function POST(req: NextRequest) {
             { shopId },
             { $set: updateData }
           );
+          await dualWritePgIdentity(`shops.update(sub-updated ${shopId})`, () =>
+            updateShopFields(shopId, updateData)
+          );
           console.log(`[Stripe] Shop ${shopId} subscription updated: ${status}`);
         }
         break;
@@ -605,17 +651,19 @@ export async function POST(req: NextRequest) {
             console.log(`[Stripe] Shop ${resolved.shopId} is invoice-billed; ignoring subscription.deleted event`);
             break;
           }
+          const subDeletedSet = {
+            "billing.plan": "churned",
+            "billing.status": "canceled",
+            "billing.isPaid": false,
+            "billing.stripeSubscriptionId": null,
+            "billing.updatedAt": new Date(),
+          };
           await db.collection("shops").updateOne(
             { shopId: resolved.shopId },
-            {
-              $set: {
-                "billing.plan": "churned",
-                "billing.status": "canceled",
-                "billing.isPaid": false,
-                "billing.stripeSubscriptionId": null,
-                "billing.updatedAt": new Date(),
-              },
-            }
+            { $set: subDeletedSet }
+          );
+          await dualWritePgIdentity(`shops.update(sub-deleted ${resolved.shopId})`, () =>
+            updateShopFields(resolved.shopId, subDeletedSet)
           );
           console.log(`[Stripe] Shop ${resolved.shopId} subscription canceled`);
         }
@@ -729,6 +777,9 @@ export async function POST(req: NextRequest) {
             await db.collection("shops").updateOne(
               { shopId },
               { $set: updateData }
+            );
+            await dualWritePgIdentity(`shops.update(payment-succeeded ${shopId})`, () =>
+              updateShopFields(shopId, updateData)
             );
           }
         }
@@ -851,6 +902,9 @@ export async function POST(req: NextRequest) {
               }
 
               await db.collection("shops").updateOne({ shopId }, { $set: updateData });
+              await dualWritePgIdentity(`shops.update(trial-conversion ${shopId})`, () =>
+                updateShopFields(shopId, updateData)
+              );
               break;
             }
 
@@ -882,6 +936,9 @@ export async function POST(req: NextRequest) {
             await db.collection("shops").updateOne(
               { shopId },
               { $set: updateData }
+            );
+            await dualWritePgIdentity(`shops.update(payment-failed ${shopId})`, () =>
+              updateShopFields(shopId, updateData)
             );
           }
         }
