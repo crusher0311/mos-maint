@@ -174,6 +174,93 @@ export function isSharedLimiterDisabled(): boolean {
   return process.env.TEKMETRIC_SHARED_LIMITER_DISABLED === "true";
 }
 
+/**
+ * Backend selector (task #557, Mongo → Postgres migration). When
+ * `TEKMETRIC_SHARED_LIMITER_PG_CANONICAL=1` the per-second token bucket is
+ * kept in the Postgres `tekmetric_rate_buckets` table instead of the Mongo
+ * collection. Default-off preserves the current Mongo behavior, so flipping
+ * it is an operator action on the production deploy. The cap math, priority
+ * lanes, fail-open/closed timeout behavior, and graceful fallback-on-error
+ * are identical across both backends — only the increment/decrement storage
+ * differs.
+ */
+export function isSharedLimiterPgCanonical(): boolean {
+  return process.env.TEKMETRIC_SHARED_LIMITER_PG_CANONICAL === "1";
+}
+
+/**
+ * Per-second bucket storage backend. Both implementations expose the same
+ * two atomic primitives the limiter loop needs: increment-and-return-count,
+ * and decrement (used to release a slot when the caller is over cap).
+ */
+interface BucketBackend {
+  /** Atomically `+1` the current second's bucket and return the new count. */
+  inc(key: string, nowMs: number): Promise<number>;
+  /** Best-effort `-1` to release a slot the caller decided not to use. */
+  dec(key: string): Promise<void>;
+}
+
+function mongoBucketBackend(db: any): BucketBackend {
+  return {
+    async inc(key: string, nowMs: number): Promise<number> {
+      const result: any = await db.collection(COLLECTION).findOneAndUpdate(
+        { _id: key },
+        {
+          $inc: { count: 1 },
+          $setOnInsert: {
+            createdAt: new Date(nowMs),
+            expiresAt: new Date(nowMs + BUCKET_TTL_MS),
+          },
+        },
+        { upsert: true, returnDocument: "after" },
+      );
+      // Mongo driver returns the doc directly in newer versions, or
+      // `{ value, ok, ... }` in older ones.
+      return result?.value?.count ?? result?.count ?? 1;
+    },
+    async dec(key: string): Promise<void> {
+      await db.collection(COLLECTION).updateOne({ _id: key }, { $inc: { count: -1 } });
+    },
+  };
+}
+
+function pgBucketBackend(sql: any): BucketBackend {
+  return {
+    async inc(key: string, _nowMs: number): Promise<number> {
+      const rows: any = await sql.unsafe(
+        `INSERT INTO tekmetric_rate_buckets (bucket_key, count, created_at, expires_at)
+         VALUES ($1, 1, now(), now() + ($2::bigint * interval '1 millisecond'))
+         ON CONFLICT (bucket_key) DO UPDATE
+           SET count = tekmetric_rate_buckets.count + 1
+         RETURNING count`,
+        [key, BUCKET_TTL_MS],
+      );
+      const count = Array.isArray(rows) && rows.length > 0 ? Number(rows[0].count) : 1;
+      // Postgres has no Mongo-style TTL index, so sweep expired buckets
+      // opportunistically (~1% of calls) to keep the table tiny. Fire and
+      // forget — failure here never affects the acquire decision.
+      if (Math.random() < 0.01) {
+        Promise.resolve(
+          sql.unsafe(`DELETE FROM tekmetric_rate_buckets WHERE expires_at <= now()`),
+        ).catch(() => {});
+      }
+      return count;
+    },
+    async dec(key: string): Promise<void> {
+      await sql.unsafe(
+        `UPDATE tekmetric_rate_buckets SET count = count - 1 WHERE bucket_key = $1`,
+        [key],
+      );
+    },
+  };
+}
+
+/** Lazily resolve the app's shared postgres-js client for the PG backend. */
+async function getSharedLimiterPgClient(): Promise<any> {
+  const { getClient } = await import("@/lib/db/drizzle");
+  return getClient();
+}
+
 export interface SharedSlotResult {
   acquired: boolean;
   waitedMs: number;
@@ -207,6 +294,12 @@ export interface AcquireSharedSlotOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Test seam: inject a Mongo db (skips the real getDb call). */
   dbOverride?: any;
+  /**
+   * Test seam: inject a postgres-js-like client (exposing `.unsafe`) for the
+   * PG backend, skipping the real `getClient()` call. Only consulted when the
+   * PG backend is active (`TEKMETRIC_SHARED_LIMITER_PG_CANONICAL=1`).
+   */
+  pgOverride?: any;
 }
 
 /**
@@ -261,18 +354,26 @@ export async function acquireSharedTekmetricSlot(
   const sleep =
     opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  let db: any;
+  const usePg = isSharedLimiterPgCanonical();
+  let backend: BucketBackend;
   try {
-    db = opts.dbOverride ?? (await __deps.getDb());
+    if (usePg) {
+      const sql = opts.pgOverride ?? (await getSharedLimiterPgClient());
+      backend = pgBucketBackend(sql);
+    } else {
+      const db = opts.dbOverride ?? (await __deps.getDb());
+      // TTL index is a Mongo-only concern; the PG table's expiry is enforced
+      // by the opportunistic sweep in `pgBucketBackend`.
+      await ensureIndex(db).catch(() => {});
+      backend = mongoBucketBackend(db);
+    }
   } catch (err: any) {
     console.warn(
-      `[Tekmetric SharedLimiter] Mongo unavailable (getDb failed), falling back to per-process limiter: ${err?.message || err}`,
+      `[Tekmetric SharedLimiter] ${usePg ? "Postgres" : "Mongo"} unavailable (client init failed), falling back to per-process limiter: ${err?.message || err}`,
     );
     bumpRateLimiterFallback();
     return { acquired: true, waitedMs: 0, fallback: true };
   }
-
-  await ensureIndex(db).catch(() => {});
 
   const startedAt = nowMs();
 
@@ -283,24 +384,10 @@ export async function acquireSharedTekmetricSlot(
 
     let count: number;
     try {
-      const result: any = await db.collection(COLLECTION).findOneAndUpdate(
-        { _id: key },
-        {
-          $inc: { count: 1 },
-          $setOnInsert: {
-            createdAt: new Date(now),
-            expiresAt: new Date(now + BUCKET_TTL_MS),
-          },
-        },
-        { upsert: true, returnDocument: "after" },
-      );
-      // Mongo driver returns the doc directly in newer versions, or
-      // `{ value, ok, ... }` in older ones. Match the convention from
-      // `lib/data/repositories/api-usage.ts:claimRateLimitSlot`.
-      count = result?.value?.count ?? result?.count ?? 1;
+      count = await backend.inc(key, now);
     } catch (err: any) {
       console.warn(
-        `[Tekmetric SharedLimiter] Mongo error during $inc, falling back to per-process limiter: ${err?.message || err}`,
+        `[Tekmetric SharedLimiter] ${usePg ? "Postgres" : "Mongo"} error during increment, falling back to per-process limiter: ${err?.message || err}`,
       );
       const waited = nowMs() - startedAt;
       bumpRateLimiterWait(waited);
@@ -317,9 +404,7 @@ export async function acquireSharedTekmetricSlot(
     // Over cap. Release our slot so we don't poison the bucket for the
     // rest of this second, then wait for the next bucket to open.
     try {
-      await db
-        .collection(COLLECTION)
-        .updateOne({ _id: key }, { $inc: { count: -1 } });
+      await backend.dec(key);
     } catch {
       // If the release fails, the stranded count just expires with the
       // bucket. Not worth aborting the retry loop.

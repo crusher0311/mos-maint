@@ -977,3 +977,97 @@ The following items remain open by definition because they require either produc
 10. **Job index family**: run `--mirror=job_index|job_history|jobs`, verify, port readers, retire Mongo.
 11. **SMS history**: run `--mirror=sms_historical_work_orders`, verify, port readers, retire Mongo.
 12. **Pre-normalized retirement**: per-reader decision table — for each consumer of the legacy `vehicles` / `customers` / `repair_orders` / `manual_vehicles` Mongo collections, decide whether to (a) re-point at `normalized_*` (W3a output) which is preferred, or (b) re-point at `pre_normalized_*` (W3b mirror) as a port-one-for-one fallback. Then drop the Mongo collections via the Wave 0 procedure.
+
+
+## §12 Operational primitives PG-readiness (task #557, 2026-05-30)
+
+Task #557's deliverable is **code-readiness, not production operations**. The
+data-bearing Mongo tail (plans/AI caches, reference/lookup data, auth tokens,
+billing audit) was already scaffolded with PG schema + backfill specs by Waves 1–4
+and is **operator-gated** (see the per-group enumerations in §10.5 and §11.8 — those
+backfills, soaks, reader ports, and Mongo retirements remain operator-only). The one
+genuinely-missing, self-contained, operationally-safe piece was the operational
+primitives that have no backfill (they are transient runtime state): the **cron
+distributed lock** and the **Tekmetric shared rate-limiter token buckets**. This
+section documents the PG backend added for those two, behind default-off flags.
+
+### 12.1 Schema landing
+
+`lib/db/schema/operational.ts` defines two Drizzle tables, exported via
+`lib/db/schema/index.ts`. Drizzle migration mirror is
+`drizzle/0018_task557_operational_primitives.sql` (`CREATE TABLE IF NOT EXISTS`,
+schema-only — **NOT applied to any DB in this task env**; dev Postgres == shared
+Supabase, so the operator applies it at cutover).
+
+| Table | Purpose | Mongo equivalent |
+| --- | --- | --- |
+| `cron_locks` | distributed lock for the in-process node-cron scheduler (one row per job, `expires_at` lease + `instance_id` fence) | the Mongo-backed lock in `lib/cron/scheduler.cjs` |
+| `tekmetric_rate_buckets` | per-second token buckets for the cross-process Tekmetric rate limiter (`bucket_key` = `tek:<epoch-second>`, `count`, `expires_at`) | the `tek:<second>` bucket docs the limiter upserts in Mongo |
+
+Both tables hold **transient runtime state only** — there is intentionally **no
+backfill**. Cron leases self-heal on TTL takeover; rate buckets are recreated every
+second. A cutover is a flag flip with no data migration.
+
+### 12.2 Cron distributed lock — PG backend behind `CRON_LOCK_PG_CANONICAL`
+
+- `lib/cron/scheduler.cjs` keeps the Mongo lock as the default. The original
+  acquire/release were renamed `*Mongo`; a PG pair (`tryAcquireLockPg` /
+  `releaseLockPg`) was added and the dispatchers select on
+  `CRON_LOCK_PG_CANONICAL === "1"` (default off → Mongo, behavior unchanged).
+- PG client is a lazy `require("postgres")` with `max: 1` (`getCronPgSql()`).
+- **Acquire** is a single `INSERT … ON CONFLICT (job_name) DO UPDATE … WHERE
+  cron_locks.expires_at <= now() OR cron_locks.instance_id = <self>` returning the
+  row — this preserves the Mongo semantics: a free/expired lease can be taken, and
+  the current holder can refresh its own lease, but a live lease held by another
+  instance blocks.
+- **Release** is fenced: `DELETE … WHERE job_name = $1 AND instance_id = $2`, so a
+  stale holder cannot free a successor's lock.
+- Both dispatchers **fail closed** on a PG error (treat as "lock not acquired") so a
+  DB blip cannot run a job on two instances at once.
+
+### 12.3 Tekmetric shared rate-limiter — PG backend behind `TEKMETRIC_SHARED_LIMITER_PG_CANONICAL`
+
+- `lib/integrations/tekmetric/shared-rate-limiter.ts` was refactored to a small
+  `BucketBackend` interface (`inc(key, now) -> count`, `dec(key)`). `mongoBucketBackend`
+  preserves the existing `findOneAndUpdate`/`$inc` behavior; `pgBucketBackend` is the
+  new path, selected by `TEKMETRIC_SHARED_LIMITER_PG_CANONICAL === "1"` (default off →
+  Mongo, behavior unchanged).
+- PG **increment** is `INSERT … ON CONFLICT (bucket_key) DO UPDATE SET count = count + 1
+  RETURNING count`; **decrement** (slot release when over cap) is `UPDATE … SET
+  count = count - 1`. Expiry is enforced by an opportunistic (~1%) `DELETE … WHERE
+  expires_at <= now()` sweep, replacing the Mongo TTL index.
+- All higher-level semantics are unchanged regardless of backend: effective cap,
+  priority lanes (`interactive` reserve vs. `background` ceiling), fail-open
+  (`TEKMETRIC_SHARED_LIMITER_FAIL_OPEN`) vs. fail-closed on sustained over-cap, and
+  per-process fallback (`acquired: true, fallback: true`) when the store is
+  unavailable or errors mid-loop.
+
+### 12.4 Tests
+
+- `tests/cron-lock-pg.smoke.ts` and `tests/tekmetric-shared-rate-limiter-pg.smoke.ts`
+  drive the PG paths with **injected fake `sql` clients** (no real DB) and assert the
+  contracts above (lease takeover, fenced release, cap/priority/fail-open/closed,
+  fallback-on-error). Wired into `test:smoke` next to the existing cron / rate-limiter
+  tests via `test:cron-lock-pg` and `test:tekmetric-shared-rate-limiter-pg`.
+- The pre-existing Mongo-path smoke tests (`test:cron-scheduler-fetch-timeout`,
+  `test:tekmetric-shared-rate-limiter`) still pass with the flags off, confirming
+  default behavior is unchanged.
+
+### 12.5 Operator-required follow-ups (cannot complete in an isolated task env)
+
+Same gating rationale as §10.5 / §11.8 — these need production access and a soak
+window:
+
+1. Apply `drizzle/0018_task557_operational_primitives.sql` to Supabase.
+2. **Cron lock cutover**: with both instances running, flip `CRON_LOCK_PG_CANONICAL=1`.
+   Because leases are transient (TTL self-heal), no backfill is needed; verify only
+   one instance runs each job for one full schedule cycle, then leave it on. Roll back
+   by clearing the flag.
+3. **Rate-limiter cutover**: flip `TEKMETRIC_SHARED_LIMITER_PG_CANONICAL=1`; buckets
+   regenerate per-second, so no backfill. Verify combined attempted RPS still honors
+   the cap during a busy window, then leave it on.
+4. Only after both have soaked on PG (alongside every other Mongo store reaching
+   PG-canonical per §10.5 / §11.8) can the Mongo driver be removed and the Mongo
+   `locks` / `tek:*` bucket collections dropped (Wave 0 procedure). This final
+   decommission is the downstream "Final MongoDB decommission" task — **not** part of
+   #557.
