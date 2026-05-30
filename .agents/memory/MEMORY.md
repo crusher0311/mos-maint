@@ -1,1 +1,2 @@
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
+- [job_index retirement blocked](job-index-retirement-blocked.md) — legacy Mongo job_index still has live readers (job-search fallback, plan-build, parts, dashboard); cannot drop until PG backfill+soak done.
