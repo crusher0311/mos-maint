@@ -794,6 +794,11 @@ export async function runFullPageBackfillChunk(
   shopId: number,
   tekmetricShopId: number,
   lockOwner?: string,
+  // Absolute wall-clock deadline (ms) from the calling cron/route. The chunk
+  // stops adding work by min(its own soft deadline, this) so the route can
+  // return before its hard 300s kill — a chunk started late in a tick no
+  // longer overruns and times out the whole request.
+  routeDeadlineMs?: number,
 ): Promise<FullPageBackfillResult> {
   // Task #460: capture write fan-out + record into backfill_chunk_metrics.
   const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
@@ -805,6 +810,12 @@ export async function runFullPageBackfillChunk(
   try {
   const _result = await runWithTekmetric429Tracking(async () => {
     const startedAt = Date.now();
+    // Honour the caller's route deadline if it's tighter than our own soft
+    // budget, so a chunk started late in a cron tick stops in time instead of
+    // overrunning the route's hard kill.
+    const softDeadlineMs = routeDeadlineMs
+      ? Math.min(startedAt + SOFT_DEADLINE_MS, routeDeadlineMs)
+      : startedAt + SOFT_DEADLINE_MS;
     const progress = await db
       .collection("tekmetric_backfill_progress")
       .findOne({ shopId });
@@ -853,7 +864,7 @@ export async function runFullPageBackfillChunk(
     let vehiclesPrePassDoneForShop = !!progress?.vehiclesPrePassDone;
     const customersPrePassEnabled = isCustomersPrePassEnabled(shopId);
     let customersPrePassDoneForShop = !!progress?.customersPrePassDone;
-    const tickDeadlineMs = Date.now() + SOFT_DEADLINE_MS;
+    const tickDeadlineMs = softDeadlineMs;
     if (prePassEnabled && !prePassDoneForShop) {
       const prePassResult = await runJobsPrePass(
         db,
@@ -956,6 +967,16 @@ export async function runFullPageBackfillChunk(
     let reachedEnd = false;
 
     while (pagesProcessed < MAX_PAGES_PER_RUN) {
+      // Pre-fetch guard: if we've already hit the soft deadline, stop before
+      // issuing another page fetch so a chunk started late in the cron tick
+      // can't overrun the route's hard kill with one more full page cycle.
+      if (Date.now() >= softDeadlineMs) {
+        console.log(
+          `[Tekmetric Full-Page Backfill] Shop ${shopId}: soft deadline reached before page ${page}, deferring rest to next tick`,
+        );
+        break;
+      }
+
       const queryParams = new URLSearchParams({
         shop: tekmetricShopId.toString(),
         page: page.toString(),
@@ -1406,7 +1427,7 @@ export async function runFullPageBackfillChunk(
       // Soft deadline: stop adding pages so we have time to flush the
       // normalized batch + write the final progress doc before the route
       // is killed.
-      if (Date.now() - startedAt >= SOFT_DEADLINE_MS) {
+      if (Date.now() >= softDeadlineMs) {
         console.log(
           `[Tekmetric Full-Page Backfill] Shop ${shopId}: soft deadline hit after ${pagesProcessed} pages, deferring rest to next tick`,
         );

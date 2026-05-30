@@ -108,6 +108,8 @@ async function processShops(shops: ShopRow[], deadlineMs: number) {
         null as any,
         shop.shopId,
         shop.tekmetricShopId,
+        undefined,
+        deadlineMs,
       );
       results.push({ shopId: shop.shopId, name: shop.name, ...result });
     } catch (err: any) {
@@ -133,12 +135,18 @@ async function processShops(shops: ShopRow[], deadlineMs: number) {
 // the in-flight-lock heartbeat after each page write — a wedged run that
 // stops writing pages within 3 minutes is now stealable by the next tick
 // (see lib/integrations/tekmetric/inflight-lock.ts).
-async function runForShop(db: any, shop: ShopRow, lockOwner: string) {
+async function runForShop(
+  db: any,
+  shop: ShopRow,
+  lockOwner: string,
+  deadlineMs?: number,
+) {
   return runFullPageBackfillChunk(
     db,
     shop.shopId,
     shop.tekmetricShopId,
     lockOwner,
+    deadlineMs,
   );
 }
 
@@ -251,7 +259,7 @@ export async function GET(req: NextRequest) {
       );
     }
     try {
-      const result = await runForShop(db, shop, lock.owner);
+      const result = await runForShop(db, shop, lock.owner, deadlineMs);
       results.push({ shopId: shop.shopId, name: shop.name, ...result });
     } catch (err: any) {
       console.error(
@@ -418,6 +426,7 @@ export async function POST(req: NextRequest) {
         targetShopId,
         tekmetricShopId,
         lock.owner,
+        deadlineMs,
       );
       results.push({
         pagesProcessed: result.pagesProcessed,

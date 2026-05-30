@@ -2,6 +2,12 @@ import { getDb } from "@/lib/mongo";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+// Bound the OAuth token fetch the same way client requests are bounded — a
+// hung token request would otherwise stall every caller waiting on a token.
+const TOKEN_FETCH_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.TEKMETRIC_REQUEST_TIMEOUT_MS) || 60000,
+);
 
 interface TekmetricToken {
   accessToken: string;
@@ -48,6 +54,7 @@ async function fetchNewToken(): Promise<TekmetricToken> {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
   });
   
   if (!response.ok) {

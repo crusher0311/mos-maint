@@ -412,8 +412,13 @@ export async function backfillShopChunk(
   // under this chunk forwards it; an in-flight 100-min chunk rejects
   // promptly with AbortError instead of running to completion.
   signal?: AbortSignal,
+  // Optional heartbeat fired after each page of ROs is processed. The drain
+  // worker uses this to bump its progress watchdog at page granularity so a
+  // legitimately-slow (but advancing) 50-100 page chunk isn't mistaken for a
+  // wedge — only a chunk that completes no page for the stall window is killed.
+  onPageProgress?: () => void,
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
-  const run = () => backfillShopChunkInner(db, shopId, tekmetricShopId);
+  const run = () => backfillShopChunkInner(db, shopId, tekmetricShopId, onPageProgress);
   try {
     return signal ? await runWithTekmetricAbortSignal(signal, run) : await run();
   } catch (err: any) {
@@ -455,7 +460,8 @@ export async function backfillShopChunk(
 async function backfillShopChunkInner(
   db: any,
   shopId: number,
-  tekmetricShopId: number
+  tekmetricShopId: number,
+  onPageProgress?: () => void
 ): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; normalizedCount: number }> {
   // Per-chunk speed metrics. Captured here and persisted at the end of the
   // chunk so a regression in /jobs cache hit rate or a 429 backoff spike is
@@ -1080,6 +1086,8 @@ async function backfillShopChunkInner(
     }
 
     page++;
+    // Page completed → heartbeat the drain watchdog (no-op under the cron path).
+    onPageProgress?.();
     await new Promise(r => setTimeout(r, 200));
   }
 

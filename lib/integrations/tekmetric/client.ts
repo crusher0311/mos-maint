@@ -151,6 +151,31 @@ export async function runWithTekmetricApiCallTracking<T>(
 }
 
 const MAX_429_RETRIES = 5;
+// Per-request timeout for Tekmetric HTTP calls. Node's fetch has no short
+// default, so a hung connection (socket open, no response) would block the
+// caller forever — which previously wedged the backfill drain worker
+// indefinitely while it kept refreshing its global lease, starving the
+// in-process cron fallback. Bounding each request turns a hang into a
+// retriable timeout. Tunable via env for unusually slow shops.
+const REQUEST_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.TEKMETRIC_REQUEST_TIMEOUT_MS) || 60000,
+);
+
+// Build a fetch signal that aborts on EITHER the operator hard-cancel
+// (drain SIGINT, via `operatorSignal`) OR a per-request timeout. Returns the
+// timeout signal too so the caller can tell a timeout (retriable) apart from
+// an operator abort (propagate immediately, no retry).
+function buildFetchTimeout(operatorSignal: AbortSignal | undefined): {
+  fetchSignal: AbortSignal;
+  timeoutSignal: AbortSignal;
+} {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const fetchSignal = operatorSignal
+    ? AbortSignal.any([operatorSignal, timeoutSignal])
+    : timeoutSignal;
+  return { fetchSignal, timeoutSignal };
+}
 const MAX_BACKOFF_MS = 60_000;
 
 function compute429Backoff(attempt: number, retryAfterHeader: string | null): number {
@@ -340,11 +365,20 @@ export async function tekmetricRequest<T = any>(
     const apiCallCounter = apiCallStorage.getStore();
     if (apiCallCounter) apiCallCounter.count++;
 
-    const token = await getValidToken();
     const startTime = Date.now();
     let statusCode = 0;
+    // Declared before the try so the catch can tell a per-request timeout
+    // apart from an operator abort. Assigned right before the fetch so the
+    // timeout window covers only the HTTP call (the token fetch below has its
+    // own AbortSignal.timeout and is retried via its TimeoutError name).
+    let timeoutSignal: AbortSignal | undefined;
 
     try {
+      // Resolve the token inside the retry loop so a hung token request also
+      // times out and retries instead of escaping the bounded-retry path.
+      const token = await getValidToken();
+      const { fetchSignal, timeoutSignal: ts } = buildFetchTimeout(abortSignal);
+      timeoutSignal = ts;
       const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
         ...options,
         cache: 'no-store',
@@ -353,7 +387,7 @@ export async function tekmetricRequest<T = any>(
           'Content-Type': 'application/json',
           ...options.headers,
         },
-        signal: abortSignal,
+        signal: fetchSignal,
       });
 
       statusCode = response.status;
@@ -421,6 +455,21 @@ export async function tekmetricRequest<T = any>(
         trackApiRequest('tekmetric', endpoint, method, 0, latencyMs, shopId, {
           errorMessage: truncateForTracking(err?.message || String(err)),
         }).catch(() => {});
+      }
+      // Operator hard-cancel (drain SIGINT) → propagate immediately, no retry.
+      if (abortSignal?.aborted) throw err;
+      // Per-request timeout fired (hung connection). Treat it as retriable so
+      // a single stalled request doesn't fail the whole chunk (and previously
+      // wedge the drain worker) — back off and retry within the same attempt
+      // budget the 429 path uses, then give up if exhausted.
+      const isTimeout = err?.name === 'TimeoutError' || timeoutSignal?.aborted === true;
+      if (isTimeout && attempt <= MAX_429_RETRIES) {
+        const backoffMs = compute429Backoff(attempt, null);
+        console.warn(`[Tekmetric] request timeout after ${REQUEST_TIMEOUT_MS}ms on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms before retry`);
+        const backoffCounter = backoff429Storage.getStore();
+        if (backoffCounter) backoffCounter.ms += backoffMs;
+        await abortableSleep(backoffMs, abortSignal);
+        continue;
       }
       throw err;
     }
@@ -706,6 +755,10 @@ export async function getRepairOrderInspectionsWithXAuth(
 
   for (let attempt = 1; attempt <= MAX_429_RETRIES + 1; attempt++) {
     throwIfAborted(abortSignal);
+    // Declared before the try so the catch can distinguish a per-request
+    // timeout from an operator abort. Assigned right before the fetch so the
+    // timeout window covers only the HTTP call, not the rate-limit wait.
+    let timeoutSignal: AbortSignal | undefined;
     try {
       const rateSlot = await acquireRateLimitSlot('tekmetric', 8);
       if (!rateSlot.acquired) {
@@ -732,13 +785,15 @@ export async function getRepairOrderInspectionsWithXAuth(
       if (apiCallCounter) apiCallCounter.count++;
 
       const startTime = Date.now();
+      const { fetchSignal, timeoutSignal: ts } = buildFetchTimeout(abortSignal);
+      timeoutSignal = ts;
       const response = await fetch(url, {
         cache: 'no-store',
         headers: {
           'x-auth-token': xAuthToken,
           'Content-Type': 'application/json',
         },
-        signal: abortSignal,
+        signal: fetchSignal,
       });
 
       const latencyMs = Date.now() - startTime;
@@ -821,6 +876,15 @@ export async function getRepairOrderInspectionsWithXAuth(
       // "no inspections") and stay swallowed.
       if (err?.name === "AbortError" || abortSignal?.aborted) {
         throw err;
+      }
+      // Per-request timeout (hung connection): retry within the attempt
+      // budget instead of dropping this RO's inspections on the first stall.
+      const isTimeout = err?.name === "TimeoutError" || timeoutSignal?.aborted === true;
+      if (isTimeout && attempt <= MAX_429_RETRIES) {
+        const backoffMs = compute429Backoff(attempt, null);
+        console.warn(`[Tekmetric] inspection fetch timeout for RO ${repairOrderId} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms`);
+        await abortableSleep(backoffMs, abortSignal);
+        continue;
       }
       console.warn(`[Tekmetric] Inspection fetch error for RO ${repairOrderId}: ${err.message}`);
       return [];

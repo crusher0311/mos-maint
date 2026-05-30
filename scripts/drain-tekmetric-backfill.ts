@@ -78,6 +78,21 @@ const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const LOCK_REFRESH_MS = 60 * 1000; // refresh every 60s
 const LOCK_OWNER = `drain-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Progress watchdog. `lastProgressAt` is bumped at shop start and after every
+// *page* of ROs (via the onPageProgress heartbeat below), not just at chunk
+// completion — a single chunk processes 50-100 pages and can legitimately run
+// 40+ minutes, so chunk-granularity would false-positive and kill healthy work.
+// The lease refresher refuses to refresh (and stops the run) if no page has
+// advanced within PROGRESS_STALL_LIMIT_MS, so a wedged drain releases the
+// global lock within the lease TTL and the in-process cron resumes instead of
+// stalling for days. Tunable via env. Defense-in-depth on top of the
+// per-request fetch timeout (which is the actual root-cause fix).
+let lastProgressAt = Date.now();
+const PROGRESS_STALL_LIMIT_MS = Math.max(
+  60_000,
+  Number(process.env.DRAIN_PROGRESS_STALL_MS) || 10 * 60 * 1000,
+);
+
 type ShopJob = {
   shopId: number;
   name: string;
@@ -300,6 +315,7 @@ async function drainShop(job: ShopJob, signal: AbortSignal): Promise<ShopOutcome
   log(
     `START shop=${job.shopId} (${job.name}) tek=${job.tekmetricShopId}`
   );
+  lastProgressAt = Date.now();
 
   while (chunksRun < MAX_CHUNKS_PER_SHOP) {
     if (stopRequested || signal.aborted) {
@@ -323,6 +339,11 @@ async function drainShop(job: ShopJob, signal: AbortSignal): Promise<ShopOutcome
         job.shopId,
         job.tekmetricShopId,
         signal,
+        () => {
+          // Per-page heartbeat: a chunk that is still turning pages is making
+          // progress even if it hasn't returned yet.
+          lastProgressAt = Date.now();
+        },
       );
     } catch (err: any) {
       const msg = err?.message ? String(err.message) : String(err);
@@ -365,6 +386,7 @@ async function drainShop(job: ShopJob, signal: AbortSignal): Promise<ShopOutcome
     }
 
     chunksRun++;
+    lastProgressAt = Date.now();
     jobsIndexed += result.jobsIndexed || 0;
     skipped += result.skipped || 0;
 
@@ -488,6 +510,16 @@ async function main() {
   // between our load and our first chunk write.
   await acquireDrainLock();
   const lockRefresher = setInterval(() => {
+    const sinceProgress = Date.now() - lastProgressAt;
+    if (sinceProgress > PROGRESS_STALL_LIMIT_MS) {
+      log(
+        `WATCHDOG no progress for ${Math.round(sinceProgress / 1000)}s ` +
+          `(>${Math.round(PROGRESS_STALL_LIMIT_MS / 1000)}s); NOT refreshing lease ` +
+          `so the cron can take over, and stopping this run.`
+      );
+      triggerHardCancel("progress watchdog stall");
+      return; // skip refresh → lease expires within LOCK_TTL_MS
+    }
     refreshDrainLock().catch((err) =>
       log(`WARN lock refresh threw: ${err?.message || String(err)}`)
     );
