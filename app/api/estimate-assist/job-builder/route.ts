@@ -12,7 +12,9 @@ import {
   getShopHistoricalAverage,
   JobKnowledgeEntry,
 } from "@/lib/estimate-assist/job-knowledge-base";
-import { getDb } from "@/lib/mongo";
+import { getDb } from "@/lib/db/drizzle";
+import { normalizedVehicles } from "@/lib/db/schema/normalized";
+import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -71,11 +73,41 @@ export async function POST(req: NextRequest) {
     let vehicleInfo: { year?: number; make?: string; model?: string; submodel?: string; drivetrain?: string; engineCylinders?: number; engineDescription?: string; fuelType?: string; transmission?: string } | null = null;
     if (vin) {
       try {
-        const db = await getDb();
-        vehicleInfo = await db.collection("normalized_vehicles").findOne(
-          { vin: vin.toUpperCase(), shopId },
-          { projection: { year: 1, make: 1, model: 1, submodel: 1, drivetrain: 1, engineCylinders: 1, engineDescription: 1, fuelType: 1, transmission: 1 } }
-        ) as typeof vehicleInfo;
+        const db = getDb();
+        const rows = await db
+          .select({
+            year: normalizedVehicles.year,
+            make: normalizedVehicles.make,
+            model: normalizedVehicles.model,
+            submodel: normalizedVehicles.submodel,
+            drivetrain: normalizedVehicles.drivetrain,
+            engineCylinders: normalizedVehicles.engineCylinders,
+            engineDescription: normalizedVehicles.engineDescription,
+            fuelType: normalizedVehicles.fuelType,
+            transmission: normalizedVehicles.transmission,
+          })
+          .from(normalizedVehicles)
+          .where(
+            and(
+              eq(normalizedVehicles.vin, vin.toUpperCase()),
+              eq(normalizedVehicles.shopId, shopId),
+            ),
+          )
+          .limit(1);
+        const r = rows[0];
+        vehicleInfo = r
+          ? {
+              year: r.year ?? undefined,
+              make: r.make ?? undefined,
+              model: r.model ?? undefined,
+              submodel: r.submodel ?? undefined,
+              drivetrain: r.drivetrain ?? undefined,
+              engineCylinders: r.engineCylinders ?? undefined,
+              engineDescription: r.engineDescription ?? undefined,
+              fuelType: r.fuelType ?? undefined,
+              transmission: r.transmission ?? undefined,
+            }
+          : null;
       } catch (vinErr) {
         console.warn("[Estimate Job Builder] VIN lookup failed:", vinErr);
       }

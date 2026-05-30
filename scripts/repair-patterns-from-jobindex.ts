@@ -1,28 +1,38 @@
 import { getDb } from "../lib/mongo";
+import { getDb as getPgDb } from "../lib/db/drizzle";
+import { normalizedWorkOrders } from "../lib/db/schema/normalized";
+import { and, gt, sql } from "drizzle-orm";
 import { updateRepairPatternBatch } from "../lib/repair-patterns";
 
 async function backfill() {
   const db = await getDb();
   const jobIndex = db.collection("job_index");
-  const workOrders = db.collection("normalized_work_orders");
+  const pg = getPgDb();
 
   console.log("Building VIN to mileage lookup...");
 
   const vinMileage = new Map<string, { mileage: number; enterpriseId?: string }>();
-  const cursor = workOrders.find(
-    {
-      "vehicle.vin": { $exists: true, $ne: null },
-      odometerIn: { $gt: 1000 },
-    },
-    { projection: { "vehicle.vin": 1, odometerIn: 1, enterpriseId: 1 } }
-  );
+  const workOrders = await pg
+    .select({
+      vin: sql<string | null>`${normalizedWorkOrders.vehicle}->>'vin'`,
+      odometerIn: normalizedWorkOrders.odometerIn,
+      enterpriseId: normalizedWorkOrders.enterpriseId,
+    })
+    .from(normalizedWorkOrders)
+    .where(
+      and(
+        gt(normalizedWorkOrders.odometerIn, 1000),
+        sql`${normalizedWorkOrders.vehicle}->>'vin' is not null`,
+      ),
+    );
 
-  for await (const wo of cursor) {
-    const vin = wo.vehicle?.vin;
+  for (const wo of workOrders) {
+    const vin = wo.vin;
+    const odo = wo.odometerIn ?? 0;
     if (vin) {
       const existing = vinMileage.get(vin);
-      if (!existing || wo.odometerIn > existing.mileage) {
-        vinMileage.set(vin, { mileage: wo.odometerIn, enterpriseId: wo.enterpriseId });
+      if (!existing || odo > existing.mileage) {
+        vinMileage.set(vin, { mileage: odo, enterpriseId: wo.enterpriseId ?? undefined });
       }
     }
   }

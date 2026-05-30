@@ -277,6 +277,9 @@ export const normalizedVehicles = pgTable("normalized_vehicles", {
   // not needed (the column is sparse enough that PG will fast-path nulls).
   acesVehicleIdx: index("nv_aces_vehicle_idx").on(table.acesVehicleId),
   acesEngineIdx: index("nv_aces_engine_idx").on(table.acesEngineId),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (the no-VIN path).
+  provenanceSourceIdsIdx: index("nv_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export const normalizedCustomers = pgTable("normalized_customers", {
@@ -352,6 +355,9 @@ export const normalizedCustomers = pgTable("normalized_customers", {
   sourceSystemIdx: index("nc_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nc_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nc_updated_at_idx").on(table.updatedAt),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (shopId-scoped).
+  provenanceSourceIdsIdx: index("nc_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export const normalizedWorkOrders = pgTable("normalized_work_orders", {
@@ -450,6 +456,9 @@ export const normalizedWorkOrders = pgTable("normalized_work_orders", {
   sourceSystemIdx: index("nwo_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nwo_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nwo_updated_at_idx").on(table.updatedAt),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (shopId-scoped).
+  provenanceSourceIdsIdx: index("nwo_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export const normalizedServiceJobs = pgTable("normalized_service_jobs", {
@@ -535,6 +544,9 @@ export const normalizedServiceJobs = pgTable("normalized_service_jobs", {
   sourceSystemIdx: index("nsj_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nsj_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nsj_updated_at_idx").on(table.updatedAt),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (workOrderId-scoped).
+  provenanceSourceIdsIdx: index("nsj_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export const normalizedLineItems = pgTable("normalized_line_items", {
@@ -624,6 +636,9 @@ export const normalizedLineItems = pgTable("normalized_line_items", {
   sourceSystemIdx: index("nli_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nli_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nli_updated_at_idx").on(table.updatedAt),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (serviceJobId-scoped).
+  provenanceSourceIdsIdx: index("nli_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export const normalizedPayments = pgTable("normalized_payments", {
@@ -686,6 +701,9 @@ export const normalizedPayments = pgTable("normalized_payments", {
   sourceSystemIdx: index("np_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("np_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("np_updated_at_idx").on(table.updatedAt),
+  // Task #552 — GIN index supporting the W3a PG-canonical change-detection
+  // `provenance->'sourceIds' @> [...]` containment lookup (workOrderId-scoped).
+  provenanceSourceIdsIdx: index("np_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
 export type NormalizedVehicleRow = typeof normalizedVehicles.$inferSelect;

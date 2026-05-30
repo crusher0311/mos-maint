@@ -408,6 +408,18 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "np_source_system_idx" ON "normalized_payments" ((provenance->>'sourceSystem'))`,
     `CREATE INDEX IF NOT EXISTS "np_created_at_idx" ON "normalized_payments" ("created_at")`,
     `CREATE INDEX IF NOT EXISTS "np_updated_at_idx" ON "normalized_payments" ("updated_at")`,
+
+    // Task #552 (W3a cutover) — GIN indexes supporting PG-canonical
+    // change-detection. The ingestion service now dedupes against
+    // `provenance->'sourceIds' @> [...]` instead of a Mongo findOne, so each
+    // table needs a containment index or the shopId/FK-scoped lookups would
+    // seq-scan on the hot ingest path.
+    `CREATE INDEX IF NOT EXISTS "nv_provenance_source_ids_idx" ON "normalized_vehicles" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nc_provenance_source_ids_idx" ON "normalized_customers" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nwo_provenance_source_ids_idx" ON "normalized_work_orders" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nsj_provenance_source_ids_idx" ON "normalized_service_jobs" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nli_provenance_source_ids_idx" ON "normalized_line_items" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+    `CREATE INDEX IF NOT EXISTS "np_provenance_source_ids_idx" ON "normalized_payments" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
   ];
 
   console.log("Creating enums...");

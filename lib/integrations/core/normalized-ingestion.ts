@@ -177,7 +177,14 @@ export class NormalizedIngestionService {
         existingQuery['provenance.sourceIds'] = { $elemMatch: sourceIds[0] };
       }
       
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection. Mongo is only
+      // consulted as a fallback while shadow writes are still on, so the same
+      // code is correct before AND after WRITE_MONGO_NORMALIZED=0.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findVehicleByNaturalKey(this.shopId, mapped.vin, sourceIds[0])
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -298,7 +305,13 @@ export class NormalizedIngestionService {
         'provenance.sourceIds': { $elemMatch: sourceIds[0] },
       };
       
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
+      // only while shadow writes are on.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findCustomerByNaturalKey(this.shopId, sourceIds[0])
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -450,7 +463,13 @@ export class NormalizedIngestionService {
         'provenance.sourceIds': { $elemMatch: sourceIds[0] },
       };
       
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
+      // only while shadow writes are on.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findWorkOrderByNaturalKey(this.shopId, sourceIds[0])
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -465,15 +484,21 @@ export class NormalizedIngestionService {
           // FK against. Idempotently upsert PG on the skip path so the FK
           // invariant holds. PG upsert is `onConflictDoUpdate` so the cost
           // is one cheap UPSERT per skipped RO; correctness > microperf.
-          await this.dualWriteToSupabase('work_order', existing._id, 'skip-fk-backfill', () =>
-            this.supabaseDualWriter!.upsertWorkOrder({
-              ...existing,
-              shopId: this.shopId,
-              enterpriseId: this.enterpriseId,
-              vehicleId: vehicleId || existing.vehicleId,
-              customerId: customerId || existing.customerId,
-            })
-          );
+          // task #552: when `existing` came from PG (`__fromPg`), the parent
+          // row already exists, so this backfill is redundant — and `existing`
+          // is only a partial projection, so spreading it would clobber the
+          // real row. Only backfill when the hit came from the Mongo fallback.
+          if (!existing.__fromPg) {
+            await this.dualWriteToSupabase('work_order', existing._id, 'skip-fk-backfill', () =>
+              this.supabaseDualWriter!.upsertWorkOrder({
+                ...existing,
+                shopId: this.shopId,
+                enterpriseId: this.enterpriseId,
+                vehicleId: vehicleId || existing.vehicleId,
+                customerId: customerId || existing.customerId,
+              })
+            );
+          }
           return {
             success: true,
             entityType: 'work_order',
@@ -648,7 +673,13 @@ export class NormalizedIngestionService {
         'provenance.sourceIds.idValue': String(sourceId),
       };
       
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
+      // only while shadow writes are on.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findServiceJobByNaturalKey(workOrderId, sourceId)
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -658,15 +689,18 @@ export class NormalizedIngestionService {
           // pre-dates the W3a polarity flip (task #344). Without this
           // backfill upsert, child line_items would FK-violate against a
           // missing parent service_job. See ingestWorkOrder skip path for
-          // the full rationale.
-          await this.dualWriteToSupabase('service_job', existing._id, 'skip-fk-backfill', () =>
-            this.supabaseDualWriter!.upsertServiceJob({
-              ...existing,
-              shopId: this.shopId,
-              enterpriseId: this.enterpriseId,
-              workOrderId,
-            })
-          );
+          // the full rationale. task #552: skip when the hit came from PG
+          // (`__fromPg`) — the row already exists and `existing` is partial.
+          if (!existing.__fromPg) {
+            await this.dualWriteToSupabase('service_job', existing._id, 'skip-fk-backfill', () =>
+              this.supabaseDualWriter!.upsertServiceJob({
+                ...existing,
+                shopId: this.shopId,
+                enterpriseId: this.enterpriseId,
+                workOrderId,
+              })
+            );
+          }
           return {
             success: true,
             entityType: 'service_job',
@@ -801,7 +835,13 @@ export class NormalizedIngestionService {
         'provenance.sourceIds.idValue': String(sourceId),
       };
 
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
+      // only while shadow writes are on.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findLineItemByNaturalKey(serviceJobId, sourceId)
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
 
       const contentHash = generateContentHash(mapped);
 
@@ -922,7 +962,13 @@ export class NormalizedIngestionService {
         'provenance.sourceIds.idValue': String(sourceId),
       };
       
-      const existing = await collection.findOne(existingQuery);
+      // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
+      // only while shadow writes are on.
+      const existing =
+        (this.supabaseDualWriter
+          ? await this.supabaseDualWriter.findPaymentByNaturalKey(workOrderId, sourceId)
+          : null) ??
+        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -1247,13 +1293,23 @@ export class NormalizedIngestionService {
     if (workOrderResult.success && workOrderResult.entityId) {
       const workOrderId = workOrderResult.entityId;
       
+      // task #552 (W3a cutover): resolve the vehicle id (used to link the
+      // Mongo-only inspection/recommendation entities) from PG first; fall back
+      // to Mongo only while shadow writes are on.
       const vehicleData = this.adapter.extractVehicleFromWorkOrder(sourceData);
-      const vehicleQuery: any = { shopId: this.shopId };
-      if (vehicleData?.vin) {
-        vehicleQuery.vin = vehicleData.vin;
+      let vehicleId = '';
+      if (vehicleData?.vin && this.supabaseDualWriter) {
+        const pgVehicle = await this.supabaseDualWriter.findVehicleByNaturalKey(this.shopId, vehicleData.vin, undefined);
+        if (pgVehicle?._id) vehicleId = String(pgVehicle._id);
       }
-      const vehicleDoc = await this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery);
-      const vehicleId = vehicleDoc?._id ? String(vehicleDoc._id) : '';
+      if (!vehicleId && shouldShadowWriteMongo()) {
+        const vehicleQuery: any = { shopId: this.shopId };
+        if (vehicleData?.vin) {
+          vehicleQuery.vin = vehicleData.vin;
+        }
+        const vehicleDoc = await this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery);
+        if (vehicleDoc?._id) vehicleId = String(vehicleDoc._id);
+      }
 
       // Standalone service-job + line-item ingestion. This is the gap that
       // task #360 closes: the work-order path used to only embed jobs into

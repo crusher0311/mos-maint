@@ -1,17 +1,26 @@
 /**
  * Smoke test for task #414 — pin the FK invariant on the
- * `ingestWorkOrder` / `ingestServiceJob` skip paths.
+ * `ingestWorkOrder` / `ingestServiceJob` skip paths — extended for the
+ * task #552 W3a change-detection cutover.
  *
  * Before #414, when a Mongo doc existed with a matching contentHash the
  * ingest method short-circuited *before* any PG write. If the Mongo doc
  * pre-dated the W3a polarity flip (#344), the PG row was never created,
  * and any subsequent child `service_job` / `line_item` insert would
- * FK-violate against the missing parent.
+ * FK-violate against the missing parent. The #414 fix performs an
+ * idempotent PG upsert on that skip path.
  *
- * The fix performs an idempotent PG upsert on the skip path. This test
- * runs the ingest flow with a stubbed Mongo db + adapter override + PG
- * writer, and asserts that `upsertWorkOrder` / `upsertServiceJob` are
- * invoked on the skip branch.
+ * Task #552 moved change-detection itself to PG-canonical: the ingest
+ * method now looks the existing record up via the PG natural-key finders
+ * (`findWorkOrderByNaturalKey` / `findServiceJobByNaturalKey`) first, and
+ * only falls back to the Mongo `findOne` while shadow writes are on. There
+ * are now two skip scenarios, both of which must keep the FK invariant:
+ *   1. Mongo-fallback hit (PG finder returns null, pre-flip Mongo doc):
+ *      the #414 skip-fk-backfill upsert MUST fire so the missing PG parent
+ *      is created.
+ *   2. PG-canonical hit (finder returns a `__fromPg` record): the PG row
+ *      already exists, so the backfill upsert MUST NOT fire — `existing`
+ *      is only a partial projection and spreading it would clobber the row.
  *
  * Run: `npx tsx tests/pg-canonical-fk-skip-path.smoke.ts`
  */
@@ -36,7 +45,13 @@ interface UpsertCall {
   doc: { _id?: string; workOrderId?: string };
 }
 
-type MockWriter = Pick<SupabaseDualWriter, "upsertWorkOrder" | "upsertServiceJob">;
+type MockWriter = Pick<
+  SupabaseDualWriter,
+  | "upsertWorkOrder"
+  | "upsertServiceJob"
+  | "findWorkOrderByNaturalKey"
+  | "findServiceJobByNaturalKey"
+>;
 
 function makeStubMongoDb(existingByCol: Record<string, unknown[]>): Db {
   // Minimal subset of the Mongo `Db` surface that NormalizedIngestionService
@@ -128,6 +143,10 @@ async function probeContentHash(kind: "wo" | "sj"): Promise<string> {
     upsertServiceJob: async (d) => {
       if (kind === "sj") captured = d.provenance?.contentHash ?? "";
     },
+    // Empty PG → finders miss, so change-detection falls through to the
+    // (empty) Mongo stub and the create branch fires.
+    findWorkOrderByNaturalKey: async () => null,
+    findServiceJobByNaturalKey: async () => null,
   };
   const svc = makeService(mongoDb, probeWriter);
   if (kind === "wo") await svc.ingestWorkOrder({ id: "1" });
@@ -188,46 +207,52 @@ async function main() {
   };
 
   const upsertCalls: UpsertCall[] = [];
-  const fakeWriter: MockWriter = {
+
+  // Scenario 1 — Mongo-fallback hit (pre-flip doc, PG row missing). The PG
+  // finders miss (return null), so change-detection falls back to Mongo and
+  // the #414 skip-fk-backfill upsert MUST fire.
+  const mongoFallbackWriter: MockWriter = {
     upsertWorkOrder: async (d) => {
       upsertCalls.push({ kind: "wo", doc: d });
     },
     upsertServiceJob: async (d) => {
       upsertCalls.push({ kind: "sj", doc: d });
     },
+    findWorkOrderByNaturalKey: async () => null,
+    findServiceJobByNaturalKey: async () => null,
   };
 
-  // WO skip-path test
+  // WO skip-path test (Mongo fallback)
   {
     const mongoDb = makeStubMongoDb({ normalized_work_orders: [fakeWoMongo] });
-    const svc = makeService(mongoDb, fakeWriter);
+    const svc = makeService(mongoDb, mongoFallbackWriter);
     upsertCalls.length = 0;
     const r = await svc.ingestWorkOrder({ id: "1" });
     ok(
-      "WO skip branch returns 'skipped'",
+      "WO skip branch (Mongo fallback) returns 'skipped'",
       r.action === "skipped",
       `got ${r.action} (${r.message ?? ""})`,
     );
     ok(
-      "WO skip branch performs idempotent PG upsert (task #414)",
+      "WO skip branch (Mongo fallback) performs idempotent PG upsert (task #414)",
       upsertCalls.some((c) => c.kind === "wo" && c.doc._id === "wo-pg-canonical-id"),
       "upsertWorkOrder was NOT invoked on skip — PG FK invariant would break",
     );
   }
 
-  // SJ skip-path test
+  // SJ skip-path test (Mongo fallback)
   {
     const mongoDb = makeStubMongoDb({ normalized_service_jobs: [fakeSjMongo] });
-    const svc = makeService(mongoDb, fakeWriter);
+    const svc = makeService(mongoDb, mongoFallbackWriter);
     upsertCalls.length = 0;
     const r = await svc.ingestServiceJob("wo-pg-canonical-id", { id: "10" });
     ok(
-      "SJ skip branch returns 'skipped'",
+      "SJ skip branch (Mongo fallback) returns 'skipped'",
       r.action === "skipped",
       `got ${r.action} (${r.message ?? ""})`,
     );
     ok(
-      "SJ skip branch performs idempotent PG upsert (task #414)",
+      "SJ skip branch (Mongo fallback) performs idempotent PG upsert (task #414)",
       upsertCalls.some(
         (c) =>
           c.kind === "sj" &&
@@ -235,6 +260,86 @@ async function main() {
           c.doc.workOrderId === "wo-pg-canonical-id",
       ),
       "upsertServiceJob was NOT invoked on skip — child line_items would FK-violate",
+    );
+  }
+
+  // Scenario 2 — PG-canonical hit (task #552). The finder returns a
+  // `__fromPg` record, so the PG row already exists. The skip branch MUST
+  // still return 'skipped' but MUST NOT run the backfill upsert (which would
+  // spread a partial projection over the real row).
+  const pgWoRecord = {
+    _id: "wo-pg-canonical-id",
+    provenance: {
+      contentHash: woHash,
+      sourceIds: [
+        { system: "tekmetric", idType: "work_order_id", idValue: "1", isPrimary: true },
+      ],
+    },
+    softDelete: { isDeleted: false },
+    version: 5,
+    createdAt: new Date("2025-01-01"),
+    vehicleId: "veh-1",
+    customerId: null,
+    __fromPg: true,
+  };
+  const pgSjRecord = {
+    _id: "sj-pg-canonical-id",
+    provenance: {
+      contentHash: sjHash,
+      sourceIds: [
+        { system: "tekmetric", idType: "service_job_id", idValue: "10", isPrimary: true },
+      ],
+    },
+    softDelete: { isDeleted: false },
+    version: 4,
+    createdAt: new Date("2025-01-01"),
+    __fromPg: true,
+  };
+  const pgCanonicalWriter: MockWriter = {
+    upsertWorkOrder: async (d) => {
+      upsertCalls.push({ kind: "wo", doc: d });
+    },
+    upsertServiceJob: async (d) => {
+      upsertCalls.push({ kind: "sj", doc: d });
+    },
+    findWorkOrderByNaturalKey: async () => pgWoRecord as any,
+    findServiceJobByNaturalKey: async () => pgSjRecord as any,
+  };
+
+  // WO skip-path test (PG canonical) — Mongo is empty so a fallback would
+  // miss; the only hit comes from the PG finder.
+  {
+    const mongoDb = makeStubMongoDb({});
+    const svc = makeService(mongoDb, pgCanonicalWriter);
+    upsertCalls.length = 0;
+    const r = await svc.ingestWorkOrder({ id: "1" });
+    ok(
+      "WO skip branch (PG canonical) returns 'skipped'",
+      r.action === "skipped",
+      `got ${r.action} (${r.message ?? ""})`,
+    );
+    ok(
+      "WO skip branch (PG canonical) does NOT re-upsert the existing PG row (task #552)",
+      !upsertCalls.some((c) => c.kind === "wo"),
+      "upsertWorkOrder fired on a __fromPg hit — partial projection would clobber the real row",
+    );
+  }
+
+  // SJ skip-path test (PG canonical)
+  {
+    const mongoDb = makeStubMongoDb({});
+    const svc = makeService(mongoDb, pgCanonicalWriter);
+    upsertCalls.length = 0;
+    const r = await svc.ingestServiceJob("wo-pg-canonical-id", { id: "10" });
+    ok(
+      "SJ skip branch (PG canonical) returns 'skipped'",
+      r.action === "skipped",
+      `got ${r.action} (${r.message ?? ""})`,
+    );
+    ok(
+      "SJ skip branch (PG canonical) does NOT re-upsert the existing PG row (task #552)",
+      !upsertCalls.some((c) => c.kind === "sj"),
+      "upsertServiceJob fired on a __fromPg hit — partial projection would clobber the real row",
     );
   }
 

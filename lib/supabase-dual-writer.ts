@@ -20,7 +20,7 @@
  *
  * See `docs/db-migration-map.md` §10.3 #5.
  */
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   normalizedVehicles,
   normalizedCustomers,
@@ -393,6 +393,164 @@ export class SupabaseDualWriter {
           createdAt: undefined,
         },
       });
+  }
+
+  // ---------------------------------------------------------------------------
+  // CHANGE-DETECTION READERS (Task #552, W3a cutover)
+  //
+  // PG-canonical natural-key lookups that replace the Mongo `findOne` the
+  // ingestion service used to run before deciding create/update/skip. They
+  // return a *minimal* reconstructed shape — only the fields the ingest logic
+  // reads from `existing` (`_id`, `provenance`, `softDelete`, `version`,
+  // `createdAt`, plus `vehicleId`/`customerId` for work orders) — tagged with
+  // `__fromPg: true` so the caller knows the PG row already exists and can skip
+  // the task #414 skip-fk-backfill upsert (which would otherwise spread this
+  // partial object over the real row and clobber it).
+  //
+  // Natural keys mirror the old Mongo queries exactly so dedupe semantics do
+  // not change: vehicle = (shopId, vin) or shopId + sourceIds[0] containment;
+  // customer / work_order = shopId + sourceIds[0] containment; service_job /
+  // line_item / payment = parent FK + a sourceIds element whose idValue matches.
+  // No soft-delete filter, matching the Mongo `findOne` behaviour.
+  // ---------------------------------------------------------------------------
+
+  /** Containment predicate: an element of provenance.sourceIds contains `elem`. */
+  private sourceIdsContain(provenanceCol: any, elem: any) {
+    return sql`${provenanceCol} -> 'sourceIds' @> ${JSON.stringify([elem])}::jsonb`;
+  }
+
+  async findVehicleByNaturalKey(
+    shopId: number,
+    vin: string | null | undefined,
+    sourceId0: any,
+  ): Promise<any | null> {
+    let where: any;
+    if (vin) {
+      where = and(eq(normalizedVehicles.shopId, shopId), eq(normalizedVehicles.vin, vin));
+    } else if (sourceId0) {
+      where = and(
+        eq(normalizedVehicles.shopId, shopId),
+        this.sourceIdsContain(normalizedVehicles.provenance, sourceId0),
+      );
+    } else {
+      return null;
+    }
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedVehicles.id,
+        provenance: normalizedVehicles.provenance,
+        softDelete: normalizedVehicles.softDelete,
+        version: normalizedVehicles.version,
+        createdAt: normalizedVehicles.createdAt,
+      })
+      .from(normalizedVehicles)
+      .where(where)
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
+  }
+
+  async findCustomerByNaturalKey(shopId: number, sourceId0: any): Promise<any | null> {
+    if (!sourceId0) return null;
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedCustomers.id,
+        provenance: normalizedCustomers.provenance,
+        softDelete: normalizedCustomers.softDelete,
+        version: normalizedCustomers.version,
+        createdAt: normalizedCustomers.createdAt,
+      })
+      .from(normalizedCustomers)
+      .where(
+        and(
+          eq(normalizedCustomers.shopId, shopId),
+          this.sourceIdsContain(normalizedCustomers.provenance, sourceId0),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
+  }
+
+  async findWorkOrderByNaturalKey(shopId: number, sourceId0: any): Promise<any | null> {
+    if (!sourceId0) return null;
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedWorkOrders.id,
+        provenance: normalizedWorkOrders.provenance,
+        softDelete: normalizedWorkOrders.softDelete,
+        version: normalizedWorkOrders.version,
+        createdAt: normalizedWorkOrders.createdAt,
+        vehicleId: normalizedWorkOrders.vehicleId,
+        customerId: normalizedWorkOrders.customerId,
+      })
+      .from(normalizedWorkOrders)
+      .where(
+        and(
+          eq(normalizedWorkOrders.shopId, shopId),
+          this.sourceIdsContain(normalizedWorkOrders.provenance, sourceId0),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
+  }
+
+  async findServiceJobByNaturalKey(workOrderId: string, sourceIdValue: any): Promise<any | null> {
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedServiceJobs.id,
+        provenance: normalizedServiceJobs.provenance,
+        softDelete: normalizedServiceJobs.softDelete,
+        version: normalizedServiceJobs.version,
+        createdAt: normalizedServiceJobs.createdAt,
+      })
+      .from(normalizedServiceJobs)
+      .where(
+        and(
+          eq(normalizedServiceJobs.workOrderId, workOrderId),
+          this.sourceIdsContain(normalizedServiceJobs.provenance, { idValue: String(sourceIdValue) }),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
+  }
+
+  async findLineItemByNaturalKey(serviceJobId: string, sourceIdValue: any): Promise<any | null> {
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedLineItems.id,
+        provenance: normalizedLineItems.provenance,
+        softDelete: normalizedLineItems.softDelete,
+        version: normalizedLineItems.version,
+        createdAt: normalizedLineItems.createdAt,
+      })
+      .from(normalizedLineItems)
+      .where(
+        and(
+          eq(normalizedLineItems.serviceJobId, serviceJobId),
+          this.sourceIdsContain(normalizedLineItems.provenance, { idValue: String(sourceIdValue) }),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
+  }
+
+  async findPaymentByNaturalKey(workOrderId: string, sourceIdValue: any): Promise<any | null> {
+    const rows = await (this.db as any)
+      .select({
+        _id: normalizedPayments.id,
+        provenance: normalizedPayments.provenance,
+        softDelete: normalizedPayments.softDelete,
+        version: normalizedPayments.version,
+        createdAt: normalizedPayments.createdAt,
+      })
+      .from(normalizedPayments)
+      .where(
+        and(
+          eq(normalizedPayments.workOrderId, workOrderId),
+          this.sourceIdsContain(normalizedPayments.provenance, { idValue: String(sourceIdValue) }),
+        ),
+      )
+      .limit(1);
+    return rows[0] ? { ...rows[0], __fromPg: true } : null;
   }
 
   private sanitizeForJson(doc: any): any {

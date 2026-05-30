@@ -1,4 +1,7 @@
 import { getDb } from "@/lib/mongo";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
+import { normalizedServiceJobs } from "@/lib/db/schema/normalized";
+import { eq, and, inArray, ilike, sql } from "drizzle-orm";
 
 export interface JobKnowledgeEntry {
   jobId: string;
@@ -3153,44 +3156,40 @@ export async function getShopHistoricalAverage(
   vehicleAttributes?: { make?: string; model?: string; year?: number }
 ): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number } | null> {
   try {
-    const db = await getDb();
-    const matchConditions: any = {
-      shopId,
-      'softDelete.isDeleted': { $ne: true },
-      status: { $in: ['completed', 'authorized'] },
-    };
+    const db = getPgDb();
 
-    const titleWords = jobTitle.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-    if (titleWords.length > 0) {
-      matchConditions.$and = titleWords.map(word => ({
-        title: { $regex: word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
-      }));
-    }
-
-    const pipeline: any[] = [
-      { $match: matchConditions },
-      {
-        $group: {
-          _id: null,
-          avgHours: { $avg: { $ifNull: ['$laborHoursBilled', '$laborHoursActual'] } },
-          avgTotal: { $avg: '$total' },
-          avgLaborTotal: { $avg: '$laborTotal' },
-          avgPartsTotal: { $avg: '$partsTotal' },
-          count: { $sum: 1 },
-        },
-      },
+    const conditions: any[] = [
+      eq(normalizedServiceJobs.shopId, shopId),
+      sql`(${normalizedServiceJobs.softDelete}->>'isDeleted')::boolean = false`,
+      inArray(normalizedServiceJobs.status, ['completed', 'authorized']),
     ];
 
-    const results = await db.collection('normalized_service_jobs').aggregate(pipeline).toArray();
-    if (results.length === 0 || results[0].count === 0) return null;
+    const titleWords = jobTitle.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    for (const word of titleWords) {
+      const pattern = `%${word.replace(/[\\%_]/g, '\\$&')}%`;
+      conditions.push(ilike(normalizedServiceJobs.title, pattern));
+    }
 
-    const r = results[0];
+    const rows = await db
+      .select({
+        avgHours: sql<string | null>`avg(coalesce(${normalizedServiceJobs.laborHoursBilled}, ${normalizedServiceJobs.laborHoursActual}))`,
+        avgTotal: sql<string | null>`avg(${normalizedServiceJobs.total})`,
+        avgLaborTotal: sql<string | null>`avg(${normalizedServiceJobs.laborTotal})`,
+        avgPartsTotal: sql<string | null>`avg(${normalizedServiceJobs.partsTotal})`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(normalizedServiceJobs)
+      .where(and(...conditions));
+
+    const r = rows[0];
+    if (!r || !r.count) return null;
+
     return {
-      avgHours: Math.round((r.avgHours || 0) * 10) / 10,
-      avgTotal: Math.round((r.avgTotal || 0) * 100) / 100,
-      avgLaborTotal: Math.round((r.avgLaborTotal || 0) * 100) / 100,
-      avgPartsTotal: Math.round((r.avgPartsTotal || 0) * 100) / 100,
-      count: r.count,
+      avgHours: Math.round((Number(r.avgHours) || 0) * 10) / 10,
+      avgTotal: Math.round((Number(r.avgTotal) || 0) * 100) / 100,
+      avgLaborTotal: Math.round((Number(r.avgLaborTotal) || 0) * 100) / 100,
+      avgPartsTotal: Math.round((Number(r.avgPartsTotal) || 0) * 100) / 100,
+      count: Number(r.count),
     };
   } catch {
     return null;
