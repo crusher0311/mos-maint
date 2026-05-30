@@ -20,6 +20,7 @@ import {
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import { computeSweepPlan } from "@/lib/integrations/protractor/sync-cursor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
@@ -27,6 +28,20 @@ import { Db } from "mongodb";
 
 const QUEUE_BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 3;
+
+// Resumable-sweep tuning. The handler used to try to refresh ALL Protractor
+// shops in a single run, which consistently hit the scheduler's 25-min hard
+// abort (`ms=1500000`, lastSuccess NEVER) — shops late in the pLimit(4) queue
+// never refreshed and the run never recorded a success. We now process shops
+// in rotating batches across runs: each run picks up the shops not yet swept
+// in the current cycle, works until SOFT_BUDGET_MS, marks each completed shop
+// done, and lets the next run continue. When every shop is done the cycle
+// resets and the sweep starts over. SOFT_BUDGET_MS leaves headroom under the
+// 25-min hard abort so a run can finish its in-flight shops and return 200.
+const SYNC_PROGRESS_COLLECTION = "protractor_sync_progress";
+const SYNC_PROGRESS_ID = "global";
+const SOFT_BUDGET_MS = 18 * 60 * 1000; // stop STARTING new shops after 18 min
+const PREGEN_HARD_MS = 23 * 60 * 1000; // stop pre-generation after 23 min
 
 async function processWebhookQueue(db: Db): Promise<{ processed: number; failed: number }> {
   // Process unprocessed GET callback events (webhooks)
@@ -225,18 +240,124 @@ export async function GET(req: NextRequest) {
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];
 
+    // --- Resumable sweep cursor ---------------------------------------------
+    // Each run sweeps the shops not yet covered in the current cycle, marks
+    // each completed shop done, and lets the next run continue. When all shops
+    // are done the cycle resets. This replaces the old "refresh all 27 shops
+    // every run" loop that never finished inside the 25-min hard abort.
+    const allShopIds = shops
+      .map((s) => Number(s.shopId))
+      .filter((n) => !Number.isNaN(n));
+
+    const progressDoc = await db
+      .collection(SYNC_PROGRESS_COLLECTION)
+      .findOne({ _id: SYNC_PROGRESS_ID } as any);
+
+    const priorDone: number[] = Array.isArray(progressDoc?.doneShopIds)
+      ? (progressDoc!.doneShopIds as number[])
+      : [];
+    const attemptsByShop: Record<string, number> =
+      progressDoc?.attemptsByShop && typeof progressDoc.attemptsByShop === "object"
+        ? progressDoc.attemptsByShop
+        : {};
+    const { cycleReset, doneShopIds, remainingShopIds, exhaustedShopIds } =
+      computeSweepPlan(allShopIds, priorDone, attemptsByShop);
+    const cycleStartedAt: Date = cycleReset
+      ? new Date()
+      : progressDoc?.cycleStartedAt
+        ? new Date(progressDoc.cycleStartedAt)
+        : new Date();
+
+    // Persist the reset so the new cycle's `cycleStartedAt` is durable even if
+    // this run is aborted before marking any shop done. The reset also clears
+    // the per-shop attempt counts so an exhausted shop gets a fresh chance.
+    if (cycleReset) {
+      await db.collection(SYNC_PROGRESS_COLLECTION).updateOne(
+        { _id: SYNC_PROGRESS_ID } as any,
+        { $set: { doneShopIds: [], attemptsByShop: {}, cycleStartedAt, updatedAt: new Date() } },
+        { upsert: true }
+      );
+    }
+
+    if (exhaustedShopIds.length > 0) {
+      console.warn(
+        `[Cron] Protractor sync: ${exhaustedShopIds.length} shop(s) exhausted attempts this cycle (skipped):`,
+        exhaustedShopIds
+      );
+    }
+
+    const remainingSet = new Set(remainingShopIds);
+    const shopsToProcess = shops.filter((s) =>
+      remainingSet.has(Number(s.shopId))
+    );
+    const processedThisRun: number[] = [];
+    const skippedForBudget: number[] = [];
+
+    const markShopDone = async (shopId: number) => {
+      try {
+        await db.collection(SYNC_PROGRESS_COLLECTION).updateOne(
+          { _id: SYNC_PROGRESS_ID } as any,
+          {
+            $addToSet: { doneShopIds: shopId },
+            $set: { updatedAt: new Date(), cycleStartedAt },
+          },
+          { upsert: true }
+        );
+      } catch (e: any) {
+        console.error(`[Cron] Protractor sync: failed to mark shop ${shopId} done:`, e?.message || e);
+      }
+    };
+
+    // Record an attempt the moment a shop STARTS (before the heavy work) so the
+    // count survives even if this run is killed mid-shop. computeSweepPlan
+    // exhausts (skips) a shop after MAX attempts so one pathological shop can't
+    // block the cycle from resetting.
+    const markShopAttempt = async (shopId: number) => {
+      try {
+        await db.collection(SYNC_PROGRESS_COLLECTION).updateOne(
+          { _id: SYNC_PROGRESS_ID } as any,
+          { $inc: { [`attemptsByShop.${shopId}`]: 1 }, $set: { updatedAt: new Date(), cycleStartedAt } },
+          { upsert: true }
+        );
+      } catch (e: any) {
+        console.error(`[Cron] Protractor sync: failed to record attempt for shop ${shopId}:`, e?.message || e);
+      }
+    };
+
+    console.log(
+      `[Cron] Protractor sync sweep: ${remainingShopIds.length}/${allShopIds.length} shops remaining this cycle` +
+        (cycleReset ? " (new cycle)" : "")
+    );
+
     // pLimit(4) across shops — see lib/cron/jobs.cjs comment on protractor-sync.
-    // Previously this was a sequential `for (const shop of shops)` loop that
-    // only reached the first 5 of 27 shops before the scheduler aborted at
-    // 5 min. With 4-way concurrency + the 25-min scheduler timeout we cover
-    // the full fleet on every tick. Each Protractor shop has its own API
-    // creds so there is no shared rate-limit ceiling to coordinate.
+    // Each Protractor shop has its own API creds so there is no shared
+    // rate-limit ceiling to coordinate. A soft time budget stops the run from
+    // STARTING new shops once we near the scheduler's hard abort; shops not
+    // reached this run stay un-marked and are picked up by the next run.
     const shopLimit = pLimit(4);
-    await Promise.all(shops.map((shop) => shopLimit(async () => {
+    await Promise.all(shopsToProcess.map((shop) => shopLimit(async () => {
       const shopId = Number(shop.shopId);
+
+      // Out of time budget — leave this shop for the next run (do NOT mark
+      // done or record an attempt — it never actually started).
+      if (Date.now() - startTime > SOFT_BUDGET_MS) {
+        skippedForBudget.push(shopId);
+        return;
+      }
+
+      // Shop is starting — record the attempt before any heavy work so it
+      // survives a mid-shop kill and feeds the exhaustion safety net.
+      await markShopAttempt(shopId);
+
       const config = await resolveProtractorConfig(shopId);
-      
-      if (!config.configured) return;
+
+      if (!config.configured) {
+        // Not configured right now — count it done for this cycle so the sweep
+        // can advance; a fresh cycle will re-check it.
+        processedThisRun.push(shopId);
+        await markShopDone(shopId);
+        return;
+      }
 
       try {
         const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
@@ -496,11 +617,25 @@ export async function GET(req: NextRequest) {
         console.log(`[Cron] Protractor sync shop ${shopId}: processed=${syncedCount} vehiclesUpdated=${vehiclesUpdated} (streaming)`);
       } catch (err: any) {
         results.push({ shopId, synced: 0, removed: 0, error: err.message });
+      } finally {
+        // Mark the shop swept for this cycle regardless of success/error so the
+        // sweep always advances. A failing shop is retried on the next full
+        // cycle (after reset), not in a tight loop within the same cycle.
+        processedThisRun.push(shopId);
+        await markShopDone(shopId);
       }
     })));
 
     const duration = Date.now() - startTime;
-    console.log(`[Cron] Protractor sync completed in ${duration}ms:`, results);
+    const doneAfter = new Set<number>([...doneShopIds, ...processedThisRun]);
+    const exhaustedSet = new Set<number>(exhaustedShopIds);
+    const remainingAfter = allShopIds.filter(
+      (id) => !doneAfter.has(id) && !exhaustedSet.has(id)
+    );
+    console.log(
+      `[Cron] Protractor sync completed in ${duration}ms: processed=${processedThisRun.length} skippedForBudget=${skippedForBudget.length} exhausted=${exhaustedShopIds.length} doneThisCycle=${doneAfter.size}/${allShopIds.length} remaining=${remainingAfter.length}`,
+      results
+    );
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     console.log(`[Cron] Starting Protractor pregeneration, CRON_SECRET set: ${!!CRON_SECRET}`);
@@ -528,14 +663,27 @@ export async function GET(req: NextRequest) {
           .project({ _id: 0, shopId: 1, protractor: 1, protractorApiKey: 1, protractorConnectionId: 1 })
           .toArray();
         
-        console.log(`[Cron] Found ${protractorShops.length} Protractor shops for pregeneration`);
+        // Only pre-generate for shops actually swept this run — the resumable
+        // sweep covers the rest on later runs, and this keeps pregeneration
+        // inside the time budget too.
+        const processedSet = new Set(processedThisRun);
+        const pregenShops = protractorShops.filter((s) =>
+          processedSet.has(Number(s.shopId))
+        );
+        console.log(`[Cron] Pregeneration for ${pregenShops.length}/${protractorShops.length} Protractor shops swept this run`);
         
         const INTERNAL_SECRET = process.env.INTERNAL_WORKER_SECRET || "mos-prefetch-worker-2024";
         
         let triggeredCount = 0;
-        for (const shop of protractorShops) {
+        for (const shop of pregenShops) {
           const shopId = shop.shopId;
           if (!shopId) continue;
+
+          // Stay clear of the scheduler's hard abort — defer the rest.
+          if (Date.now() - startTime > PREGEN_HARD_MS) {
+            console.log(`[Cron] Pregeneration time budget reached — deferring remaining shops`);
+            break;
+          }
           
           try {
             // Use the internal prefetch-vehicles endpoint (handles vehicle priority + mileage filtering)
@@ -579,6 +727,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       duration: `${duration}ms`,
+      cycle: {
+        startedAt: cycleStartedAt,
+        reset: cycleReset,
+        totalShops: allShopIds.length,
+        processedThisRun: processedThisRun.length,
+        skippedForBudget: skippedForBudget.length,
+        exhausted: exhaustedShopIds.length,
+        doneThisCycle: doneAfter.size,
+        remaining: remainingAfter.length,
+      },
       shops: results
     });
   } catch (err: any) {
