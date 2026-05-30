@@ -4,6 +4,12 @@
 // `shopId` is stored as a string.
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import {
+  isAutovitalsCachePgCanonical,
+  shouldShadowWriteMongoAutovitalsCache,
+  shadowWriteMongoIntegrationCache,
+} from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/autovitals-cache";
 
 const COLLECTION = "autovitals_inspections";
 
@@ -37,6 +43,22 @@ export async function upsertAutoVitalsInspection(
   inspection: AutoVitalsInspectionUpsertInput,
   shopId: string,
 ): Promise<void> {
+  if (isAutovitalsCachePgCanonical()) {
+    await pg.upsertAutoVitalsInspection(inspection, shopId);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoAutovitalsCache,
+      "autovitals.inspections.upsert",
+      () => upsertAutoVitalsInspectionMongo(inspection, shopId),
+    );
+    return;
+  }
+  await upsertAutoVitalsInspectionMongo(inspection, shopId);
+}
+
+async function upsertAutoVitalsInspectionMongo(
+  inspection: AutoVitalsInspectionUpsertInput,
+  shopId: string,
+): Promise<void> {
   const col = await collection();
   const now = new Date();
   await col.updateOne(
@@ -53,6 +75,12 @@ export async function findAutoVitalsInspection(
   appointmentId: number,
   shopId: string,
 ): Promise<AutoVitalsInspectionCacheDoc | null> {
+  if (isAutovitalsCachePgCanonical()) {
+    return (await pg.findAutoVitalsInspection(
+      appointmentId,
+      shopId,
+    )) as AutoVitalsInspectionCacheDoc | null;
+  }
   const col = await collection();
   return col.findOne({ appointmentId, shopId });
 }

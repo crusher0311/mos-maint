@@ -7,6 +7,12 @@
 // work-order `ServiceItem`.
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import {
+  isProtractorCachePgCanonical,
+  shouldShadowWriteMongoProtractorCache,
+  shadowWriteMongoIntegrationCache,
+} from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/protractor-cache";
 
 const COLLECTION = "protractor_vehicles";
 
@@ -40,6 +46,12 @@ export async function findVehicleByShopAndVin(
   shopId: number,
   vin: string,
 ): Promise<ProtractorVehicleCacheDoc | null> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.findVehicleByShopAndVin(
+      shopId,
+      vin,
+    )) as ProtractorVehicleCacheDoc | null;
+  }
   const col = await collection();
   return col.findOne({ shopId, vin: vin.toUpperCase() });
 }
@@ -49,6 +61,24 @@ export type ProtractorVehicleUpsertFields = Partial<
 >;
 
 export async function upsertVehicleSnapshot(
+  shopId: number,
+  vin: string,
+  set: ProtractorVehicleUpsertFields,
+  now: Date,
+): Promise<void> {
+  if (isProtractorCachePgCanonical()) {
+    await pg.upsertVehicleSnapshot(shopId, vin, set, now);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoProtractorCache,
+      "protractor.vehicles.upsert",
+      () => upsertVehicleSnapshotMongo(shopId, vin, set, now),
+    );
+    return;
+  }
+  await upsertVehicleSnapshotMongo(shopId, vin, set, now);
+}
+
+async function upsertVehicleSnapshotMongo(
   shopId: number,
   vin: string,
   set: ProtractorVehicleUpsertFields,

@@ -20,6 +20,12 @@ import {
   triggerVhiOnWorkOrderClose,
   type VhiTriggerInput,
 } from "@/lib/vhi-webhook-trigger";
+import {
+  isShopwareCachePgCanonical,
+  shouldShadowWriteMongoShopwareCache,
+  shadowWriteMongoIntegrationCache,
+} from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/shopware-cache";
 
 const REPAIR_ORDERS = "shopware_repair_orders";
 const VEHICLES = "shopware_vehicles";
@@ -65,6 +71,22 @@ export async function markRepairOrderDeleted(
   mosShopId: number,
   roId: number,
 ): Promise<void> {
+  if (isShopwareCachePgCanonical()) {
+    await pg.markRepairOrderDeleted(mosShopId, roId);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoShopwareCache,
+      "shopware.repair_orders.markDeleted",
+      () => markRepairOrderDeletedMongo(mosShopId, roId),
+    );
+    return;
+  }
+  await markRepairOrderDeletedMongo(mosShopId, roId);
+}
+
+async function markRepairOrderDeletedMongo(
+  mosShopId: number,
+  roId: number,
+): Promise<void> {
   const c = await col(REPAIR_ORDERS);
   await c.updateMany(
     { mosShopId, roId },
@@ -73,6 +95,23 @@ export async function markRepairOrderDeleted(
 }
 
 export async function upsertRepairOrder(
+  mosShopId: number,
+  roId: number,
+  data: RepairOrderUpsertData,
+): Promise<void> {
+  if (isShopwareCachePgCanonical()) {
+    await pg.upsertRepairOrder(mosShopId, roId, data);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoShopwareCache,
+      "shopware.repair_orders.upsert",
+      () => upsertRepairOrderMongo(mosShopId, roId, data),
+    );
+    return;
+  }
+  await upsertRepairOrderMongo(mosShopId, roId, data);
+}
+
+async function upsertRepairOrderMongo(
   mosShopId: number,
   roId: number,
   data: RepairOrderUpsertData,
@@ -101,6 +140,23 @@ export async function upsertVehicle(
   vehicleId: number,
   data: VehicleUpsertData,
 ): Promise<void> {
+  if (isShopwareCachePgCanonical()) {
+    await pg.upsertVehicle(mosShopId, vehicleId, data);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoShopwareCache,
+      "shopware.vehicles.upsert",
+      () => upsertVehicleMongo(mosShopId, vehicleId, data),
+    );
+    return;
+  }
+  await upsertVehicleMongo(mosShopId, vehicleId, data);
+}
+
+async function upsertVehicleMongo(
+  mosShopId: number,
+  vehicleId: number,
+  data: VehicleUpsertData,
+): Promise<void> {
   const c = await col(VEHICLES);
   await c.updateOne({ mosShopId, vehicleId }, { $set: data }, { upsert: true });
 }
@@ -118,6 +174,23 @@ export interface CustomerUpsertData extends Document {
 }
 
 export async function upsertCustomer(
+  mosShopId: number,
+  customerId: number,
+  data: CustomerUpsertData,
+): Promise<void> {
+  if (isShopwareCachePgCanonical()) {
+    await pg.upsertCustomer(mosShopId, customerId, data);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoShopwareCache,
+      "shopware.customers.upsert",
+      () => upsertCustomerMongo(mosShopId, customerId, data),
+    );
+    return;
+  }
+  await upsertCustomerMongo(mosShopId, customerId, data);
+}
+
+async function upsertCustomerMongo(
   mosShopId: number,
   customerId: number,
   data: CustomerUpsertData,

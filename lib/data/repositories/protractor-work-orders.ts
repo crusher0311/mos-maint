@@ -6,6 +6,12 @@
 // service item.
 import type { Collection, Document, Filter } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import {
+  isProtractorCachePgCanonical,
+  shouldShadowWriteMongoProtractorCache,
+  shadowWriteMongoIntegrationCache,
+} from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/protractor-cache";
 
 const COLLECTION = "protractor_work_orders";
 
@@ -57,6 +63,24 @@ export async function upsertWorkOrderSnapshot(
   set: ProtractorWorkOrderUpsertFields,
   now: Date,
 ): Promise<void> {
+  if (isProtractorCachePgCanonical()) {
+    await pg.upsertWorkOrderSnapshot(shopId, workOrderId, set, now);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoProtractorCache,
+      "protractor.work_orders.upsert",
+      () => upsertWorkOrderSnapshotMongo(shopId, workOrderId, set, now),
+    );
+    return;
+  }
+  await upsertWorkOrderSnapshotMongo(shopId, workOrderId, set, now);
+}
+
+async function upsertWorkOrderSnapshotMongo(
+  shopId: number,
+  workOrderId: string,
+  set: ProtractorWorkOrderUpsertFields,
+  now: Date,
+): Promise<void> {
   const col = await collection();
   await col.updateOne(
     { shopId, workOrderId },
@@ -69,6 +93,12 @@ export async function findCachedWorkOrderByLegacyRoNumber(
   shopId: number,
   roNumber: number,
 ): Promise<ProtractorWorkOrderCacheDoc | null> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.findCachedWorkOrderByLegacyRoNumber(
+      shopId,
+      roNumber,
+    )) as ProtractorWorkOrderCacheDoc | null;
+  }
   const col = await collection();
   return col.findOne({
     shopId,
@@ -81,6 +111,13 @@ export async function listCachedWorkOrdersForServiceItem(
   serviceItemId: string,
   options?: { includeOpen?: boolean },
 ): Promise<ProtractorWorkOrderCacheDoc[]> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.listCachedWorkOrdersForServiceItem(
+      shopId,
+      serviceItemId,
+      options,
+    )) as ProtractorWorkOrderCacheDoc[];
+  }
   const col = await collection();
   const query: Filter<ProtractorWorkOrderCacheDoc> = { shopId, serviceItemId };
   if (options?.includeOpen) {

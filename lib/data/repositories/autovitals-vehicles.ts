@@ -5,6 +5,12 @@
 // AutoVitals cache collections).
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import {
+  isAutovitalsCachePgCanonical,
+  shouldShadowWriteMongoAutovitalsCache,
+  shadowWriteMongoIntegrationCache,
+} from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/autovitals-cache";
 
 const COLLECTION = "autovitals_vehicles";
 
@@ -46,6 +52,22 @@ export async function upsertAutoVitalsVehicle(
   vehicle: AutoVitalsVehicleUpsertInput,
   shopId: string,
 ): Promise<void> {
+  if (isAutovitalsCachePgCanonical()) {
+    await pg.upsertAutoVitalsVehicle(vehicle, shopId);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoAutovitalsCache,
+      "autovitals.vehicles.upsert",
+      () => upsertAutoVitalsVehicleMongo(vehicle, shopId),
+    );
+    return;
+  }
+  await upsertAutoVitalsVehicleMongo(vehicle, shopId);
+}
+
+async function upsertAutoVitalsVehicleMongo(
+  vehicle: AutoVitalsVehicleUpsertInput,
+  shopId: string,
+): Promise<void> {
   const col = await collection();
   const now = new Date();
   await col.updateOne(
@@ -62,6 +84,12 @@ export async function findAutoVitalsVehicleByVin(
   vin: string,
   shopId: string,
 ): Promise<AutoVitalsVehicleCacheDoc | null> {
+  if (isAutovitalsCachePgCanonical()) {
+    return (await pg.findAutoVitalsVehicleByVin(
+      vin,
+      shopId,
+    )) as AutoVitalsVehicleCacheDoc | null;
+  }
   const col = await collection();
   return col.findOne({ vin, shopId });
 }
@@ -73,6 +101,12 @@ export async function findAutoVitalsVehicleByVinCaseInsensitive(
   vinUpper: string,
   shopId: string,
 ): Promise<AutoVitalsVehicleCacheDoc | null> {
+  if (isAutovitalsCachePgCanonical()) {
+    return (await pg.findAutoVitalsVehicleByVinCaseInsensitive(
+      vinUpper,
+      shopId,
+    )) as AutoVitalsVehicleCacheDoc | null;
+  }
   const col = await collection();
   return col.findOne({
     shopId,

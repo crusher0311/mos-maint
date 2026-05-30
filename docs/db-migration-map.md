@@ -266,6 +266,13 @@ Grouped by domain. "PG plan" calls out the wave each one belongs to.
 
 These are per-integration mirrors of remote SMS data. They feed `normalized_ingestion`, so they're upstream of the dual-written entities; cutover order matters.
 
+**Cutover infrastructure (task #556).** The PG mirror tables exist (`drizzle/0014_wave3.sql`, schema in `lib/db/schema/wave3.ts`/`wave2.ts`). Each of the five integrations now has a pair of runtime kill-switches in `lib/db/integration-cache-write-mode.ts`:
+
+* `<INTEGRATION>_CACHE_PG_CANONICAL=1` flips that integration's *abstracted* cache repos from Mongo reads/writes to Postgres. **Default OFF → Mongo canonical → zero behaviour change.**
+* `WRITE_MONGO_<INTEGRATION>_CACHE=0` disables the Mongo shadow write during the post-flip soak. **Default ON.**
+
+`<INTEGRATION>` ∈ `{TEKMETRIC, PROTRACTOR, SHOPWARE, AUTOFLOW, AUTOVITALS}`. PG read/write surfaces live in `lib/data/repositories/pg/{shopware,protractor,autovitals}-cache.ts` and are dispatched from the matching Mongo repos. Per-integration backfill + soak + flip is **operator action in prod** (this repl's dev Mongo == prod, so no writes/backfills run here). Full playbook, per-integration readiness, and the remaining direct-access reader call sites (the `lint:direct-db` allowlist) that must be folded onto the gated repos before each flip: **`docs/runbooks/db-integration-cache-cutover.md`**.
+
 | Collection | Readers | Writers | Notes |
 | --- | --- | --- | --- |
 | `tekmetric_work_orders` | `lib/tekmetric-job-index.ts`, `lib/tekmetric-incremental-sync.ts`, `app/api/dashboard/data/route.ts`, `lib/plan-builder.ts`, `lib/vhi-rebuild.ts`, `app/api/extension/jobs/search/route.ts` | `lib/tekmetric-sync.ts`, `lib/tekmetric-incremental-sync.ts`, `app/api/webhooks/tekmetric/route.ts`, `app/api/cron/tekmetric-backfill/route.ts` | Hot path. **W3.** |
@@ -279,7 +286,7 @@ These are per-integration mirrors of remote SMS data. They feed `normalized_inge
 | `protractor_work_orders`, `protractor_invoices`, `protractor_invoice_cache`, `protractor_vehicles`, `protractor_canned_jobs`, `protractor_canned_jobs_cache`, `protractor_ro_cache`, `protractor_template_cache`, `protractor_service_items`, `protractor_deferred_work`, `protractor_callback_events` | `lib/integrations/protractor.ts`, `lib/protractor-jobs-prewarm.ts`, `app/api/cron/protractor-sync/route.ts`, `lib/auto-booking/scheduler.ts`, `app/api/dashboard/data/route.ts`, `lib/vhi-rebuild.ts`, `app/api/webhooks/protractor/[token]/route.ts` | same | Mirror of Protractor's REST/SOAP API. **W3.** |
 | `shopware_repair_orders`, `shopware_vehicles`, `shopware_customers`, `shopware_backfill_progress`, `shopware_webhook_logs` | `lib/shopware-jobs-prewarm.ts`, cron + webhook routes, `app/api/dashboard/data/route.ts`, `app/api/plan-build/route.ts` | same | **W3.** |
 | `autoflow_credentials`, `autoflow_dvi_items`, `autoflow_events`, `af_open` | `lib/integrations/autoflow.ts`, `lib/integrations/autoflow/client.ts`, `lib/evidence.ts` | same | **W3.** |
-| `autovitals_vehicles`, `autovitals_inspections`, `autovitals_appointments`, `autovitals_imports` | `lib/integrations/autovitals.ts`, `app/api/autovitals/**` | same | **W3.** |
+| `autovitals_vehicles`, `autovitals_inspections`, `autovitals_appointments`, `autovitals_imports` | `lib/integrations/autovitals.ts`, `app/api/autovitals/**` | same | **W3.** Abstracted repos gated on `AUTOVITALS_CACHE_PG_CANONICAL` (#556). **Pre-flip:** `autovitals_appointments`/`autovitals_inspections` still need backfill mirror specs (only `autovitals_vehicles` exists) — see runbook. |
 
 ### 3.4 Reference / lookup data (mostly DataOne ETL — W1/W2)
 
