@@ -1,3 +1,4 @@
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
 - [job_index retirement blocked](job-index-retirement-blocked.md) — legacy Mongo job_index still has live readers (job-search fallback, plan-build, parts, dashboard); cannot drop until PG backfill+soak done.
 - [DB cutover flips are operator-only](db-cutover-operator-gated.md) — flipping *_PG_CANONICAL, running backfills, soaking, removing fallbacks are prod actions; never do them from an isolated env.
+- [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
