@@ -1,0 +1,1 @@
+- [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
