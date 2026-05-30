@@ -114,6 +114,7 @@
     "db:studio": "npx drizzle-kit studio",
     "drain:tekmetric-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts",
     "drain:protractor-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts",
+    "sweep:protractor-new-shops": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/sweep-new-protractor-shops.ts",
     "worker:backfill-drain": "tsx scripts/backfill-drain-worker.ts"
   },
   "dependencies": {
