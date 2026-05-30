@@ -148,6 +148,15 @@ async function ensureIndexes() {
       // print_agent_heartbeats - one row per (shopId, printerId); the admin
       // dashboard (task #543) reads "last seen" to derive online/offline.
       { collection: "print_agent_heartbeats", index: { shopId: 1, printerId: 1 }, options: { unique: true } },
+
+      // protractor_callback_events - the protractor-sync cron drains the pending
+      // GET webhook queue first thing every run via
+      //   find({ method:"GET", processed:false }).sort({ priority:1, receivedAt:1 }).limit(50)
+      // The collection grew to >500k docs with no index for this shape, so every
+      // run did a full COLLSCAN before the shop sweep could start — starving the
+      // sweep of its time budget and never recording a success. This compound
+      // index serves the equality match AND the sort.
+      { collection: "protractor_callback_events", index: { method: 1, processed: 1, priority: 1, receivedAt: 1 } },
     ];
 
     for (const { collection, index, options } of indexes) {

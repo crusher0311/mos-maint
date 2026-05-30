@@ -28,6 +28,11 @@ import { Db } from "mongodb";
 
 const QUEUE_BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 3;
+// Safety cap on the pre-sweep webhook-queue drain. Even with the supporting
+// index this loop must never be allowed to consume the whole run and starve
+// the shop sweep — if a batch is unusually slow we stop and let the next run
+// pick up the rest (items stay unprocessed and re-queue naturally).
+const QUEUE_BUDGET_MS = 3 * 60 * 1000;
 
 // Resumable-sweep tuning. The handler used to try to refresh ALL Protractor
 // shops in a single run, which consistently hit the scheduler's 25-min hard
@@ -65,8 +70,16 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
 
   let processed = 0;
   let failed = 0;
+  const queueStart = Date.now();
 
   for (const item of pendingItems) {
+    // Never let the pre-sweep drain run away and starve the shop sweep.
+    if (Date.now() - queueStart > QUEUE_BUDGET_MS) {
+      console.warn(
+        `[Cron] Protractor webhook queue: time cap (${QUEUE_BUDGET_MS}ms) hit after ${processed} processed — deferring the rest to the next run`
+      );
+      break;
+    }
     try {
       await db.collection("protractor_callback_events").updateOne(
         { _id: item._id },
