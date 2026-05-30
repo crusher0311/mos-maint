@@ -202,6 +202,43 @@ Grouped by domain. "PG plan" calls out the wave each one belongs to.
 > `enabledFeatures.*` dot-paths write the real `enabled_features` column
 > rather than the `settings` catch-all). Out of scope: flipping flags,
 > dropping Mongo (downstream "flip PG canonical & retire Mongo shadow" task).
+>
+> **W4 status (2026-05-30, task #555): cutover is CODE-READY; the production
+> flip / soak / shadow-retirement were NOT performed — they are operator-only
+> actions and remain OPEN.** Verified from the isolated task env that the
+> production cutover has not been run: `IDENTITY_PG_CANONICAL` and
+> `WRITE_MONGO_IDENTITY` are unset at runtime and in every config
+> (`.env*`, `.replit`, `render.yaml`), so prod is still on the pre-cutover
+> defaults (Mongo-canonical, shadow-writes-on); there are no deployment logs
+> and zero `pg_miss_mongo_hit`, `[DualWritePgIdentity]`, or
+> `[ShadowMongoIdentity]` markers (the runbook's three soak gates), i.e. the
+> flag has never been flipped on under traffic. Per the established convention
+> (W3a/W3b §10.5/§11.8) and the dev==prod-Mongo constraint, the W4 backfill,
+> the `IDENTITY_PG_CANONICAL=1` flip, the 24–168 h soak, and driving
+> `pg_miss_mongo_hit` drift to zero **cannot run in an isolated task env** —
+> they require production cluster access and a real soak window.
+> **The extension-auth Mongo fallback (PG-miss → `users.extensionToken` /
+> `extensionTokens[]` read in `lib/extension-auth.ts` and `lib/auth.ts`) was
+> therefore deliberately LEFT IN PLACE.** Removing it before a clean soak
+> confirms zero drift would strip the net that keeps logged-in users
+> authenticated through the flip, and would do so while the flag is still off
+> in prod (worst possible ordering). It must only be removed once step 4 of
+> the runbook is reached with drift confirmed zero.
+>
+> **Operator steps remaining to complete W4 (`docs/runbooks/db-w4-cutover.md`):**
+> 1. Pre-window backfill + verify: `tsx scripts/backfill-mongo-to-supabase.ts
+>    --mirror=all-w4`, confirm `coverage>=99%` for every spec; spot-check
+>    `shops` / `users` row counts.
+> 2. In the maintenance window: final delta backfill, then set
+>    `IDENTITY_PG_CANONICAL=1` (keep `WRITE_MONGO_IDENTITY=1`) and restart.
+> 3. Run the auth smoke (login → `/api/auth/me` → switch-shop → password
+>    reset → re-login) with a real cookie; if any step 401s, roll back.
+> 4. Soak with periodic delta backfills; every W4 mirror must report `OK` and
+>    logs must show zero `[DualWritePgIdentity]` / `[ShadowMongoIdentity]`
+>    errors and `pg_miss_mongo_hit` drift driven to zero at T+1h/6h/24h.
+> 5. `ALTER TABLE users VALIDATE CONSTRAINT users_shop_id_fkey;`.
+> 6. After the soak passes: set `WRITE_MONGO_IDENTITY=0`, then (and only then)
+>    remove the extension-auth Mongo fallback and flip this status to complete.
 
 | Collection | Source of truth | Readers | Writers | Notes |
 | --- | --- | --- | --- | --- |
