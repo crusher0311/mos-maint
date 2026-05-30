@@ -90,6 +90,13 @@ const ALLOWLIST = new Set([
   // alerter/health crons above.
   "lib/synthetic/runner.ts",
   "app/api/admin/synthetic-prod-smoke/route.ts",
+  // ZINK Print (tasks #542/#543) — the print queue's data-access layer.
+  // print_jobs / print_printer_configs / print_agent_heartbeats are
+  // operational collections (print-job lifecycle + agent telemetry), not
+  // entity data, so they live in their own `lib/print-queue/repository.ts`
+  // rather than `lib/data/repositories/`. App routes go THROUGH this module
+  // (none call getDb directly). Matches the synthetic-runner precedent above.
+  "lib/print-queue/repository.ts",
   "app/admin/synthetic-prod-smoke/page.tsx",
   // Task #511 — extension client-side telemetry. The route ingests and the
   // admin page reads privacy-safe operational events (collection

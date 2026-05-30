@@ -23,15 +23,14 @@ import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import {
   enqueuePrintJob,
   getPrinterConfig,
+  isAgentOnline,
   resolveJobOptions,
 } from "@/lib/print-queue/repository";
 import { toJpegBase64 } from "@/lib/print-queue/render";
 import {
-  AGENT_ONLINE_THRESHOLD_MS,
   PRINTER_DEFAULTS,
   type ZinkPrintOptions,
 } from "@/lib/print-queue/types";
-import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,17 +63,7 @@ export async function GET() {
   // Derive a coarse "agent online" hint from the most recent poll heartbeat.
   let agentOnline = false;
   try {
-    const db = await getDb();
-    const hb = await db
-      .collection("print_agent_heartbeats")
-      .find({ shopId: session.shopId })
-      .sort({ lastPollAt: -1 })
-      .limit(1)
-      .toArray();
-    if (hb[0]?.lastPollAt) {
-      agentOnline =
-        Date.now() - new Date(hb[0].lastPollAt).getTime() < AGENT_ONLINE_THRESHOLD_MS;
-    }
+    agentOnline = await isAgentOnline(session.shopId);
   } catch {
     // best-effort only
   }

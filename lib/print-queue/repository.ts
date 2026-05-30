@@ -311,6 +311,29 @@ export async function recordAgentPoll(
   await col.updateOne({ shopId, printerId: pid }, { $set: set }, { upsert: true });
 }
 
+/**
+ * Coarse "is the local agent online" hint derived from the most recent poll
+ * heartbeat for a shop (optionally a specific printer). Returns true when the
+ * latest heartbeat is within AGENT_ONLINE_THRESHOLD_MS. Best-effort: callers
+ * treat any error as offline.
+ */
+export async function isAgentOnline(
+  shopId: number,
+  printerId?: string,
+): Promise<boolean> {
+  const col = await heartbeatCol();
+  const filter: Document = { shopId };
+  if (printerId && printerId.trim() !== "") filter.printerId = printerId.trim();
+  const hb = await col
+    .find(filter)
+    .sort({ lastPollAt: -1 })
+    .limit(1)
+    .toArray();
+  const last = hb[0]?.lastPollAt;
+  if (!last) return false;
+  return Date.now() - new Date(last).getTime() < AGENT_ONLINE_THRESHOLD_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Admin controls (Milestone 3) — every op is shopId-scoped so a foreign id
 // can never be mutated cross-shop.

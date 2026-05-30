@@ -23,7 +23,7 @@
 
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
+import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import {
   enqueuePrintJob,
@@ -95,10 +95,7 @@ async function _POST(req: NextRequest) {
           { status: 400, headers: corsHeaders },
         );
       }
-      const db = await getDb();
-      const shop = await db
-        .collection("shops")
-        .findOne({ shopId }, { projection: { keytagConfig: 1 } });
+      const shop = await findShopByExactShopId<any>(shopId, { keytagConfig: 1 });
       const png = await renderKeytagBuffer(shop?.keytagConfig, {
         customerName: k.customerName,
         vehicleInfo: k.vehicleInfo,
