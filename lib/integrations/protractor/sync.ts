@@ -911,3 +911,103 @@ export async function findAndResumeStaleBackfills(): Promise<{
   
   return { resumed: shopIds.length, shopIds };
 }
+
+// New-shop fastpath knobs. Mirrors the Tekmetric `?fastpath=newShops`
+// cron: Protractor shops onboarded within this window are eligible for
+// the every-5-min fast lane so a freshly onboarded client sees their
+// history populate in minutes instead of waiting for the daily 02:00 UTC
+// tick or the 15-min boost windows. Env-tunable, mirroring
+// TEKMETRIC_NEW_SHOP_FASTPATH_DAYS. Read per-call so the window can be
+// dialed without a redeploy (the in-process cron stays warm for days).
+function getNewShopFastpathDays(): number {
+  return Math.max(1, Number(process.env.PROTRACTOR_NEW_SHOP_FASTPATH_DAYS) || 14);
+}
+// Small per-tick budget so the fast lane stays light (it fires every 5
+// min, far more often than the boosts) and stays focused on the handful
+// of genuinely brand-new shops. Mirrors the Tekmetric FASTPATH cap.
+const FASTPATH_MAX_SHOPS_PER_RUN = 3;
+
+// Test seam — swapped in smoke tests so the selection logic can be
+// exercised against a fake Mongo without launching real backfills.
+export const __fastpathDeps = {
+  getDb,
+  runBackfill: (shopId: number): void => {
+    // Fire-and-forget, mirroring `findAndResumeStaleBackfills`.
+    // `runProtractorBackfill` claims the per-shop in-flight/stale lock,
+    // so a shop already being drained by the daily/boost run is a no-op
+    // here (its lock is fresh), and the rate limiter inside the backfill
+    // keeps us under Protractor's API ceiling.
+    runProtractorBackfill(shopId)
+      .then((result) =>
+        console.log(`[Backfill] Shop ${shopId} fastpath run completed:`, result),
+      )
+      .catch((err) =>
+        console.error(`[Backfill] Shop ${shopId} fastpath run failed:`, err.message),
+      );
+  },
+};
+
+/**
+ * Every-5-min "new shop honeymoon" fast lane for Protractor.
+ *
+ * Selects Protractor-configured shops created within the last
+ * NEW_SHOP_FASTPATH_DAYS days whose backfill is not yet complete, caps
+ * the set at FASTPATH_MAX_SHOPS_PER_RUN, and kicks each one through the
+ * existing resume/drain core (`runProtractorBackfill`), which owns the
+ * per-shop in-flight/stale lock and the rate limiter. Shops that have
+ * completed their backfill, or have aged past the new-shop window, drop
+ * off the fast lane and are left to the normal daily/boost cadence.
+ */
+export async function findAndRunNewShopFastpath(): Promise<{
+  processed: number;
+  shopIds: number[];
+}> {
+  const db = await __fastpathDeps.getDb();
+  const fastpathDays = getNewShopFastpathDays();
+  const cutoff = new Date(
+    Date.now() - fastpathDays * 24 * 60 * 60 * 1000,
+  );
+
+  // Protractor-configured shops onboarded inside the new-shop window.
+  const newShops = await db
+    .collection("shops")
+    .find({ "protractor.configured": true, createdAt: { $gte: cutoff } })
+    .project({ shopId: 1 })
+    .toArray();
+
+  if (newShops.length === 0) {
+    console.log(
+      `[Protractor Backfill] fastpath=newShops: no shops created in last ${fastpathDays}d`,
+    );
+    return { processed: 0, shopIds: [] };
+  }
+
+  const newShopIds = newShops.map((s: any) => Number(s.shopId));
+
+  // Drop shops whose backfill is already complete; brand-new shops with
+  // no progress doc yet are kept (they need the backfill the most).
+  const progressDocs = await db
+    .collection("backfill_progress")
+    .find({ shopId: { $in: newShopIds } })
+    .project({ shopId: 1, completed: 1 })
+    .toArray();
+  const completedShopIds = new Set(
+    progressDocs
+      .filter((p: any) => p.completed === true)
+      .map((p: any) => Number(p.shopId)),
+  );
+
+  const eligible = newShopIds
+    .filter((id) => !completedShopIds.has(id))
+    .slice(0, FASTPATH_MAX_SHOPS_PER_RUN);
+
+  console.log(
+    `[Protractor Backfill] fastpath=newShops: ${eligible.length} of ${newShopIds.length} new shop(s) (created in last ${fastpathDays}d) need backfill`,
+  );
+
+  for (const shopId of eligible) {
+    __fastpathDeps.runBackfill(shopId);
+  }
+
+  return { processed: eligible.length, shopIds: eligible };
+}

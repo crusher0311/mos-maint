@@ -223,6 +223,13 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
                 matched = matched.slice(n);
                 return cursor;
               },
+              // Projection is a no-op passthrough: `.toArray()` already
+              // returns shallow copies and the cron callers only read the
+              // projected fields, so faithfully stripping non-projected
+              // keys isn't needed for the smoke tests.
+              project(_spec: any) {
+                return cursor;
+              },
               limit(n: number) {
                 matched = matched.slice(0, n);
                 return cursor;

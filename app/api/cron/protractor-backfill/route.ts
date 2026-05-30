@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findAndResumeStaleBackfills, runProtractorBackfill } from "@/lib/integrations/protractor/sync";
+import { findAndResumeStaleBackfills, findAndRunNewShopFastpath, runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { getDb } from "@/lib/mongo";
 
 export const runtime = "nodejs";
@@ -18,6 +18,28 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Every-5-min new-shop fast lane: `?fastpath=newShops` restricts the
+    // queue to Protractor shops onboarded in the last
+    // PROTRACTOR_NEW_SHOP_FASTPATH_DAYS days (and still incomplete) and
+    // processes a small per-tick budget, mirroring the Tekmetric fastpath.
+    // It reuses the resume/drain core so the per-shop in-flight/stale lock
+    // and the rate limiter still apply.
+    if (req.nextUrl.searchParams.get("fastpath") === "newShops") {
+      console.log("[Protractor Backfill Cron] fastpath=newShops tick...");
+      const result = await findAndRunNewShopFastpath();
+      console.log(
+        `[Protractor Backfill Cron] fastpath kicked ${result.processed} new shop(s):`,
+        result.shopIds,
+      );
+      return NextResponse.json({
+        ok: true,
+        fastpath: "newShops",
+        processed: result.processed,
+        shopIds: result.shopIds,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const shopIdParam = req.nextUrl.searchParams.get("shopId");
     
     if (shopIdParam) {
