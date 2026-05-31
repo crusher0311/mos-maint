@@ -233,17 +233,50 @@ export class SupabaseDualWriter {
       updatedAt: doc.updatedAt || new Date(),
     };
 
-    await (this.db as any)
-      .insert(normalizedWorkOrders)
-      .values(row)
-      .onConflictDoUpdate({
-        target: normalizedWorkOrders.id,
-        set: {
-          ...row,
-          id: undefined,
-          createdAt: undefined,
-        },
-      });
+    const updateSet = {
+      ...row,
+      id: undefined,
+      createdAt: undefined,
+    };
+
+    try {
+      await (this.db as any)
+        .insert(normalizedWorkOrders)
+        .values(row)
+        .onConflictDoUpdate({
+          target: normalizedWorkOrders.id,
+          set: updateSet,
+        });
+    } catch (e: any) {
+      // The insert only reconciles conflicts on the primary key `id`
+      // (onConflictDoUpdate target above). The table ALSO has the unique
+      // index `nwo_shop_id_wo_num_idx (shop_id, work_order_number)`. When a
+      // row with the same (shop_id, work_order_number) already exists under a
+      // DIFFERENT id — e.g. a live webhook racing the backfill on the same
+      // shop, or duplicate webhook delivery — that conflict is NOT caught and
+      // Postgres throws 23505. Recover by resolving the existing row by its
+      // natural key and updating it in place, keeping the write idempotent.
+      const pgCode = e?.code ?? e?.cause?.code ?? null;
+      if (pgCode !== "23505") throw e;
+
+      const existing = await (this.db as any)
+        .select({ id: normalizedWorkOrders.id })
+        .from(normalizedWorkOrders)
+        .where(
+          and(
+            eq(normalizedWorkOrders.shopId, row.shopId),
+            eq(normalizedWorkOrders.workOrderNumber, row.workOrderNumber),
+          ),
+        )
+        .limit(1);
+      const existingId = existing[0]?.id;
+      if (!existingId) throw e;
+
+      await (this.db as any)
+        .update(normalizedWorkOrders)
+        .set(updateSet)
+        .where(eq(normalizedWorkOrders.id, existingId));
+    }
   }
 
   async upsertServiceJob(doc: any): Promise<void> {
