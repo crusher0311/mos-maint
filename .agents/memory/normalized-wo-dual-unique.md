@@ -39,7 +39,23 @@ Harmless for Tekmetric (RO numbers are never 0), but if a future source emits
 falsy/`0` identifiers, switch to explicit null/empty checks + `String(...)` so the
 retry select key matches the persisted value.
 
-**How to apply:** when touching work-order ingestion or the dual-writer create
-path, preserve the natural-key pre-resolution AND the 23505 catch/retry, and keep
-the lookup key identical to the persisted `work_order_number` value, or collisions
-return.
+**Vehicle path guarded too:** `normalized_vehicles` has the SAME shape of
+secondary unique index — `nv_shop_id_vin_idx (shop_id, vin)` — and `upsertVehicle`
+originally only reconciled on `id`, so it had the identical 23505 race. It now
+carries the same catch/retry (on 23505, re-resolve by `(shopId, vin)` and UPDATE
+by id; a null VIN can't collide since PG treats NULLs as distinct, so it
+re-throws). These are the ONLY two normalized tables with a secondary unique
+index — customers/service_jobs/line_items/payments have just the `id` PK, so no
+natural-key collision risk there.
+
+**Protractor shares this exact path (and had the same bug):** Protractor backfill
+is NOT on the Tekmetric drain-worker — it runs as an in-process node-cron on the
+WEB service (new-shop fastpath re-kicking recent shops every 5 min + a stale-resume
+sweep), but it ingests through the same `NormalizedIngestionService` /
+`SupabaseDualWriter`, so the work_order+vehicle 23505 fixes cover it automatically.
+Most of the web-service 23505s seen during the stall were actually Protractor
+fastpath collisions (sourceSystem:"protractor"), not Tekmetric webhooks.
+
+**How to apply:** when touching work-order OR vehicle ingestion or the dual-writer
+create path, preserve the natural-key pre-resolution AND the 23505 catch/retry, and
+keep the lookup key identical to the persisted value, or collisions return.
