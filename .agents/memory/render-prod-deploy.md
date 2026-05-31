@@ -8,9 +8,14 @@ description: Prod runs on Render and builds from GitHub main; merging a fix to m
 `origin` is GitHub (`crusher0311/mos-maint`). Prod = two Render services that
 build from branch `main`: a **web service** (runs the in-process node-cron
 backfill) and a **background worker** (the drain worker). Merging a fix to
-`main` only updates GitHub — Render keeps running its last-built commit until a
-deploy is triggered. So a "fixed + merged" task can still be running OLD code in
-prod. Always confirm the prod-deployed commit before claiming a fix is live.
+`main` updates GitHub. NOTE (observed 2026-05-31): both prod services
+(`mos-tools` web + `backfill-drain-worker`) have Render **auto-deploy ON** — a
+push to `main` kicks off builds automatically (~7-8 min each), no manual trigger
+needed. Still always confirm the prod-deployed commit (and that the deploy went
+`live`) before claiming a fix is live; the manual-trigger API below remains the
+fallback if auto-deploy is ever off or a redeploy of the same commit is needed.
+`mos-tools-east` (srv-d6ujdima2pns73a3pobg) is an OLD inactive web service — do
+NOT deploy it.
 
 **Why:** chasing a "still broken after the fix" report led to discovering prod
 was several commits behind main; the fix was never deployed. Render's last-built
