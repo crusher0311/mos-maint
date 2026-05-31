@@ -2,6 +2,8 @@
 - [job_index retirement blocked](job-index-retirement-blocked.md) — legacy Mongo job_index still has live readers (job-search fallback, plan-build, parts, dashboard); cannot drop until PG backfill+soak done.
 - [DB cutover flips are operator-only](db-cutover-operator-gated.md) — flipping *_PG_CANONICAL, running backfills, soaking, removing fallbacks are prod actions; never do them from an isolated env.
 - [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
+- [Mongo db-name split](mongo-db-name-split.md) — cron bookkeeping is in db `mos`; app data is in db `mos-maintenance-mvp`; reading cron state via lib/mongo returns empty and fakes a "dead scheduler."
+- [Tekmetric full-page completion](tekmetric-fullpage-completion.md) — `completed` flips only after an optional full-page reindex; that cron head-of-line-blocks on giant shops, starving the rest for days.
 - [Operational primitives → PG](operational-primitives-pg.md) — cron lock + Tekmetric rate buckets are transient state; their Mongo→PG cutover is a pure flag flip, NO backfill/soak unlike data stores.
 - [Reconcile reopens completed shops](backfill-reconcile-protractor-false-positive.md) — reconcile count must match upstream's date-field semantics per provider AND only re-queue on a real shortfall (directional, ~10% tol, zero-count guard); else completed shops loop forever.
 - [WO dual unique keys](normalized-wo-dual-unique.md) — normalized_work_orders has PK id + (shop_id, work_order_number); upsert only guards id, so create paths must resolve by natural key first or 23505 (+ residual concurrent-ingest race).
