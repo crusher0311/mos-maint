@@ -35,6 +35,19 @@ function randomSampleWindows(years: number, count: number): { start: Date; end: 
   return out;
 }
 
+// Zero-count guard: if we matched ZERO stored records in *every* sampled
+// window, the count query is almost certainly misreading (wrong field/type)
+// rather than the shop having genuinely lost all of its history. For an
+// already-completed shop that is never a legitimate reason to flip it back to
+// incomplete and re-pull, so we refuse to re-queue and just flag it for
+// visibility. (Added after the Protractor reconcile counted `closedAt` — a
+// field Protractor `job_index` rows don't have; their date is `performedAt` —
+// so our count was always 0, every window read a false ~100% gap, and every
+// completed shop got re-queued every hour, forever.)
+function sawAnyStoredData(audits: Array<{ ours?: number }>): boolean {
+  return audits.some((a) => typeof a.ours === "number" && a.ours > 0);
+}
+
 async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: number) {
   const samples = randomSampleWindows(YEARS, SAMPLES_PER_SHOP);
   const audits: any[] = [];
@@ -80,15 +93,20 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
     }
   }
 
-  if (worstDeltaWindow) {
+  const hasStoredData = sawAnyStoredData(audits);
+  const shouldRequeue = !!worstDeltaWindow && hasStoredData;
+  const zeroCountGuardTripped = !!worstDeltaWindow && !hasStoredData;
+
+  if (shouldRequeue) {
     // Re-queue: pull cursor back so the worst-delta window will be reprocessed.
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
       {
         $set: {
           completed: false,
-          currentChunkEnd: worstDeltaWindow.end,
+          currentChunkEnd: worstDeltaWindow!.end,
           reconciliationGapDetected: true,
+          reconciliationZeroCountGuard: false,
           reconciliationLastRunAt: new Date(),
         },
       }
@@ -100,11 +118,17 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
   } else {
     await db.collection("tekmetric_backfill_progress").updateOne(
       { shopId },
-      { $set: { reconciliationLastRunAt: new Date(), reconciliationGapDetected: false } }
+      {
+        $set: {
+          reconciliationLastRunAt: new Date(),
+          reconciliationGapDetected: false,
+          reconciliationZeroCountGuard: zeroCountGuardTripped,
+        },
+      }
     );
   }
 
-  return { provider: "tekmetric", shopId, samples: audits, requeued: !!worstDeltaWindow };
+  return { provider: "tekmetric", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };
 }
 
 async function reconcileProtractorShop(db: any, shopId: number) {
@@ -141,10 +165,21 @@ async function reconcileProtractorShop(db: any, shopId: number) {
       continue;
     }
 
+    // Protractor `job_index` rows store their date in `performedAt` (a Date),
+    // NOT `closedAt` (which only Tekmetric rows have). Counting by `closedAt`
+    // always returned 0 here -> a false ~100% gap -> every completed shop got
+    // re-queued every hour. Count by `performedAt`, with bounds aligned to the
+    // SAME inclusive day window the upstream `/Invoice?startDate=&endDate=`
+    // filter uses (day granularity). Using the raw w.start/w.end timestamps
+    // (which carry a random time-of-day) would shave a partial day off each
+    // edge and could push a 30-day window past the 2% tolerance, re-queuing a
+    // shop that is actually complete.
+    const lowerBound = new Date(`${startStr}T00:00:00.000Z`);
+    const upperBound = new Date(`${endStr}T23:59:59.999Z`);
     const ourInvoiceIds: string[] = await db.collection("job_index").distinct("workOrderId", {
       shopId,
       sourceSystem: "protractor",
-      closedAt: { $gte: w.start.toISOString(), $lte: w.end.toISOString() },
+      performedAt: { $gte: lowerBound, $lte: upperBound },
     });
     const ourCount = ourInvoiceIds.length;
 
@@ -156,14 +191,19 @@ async function reconcileProtractorShop(db: any, shopId: number) {
     }
   }
 
-  if (worstDeltaWindow) {
+  const hasStoredData = sawAnyStoredData(audits);
+  const shouldRequeue = !!worstDeltaWindow && hasStoredData;
+  const zeroCountGuardTripped = !!worstDeltaWindow && !hasStoredData;
+
+  if (shouldRequeue) {
     await db.collection("backfill_progress").updateOne(
       { shopId },
       {
         $set: {
           completed: false,
-          currentChunkEnd: worstDeltaWindow.end,
+          currentChunkEnd: worstDeltaWindow!.end,
           reconciliationGapDetected: true,
+          reconciliationZeroCountGuard: false,
           reconciliationLastRunAt: new Date(),
         },
       }
@@ -175,11 +215,17 @@ async function reconcileProtractorShop(db: any, shopId: number) {
   } else {
     await db.collection("backfill_progress").updateOne(
       { shopId },
-      { $set: { reconciliationLastRunAt: new Date(), reconciliationGapDetected: false } }
+      {
+        $set: {
+          reconciliationLastRunAt: new Date(),
+          reconciliationGapDetected: false,
+          reconciliationZeroCountGuard: zeroCountGuardTripped,
+        },
+      }
     );
   }
 
-  return { provider: "protractor", shopId, samples: audits, requeued: !!worstDeltaWindow };
+  return { provider: "protractor", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };
 }
 
 async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, swShopId: number) {
@@ -222,14 +268,19 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
     }
   }
 
-  if (worstDeltaWindow) {
+  const hasStoredData = sawAnyStoredData(audits);
+  const shouldRequeue = !!worstDeltaWindow && hasStoredData;
+  const zeroCountGuardTripped = !!worstDeltaWindow && !hasStoredData;
+
+  if (shouldRequeue) {
     await db.collection("shopware_backfill_progress").updateOne(
       { shopId },
       {
         $set: {
           completed: false,
-          currentChunkEnd: worstDeltaWindow.end,
+          currentChunkEnd: worstDeltaWindow!.end,
           reconciliationGapDetected: true,
+          reconciliationZeroCountGuard: false,
           reconciliationLastRunAt: new Date(),
         },
       }
@@ -241,11 +292,17 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
   } else {
     await db.collection("shopware_backfill_progress").updateOne(
       { shopId },
-      { $set: { reconciliationLastRunAt: new Date(), reconciliationGapDetected: false } }
+      {
+        $set: {
+          reconciliationLastRunAt: new Date(),
+          reconciliationGapDetected: false,
+          reconciliationZeroCountGuard: zeroCountGuardTripped,
+        },
+      }
     );
   }
 
-  return { provider: "shopware", shopId, samples: audits, requeued: !!worstDeltaWindow };
+  return { provider: "shopware", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };
 }
 
 export async function GET(req: NextRequest) {
