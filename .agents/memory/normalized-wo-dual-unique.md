@@ -22,14 +22,24 @@ an error result, and the backfill chunk held its cursor, so the shop never
 completed. Fixing the natural-key lookup let the backfill walk pages with
 error=0 again.
 
-**Residual race (not yet fixed):** the lookup-then-insert is not atomic. When
-the same shop's work order is ingested concurrently (e.g. a Tekmetric webhook on
-the web service overlapping backfill, or duplicate webhook delivery), both can
-miss the lookup and both insert → one 23505s. This is low-volume, does NOT stall
-anything (webhooks don't hold a cursor), and self-heals on the next backfill
-sweep (which re-resolves and updates). To eliminate it, the create path needs to
-catch 23505 and retry as a natural-key update (or upsert on the natural key).
+**Residual race (FIXED):** the lookup-then-insert is not atomic. When the same
+shop's work order is ingested concurrently (e.g. a Tekmetric webhook on the web
+service overlapping backfill, or duplicate webhook delivery), both can miss the
+lookup and both insert → one 23505s. Now handled inside `upsertWorkOrder`: the
+insert is wrapped in try/catch; on 23505 it re-resolves the existing row by
+`(shopId, workOrderNumber)` and UPDATEs by its id (single retry, no loop). If the
+re-resolve finds no row it re-throws (a real 23505 with no natural-key row is a
+genuine error, not a race). Verified in prod: zero work_order 23505 in a clean
+post-deploy window.
+
+**Known edge case (not currently a problem):** the natural-key value uses a
+truthy fallback (`doc.workOrderNumber || String(doc._id)`), so a literal numeric
+`0` work-order number would be treated as missing and substituted with `_id`.
+Harmless for Tekmetric (RO numbers are never 0), but if a future source emits
+falsy/`0` identifiers, switch to explicit null/empty checks + `String(...)` so the
+retry select key matches the persisted value.
 
 **How to apply:** when touching work-order ingestion or the dual-writer create
-path, preserve the natural-key pre-resolution and keep the lookup key identical
-to the persisted `work_order_number` value, or collisions return.
+path, preserve the natural-key pre-resolution AND the 23505 catch/retry, and keep
+the lookup key identical to the persisted `work_order_number` value, or collisions
+return.
