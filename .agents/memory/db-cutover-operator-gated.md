@@ -34,3 +34,13 @@ task env.
   convention). Do NOT mark the wave complete or remove fallbacks.
 - The runbooks (`docs/runbooks/db-w4-cutover.md`, etc.) hold the exact operator
   sequence; reference them rather than improvising.
+
+**Deploying merged cutover code is SAFE (code deploy ≠ cutover):** every
+`*_PG_CANONICAL` flag resolves via `process.env.X === "1"` → default OFF (Mongo
+canonical). Shipping the merged migration tasks to prod does NOT activate any
+cutover; only setting the env var to `"1"` on the Render service does. To prove
+no cutover is live on prod, list the service env vars via the Render API
+(`GET /v1/services/{id}/env-vars`, paginate by `cursor`, `limit<=100`) and
+confirm no canonical/cutover flag is present/`=1`. Build-time smoke tests emit a
+deliberate `Postgres error ... simulated pg blip` line proving the
+fallback-to-per-process/Mongo path works — that is test noise, not a prod fault.

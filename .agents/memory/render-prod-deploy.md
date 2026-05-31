@@ -1,0 +1,38 @@
+---
+name: Render prod deploy gap
+description: Prod runs on Render and builds from GitHub main; merging a fix to main does NOT reach prod until a Render deploy is triggered. How to deploy + verify.
+---
+
+# Prod runs on Render — merging to main is not deploying
+
+`origin` is GitHub (`crusher0311/mos-maint`). Prod = two Render services that
+build from branch `main`: a **web service** (runs the in-process node-cron
+backfill) and a **background worker** (the drain worker). Merging a fix to
+`main` only updates GitHub — Render keeps running its last-built commit until a
+deploy is triggered. So a "fixed + merged" task can still be running OLD code in
+prod. Always confirm the prod-deployed commit before claiming a fix is live.
+
+**Why:** chasing a "still broken after the fix" report led to discovering prod
+was several commits behind main; the fix was never deployed. Render's last-built
+commit was an *ancestor* of main HEAD (prod simply behind, not diverged).
+
+**How to apply (all via `RENDER_API_KEY_PROD` + `RENDER_OWNER_ID_PROD`):**
+- Service IDs are environment-specific — never hardcode; list with
+  `GET /v1/services?limit=100&ownerId=...` and match by name/type.
+- Check what's live: `GET /v1/services/{id}/deploys?limit=2` → latest
+  `commit.id` + `finishedAt`. Compare to `git log` / `git ls-remote origin main`.
+- `git merge-base --is-ancestor <renderCommit> HEAD` tells you if prod is just
+  behind (safe redeploy) vs diverged.
+- Trigger: `POST /v1/services/{id}/deploys` with `{"commitId":"<full-sha>",
+  "clearCache":"do_not_clear"}`. Deploy BOTH web + worker for a shared fix.
+- Poll `GET /v1/services/{id}/deploys/{deployId}` until `status==="live"`
+  (terminal also: build_failed/update_failed/canceled). A full Next.js build +
+  prebuild smoke suite takes ~7-8 min.
+- Fetch prod logs (no BetterStack creds needed): `GET /v1/logs?ownerId=...&
+  resource={id}&startTime=&endTime=&level=error&text=...&limit=`.
+  (BetterStack direct query needs `BETTERSTACK_QUERY_HOST`/`_USERNAME` which are
+  NOT in this env — only `_PASSWORD` is — so use the Render logs API instead.)
+
+**Security:** the git remote URL has a GitHub PAT embedded in plaintext
+(`git remote get-url origin` exposes it). Treat as compromised if printed; the
+user should rotate that token.

@@ -3,3 +3,4 @@
 - [DB cutover flips are operator-only](db-cutover-operator-gated.md) — flipping *_PG_CANONICAL, running backfills, soaking, removing fallbacks are prod actions; never do them from an isolated env.
 - [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
 - [Operational primitives → PG](operational-primitives-pg.md) — cron lock + Tekmetric rate buckets are transient state; their Mongo→PG cutover is a pure flag flip, NO backfill/soak unlike data stores.
+- [Render prod deploy gap](render-prod-deploy.md) — prod builds from GitHub main but doesn't auto-deploy; merging ≠ live. Trigger+verify deploys via Render API (web + drain worker).
