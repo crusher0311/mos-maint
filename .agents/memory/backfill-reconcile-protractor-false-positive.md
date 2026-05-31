@@ -1,16 +1,18 @@
 ---
-name: backfill-reconcile re-queues completed Protractor shops (false positive)
-description: Why "completed" Protractor backfills keep reopening — reconcile counts the wrong date field
+name: backfill-reconcile re-queues completed shops (false positives)
+description: Why "completed" shop backfills keep reopening — reconcile date-field and direction pitfalls
 ---
 
-The hourly `backfill-reconcile` cron (`/api/cron/backfill-reconcile`, schedule `30 * * * *`) spot-checks only shops already marked complete. For each, it pulls 6 random 30-day windows, compares the integration's upstream RO/invoice count to our stored count, and if any window is off by more than `DELTA_TOLERANCE` (2%) it sets `completed:false` + `currentChunkEnd = worstWindow.end` to re-queue. It does NOT clear the old `completedAt`.
+The hourly `backfill-reconcile` cron spot-checks only already-completed shops: it samples random 30-day windows, compares the integration's upstream RO/invoice count to our stored count, and if a window is off beyond `DELTA_TOLERANCE` it flips the shop back to incomplete and re-pulls. Two distinct false-positive traps bit it:
 
-**The bug:** the Protractor branch counts our stored ROs with `job_index.distinct("workOrderId", { ..., closedAt: { $gte, $lte } })`, but Protractor `job_index` documents have **no `closedAt` field** — their date lives in **`performedAt`** (a BSON Date). So our count is always 0, every sampled window reads ~100% short, and every completed Protractor shop is re-queued every hour, forever. The data is actually present (e.g. shop 66 had 12,112 ROs stored). It is a pure false positive, not a real gap.
+**1. Date-field semantics must match the upstream filter.** Each provider stores its `job_index` date differently, and the reconcile count MUST query the same field/type the upstream count filters on:
+- Protractor: our `performedAt` = `workOrder.Header.LastModifiedTime` (a Date). Upstream `/Invoice?startDate&endDate` filters by **invoice date** (different field). There is NO `closedAt` on Protractor rows.
+- Tekmetric: `closedAt`, stored as an ISO **string** (string-range compare).
+- Shopware: `updatedAt` (Date) on `shopware_repair_orders`.
+Counting Protractor by `closedAt` returned 0 every time → false ~100% gap → every completed shop re-queued hourly forever. Even after switching to `performedAt`, counts still drift because last-modified-date ≠ invoice-date, so the same RO falls in different windows on each side.
 
-**Schema divergence to remember:**
-- Protractor `job_index` rows: date = `performedAt` (Date). No `closedAt`.
-- Tekmetric `job_index` rows: date = `closedAt` (stored as an ISO **string**, e.g. `"2025-12-30T20:25:25Z"`). Tekmetric reconcile happens to work because it compares string bounds against a string field.
+**2. The gap test must be directional + tolerant.** A re-queue is a pull-only remedy: it can recover MISSING records but cannot remove an overcount or reconcile a date-semantics mismatch. So the delta is `max(0, upstream - ours)/upstream` (overcount → 0, never re-queues), the tolerance is wide (~10%) to absorb benign date drift, and a zero-count guard refuses to re-queue when every sampled window matched zero stored rows (that signature means a broken count query, not real total data loss).
 
-**Why:** the reconcile date filter was written for Tekmetric's `closedAt` and never adapted to Protractor's `performedAt`, and the two collections store dates as different types (string vs Date).
+**Why:** date-field divergence across collections + a symmetric/too-tight gap metric turned a safety net into a runaway loop.
 
-**How to apply:** any window/count query over `job_index` must branch on `sourceSystem` — use `performedAt` (Date bounds) for protractor, `closedAt` (string bounds) for tekmetric. A fix to the reopening should make the Protractor reconcile count `performedAt` with `new Date()` bounds. Re-queue side effects: idempotent re-pulls (no bad data after the 23505 dedup fixes) but wasted API calls and a never-stabilizing "completed" count.
+**How to apply:** any window/count query over `job_index` (or a provider RO collection) must branch on `sourceSystem` and match the upstream filter's date semantics; re-queue/backfill triggers should only fire on a genuine, material shortfall.

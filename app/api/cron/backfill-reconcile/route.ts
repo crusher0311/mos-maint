@@ -10,7 +10,12 @@ export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const SAMPLES_PER_SHOP = 6;
-const DELTA_TOLERANCE = 0.02;
+// Re-queue tolerance. Set wide enough to absorb benign count drift caused by
+// comparing our `performedAt` (work-order last-modified date) against upstream's
+// invoice-date filter — the same RO can land in a different 30-day window on
+// each side. Only a SHORTFALL beyond this (see directional delta below) means we
+// are genuinely missing data a re-pull can recover.
+const DELTA_TOLERANCE = 0.1;
 const YEARS = 5;
 
 function isAuthorized(req: NextRequest): boolean {
@@ -80,7 +85,11 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
     });
     const ourCount = ourROIds.length;
 
-    const delta = upstreamTotal === 0 ? 0 : Math.abs(upstreamTotal - ourCount) / upstreamTotal;
+    // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
+    // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
+    // remove records, and over/under drift is expected from the date-field
+    // mismatch above, so it must never re-queue an already-complete shop.
+    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
     audits.push({
       window: { start: startStr.split("T")[0], end: endStr.split("T")[0] },
       upstream: upstreamTotal,
@@ -183,7 +192,11 @@ async function reconcileProtractorShop(db: any, shopId: number) {
     });
     const ourCount = ourInvoiceIds.length;
 
-    const delta = upstreamTotal === 0 ? 0 : Math.abs(upstreamTotal - ourCount) / upstreamTotal;
+    // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
+    // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
+    // remove records, and over/under drift is expected from the date-field
+    // mismatch above, so it must never re-queue an already-complete shop.
+    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
     audits.push({ window: { start: startStr, end: endStr }, upstream: upstreamTotal, ours: ourCount, delta: Number(delta.toFixed(3)) });
 
     if (delta > DELTA_TOLERANCE && (!worstDeltaWindow || delta > worstDeltaWindow.delta)) {
@@ -255,7 +268,11 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
       updatedAt: { $gte: w.start, $lte: w.end },
     });
 
-    const delta = upstreamTotal === 0 ? 0 : Math.abs(upstreamTotal - ourCount) / upstreamTotal;
+    // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
+    // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
+    // remove records, and over/under drift is expected from the date-field
+    // mismatch above, so it must never re-queue an already-complete shop.
+    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
     audits.push({
       window: { start: w.start.toISOString().split("T")[0], end: w.end.toISOString().split("T")[0] },
       upstream: upstreamTotal,
