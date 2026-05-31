@@ -119,17 +119,52 @@ export class SupabaseDualWriter {
       updatedAt: doc.updatedAt || new Date(),
     };
 
-    await (this.db as any)
-      .insert(normalizedVehicles)
-      .values(row)
-      .onConflictDoUpdate({
-        target: normalizedVehicles.id,
-        set: {
-          ...row,
-          id: undefined,
-          createdAt: undefined,
-        },
-      });
+    const updateSet = {
+      ...row,
+      id: undefined,
+      createdAt: undefined,
+    };
+
+    try {
+      await (this.db as any)
+        .insert(normalizedVehicles)
+        .values(row)
+        .onConflictDoUpdate({
+          target: normalizedVehicles.id,
+          set: updateSet,
+        });
+    } catch (e: any) {
+      // The insert only reconciles conflicts on the primary key `id`
+      // (onConflictDoUpdate target above). The table ALSO has the unique
+      // index `nv_shop_id_vin_idx (shop_id, vin)`. When a row with the same
+      // (shop_id, vin) already exists under a DIFFERENT id — e.g. a backfill
+      // racing a live webhook on the same shop, or duplicate delivery — that
+      // conflict is NOT caught and Postgres throws 23505. Recover by resolving
+      // the existing row by its natural key and updating it in place, keeping
+      // the write idempotent. (A null VIN can't collide — Postgres treats
+      // NULLs as distinct — so the lookup finds nothing and the original error
+      // re-throws.)
+      const pgCode = e?.code ?? e?.cause?.code ?? null;
+      if (pgCode !== "23505") throw e;
+
+      const existing = await (this.db as any)
+        .select({ id: normalizedVehicles.id })
+        .from(normalizedVehicles)
+        .where(
+          and(
+            eq(normalizedVehicles.shopId, row.shopId),
+            eq(normalizedVehicles.vin, row.vin),
+          ),
+        )
+        .limit(1);
+      const existingId = existing[0]?.id;
+      if (!existingId) throw e;
+
+      await (this.db as any)
+        .update(normalizedVehicles)
+        .set(updateSet)
+        .where(eq(normalizedVehicles.id, existingId));
+    }
   }
 
   async upsertCustomer(doc: any): Promise<void> {
