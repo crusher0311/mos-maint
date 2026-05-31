@@ -465,9 +465,16 @@ export class NormalizedIngestionService {
       
       // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
       // only while shadow writes are on.
+      // Resolve by the real unique key (shop_id, work_order_number); this must
+      // mirror the value persisted in newWorkOrder/upsertWorkOrder below so a
+      // re-run matches the existing row instead of colliding on insert (23505).
+      const woNumberKey =
+        mapped.workOrderNumber != null && String(mapped.workOrderNumber) !== ""
+          ? String(mapped.workOrderNumber)
+          : (sourceIds[0]?.idValue != null ? String(sourceIds[0].idValue) : null);
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findWorkOrderByNaturalKey(this.shopId, sourceIds[0])
+          ? await this.supabaseDualWriter.findWorkOrderByNaturalKey(this.shopId, sourceIds[0], woNumberKey)
           : null) ??
         (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
@@ -580,7 +587,10 @@ export class NormalizedIngestionService {
         createdAt: now,
         updatedAt: now,
         version: 1,
-        workOrderNumber: mapped.workOrderNumber || String(sourceIds[0]?.idValue),
+        // Persist the SAME value used as the change-detection unique key
+        // (woNumberKey) so a later re-run resolves this row by
+        // (shop_id, work_order_number) instead of colliding on insert.
+        workOrderNumber: woNumberKey ?? String(sourceIds[0]?.idValue),
         workOrderType: mapped.workOrderType || 'repair',
         status: mapped.status || 'closed',
         statusHistory: [],

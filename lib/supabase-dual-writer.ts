@@ -470,18 +470,47 @@ export class SupabaseDualWriter {
     return rows[0] ? { ...rows[0], __fromPg: true } : null;
   }
 
-  async findWorkOrderByNaturalKey(shopId: number, sourceId0: any): Promise<any | null> {
+  async findWorkOrderByNaturalKey(
+    shopId: number,
+    sourceId0: any,
+    workOrderNumber?: string | null,
+  ): Promise<any | null> {
+    const cols = {
+      _id: normalizedWorkOrders.id,
+      provenance: normalizedWorkOrders.provenance,
+      softDelete: normalizedWorkOrders.softDelete,
+      version: normalizedWorkOrders.version,
+      createdAt: normalizedWorkOrders.createdAt,
+      vehicleId: normalizedWorkOrders.vehicleId,
+      customerId: normalizedWorkOrders.customerId,
+    };
+    // W3a backfill stall fix: resolve by the table's real unique key
+    // (shop_id, work_order_number) — index `nwo_shop_id_wo_num_idx` —
+    // BEFORE the sourceIds match. The sourceIds-only lookup missed rows
+    // whose stored provenance didn't contain this run's sourceId0, so
+    // ingestion fell through to the create path and the INSERT collided
+    // with the already-present work-order-number row (pgCode 23505).
+    // dualWriteToSupabase rethrows that, ingestWorkOrder turns it into an
+    // `action:'error'` result, and the backfill chunk holds its cursor —
+    // so the shop never completes. Matching the unique key takes the safe
+    // UPDATE path and reuses the existing row id, keeping the
+    // service_jobs / line_items / payments FKs valid.
+    if (workOrderNumber != null && workOrderNumber !== "") {
+      const byNum = await (this.db as any)
+        .select(cols)
+        .from(normalizedWorkOrders)
+        .where(
+          and(
+            eq(normalizedWorkOrders.shopId, shopId),
+            eq(normalizedWorkOrders.workOrderNumber, workOrderNumber),
+          ),
+        )
+        .limit(1);
+      if (byNum[0]) return { ...byNum[0], __fromPg: true };
+    }
     if (!sourceId0) return null;
     const rows = await (this.db as any)
-      .select({
-        _id: normalizedWorkOrders.id,
-        provenance: normalizedWorkOrders.provenance,
-        softDelete: normalizedWorkOrders.softDelete,
-        version: normalizedWorkOrders.version,
-        createdAt: normalizedWorkOrders.createdAt,
-        vehicleId: normalizedWorkOrders.vehicleId,
-        customerId: normalizedWorkOrders.customerId,
-      })
+      .select(cols)
       .from(normalizedWorkOrders)
       .where(
         and(
