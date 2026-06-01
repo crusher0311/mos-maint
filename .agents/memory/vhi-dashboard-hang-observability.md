@@ -32,6 +32,19 @@ just stops waiting, so the underlying call still finishes in the background.
 originally left unprotected while the extension was fixed, so it could spin to
 300s+ with no log trace.
 
+**The hang has TWO doors — only one is fully closed.** The multi-minute build
+(`[PlanBuild] Built and cached plan ... in <ms>ms`) is logged by the API route
+`app/api/plan-build/route.ts`, which is a SEPARATE implementation from the
+dashboard server-render path (`app/dashboard/vehicles/[vin]/plan/page.tsx`).
+They gather the same upstreams in parallel code (the page even comments that it
+"mirrors" the route's triage). Only the **page** got comprehensive per-call
+`withUpstreamTimeout` wrapping; the **route** still has only a partial OEM-only
+`Promise.race` (the `[PlanBuild] DataOne timeout` line) and can still spin for
+minutes — confirmed live: shop 116 VIN JF2SKAGC9KH499458 logged a single build
+of **362689ms** the same day the page fix shipped. If a "VHI build stuck"
+complaint recurs after the page fix, suspect the `/api/plan-build` route
+(driven by webhook/cron VHI rebuilds + the extension), not the page.
+
 **How to apply:** to make dashboard hangs both impossible and observable, wrap the
 dashboard build's upstream calls in `withUpstreamTimeout` with per-call budgets and
 an overall ceiling (~25-30s, matching the loading UI's promise), rendering
