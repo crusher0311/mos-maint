@@ -5,6 +5,7 @@
 - [Mongo db-name split](mongo-db-name-split.md) — cron bookkeeping is in db `mos`; app data is in db `mos-maintenance-mvp`; reading cron state via lib/mongo returns empty and fakes a "dead scheduler."
 - [Tekmetric full-page completion](tekmetric-fullpage-completion.md) — `completed` flips only after an optional full-page reindex; that cron head-of-line-blocks on giant shops, starving the rest for days.
 - [Operational primitives → PG](operational-primitives-pg.md) — cron lock + Tekmetric rate buckets are transient state; their Mongo→PG cutover is a pure flag flip, NO backfill/soak unlike data stores.
+- [VHI dashboard hang is invisible](vhi-dashboard-hang-observability.md) — dashboard plan page has no upstream timeout/deadline, so true hangs leave NO log; extension has withUpstreamTimeout, dashboard doesn't.
 - [Reconcile reopens completed shops](backfill-reconcile-protractor-false-positive.md) — reconcile count must match upstream's date-field semantics per provider AND only re-queue on a real shortfall (directional, ~10% tol, zero-count guard); else completed shops loop forever.
 - [WO dual unique keys](normalized-wo-dual-unique.md) — normalized_work_orders has PK id + (shop_id, work_order_number); upsert only guards id, so create paths must resolve by natural key first or 23505 (+ residual concurrent-ingest race).
 - [Render prod deploy](render-prod-deploy.md) — prod web `mos-tools` + `backfill-drain-worker` AUTO-DEPLOY on push to GitHub main (~7-8min build); `mos-tools-east` is an inactive old web svc. Verify live commit via Render API.
