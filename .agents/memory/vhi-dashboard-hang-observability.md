@@ -19,16 +19,18 @@ per-call timeout**. Consequence for debugging:
 - Better Stack ingests only a fraction of info-level `[Plan]` breadcrumbs (heavy
   sampling) — you'll see a few Cache HIT lines, not every build.
 
-**Where protection exists vs not:** `lib/with-upstream-timeout.ts`
+**Where protection exists:** `lib/with-upstream-timeout.ts`
 (`withUpstreamTimeout(promise, ms, label, fallback)` — races a timeout, returns
-fallback, logs one `[upstream-timeout] <label> exceeded <ms>ms` warn) is wired into
-the **extension** routes only (`/api/extension/plan`, `/ro-context`, canned-jobs).
-The **dashboard** plan page never got it. In prod the only caught stalls are
-Tekmetric RO fetches >6s on the extension — which degrade gracefully there.
+fallback, logs one `[upstream-timeout] <label> exceeded <ms>ms` warn) is now wired
+into BOTH the extension routes (`/api/extension/plan`, `/ro-context`, canned-jobs)
+AND the dashboard plan page build. So a future stall on the dashboard should emit
+an `[upstream-timeout]` line instead of spinning silently — search that label
+first. NOTE the helper uses `Promise.race` and does NOT cancel the slow op; it
+just stops waiting, so the underlying call still finishes in the background.
 
-**Why:** the same 30s+ upstream-hang symptom was already fixed for the extension
-panel; the dashboard web page (what shops actually stare at) was left unprotected,
-so it can spin to 300s+.
+**Why it mattered:** the dashboard web page (what shops actually stare at) was
+originally left unprotected while the extension was fixed, so it could spin to
+300s+ with no log trace.
 
 **How to apply:** to make dashboard hangs both impossible and observable, wrap the
 dashboard build's upstream calls in `withUpstreamTimeout` with per-call budgets and

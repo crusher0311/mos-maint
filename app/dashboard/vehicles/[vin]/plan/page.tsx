@@ -56,8 +56,27 @@ import {
   type ServiceAction,
 } from "@/lib/service-keys";
 import { getShopDviBestPracticeMap } from "@/lib/dvi-best-practices";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 export const runtime = "nodejs";
+
+// Per-call upstream budgets for the dashboard VHI build. These cap each slow
+// external/Mongo call so a stalled upstream degrades to cached/partial data
+// instead of hanging the page (the loading UI promises "up to 30 seconds").
+// Budgets are sized so the worst-case SEQUENTIAL cache-miss path stays under
+// ~28s: canned 5 + early-miles 2 + events 2 + RO-source 2.5 + external group 7
+// + deferred 5 + miles/OEM group 5 = ~28.5s (calls inside a single Promise.all
+// run concurrently and count once). Every timeout logs one [upstream-timeout]
+// line in BetterStack so stalls become visible. Note: withUpstreamTimeout uses
+// Promise.race and does NOT cancel the underlying op — the loser keeps running
+// in the background; acceptable here since each wrapped call is bounded work.
+const VHI_EXTERNAL_FETCH_TIMEOUT_MS = 7000; // DVI, CARFAX, Protractor vehicle, AutoVitals
+const VHI_CANNED_TIMEOUT_MS = 5000; // Protractor canned-jobs (can paginate)
+const VHI_DEFERRED_TIMEOUT_MS = 5000; // Protractor deferred work
+const VHI_OEM_TIMEOUT_MS = 5000; // DataOne maintenance schedule
+const VHI_MILES_TIMEOUT_MS = 2000; // Mongo mileage lookup
+const VHI_EVENTS_TIMEOUT_MS = 2000; // Mongo events RO aggregate
+const VHI_DB_TIMEOUT_MS = 2500; // Mongo scan-style queries (RO-source + completed-WO finds)
 export const dynamic = "force-dynamic";
 
 /* ---------------- small utils ---------------- */
@@ -1350,7 +1369,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
     }
   }
   
-  const cannedJobsCache = await fetchCannedJobsWithCache(shopId);
+  const cannedJobsCache = await withUpstreamTimeout(
+    fetchCannedJobsWithCache(shopId),
+    VHI_CANNED_TIMEOUT_MS,
+    `canned-jobs shop ${shopId}`,
+    { ok: false } as unknown as Awaited<ReturnType<typeof fetchCannedJobsWithCache>>,
+  );
   const cannedJobsById: Record<string, { id: string; title: string }> = {};
   if (cannedJobsCache.ok && cannedJobsCache.cannedJobs) {
     for (const job of cannedJobsCache.cannedJobs) {
@@ -1388,7 +1412,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
 
   // Early mileage check and cache lookup (skip cache if force refresh)
-  const earlyMilesResult = await getLatestMilesForVin(db, vin);
+  const earlyMilesResult = await withUpstreamTimeout(
+    getLatestMilesForVin(db, vin),
+    VHI_MILES_TIMEOUT_MS,
+    `miles ${vin}`,
+    { miles: null, recordedDate: null },
+  );
   const earlyMiles = earlyMilesResult.miles;
   const cachedPlan = forceRefresh ? null : await getCachedPlan(db, vin, shopId, earlyMiles, distanceUnit);
   const useCachedData = cachedPlan !== null;
@@ -1401,7 +1430,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
-  const eventRos = await db.collection("events").aggregate([
+  const eventRos = await withUpstreamTimeout(
+    db.collection("events").aggregate([
     {
       $match: {
         $and: [
@@ -1439,7 +1469,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
     },
     { $sort: { updatedAt: -1 } },
     { $limit: 20 }
-  ]).toArray();
+  ]).toArray(),
+    VHI_EVENTS_TIMEOUT_MS,
+    `events-ro ${vin}`,
+    [] as any[],
+  );
 
   const ros = eventRos;
   
@@ -1471,7 +1505,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Query all connected work order sources in parallel
   const vinRegex = new RegExp(`^${vin}$`, 'i');
   
-  const [protractorWO, tekmetricWO, autoflowWO] = await Promise.all([
+  const [protractorWO, tekmetricWO, autoflowWO] = await withUpstreamTimeout(
+    Promise.all([
     // Protractor work orders
     db.collection("protractor_work_orders").findOne(
       { 
@@ -1500,7 +1535,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
       },
       { sort: { createdAt: -1 } }
     )
-  ]);
+    ]),
+    VHI_DB_TIMEOUT_MS,
+    `wo-sources ${vin}`,
+    [null, null, null] as any,
+  );
   
   // Pick the most recent work order from any connected source
   type WOCandidate = { source: string; roNumber: string; workOrderId: string | null; customerName: string | null; updatedAt: Date };
@@ -1612,7 +1651,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
     
     // Fetch Protractor vehicle info for deferred work (needed even on cache hit)
     if (protractorCfg.configured) {
-      protractorVehicleResult = await fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
+      protractorVehicleResult = await withUpstreamTimeout(
+        fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL),
+        VHI_EXTERNAL_FETCH_TIMEOUT_MS,
+        `protractor-vehicle ${vin}`,
+        { ok: false } as unknown as Awaited<ReturnType<typeof fetchProtractorVehicle>>,
+      );
     }
   } else {
     // CACHE MISS: Full parallel data fetching - external APIs + local queries
@@ -1630,29 +1674,59 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
     const [localDvi, localCarfax, localProtractorVehicleResult, localAvInspectionResult, localProtractorCompletedWOs, localTekmetricCompletedWOs, localShopBranding] = await Promise.all([
       latestRoNumber && autoCfg.configured
-        ? fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL)
+        ? withUpstreamTimeout(
+            fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL),
+            VHI_EXTERNAL_FETCH_TIMEOUT_MS,
+            `autoflow-dvi ${vin}`,
+            { ok: false, error: "AutoFlow timed out." } as unknown as Awaited<ReturnType<typeof fetchDviWithCache>>,
+          )
         : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
       carfaxCfg.configured
-        ? fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL)
+        ? withUpstreamTimeout(
+            fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL),
+            VHI_EXTERNAL_FETCH_TIMEOUT_MS,
+            `carfax ${vin}`,
+            { ok: false, error: "CARFAX timed out." } as unknown as Awaited<ReturnType<typeof fetchCarfaxWithCache>>,
+          )
         : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
       protractorCfg.configured
-        ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
+        ? withUpstreamTimeout(
+            fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL),
+            VHI_EXTERNAL_FETCH_TIMEOUT_MS,
+            `protractor-vehicle ${vin}`,
+            { ok: false } as unknown as Awaited<ReturnType<typeof fetchProtractorVehicle>>,
+          )
         : Promise.resolve({ ok: false } as { ok: false }),
       autoVitalsCfg.configured
-        ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL)
+        ? withUpstreamTimeout(
+            fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL),
+            VHI_EXTERNAL_FETCH_TIMEOUT_MS,
+            `autovitals ${vin}`,
+            { ok: false } as unknown as Awaited<ReturnType<typeof fetchAutoVitalsInspectionByVin>>,
+          )
         : Promise.resolve({ ok: false } as { ok: false }),
-      db.collection("protractor_work_orders").find({
-        shopId,
-        $or: [
-          { vin: vinUpper },
-          { "data.VIN": vinUpper },
-          { "ServiceItem.VIN": vinUpper }
-        ]
-      }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
-      db.collection("tekmetric_work_orders").find({
-        shopId: Number(shopId),
-        vin: vinUpper
-      }).sort({ completedDate: -1 }).limit(50).toArray(),
+      withUpstreamTimeout(
+        db.collection("protractor_work_orders").find({
+          shopId,
+          $or: [
+            { vin: vinUpper },
+            { "data.VIN": vinUpper },
+            { "ServiceItem.VIN": vinUpper }
+          ]
+        }).sort({ "Header.LastModifiedTime": -1 }).limit(20).toArray(),
+        VHI_DB_TIMEOUT_MS,
+        `protractor-completed-wos ${vin}`,
+        [] as any[],
+      ),
+      withUpstreamTimeout(
+        db.collection("tekmetric_work_orders").find({
+          shopId: Number(shopId),
+          vin: vinUpper
+        }).sort({ completedDate: -1 }).limit(50).toArray(),
+        VHI_DB_TIMEOUT_MS,
+        `tekmetric-completed-wos ${vin}`,
+        [] as any[],
+      ),
       db.collection("shops").findOne({ shopId }, { projection: { "branding.logo": 1 } })
     ]);
     dvi = localDvi;
@@ -1667,11 +1741,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Protractor Deferred Work - always fetch fresh for Protractor shops (it's dynamic)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
   if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
-    const deferredResult = await fetchProtractorDeferredWork(
-      shopId,
-      vin,
-      (protractorVehicleResult as any).vehicle.ID,
-      PROTRACTOR_CACHE_TTL
+    const deferredResult = await withUpstreamTimeout(
+      fetchProtractorDeferredWork(
+        shopId,
+        vin,
+        (protractorVehicleResult as any).vehicle.ID,
+        PROTRACTOR_CACHE_TTL
+      ),
+      VHI_DEFERRED_TIMEOUT_MS,
+      `protractor-deferred ${vin}`,
+      { ok: false } as unknown as Awaited<ReturnType<typeof fetchProtractorDeferredWork>>,
     );
     if (deferredResult.ok && deferredResult.deferredWork) {
       protractorDeferredWork = deferredResult.deferredWork;
@@ -1785,8 +1864,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan] Using cached currentMiles: ${currentMiles}`);
   } else {
     const [fetchedResult, fetchedOemData] = await Promise.all([
-      getLatestMilesForVin(db, vin),
-      getMaintenanceScheduleCached(vin)
+      withUpstreamTimeout(
+        getLatestMilesForVin(db, vin),
+        VHI_MILES_TIMEOUT_MS,
+        `miles ${vin}`,
+        { miles: null, recordedDate: null },
+      ),
+      withUpstreamTimeout(
+        getMaintenanceScheduleCached(vin),
+        VHI_OEM_TIMEOUT_MS,
+        `dataone-oem ${vin}`,
+        { source: 'cache', count: 0, items: [], vehicle: null } as unknown as Awaited<ReturnType<typeof getMaintenanceScheduleCached>>,
+      )
     ]);
     currentMiles = fetchedResult.miles;
     lastRecordedMiles = fetchedResult.miles;
