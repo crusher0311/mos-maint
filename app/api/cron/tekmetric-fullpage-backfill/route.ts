@@ -28,17 +28,40 @@ export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
+// Fairness knobs for the GET drain loop (see `getFlaggedShops` for the
+// ordering they pair with).
+//   - PER_SHOP_SLICE_MS bounds how long any single shop may hold a tick so
+//     one shop's pre-pass can't consume the whole ~270s budget and starve
+//     everyone behind it (the shop-99 head-of-line stall: its pre-pass ate
+//     the full 240s SOFT_DEADLINE every tick for ~13 days while 15 shops
+//     never got a first page).
+//   - A "giant" (prePassTotalPages >= GIANT_PREPASS_PAGES) is capped to
+//     MAX_GIANTS_PER_TICK slices per tick, reserving the rest of the budget
+//     for normal shops so the long tail keeps moving.
+const PER_SHOP_SLICE_MS = 60 * 1000;
+const GIANT_PREPASS_PAGES = 1500;
+const MAX_GIANTS_PER_TICK = 1;
+
 type ShopRow = {
   shopId: number;
   name: string;
   tekmetricShopId: number;
+  // Last-known pre-pass page count for this shop (0 until the pre-pass has
+  // reported one). Used to classify "giant" shops for the per-tick cap.
+  prePassTotalPages: number;
 };
 
 async function getFlaggedShops(db: any): Promise<ShopRow[]> {
   const progressRows = await db
     .collection("tekmetric_backfill_progress")
     .find({ fullPageMode: true, completed: { $ne: true } })
-    .project({ shopId: 1, fullPageQueuedAt: 1, lastFullPageRunAt: 1 })
+    .project({
+      shopId: 1,
+      fullPageQueuedAt: 1,
+      lastFullPageRunAt: 1,
+      lastPrePassRunAt: 1,
+      prePassTotalPages: 1,
+    })
     .toArray();
   if (progressRows.length === 0) return [];
   const shopIds = progressRows.map((r: any) => Number(r.shopId));
@@ -52,25 +75,35 @@ async function getFlaggedShops(db: any): Promise<ShopRow[]> {
       tekmetricShopId: 1,
     })
     .toArray();
-  // Two-tier sort: never-ran-a-page shops FIRST (oldest queue wins),
-  // then everyone else by least-recently-run. Without the tier split,
-  // the bare `lastFullPageRunAt || fullPageQueuedAt` fallback ties
-  // never-ran shops against shops that DID run yesterday — which lets
-  // the same 1-2 shops dominate the cron's per-tick budget while
-  // never-ran shops (8 of 14 in diagnosis #443, some queued 9 days ago)
-  // never get a turn. Promoting null-lastFullPageRunAt to the front
-  // guarantees every flagged shop sees a first page within a few ticks.
-  type SortKey = { tier: 0 | 1; t: number };
+  // Fairness ordering: process the LEAST-recently-touched shop first, where
+  // "touched" is the most recent of EITHER backfill phase —
+  // `lastFullPageRunAt` (the RO loop) OR `lastPrePassRunAt` (the bulk
+  // pre-pass). Tie-break by oldest `fullPageQueuedAt` so a never-touched shop
+  // still wins by waiting longest.
+  //
+  // Why both stamps: completion is gated on the full-page reindex, but a giant
+  // shop can sit in the PRE-PASS phase for days, and the pre-pass never stamps
+  // `lastFullPageRunAt`. The old tier sort (never-ran-full-page first, by
+  // queue time) therefore pinned that one giant to the head of the line every
+  // tick — it took the whole budget on its pre-pass and the shops behind it
+  // never got a turn (shop 99's pre-pass stuck at 6116/6352 pages starved 15
+  // never-started shops for ~13 days). Keying off the freshest of the two run
+  // stamps rotates a shop to the BACK the moment it gets a slice, so every
+  // flagged shop reaches the head within a few ticks.
+  type SortKey = { touchedAt: number; queuedAt: number; prePassTotalPages: number };
   const sortKeyByShop = new Map<number, SortKey>(
     progressRows.map((r: any) => {
-      const neverRan = !r.lastFullPageRunAt;
-      const t = new Date(
-        r.lastFullPageRunAt || r.fullPageQueuedAt || 0,
-      ).getTime();
-      return [Number(r.shopId), { tier: neverRan ? 0 : 1, t }] as [
-        number,
-        SortKey,
-      ];
+      const fp = r.lastFullPageRunAt ? new Date(r.lastFullPageRunAt).getTime() : 0;
+      const pp = r.lastPrePassRunAt ? new Date(r.lastPrePassRunAt).getTime() : 0;
+      const queuedAt = new Date(r.fullPageQueuedAt || 0).getTime();
+      return [
+        Number(r.shopId),
+        {
+          touchedAt: Math.max(fp, pp),
+          queuedAt,
+          prePassTotalPages: Number(r.prePassTotalPages) || 0,
+        },
+      ] as [number, SortKey];
     }),
   );
   return shops
@@ -83,14 +116,18 @@ async function getFlaggedShops(db: any): Promise<ShopRow[]> {
         shopId: Number(s.shopId),
         name: s.name || `Shop ${s.shopId}`,
         tekmetricShopId,
+        prePassTotalPages:
+          sortKeyByShop.get(Number(s.shopId))?.prePassTotalPages || 0,
       } as ShopRow;
     })
     .filter((s: ShopRow | null): s is ShopRow => s !== null)
     .sort((a: ShopRow, b: ShopRow) => {
-      const ka = sortKeyByShop.get(a.shopId) || { tier: 1, t: 0 };
-      const kb = sortKeyByShop.get(b.shopId) || { tier: 1, t: 0 };
-      if (ka.tier !== kb.tier) return ka.tier - kb.tier;
-      return ka.t - kb.t;
+      const ka =
+        sortKeyByShop.get(a.shopId) || { touchedAt: 0, queuedAt: 0, prePassTotalPages: 0 };
+      const kb =
+        sortKeyByShop.get(b.shopId) || { touchedAt: 0, queuedAt: 0, prePassTotalPages: 0 };
+      if (ka.touchedAt !== kb.touchedAt) return ka.touchedAt - kb.touchedAt;
+      return ka.queuedAt - kb.queuedAt;
     });
 }
 
@@ -197,6 +234,9 @@ export async function GET(req: NextRequest) {
   }
 
   const results: any[] = [];
+  // Giant shops get at most MAX_GIANTS_PER_TICK slices per tick (see the
+  // knob comments up top). Counter is per-tick, reset each GET.
+  let giantsProcessed = 0;
   for (const shop of shops) {
     if (Date.now() >= deadlineMs) {
       console.log(
@@ -235,6 +275,22 @@ export async function GET(req: NextRequest) {
         `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: queue unavailable (${enq.reason}), falling back to in-process path`,
       );
     }
+    // Giant-shop lane: a shop whose pre-pass is known to be huge gets at
+    // most MAX_GIANTS_PER_TICK slices per tick so it can't crowd out the
+    // smaller shops behind it. prePassTotalPages is 0 until the pre-pass
+    // reports a page count, so a never-measured shop is treated as normal
+    // (and re-classified next tick once its size is known).
+    const isGiant = (shop.prePassTotalPages || 0) >= GIANT_PREPASS_PAGES;
+    if (isGiant && giantsProcessed >= MAX_GIANTS_PER_TICK) {
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ok: true,
+        skipped: true,
+        reason: "giant_deferred",
+      });
+      continue;
+    }
     // Per-shop in-flight lock. If a manual POST or a slow previous tick
     // is still running this shop, skip and move on rather than racing.
     const lock = await acquireInFlightLock(db, shop.shopId);
@@ -258,8 +314,17 @@ export async function GET(req: NextRequest) {
         `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: took over wedged lock from ${(lock as any).previousOwner} (heartbeat stale).`,
       );
     }
+    if (isGiant) giantsProcessed += 1;
     try {
-      const result = await runForShop(db, shop, lock.owner, deadlineMs);
+      // Per-shop time slice: bound how long this single shop may run so its
+      // pre-pass can't consume the whole tick. The chunk honours
+      // min(its own soft budget, this deadline), so control returns here in
+      // time to give the next shop a turn.
+      const shopDeadlineMs = Math.min(
+        deadlineMs,
+        Date.now() + PER_SHOP_SLICE_MS,
+      );
+      const result = await runForShop(db, shop, lock.owner, shopDeadlineMs);
       results.push({ shopId: shop.shopId, name: shop.name, ...result });
     } catch (err: any) {
       console.error(
