@@ -6,6 +6,8 @@ MOS Maintenance MVP is an AI-enhanced automotive maintenance management system f
 ## User Preferences
 I prefer simple language and clear explanations. I want iterative development, with frequent updates and opportunities for feedback. Ask before making major changes.
 
+**Log filtering default:** When checking production logs / Better Stack for this app, filter to the `mos-maintenance-mvp-main` host (appname `web-*`) by default. Multiple unrelated apps (e.g. `heart-helper`) share the same Better Stack feed; their errors (like the RingCentral call-sync failures) are NOT this app's and should not be reported as MOS issues unless I'm explicitly asked to look across all apps. (Set 2026-06-02.)
+
 **Chrome Web Store publishing (mos-tools-extension): NEVER auto-publish.** Commit code, bump the manifest version, and write the CHANGELOG entry — but DO NOT run `scripts/auto-publish-extension.ts`, `scripts/publish-extension.js`, or `npm run ext:auto-publish`. Wait for Brandon to explicitly say "publish it" before anything goes to Google. The auto-publisher uses `CWS_REFRESH_TOKEN` to push straight to CWS, so a single command equals a real Google upload. The post-merge hook (`scripts/post-merge.sh`) does NOT publish on a manifest-version change — it only logs that a publish is pending. There is an intentionally undocumented escape hatch (`POST_MERGE_ALLOW_EXTENSION_PUBLISH=1`); do not set it. (Set 2026-05-06, tightened 2026-05-17 after accidental auto-ships.)
 
 ## System Architecture
