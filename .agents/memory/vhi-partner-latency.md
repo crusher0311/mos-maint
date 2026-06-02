@@ -15,12 +15,18 @@ endpoint can take 18s–2min. Three compounding causes (observed shop 83 Schindl
    (responseTimeMS=19437 on a single trace). Same gap as the dashboard plan page
    (see vhi-dashboard-hang-observability.md).
 
-2. **`vehicles=0` shops → mileage-anchor cache thrash.** Some Tekmetric shops have ZERO docs
-   in the `vehicles` collection, so mileage is re-derived per request from disagreeing sources
-   (open-RO odometer vs CARFAX estimate vs annual estimate). `getCachedPlan` only reuses a plan
-   within `MILEAGE_TOLERANCE=500` mi (lib/plan-cache.ts); when sources differ by thousands
-   (e.g. 93,980 vs 97,495) every load MISSES and rebuilds. Same VIN rebuilt twice in 10s at two
-   mileages, 18s and 26s. This is the Task #476/open-RO-mileage area.
+2. **Surfaces disagree on mileage → mileage-anchor cache thrash.** `getCachedPlan` only reuses a
+   plan within `MILEAGE_TOLERANCE=500` mi (lib/plan-cache.ts). The extension and partner resolve
+   DIFFERENT mileage for the same VIN (observed 93,980 vs 97,495, 3,515 apart), so each builds and
+   caches its own plan and misses the other's — same VIN rebuilt twice in 10s at 18s and 26s. Root
+   inputs: partner anchors on `vehicles.mileage`; extension on a live CARFAX rolling estimate.
+   NOTE: the `vehicles` collection is keyed inconsistently (int / string / shop-ObjectId — count
+   by ALL forms incl. ObjectId or you'll falsely read 0). Schindler's (shop 83) DOES have ~3,939
+   vehicle docs, but mileage is FROZEN at the one-time import (all updatedAt 2026-03-17/18, zero
+   refreshes since) and stored in field `mileage` (no `currentMileage`). So the partner anchors on
+   a months-stale odometer while the open RO often has no odometer entered yet. This is the
+   Task #476/open-RO-mileage area. Fix = unify the mileage source across both surfaces (and/or
+   refresh the Tekmetric vehicles sync), not "populate missing vehicles."
 
 3. **Each rebuild is genuinely slow (~18-26s).** `[PlanBuild] DataOne timeout ... continuing
    without OEM data` fires repeatedly (DataOne OEM decode timing out), plus CARFAX + Tekmetric
