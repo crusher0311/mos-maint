@@ -28,6 +28,28 @@ endpoint can take 18s–2min. Three compounding causes (observed shop 83 Schindl
    Task #476/open-RO-mileage area. Fix = unify the mileage source across both surfaces (and/or
    refresh the Tekmetric vehicles sync), not "populate missing vehicles."
 
+   **WHY the vehicles.mileage is frozen (structural):** there is NO recurring Tekmetric vehicle
+   sync. The `vehicles` collection is written for Tekmetric shops ONLY by the on-demand endpoint
+   `app/api/tekmetric/sync/route.ts` (NOT in `lib/cron/jobs.cjs`'s CRON_JOBS). It ran once at
+   onboarding (March) and never again. The recurring crons `tekmetric-incremental-sync` (*/30) and
+   `tekmetric-backfill` (+boosts) write ONLY `tekmetric_work_orders`, never `vehicles`. So
+   vehicles.mileage was never going to refresh — it's a one-time snapshot, not a stalled job.
+   (Also: that writer's update path matches `{ vin }` with NO shopId → cross-shop VIN collision risk,
+   and inserts key shopId = shop._id ObjectId, which is why these docs are ObjectId-keyed.)
+
+   **The FRESH source is the work orders, not vehicles.** Odometers flow continuously into
+   `tekmetric_work_orders` (shop 83: 12,069 / 15,974 WOs have odometer>0). So the durable anchor is
+   "most-recent WO with odometer>0", which is always current — NOT vehicles.mileage. BUT
+   `resolveOpenRoMileage` (lib/plan-build/open-ro-mileage.ts) only inspects the SINGLE most-recent
+   WO and returns null if it lacks an odometer, instead of scanning back for the latest WO that has
+   odometer>0. When the newest RO is an in-progress one with no miles entered yet (common), it
+   needlessly discards a good earlier reading and falls back to stale vehicles.mileage.
+
+   **Conclusion for a wholistic fix:** anchor mileage on the continuously-synced WO odometer
+   (latest WO with odometer>0) consistently across extension + partner; fall back to CARFAX est,
+   then stale vehicles.mileage last — same order on both surfaces. Don't try to resurrect a
+   "vehicles sync"; vehicles.mileage being stale stops mattering once nobody anchors on it.
+
 3. **Each rebuild is genuinely slow (~18-26s).** `[PlanBuild] DataOne timeout ... continuing
    without OEM data` fires repeatedly (DataOne OEM decode timing out), plus CARFAX + Tekmetric
    calls, and busy shops compete for the shared Tekmetric 10 RPS key (see
