@@ -1,5 +1,28 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.19 — 2026-06-02
+
+### Performance
+- **Vehicle Health Indicator now loads instantly on revisit.** The side
+  panel previously re-fetched `/api/extension/plan` over the network every
+  time you switched back to the Plan tab or re-opened a repair order, so
+  even a server-cached report still showed a loading spinner each visit.
+  The panel now keeps an in-memory plan cache (per shop + RO, 5-minute
+  TTL): a previously-viewed RO paints immediately from cache, then quietly
+  refreshes in the background. The refresh button still forces a fresh
+  pull.
+
+### Fixed
+- **No more "snap-back" off the tab you're on.** When the shop management
+  system re-sent the *same* repair-order context (a common, harmless
+  re-fire), the panel force-switched you to the first RO-independent tab,
+  yanking you off Plan/Jobs/etc. It now stays on your current tab unless
+  there's genuinely no RO to show.
+- **Late/stale plan responses can no longer paint the wrong vehicle.** If
+  you switch to a different RO while a plan request is still in flight, the
+  late response is now dropped instead of overwriting the current view and
+  context.
+
 ## 1.27.18 — 2026-05-29
 
 ### Maintenance

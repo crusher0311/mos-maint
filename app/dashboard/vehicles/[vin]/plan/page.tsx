@@ -1632,10 +1632,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const recallCount = recallsResult.ok ? recallsResult.count : 0;
   const safetyCriticalCount = recallsResult.ok ? recallsResult.safetyCriticalCount : 0;
 
-  // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status)
-  // Also fetch Protractor vehicle info for deferred work (deferred work is dynamic, not cached)
+  // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status).
+  // We deliberately do NOT make the live Protractor vehicle/deferred-work calls
+  // here — those two external round-trips were the main reason a "cache hit"
+  // still took seconds. The cached plan already carries a deferred-work snapshot
+  // (used via the fallback below), so the page paints fast on revisit. A manual
+  // refresh (?refresh=1) takes the cache-miss path and pulls fresh deferred work.
   if (useCachedData) {
-    console.log(`[Plan] Cache HIT - skipping expensive external API calls`);
+    console.log(`[Plan] Cache HIT - skipping expensive external API calls (incl. live Protractor)`);
     const [localAutoCfg, localCarfaxCfg, localProtractorCfg, localAutoVitalsCfg, localShopBranding] = await Promise.all([
       resolveAutoflowConfig(shopId),
       resolveCarfaxConfig(shopId),
@@ -1648,16 +1652,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
     protractorCfg = localProtractorCfg;
     autoVitalsCfg = localAutoVitalsCfg;
     shopBranding = localShopBranding;
-    
-    // Fetch Protractor vehicle info for deferred work (needed even on cache hit)
-    if (protractorCfg.configured) {
-      protractorVehicleResult = await withUpstreamTimeout(
-        fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL),
-        VHI_EXTERNAL_FETCH_TIMEOUT_MS,
-        `protractor-vehicle ${vin}`,
-        { ok: false } as unknown as Awaited<ReturnType<typeof fetchProtractorVehicle>>,
-      );
-    }
+    // protractorVehicleResult stays { ok: false } → the deferred-work block
+    // below falls through to the cached deferred-work snapshot.
   } else {
     // CACHE MISS: Full parallel data fetching - external APIs + local queries
     console.log(`[Plan] Cache MISS - fetching all external data`);
@@ -2323,6 +2319,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
       soonMiles,
       soonDays,
       showInspectItems,
+      // Persist the freshly-fetched Protractor deferred work into the cache so
+      // a later cache HIT can render it without re-making the live Protractor
+      // round-trips. The cache-hit path reads this back via the
+      // `cachedPlan.plan.deferredWork` fallback.
+      deferredWork: protractorDeferredWork,
       // Task #166: persist classifier output and active duty preference so
       // cached reads keep the chip + interval choice in sync.
       engineRisk: engineRisk

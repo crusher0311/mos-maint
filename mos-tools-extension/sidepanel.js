@@ -48,6 +48,27 @@ let isAuthenticated = false;
 let currentUserCanWrite = true; // Conservative default; refined via GET_MOS_AUTH.
 let currentContext = null;
 let currentTab = 'plan';
+
+// Client-side plan cache so revisiting an RO (tab switch or RO re-open) is
+// instant instead of re-hitting /api/extension/plan over the network every
+// time. Stale-while-revalidate: a cached entry paints immediately; if it's
+// older than the TTL we still paint it, then refresh quietly in the
+// background. Keyed by shop+RO. Capped to avoid unbounded growth.
+const PLAN_CACHE_TTL_MS = 5 * 60 * 1000;
+const PLAN_CACHE_MAX = 30;
+const planCache = new Map(); // cacheKey -> { data, ts }
+function planCacheKey(ctx) {
+  if (!ctx || !ctx.roId) return null;
+  return `${ctx.shopId || ''}::${ctx.roId}`;
+}
+function setPlanCache(key, data) {
+  if (!key) return;
+  planCache.set(key, { data, ts: Date.now() });
+  if (planCache.size > PLAN_CACHE_MAX) {
+    const oldest = planCache.keys().next().value;
+    if (oldest !== undefined) planCache.delete(oldest);
+  }
+}
 // Tabs the main extension actually renders. Used to sanitize a stored
 // `defaultExtensionTab` from the user record — e.g. legacy `"migrate"`
 // values from before the Migrate wizard was extracted into the
@@ -798,9 +819,14 @@ function updateContext(context) {
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
       switchTab(currentTab);
-    } else {
+    } else if (!context.roId) {
+      // No RO available and the current tab needs one → fall back to an
+      // RO-independent tab.
       switchTab(RO_INDEPENDENT_TABS[0]);
     }
+    // else: same RO re-fired (roChanged === false) while on an RO-dependent
+    // tab — stay put. Previously this branch force-switched to the first
+    // RO-independent tab, yanking the user off Plan/Jobs ("snap-back").
   } else {
     elements.noContext.classList.remove('hidden');
     elements.hasContext.classList.add('hidden');
@@ -990,21 +1016,45 @@ async function loadPlan(forceRefresh = false) {
     elements.planContent.classList.add('hidden');
     return;
   }
-  
+
+  // Snapshot the request identity so a slow/late response can never clobber a
+  // newer RO the user has since switched to, or yank focus back to this tab.
+  const reqRoId = currentContext.roId;
+  const reqShopId = currentContext.shopId;
+  const reqProvider = currentContext.provider || '';
+  const reqVin = currentContext.vin || '';
+  const cacheKey = planCacheKey(currentContext);
+
+  // Stale-while-revalidate: paint cached content instantly when we have it.
+  let servedFromCache = false;
+  if (!forceRefresh && cacheKey) {
+    const entry = planCache.get(cacheKey);
+    if (entry) {
+      renderPlan(entry.data, reqRoId, reqShopId);
+      servedFromCache = true;
+      // Fresh enough → skip the network entirely (truly instant revisit).
+      if (Date.now() - entry.ts < PLAN_CACHE_TTL_MS) return;
+      // Otherwise fall through and refresh quietly behind the cached view.
+    }
+  }
+
   if (forceRefresh) {
     elements.refreshBtn?.classList.add('spinning');
   }
-  elements.planLoading.classList.remove('hidden');
-  elements.planEmpty.classList.add('hidden');
-  elements.planContent.classList.add('hidden');
-  
+  // Only show the loading skeleton when we have nothing to display yet.
+  if (!servedFromCache) {
+    elements.planLoading.classList.remove('hidden');
+    elements.planEmpty.classList.add('hidden');
+    elements.planContent.classList.add('hidden');
+  }
+
   try {
     const params = new URLSearchParams({
-      shopId: currentContext.shopId,
-      roId: currentContext.roId,
-      provider: currentContext.provider || ''
+      shopId: reqShopId,
+      roId: reqRoId,
+      provider: reqProvider
     });
-    if (currentContext.vin) params.set('vin', currentContext.vin);
+    if (reqVin) params.set('vin', reqVin);
     if (forceRefresh) params.set('refresh', 'true');
     
     let result;
@@ -1025,9 +1075,18 @@ async function loadPlan(forceRefresh = false) {
     }
     
     if (result.error) throw new Error(result.error);
-    
-    renderPlan(result);
+
+    setPlanCache(cacheKey, result);
+    renderPlan(result, reqRoId, reqShopId);
   } catch (err) {
+    // The user already moved on to another RO/shop — drop this stale failure.
+    if (currentContext?.roId !== reqRoId || currentContext?.shopId !== reqShopId) return;
+    // We already have cached content on screen — keep it rather than wiping
+    // the view with an error for a background refresh that failed.
+    if (servedFromCache) {
+      console.warn('[MOS] Background plan refresh failed, keeping cached view:', err);
+      return;
+    }
     console.error('[MOS] Error loading plan:', err);
     elements.planLoading.classList.add('hidden');
     elements.planEmpty.classList.remove('hidden');
@@ -1037,7 +1096,15 @@ async function loadPlan(forceRefresh = false) {
   }
 }
 
-function renderPlan(data) {
+function renderPlan(data, reqRoId, reqShopId) {
+  // Stale-response guard: if the user has switched to a different RO (or shop —
+  // roIds can collide across shops/providers) while this response or background
+  // refresh was in flight, drop it so we don't paint the wrong vehicle or
+  // overwrite currentContext with stale values.
+  if (reqRoId != null && currentContext &&
+      (currentContext.roId !== reqRoId || currentContext.shopId !== reqShopId)) {
+    return;
+  }
   elements.planLoading.classList.add('hidden');
   
   // Update vehicle/mileage display from API response (more reliable than page scraping)
