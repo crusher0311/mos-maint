@@ -38,3 +38,27 @@ fix here changes prod cron logic and is operator-gated.
 link (`tekmetric.shopId`/`tekmetricShopId`), so its total (76) and complete (7) can differ
 slightly from a raw `tekmetric_backfill_progress` count (77 docs, complete:true=8) because
 orphan progress rows have no linked shop.
+
+**The full-page head-of-line fix is ALREADY in place** (`tekmetric-fullpage-backfill/route.ts`):
+PER_SHOP_SLICE_MS=60s, giant-shop cap (MAX_GIANTS_PER_TICK=1 at prePassTotalPages>=1500),
+and least-recently-touched ordering keyed off max(lastFullPageRunAt,lastPrePassRunAt). So
+"a giant shop starves everyone" is no longer the active blocker — don't re-fix it.
+
+**The real throughput bottleneck = the single shared Tekmetric API key (10 RPS hard cap).**
+All backfill processes (date-window drain worker + full-page cron + pre-passes) run at
+`'background'` priority and share ONE OAuth key via `lib/integrations/tekmetric/shared-rate-limiter.ts`.
+Effective background budget = `TEKMETRIC_SHARED_RPS_CAP` (default 8, ceiling 10) minus
+`TEKMETRIC_SHARED_RPS_USER_RESERVE` (default 3 RPS reserved for interactive users) ≈ 5 RPS
+for ALL background backfill combined. "Shared rate limiter saturated/timed out" errors are
+that cap being hit — the chunk sets lastError, holds its cursor, retries next tick
+(self-healing, NOT wedged/data-loss). Years of history × dozens of shops through ~5 RPS is
+simply slow; that's why only a few complete after days.
+
+**Levers (no clean code fix — fairness is done):** (a) raise `TEKMETRIC_SHARED_RPS_CAP` 8→10
+and/or lower `TEKMETRIC_SHARED_RPS_USER_RESERVE` — pure env-var config, reversible, but pushes
+toward 429s / slows live in-app Tekmetric calls; (b) let the ~15 shops still in pre-pass
+finish (per-RO API cost drops sharply once prePassDone); (c) get a second Tekmetric credential
+to widen the pipe (external, needs Brandon/Tekmetric). All are operator/prod actions.
+
+**Dev does NOT run these crons** (workflow logs show only dashboard polling + HostLoadSampler),
+so the dev repl isn't stealing prod's Tekmetric budget despite sharing the prod Mongo/key.
