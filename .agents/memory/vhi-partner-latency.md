@@ -45,10 +45,23 @@ endpoint can take 18s–2min. Three compounding causes (observed shop 83 Schindl
    odometer>0. When the newest RO is an in-progress one with no miles entered yet (common), it
    needlessly discards a good earlier reading and falls back to stale vehicles.mileage.
 
-   **Conclusion for a wholistic fix:** anchor mileage on the continuously-synced WO odometer
-   (latest WO with odometer>0) consistently across extension + partner; fall back to CARFAX est,
-   then stale vehicles.mileage last — same order on both surfaces. Don't try to resurrect a
-   "vehicles sync"; vehicles.mileage being stale stops mattering once nobody anchors on it.
+   **CORRECTED conclusion (after reading the extension code) — "scan-back to latest WO with
+   odometer>0" is WRONG.** When the open/current RO has no odometer entered (common: in-progress
+   RO), the latest odometer-bearing WO can be MONTHS old, so scan-back surfaces STALE data. The
+   real divergence mechanism for shop 83's VIN:
+   - Extension (`/api/extension/plan`, tekmetric roId path): live open-RO `milesIn` → vehicles doc
+     → CARFAX est. BUT its vehicles lookup uses `{ vin, shopId: mosShopId }` with the NUMERIC shop
+     id (line ~1487), which MISSES the ObjectId-keyed vehicle doc — so it effectively skips the
+     stale snapshot and lands on the CARFAX estimate (97,495).
+   - Partner (`/api/external/.../vhi`): builds ALL shopId variants, FINDS the stale vehicle doc
+     (93,980), and `pickMileageInput` prefers it (returns "vehicles_collection"); CARFAX only runs
+     `if (!mileage)`, so it never reaches CARFAX. → anchors 93,980.
+   So the two disagree because the partner prefers the stale `vehicles.mileage` while the extension
+   (by keying accident) uses the fresher CARFAX estimate.
+   **Right fix = unify on the FRESH order: current/open-RO odometer (no scan-back) → CARFAX
+   estimate → stale vehicles.mileage LAST → annual.** i.e. DEMOTE vehicles.mileage below CARFAX on
+   the partner side so it matches what Detect Dog shows. Do NOT add scan-back. Note this changes
+   Task #476 partner mileage priority (a partner-facing contract) — confirm before shipping.
 
 3. **Each rebuild is genuinely slow (~18-26s).** `[PlanBuild] DataOne timeout ... continuing
    without OEM data` fires repeatedly (DataOne OEM decode timing out), plus CARFAX + Tekmetric
