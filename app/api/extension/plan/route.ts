@@ -1489,9 +1489,12 @@ async function _GET(request: NextRequest) {
         shopId: mosShopId
       });
 
-      if (vehicle) {
-        mileage = mileage || vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage;
-      }
+      // NOTE: we intentionally do NOT take mileage from the vehicles snapshot
+      // here. vehicles.* has no recurring sync (stale), so the CARFAX estimate
+      // below is preferred; the snapshot is only used as a LAST-resort mileage
+      // fallback (added after the CARFAX block) so Detect Dog anchors on the
+      // same value as the partner VHI endpoint. The vehicle doc itself is still
+      // used for year/make/model in the VIN decode fallback just below.
 
       if (!vehicle || !vehicle.year || !vehicle.make || !vehicle.model) {
         try {
@@ -1551,6 +1554,18 @@ async function _GET(request: NextRequest) {
         }
       } catch (e: any) {
         console.warn(`[Extension] CARFAX mileage estimation failed for ${vin}: ${e.message}`);
+      }
+    }
+
+    // Last-resort mileage: the stale vehicles snapshot, applied only after the
+    // open-RO odometer and the CARFAX estimate have both come up empty. Kept
+    // below CARFAX so Detect Dog anchors on the same (fresher) value as the
+    // partner VHI endpoint. vehicles.* has no recurring sync, so it's stale.
+    if ((!mileage || mileage <= 0) && vehicle) {
+      const snapshotMiles = vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage || null;
+      if (snapshotMiles && snapshotMiles > 0) {
+        mileage = snapshotMiles;
+        console.log(`[Extension] Using vehicles snapshot mileage ${mileage} for ${vin} (open RO + CARFAX unavailable)`);
       }
     }
 

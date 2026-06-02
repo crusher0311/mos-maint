@@ -73,6 +73,18 @@ the extension has (serve cached/partial immediately, rebuild async) — biggest 
 Then stabilize the mileage anchor (consistent source / wider tolerance) to stop the rebuild thrash.
 Both are prod, partner-facing — ask before changing.
 
+**IMPLEMENTED (operator approved both surfaces anchoring on the fresher CARFAX estimate):**
+unified mileage order on BOTH surfaces = open-RO odometer → CARFAX estimate → stale vehicles
+snapshot → annual. Partner resolves the anchor (incl. CARFAX, a cached Mongo read wrapped in a
+5s `withUpstreamTimeout`) BEFORE `getCachedPlan` so its cache key matches the extension's, killing
+the thrash. Partner `rebuildVhi` is now wrapped in a 25s `withUpstreamTimeout`; on timeout it
+serves the most-recent `cached_plans` doc (source `stale_plan_rebuilding`) or returns `202
+{building:true}` for a never-before-built VIN (**NEW partner-contract response** — AppFueled should
+treat 202 as "retry shortly"). Extension demotes the stale vehicles snapshot below the CARFAX
+estimate (removed the early mileage assignment; re-added it as a last resort after the CARFAX
+block). Dev-only so far; ships to prod via the normal Render auto-deploy on push to main (operator
+action). **Do NOT add scan-back** — it surfaces stale data and re-breaks the match.
+
 **How to trace:** Better Stack, filter host `mos-maintenance-mvp-main`, grep the VIN — look for
 `[Extension Plan] TIMING`, `[VHI Rebuild] TIMING`, `[PlanBuild] ... in NNNNms`, and the
 `responseTimeMS` on `/api/external/vehicles/.../vhi` vs `/api/extension/plan`.

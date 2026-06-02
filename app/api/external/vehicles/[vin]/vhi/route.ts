@@ -12,6 +12,7 @@ import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
 import { resolveOpenRoMileage, pickMileageInput, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 /**
  * Task #476: provenance label for the actual odometer reading the partner
@@ -61,6 +62,83 @@ function buildFlags(opts: {
   consider(opts.mileageDiscrepancy ?? null);
   consider(opts.openRoMileageDiscrepancy ?? null);
   return flags;
+}
+
+/**
+ * Format a persisted plan document into the partner VHI response shape.
+ * Shared by the cache-hit path and the rebuild-timeout "serve stale" path so
+ * both branches return an identical contract. `source` distinguishes them.
+ */
+function buildPlanResponse(
+  plan: any,
+  opts: {
+    vin: string;
+    resolvedShopId: number | string;
+    source: string;
+    cachedAt: unknown;
+    mileageInputSource: MileageInputSource | null;
+    openRoMileageDiscrepancy: Parameters<typeof buildFlags>[0]["openRoMileageDiscrepancy"];
+  },
+) {
+  const separated = separateComplimentary(plan.buckets);
+  const score = computeScore(separated);
+  const planSource: "actual" | "estimated_carfax" | "estimated_annual" =
+    plan.mileageSource ?? "actual";
+  const planDetails = planSource === "actual" ? null : plan.mileageEstimateDetails ?? null;
+  return {
+    success: true,
+    vin: opts.vin,
+    vehicle: {
+      year: plan.vehicle?.year ?? null,
+      make: plan.vehicle?.make ?? null,
+      model: plan.vehicle?.model ?? null,
+      engine: plan.vehicle?.engine ?? null,
+    },
+    currentMiles: plan.currentMiles,
+    distanceUnit: plan.distanceUnit,
+    customerName: plan.customerName ?? null,
+    score: buildApiScore(score, plan.dataQuality),
+    summary: {
+      overdue: separated.overdue.length,
+      dueSoon: separated.dueSoon.length,
+      upcoming: separated.upcoming.length,
+      complimentary: separated.complimentary.length,
+    },
+    buckets: {
+      overdue: separated.overdue.map((it: any) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+      ),
+      dueSoon: separated.dueSoon.map((it: any) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+      ),
+      upcoming: separated.upcoming.map((it: any) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+      ),
+      complimentary: separated.complimentary.map((it: any) =>
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+      ),
+    },
+    icons: getStatusIconSet(),
+    reportUrl: buildReportUrl(opts.vin, opts.resolvedShopId),
+    cachedAt: opts.cachedAt,
+    source: opts.source,
+    mileageSource: planSource,
+    mileageEstimated: planSource !== "actual",
+    mileageEstimateDetails: planDetails,
+    mileageInputSource: opts.mileageInputSource ?? "vehicles_collection",
+    flags: buildFlags({
+      mileageDiscrepancy: plan.mileageDiscrepancy ?? null,
+      openRoMileageDiscrepancy: opts.openRoMileageDiscrepancy,
+    }),
+    dataQuality: plan.dataQuality ?? {
+      sufficient: true,
+      carfaxStatus: "ok",
+      anchorCount: 0,
+      carfaxRecordCount: 0,
+      shopHistoryCount: 0,
+      reasons: [],
+    },
+  };
 }
 
 // Decode model year from VIN position 10 (no DB required).
@@ -221,15 +299,70 @@ export const GET = createExternalEndpoint(
         err instanceof Error ? err.message : err,
       );
     }
+    // Task #476 + thrash fix: unify the mileage anchor with what the Detect
+    // Dog overlay shows so the two surfaces don't build plans at different
+    // mileages (which thrashes the shared plan cache — see memory
+    // vhi-partner-latency). Order:
+    //   (1) current/open-RO odometer  [fresh real reading]
+    //   (2) CARFAX estimate           [fresh projection]
+    //   (3) vehicles.currentMileage   [stale snapshot; no recurring sync]
+    //   (4) annual estimate           [year-based fallback, further below]
+    // Resolved fully BEFORE getCachedPlan so the cache key matches the anchor
+    // the extension uses. `pickMileageInput` is still used purely to derive the
+    // open-RO-vs-vehicles discrepancy flag (Task #391/#476).
     const picked = pickMileageInput({
       vehicleDocMileage: vehicleDocMileage ?? null,
       openRoLookup,
     });
-    let mileage: number | null = picked.miles;
-    let mileageInputSource: MileageInputSource | null = picked.mileageInputSource;
-    // Task #476: surface advisor-typed-low / stale-RO discrepancy via the
-    // existing Task #391 flags channel on every response branch.
     const openRoMileageDiscrepancy = picked.discrepancy;
+
+    let mileage: number | null = null;
+    let mileageInputSource: MileageInputSource | null = null;
+    let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
+    let mileageEstimateDetails: Record<string, unknown> | null = null;
+
+    // (1) Current/open-RO odometer (fresh real reading).
+    if (openRoLookup && openRoLookup.miles > 0) {
+      mileage = openRoLookup.miles;
+      mileageInputSource = "open_ro";
+    }
+
+    // (2) CARFAX estimate — preferred over the stale vehicles snapshot so the
+    // partner matches the overlay, which estimates when the open RO has no
+    // odometer. `estimateMileageFromCarfax` is a cached Mongo read (no external
+    // call), so it's cheap on the hot path; the timeout is a safety guard.
+    if (!mileage || mileage <= 0) {
+      try {
+        const est = await withUpstreamTimeout(
+          estimateMileageFromCarfax(Number(resolvedShopId), vin),
+          5000,
+          `carfax estimateMileage ${vin}`,
+          { estimated: false, mileage: null, reason: "timeout" } as any,
+        );
+        if (est.estimated && est.mileage && est.mileage > 0) {
+          mileage = est.mileage;
+          mileageSource = "estimated_carfax";
+          mileageInputSource = "carfax_estimated";
+          mileageEstimateDetails = {
+            confidence: est.confidence,
+            dataPoints: est.dataPoints,
+            lastRecordedMileage: est.lastRecordedMileage,
+            lastRecordedDate: est.lastRecordedDate,
+            milesPerDay: est.milesPerDay,
+          };
+        }
+      } catch (err) {
+        console.warn(`[VHI External] CARFAX estimate threw for ${vin}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // (3) Stale vehicles snapshot — last real-data resort before annual.
+    if ((!mileage || mileage <= 0) && vehicleDocMileage && vehicleDocMileage > 0) {
+      mileage = vehicleDocMileage;
+      mileageInputSource = "vehicles_collection";
+      mileageSource = "actual";
+    }
+
     if (mileage) {
       console.log(
         `[VHI External] Resolved mileage ${mileage} for ${vin} (shop=${resolvedShopId}) source=${mileageInputSource}` +
@@ -244,8 +377,6 @@ export const GET = createExternalEndpoint(
       `openRoMiles=${openRoLookup?.miles ?? "null"} ` +
       `vehiclesDocMiles=${vehicleDocMileage ?? "null"}`
     );
-    let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
-    let mileageEstimateDetails: Record<string, unknown> | null = null;
 
     let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
 
@@ -385,33 +516,9 @@ export const GET = createExternalEndpoint(
     // would only fire when the open-RO query already returned null, in
     // which case those same collections were just queried. Removed.
 
-    // Fallback 1: estimate from CARFAX service history (rolling miles/day projection)
-    if (!mileage || mileage <= 0) {
-      try {
-        const est = await estimateMileageFromCarfax(Number(resolvedShopId), vin);
-        if (est.estimated && est.mileage && est.mileage > 0) {
-          mileage = est.mileage;
-          mileageSource = "estimated_carfax";
-          mileageInputSource = "carfax_estimated";
-          mileageEstimateDetails = {
-            confidence: est.confidence,
-            dataPoints: est.dataPoints,
-            lastRecordedMileage: est.lastRecordedMileage,
-            lastRecordedDate: est.lastRecordedDate,
-            milesPerDay: est.milesPerDay,
-          };
-          console.log(
-            `[VHI External] Estimated mileage ${mileage} from CARFAX for ${vin} (confidence=${est.confidence})`
-          );
-        } else {
-          console.log(
-            `[VHI External] CARFAX estimate not available for ${vin} at shop ${resolvedShopId}: ${est.estimated ? "no mileage returned" : est.reason}`
-          );
-        }
-      } catch (err) {
-        console.warn(`[VHI External] CARFAX estimate threw for ${vin}:`, err instanceof Error ? err.message : err);
-      }
-    }
+    // CARFAX estimate is now resolved up front (before getCachedPlan) in the
+    // unified mileage block above, so the cache key matches the extension's
+    // anchor. No second CARFAX attempt is needed here.
 
     // Fallback 2: model-year * 12k miles/year (US national average), so we never hard-fail.
     // Year source priority: vehicles doc → DataOne VIN decode → VIN position-10 character map.
@@ -479,13 +586,60 @@ export const GET = createExternalEndpoint(
       `[PartnerVHI] rebuild_start requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
       `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner}`
     );
-    const result = await rebuildVhi(resolvedShopId, vin, mileage, {
-      invalidateFirst: false,
-      // Task #384: forward the resolved source so the persisted cache row
-      // (and therefore the next cache HIT) carries the same fields.
-      mileageSource,
-      mileageEstimateDetails,
-    });
+    // Bound the cold build so a busy-shop stall can't hang the partner for
+    // 1-2 min. The rebuild promise keeps running after the timeout fires and
+    // still populates cached_plans, so a retry (or the Detect Dog overlay)
+    // gets a cache hit. On timeout we serve the most-recent plan we already
+    // have (even if expired) so AppFueled gets data now; only a never-before-
+    // built VIN falls through to a 202 "building" response.
+    const REBUILD_TIMEOUT_MS = 25000;
+    const result = await withUpstreamTimeout(
+      rebuildVhi(resolvedShopId, vin, mileage, {
+        invalidateFirst: false,
+        // Task #384: forward the resolved source so the persisted cache row
+        // (and therefore the next cache HIT) carries the same fields.
+        mileageSource,
+        mileageEstimateDetails,
+      }),
+      REBUILD_TIMEOUT_MS,
+      `partner rebuildVhi ${vin}`,
+      null as unknown as Awaited<ReturnType<typeof rebuildVhi>>,
+    );
+
+    if (!result) {
+      const lastPlan = await db.collection("cached_plans").findOne(
+        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
+        { sort: { createdAt: -1 } },
+      );
+      if (lastPlan?.plan) {
+        console.warn(
+          `[PartnerVHI] rebuild_timeout_serving_stale requestId=${requestId} vin=${vin} ` +
+          `shopId=${resolvedShopId} cachedAt=${lastPlan.createdAt}`
+        );
+        return NextResponse.json(
+          buildPlanResponse(lastPlan.plan, {
+            vin,
+            resolvedShopId,
+            source: "stale_plan_rebuilding",
+            cachedAt: lastPlan.createdAt,
+            mileageInputSource,
+            openRoMileageDiscrepancy,
+          }),
+        );
+      }
+      console.warn(
+        `[PartnerVHI] rebuild_timeout_no_cache requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          building: true,
+          requestId,
+          message: "Maintenance plan is being built; please retry in a few seconds.",
+        },
+        { status: 202 },
+      );
+    }
 
     if (!result.success) {
       console.error(
