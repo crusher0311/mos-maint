@@ -85,6 +85,17 @@ estimate (removed the early mileage assignment; re-added it as a last resort aft
 block). Dev-only so far; ships to prod via the normal Render auto-deploy on push to main (operator
 action). **Do NOT add scan-back** — it surfaces stale data and re-breaks the match.
 
+**THREE surfaces share ONE plan cache (vin+shopId+mileage±500): the partner GET
+`/api/external/vehicles/[vin]/vhi`, the partner POST `/api/external/vhi/analyze`, and the
+extension `/api/extension/plan`.** They MUST resolve the identical mileage-anchor waterfall
+(open-RO odometer → CARFAX estimate → stale vehicles snapshot → annual year×12k) or they thrash the
+cache (each rebuilds at its own mileage, 18-26s each). The stale-vehicles snapshot must read the
+SAME field precedence everywhere: `currentMileage ?? lastMileage ?? mileage ?? odometer` (legacy
+docs often only have `mileage`/`odometer`). analyze gets this order via `estimateMileageWhenMissing`
+(lib/vhi-mileage-fallbacks.ts), which is analyze-only and now takes `vehicleDocMileage`. **Invariant:
+change the anchor order on one surface → change all three, or the "two products disagree" report
+comes back.**
+
 **How to trace:** Better Stack, filter host `mos-maintenance-mvp-main`, grep the VIN — look for
 `[Extension Plan] TIMING`, `[VHI Rebuild] TIMING`, `[PlanBuild] ... in NNNNms`, and the
 `responseTimeMS` on `/api/external/vehicles/.../vhi` vs `/api/extension/plan`.

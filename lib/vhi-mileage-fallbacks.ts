@@ -47,6 +47,16 @@ export async function estimateMileageWhenMissing(opts: {
   vin: string;
   /** Optional pre-fetched model year (from a vehicles doc). Skips DataOne lookup when present. */
   knownYear?: number | null;
+  /**
+   * Optional stale `vehicles`-collection mileage snapshot. Tried AFTER the
+   * CARFAX projection but BEFORE the year×12k annual estimate, so this endpoint
+   * resolves the SAME anchor order as GET /api/external/vehicles/{vin}/vhi
+   * (open-RO → CARFAX → stale vehicles → annual). Keeping the order identical
+   * prevents the two partner endpoints from building plans at different
+   * mileages and thrashing the shared plan cache (see memory
+   * vhi-partner-latency).
+   */
+  vehicleDocMileage?: number | null;
 }): Promise<ResolvedMileage | null> {
   const { shopId, vin } = opts;
   const vinUpper = vin.toUpperCase();
@@ -83,7 +93,20 @@ export async function estimateMileageWhenMissing(opts: {
     );
   }
 
-  // Fallback 2: model-year × 12k miles/year (US average)
+  // Fallback 2: stale vehicles-collection snapshot (last real-data resort
+  // before a pure year-based guess). Matches GET /vehicles/{vin}/vhi step (3).
+  if (opts.vehicleDocMileage && opts.vehicleDocMileage > 0) {
+    console.log(
+      `[Mileage Fallback] Using stale vehicles snapshot ${opts.vehicleDocMileage} for ${vinUpper} shop=${shopId}`
+    );
+    return {
+      mileage: opts.vehicleDocMileage,
+      source: "actual",
+      estimateDetails: null,
+    };
+  }
+
+  // Fallback 3: model-year × 12k miles/year (US average)
   let year: number | null =
     opts.knownYear && Number(opts.knownYear) > 1980 ? Number(opts.knownYear) : null;
   let yearSource = year ? "vehicles_doc" : null;

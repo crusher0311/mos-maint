@@ -93,12 +93,26 @@ export const POST = createExternalEndpoint(
           shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] },
           vin: { $in: [vin, vin.toUpperCase()] },
         },
-        { projection: { year: 1 } }
+        { projection: { year: 1, currentMileage: 1, lastMileage: 1, mileage: 1, odometer: 1 } }
       );
+      // Pass the stale vehicles snapshot so this endpoint resolves the SAME
+      // anchor order as GET /vehicles/{vin}/vhi (open-RO → CARFAX → stale
+      // vehicles → annual) and the two partner endpoints don't thrash the
+      // shared plan cache with different mileages. Mirror GET's snapshot field
+      // precedence exactly (currentMileage → lastMileage → mileage → odometer);
+      // legacy vehicle docs often only have `mileage`/`odometer`.
+      const vehicleDocMileage =
+        (vehicleDoc?.currentMileage ??
+          vehicleDoc?.lastMileage ??
+          vehicleDoc?.mileage ??
+          vehicleDoc?.odometer ??
+          null) as number | null;
       const estimate = await estimateMileageWhenMissing({
         shopId: resolvedShopId,
         vin,
         knownYear: vehicleDoc?.year ? Number(vehicleDoc.year) : null,
+        vehicleDocMileage:
+          vehicleDocMileage && Number(vehicleDocMileage) > 0 ? Number(vehicleDocMileage) : null,
       });
       if (estimate) {
         mileage = estimate.mileage;
