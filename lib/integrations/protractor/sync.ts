@@ -10,10 +10,9 @@ import {
 } from "./client";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
-import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
+import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import pLimit from "p-limit";
 
-const YEARS_TO_BACKFILL = 5;
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 // Per-chunk metrics rolling window. Mirrors the Tekmetric backfill cap so the
 // admin sync-health view can compute median/p95 chunk duration per shop
@@ -260,8 +259,9 @@ async function backfillShopChunk(
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
+  const yearsToBackfill = getBackfillYears();
   const oldestDate = new Date();
-  oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  oldestDate.setFullYear(oldestDate.getFullYear() - yearsToBackfill);
   oldestDate.setHours(0, 0, 0, 0);
   
   let chunkEnd: Date;
@@ -327,7 +327,7 @@ async function backfillShopChunk(
   const startStr = chunkStart.toISOString().split("T")[0];
   const endStr = chunkEnd.toISOString().split("T")[0];
 
-  console.log(`[Backfill] Shop ${shopId}: ${startStr} to ${endStr} (${daysToProcess} days)`);
+  console.log(`[Backfill] Shop ${shopId}: ${startStr} to ${endStr} (${daysToProcess} days) horizon=${yearsToBackfill}y`);
 
   let jobsIndexed = 0;
   let skippedUnchanged = 0;
@@ -866,7 +866,26 @@ export async function findAndResumeStaleBackfills(): Promise<{
 }> {
   const db = await getDb();
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
-  
+
+  // Horizon-raise reopen: if the operator raised BACKFILL_HORIZON_YEARS, clear
+  // the completion flag on configured shops that still have deeper history to
+  // walk so the stale-resume query below re-includes them and resumes from
+  // their parked cursor. No-op until the horizon is actually raised.
+  const configuredForReopen = await db
+    .collection("shops")
+    .find({ "protractor.configured": true })
+    .project({ shopId: 1 })
+    .toArray();
+  await reopenCompletedShopsForHorizon({
+    db,
+    progressCollection: "backfill_progress",
+    providerLabel: "Backfill",
+    shopFlagField: "protractorBackfillComplete",
+    eligibleShopIds: configuredForReopen
+      .map((s: any) => Number(s.shopId))
+      .filter((n: number) => Number.isFinite(n)),
+  });
+
   const [staleBackfills, protractorShops] = await Promise.all([
     db.collection("backfill_progress").find({
       completed: { $ne: true },

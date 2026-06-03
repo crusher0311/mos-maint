@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking, runWithTekmetricAbortSignal } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/integrations/tekmetric/incremental-sync";
-import { getPaceConfig, midpoint, describePace } from "@/lib/integrations/backfill-pace";
+import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
@@ -49,7 +49,6 @@ const NEW_SHOP_FASTPATH_DAYS = Math.max(
 // as often as the weekend boost) and keeps the focus on the handful
 // of shops that are genuinely brand-new.
 const FASTPATH_MAX_SHOPS_PER_RUN = 3;
-const YEARS_TO_BACKFILL = 5;
 // If a shop's lastError was set more than this many hours ago, clear it
 // before the next run so a transient failure can't permanently freeze the
 // cursor without anyone noticing.
@@ -168,6 +167,31 @@ type ShopToBackfill = {
 };
 
 async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
+  // Horizon-raise reopen: if the operator raised BACKFILL_HORIZON_YEARS, a shop
+  // already marked complete under the shorter horizon may still have deeper
+  // history to walk. Clear its completion flags first (constrained to linked
+  // shops so orphan rows aren't churned) so the completion-filtered query below
+  // re-includes it this same tick and it resumes from its parked cursor.
+  const linkedForReopen = await db
+    .collection("shops")
+    .find({
+      $or: [
+        { "tekmetric.shopId": { $exists: true, $ne: null } },
+        { "tekmetricShopId": { $exists: true, $ne: null } },
+      ],
+    })
+    .project({ shopId: 1 })
+    .toArray();
+  await reopenCompletedShopsForHorizon({
+    db,
+    progressCollection: "tekmetric_backfill_progress",
+    providerLabel: "Tekmetric Backfill",
+    shopFlagField: "tekmetricBackfillComplete",
+    eligibleShopIds: linkedForReopen
+      .map((s: any) => Number(s.shopId))
+      .filter((n: number) => Number.isFinite(n)),
+  });
+
   // Only fetch shops that don't have the completion flag set
   const shops = await db.collection("shops").find({
     $or: [
@@ -550,8 +574,9 @@ async function backfillShopChunkInner(
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
+  const yearsToBackfill = getBackfillYears();
   const oldestDate = new Date();
-  oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+  oldestDate.setFullYear(oldestDate.getFullYear() - yearsToBackfill);
   oldestDate.setHours(0, 0, 0, 0);
   
   // REVERSE CHRONOLOGICAL: Start from today, work backwards
@@ -601,7 +626,7 @@ async function backfillShopChunkInner(
   const startStr = chunkStart.toISOString();
   const endStr = chunkEnd.toISOString();
 
-  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]} (reverse) ${describePace(pace)}`);
+  console.log(`[Tekmetric Backfill] Shop ${shopId}: ${startStr.split("T")[0]} to ${endStr.split("T")[0]} (reverse) horizon=${yearsToBackfill}y ${describePace(pace)}`);
 
   let jobsIndexed = 0;
   let skippedUnchanged = 0;

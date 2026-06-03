@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getAllQueueSnapshots } from "@/lib/queue/metrics";
 import { isQueueEnabled } from "@/lib/queue/connection";
+import { getBackfillYears } from "@/lib/integrations/backfill-pace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,6 +193,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       generatedAt: new Date().toISOString(),
+      // The resolved backfill horizon (in years) currently driving all three
+      // provider backfills. Surfaced so an operator can confirm which value is
+      // live without grepping cron logs or redeploying. Controlled by the
+      // BACKFILL_HORIZON_YEARS env var (default 2). Shrinking it lets shops
+      // reach `completed` sooner; raising it resumes deeper history.
+      backfillHorizonYears: getBackfillYears(),
       summary: {
         tekShopsTotal: shopRows.length,
         tekShopsComplete: shopRows.filter((r) => r.complete).length,

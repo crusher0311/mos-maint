@@ -15,6 +15,117 @@ export interface PaceConfig {
 
 const DEFAULT_TZ = "America/Chicago";
 
+// How many years of history each provider backfill walks
+// (reverse-chronological, newest-first). Shared by Tekmetric, Protractor and
+// Shop-Ware so the horizon stays consistent across providers.
+//
+// Default 2 years (was a hard-coded 5 in each provider): because the backfill
+// runs newest-first, a shorter horizon lets every shop reach `completed`
+// sooner. Operators can grow or shrink it without a redeploy via the
+// BACKFILL_HORIZON_YEARS env var; raising it later resumes deeper history.
+// A shop whose cursor is already older than the resolved horizon flips to
+// complete on its next tick (the per-provider `chunkEnd <= oldestDate` check),
+// so shrinking the horizon never re-walks or errors.
+export const DEFAULT_BACKFILL_YEARS = 2;
+
+export function getBackfillYears(): number {
+  const raw = Number(process.env.BACKFILL_HORIZON_YEARS);
+  if (Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  return DEFAULT_BACKFILL_YEARS;
+}
+
+/**
+ * Compute the oldest date a backfill should walk back to, for the currently
+ * resolved horizon. Shared so every provider derives the boundary identically.
+ */
+export function getBackfillOldestDate(now: Date = new Date()): Date {
+  const oldest = new Date(now);
+  oldest.setFullYear(oldest.getFullYear() - getBackfillYears());
+  oldest.setHours(0, 0, 0, 0);
+  return oldest;
+}
+
+/**
+ * Horizon-raise reopen sweep.
+ *
+ * When an operator increases BACKFILL_HORIZON_YEARS, shops previously marked
+ * `completed` under the shorter horizon still have history between their stored
+ * cursor (`currentChunkEnd`, parked at the old oldest date) and the new, deeper
+ * oldestDate. This clears their completion flags so the normal per-provider
+ * selection re-includes them and the per-shop logic resumes walking backward
+ * from `currentChunkEnd` — no code change or manual DB edit required.
+ *
+ * Guard: only reopens docs whose `currentChunkEnd` is strictly newer than the
+ * freshly computed oldestDate. Because oldestDate advances forward with wall
+ * time, a steady-state or shrunk horizon never satisfies this (a completed
+ * shop's parked cursor is always <= the oldestDate at its completion, which is
+ * <= today's oldestDate), so this is a no-op until the horizon is raised.
+ *
+ * `eligibleShopIds` constrains the sweep to shops the caller actually processes
+ * so orphaned/unlinked progress rows aren't churned (and re-completed) every
+ * tick.
+ *
+ * Returns the shopIds that were reopened.
+ */
+export async function reopenCompletedShopsForHorizon(opts: {
+  db: any;
+  progressCollection: string;
+  providerLabel: string;
+  eligibleShopIds: number[];
+  shopFlagField?: string | null;
+  now?: Date;
+}): Promise<number[]> {
+  const { db, progressCollection, providerLabel, eligibleShopIds, shopFlagField } = opts;
+  if (!eligibleShopIds.length) return [];
+
+  const years = getBackfillYears();
+  const oldestDate = getBackfillOldestDate(opts.now ?? new Date());
+
+  const candidates = await db
+    .collection(progressCollection)
+    .find(
+      {
+        shopId: { $in: eligibleShopIds },
+        completed: true,
+        currentChunkEnd: { $gt: oldestDate },
+      },
+      { projection: { shopId: 1 } },
+    )
+    .toArray();
+  if (!candidates.length) return [];
+
+  const ids = candidates
+    .map((r: any) => Number(r.shopId))
+    .filter((n: number) => Number.isFinite(n));
+  if (!ids.length) return [];
+
+  const now = new Date();
+  await db.collection(progressCollection).updateMany(
+    { shopId: { $in: ids } },
+    {
+      $set: {
+        completed: false,
+        complete: false,
+        reopenedForHorizonAt: now,
+        resolvedBackfillHorizonYears: years,
+      },
+      $unset: { completedAt: "" },
+    },
+  );
+  if (shopFlagField) {
+    await db.collection("shops").updateMany(
+      { shopId: { $in: ids } },
+      { $set: { [shopFlagField]: false } },
+    );
+  }
+  console.log(
+    `[${providerLabel}] Horizon reopen: cleared completion on ${ids.length} shop(s) to resume deeper history (horizon=${years}y): ${ids.join(",")}`,
+  );
+  return ids;
+}
+
 const DAY_PROFILE: Record<BackfillProvider, Omit<PaceConfig, "isOffHours" | "shopHourLocal" | "shopTimezone">> = {
   tekmetric: {
     // Bumped 2→4 after introducing the persistent /jobs cache

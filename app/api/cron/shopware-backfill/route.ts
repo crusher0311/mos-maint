@@ -7,7 +7,7 @@ import {
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
-import { getPaceConfig, describePace } from "@/lib/integrations/backfill-pace";
+import { getPaceConfig, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +15,6 @@ export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const STALE_LOCK_MS = 3 * 60 * 1000; // shrunk from 10min so a crashed run unblocks fast
-const YEARS_TO_BACKFILL = 5;
 // Per-chunk metrics rolling window. Mirrors the Tekmetric/Protractor backfill
 // caps so the admin sync-health view can compute median/p95 chunk duration
 // per shop without grepping cron logs. 25 entries keeps the progress doc
@@ -426,6 +425,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, message: "No Shop-Ware shops found", results: [] });
   }
 
+  // Horizon-raise reopen: if the operator raised BACKFILL_HORIZON_YEARS, clear
+  // the completion flag on shops that still have deeper history to walk so the
+  // `progress.completed` skip below no longer short-circuits them and they
+  // resume from their parked cursor. No-op until the horizon is raised.
+  await reopenCompletedShopsForHorizon({
+    db,
+    progressCollection: "shopware_backfill_progress",
+    providerLabel: "SW Backfill",
+    eligibleShopIds: swShops
+      .map((s: any) => Number(s.shopId))
+      .filter((n: number) => Number.isFinite(n)),
+  });
+
   const allResults: any[] = [];
 
   for (const shop of swShops) {
@@ -455,8 +467,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const yearsToBackfill = getBackfillYears();
     const oldestDate = new Date();
-    oldestDate.setFullYear(oldestDate.getFullYear() - YEARS_TO_BACKFILL);
+    oldestDate.setFullYear(oldestDate.getFullYear() - yearsToBackfill);
     oldestDate.setHours(0, 0, 0, 0);
 
     const today = new Date();
@@ -491,7 +504,7 @@ export async function GET(req: NextRequest) {
     );
 
     console.log(
-      `[SW Backfill] Shop ${mosShopId} (tenant ${tenantId}): reverse from ${chunkEndCursor.toISOString().split("T")[0]} ${describePace(pace)}`
+      `[SW Backfill] Shop ${mosShopId} (tenant ${tenantId}): reverse from ${chunkEndCursor.toISOString().split("T")[0]} horizon=${yearsToBackfill}y ${describePace(pace)}`
     );
 
     let cursor = new Date(chunkEndCursor);

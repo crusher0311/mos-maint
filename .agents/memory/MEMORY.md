@@ -13,3 +13,4 @@
 - [WO dual unique keys](normalized-wo-dual-unique.md) — normalized_work_orders has PK id + (shop_id, work_order_number); upsert only guards id, so create paths must resolve by natural key first or 23505 (+ residual concurrent-ingest race).
 - [Render prod deploy](render-prod-deploy.md) — prod web `mos-tools` + `backfill-drain-worker` AUTO-DEPLOY on push to GitHub main (~7-8min build); `mos-tools-east` is an inactive old web svc. Verify live commit via Render API.
 - [VHI/Plan revisit performance](vhi-revisit-performance.md) — a plan-cache HIT still did per-view work; extension needs client SWR cache + no same-RO snap-back, dashboard must store deferredWork & skip live Protractor on hit.
+- [Backfill horizon](backfill-horizon.md) — shared env-driven `getBackfillYears()` (default 2y); shrink = free via existing complete check; raise = `reopenCompletedShopsForHorizon` guarded by currentChunkEnd>oldestDate (no-op until raised).
