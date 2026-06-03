@@ -131,6 +131,12 @@ const ALLOWLIST = new Set([
   "app/api/cron/tekmetric-ro-retry/route.ts",
   "app/api/cron/tekmetric-sync/route.ts",
   "app/api/cron/tekmetric-webhook-health/route.ts",
+  // Task #569 — daily webhook-subscription sweep. Verifies/repairs each
+  // shop's provider webhook subscription and reads/writes the operational
+  // `protractor_webhook_subscriptions` collection (subscription bookkeeping,
+  // not entity data). Same operational-telemetry precedent as the other
+  // webhook-health crons above and the tekmetric webhook-subscribe helper.
+  "app/api/cron/webhook-subscription-sweep/route.ts",
   "app/api/cron/trial-check/route.ts",
   "app/api/customers/[customerId]/inspect/route.ts",
   "app/api/customers/[customerId]/route.ts",
@@ -377,6 +383,11 @@ const ALLOWLIST = new Set([
   "lib/integrations/protractor/jobs-prewarm.ts",
   "lib/integrations/protractor/sync.ts",
   "lib/integrations/protractor/work-order-service.ts",
+  // Task #569 — Protractor webhook auto-subscribe helper. Reads/writes the
+  // operational `protractor_webhook_subscriptions` collection (subscription
+  // bookkeeping + token), mirroring the already-allowlisted tekmetric
+  // webhook-subscribe helper below.
+  "lib/integrations/protractor/webhook-subscribe.ts",
   "lib/integrations/shopware/adapter.ts",
   "lib/integrations/tekmetric/auth.ts",
   "lib/integrations/tekmetric/incremental-sync.ts",
