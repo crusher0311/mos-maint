@@ -18,6 +18,12 @@
 // becomes visible (would suggest the on-write SQL writer is lagging).
 //
 //   Usage:  npm run report:job-index-aces-coverage [-- --shop 12345]
+//           npm run report:job-index-aces-coverage -- --by-shop [--top 20] [--min-docs 500]
+//
+// `--by-shop` ranks the worst-covered shops *per source system* (lowest
+// ACES vehicle_id %% first) so per-shop gaps are visible without a manual
+// per-shop loop. It runs one bounded aggregation per shop (each well under
+// the Mongo socket timeout) rather than a single 9M-doc scan.
 //
 // Read-only — no writes. Safe to run on production.
 
@@ -46,6 +52,13 @@ function classifySource(doc: any): string {
   if (typeof doc.sourceSystem === "string") return doc.sourceSystem;
   if (doc.metadata?.sourceType) return doc.metadata.sourceType;
   if (doc.provenance?.sourceSystem) return doc.provenance.sourceSystem;
+  // Explicit `provider` stamp. Shop-Ware live-indexed docs carry
+  // provider:"shopware" (and a *string* servicePackageId), so without this
+  // branch they fail every heuristic below and get mislabeled "unknown".
+  // `provider:"sms"` keeps its historical "sms_historical" label.
+  if (typeof doc.provider === "string" && doc.provider) {
+    return doc.provider === "sms" ? "sms_historical" : doc.provider;
+  }
   // Fallbacks for legacy docs written before sourceSystem stamping was
   // unified. Tekmetric: live indexer payloads always carry a numeric
   // servicePackageId or jobs[].id-shaped serviceItemId. Shop-Ware:
@@ -69,11 +82,144 @@ function lineHasPcdb(line: any): boolean {
   );
 }
 
+// ---------------------------------------------------------------------------
+// --by-shop mode — rank the worst-covered shops per source system.
+// ---------------------------------------------------------------------------
+//
+// Mirrors classifySource() / lineHasPcdb() as a server-side aggregation so a
+// 9M-doc corpus doesn't have to stream through Node. One aggregation per shop
+// (bounded, fast) instead of a single full-collection group, which keeps each
+// command comfortably under the driver socket timeout. Read-only.
+
+const AGG_SOURCE_EXPR = {
+  $switch: {
+    branches: [
+      { case: { $eq: [{ $type: "$sourceSystem" }, "string"] }, then: "$sourceSystem" },
+      { case: { $ne: [{ $type: "$metadata.sourceType" }, "missing"] }, then: "$metadata.sourceType" },
+      { case: { $ne: [{ $type: "$provenance.sourceSystem" }, "missing"] }, then: "$provenance.sourceSystem" },
+      { case: { $eq: ["$provider", "sms"] }, then: "sms_historical" },
+      { case: { $eq: [{ $type: "$provider" }, "string"] }, then: "$provider" },
+      { case: { $in: [{ $type: "$servicePackageId" }, ["double", "int", "long", "decimal"]] }, then: "tekmetric" },
+      { case: { $eq: [{ $type: "$serviceItemUuid" }, "string"] }, then: "shopware" },
+      { case: { $and: [{ $eq: [{ $type: "$serviceItemId" }, "string"] }, { $eq: [{ $strLenCP: { $ifNull: ["$serviceItemId", ""] } }, 36] }] }, then: "shopware" },
+      { case: { $eq: [{ $type: "$invoiceLineItemId" }, "string"] }, then: "protractor" },
+      { case: { $eq: ["$roProvider", "sms"] }, then: "sms_historical" },
+    ],
+    default: "unknown",
+  },
+};
+
+const AGG_LINE_PCDB_EXPR = {
+  $anyElementTrue: {
+    $map: {
+      input: { $ifNull: ["$lines", []] },
+      as: "l",
+      in: {
+        $or: [
+          { $ne: [{ $ifNull: ["$$l.pcdbPartTypeId", null] }, null] },
+          { $ne: [{ $ifNull: ["$$l.partsTechPartId", null] }, null] },
+          { $ne: [{ $ifNull: ["$$l.pcdbPartTypeName", null] }, null] },
+        ],
+      },
+    },
+  },
+};
+
+interface ShopSliceMetrics extends SliceMetrics {
+  shopId: number | string;
+  source: string;
+  withVin: number;
+}
+
+async function rankShopsBySource(
+  db: Awaited<ReturnType<typeof getDb>>,
+  top: number,
+  minDocs: number,
+): Promise<void> {
+  const collection = db.collection("job_index");
+  const shopIds = await collection.distinct("shopId");
+  console.log(`[coverage] --by-shop ranking ${shopIds.length} shops (top=${top} min-docs=${minDocs}) ...`);
+
+  const rows: ShopSliceMetrics[] = [];
+  for (const sh of shopIds) {
+    const agg = await collection
+      .aggregate(
+        [
+          { $match: { shopId: sh } },
+          {
+            $project: {
+              src: AGG_SOURCE_EXPR,
+              hasVid: { $cond: [{ $ne: [{ $ifNull: ["$vehicle.acesVehicleId", null] }, null] }, 1, 0] },
+              hasEid: { $cond: [{ $ne: [{ $ifNull: ["$vehicle.acesEngineId", null] }, null] }, 1, 0] },
+              dec: { $cond: [{ $ne: [{ $ifNull: ["$vehicle.acesDecodedAt", null] }, null] }, 1, 0] },
+              hasVin: { $cond: [{ $and: [{ $eq: [{ $type: "$vehicle.vin" }, "string"] }, { $gte: [{ $strLenCP: { $ifNull: ["$vehicle.vin", ""] } }, 11] }] }, 1, 0] },
+              pcdb: { $cond: [AGG_LINE_PCDB_EXPR, 1, 0] },
+            },
+          },
+          {
+            $group: {
+              _id: "$src",
+              total: { $sum: 1 },
+              withAcesVehicleId: { $sum: "$hasVid" },
+              withAcesEngineId: { $sum: "$hasEid" },
+              decoded: { $sum: "$dec" },
+              withVin: { $sum: "$hasVin" },
+              withLinePcdb: { $sum: "$pcdb" },
+            },
+          },
+        ],
+        { allowDiskUse: true },
+      )
+      .toArray();
+    for (const g of agg) {
+      rows.push({
+        shopId: sh as number | string,
+        source: (g._id as string) ?? "unknown",
+        total: g.total,
+        withAcesVehicleId: g.withAcesVehicleId,
+        withAcesEngineId: g.withAcesEngineId,
+        decoded: g.decoded,
+        withVin: g.withVin,
+        withLinePcdb: g.withLinePcdb,
+      });
+    }
+  }
+
+  const sources = [...new Set(rows.map((r) => r.source))].sort();
+  for (const src of sources) {
+    const slice = rows
+      .filter((r) => r.source === src && r.total >= minDocs)
+      .sort((a, b) => a.withAcesVehicleId / a.total - b.withAcesVehicleId / b.total)
+      .slice(0, top);
+    if (slice.length === 0) continue;
+    console.log(`\n=== worst ${slice.length} shops for source="${src}" (>=${minDocs} docs, by acesVid%) ===`);
+    console.log("shop        total    decoded   acesVid   acesEid   hasVIN    linePCDB");
+    console.log("----------- -------- --------- --------- --------- --------- ---------");
+    for (const m of slice) {
+      console.log(
+        `${String(m.shopId).padEnd(11)} ${String(m.total).padStart(8)}   ${pct(m.decoded, m.total)}    ${pct(m.withAcesVehicleId, m.total)}    ${pct(m.withAcesEngineId, m.total)}    ${pct(m.withVin, m.total)}    ${pct(m.withLinePcdb, m.total)}`,
+      );
+    }
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   let shopId: number | null = null;
+  let byShop = false;
+  let top = 20;
+  let minDocs = 500;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--shop" && argv[i + 1]) shopId = Number(argv[++i]);
+    else if (argv[i] === "--by-shop") byShop = true;
+    else if (argv[i] === "--top" && argv[i + 1]) top = Number(argv[++i]);
+    else if (argv[i] === "--min-docs" && argv[i + 1]) minDocs = Number(argv[++i]);
+  }
+
+  if (byShop) {
+    const db = await getDb();
+    await rankShopsBySource(db, top, minDocs);
+    process.exit(0);
   }
 
   const db = await getDb();

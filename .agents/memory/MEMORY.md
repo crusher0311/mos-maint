@@ -18,3 +18,4 @@
 - [Shop-Ware progress collection](shopware-progress-collection.md) — Shop-Ware backfill progress is in collection `ln`, NOT `shopware_backfill_progress` (which chunk-speed-health wrongly reads → its SW branch is dead).
 - [Webhook subscription gating](webhook-subscription-gating.md) — auto-subscribe OFF means tekmetric_webhook_subscriptions is empty, so any "missing subscription" check/alert must be gated behind TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE or it false-positives the whole fleet.
 - [direct-db guard gates deploy](direct-db-guard-gates-deploy.md) — `lint:direct-db` runs in Render prebuild; a new file touching Mongo that isn't allowlisted (or in a repo) fails the prod build, not just local lint.
+- [ACES coverage gaps](aces-coverage-gaps.md) — Protractor history undecoded (fixable), Tek split fixable/VIN-capped, PCDB 0% corpus-wide; SW job_index docs skeletal + provider:"shopware" + source table keyed by tenantId not shopId.
