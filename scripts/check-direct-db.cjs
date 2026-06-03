@@ -82,6 +82,12 @@ const ALLOWLIST = new Set([
   "app/api/cron/backfill-reconcile/route.ts",
   "app/api/cron/catchup-status/route.ts",
   "app/api/cron/cron-health-alerter/route.ts",
+  // Task #568 — whole-pipeline backfill stall alerter. Reads per-shop
+  // backfill progress + the drain lock and tracks fleet-heartbeat /
+  // alert-dedup state in operational-only collections
+  // (`pipeline_progress_heartbeat`, `pipeline_stall_alerts`). Same
+  // operational-telemetry precedent as the other alerter/health crons.
+  "app/api/cron/pipeline-stall-alerter/route.ts",
   // Task #512 — synthetic prod smoke. The runner writes per-run records
   // to a synthetic-only collection (`synthetic_runs`) and tracks
   // alert-dedup state in `synthetic_state`. Both collections are

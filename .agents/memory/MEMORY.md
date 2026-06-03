@@ -14,3 +14,5 @@
 - [Render prod deploy](render-prod-deploy.md) — prod web `mos-tools` + `backfill-drain-worker` AUTO-DEPLOY on push to GitHub main (~7-8min build); `mos-tools-east` is an inactive old web svc. Verify live commit via Render API.
 - [VHI/Plan revisit performance](vhi-revisit-performance.md) — a plan-cache HIT still did per-view work; extension needs client SWR cache + no same-RO snap-back, dashboard must store deferredWork & skip live Protractor on hit.
 - [Backfill horizon](backfill-horizon.md) — shared env-driven `getBackfillYears()` (default 2y); shrink = free via existing complete check; raise = `reopenCompletedShopsForHorizon` guarded by currentChunkEnd>oldestDate (no-op until raised).
+- [Fleet backfill stall detection](pipeline-stall-detection.md) — pipeline-stall-alerter pages when cron is green but fleet makes zero real progress; signature must exclude lastRunAt, gate on loop liveness, escalate via [OPS-ALERT].
+- [Shop-Ware progress collection](shopware-progress-collection.md) — Shop-Ware backfill progress is in collection `ln`, NOT `shopware_backfill_progress` (which chunk-speed-health wrongly reads → its SW branch is dead).
