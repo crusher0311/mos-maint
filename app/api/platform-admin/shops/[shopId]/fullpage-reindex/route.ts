@@ -58,7 +58,10 @@ export async function POST(
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
+      : process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.RENDER_EXTERNAL_URL ||
+        process.env.PRODUCTION_URL ||
+        "http://localhost:5000";
     fetch(`${baseUrl}/api/cron/tekmetric-fullpage-backfill`, {
       method: "POST",
       headers: {

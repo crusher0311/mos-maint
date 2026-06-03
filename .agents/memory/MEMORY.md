@@ -4,6 +4,7 @@
 - [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
 - [Mongo db-name split](mongo-db-name-split.md) — cron bookkeeping is in db `mos`; app data is in db `mos-maintenance-mvp`; reading cron state via lib/mongo returns empty and fakes a "dead scheduler."
 - [Tekmetric full-page completion](tekmetric-fullpage-completion.md) — `completed` flips only after an optional full-page reindex; that cron head-of-line-blocks on giant shops, starving the rest for days.
+- [Full-page cron queue hand-off ordering](fullpage-queue-handoff-ordering.md) — enqueue queue-routed shops in an up-front pass BEFORE deadline-bounded inline work, or giants starve allowlisted/canary shops out of the queue entirely.
 - [Operational primitives → PG](operational-primitives-pg.md) — cron lock + Tekmetric rate buckets are transient state; their Mongo→PG cutover is a pure flag flip, NO backfill/soak unlike data stores.
 - [Better Stack shared log feed](betterstack-shared-feed.md) — many apps (incl. `heart-helper`) log into one feed; filter to host `mos-maintenance-mvp-main` or you'll see other apps' errors (e.g. RingCentral).
 - [Backfill completion tracking](backfill-completion-tracking.md) — Tekmetric "done" lives in progress collection's `complete`/`completed` (which disagree), NOT the shops-doc flag; Protractor uses the shops flag. Don't trust one field.

@@ -234,46 +234,69 @@ export async function GET(req: NextRequest) {
   }
 
   const results: any[] = [];
+
+  // ── Pass 1: fast queue hand-off (Task #513 fairness fix) ───────────
+  // Enqueue EVERY queue-enabled shop before spending any of the tick
+  // budget on in-process work. Enqueuing is a couple of O(1) Redis
+  // writes (deduped by the `tekmetric-fullpage:<shopId>` jobId), so it
+  // can never blow the deadline — and doing it up front guarantees
+  // allowlisted shops always reach the queue even when a backlog of
+  // giant in-process shops would otherwise eat the whole budget first.
+  //
+  // Why this is its own pass: with the hand-off interleaved into the
+  // single fairness-ordered loop, an early giant's chunk overran its
+  // per-shop slice and consumed the entire ~270s budget, so the loop
+  // hit the deadline and `break`'d before ever reaching the allowlisted
+  // shop further down the order. The canary (River Valley #134) sat at
+  // rank 9 of 27 behind six 3k–6k-page giants and was never enqueued —
+  // the cron timed out on the first giant every tick. Splitting the
+  // hand-off out fixes this for the canary today and for the whole
+  // fleet once BACKFILL_QUEUE_ENABLED flips on.
+  //
+  // Shops that are NOT queue-routed (flag off for them) — or whose
+  // enqueue fails because Redis is down / BullMQ rejected it — fall
+  // through to `inlineShops` and run in-process below, preserving the
+  // fail-open contract.
+  const inlineShops: ShopRow[] = [];
+  for (const shop of shops) {
+    if (!decideQueueFor(shop.shopId).useQueue) {
+      inlineShops.push(shop);
+      continue;
+    }
+    const enq = await enqueueTekmetricFullPage({
+      shopId: shop.shopId,
+      tekmetricShopId: shop.tekmetricShopId,
+      enqueuedAt: new Date().toISOString(),
+      trigger: "cron",
+    });
+    if (enq.enqueued || enq.reason === "duplicate") {
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ok: true,
+        routedTo: "queue",
+        jobId: enq.enqueued ? enq.jobId : undefined,
+        duplicate: !enq.enqueued && enq.reason === "duplicate",
+      });
+      continue;
+    }
+    // queue_unavailable — fall back to the in-process path for this shop.
+    console.warn(
+      `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: queue unavailable (${enq.reason}), falling back to in-process path`,
+    );
+    inlineShops.push(shop);
+  }
+
+  // ── Pass 2: in-process drain for shops not routed to the queue ─────
   // Giant shops get at most MAX_GIANTS_PER_TICK slices per tick (see the
   // knob comments up top). Counter is per-tick, reset each GET.
   let giantsProcessed = 0;
-  for (const shop of shops) {
+  for (const shop of inlineShops) {
     if (Date.now() >= deadlineMs) {
       console.log(
-        `[Tekmetric Full-Page Cron] Deadline reached after ${results.length}/${shops.length} shops`,
+        `[Tekmetric Full-Page Cron] Deadline reached after ${results.length} shop(s) handled (${inlineShops.length} eligible for in-process this tick)`,
       );
       break;
-    }
-    // Task #513: feature-flagged hand-off to BullMQ. When the queue is
-    // enabled for this shop, enqueue the chunk and continue without
-    // running it inline — the worker service owns it now. Falls back to
-    // the in-process path when the flag is off, Redis is missing, or
-    // BullMQ rejects the enqueue (see `producer.ts` for the fail-open
-    // contract). The in-flight-lock path below is the legacy guard;
-    // the queue's jobId-based uniqueness replaces it for queued shops.
-    const decision = decideQueueFor(shop.shopId);
-    if (decision.useQueue) {
-      const enq = await enqueueTekmetricFullPage({
-        shopId: shop.shopId,
-        tekmetricShopId: shop.tekmetricShopId,
-        enqueuedAt: new Date().toISOString(),
-        trigger: "cron",
-      });
-      if (enq.enqueued || enq.reason === "duplicate") {
-        results.push({
-          shopId: shop.shopId,
-          name: shop.name,
-          ok: true,
-          routedTo: "queue",
-          jobId: enq.enqueued ? enq.jobId : undefined,
-          duplicate: !enq.enqueued && enq.reason === "duplicate",
-        });
-        continue;
-      }
-      // queue_unavailable — fall through to the in-process path.
-      console.warn(
-        `[Tekmetric Full-Page Cron] Shop ${shop.shopId}: queue unavailable (${enq.reason}), falling back to in-process path`,
-      );
     }
     // Giant-shop lane: a shop whose pre-pass is known to be huge gets at
     // most MAX_GIANTS_PER_TICK slices per tick so it can't crowd out the
