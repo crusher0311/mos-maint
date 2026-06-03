@@ -20,7 +20,8 @@ import {
   getAllQueueSnapshots,
   getFailedJobs,
 } from "@/lib/queue/metrics";
-import { ALL_QUEUE_NAMES } from "@/lib/queue/queues";
+import { retryFailedJob } from "@/lib/queue/actions";
+import { ALL_QUEUE_NAMES, type QueueName } from "@/lib/queue/queues";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,4 +60,69 @@ export async function GET() {
     queues: snapshots,
     failedJobs,
   });
+}
+
+/**
+ * Operator actions on the queues. Currently the single supported action
+ * is `retry`, which re-enqueues a dead-lettered (failed) job — closing
+ * the script-only gap noted in the cutover runbook.
+ *
+ * Body: { action: "retry", queue: <queueName>, jobId: <id> }
+ */
+export async function POST(req: Request) {
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isQueueEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "REDIS_URL is not set. The backfill worker queue is not enabled in this environment.",
+      },
+      { status: 400 },
+    );
+  }
+
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "Invalid JSON body" },
+      { status: 400 },
+    );
+  }
+
+  if (body?.action !== "retry") {
+    return NextResponse.json(
+      { ok: false, error: `Unknown action: ${body?.action ?? "(none)"}` },
+      { status: 400 },
+    );
+  }
+
+  const queue = body?.queue as QueueName;
+  const jobId = body?.jobId;
+  if (!ALL_QUEUE_NAMES.includes(queue)) {
+    return NextResponse.json(
+      { ok: false, error: `Unknown queue: ${String(queue)}` },
+      { status: 400 },
+    );
+  }
+  if (typeof jobId !== "string" || jobId.length === 0) {
+    return NextResponse.json(
+      { ok: false, error: "Missing jobId" },
+      { status: 400 },
+    );
+  }
+
+  const result = await retryFailedJob(queue, jobId);
+  if (result.ok) {
+    return NextResponse.json(result);
+  }
+  const status = result.reason === "not_found" ? 404 : 400;
+  return NextResponse.json(result, { status });
 }

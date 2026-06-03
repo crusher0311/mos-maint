@@ -35,16 +35,41 @@ is dormant until an operator opts in.
      backfill needs (Tekmetric, Mongo, Postgres, Drizzle URLs, etc.).
    - Verify the boot log shows `[Worker] Started 4 BullMQ workers`.
 
-4. **Smoke-test on one canary shop.**
+4. **Run the readiness check (go/no-go).**
+   - This is the single pre-cutover gate. It verifies Redis is reachable,
+     that workers are actually consuming each queue, and prints what the
+     flags would do right now — so go/no-go is unambiguous *before* any
+     shop is routed.
+   - CLI (on the web service, with prod env): `npm run queue:readiness`.
+     Exit code 0 = ready, 1 = not ready (blockers are printed).
+   - Or in a browser as a platform admin: open `/admin/queues` (the
+     readiness panel is at the top) or hit
+     `GET /api/admin/queues/readiness` for the raw JSON.
+   - **Do not proceed past a NOT READY verdict.** Common blockers:
+     `REDIS_URL` not set, Redis unreachable (firewall/region mismatch),
+     or a queue with 0 consumers (worker service not deployed/started).
+   - The readiness check is read-only — it never enqueues or mutates.
+
+5. **Smoke-test on one canary shop.**
    - Pick a shop that's already complete or near-complete (low blast
      radius).
    - Set `BACKFILL_QUEUE_SHOPS=<canary-shop-id>` on the web service.
+   - Re-run `npm run queue:readiness` and confirm the flag report shows
+     that shop's decision as `→ queue (per_shop_allow)` and every other
+     shop as `→ legacy`.
    - Trigger the cron tick OR POST to `/api/cron/tekmetric-fullpage-backfill`.
-   - Confirm the response shows `routedTo: "queue"`.
+   - Confirm the response shows `routedTo: "queue"` for the canary shop
+     (the per-shop result object also carries `jobId` on a fresh enqueue
+     or `duplicate: true` if one was already in flight).
    - Watch `/admin/queues` for the job moving waiting → active → completed.
-   - Diff the `tekmetric_backfill_progress` row against expectations:
+   - **Parity check** — both paths write the SAME
+     `tekmetric_backfill_progress` fields, so a queued shop must advance
+     exactly like a legacy one. Diff the row against expectations:
      `fullPageNextPage` should advance, `lastFullPageRunAt` should
-     update, `prePassNextPage` should advance for the pre-pass jobs.
+     update, and `prePassNextPage` should advance for the pre-pass jobs.
+     `/api/cron/catchup-status` surfaces these same fields plus a
+     `queue.snapshots` block, so a single GET shows both the cursor
+     movement and the queue depth.
 
 ## Cutover sequence
 
@@ -93,15 +118,25 @@ identical pre-task-513 behavior with no further intervention.
 - **Dashboard:** `/admin/queues` (platform-admin only). Shows counts
   per queue (waiting / active / delayed / failed / completed / paused)
   and the failed-job sample.
+- **Readiness check:** `npm run queue:readiness` (CLI) or
+  `GET /api/admin/queues/readiness` (platform-admin JSON). The readiness
+  panel is also rendered at the top of `/admin/queues`.
 - **Catchup status:** `/api/cron/catchup-status` now includes a
   `queue.snapshots` block when the queue is enabled.
-- **Retry a failed job:** TODO — for now, mark it resolved in BullMQ
-  via a script, or re-enqueue by triggering the cron path.
+- **Retry a failed job:** on `/admin/queues`, each failed job has a
+  **Retry** button that re-enqueues it (`POST /api/admin/queues` with
+  `{ action: "retry", queue, jobId }`). The job keeps its original jobId,
+  so a retry can't fan out into per-shop duplicates. No script needed.
 
 ## Known gaps left for follow-ups
 
 - BullBoard UI is not mounted (uses our JSON+React admin page instead).
-- No automated retry-from-failed action in the dashboard yet.
+
+> Resolved (task #567): the pre-cutover readiness check
+> (`npm run queue:readiness` / `GET /api/admin/queues/readiness`) and the
+> retry-from-failed action on `/admin/queues` are now in place. The
+> dashboard page itself (`app/admin/queues/page.tsx`) is now wired —
+> previously only the JSON route existed.
 
 > Resolved (task #523): the drain-protractor processor no longer spawns
 > the legacy script as a child process. `scripts/drain-protractor-backfill.ts`
