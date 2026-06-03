@@ -1,7 +1,9 @@
 // Platform-admin dashboard for the BullMQ backfill worker queue
 // (task #513 scaffold, dashboard + retry action wired in task #567).
 //
-// This is the JSON+React admin page that replaces BullBoard. It renders:
+// Lives in the platform-admin area (gated by the platform-admin session
+// via the layout's requirePlatformAdmin) — NOT the /admin area, which uses
+// a different session and bounced platform admins to /dashboard. It renders:
 //   1. A pre-cutover readiness panel (Redis reachable? workers up? what
 //      will the flags do right now?) — the go/no-go an operator needs
 //      before routing a shop.
@@ -10,8 +12,7 @@
 //
 // Runs in the web service, so it calls the queue lib functions directly
 // (same process) rather than fetching its own API route.
-import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requirePlatformAdmin } from "@/lib/auth";
 import { isQueueEnabled } from "@/lib/queue/connection";
 import { getAllQueueSnapshots, getFailedJobs } from "@/lib/queue/metrics";
 import { getQueueReadiness } from "@/lib/queue/readiness";
@@ -33,15 +34,14 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export default async function QueuesPage() {
-  const session = await requireSession();
-  if (session.role !== "platform_admin") redirect("/admin");
+  await requirePlatformAdmin();
 
   const enabled = isQueueEnabled();
 
   if (!enabled) {
     const readiness = await getQueueReadiness();
     return (
-      <div>
+      <div className="p-6">
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">
           Backfill Worker Queue
         </h1>
@@ -77,7 +77,7 @@ export default async function QueuesPage() {
   }
 
   return (
-    <div>
+    <div className="p-6">
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">

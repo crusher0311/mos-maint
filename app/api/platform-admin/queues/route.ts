@@ -1,10 +1,10 @@
 /**
- * Admin queue dashboard JSON endpoint (task #513).
+ * Platform-admin queue dashboard JSON endpoint (task #513).
  *
  * Platform-admin only. Returns counts per queue and the "needs-human"
  * failed-jobs sample. This is the BullBoard-equivalent for the
  * project — a thin JSON over `lib/queue/metrics.ts` that the admin UI
- * (`app/admin/queues/page.tsx`) renders.
+ * (`app/platform-admin/queues/page.tsx`) renders.
  *
  * BullBoard's UI itself wasn't a clean fit: it ships an Express adapter
  * that doesn't compose with Next's app router without a separate

@@ -2,8 +2,8 @@
 
 // Client-side failed-jobs table for the queue dashboard (task #567).
 // Renders the dead-lettered jobs and a per-row "Retry" button that POSTs
-// to /api/admin/queues. On success the row is removed from the local
-// list and the page is refreshed so the queue counts re-read.
+// to /api/platform-admin/queues. On success the row is removed from the
+// local list and the page is refreshed so the queue counts re-read.
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -30,7 +30,7 @@ export default function FailedJobsTable({ jobs }: { jobs: FailedJobRow[] }) {
     setError(null);
     setPending(rowKey(j));
     try {
-      const res = await fetch("/api/admin/queues", {
+      const res = await fetch("/api/platform-admin/queues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "retry", queue: j.queue, jobId: j.id }),

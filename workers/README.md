@@ -30,7 +30,7 @@ The worker is a no-op if `REDIS_URL` is unset.
 - Retries: exponential backoff, 5 attempts. See `DEFAULT_JOB_OPTS` in
   `lib/queue/queues.ts`.
 - After all retries, the job lands in the `failed` set permanently.
-  Operators see it on the admin sync-health page (`/admin/queues`).
+  Operators see it on the admin sync-health page (`/platform-admin/queues`).
 - Stalled jobs (worker crashed mid-chunk) are re-queued after
   `STALLED_VISIBILITY_MS` (30 min).
 

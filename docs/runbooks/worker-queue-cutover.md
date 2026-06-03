@@ -26,7 +26,7 @@ is dormant until an operator opts in.
    - With this set, the producer code (`lib/queue/producer.ts`) is
      wired to BullMQ, but the per-shop flag is still off — no shop is
      routed to the queue yet. The presence of `REDIS_URL` is what
-     `/admin/queues` uses to decide whether to render the dashboard.
+     `/platform-admin/queues` uses to decide whether to render the dashboard.
 
 3. **Deploy the worker service on Render.**
    - New → Background Worker (or new Web Service running `npm run worker`).
@@ -42,9 +42,9 @@ is dormant until an operator opts in.
      shop is routed.
    - CLI (on the web service, with prod env): `npm run queue:readiness`.
      Exit code 0 = ready, 1 = not ready (blockers are printed).
-   - Or in a browser as a platform admin: open `/admin/queues` (the
+   - Or in a browser as a platform admin: open `/platform-admin/queues` (the
      readiness panel is at the top) or hit
-     `GET /api/admin/queues/readiness` for the raw JSON.
+     `GET /api/platform-admin/queues/readiness` for the raw JSON.
    - **Do not proceed past a NOT READY verdict.** Common blockers:
      `REDIS_URL` not set, Redis unreachable (firewall/region mismatch),
      or a queue with 0 consumers (worker service not deployed/started).
@@ -61,7 +61,7 @@ is dormant until an operator opts in.
    - Confirm the response shows `routedTo: "queue"` for the canary shop
      (the per-shop result object also carries `jobId` on a fresh enqueue
      or `duplicate: true` if one was already in flight).
-   - Watch `/admin/queues` for the job moving waiting → active → completed.
+   - Watch `/platform-admin/queues` for the job moving waiting → active → completed.
    - **Parity check** — both paths write the SAME
      `tekmetric_backfill_progress` fields, so a queued shop must advance
      exactly like a legacy one. Diff the row against expectations:
@@ -80,7 +80,7 @@ is dormant until an operator opts in.
    history). Soak through a weekend.
 4. **Fleet-wide** — set `BACKFILL_QUEUE_ENABLED=true` and remove
    `BACKFILL_QUEUE_SHOPS`. Watch the failed-job list on
-   `/admin/queues` for 24h.
+   `/platform-admin/queues` for 24h.
 5. **After two clean weeks**, file a follow-up task to delete the
    in-process backfill code paths.
 
@@ -115,16 +115,16 @@ identical pre-task-513 behavior with no further intervention.
 
 ## Operating the queue
 
-- **Dashboard:** `/admin/queues` (platform-admin only). Shows counts
+- **Dashboard:** `/platform-admin/queues` (platform-admin only). Shows counts
   per queue (waiting / active / delayed / failed / completed / paused)
   and the failed-job sample.
 - **Readiness check:** `npm run queue:readiness` (CLI) or
-  `GET /api/admin/queues/readiness` (platform-admin JSON). The readiness
-  panel is also rendered at the top of `/admin/queues`.
+  `GET /api/platform-admin/queues/readiness` (platform-admin JSON). The readiness
+  panel is also rendered at the top of `/platform-admin/queues`.
 - **Catchup status:** `/api/cron/catchup-status` now includes a
   `queue.snapshots` block when the queue is enabled.
-- **Retry a failed job:** on `/admin/queues`, each failed job has a
-  **Retry** button that re-enqueues it (`POST /api/admin/queues` with
+- **Retry a failed job:** on `/platform-admin/queues`, each failed job has a
+  **Retry** button that re-enqueues it (`POST /api/platform-admin/queues` with
   `{ action: "retry", queue, jobId }`). The job keeps its original jobId,
   so a retry can't fan out into per-shop duplicates. No script needed.
 
@@ -133,9 +133,9 @@ identical pre-task-513 behavior with no further intervention.
 - BullBoard UI is not mounted (uses our JSON+React admin page instead).
 
 > Resolved (task #567): the pre-cutover readiness check
-> (`npm run queue:readiness` / `GET /api/admin/queues/readiness`) and the
-> retry-from-failed action on `/admin/queues` are now in place. The
-> dashboard page itself (`app/admin/queues/page.tsx`) is now wired —
+> (`npm run queue:readiness` / `GET /api/platform-admin/queues/readiness`) and the
+> retry-from-failed action on `/platform-admin/queues` are now in place. The
+> dashboard page itself (`app/platform-admin/queues/page.tsx`) is now wired —
 > previously only the JSON route existed.
 
 > Resolved (task #523): the drain-protractor processor no longer spawns

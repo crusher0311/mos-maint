@@ -393,7 +393,7 @@ export async function POST(req: NextRequest) {
   // Task #513: feature-flagged queue hand-off for manual POST triggers,
   // same contract as the GET cron path above. When the flag is on for
   // this shop, the request returns 202 immediately and the worker
-  // picks up the chunk. Operators see the job in `/admin/queues`.
+  // picks up the chunk. Operators see the job in `/platform-admin/queues`.
   const queueDecision = decideQueueFor(targetShopId);
   if (queueDecision.useQueue) {
     const enq = await enqueueTekmetricFullPage({
@@ -409,7 +409,7 @@ export async function POST(req: NextRequest) {
           routedTo: "queue",
           jobId: enq.jobId,
           shopId: targetShopId,
-          message: `Enqueued to ${enq.queue} queue. Track progress at /admin/queues.`,
+          message: `Enqueued to ${enq.queue} queue. Track progress at /platform-admin/queues.`,
         },
         { status: 202 },
       );
@@ -421,7 +421,7 @@ export async function POST(req: NextRequest) {
           routedTo: "queue",
           duplicate: true,
           shopId: targetShopId,
-          message: `A job is already queued or in-flight for shop ${targetShopId}. See /admin/queues.`,
+          message: `A job is already queued or in-flight for shop ${targetShopId}. See /platform-admin/queues.`,
         },
         { status: 202 },
       );
