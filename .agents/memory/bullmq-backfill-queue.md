@@ -49,3 +49,25 @@ falsey, and the fullpage processor resolves `getDb()` / never passes null.
 Known still-latent (dormant, out of canary scope): the dead `processShops`
 helper in the cron route still passes null-db, and the prepass/drain processors
 keep the no-op self-re-enqueue — fix before enabling those queues.
+
+## Canary soak finding — chunk duration runs unbounded under limiter starvation
+Once the canary flowed, the queue worked end-to-end (jobs flow, complete, no
+failures, no dedupe-block, page cursor advances each chunk). The real soak issue
+is THROUGHPUT, not correctness: a single full-page chunk can stay `active` for
+HOURS (observed 3.26h for one chunk vs 4.5min for a healthy one on the same shop).
+**Why:** the chunk's soft deadline (SOFT_DEADLINE_MS=240s) is only checked at the
+TOP of the per-PAGE while-loop, NOT inside the per-RO inner loop. Each page has up
+to 100 ROs, and per-RO vehicle/customer/jobs lookups can hit the Tekmetric API.
+Splitting the worker into its own Render service means worker (background priority,
+effectiveCap≈5) and web (interactive, cap=8) now both pull on the SAME shared
+cross-process rate limiter; under contention the limiter "fails closed" and each
+API acquire waits ~5s + retries, so one page's 100 ROs can drag on far past 240s
+with no deadline check until the page completes.
+**Consequences:** (1) while a chunk is `active` for hours the cron's per-tick
+re-enqueue is deduped (stable jobId) so the shop makes ZERO page progress that
+whole time; (2) any chunk >15min crosses BullMQ stalledInterval
+(STALLED_VISIBILITY_MS/2) — maxStalledCount=3 can re-run or eventually fail it.
+**Implication for rollout:** do NOT widen from canary to fleet until chunk
+duration is bounded (e.g. check the deadline inside the per-RO loop, or have the
+worker pass a tight routeDeadlineMs). At fleet scale this would hold worker slots
+for hours and saturate the limiter against interactive traffic.
