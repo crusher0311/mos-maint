@@ -10,7 +10,7 @@
  * in the worker, and BullMQ can stall/cancel a stuck attempt via the
  * shared deadline predicate.
  *
- * Singleton: `enqueueDrain` uses `jobId = drain-protractor:all` for the
+ * Singleton: `enqueueDrain` uses `jobId = drain-protractor_all` for the
  * default no-allowlist case, so two cron ticks or two admin clicks can
  * never spawn parallel drains of the same shop set.
  */

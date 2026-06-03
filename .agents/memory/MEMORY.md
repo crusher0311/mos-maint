@@ -21,3 +21,4 @@
 - [direct-db guard gates deploy](direct-db-guard-gates-deploy.md) — `lint:direct-db` runs in Render prebuild; a new file touching Mongo that isn't allowlisted (or in a repo) fails the prod build, not just local lint.
 - [/admin vs /platform-admin auth](admin-vs-platform-admin-auth.md) — two separate admin realms with different auth; operator UI placed under /admin silently redirects platform admins to /dashboard. Put it under /platform-admin.
 - [ACES coverage gaps](aces-coverage-gaps.md) — Protractor history undecoded (fixable), Tek split fixable/VIN-capped, PCDB 0% corpus-wide; SW job_index docs skeletal + provider:"shopware" + source table keyed by tenantId not shopId.
+- [BullMQ backfill queue](bullmq-backfill-queue.md) — jobId no `:` (use `_`), stable jobId needs removeOnComplete:true, continuation is cron-driven not in-processor, processor must getDb() not null; cron fails OPEN so all break silently.

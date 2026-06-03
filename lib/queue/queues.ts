@@ -9,16 +9,28 @@
  *   - `drain-protractor`     — long-running drain worker (replaces `scripts/drain-protractor-backfill.ts`)
  *
  * Per-shop concurrency: BullMQ's `Job.opts.jobId` is a uniqueness key.
- * Producers set `jobId = \`${queueName}:${shopId}\`` (and `:${variant}`
+ * Producers set `jobId = \`${queueName}_${shopId}\`` (and `_${variant}`
  * for the prepass queue) so a second enqueue for the same shop while
  * the first is still active or waiting is rejected by BullMQ. That
  * replaces `lib/integrations/tekmetric/inflight-lock.ts` for the ported
  * workloads — the queue itself is the lock.
  *
- * Dead-lettering: every queue uses `removeOnComplete: { age: 24h, count: 1000 }`
- * and `removeOnFail: false` so failed jobs persist in the `failed` set
- * indefinitely until an operator marks them resolved. That's the
- * "needs-human" bucket the admin sync-health view reads.
+ * NB: the delimiter is "_", NOT ":". BullMQ THROWS "Custom Ids cannot
+ * contain :" for any jobId containing a colon (it's Redis's key
+ * separator). A colon delimiter made every enqueue fail and silently
+ * fall back to the in-process path — the queue never received a job.
+ *
+ * Dead-lettering: every queue uses `removeOnComplete: true` and
+ * `removeOnFail: false`. Failed jobs persist in the `failed` set
+ * indefinitely until an operator marks them resolved (the "needs-human"
+ * bucket the admin sync-health view reads). Completed jobs are removed
+ * IMMEDIATELY — this is load-bearing, not cosmetic: these workloads are
+ * resumable and re-driven by the cron under a STABLE per-shop jobId
+ * (`runFullPageBackfillChunk` does MAX_PAGES_PER_RUN pages then returns
+ * `complete:false`). If a completed chunk lingered (e.g. `age: 24h`), the
+ * next tick's enqueue would dedupe against that lingering completed job
+ * and the shop would stall after a single chunk until the TTL expired.
+ * Removing on completion lets the next cron tick enqueue the next chunk.
  *
  * Retries: exponential backoff, capped attempts. Tekmetric's own rate
  * limiter (`shared-rate-limiter.ts`) is still in the call path, so the
@@ -51,7 +63,10 @@ export const STALLED_VISIBILITY_MS = 30 * 60 * 1000;
 export const DEFAULT_JOB_OPTS = {
   attempts: 5,
   backoff: { type: "exponential" as const, delay: 30_000 },
-  removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+  // MUST remove on completion: these jobs use a stable per-shop jobId and
+  // are re-driven chunk-by-chunk by the cron. A lingering completed job
+  // would dedupe-block the next chunk's enqueue. See the file header.
+  removeOnComplete: true as const,
   removeOnFail: false as const,
 };
 

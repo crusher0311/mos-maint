@@ -7,7 +7,7 @@
  * exact behavior, just driven by a queue job instead of a forever-loop
  * inside a dedicated Render Background Worker.
  *
- * Singleton: `enqueueDrain` uses `jobId = drain-tekmetric:all` for the
+ * Singleton: `enqueueDrain` uses `jobId = drain-tekmetric_all` for the
  * default no-allowlist case, so two cron ticks or two admin clicks can
  * never spawn parallel drains of the same shop set.
  */

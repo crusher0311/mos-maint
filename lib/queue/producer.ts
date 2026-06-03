@@ -99,7 +99,12 @@ export async function enqueueTekmetricFullPage(
       queue: QUEUE_NAMES.TEKMETRIC_FULLPAGE,
     };
   }
-  const jobId = `${QUEUE_NAMES.TEKMETRIC_FULLPAGE}:${data.shopId}`;
+  // NOTE: BullMQ forbids ":" in a custom jobId (it's Redis's key
+  // separator) and THROWS "Custom Ids cannot contain :". Use "_" as the
+  // field delimiter — a colon here silently routed every shop back to the
+  // in-process path (caught as queue_unavailable) and the queue never
+  // received a single job.
+  const jobId = `${QUEUE_NAMES.TEKMETRIC_FULLPAGE}_${data.shopId}`;
   return safeAdd(QUEUE_NAMES.TEKMETRIC_FULLPAGE, "chunk", data, jobId);
 }
 
@@ -116,7 +121,8 @@ export async function enqueueTekmetricPrePass(
   // jobId includes variant so the three pre-pass variants for one shop
   // can run concurrently — they hit different Tekmetric endpoints and
   // contend only on the shared rate limiter.
-  const jobId = `${QUEUE_NAMES.TEKMETRIC_PREPASS}:${data.shopId}:${data.variant}`;
+  // "_" delimiter — BullMQ forbids ":" in custom jobIds (see fullpage note).
+  const jobId = `${QUEUE_NAMES.TEKMETRIC_PREPASS}_${data.shopId}_${data.variant}`;
   return safeAdd(QUEUE_NAMES.TEKMETRIC_PREPASS, data.variant, data, jobId);
 }
 
@@ -135,6 +141,7 @@ export async function enqueueDrain(
   const tag = (data.shopIds && data.shopIds.length > 0
     ? data.shopIds.slice().sort((a, b) => a - b).join("-")
     : "all");
-  const jobId = `${queueName}:${tag}`;
+  // "_" delimiter — BullMQ forbids ":" in custom jobIds (see fullpage note).
+  const jobId = `${queueName}_${tag}`;
   return safeAdd(queueName, "drain", data, jobId);
 }
