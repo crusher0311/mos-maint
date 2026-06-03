@@ -231,6 +231,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Whether we're actually managing subscriptions programmatically. When
+  // auto-subscribe is OFF (the default), `subscribeShopToTekmetricWebhooks`
+  // returns early WITHOUT persisting a row, so a `missing` subscriptionStatus
+  // just means "we've never tried" — not an alarm. The UI / alerter use this
+  // flag to decide whether a `missing` subscription is actionable (task #569).
+  const autoSubscribeEnabled =
+    process.env.TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE === "true";
+
   const summary = (tekShops as any[]).map(shop => {
     const tekId = Number(shop.tekmetric.shopId);
     const stats = byShop.get(tekId);
@@ -240,11 +248,23 @@ export async function GET(req: NextRequest) {
     let healthStatus: "healthy" | "stale" | "silent" = "silent";
     if (totalLast24h > 0) healthStatus = "healthy";
     else if (totalLast7d > 0) healthStatus = "stale";
+
+    // Subscription status (task #569): is this shop's webhook subscription
+    // registered, errored, or never wired up?
+    //   - `subscribed` — last auto-subscribe attempt succeeded
+    //   - `error`      — last attempt ran but failed (HTTP / auth / network)
+    //   - `missing`    — no subscription record at all (never auto-subscribed)
+    let subscriptionStatus: "subscribed" | "error" | "missing" = "missing";
+    if (sub?.lastResult) {
+      subscriptionStatus = sub.lastResult.ok === true ? "subscribed" : "error";
+    }
+
     return {
       tekmetricShopId: tekId,
       mosShopId: shop.shopId,
       name: shop.name || "(unnamed)",
       healthStatus,
+      subscriptionStatus,
       totalLast24h,
       totalLast7d,
       totalLast30d: stats?.totalLast30d || 0,
@@ -271,11 +291,20 @@ export async function GET(req: NextRequest) {
     total: summary.length,
   };
 
+  const subscriptionCounts = {
+    subscribed: summary.filter(s => s.subscriptionStatus === "subscribed").length,
+    error: summary.filter(s => s.subscriptionStatus === "error").length,
+    missing: summary.filter(s => s.subscriptionStatus === "missing").length,
+    total: summary.length,
+  };
+
   return NextResponse.json({
     counts,
+    subscriptionCounts,
+    autoSubscribeEnabled,
     summary,
     latency,
     incrementalSync,
-    note: "Health: `healthy` = events in last 24h, `stale` = no events 24h but some in 7d, `silent` = no events in 7d. Sorted silent → stale → healthy. See TEKMETRIC_5K_SCALING_PLAN.md Step 3.",
+    note: "Health: `healthy` = events in last 24h, `stale` = no events 24h but some in 7d, `silent` = no events in 7d. Subscription: `subscribed`/`error`/`missing`; `missing` is only actionable when autoSubscribeEnabled=true. Sorted silent → stale → healthy. See TEKMETRIC_5K_SCALING_PLAN.md Step 3.",
   });
 }

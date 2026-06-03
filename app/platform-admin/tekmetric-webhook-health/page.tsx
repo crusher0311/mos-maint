@@ -39,6 +39,7 @@ type ShopRow = {
   mosShopId: any;
   name: string;
   healthStatus: "healthy" | "stale" | "silent";
+  subscriptionStatus: "subscribed" | "error" | "missing";
   totalLast24h: number;
   totalLast7d: number;
   totalLast30d: number;
@@ -55,6 +56,13 @@ type ShopRow = {
 
 type StatusResponse = {
   counts: { healthy: number; stale: number; silent: number; total: number };
+  subscriptionCounts?: {
+    subscribed: number;
+    error: number;
+    missing: number;
+    total: number;
+  };
+  autoSubscribeEnabled?: boolean;
   summary: ShopRow[];
   latency: {
     last24h: Percentiles;
@@ -244,6 +252,53 @@ export default function TekmetricWebhookHealthPage() {
         </div>
       </div>
 
+      {/* Subscription health strip (task #569) */}
+      <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle2 className="w-4 h-4 text-gray-500" />
+          <h2 className="text-lg font-semibold">Webhook subscriptions</h2>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Whether each shop has a managed Tekmetric webhook subscription on
+          record. Onboarding auto-subscribes new shops and the daily{" "}
+          <code className="font-mono">webhook-subscription-sweep</code> cron
+          repairs existing ones.{" "}
+          {data?.autoSubscribeEnabled === false ? (
+            <span className="text-amber-700">
+              Auto-subscribe is currently <strong>off</strong>{" "}
+              (<code className="font-mono">TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE</code>{" "}
+              not set), so <strong>missing</strong> just means
+              &ldquo;never wired up&rdquo; — not an alarm.
+            </span>
+          ) : (
+            <span className="text-emerald-700">
+              Auto-subscribe is <strong>on</strong>; persistent
+              &ldquo;missing&rdquo; rows mean auto-subscribe is failing.
+            </span>
+          )}
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+            <div className="text-sm text-emerald-700">Subscribed</div>
+            <div className="text-2xl font-bold mt-1 text-emerald-700">
+              {data?.subscriptionCounts?.subscribed ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <div className="text-sm text-red-700">Error</div>
+            <div className="text-2xl font-bold mt-1 text-red-700">
+              {data?.subscriptionCounts?.error ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="text-sm text-gray-600">Missing</div>
+            <div className="text-2xl font-bold mt-1 text-gray-700">
+              {data?.subscriptionCounts?.missing ?? "—"}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Latency block */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -337,6 +392,7 @@ export default function TekmetricWebhookHealthPage() {
                 <th className="px-4 py-2 text-left">Shop</th>
                 <th className="px-4 py-2 text-left">Tek ID</th>
                 <th className="px-4 py-2 text-left">Status</th>
+                <th className="px-4 py-2 text-left">Subscription</th>
                 <th className="px-4 py-2 text-right">24h</th>
                 <th className="px-4 py-2 text-right">7d</th>
                 <th className="px-4 py-2 text-right">30d</th>
@@ -351,6 +407,12 @@ export default function TekmetricWebhookHealthPage() {
                     : row.healthStatus === "stale"
                     ? "bg-amber-100 text-amber-700"
                     : "bg-emerald-100 text-emerald-700";
+                const subBadge =
+                  row.subscriptionStatus === "subscribed"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : row.subscriptionStatus === "error"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-gray-100 text-gray-600";
                 return (
                   <tr key={row.tekmetricShopId} className="border-t border-gray-100">
                     <td className="px-4 py-2">{row.name}</td>
@@ -360,6 +422,11 @@ export default function TekmetricWebhookHealthPage() {
                     <td className="px-4 py-2">
                       <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${badge}`}>
                         {row.healthStatus}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${subBadge}`}>
+                        {row.subscriptionStatus}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right font-mono">{row.totalLast24h}</td>
@@ -373,7 +440,7 @@ export default function TekmetricWebhookHealthPage() {
               })}
               {!loading && (data?.summary?.length ?? 0) === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                     No Tekmetric-connected shops found.
                   </td>
                 </tr>

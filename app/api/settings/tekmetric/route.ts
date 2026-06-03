@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/integrations/tekmetric";
 import { syncSingleShop } from "@/lib/integrations/tekmetric/sync";
 import { prewarmTekmetricJobsCacheForOnboarding } from "@/lib/integrations/tekmetric/jobs-prewarm";
+import { subscribeShopToTekmetricWebhooks } from "@/lib/integrations/tekmetric/webhook-subscribe";
 
 // Tekmetric Connect (POST) used to block the response on the full
 // `syncSingleShop` call — for a busy shop that's up to 1000 active ROs
@@ -271,6 +272,31 @@ export async function POST(request: NextRequest) {
     // also pre-warms `tekmetric_jobs_cache` for recent terminal ROs so
     // the first backfill chunk lands at cache-hit speed (task #59).
     triggerJobHistoryBackfill(Number(userShopId), tekmetricShopId).catch(() => {});
+
+    // Auto-subscribe this shop to Tekmetric webhooks so freshness doesn't
+    // depend on someone manually wiring the callback URL in the Tekmetric
+    // portal (task #569). Fire-and-forget — onboarding must never block or
+    // fail on this. The helper is gated default-OFF behind
+    // TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE and records every outcome to
+    // `tekmetric_webhook_subscriptions` for the webhook-health view; when
+    // disabled it's a safe no-op that returns early.
+    subscribeShopToTekmetricWebhooks({
+      tekmetricShopId,
+      mosShopId: userShopId,
+    })
+      .then((result) => {
+        if (!result.ok && result.reason !== "auto_subscribe_disabled") {
+          console.warn(
+            `[Tekmetric Settings] Webhook auto-subscribe for shop ${tekmetricShopId} did not succeed: ${result.reason}`,
+          );
+        }
+      })
+      .catch((err: any) =>
+        console.warn(
+          `[Tekmetric Settings] Webhook auto-subscribe threw for shop ${tekmetricShopId}:`,
+          err?.message,
+        ),
+      );
 
     return NextResponse.json({
       success: true,

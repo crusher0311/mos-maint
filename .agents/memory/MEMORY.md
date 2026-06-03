@@ -16,3 +16,4 @@
 - [Backfill horizon](backfill-horizon.md) — shared env-driven `getBackfillYears()` (default 2y); shrink = free via existing complete check; raise = `reopenCompletedShopsForHorizon` guarded by currentChunkEnd>oldestDate (no-op until raised).
 - [Fleet backfill stall detection](pipeline-stall-detection.md) — pipeline-stall-alerter pages when cron is green but fleet makes zero real progress; signature must exclude lastRunAt, gate on loop liveness, escalate via [OPS-ALERT].
 - [Shop-Ware progress collection](shopware-progress-collection.md) — Shop-Ware backfill progress is in collection `ln`, NOT `shopware_backfill_progress` (which chunk-speed-health wrongly reads → its SW branch is dead).
+- [Webhook subscription gating](webhook-subscription-gating.md) — auto-subscribe OFF means tekmetric_webhook_subscriptions is empty, so any "missing subscription" check/alert must be gated behind TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE or it false-positives the whole fleet.

@@ -189,6 +189,41 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Task #569: missing-subscription detection. A shop can be delivering
+  // events today (so it's NOT silent) yet still have no managed webhook
+  // subscription record — meaning if its portal subscription is ever deleted,
+  // nothing will re-create it. We flag shops with no successful subscription
+  // record so the fleet stays self-healing.
+  //
+  // GATED: only meaningful when we're actually managing subscriptions
+  // (`TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE=true`). With auto-subscribe OFF (the
+  // default), `subscribeShopToTekmetricWebhooks` never persists a row, so
+  // EVERY shop would look "missing" — a mass false-positive. Skip entirely
+  // until auto-subscribe is on.
+  const autoSubscribeEnabled =
+    process.env.TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE === "true";
+  const missingSubs: Array<{ tekmetricShopId: number; mosShopId: any; name: string }> = [];
+  if (autoSubscribeEnabled) {
+    const subRows = await db.collection("tekmetric_webhook_subscriptions").find(
+      { tekmetricShopId: { $in: tekShopIds } },
+      { projection: { tekmetricShopId: 1, lastResult: 1 } },
+    ).toArray();
+    const subscribedOk = new Set<number>();
+    for (const row of subRows as any[]) {
+      if (row?.lastResult?.ok === true) subscribedOk.add(Number(row.tekmetricShopId));
+    }
+    for (const shop of tekShops as any[]) {
+      const tekId = Number(shop.tekmetric.shopId);
+      if (!subscribedOk.has(tekId)) {
+        missingSubs.push({
+          tekmetricShopId: tekId,
+          mosShopId: shop.shopId,
+          name: shop.name || "(unnamed)",
+        });
+      }
+    }
+  }
+
   // Step 5 of task #376: latency check. Aggregate handler durations from the
   // last hour and alert if p95 crosses threshold with enough samples to be
   // statistically meaningful. We pull just the field, not whole rows, so this
@@ -288,10 +323,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Task #569: missing-subscription alert dedup. Uses the same
+  // (shopId, alertDate) unique-index contract, but a separate synthetic
+  // namespace (offset by 1,000,000) so a shop can be independently flagged
+  // "missing subscription" without colliding with its silent (+id) or
+  // drop (-id) entries on the same day.
+  const toAlertMissing: typeof missingSubs = [];
+  for (const m of missingSubs) {
+    try {
+      await alertsCollection.insertOne({
+        tekmetricShopId: m.tekmetricShopId + 1_000_000,
+        mosShopId: m.mosShopId,
+        alertDate: today,
+        alertKind: "missing_subscription",
+        createdAt: new Date(),
+      });
+      toAlertMissing.push(m);
+    } catch (err: any) {
+      if (err?.code !== 11000) {
+        console.error(`[TekmetricWebhookHealth] Missing-subscription alert dedup failed for shop ${m.tekmetricShopId}:`, err?.message);
+      }
+    }
+  }
+
   // Send a single consolidated email per cron run instead of one-per-shop.
   let emailed = 0;
   const anyNewAlert =
-    toAlertSilent.length > 0 || toAlertDrop.length > 0 || latencyAlertNew;
+    toAlertSilent.length > 0 ||
+    toAlertDrop.length > 0 ||
+    toAlertMissing.length > 0 ||
+    latencyAlertNew;
   if (anyNewAlert) {
     // Canonical field is `isPlatformAdmin` (see lib/auth.ts) — not `platformAdmin`.
     const admins = await db.collection("users").find(
@@ -352,6 +413,28 @@ export async function GET(req: NextRequest) {
           </table>`);
       }
 
+      if (toAlertMissing.length > 0) {
+        const rows = toAlertMissing.map(m => `
+          <tr>
+            <td style="padding:6px 12px;border:1px solid #ddd">${m.name}</td>
+            <td style="padding:6px 12px;border:1px solid #ddd">${m.tekmetricShopId}</td>
+            <td style="padding:6px 12px;border:1px solid #ddd">${m.mosShopId}</td>
+          </tr>`).join("");
+        sections.push(`
+          <h3 style="margin-top:24px">Missing webhook subscription — ${toAlertMissing.length}</h3>
+          <p>These shops have no successful managed webhook subscription on record, so their freshness isn't self-healing — if their portal subscription is deleted, nothing re-creates it. The daily <code>/api/cron/webhook-subscription-sweep</code> will attempt repair; persistent entries here mean auto-subscribe is failing for these shops (check credentials / API errors on <code>/api/platform-admin/tekmetric/webhook-subscription-status</code>).</p>
+          <table style="border-collapse:collapse;border:1px solid #ddd">
+            <thead>
+              <tr>
+                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Shop</th>
+                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">Tekmetric ID</th>
+                <th style="padding:6px 12px;border:1px solid #ddd;text-align:left">MOS ID</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`);
+      }
+
       if (latencyAlertNew && latencyP95 !== null) {
         sections.push(`
           <h3 style="margin-top:24px">Webhook handler latency — p95 = ${latencyP95}ms (threshold ${P95_LATENCY_MS_THRESHOLD}ms)</h3>
@@ -371,11 +454,12 @@ export async function GET(req: NextRequest) {
       const subjectParts: string[] = [];
       if (toAlertSilent.length > 0) subjectParts.push(`${toAlertSilent.length} silent`);
       if (toAlertDrop.length > 0) subjectParts.push(`${toAlertDrop.length} drop`);
+      if (toAlertMissing.length > 0) subjectParts.push(`${toAlertMissing.length} missing-sub`);
       if (latencyAlertNew) subjectParts.push(`p95=${latencyP95}ms`);
       // Preserve the legacy subject format when only the silent-shop condition
       // fired, so existing email filters/rules in admins' inboxes keep working.
       const subject =
-        toAlertSilent.length > 0 && toAlertDrop.length === 0 && !latencyAlertNew
+        toAlertSilent.length > 0 && toAlertDrop.length === 0 && toAlertMissing.length === 0 && !latencyAlertNew
           ? `[MOS] Tekmetric webhook silence: ${toAlertSilent.length} shop(s) flagged`
           : `[MOS] Tekmetric webhook health: ${subjectParts.join(", ")}`;
 
@@ -395,7 +479,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(
-    `[TekmetricWebhookHealth] Scanned ${tekShops.length} shops, ${silent.length} silent (${toAlertSilent.length} new), ${drops.length} drop (${toAlertDrop.length} new), latencyP95=${latencyP95}ms (firing=${latencyAlertFiring}, new=${latencyAlertNew}), emailed ${emailed} admin(s)`,
+    `[TekmetricWebhookHealth] Scanned ${tekShops.length} shops, ${silent.length} silent (${toAlertSilent.length} new), ${drops.length} drop (${toAlertDrop.length} new), ${missingSubs.length} missing-sub (${toAlertMissing.length} new, autoSubscribe=${autoSubscribeEnabled}), latencyP95=${latencyP95}ms (firing=${latencyAlertFiring}, new=${latencyAlertNew}), emailed ${emailed} admin(s)`,
   );
 
   return NextResponse.json({
@@ -407,6 +491,9 @@ export async function GET(req: NextRequest) {
     silentShops: silent,
     receiptDrops: drops,
     newDropAlerts: toAlertDrop.length,
+    autoSubscribeEnabled,
+    missingSubscriptions: missingSubs,
+    newMissingSubscriptionAlerts: toAlertMissing.length,
     latencyP95Ms: latencyP95,
     latencySamples: latencyValues.length,
     latencyAlertFiring,

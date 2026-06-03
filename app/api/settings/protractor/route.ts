@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { testConnection, resolveProtractorConfig } from "@/lib/integrations/protractor";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
+import { ensureProtractorWebhookSubscription } from "@/lib/integrations/protractor/webhook-subscribe";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -186,6 +187,20 @@ export async function POST(req: NextRequest) {
         },
       },
       { upsert: true }
+    );
+
+    // Record this shop's side of the Protractor webhook contract (task
+    // #569): the token is already written above, so this guarantees the
+    // callback URL + a `protractor_webhook_subscriptions` bookkeeping row
+    // exist for the webhook-health / sweep surfaces. Protractor has no
+    // programmatic subscribe API — the portal registration stays a manual
+    // step (recorded as registrationMode "manual"). Fire-and-forget so it
+    // never blocks the Connect response.
+    ensureProtractorWebhookSubscription({ shopId, db }).catch((err: any) =>
+      console.warn(
+        `[Protractor Settings] Webhook subscription record failed for shop ${shopId}:`,
+        err?.message,
+      ),
     );
 
     // Connect-confirm pattern: once Protractor has validated the creds
