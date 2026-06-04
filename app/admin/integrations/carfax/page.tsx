@@ -1,5 +1,6 @@
 // app/admin/integrations/carfax/page.tsx
 import { getDb } from "@/lib/mongo";
+import { setShopCarfaxLocationId } from "@/lib/integrations/carfax";
 import { revalidatePath } from "next/cache";
 import { CheckCircle, XCircle, AlertCircle, Building2 } from "lucide-react";
 import CarfaxAdminForm from "./CarfaxAdminForm";
@@ -33,20 +34,9 @@ export default async function CarfaxAdminPage() {
     "use server";
     const shopId = Number(formData.get("shopId"));
     const locationId = String(formData.get("locationId") || "").trim();
-    
+
     const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          carfax: { locationId },
-          carfaxLocationId: locationId,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    await setShopCarfaxLocationId(db, shopId, locationId);
 
     revalidatePath("/admin/integrations/carfax");
     revalidatePath("/dashboard/vehicles/[vin]");

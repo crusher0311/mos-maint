@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
+import { setShopCarfaxLocationId } from "@/lib/integrations/carfax";
+import { invalidateShopPlanCache } from "@/lib/plan-cache";
 
 export const runtime = "nodejs";
 
@@ -35,20 +37,9 @@ export async function POST(req: Request) {
     const { locationId } = body || {};
 
     const db = await getDb();
-    await db.collection("shops").updateOne(
-      { shopId },
-      {
-        $set: {
-          carfax: { locationId: String(locationId || "").trim() },
-          carfaxLocationId: String(locationId || "").trim(),
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true }
-    );
+    const { cleared } = await setShopCarfaxLocationId(db, shopId, locationId);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, cacheCleared: cleared });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
@@ -60,6 +51,13 @@ export async function DELETE() {
     const shopId = Number(session.shopId);
 
     const db = await getDb();
+    const existing = await db
+      .collection("shops")
+      .findOne({ shopId }, { projection: { carfax: 1, carfaxLocationId: 1 } });
+    const prevLoc = String(
+      existing?.carfax?.locationId || existing?.carfaxLocationId || "",
+    ).trim();
+
     await db.collection("shops").updateOne(
       { shopId },
       {
@@ -71,7 +69,15 @@ export async function DELETE() {
       }
     );
 
-    return NextResponse.json({ ok: true });
+    // Standardize all CARFAX config transitions: removing CARFAX makes plans
+    // that were built WITH service history stale, so clear them too so they
+    // rebuild without CARFAX on next view.
+    let cleared = null;
+    if (prevLoc) {
+      cleared = await invalidateShopPlanCache(db, shopId);
+    }
+
+    return NextResponse.json({ ok: true, cacheCleared: cleared });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }

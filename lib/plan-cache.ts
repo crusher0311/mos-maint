@@ -392,6 +392,35 @@ export async function invalidateCachedPlan(
 }
 
 /**
+ * Drops ALL cached plan + analysis rows for a shop (every VIN).
+ *
+ * Used when a shop-level input that feeds every plan changes — e.g. a CARFAX
+ * Location ID is entered for the first time. Plans built before CARFAX was
+ * connected have no service-history anchors, so they must be discarded and
+ * rebuilt fresh (with CARFAX) the next time each vehicle is viewed. shopId is
+ * matched as BOTH String and Number because legacy rows stored it either way.
+ */
+export async function invalidateShopPlanCache(
+  db: Db,
+  shopId: number,
+): Promise<{ cachedPlans: number; analysisCache: number }> {
+  const shopMatch = { $in: [String(shopId), Number(shopId)] };
+  const planRes = await db
+    .collection("cached_plans")
+    .deleteMany({ shopId: shopMatch });
+  const analysisRes = await db
+    .collection("maintenance_analysis_cache")
+    .deleteMany({ shopId: shopMatch });
+  console.log(
+    `[PlanCache] Invalidated shop ${shopId} plan cache: cached_plans=${planRes.deletedCount} maintenance_analysis_cache=${analysisRes.deletedCount}`,
+  );
+  return {
+    cachedPlans: planRes.deletedCount,
+    analysisCache: analysisRes.deletedCount,
+  };
+}
+
+/**
  * Records a (shopId, vin, roNumber) view in `viewed_vins` and returns the
  * running total. Task #271: VINs are no longer a billing/quota dimension —
  * this function always returns `allowed: true` and the `limit` argument is

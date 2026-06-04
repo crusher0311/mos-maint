@@ -1,7 +1,9 @@
 // lib/integrations/carfax.ts
 import "server-only";
+import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { invalidateShopPlanCache } from "@/lib/plan-cache";
 
 type Fetcher = typeof fetch;
 
@@ -34,6 +36,54 @@ export type CarfaxResult = {
   raw?: any;
   error?: string;
 };
+
+/**
+ * Writes a shop's CARFAX Location ID and, when the ID is newly entered or
+ * changed (transition from empty/old -> a non-empty value), clears the shop's
+ * plan cache so every vehicle's plan rebuilds WITH CARFAX service history on
+ * next view. This is the standard behaviour: if CARFAX is added after plans
+ * were already built, those CARFAX-less plans are stale and must be discarded.
+ *
+ * Returns `cleared` with the deleted-row counts when a rebuild was triggered,
+ * or `null` when nothing changed (e.g. re-saving the same id, or clearing it).
+ */
+export async function setShopCarfaxLocationId(
+  db: Db,
+  shopId: number,
+  locationId: string,
+): Promise<{
+  ok: true;
+  cleared: { cachedPlans: number; analysisCache: number } | null;
+}> {
+  const loc = String(locationId || "").trim();
+
+  const existing = await db
+    .collection("shops")
+    .findOne({ shopId }, { projection: { carfax: 1, carfaxLocationId: 1 } });
+  const prevLoc = String(
+    existing?.carfax?.locationId || existing?.carfaxLocationId || "",
+  ).trim();
+
+  await db.collection("shops").updateOne(
+    { shopId },
+    {
+      $set: {
+        carfax: { locationId: loc },
+        carfaxLocationId: loc,
+        updatedAt: new Date(),
+      },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true },
+  );
+
+  let cleared: { cachedPlans: number; analysisCache: number } | null = null;
+  if (loc && loc !== prevLoc) {
+    cleared = await invalidateShopPlanCache(db, shopId);
+  }
+
+  return { ok: true, cleared };
+}
 
 /** -------- Config (env + per-shop locationId) -------- */
 export async function resolveCarfaxConfig(shopId: number) {
