@@ -71,3 +71,17 @@ whole time; (2) any chunk >15min crosses BullMQ stalledInterval
 duration is bounded (e.g. check the deadline inside the per-RO loop, or have the
 worker pass a tight routeDeadlineMs). At fleet scale this would hold worker slots
 for hours and saturate the limiter against interactive traffic.
+
+**Fix landed (mid-page deadline bail):** the per-RO loop now checks the soft
+deadline each iteration and, when hit, bails WITHOUT advancing the page cursor so
+the page is re-fetched/finished next tick. Re-processing is safe: job_index
+writes are content-hash idempotent (unchanged ROs don't re-increment
+jobsIndexed), the partial normalized batch still flushes (idempotent upsert), and
+the warmed vehicle/customer caches make the re-run cheaper so the page converges.
+This bounds each chunk to ~SOFT_DEADLINE_MS + one in-flight call.
+**Still open before FLEET (canary-OK without it):** per-RO Tekmetric calls
+(/vehicles,/customers,/jobs) rely on the central helper's bounded ~5-retry cap
+(~60s) — there's no explicit hard per-request abort timeout, so the deadline is
+only enforced BETWEEN ROs, not inside a single hung await. Add a real
+per-request timeout (and a deadlineHitMidPage frequency/streak metric) before
+widening, so one stuck RO can't exceed budget and trip BullMQ stalled handling.

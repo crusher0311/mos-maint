@@ -965,6 +965,10 @@ export async function runFullPageBackfillChunk(
 
     let lastError: string | null = null;
     let reachedEnd = false;
+    // Set when the soft deadline is hit partway through a page's per-RO loop.
+    // Signals the while loop to stop WITHOUT advancing the page cursor so the
+    // current page is re-fetched (and finished) on the next tick.
+    let deadlineHitMidPage = false;
 
     while (pagesProcessed < MAX_PAGES_PER_RUN) {
       // Pre-fetch guard: if we've already hit the soft deadline, stop before
@@ -1017,6 +1021,19 @@ export async function runFullPageBackfillChunk(
       rosFetched += ros.length;
 
       for (const ro of ros) {
+        // Intra-page soft-deadline check. The per-RO body can fan out to
+        // /vehicles, /customers and /jobs API calls on cache miss; when the
+        // shared Tekmetric limiter is saturated each of those can take tens of
+        // seconds, so grinding all 100 ROs of a page blows far past the
+        // deadline (a single chunk was observed running ~12h, holding the
+        // worker slot and making zero page progress the whole time). Bail
+        // mid-page instead: per-RO writes are idempotent and we've warmed the
+        // vehicle/customer caches for the ROs handled so far, so re-fetching
+        // this page next tick is cheaper and the page still converges.
+        if (Date.now() >= softDeadlineMs) {
+          deadlineHitMidPage = true;
+          break;
+        }
         try {
           const statusCode =
             ro.repairOrderStatus?.code?.toUpperCase() || "";
@@ -1385,6 +1402,16 @@ export async function runFullPageBackfillChunk(
             `[Tekmetric Full-Page Backfill] Shop ${shopId} RO ${ro.id} threw: ${(roErr?.message || String(roErr)).slice(0, 200)}`,
           );
         }
+      }
+
+      if (deadlineHitMidPage) {
+        // Do NOT increment `page`: leave the cursor on this page so the next
+        // tick re-fetches and finishes it. The normalized batch flush below
+        // still persists the ROs we did process (idempotent upsert).
+        console.log(
+          `[Tekmetric Full-Page Backfill] Shop ${shopId}: soft deadline hit mid-page ${page + 1}, deferring (page re-fetched next tick)`,
+        );
+        break;
       }
 
       page++;
