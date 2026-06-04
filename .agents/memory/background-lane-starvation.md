@@ -34,3 +34,16 @@ persists progress, frees the lock). Interactive keeps the unbounded wait.
 2. *Structural:* keep the background-lane wait bounded so any future starvation
    fails fast instead of wedging a tick. The cap effectively never fires on the
    idle worker (sub-second waits there).
+
+**Verified rollout consequence (worth knowing before you route giants):**
+concentrating ALL the giants on the single BullMQ worker shifts the bottleneck
+from the in-process lane to the SHARED cross-process Tekmetric limiter
+(`[Tekmetric SharedLimiter] ... failing closed`, effectiveCap drops 8→5). That's
+healthy self-protection, not breakage — no API breach — but it caps throughput,
+so giants round-robin ~4-min chunks and the very biggest (2000+ pages) only
+crawl ~20 pages per 30 min. They DO make steady, resumable progress (per-page
+persistence + soft-deadline defer), so "slow giant" ≠ "stuck giant"; confirm by
+watching the page counter climb across ticks before assuming a wedge.
+Once the bounded-wait code fix is live everywhere, giants *could* go back to the
+web cron, but a dedicated worker (no interactive competition) is still the better
+home for them — keep them on the queue.
