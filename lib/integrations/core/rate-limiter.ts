@@ -11,6 +11,27 @@ type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' 
 // traffic gets a slot within ~200ms.
 export type RateLimitPriority = 'interactive' | 'background';
 
+// Max time a 'background' request will wait for a local rate-limit slot before
+// giving up with { acquired: false }. Background requests only get a slot when
+// the interactive lane is empty (see `processNext`), so on a process saturated
+// with interactive traffic (the web service: webhooks, VHI, extension) the
+// background lane can starve indefinitely. Before this bound, the awaited
+// Promise had no timeout — a starved backfill request never fired, never
+// errored, never timed out (the per-request HTTP timeout only covers the fetch,
+// not this pre-fetch wait), so a full-page backfill chunk would silently hang
+// for the whole cron tick, persist no progress, bump no heartbeat, and get its
+// stale lock stolen next tick — head-of-line-blocking the entire fleet. Bailing
+// after this cap lets the caller back off cleanly: client.ts throws on
+// !acquired, the backfill catches it, persists progress, and frees the lock so
+// the next shop gets a turn. On the idle worker process the background lane
+// flows in <1s, so this cap effectively never fires there.
+const BACKGROUND_SLOT_MAX_WAIT_MS = (() => {
+  const parsed = Number(process.env.RATE_LIMIT_BACKGROUND_MAX_WAIT_MS);
+  // Guard against a missing/garbage/too-small override that would make
+  // background requests bail almost immediately and stall all backfill.
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : 30_000;
+})();
+
 const localQueues: Map<SMSProvider, {
   lastRequestTime: number;
   interactiveQueue: (() => void)[];
@@ -92,14 +113,47 @@ export async function acquireRateLimitSlot(
   }
 
   const state = getLocalQueue(provider, localRpsLimit);
-  await new Promise<void>((resolve) => {
+  const waitStartedAt = Date.now();
+  const acquired = await new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // The function the queue calls when this request wins a slot. Guarded so a
+    // late slot-grant after a timeout (or a double-call) is a harmless no-op.
+    const slot = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(true);
+    };
     if (priority === 'background') {
-      state.backgroundQueue.push(resolve);
+      state.backgroundQueue.push(slot);
+      // Bounded wait: interactive always wins, so a background request can
+      // starve forever on a busy process. Give up after the cap and let the
+      // caller back off instead of hanging the whole backfill tick.
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        // Drop our resolver from the queue so a freed slot isn't spent on a
+        // request that already gave up.
+        const i = state.backgroundQueue.indexOf(slot);
+        if (i !== -1) state.backgroundQueue.splice(i, 1);
+        resolve(false);
+      }, BACKGROUND_SLOT_MAX_WAIT_MS);
     } else {
-      state.interactiveQueue.push(resolve);
+      // Interactive callers are human-facing and always win the lane, so they
+      // resolve promptly — keep the original unbounded wait for them.
+      state.interactiveQueue.push(slot);
     }
     processLocalQueue(provider);
   });
+
+  if (!acquired) {
+    const waitedMs = Date.now() - waitStartedAt;
+    console.warn(
+      `[RateLimiter] ${provider}: background slot starved — gave up after ${waitedMs}ms (interactive lane stayed busy). Caller will back off.`,
+    );
+    return { acquired: false, waitedMs };
+  }
 
   return { acquired: true };
 }
