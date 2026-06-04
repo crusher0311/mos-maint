@@ -85,3 +85,32 @@ This bounds each chunk to ~SOFT_DEADLINE_MS + one in-flight call.
 only enforced BETWEEN ROs, not inside a single hung await. Add a real
 per-request timeout (and a deadlineHitMidPage frequency/streak metric) before
 widening, so one stuck RO can't exceed budget and trip BullMQ stalled handling.
+
+## Worker path has NO platform timeout backstop — a hung await wedges the shop forever
+The single deadliest queue footgun, found right after the mid-page fix shipped:
+the canary ran ONE clean chunk then went permanently silent — one worker pickup,
+then NO completion / NO failure / NO stalled event for hours; worker alive but
+idle (CPU ~1-2%, flat mem, single boot, no crash loop). The shop never ran again.
+**Why:** the inline cron path is bounded for FREE by Render's `maxDuration=300`
+request kill + the 6-min inflight-lock TTL, so a hung chunk self-heals. The
+WORKER path has no such platform backstop. If any downstream `await` never
+resolves (a Mongo/ingestion call to a service that accepts the connection but
+never responds — the soft-deadline clock check can't interrupt a pending await),
+the BullMQ job stays `active` forever: the worker's event loop is free, so it
+keeps renewing the job lock → never stalls (so stalled-recovery never fires),
+never fails (so `attempts:5` retry never fires — absence of retry/failed logs is
+the tell it HUNG, didn't throw), never completes. And the stable per-shop jobId
+dedupes every cron re-enqueue, with NO inline fallback → silent permanent wedge.
+**Fix:** give the processor its own hard timeout (`Promise.race` vs 300s, mirroring
+the inline envelope) so a hang becomes a job FAILURE → BullMQ retries → recovers;
+chunk is resumable so a timeout loses ≤1 partial page. `clearTimeout` in `finally`.
+**Caveats (follow-ups, not done):** `Promise.race` does NOT cancel the loser — the
+hung promise keeps running in bg and may strand a Mongo connection / late-write
+progress; real fix is AbortSignal/deadline cancellation into the downstream calls.
+After 5 failed attempts the failed job dead-letters and its stable jobId dedupes
+re-enqueues until an operator retries (by design = needs-human). Un-wedging the
+CURRENT stuck job needs a worker restart (a redeploy does this) so the orphaned
+`active` lock expires and stalled-recovery requeues it (~stalledInterval=15min).
+**Also latent:** producer `safeAdd` can't detect duplicates in modern BullMQ —
+`q.add` silently returns the existing job, so it reports `{enqueued:true}` even
+when nothing was queued (masks exactly this wedge). Harden before fleet.

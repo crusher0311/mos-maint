@@ -42,11 +42,52 @@ export async function processTekmetricFullPage(
   // processor).
   const { getDb } = await import("@/lib/mongo");
   const db = await getDb();
-  const result: any = await runFullPageBackfillChunk(
-    db,
-    shopId,
-    tekmetricShopId,
-  );
+
+  // Hard processor timeout — backstop for a hung downstream await.
+  //
+  // The chunk self-limits to SOFT_DEADLINE_MS (240s) by checking the clock
+  // BETWEEN pages and per-RO, but that guard can NOT interrupt a single
+  // `await` that never resolves (e.g. a normalized-ingestion or Mongo call
+  // to a service that accepts the connection but never responds). The
+  // in-process cron path is bounded for free by Render's `maxDuration=300`
+  // request kill plus the 6-min inflight-lock TTL; the worker path has NO
+  // such platform backstop. A hung await therefore keeps the BullMQ job
+  // `active` indefinitely: the worker's event loop stays free and renews the
+  // job lock forever, so the job never stalls, never fails, never completes —
+  // and because the stable per-shop jobId (`tekmetric-fullpage_<shopId>`)
+  // dedupes every re-enqueue, the cron can never re-drive the shop and there
+  // is no in-process fallback. That silently wedged the canary after a single
+  // chunk (one pickup, then permanent silence — no completion/failure/stall).
+  //
+  // Racing the chunk against a 300s deadline (matching the inline envelope)
+  // converts that infinite hang into a job FAILURE, which BullMQ retries
+  // (attempts: 5, exponential backoff) and ultimately dead-letters for an
+  // operator — restoring liveness. The chunk persists progress per page and
+  // upserts by natural key, so a timed-out run loses at most one partial page
+  // and resumes from `fullPageNextPage` on the next attempt.
+  const HARD_TIMEOUT_MS = 300_000;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `[Worker tekmetric-fullpage] shop=${shopId} hard timeout after ${HARD_TIMEOUT_MS}ms — chunk did not return (likely a hung downstream call); failing job so BullMQ retries and the cron can re-drive.`,
+          ),
+        ),
+      HARD_TIMEOUT_MS,
+    );
+  });
+
+  let result: any;
+  try {
+    result = await Promise.race([
+      runFullPageBackfillChunk(db, shopId, tekmetricShopId),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
 
   // No in-processor re-enqueue: the job is still `active` here, so a
   // same-jobId add would be deduped to a no-op. When this job completes
