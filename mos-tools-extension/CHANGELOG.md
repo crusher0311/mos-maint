@@ -1,5 +1,26 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.24 — 2026-06-05
+
+### Added
+- **Shopmonkey support (read-only context + VHI Coach).** The extension now
+  runs on the Shopmonkey web app (`app.shopmonkey.cloud`), bringing the same
+  on-page experience advisors already have on Tekmetric, Shop-Ware, and
+  AutoFlow:
+  - A new content adapter (`adapters/shopmonkey-content.js`) detects the open
+    Order (RO) context — order number, vehicle (year/make/model + VIN),
+    mileage, and customer contact — by reading the page, and relays it to the
+    background worker, which resolves the matching MOS shop and drives the
+    VHI Coach overlay (`vhi-coach.js`) and realtime updates
+    (`realtime-subscriber.js`).
+  - Host permissions, content scripts, and web-accessible resources were added
+    for `app.shopmonkey.cloud` / `*.shopmonkey.cloud`, mirroring the existing
+    provider wiring. No write-back actions are enabled for Shopmonkey yet.
+  - Shopmonkey is a single-host SPA, so the per-shop identifier
+    (companyId / locationId) is discovered from the page rather than the
+    hostname. The exact storage keys / DOM selectors are best-effort and pending
+    live verification on a real Shopmonkey session.
+
 ## 1.27.23 — 2026-06-05
 
 ### Fixed

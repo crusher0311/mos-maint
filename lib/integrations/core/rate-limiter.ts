@@ -1,7 +1,7 @@
 import { acquireDistributedRateLimitSlot } from '@/lib/api-usage-tracker';
 import type { SMSProvider } from './types';
 
-type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode';
+type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode' | 'shopmonkey';
 
 // Two-lane queue: 'interactive' (VHI requests, dashboard, anything a human
 // is waiting on) drains before 'background' (full-page backfills, prefetch,

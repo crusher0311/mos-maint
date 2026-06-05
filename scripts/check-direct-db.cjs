@@ -131,6 +131,11 @@ const ALLOWLIST = new Set([
   "app/api/cron/tekmetric-ro-retry/route.ts",
   "app/api/cron/tekmetric-sync/route.ts",
   "app/api/cron/tekmetric-webhook-health/route.ts",
+  // Task #587 — Shopmonkey webhook-health cron. Reads/writes the operational
+  // `shopmonkey_webhook_logs` / `shopmonkey_webhook_health_alerts` collections
+  // (webhook delivery telemetry, not entity data), mirroring the already-
+  // allowlisted tekmetric-webhook-health cron above.
+  "app/api/cron/shopmonkey-webhook-health/route.ts",
   // Task #569 — daily webhook-subscription sweep. Verifies/repairs each
   // shop's provider webhook subscription and reads/writes the operational
   // `protractor_webhook_subscriptions` collection (subscription bookkeeping,
@@ -303,6 +308,9 @@ const ALLOWLIST = new Set([
   "app/api/settings/shopware/route.ts",
   "app/api/settings/shopware/webhook/route.ts",
   "app/api/settings/tekmetric/route.ts",
+  // Task #587 — Shopmonkey per-shop settings (API key/location/company),
+  // mirroring the allowlisted tekmetric settings route above.
+  "app/api/settings/shopmonkey/route.ts",
   "app/api/settings/users/route.ts",
   "app/api/settings/users/[userId]/route.ts",
   "app/api/settings/workflows/route.ts",
@@ -348,6 +356,9 @@ const ALLOWLIST = new Set([
   "app/api/webhooks/autoflow/[token]/route.ts",
   "app/api/webhooks/protractor/[token]/route.ts",
   "app/api/webhooks/tekmetric/route.ts",
+  // Task #587 — Shopmonkey inbound webhook receiver, mirroring the allowlisted
+  // tekmetric webhook route above.
+  "app/api/webhooks/shopmonkey/route.ts",
   "app/api/workflows/runs/route.ts",
   "app/dashboard/parts/page.tsx",
   "app/dashboard/settings/autoflow/page.tsx",
@@ -397,6 +408,15 @@ const ALLOWLIST = new Set([
   "lib/integrations/tekmetric/sync.ts",
   "lib/integrations/tekmetric/usage-tracker.ts",
   "lib/integrations/tekmetric/webhook-subscribe.ts",
+  // Task #587 — Shopmonkey integration layer (read adapter, per-shop auth,
+  // backfill/sync, operational rate-limiter, gated webhook-subscribe), mirroring
+  // the allowlisted tekmetric integration files above.
+  "lib/integrations/shopmonkey/adapter.ts",
+  "lib/integrations/shopmonkey/auth.ts",
+  "lib/integrations/shopmonkey/full-page-backfill.ts",
+  "lib/integrations/shopmonkey/incremental-sync.ts",
+  "lib/integrations/shopmonkey/shared-rate-limiter.ts",
+  "lib/integrations/shopmonkey/webhook-subscribe.ts",
   "lib/job-index.ts",
   "lib/models/customers.ts",
   "lib/rate.ts",

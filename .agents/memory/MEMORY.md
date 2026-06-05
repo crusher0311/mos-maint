@@ -27,3 +27,4 @@
 - [BullMQ backfill queue](bullmq-backfill-queue.md) — jobId no `:` (use `_`), stable jobId needs removeOnComplete:true, continuation is cron-driven not in-processor, processor must getDb() not null; cron fails OPEN so all break silently.
 - [Protractor list-vs-detail parity](protractor-list-detail-hash-churn.md) — list & detail invoice extraction are content-identical; computeJobHash only flips on line ORDER + float rounding → switching source causes one-time re-index churn. Fix = canonicalize hash.
 - [Protractor list-vs-detail line items](protractor-list-richness.md) — `/Invoice/?…` list already carries full lines+deferred (detail N+1 avoidable); `/WorkOrder/?…` list is thin (detail required). Pricing is flat fields, not PriceSummary.
+- [Shopmonkey API quirks](shopmonkey-api-quirks.md) — v3 Bearer API-key (no OAuth); locationId often absent & fully optional (key alone authorizes); amounts in CENTS; single-host SPA so extension scrapes company/location from page.

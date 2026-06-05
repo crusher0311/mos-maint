@@ -1,0 +1,232 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getBaseUrl, getCredentials } from "./auth";
+import type {
+  ShopmonkeyEnvelope,
+  ShopmonkeyPaginatedResponse,
+  ShopmonkeyOrder,
+  ShopmonkeyVehicle,
+  ShopmonkeyCustomer,
+  ShopmonkeyCannedService,
+} from "./types";
+
+const REQUEST_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.SHOPMONKEY_REQUEST_TIMEOUT_MS) || 60000,
+);
+
+// Per-chunk rate-limit backoff accumulator, scoped via AsyncLocalStorage so
+// concurrent backfill chunks do not leak rate-limit waits into each other's
+// per-chunk metric. Mirrors the Tekmetric/Shop-Ware pattern.
+const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
+
+export async function runWithShopmonkeyBackoffTracking<T>(
+  fn: (counter: { readonly ms: number }) => Promise<T>,
+): Promise<T> {
+  const counter = { ms: 0 };
+  return backoffStorage.run(counter, () => fn(counter));
+}
+
+class ShopmonkeyNotConfiguredError extends Error {
+  constructor(shopId: number) {
+    super(`Shopmonkey not configured for shop ${shopId}`);
+    this.name = "ShopmonkeyNotConfiguredError";
+  }
+}
+
+/**
+ * Core Shopmonkey request: resolves the per-shop API key, issues a Bearer
+ * request, tracks API usage, and applies a bounded rate-limit backoff when the
+ * API reports it. Throws on non-2xx (after tracking the failure).
+ */
+export async function shopmonkeyRequest<T = any>(
+  shopId: number,
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const creds = await getCredentials(shopId);
+  if (!creds) throw new ShopmonkeyNotConfiguredError(shopId);
+
+  const method = options.method || "GET";
+  const url = `${getBaseUrl()}${path}`;
+  const startTime = Date.now();
+  let statusCode = 0;
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      cache: "no-store",
+      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        Authorization: `Bearer ${creds.apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...options.headers,
+      },
+    });
+
+    statusCode = response.status;
+    const latencyMs = Date.now() - startTime;
+    trackApiRequest("shopmonkey", path, method, statusCode, latencyMs, shopId).catch(() => {});
+
+    // Honor a Retry-After / X-RateLimit-Reset hint with a bounded sleep.
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const reset = response.headers.get("X-RateLimit-Reset");
+      let waitMs = 0;
+      if (retryAfter) waitMs = Number(retryAfter) * 1000;
+      else if (reset) waitMs = Number(reset) * 1000 - Date.now();
+      if (waitMs > 0 && waitMs < 60_000) {
+        console.warn(`[Shopmonkey] Rate limit hit, sleeping ${waitMs}ms`);
+        const backoffCounter = backoffStorage.getStore();
+        if (backoffCounter) backoffCounter.ms += waitMs;
+        await new Promise((r) => setTimeout(r, waitMs));
+        return shopmonkeyRequest<T>(shopId, path, options);
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Shopmonkey API error ${response.status} (${url}): ${errorText}`);
+    }
+
+    return response.json() as Promise<T>;
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    trackApiRequest("shopmonkey", path, method, statusCode || 0, latencyMs, shopId).catch(() => {});
+    throw err;
+  }
+}
+
+function unwrap<T>(res: ShopmonkeyEnvelope<T> | T): T {
+  if (res && typeof res === "object" && "data" in (res as any)) {
+    return (res as ShopmonkeyEnvelope<T>).data;
+  }
+  return res as T;
+}
+
+/**
+ * Drain every page of a Shopmonkey collection endpoint. Supports both
+ * cursor-based and limit/offset pagination via the `meta` block.
+ */
+export async function getAllPages<T>(
+  shopId: number,
+  path: string,
+  extraParams?: Record<string, string>,
+): Promise<T[]> {
+  const results: T[] = [];
+  const limit = 100;
+  let offset = 0;
+  let cursor: string | null = null;
+  let hasMore = true;
+  const maxPages = 200;
+  let page = 0;
+
+  while (hasMore && page < maxPages) {
+    const params = new URLSearchParams({ limit: String(limit), ...extraParams });
+    if (cursor) params.set("cursor", cursor);
+    else params.set("offset", String(offset));
+
+    const sep = path.includes("?") ? "&" : "?";
+    const data = await shopmonkeyRequest<ShopmonkeyPaginatedResponse<T>>(
+      shopId,
+      `${path}${sep}${params.toString()}`,
+    );
+
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    results.push(...rows);
+
+    const next = data?.meta?.nextCursor ?? data?.meta?.cursor ?? null;
+    if (next && next !== cursor) {
+      cursor = next;
+    } else if (data?.meta?.hasMore === true || rows.length === limit) {
+      offset += limit;
+      cursor = null;
+    } else {
+      hasMore = false;
+    }
+    page++;
+  }
+
+  return results;
+}
+
+export async function getVehicle(shopId: number, vehicleId: string): Promise<ShopmonkeyVehicle> {
+  const res = await shopmonkeyRequest<ShopmonkeyEnvelope<ShopmonkeyVehicle>>(
+    shopId,
+    `/vehicle/${encodeURIComponent(vehicleId)}`,
+  );
+  return unwrap(res);
+}
+
+export async function getVehicles(
+  shopId: number,
+  params?: { updatedAfter?: string; customerId?: string },
+): Promise<ShopmonkeyVehicle[]> {
+  const extra: Record<string, string> = {};
+  if (params?.updatedAfter) extra.updatedAfter = params.updatedAfter;
+  if (params?.customerId) extra.customerId = params.customerId;
+  return getAllPages<ShopmonkeyVehicle>(shopId, `/vehicle`, extra);
+}
+
+export async function searchVehiclesByVin(
+  shopId: number,
+  vin: string,
+): Promise<ShopmonkeyVehicle[]> {
+  const res = await shopmonkeyRequest<ShopmonkeyPaginatedResponse<ShopmonkeyVehicle>>(
+    shopId,
+    `/vehicle?vin=${encodeURIComponent(vin)}&limit=50`,
+  );
+  const rows = Array.isArray(res?.data) ? res.data : [];
+  return rows.filter((v) => v.vin?.toUpperCase() === vin.toUpperCase());
+}
+
+export async function getCustomer(shopId: number, customerId: string): Promise<ShopmonkeyCustomer> {
+  const res = await shopmonkeyRequest<ShopmonkeyEnvelope<ShopmonkeyCustomer>>(
+    shopId,
+    `/customer/${encodeURIComponent(customerId)}`,
+  );
+  return unwrap(res);
+}
+
+export async function getOrder(shopId: number, orderId: string): Promise<ShopmonkeyOrder> {
+  const res = await shopmonkeyRequest<ShopmonkeyEnvelope<ShopmonkeyOrder>>(
+    shopId,
+    `/order/${encodeURIComponent(orderId)}`,
+  );
+  return unwrap(res);
+}
+
+export async function getOrders(
+  shopId: number,
+  params?: {
+    updatedAfter?: string;
+    closedAfter?: string;
+    vehicleId?: string;
+    customerId?: string;
+  },
+): Promise<ShopmonkeyOrder[]> {
+  const extra: Record<string, string> = {};
+  if (params?.updatedAfter) extra.updatedAfter = params.updatedAfter;
+  if (params?.closedAfter) extra.closedAfter = params.closedAfter;
+  if (params?.vehicleId) extra.vehicleId = params.vehicleId;
+  if (params?.customerId) extra.customerId = params.customerId;
+  return getAllPages<ShopmonkeyOrder>(shopId, `/order`, extra);
+}
+
+export async function getCannedServices(shopId: number): Promise<ShopmonkeyCannedService[]> {
+  return getAllPages<ShopmonkeyCannedService>(shopId, `/canned_service`);
+}
+
+export async function testConnection(
+  shopId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const creds = await getCredentials(shopId);
+    if (!creds) return { ok: false, error: "Shopmonkey not configured" };
+    const { validateApiKey } = await import("./auth");
+    return await validateApiKey(creds.apiKey);
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "Connection test failed" };
+  }
+}

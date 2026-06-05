@@ -53,7 +53,7 @@ export type ExtensionGuardResult =
       isPlatformAdmin: boolean;
       mosShopId: number;
       shopDoc: any;
-      provider: "tekmetric" | "protractor" | "shopware" | "autoflow";
+      provider: "tekmetric" | "protractor" | "shopware" | "autoflow" | "shopmonkey";
     }
   | {
       ok: false;

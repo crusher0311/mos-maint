@@ -49,6 +49,7 @@ export const MILES_ONLY_PROVIDERS: ReadonlySet<string> = new Set([
   "tekmetric",
   "shopware",
   "shop-ware",
+  "shopmonkey",
 ]);
 
 /** Canadian province / territory two-letter codes. */

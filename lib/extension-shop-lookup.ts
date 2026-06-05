@@ -3,7 +3,7 @@ import { getDb } from '@/lib/mongo';
 export type ShopLookupResult = {
   mosShopId: number;
   shopDoc: any;
-  provider: 'tekmetric' | 'protractor' | 'shopware' | 'autoflow';
+  provider: 'tekmetric' | 'protractor' | 'shopware' | 'autoflow' | 'shopmonkey';
 } | null;
 
 /**
@@ -45,6 +45,8 @@ export async function findShopBySmsId(
       { autoflowDomain: `${smsShopId}.autotext.me` },
       { "shopware.tenantSubdomain": smsShopId },
       { "shopware.tenantId": smsShopId },
+      { "shopmonkey.locationId": smsShopId },
+      { "shopmonkey.companyId": smsShopId },
     ]
   };
   
@@ -112,8 +114,9 @@ export async function findShopBySmsId(
     || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
       : shopDoc.protractor?.connectionId ? 'protractor' 
       : shopDoc.shopware?.tenantId ? 'shopware'
+      : shopDoc.shopmonkey?.apiKey ? 'shopmonkey'
       : shopDoc.autoflow?.domain ? 'autoflow' 
-      : 'tekmetric') as 'tekmetric' | 'protractor' | 'shopware' | 'autoflow';
+      : 'tekmetric') as 'tekmetric' | 'protractor' | 'shopware' | 'autoflow' | 'shopmonkey';
   
   return {
     mosShopId: Number(shopDoc.shopId),

@@ -11,7 +11,7 @@ import {
 } from "@/lib/data/repositories/api-usage";
 import { listShopsByQuery } from "@/lib/data/repositories/shops";
 
-export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode' | 'render' | 'shopware';
+export type ApiProvider = 'tekmetric' | 'carfax' | 'dataone' | 'openai' | 'protractor' | 'autoflow' | 'hovercode' | 'render' | 'shopware' | 'shopmonkey';
 
 interface ApiUsageRecord {
   timestamp: Date;
@@ -56,6 +56,12 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   tekmetric: { 
     name: 'Tekmetric', 
     rateLimit: { perMinute: 600, perSecond: 10 },
+    warningThreshold: 0.75,
+    criticalThreshold: 0.85
+  },
+  shopmonkey: {
+    name: 'Shopmonkey',
+    rateLimit: { perMinute: 300, perSecond: 5 },
     warningThreshold: 0.75,
     criticalThreshold: 0.85
   },

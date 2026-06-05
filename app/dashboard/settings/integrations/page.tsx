@@ -21,7 +21,7 @@ import {
   EyeOff,
 } from "lucide-react";
 
-type ShopManagementChoice = "protractor" | "tekmetric" | "shopware" | "standalone" | null;
+type ShopManagementChoice = "protractor" | "tekmetric" | "shopware" | "shopmonkey" | "standalone" | null;
 type DviChoice = "autoflow" | "tekmetric" | null;
 
 interface IntegrationStatus {
@@ -53,6 +53,13 @@ interface IntegrationStatus {
     initialSyncVehicles?: number | null;
     initialSyncError?: string | null;
   };
+  shopmonkey: {
+    configured: boolean;
+    locationId?: string | null;
+    companyId?: string | null;
+    connectedAt?: string | null;
+    lastSyncAt?: string | null;
+  };
 }
 
 export default function IntegrationsPage() {
@@ -63,6 +70,7 @@ export default function IntegrationsPage() {
     protractor: { configured: false },
     tekmetric: { configured: false },
     shopware: { configured: false },
+    shopmonkey: { configured: false },
   });
   const [shopManagement, setShopManagement] = useState<ShopManagementChoice>(null);
   const [dviChoice, setDviChoice] = useState<DviChoice>(null);
@@ -73,12 +81,13 @@ export default function IntegrationsPage() {
 
   async function fetchAllStatuses() {
     try {
-      const [carfaxRes, autoflowRes, protractorRes, tekmetricRes, shopwareRes] = await Promise.all([
+      const [carfaxRes, autoflowRes, protractorRes, tekmetricRes, shopwareRes, shopmonkeyRes] = await Promise.all([
         fetch("/api/settings/carfax").catch(() => null),
         fetch("/api/settings/autoflow").catch(() => null),
         fetch("/api/settings/protractor").catch(() => null),
         fetch("/api/settings/tekmetric").catch(() => null),
         fetch("/api/settings/shopware").catch(() => null),
+        fetch("/api/settings/shopmonkey").catch(() => null),
       ]);
 
       const carfaxData = carfaxRes?.ok ? await carfaxRes.json() : {};
@@ -86,6 +95,7 @@ export default function IntegrationsPage() {
       const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
       const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
       const shopwareData = shopwareRes?.ok ? await shopwareRes.json() : {};
+      const shopmonkeyData = shopmonkeyRes?.ok ? await shopmonkeyRes.json() : {};
 
       const newStatuses = {
         carfax: { 
@@ -122,6 +132,13 @@ export default function IntegrationsPage() {
           initialSyncVehicles: shopwareData.initialSyncVehicles,
           initialSyncError: shopwareData.initialSyncError,
         },
+        shopmonkey: {
+          configured: Boolean(shopmonkeyData.configured),
+          locationId: shopmonkeyData.locationId,
+          companyId: shopmonkeyData.companyId,
+          connectedAt: shopmonkeyData.connectedAt,
+          lastSyncAt: shopmonkeyData.lastSyncAt,
+        },
       };
 
       setStatuses(newStatuses);
@@ -139,6 +156,8 @@ export default function IntegrationsPage() {
         setShopManagement("protractor");
       } else if (newStatuses.shopware.configured) {
         setShopManagement("shopware");
+      } else if (newStatuses.shopmonkey.configured) {
+        setShopManagement("shopmonkey");
       }
 
       if (newStatuses.autoflow.configured) {
@@ -256,6 +275,17 @@ export default function IntegrationsPage() {
                 <input
                   type="radio"
                   name="shopManagement"
+                  checked={shopManagement === "shopmonkey"}
+                  onChange={() => handleShopManagementChange("shopmonkey")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="flex-1 font-medium text-gray-700">Shopmonkey</span>
+                {statuses.shopmonkey.configured && <CheckCircle className="w-4 h-4 text-green-500" />}
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="shopManagement"
                   checked={shopManagement === "standalone"}
                   onChange={() => handleShopManagementChange("standalone")}
                   className="w-4 h-4 text-blue-600"
@@ -272,6 +302,9 @@ export default function IntegrationsPage() {
             )}
             {shopManagement === "shopware" && (
               <ShopWareSection status={statuses.shopware} onUpdate={fetchAllStatuses} />
+            )}
+            {shopManagement === "shopmonkey" && (
+              <ShopmonkeySection status={statuses.shopmonkey} onUpdate={fetchAllStatuses} />
             )}
             {shopManagement === "standalone" && (
               <StandaloneSection />
@@ -1356,6 +1389,216 @@ function TekmetricSection({ status, onUpdate }: {
       <button
         onClick={handleSave}
         disabled={saving || !shopId}
+        className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+        Connect
+      </button>
+    </div>
+  );
+}
+
+function ShopmonkeySection({ status, onUpdate }: {
+  status: {
+    configured: boolean;
+    locationId?: string | null;
+    companyId?: string | null;
+    connectedAt?: string | null;
+    lastSyncAt?: string | null;
+  };
+  onUpdate: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [webhookCopied, setWebhookCopied] = useState(false);
+
+  const chromeExtensionUrl = "https://chromewebstore.google.com/detail/mos-tools/gkcehigbdlhjacjbgiffnlfhdnghlknd";
+
+  const getWebhookUrl = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/api/webhooks/shopmonkey`;
+    }
+    return "/api/webhooks/shopmonkey";
+  };
+
+  const copyWebhookUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(getWebhookUrl());
+      setWebhookCopied(true);
+      setTimeout(() => setWebhookCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings/shopmonkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey, locationId, companyId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: "Connected to Shopmonkey." });
+        setApiKey("");
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to connect" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed to save" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Disconnect Shopmonkey?")) return;
+    setDisconnecting(true);
+    try {
+      const res = await fetch("/api/settings/shopmonkey", { method: "DELETE" });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Disconnected" });
+        onUpdate();
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Failed" });
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  if (status.configured) {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <CheckCircle className="w-4 h-4" />
+            <span>Connected{status.locationId ? `: location ${status.locationId}` : ""}</span>
+          </div>
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-blue-800 mb-2">
+            <Link className="w-4 h-4" />
+            <span className="font-medium">Webhook URL</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white px-2 py-1.5 rounded border border-blue-200 text-gray-700 truncate">
+              {getWebhookUrl()}
+            </code>
+            <button
+              onClick={copyWebhookUrl}
+              className="px-2 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+              title="Copy webhook URL"
+            >
+              {webhookCopied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-blue-600 mt-2">
+            Add this URL in Shopmonkey under Settings &rarr; Integrations &rarr; Webhooks
+          </p>
+        </div>
+
+        {message && (
+          <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+            message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+          }`}>
+            {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+            <span>{message.text}</span>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="border-t pt-3 space-y-2">
+          <a
+            href={chromeExtensionUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full px-4 py-2 bg-purple-100 text-purple-700 text-sm rounded-lg hover:bg-purple-200 flex items-center justify-center gap-2"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Install Chrome Extension
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+        <div className="relative">
+          <input
+            type={showKey ? "text" : "password"}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Your Shopmonkey API key"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">Create an API key in Shopmonkey under Settings &rarr; API</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Location ID <span className="text-gray-400">(optional)</span></label>
+        <input
+          type="text"
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Shopmonkey Location ID"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Company ID <span className="text-gray-400">(optional)</span></label>
+        <input
+          type="text"
+          value={companyId}
+          onChange={(e) => setCompanyId(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Shopmonkey Company ID"
+        />
+      </div>
+
+      {message && (
+        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+          message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+        }`}>
+          {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving || !apiKey}
         className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {saving && <Loader2 className="w-4 h-4 animate-spin" />}

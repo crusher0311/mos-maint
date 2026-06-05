@@ -186,8 +186,9 @@ export function cleanString(value: any): string | undefined {
 
 import { ProtractorAdapter } from '@/lib/integrations/protractor/normalized-adapter';
 import { TekmetricAdapter } from '@/lib/integrations/tekmetric/normalized-adapter';
+import { ShopmonkeyAdapter } from '@/lib/integrations/shopmonkey/normalized-adapter';
 
-export { ProtractorAdapter, TekmetricAdapter };
+export { ProtractorAdapter, TekmetricAdapter, ShopmonkeyAdapter };
 
 const adapters: Record<SourceSystem, INormalizedAdapter | null> = {
   protractor: new ProtractorAdapter(),
@@ -197,7 +198,7 @@ const adapters: Record<SourceSystem, INormalizedAdapter | null> = {
   mitchell: null,
   shopware: null,
   rowriter: null,
-  shopmonkey: null,
+  shopmonkey: new ShopmonkeyAdapter(),
   shopboss: null,
   alldata: null,
   identifix: null,

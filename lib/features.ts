@@ -23,7 +23,7 @@ export type FeatureConfig = {
   stripePriceId?: string;
   pricePerMonth?: number;
   requiresSMS: boolean;
-  smsProviders: ("protractor" | "tekmetric" | "autoflow")[];
+  smsProviders: ("protractor" | "tekmetric" | "autoflow" | "shopmonkey")[];
 };
 
 export const FEATURES: FeatureConfig[] = [
@@ -33,7 +33,7 @@ export const FEATURES: FeatureConfig[] = [
     description: "AI-powered maintenance recommendations from OEM data, service history, and DVI findings",
     icon: "Wrench",
     requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric", "autoflow"],
+    smsProviders: ["protractor", "tekmetric", "autoflow", "shopmonkey"],
   },
   {
     id: "job_lookup",
@@ -41,7 +41,7 @@ export const FEATURES: FeatureConfig[] = [
     description: "Search historical jobs for parts, labor, and pricing. Add matching jobs to open work orders.",
     icon: "Search",
     requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric"],
+    smsProviders: ["protractor", "tekmetric", "shopmonkey"],
   },
   {
     id: "oil_sticker",
@@ -57,7 +57,7 @@ export const FEATURES: FeatureConfig[] = [
     description: "Predict common repairs by vehicle, powertrain, and mileage using shop data and AI",
     icon: "AlertTriangle",
     requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric"],
+    smsProviders: ["protractor", "tekmetric", "shopmonkey"],
   },
   {
     id: "part_xref",
@@ -65,7 +65,7 @@ export const FEATURES: FeatureConfig[] = [
     description: "Find interchangeable parts across manufacturers based on vehicle compatibility",
     icon: "RefreshCw",
     requiresSMS: true,
-    smsProviders: ["protractor", "tekmetric"],
+    smsProviders: ["protractor", "tekmetric", "shopmonkey"],
   },
   {
     id: "keytags",
@@ -89,7 +89,7 @@ export const FEATURES: FeatureConfig[] = [
     description: "Automatically apply labor rates based on vehicle, customer, and job criteria",
     icon: "DollarSign",
     requiresSMS: true,
-    smsProviders: ["tekmetric", "protractor"],
+    smsProviders: ["tekmetric", "protractor", "shopmonkey"],
   },
 ];
 

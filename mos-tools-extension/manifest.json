@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.27.23",
+  "version": "1.27.24",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -19,6 +19,8 @@
     "https://*.autotext.me/*",
     "https://*.shop-ware.com/*",
     "https://*.shop-ware-api-sandbox.com/*",
+    "https://app.shopmonkey.cloud/*",
+    "https://*.shopmonkey.cloud/*",
     "https://mos.tools/*",
     "https://*.mos.tools/*"
   ],
@@ -62,6 +64,29 @@
       ],
       "js": [
         "adapters/shopware-content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://app.shopmonkey.cloud/*",
+        "https://*.shopmonkey.cloud/*"
+      ],
+      "js": [
+        "adapters/interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://app.shopmonkey.cloud/*",
+        "https://*.shopmonkey.cloud/*"
+      ],
+      "js": [
+        "adapters/shopmonkey-content.js",
+        "realtime-subscriber.js",
+        "vhi-coach.js"
       ],
       "run_at": "document_idle"
     },
@@ -133,6 +158,23 @@
       "matches": [
         "https://*.shop-ware.com/*",
         "https://*.shop-ware-api-sandbox.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "icons/mos-print-button.png",
+        "icons/icon48.png",
+        "icons/mos-toolbox.png",
+        "icons/mos-logo.png",
+        "icons/mos-fab.png",
+        "icons/VHI_icon.png",
+        "icons/aiVHI_icon.png",
+        "icons/enhance_notes_icon.png",
+        "adapters/interceptor.js"
+      ],
+      "matches": [
+        "https://app.shopmonkey.cloud/*",
+        "https://*.shopmonkey.cloud/*"
       ]
     },
     {

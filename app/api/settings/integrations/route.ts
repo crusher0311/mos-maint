@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     
     const { smsProvider } = body;
     
-    if (smsProvider && !["protractor", "tekmetric", "standalone"].includes(smsProvider)) {
+    if (smsProvider && !["protractor", "tekmetric", "shopware", "shopmonkey", "standalone"].includes(smsProvider)) {
       return NextResponse.json({ error: "Invalid SMS provider" }, { status: 400 });
     }
 

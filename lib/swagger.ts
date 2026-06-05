@@ -472,7 +472,7 @@ API keys are scoped to specific permissions:
             { name: "vin", in: "path", required: true, schema: { type: "string" }, description: "Vehicle VIN (17 characters)" },
             { name: "shopId", in: "query", required: false, schema: { type: "number" }, description: "MOS shop ID (required for partner keys)" },
             { name: "smsShopId", in: "query", required: false, schema: { type: "string" }, description: "SMS shop ID — alternative to shopId for partner keys" },
-            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"] }, description: "SMS type — used with smsShopId for partner keys" },
+            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow", "shopmonkey"] }, description: "SMS type — used with smsShopId for partner keys" },
           ],
           responses: {
             "200": {
@@ -510,7 +510,7 @@ API keys are scoped to specific permissions:
                   required: ["vin", "sms", "smsShopId"],
                   properties: {
                     vin: { type: "string", description: "17-character Vehicle Identification Number", example: "1FT8W3BT0BEA08647" },
-                    sms: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"], description: "Shop management system name" },
+                    sms: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow", "shopmonkey"], description: "Shop management system name" },
                     smsShopId: { type: "string", description: "Shop ID within the SMS platform", example: "12345" },
                     roNumber: { type: "string", description: "Repair order number (optional — used to locate mileage from a specific RO)", example: "WO-9876" },
                     mileage: { type: "number", description: "Override mileage (optional — auto-resolved from the RO if not provided)", example: 105388 },
@@ -599,7 +599,7 @@ API keys are scoped to specific permissions:
             { name: "page", in: "query", required: false, schema: { type: "integer", default: 1 }, description: "Page number (default: 1)" },
             { name: "limit", in: "query", required: false, schema: { type: "integer", default: 50, maximum: 100 }, description: "Results per page (default: 50, max: 100)" },
             { name: "search", in: "query", required: false, schema: { type: "string" }, description: "Search by shop name or location identifier" },
-            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow"] }, description: "Filter by integration provider" },
+            { name: "sms", in: "query", required: false, schema: { type: "string", enum: ["tekmetric", "shopware", "protractor", "autoflow", "shopmonkey"] }, description: "Filter by integration provider" },
           ],
           responses: {
             "200": {

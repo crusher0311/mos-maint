@@ -2,7 +2,7 @@
 // Shop Management System (SMS) Adapter Interface
 // Provides abstraction for multi-SMS support (Protractor, Tekmetric, AutoFlow, etc.)
 
-export type SMSProvider = "protractor" | "tekmetric" | "autoflow";
+export type SMSProvider = "protractor" | "tekmetric" | "autoflow" | "shopware" | "shopmonkey";
 
 export type SMSVehicle = {
   id: string;

@@ -200,6 +200,61 @@ async function _GET(request: NextRequest) {
           console.error(`[ro-context] Shop-Ware API fallback failed:`, e.message);
         }
       }
+    } else if (resolvedProvider === "shopmonkey") {
+      const smRo = await db.collection("shopmonkey_work_orders").findOne({
+        mosShopId,
+        $or: [
+          { roId: parseInt(roId) },
+          { roId: String(roId) },
+        ],
+      });
+
+      if (smRo) {
+        customerName = smRo.customerName || null;
+        repairOrderNumber = smRo.number ? String(smRo.number) : null;
+        vin = smRo.vin || null;
+        mileage = smRo.odometer || smRo.mileage || null;
+        vehicleYear = smRo.vehicleYear || null;
+        vehicleMake = smRo.vehicleMake || null;
+        vehicleModel = smRo.vehicleModel || null;
+      }
+
+      if (!vin && shopDoc?.shopmonkey?.apiKey) {
+        try {
+          const { getOrder } = await import("@/lib/integrations/shopmonkey/client");
+          // Bound the live Shopmonkey lookup so a slow upstream falls back to
+          // the Mongo cache rather than blocking the extension popup.
+          const ro = await withUpstreamTimeout(
+            getOrder(mosShopId, String(roId)),
+            5000,
+            `shopmonkey ro-context /order/${roId}`,
+          ).catch(() => null);
+          if (ro) {
+            if (!vin) vin = ro.vehicle?.vin?.toUpperCase() ?? null;
+            if (!mileage) mileage = ro.mileage ?? ro.mileageIn ?? ro.vehicle?.mileage ?? null;
+            if (!repairOrderNumber) repairOrderNumber = ro.number ? String(ro.number) : null;
+            if (!customerName) customerName = ro.customer ? `${ro.customer.firstName ?? ""} ${ro.customer.lastName ?? ""}`.trim() : null;
+            if (!vehicleYear && ro.vehicle?.year) vehicleYear = ro.vehicle.year;
+            if (!vehicleMake) vehicleMake = ro.vehicle?.make ?? null;
+            if (!vehicleModel) vehicleModel = ro.vehicle?.model ?? null;
+
+            if (vin) {
+              const updateFields: any = { vin };
+              if (ro.vehicle?.year) updateFields.vehicleYear = ro.vehicle.year;
+              if (ro.vehicle?.make) updateFields.vehicleMake = ro.vehicle.make;
+              if (ro.vehicle?.model) updateFields.vehicleModel = ro.vehicle.model;
+              const odo = ro.mileage ?? ro.mileageIn ?? ro.vehicle?.mileage;
+              if (odo) updateFields.odometer = odo;
+              db.collection("shopmonkey_work_orders").updateOne(
+                { mosShopId, $or: [{ roId: parseInt(roId) }, { roId: String(roId) }] },
+                { $set: updateFields }
+              ).catch((e: any) => console.warn(`[ro-context] Failed to backfill VIN to cache:`, e.message));
+            }
+          }
+        } catch (e: any) {
+          console.error(`[ro-context] Shopmonkey API fallback failed:`, e.message);
+        }
+      }
     } else if (resolvedProvider === "autoflow") {
       const dvi = await db.collection("dvi_results").findOne({
         shopId: { $in: [mosShopId, String(mosShopId)] },
