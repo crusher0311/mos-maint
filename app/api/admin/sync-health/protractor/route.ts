@@ -121,11 +121,15 @@ export async function GET() {
       slowChunkShopCount: protractorSlowChunkShopCount,
       slowChunkP95ThresholdMs: SLOW_P95_THRESHOLD_MS,
       // Per-shop Protractor invoice-cache pre-warm status
-      // (lib/protractor-jobs-prewarm.ts). The "Jobs cache" column on
-      // the Protractor chunk-speed table now also reflects this
-      // cache's rolling per-chunk hit rate (see
-      // `buildProtractorChunkMetrics`); this overlay lets on-call
-      // see at a glance which shops were warmed at onboarding.
+      // (lib/protractor-jobs-prewarm.ts). NOTE: since the bulk-fetch
+      // rewrite the backfill extracts line items straight from the
+      // `/Invoice/` list, so the "Jobs cache" column on the Protractor
+      // chunk-speed table now reflects the list-extraction rate
+      // (invoices served without a `/Invoice/{id}` detail fallback — see
+      // `buildProtractorChunkMetrics`), NOT this prewarm cache's hit
+      // rate. The prewarm now only accelerates the rare detail-on-mismatch
+      // fallback; this overlay still shows which shops were warmed at
+      // onboarding.
       invoiceCachePrewarm: protractorInvoiceCachePrewarm,
       invoiceCachePrewarmShopCount: protractorInvoiceCachePrewarm.length,
       invoiceCachePrewarmMissingCount: protractorInvoiceCachePrewarmMissingCount,

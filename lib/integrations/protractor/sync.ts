@@ -164,8 +164,13 @@ function buildProtractorChunkMetrics(input: {
   chunkEnd: Date;
   nextChunkEnd: Date;
   advanceMode: string;
-  invoiceCacheHits: number;
-  invoiceCacheMisses: number;
+  // Bulk-fetch flow metrics: invoices served straight from the `/Invoice/`
+  // list (no detail API call) vs. those that needed a `/Invoice/{id}`
+  // detail fallback. These reuse the `jobsCache*` metric fields the admin
+  // sync-health view already renders — a high "hit rate" now means the
+  // list-richness optimization is working (most invoices avoided detail).
+  listExtractedCount: number;
+  detailFallbackCount: number;
   vehiclesCacheHits: number;
   vehiclesCacheMisses: number;
   backoffDeltaMs: number;
@@ -173,7 +178,7 @@ function buildProtractorChunkMetrics(input: {
   hitPageCap: boolean;
 }) {
   const vehTotal = input.vehiclesCacheHits + input.vehiclesCacheMisses;
-  const invTotal = input.invoiceCacheHits + input.invoiceCacheMisses;
+  const invTotal = input.listExtractedCount + input.detailFallbackCount;
   return {
     at: input.now,
     durationMs: input.durationMs,
@@ -182,11 +187,11 @@ function buildProtractorChunkMetrics(input: {
     chunkEnd: input.chunkEnd,
     nextChunkEnd: input.nextChunkEnd,
     advanceMode: input.advanceMode,
-    jobsCacheHits: input.invoiceCacheHits,
-    jobsCacheMisses: input.invoiceCacheMisses,
+    jobsCacheHits: input.listExtractedCount,
+    jobsCacheMisses: input.detailFallbackCount,
     jobsCacheHitRate:
       invTotal > 0
-        ? Number((input.invoiceCacheHits / invTotal).toFixed(4))
+        ? Number((input.listExtractedCount / invTotal).toFixed(4))
         : null,
     vehiclesCacheHits: input.vehiclesCacheHits,
     vehiclesCacheMisses: input.vehiclesCacheMisses,
@@ -351,10 +356,10 @@ async function backfillShopChunk(
       chunkEnd,
       nextChunkEnd,
       advanceMode: chunkHadError ? "HOLD (empty chunk after error)" : "FULL (empty chunk)",
-      // Empty chunk: nothing to look up in the invoice cache. 0/0 -> null
-      // hit rate so an empty chunk doesn't drag down the rolling average.
-      invoiceCacheHits: 0,
-      invoiceCacheMisses: 0,
+      // Empty chunk: no invoices extracted and no detail fallbacks. 0/0 ->
+      // null hit rate so an empty chunk doesn't drag down the rolling average.
+      listExtractedCount: 0,
+      detailFallbackCount: 0,
       vehiclesCacheHits: vehicleCacheCounters.hits,
       vehiclesCacheMisses: vehicleCacheCounters.misses,
       backoffDeltaMs: chunkBackoffCounter.ms,
@@ -399,55 +404,101 @@ async function backfillShopChunk(
   const invoicesForNormalized: any[] = [];
   let invoiceDetailErrors = 0;
 
-  let invoicesFromCache = 0;
+  // Bulk-fetch path (mirror AppFueled). Probe #583
+  // (docs/protractor-list-vs-detail-probe-2026-06-05.md) confirmed that the
+  // `/Invoice/?startDate&endDate` LIST already carries full ServicePackages +
+  // ServicePackageLines (and DeferredServicePackages) at parity with
+  // `/Invoice/{id}` detail for our API tier. So we extract job entries
+  // straight from each list row and SKIP the per-invoice `fetchInvoiceById`
+  // N+1 that used to dominate backfill runtime (tens of thousands of throttled
+  // detail calls for a multi-year shop).
+  //
+  // Detail-on-mismatch safety net: a list row that yields no extractable line
+  // items but carries a non-zero `Total` is treated as "thin" — its lines must
+  // live only on detail (a different tier/shop, or an unusual record). For just
+  // those we do a single bounded, rate-limited `/Invoice/{id}` fetch
+  // (cache-first, reusing any prewarmed `protractor_invoice_cache` payload).
+  // This is the invoice-path analogue of AppFueled's "detail only for
+  // open/in-progress ROs": invoices are terminal so there is no open-RO concept
+  // on this endpoint, but a thin list row is the equivalent case still needing
+  // detail.
+  //
+  // `listExtractedCount` / `detailFallbackCount` replace the old invoice-cache
+  // hit/miss counters: with the per-invoice fetch gone, the meaningful signal
+  // is "how many invoices were served straight from the list (cheap) vs needed
+  // a detail fallback (expensive)".
+  let listExtractedCount = 0;
+  let detailFallbackCount = 0;
+  let detailFallbackCapHit = false;
+  // Cap the fallback fan-out so a systematically-thin list (e.g. a tier
+  // regression) can't silently collapse the chunk back into a full per-invoice
+  // N+1. Past the cap we stop issuing detail fetches and hold the cursor with
+  // an [OPS-ALERT] so on-call investigates, rather than quietly paying the old
+  // cost or advancing over invoices indexed without line items.
+  const maxDetailFallbacks = Math.max(25, Math.ceil(invoices.length * 0.1));
+
   await Promise.all(
     invoices.map((inv: any) =>
       rateLimiter(async () => {
         try {
-          // Check `protractor_invoice_cache` first. The onboarding pre-warm
-          // (lib/protractor-jobs-prewarm.ts) and any previous backfill run
-          // populate this cache, so the very first chunk of a fresh-shop
-          // backfill — and any verification rerun — can hit Mongo instead
-          // of paying the per-invoice `/Invoice/{id}` API cost.
-          let fullInv = await getCachedProtractorInvoice(db, shopId, inv.ID).catch(
-            (cacheErr: any) => {
-              console.warn(
-                `[Backfill] Shop ${shopId}: invoice cache lookup failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
-              );
-              return null;
-            }
-          );
+          let source: any = inv;
+          let jobEntries = extractJobIndexFromWorkOrder(shopId, inv, "protractor");
 
-          if (fullInv) {
-            invoicesFromCache++;
-          } else {
-            const detailResult = await fetchInvoiceById(shopId, inv.ID);
-            if (!detailResult.ok || !detailResult.invoice) {
-              invoiceDetailErrors++;
-              return;
-            }
-            fullInv = detailResult.invoice;
-            // Warm the cache for next time. Stable post-invoice payloads
-            // mean this upsert is safe and cheap.
-            await cacheProtractorInvoice(db, shopId, inv.ID, fullInv).catch(
-              (cacheErr: any) => {
-                console.warn(
-                  `[Backfill] Shop ${shopId}: invoice cache write failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
+          const listRowIsThin =
+            jobEntries.length === 0 &&
+            typeof inv.Total === "number" &&
+            inv.Total > 0;
+
+          if (listRowIsThin) {
+            if (detailFallbackCount >= maxDetailFallbacks) {
+              detailFallbackCapHit = true;
+            } else {
+              detailFallbackCount++;
+              // Cache-first so a prewarmed/previously-fetched payload avoids
+              // even the fallback API call.
+              let fullInv = await getCachedProtractorInvoice(db, shopId, inv.ID).catch(
+                (cacheErr: any) => {
+                  console.warn(
+                    `[Backfill] Shop ${shopId}: invoice cache lookup failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
+                  );
+                  return null;
+                }
+              );
+
+              if (!fullInv) {
+                const detailResult = await fetchInvoiceById(shopId, inv.ID);
+                if (!detailResult.ok || !detailResult.invoice) {
+                  invoiceDetailErrors++;
+                  return;
+                }
+                fullInv = detailResult.invoice;
+                // Warm the cache for next time. Stable post-invoice payloads
+                // mean this upsert is safe and cheap.
+                await cacheProtractorInvoice(db, shopId, inv.ID, fullInv).catch(
+                  (cacheErr: any) => {
+                    console.warn(
+                      `[Backfill] Shop ${shopId}: invoice cache write failed for ${inv.ID}: ${cacheErr?.message || cacheErr}`
+                    );
+                  }
                 );
               }
-            );
+
+              source = fullInv;
+              jobEntries = extractJobIndexFromWorkOrder(shopId, fullInv, "protractor");
+            }
+          } else {
+            listExtractedCount++;
           }
 
-          invoicesForNormalized.push(fullInv);
+          invoicesForNormalized.push(source);
 
-          if (fullInv.ServiceItemID) {
-            serviceItemIds.add(fullInv.ServiceItemID);
+          if (source.ServiceItemID) {
+            serviceItemIds.add(source.ServiceItemID);
           }
 
-          const jobEntries = extractJobIndexFromWorkOrder(shopId, fullInv, "protractor");
           if (jobEntries.length > 0) {
             for (const entry of jobEntries) {
-              (entry as any)._serviceItemId = fullInv.ServiceItemID;
+              (entry as any)._serviceItemId = source.ServiceItemID;
             }
             allJobEntries.push(...jobEntries);
           }
@@ -460,10 +511,23 @@ async function backfillShopChunk(
 
   if (invoiceDetailErrors > 0) {
     chunkHadError = true;
-    console.warn(`[Backfill] Shop ${shopId}: ${invoiceDetailErrors}/${invoices.length} invoice-detail fetches failed; will hold cursor`);
+    console.warn(`[Backfill] Shop ${shopId}: ${invoiceDetailErrors}/${invoices.length} invoice-detail fallback fetches failed; will hold cursor`);
   }
 
-  console.log(`[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch (invoice cache: ${invoicesFromCache}/${invoices.length} hit)`);
+  if (detailFallbackCapHit) {
+    chunkHadError = true;
+    console.warn(
+      `[Backfill] Shop ${shopId}: [OPS-ALERT] detail-fallback cap (${maxDetailFallbacks}) hit — ` +
+        `${detailFallbackCount}+ thin list rows this chunk. The /Invoice/ list may have stopped ` +
+        `carrying line items for this shop/tier; holding cursor instead of advancing over ` +
+        `possibly-incomplete data.`
+    );
+  }
+
+  console.log(
+    `[Backfill] Shop ${shopId}: ${allJobEntries.length} jobs, ${serviceItemIds.size} unique vehicles to fetch ` +
+      `(list-extracted: ${listExtractedCount}/${invoices.length}, detail-fallback: ${detailFallbackCount}${detailFallbackCapHit ? " [CAP HIT]" : ""})`
+  );
 
   const vehicleCache = new Map<string, any>();
   const vehicleIdsToFetch = Array.from(serviceItemIds).filter(id => {
@@ -578,15 +642,12 @@ async function backfillShopChunk(
   // per-chunk AsyncLocalStorage counter so concurrent chunks (same
   // process, different shop) cannot leak each other's retry waits into
   // this chunk's metric.
-  // Per-RO `protractor_invoice_cache` hit/miss counts for this chunk. A
-  // miss is any invoice that fell through to `fetchInvoiceById` because
-  // the cache lookup either returned nothing OR threw (the catch above
-  // resolves to null, and that invoice subsequently goes through the
-  // API path); we count it as a miss either way since the cron paid the
-  // API cost. invoiceDetailErrors aren't subtracted: an invoice that
-  // errored during the API fetch still missed the cache.
-  const invoiceCacheHits = invoicesFromCache;
-  const invoiceCacheMisses = Math.max(0, invoices.length - invoicesFromCache);
+  // Bulk-fetch flow counts for this chunk: `listExtractedCount` is the
+  // invoices served straight from the `/Invoice/` list (the cheap path),
+  // `detailFallbackCount` is the thin list rows that needed a single
+  // `/Invoice/{id}` detail fallback. Together they reuse the `jobsCache*`
+  // metric fields the admin sync-health view renders; a high "hit rate"
+  // means the list-richness optimization is doing its job.
   const chunkMetrics = buildProtractorChunkMetrics({
     now: new Date(),
     durationMs: Date.now() - chunkStartedAt,
@@ -595,8 +656,8 @@ async function backfillShopChunk(
     chunkEnd,
     nextChunkEnd,
     advanceMode,
-    invoiceCacheHits,
-    invoiceCacheMisses,
+    listExtractedCount,
+    detailFallbackCount,
     vehiclesCacheHits: vehicleCacheCounters.hits,
     vehiclesCacheMisses: vehicleCacheCounters.misses,
     backoffDeltaMs: chunkBackoffCounter.ms,
@@ -614,7 +675,7 @@ async function backfillShopChunk(
   console.log(
     `[Backfill] Shop ${shopId}: chunk metrics ` +
       `duration=${chunkMetrics.durationMs}ms ros=${invoices.length} ` +
-      `invoiceCache=${invoiceCacheHits}/${invoiceCacheHits + invoiceCacheMisses} ` +
+      `listExtracted=${listExtractedCount}/${listExtractedCount + detailFallbackCount} ` +
       `vehiclesCache=${vehicleCacheCounters.hits}/${vehicleCacheCounters.hits + vehicleCacheCounters.misses} ` +
       `backoff=${chunkMetrics.backoff429Ms}ms`,
   );
