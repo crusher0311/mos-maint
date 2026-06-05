@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.27.20",
+  "version": "1.27.21",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -76,6 +76,17 @@
         "vhi-coach.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.autoflow.com/*",
+        "https://*.autotext.me/*"
+      ],
+      "js": [
+        "adapters/autoflow-dvi-bridge.js"
+      ],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ],
   "options_page": "options.html",
@@ -130,7 +141,10 @@
         "icons/icon48.png",
         "icons/mos-toolbox.png",
         "icons/mos-logo.png",
-        "icons/mos-fab.png"
+        "icons/mos-fab.png",
+        "icons/VHI_icon.png",
+        "icons/aiVHI_icon.png",
+        "icons/enhance_notes_icon.png"
       ],
       "matches": [
         "https://*.autoflow.com/*",

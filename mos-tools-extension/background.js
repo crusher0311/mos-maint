@@ -517,6 +517,123 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // ==================== AUTOFLOW VHI WRITE-BACK (analysis only) ====================
+  // Unlike Tekmetric (where the background relays writes via x-auth-token),
+  // AutoFlow writes must run in the page itself (same-origin session cookie)
+  // through the content script + MAIN-world bridge. The background only
+  // fetches VHI analysis from the MOS backend and hands it back; it performs
+  // NO provider write here. Each handler responds asynchronously.
+  if (message.action === "AF_ANALYZE_PREFILL") {
+    (async () => {
+      try {
+        await _stateReady;
+        if (!mosApiToken || !mosApiUrl) {
+          sendResponse({ success: false, error: "Not signed in to MOS" });
+          return;
+        }
+        const ctx = message.context || {};
+        const res = await fetch(`${mosApiUrl}/api/extension/prefill-dvi`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mosApiToken}`,
+          },
+          body: JSON.stringify({
+            vin: ctx.vin,
+            smsShopId: ctx.shopId,
+            provider: "autoflow",
+            mileage: ctx.mileage || 0,
+            inspectionTasks: message.inspectionTasks || [],
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
+          return;
+        }
+        sendResponse(Object.assign({ success: true }, data));
+      } catch (err) {
+        console.warn("[AF Prefill] error:", err.message);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "AF_ANALYZE_ENHANCE") {
+    (async () => {
+      try {
+        await _stateReady;
+        if (!mosApiToken || !mosApiUrl) {
+          sendResponse({ success: false, error: "Not signed in to MOS" });
+          return;
+        }
+        const ctx = message.context || {};
+        const res = await fetch(`${mosApiUrl}/api/extension/enhance-findings`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mosApiToken}`,
+          },
+          body: JSON.stringify({
+            findings: message.findings || [],
+            vehicleInfo: ctx.vehicle || { vin: ctx.vin },
+            shopId: ctx.shopId,
+            provider: "autoflow",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
+          return;
+        }
+        sendResponse(Object.assign({ success: true }, data));
+      } catch (err) {
+        console.warn("[AF Enhance] error:", err.message);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "AF_ANALYZE_BUILD_RO") {
+    (async () => {
+      try {
+        await _stateReady;
+        if (!mosApiToken || !mosApiUrl) {
+          sendResponse({ success: false, error: "Not signed in to MOS" });
+          return;
+        }
+        const ctx = message.context || {};
+        const res = await fetch(`${mosApiUrl}/api/extension/build-ro-from-vhi`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${mosApiToken}`,
+          },
+          body: JSON.stringify({
+            vin: ctx.vin,
+            smsShopId: ctx.shopId,
+            provider: "autoflow",
+            mileage: ctx.mileage || 0,
+            roId: ctx.roId,
+            vehicleId: ctx.vehicleId || null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
+          return;
+        }
+        sendResponse(Object.assign({ success: true }, data));
+      } catch (err) {
+        console.warn("[AF Build RO] error:", err.message);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   // Task #484: extension requests a short-lived Supabase Realtime token
   // scoped to a single shop. Server returns 503 when the feature flag is
   // off or env is missing — we surface that as success:false so the

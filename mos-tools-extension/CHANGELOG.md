@@ -1,5 +1,28 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.21 — 2026-06-05
+
+### Added
+- **VHI write-back actions on AutoFlow (DVI).** The three VHI actions that
+  previously existed only on Tekmetric now work on AutoFlow / autotext.me DVI
+  pages, each behind a per-shop feature flag (default OFF) and each gated by a
+  review/confirm modal before anything is written:
+  - **Pre-fill DVI** (flag `dvi_prefill`): matches the DVI's inspection items
+    to VHI maintenance data and sets each item's status (red / yellow / green)
+    and notes. You review and edit every proposed change before applying.
+  - **Enhance Notes** (flag `enhance_notes`): AI-rewrites the technician notes
+    already on the sheet. Original vs. enhanced text is shown side by side in a
+    review modal; only the notes you approve are written back.
+  - **Add Recommendations** (flag `dvi_prefill`): turns VHI recommendations
+    into AutoFlow RVH "concerns" on the RO after you confirm the list.
+  Writes happen in the page over AutoFlow's own same-origin request channel
+  (`/Admin/dvi_v3/request.php` / RVH) using the logged-in session — reusing
+  AutoFlow's own jQuery request helpers via a MAIN-world bridge so payloads and
+  auth always match the AutoFlow UI. The background worker only fetches the VHI
+  analysis from MOS; it performs no provider write. Toasts report
+  added / failed counts. Buttons only appear on DVI views and stay hidden when
+  the shop's flags are off.
+
 ## 1.27.20 — 2026-06-05
 
 ### Added

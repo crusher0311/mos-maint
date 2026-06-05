@@ -361,11 +361,13 @@ setTimeout(() => {
   checkForContextChanges();
   checkAndInjectButton();
   checkAndInjectCreateRoButton();
+  checkAndInjectVhiButtons();
   refreshWriteProvider();
   contextCheckInterval = setInterval(() => {
     checkForContextChanges();
     checkAndInjectButton();
     checkAndInjectCreateRoButton();
+    checkAndInjectVhiButtons();
   }, 2000);
 }, 1000);
 
@@ -384,6 +386,7 @@ setTimeout(() => {
         checkForContextChanges();
         checkAndInjectButton();
         checkAndInjectCreateRoButton();
+        checkAndInjectVhiButtons();
       } catch (e) {
         console.warn("[MOS Tools] AutoFlow re-inject error:", e.message);
       }
@@ -1397,3 +1400,561 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   });
 })();
+
+// ==================== VHI WRITE-BACK ACTIONS (Task #586) ====================
+// Three actions mirrored from the Tekmetric adapter, adapted for AutoFlow's
+// jQuery/PHP DVI:
+//   1. Pre-fill DVI      — set item statuses + notes from VHI maintenance data
+//   2. Enhance Notes     — AI-rewrite technician notes (review modal)
+//   3. Add Recommendations ("add all to concerns") — create RVH entries
+// All three are gated behind per-shop feature flags (default OFF):
+//   dvi_prefill  -> pre-fill + recommendations
+//   enhance_notes -> enhance
+// MOS analysis is fetched by the background worker; the actual writes are
+// performed in the page via the MAIN-world bridge (adapters/autoflow-dvi-bridge.js)
+// so they carry the AutoFlow session cookie and the page's own payload format.
+
+// ---------- MAIN-world bridge plumbing ----------
+let afBridgeReqId = 0;
+const afBridgePending = new Map();
+
+window.addEventListener('message', (e) => {
+  if (e.source !== window) return;
+  const m = e.data;
+  if (!m || typeof m !== 'object') return;
+  if (m.type === 'MOS_AF_DVI_DATA' || m.type === 'MOS_AF_WRITE_RESULT') {
+    const resolver = afBridgePending.get(m.requestId);
+    if (resolver) { afBridgePending.delete(m.requestId); resolver(m.payload); }
+  }
+});
+
+function afBridgeSend(type, extra, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const requestId = 'af_' + (++afBridgeReqId) + '_' + Date.now();
+    let done = false;
+    const finish = (p) => { if (done) return; done = true; resolve(p); };
+    afBridgePending.set(requestId, finish);
+    setTimeout(() => {
+      if (!done) { afBridgePending.delete(requestId); finish({ ok: false, error: 'bridge_timeout' }); }
+    }, timeoutMs);
+    window.postMessage(Object.assign({ type, requestId }, extra || {}), '*');
+  });
+}
+
+const readAutoflowDvi = () => afBridgeSend('MOS_AF_READ_DVI');
+const writeAutoflowSheet = (params) => afBridgeSend('MOS_AF_WRITE_SHEET', { params });
+const writeAutoflowRvh = (params) => afBridgeSend('MOS_AF_WRITE_RVH', { params });
+
+// MOS status string -> AutoFlow inspec_status (0=red/overdue, 1=yellow/due-soon, 2=green/ok).
+function mosStatusToAf(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'overdue') return '0';
+  if (s === 'due-soon' || s === 'duesoon' || s === 'due_soon') return '1';
+  if (s === 'ok' || s === 'good' || s === 'pass') return '2';
+  return '1';
+}
+
+function escapeAfHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = (str == null ? '' : String(str));
+  return d.innerHTML;
+}
+
+// ---------- Feature flags ----------
+let cachedAfFeatures = null;
+let afFeaturesFetchInFlight = false;
+
+function fetchAutoflowFeatures(cb) {
+  if (cachedAfFeatures) { cb(cachedAfFeatures); return; }
+  if (afFeaturesFetchInFlight) return;
+  const ctx = lastContext || detectContext();
+  if (!ctx.shopId) { cb({}); return; }
+  afFeaturesFetchInFlight = true;
+  chrome.runtime.sendMessage(
+    { action: 'GET_SHOP_FEATURES', shopId: ctx.shopId, provider: 'autoflow' },
+    (resp) => {
+      afFeaturesFetchInFlight = false;
+      if (chrome.runtime.lastError) { cb({}); return; }
+      cachedAfFeatures = (resp && resp.success) ? (resp.features || {}) : {};
+      cb(cachedAfFeatures);
+    }
+  );
+}
+
+// ---------- Button injection ----------
+let vhiButtonsInjected = false;
+let lastVhiInjectedUrl = null;
+
+function isAutoflowDviView() {
+  const url = window.location.href;
+  return /\/dvi[_v0-9]*\//i.test(url) || /[?&]status_id=\d+/.test(url);
+}
+
+function makeVhiIconButton(id, iconPath, title, handler) {
+  const btn = document.createElement('button');
+  btn.id = id;
+  btn.type = 'button';
+  btn.title = title;
+  const url = chrome.runtime.getURL(iconPath);
+  btn.innerHTML = `<img src="${url}" width="28" height="28" style="object-fit:contain;display:block;" alt="" />`;
+  Object.assign(btn.style, {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: '34px', height: '34px', padding: '2px', background: 'transparent',
+    border: 'none', borderRadius: '6px', cursor: 'pointer', marginLeft: '6px',
+    verticalAlign: 'middle', transition: 'opacity 0.2s',
+  });
+  btn.addEventListener('mouseenter', () => { if (!btn.disabled) btn.style.opacity = '0.7'; });
+  btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+  btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handler(btn); });
+  return btn;
+}
+
+function setVhiBtnBusy(btn, busy) {
+  if (!btn) return;
+  btn.disabled = busy;
+  btn.style.opacity = busy ? '0.5' : '1';
+  btn.style.cursor = busy ? 'wait' : 'pointer';
+}
+
+function injectVhiButtons() {
+  if (!isAutoflowDviView()) return;
+  const ctx = detectContext();
+  if (!ctx.roId) return;
+  if (document.getElementById('mos-vhi-actions-af')) { vhiButtonsInjected = true; return; }
+
+  fetchAutoflowFeatures((features) => {
+    const wantPrefill = !!features.dvi_prefill;
+    const wantEnhance = !!features.enhance_notes;
+    const wantConcerns = !!features.dvi_prefill;
+    if (!wantPrefill && !wantEnhance && !wantConcerns) return;
+    if (document.getElementById('mos-vhi-actions-af')) return;
+
+    // Anchor next to the AutoFlow DVI action bar (Push DVI / PDF / etc).
+    const KNOWN = [
+      'Push DVI', 'Re-Push', 'Re Push', 'RePush', 'PDF',
+      'Report Complete', 'Text & Email', 'Text and Email', 'Sheets', 'QC',
+    ];
+    const candidates = Array.from(document.querySelectorAll('a, button'));
+    let target = null;
+    for (const label of KNOWN) {
+      const hit = candidates.find((el) => {
+        if (el.closest('#mos-vhi-actions-af')) return false;
+        const t = (el.textContent || '').trim();
+        return t === label || t.startsWith(label + ' ');
+      });
+      if (hit && hit.parentElement) { target = hit; break; }
+    }
+    if (!target) return; // keep VHI actions tied to the DVI bar; retry next tick
+
+    const wrap = document.createElement('span');
+    wrap.id = 'mos-vhi-actions-af';
+    Object.assign(wrap.style, { display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' });
+
+    if (wantPrefill) wrap.appendChild(makeVhiIconButton('mos-af-prefill-btn', 'icons/VHI_icon.png', 'Pre-fill DVI with VHI data', handleAfPrefill));
+    if (wantEnhance) wrap.appendChild(makeVhiIconButton('mos-af-enhance-btn', 'icons/enhance_notes_icon.png', 'Enhance technician notes with AI', handleAfEnhance));
+    if (wantConcerns) wrap.appendChild(makeVhiIconButton('mos-af-concerns-btn', 'icons/aiVHI_icon.png', 'Add VHI recommendations to RO', handleAfConcerns));
+
+    target.parentElement.insertBefore(wrap, target.nextSibling);
+    vhiButtonsInjected = true;
+    lastVhiInjectedUrl = window.location.href;
+    console.log('[MOS Tools] AutoFlow VHI buttons injected (anchor="' + ((target.textContent || '').trim().slice(0, 24)) + '")');
+  });
+}
+
+function checkAndInjectVhiButtons() {
+  if (lastVhiInjectedUrl && lastVhiInjectedUrl !== window.location.href) {
+    const ex = document.getElementById('mos-vhi-actions-af');
+    if (ex) ex.remove();
+    vhiButtonsInjected = false;
+    lastVhiInjectedUrl = null;
+  }
+  if (!isAutoflowDviView()) {
+    const ex = document.getElementById('mos-vhi-actions-af');
+    if (ex) ex.remove();
+    vhiButtonsInjected = false;
+    return;
+  }
+  if (vhiButtonsInjected && !document.getElementById('mos-vhi-actions-af')) {
+    vhiButtonsInjected = false;
+  }
+  if (!vhiButtonsInjected) injectVhiButtons();
+}
+
+// ---------- Shared review modal ----------
+// opts: { title, applyLabel, rows:[{label,sub,badge,badgeColor,text,...}], onApply(selected,{setStatus})->Promise, onClose }
+function showAfReviewModal(opts) {
+  const existing = document.getElementById('mos-af-review-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-af-review-modal';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.5)', zIndex: '2147483646',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, {
+    background: '#fff', borderRadius: '12px', width: '680px', maxWidth: '92vw',
+    maxHeight: '82vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  });
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">${escapeAfHtml(opts.title)} <span style="color:#6b7280;font-weight:400;font-size:13px">(${opts.rows.length})</span></div>`;
+
+  const selectAllWrap = document.createElement('label');
+  Object.assign(selectAllWrap.style, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer' });
+  const selectAll = document.createElement('input');
+  selectAll.type = 'checkbox';
+  selectAll.checked = true;
+  selectAllWrap.appendChild(selectAll);
+  selectAllWrap.appendChild(document.createTextNode('Select all'));
+  header.appendChild(selectAllWrap);
+  modal.appendChild(header);
+
+  const body = document.createElement('div');
+  Object.assign(body.style, { overflowY: 'auto', padding: '12px 20px', flex: '1' });
+
+  const cbs = [];
+  opts.rows.forEach((row, idx) => {
+    const card = document.createElement('div');
+    Object.assign(card.style, { border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', marginBottom: '10px', background: '#fafafa' });
+
+    const top = document.createElement('div');
+    Object.assign(top.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' });
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.idx = idx;
+    cbs.push(cb);
+
+    const lbl = document.createElement('span');
+    Object.assign(lbl.style, { fontWeight: '600', fontSize: '13px', color: '#111' });
+    lbl.textContent = row.label || '';
+
+    top.appendChild(cb);
+    top.appendChild(lbl);
+
+    if (row.badge) {
+      const b = document.createElement('span');
+      Object.assign(b.style, { marginLeft: 'auto', fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '10px', color: '#fff', background: row.badgeColor || '#6b7280' });
+      b.textContent = row.badge;
+      top.appendChild(b);
+    }
+    card.appendChild(top);
+
+    if (row.sub) {
+      const s = document.createElement('div');
+      Object.assign(s.style, { fontSize: '12px', color: '#6b7280', marginBottom: '6px' });
+      s.innerHTML = row.sub;
+      card.appendChild(s);
+    }
+
+    const ta = document.createElement('textarea');
+    ta.value = row.text || '';
+    ta.dataset.idx = idx;
+    Object.assign(ta.style, {
+      width: '100%', minHeight: '46px', padding: '8px', border: '1px solid #d1d5db',
+      borderRadius: '6px', fontSize: '13px', color: '#111', resize: 'vertical',
+      lineHeight: '1.4', boxSizing: 'border-box',
+    });
+    card.appendChild(ta);
+
+    body.appendChild(card);
+  });
+
+  selectAll.addEventListener('change', () => { cbs.forEach((cb) => { cb.checked = selectAll.checked; }); });
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, { padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px' });
+
+  const statusEl = document.createElement('div');
+  Object.assign(statusEl.style, { marginRight: 'auto', fontSize: '12px', color: '#6b7280' });
+  footer.appendChild(statusEl);
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancel';
+  Object.assign(cancel.style, { padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' });
+
+  const apply = document.createElement('button');
+  apply.textContent = opts.applyLabel || 'Apply Selected';
+  Object.assign(apply.style, { padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '600' });
+
+  let closed = false;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    overlay.remove();
+    if (typeof opts.onClose === 'function') opts.onClose();
+  };
+  cancel.addEventListener('click', cleanup);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+
+  apply.addEventListener('click', async () => {
+    const selected = [];
+    cbs.forEach((cb, idx) => {
+      if (cb.checked) {
+        const ta = body.querySelector(`textarea[data-idx="${idx}"]`);
+        selected.push(Object.assign({}, opts.rows[idx], { text: ta ? ta.value : opts.rows[idx].text }));
+      }
+    });
+    if (selected.length === 0) { showToast('No items selected', 'info'); return; }
+    apply.disabled = true;
+    cancel.disabled = true;
+    apply.style.opacity = '0.6';
+    apply.style.cursor = 'wait';
+    try {
+      await opts.onApply(selected, { setStatus: (t) => { statusEl.textContent = t; } });
+    } catch (err) {
+      showToast('Apply error: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+      cleanup();
+    }
+  });
+
+  footer.appendChild(cancel);
+  footer.appendChild(apply);
+  modal.appendChild(footer);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
+// ---------- Action 1: Pre-fill DVI ----------
+async function handleAfPrefill(btn) {
+  const ctx = detectContext();
+  if (!ctx.roId || !ctx.shopId) { showToast('No DVI detected on this page', 'error'); return; }
+  if (!ctx.vin) { showToast('No VIN detected — cannot pre-fill DVI', 'error'); return; }
+
+  setVhiBtnBusy(btn, true);
+  showToast('Reading DVI items…', 'info');
+  const dvi = await readAutoflowDvi();
+  if (!dvi || !dvi.ok || !Array.isArray(dvi.items) || dvi.items.length === 0) {
+    showToast('Could not read DVI items on this page', 'error');
+    setVhiBtnBusy(btn, false);
+    return;
+  }
+
+  const statusId = dvi.statusId || ctx.roId;
+  const inspectionTasks = dvi.items.map((it) => ({ id: it.inspecId, name: it.name, inspectionGroup: '' }));
+  showToast('Matching VHI maintenance data…', 'info');
+
+  chrome.runtime.sendMessage(
+    { action: 'AF_ANALYZE_PREFILL', context: Object.assign({}, ctx), inspectionTasks },
+    (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.success) {
+        showToast((resp && resp.error) || 'Pre-fill analysis failed', 'error');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const updates = (resp.updates || []).filter((u) => u && u.taskId != null);
+      if (updates.length === 0) {
+        showToast('No matching DVI items to pre-fill', 'info');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const itemsById = {};
+      dvi.items.forEach((it) => { itemsById[String(it.inspecId)] = it; });
+
+      const colorFor = (st) => ({ '0': '#ef4444', '1': '#f59e0b', '2': '#22c55e' }[st] || '#6b7280');
+      const labelFor = (st) => ({ '0': 'RED', '1': 'YELLOW', '2': 'GREEN' }[st] || '—');
+      const rows = updates.map((u) => {
+        const it = itemsById[String(u.taskId)] || {};
+        const af = mosStatusToAf(u.status);
+        return {
+          _u: u, _it: it,
+          label: u.taskName || it.name || ('Item ' + u.taskId),
+          badge: labelFor(af), badgeColor: colorFor(af),
+          sub: `<span style="font-weight:500;color:#9ca3af">Status:</span> ${escapeAfHtml(u.status || '')}`,
+          text: u.finding || '',
+        };
+      });
+
+      showAfReviewModal({
+        title: 'Pre-fill DVI',
+        applyLabel: 'Apply to DVI',
+        rows,
+        onClose: () => setVhiBtnBusy(btn, false),
+        onApply: async (selected, { setStatus }) => {
+          let added = 0, failed = 0;
+          const failedNames = [];
+          for (let i = 0; i < selected.length; i++) {
+            const row = selected[i];
+            const u = row._u, it = row._it || {};
+            const af = mosStatusToAf(u.status);
+            setStatus(`Writing ${i + 1}/${selected.length}…`);
+            const params = {
+              request_type: 'update_sheet',
+              status_id: statusId,
+              inspec_id: String(u.taskId),
+              inspec_status: af,
+              inspec_sub_status: it.subStatus || 'X',
+              customer_approval: 'no',
+              notes: row.text || '',
+            };
+            if (it.resultsId) params.results_id = it.resultsId;
+            if (it.techId) params.prev_tech_id = it.techId;
+            const res = await writeAutoflowSheet(params);
+            if (res && res.ok) added++; else { failed++; failedNames.push(row.label); }
+          }
+          if (added) showToast(`DVI pre-filled: ${added} updated${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          else showToast(`Pre-fill failed (${failed} item${failed === 1 ? '' : 's'})`, 'error');
+          if (failedNames.length) console.warn('[MOS Tools] AF prefill failed items:', failedNames);
+        },
+      });
+    }
+  );
+}
+
+// ---------- Action 2: Enhance Notes ----------
+async function handleAfEnhance(btn) {
+  const ctx = detectContext();
+  if (!ctx.roId || !ctx.shopId) { showToast('No DVI detected on this page', 'error'); return; }
+
+  setVhiBtnBusy(btn, true);
+  showToast('Reading DVI notes…', 'info');
+  const dvi = await readAutoflowDvi();
+  if (!dvi || !dvi.ok) {
+    showToast('Could not read DVI on this page', 'error');
+    setVhiBtnBusy(btn, false);
+    return;
+  }
+  const withNotes = (dvi.items || []).filter((it) => (it.notes || '').trim().length > 0);
+  if (withNotes.length === 0) {
+    showToast('No technician notes to enhance', 'info');
+    setVhiBtnBusy(btn, false);
+    return;
+  }
+
+  const statusId = dvi.statusId || ctx.roId;
+  const findings = withNotes.map((it) => ({ taskId: it.inspecId, taskName: it.name, finding: it.notes }));
+  showToast('Enhancing notes with AI…', 'info');
+
+  chrome.runtime.sendMessage(
+    { action: 'AF_ANALYZE_ENHANCE', context: Object.assign({}, ctx), findings },
+    (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.success) {
+        showToast((resp && resp.error) || 'Enhance failed', 'error');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const enhanced = (resp.enhanced || []).filter((e) => e && e.enhanced && e.enhanced !== e.original);
+      if (enhanced.length === 0) {
+        showToast('Notes already look good — no changes needed', 'info');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const itemsById = {};
+      withNotes.forEach((it) => { itemsById[String(it.inspecId)] = it; });
+
+      const rows = enhanced.map((e) => ({
+        _it: itemsById[String(e.taskId)] || {},
+        _taskId: String(e.taskId),
+        label: e.taskName || ('Item ' + e.taskId),
+        sub: `<span style="font-weight:500;color:#9ca3af">ORIGINAL:</span> ${escapeAfHtml(e.original)}`,
+        text: e.enhanced,
+      }));
+
+      showAfReviewModal({
+        title: 'Review Enhanced Notes',
+        applyLabel: 'Apply Selected',
+        rows,
+        onClose: () => setVhiBtnBusy(btn, false),
+        onApply: async (selected, { setStatus }) => {
+          let added = 0, failed = 0;
+          for (let i = 0; i < selected.length; i++) {
+            const row = selected[i];
+            const it = row._it || {};
+            setStatus(`Writing ${i + 1}/${selected.length}…`);
+            const params = {
+              request_type: 'update_sheet',
+              status_id: statusId,
+              inspec_id: row._taskId,
+              inspec_sub_status: it.subStatus || 'X',
+              customer_approval: 'no',
+              notes: row.text || '',
+            };
+            // Preserve the item's existing status when only rewriting notes.
+            if (it.status !== '' && it.status != null) params.inspec_status = it.status;
+            if (it.resultsId) params.results_id = it.resultsId;
+            if (it.techId) params.prev_tech_id = it.techId;
+            const res = await writeAutoflowSheet(params);
+            if (res && res.ok) added++; else failed++;
+          }
+          if (added) showToast(`Updated ${added} note${added === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          else showToast(`Enhance apply failed (${failed})`, 'error');
+        },
+      });
+    }
+  );
+}
+
+// ---------- Action 3: Add Recommendations ("add all to concerns") ----------
+async function handleAfConcerns(btn) {
+  const ctx = detectContext();
+  if (!ctx.roId || !ctx.shopId) { showToast('No DVI detected on this page', 'error'); return; }
+  if (!ctx.vin) { showToast('No VIN detected — cannot build recommendations', 'error'); return; }
+
+  setVhiBtnBusy(btn, true);
+  showToast('Building VHI recommendations…', 'info');
+  const dvi = await readAutoflowDvi();
+  const statusId = (dvi && dvi.statusId) || ctx.roId;
+
+  chrome.runtime.sendMessage(
+    { action: 'AF_ANALYZE_BUILD_RO', context: Object.assign({}, ctx) },
+    (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.success) {
+        showToast((resp && resp.error) || 'Build recommendations failed', 'error');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const proposed = (resp.proposed || []).filter((p) => p);
+      if (proposed.length === 0) {
+        showToast('No recommendations to add', 'info');
+        setVhiBtnBusy(btn, false);
+        return;
+      }
+      const colorFor = (st) => ({ overdue: '#ef4444', 'due-soon': '#f59e0b', dueSoon: '#f59e0b' }[String(st)] || '#6b7280');
+      const rows = proposed.map((p) => ({
+        _p: p,
+        label: p.title || p.serviceKey || 'Recommendation',
+        badge: (p.status || '').toUpperCase(),
+        badgeColor: colorFor(p.status),
+        text: p.concern || p.title || '',
+      }));
+
+      showAfReviewModal({
+        title: 'Add VHI Recommendations',
+        applyLabel: 'Add to RO',
+        rows,
+        onClose: () => setVhiBtnBusy(btn, false),
+        onApply: async (selected, { setStatus }) => {
+          let added = 0, failed = 0;
+          for (let i = 0; i < selected.length; i++) {
+            const row = selected[i];
+            setStatus(`Adding ${i + 1}/${selected.length}…`);
+            const params = {
+              request_type: 'add_rvh',
+              status_id: statusId,
+              details: row.label || '',
+              notes: row.text || '',
+              skip_mapping: 1,
+            };
+            const res = await writeAutoflowRvh(params);
+            if (res && res.ok) added++; else failed++;
+          }
+          if (added) showToast(`Added ${added} recommendation${added === 1 ? '' : 's'} to RO${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          else showToast(`Add recommendations failed (${failed})`, 'error');
+        },
+      });
+    }
+  );
+}
