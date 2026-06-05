@@ -1,0 +1,134 @@
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1FMEU51K47UA50888
+sidepanel.js:1135 [MOS] Plan response mileage: 21000 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 77
+sidepanel.js:1170 [MOS] Updated customer name from API: App Ninja
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1FMEU51K47UA50888
+sidepanel.js:1135 [MOS] Plan response mileage: 21000 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 77
+sidepanel.js:1170 [MOS] Updated customer name from API: App Ninja
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1FMEU51K47UA50888
+sidepanel.js:1135 [MOS] Plan response mileage: 21000 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 77
+sidepanel.js:1170 [MOS] Updated customer name from API: App Ninja
+sidepanel.js:2550 [LaborRate] Loading rule into form — overrideCategoryRates: false applyToAllLabor: true raw rule: {"id":"temp_1772035422770","name":"Chevrolet","rate":99.87,"priority":31,"conditions":[{"type":"make","field":null,"label":"Vehicle Makes","values":["Chevrolet"]}],"matchMode":"all","color":"#3B82F6","applyToAllLabor":true,"overrideCategoryRates":false,"createdAt":"2026-02-25T16:03:42.770Z","updatedAt":"2026-06-03T21:09:03.102Z"}
+sidepanel.js:2649 [LaborRate] Saving rule — applyToAllLabor: true overrideCategoryRates: false categories: 0
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:3113 [MOS] Sending keytag to content script for printing
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+sidepanel.js:1125 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1132 [MOS] Updated VIN from API: 1GCWGFCA1D1260280
+sidepanel.js:1135 [MOS] Plan response mileage: 14998 estimated: false fromCache: true
+sidepanel.js:1165 [MOS] Updated RO number from API: 51
+sidepanel.js:1170 [MOS] Updated customer name from API: Design Appfueled
+background.js:3855 [MOS Tools] Background service worker loaded
+background.js:47 [MOS] Restored API token from storage
+background.js:51 [MOS] Restored API URL: https://mos.tools
+background.js:55 [MOS] Restored shops: 2
+background.js:72 [Tekmetric] Restored session token
+background.js:221 [MOS] Side panel opens on action click
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:306 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:306 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_LABOR_RATE_AUTO_APPLY
+background.js:244 [MOS] Message received: GET_LABOR_RATE_RULES
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:306 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:195 [MOS] Relayed x-auth-token for shop 14245
+background.js:2242 [LaborRate] Fetched 8 rules for shop 14245
+background.js:2242 [LaborRate] Fetched 8 rules for shop 14245
+sidepanel.js:3113 [MOS] Sending keytag to content script for printing
+background.js:2242 [LaborRate] Fetched 8 rules for shop 14245
+background.js:3395 [LaborRate] Loaded 4 jobs with labor from estimate (or fallback)
+background.js:3438 [LaborRate] Vehicle: 2017 Audi A4 Quattro
+background.js:3466 [LaborRate] Raw customer API response keys: id, firstName, lastName, email, phone, vehicles, customerType, contactFirstName, contactLastName, notes, address, shopId, shopName, shopNickname, taxExempt, taxId, arCreditLimit, okForMarketing, textToPayEligible, leadSource, referrerId, referrerName, birthday, fleetId, deletedDate, rewardsId, fleetCompany, tekmetricId, linkedCustomers, tag, requiredFieldValidationBypassed, userBypassedBy, arBalance, storeCreditBalance, storeCreditBalanceAge, fullName
+background.js:3467 [LaborRate] Raw customer tags fields: {"tag":"FAMILY"}
+background.js:3479 [LaborRate] Customer details: type="Person", tags=[FAMILY]
+background.js:3519 [LaborRate] Matching against vehicle: 2017 Audi A4 Quattro fuel:  categories: ["diagnostics"] customer: Mason Vidler phones: 1 custType: Person tags: ["FAMILY"]
+background.js:3530 [LaborRate] Matched RO-level rule: "Audi" (priority 2) → $224.99/hr
+background.js:3778 [LaborRate] Current rate on RO: 22499 (224.99/hr), target: 22499 (224.99/hr)
+background.js:3781 [LaborRate] Rate already matches ($224.99/hr), skipping
+background.js:3543 [LaborRate] Rule "Audi" has overrideCategoryRates — skipping per-job category rules
+background.js:3577 [LaborRate] Per-job rules exist but no job categories found on RO
+background.js:3602 [LaborRate] Job "aa" labor already at RO rate $224.99/hr
+background.js:3602 [LaborRate] Job "LOFES - FULL EURO SYNTHETIC OIL CHANGE" labor already at RO rate $224.99/hr
+background.js:3602 [LaborRate] Job "Replace spark plugs." labor already at RO rate $224.99/hr
