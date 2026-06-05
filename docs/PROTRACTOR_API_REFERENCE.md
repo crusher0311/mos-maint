@@ -329,3 +329,24 @@ npx tsx scripts/reindex-deferred-from-cache.ts
 4. Upserts to `job_index` collection with `isDeferred: true`
 
 **Key insight:** Raw invoice data is stored in `protractor_work_orders.rawPayload`, so no API calls are needed for re-indexing.
+
+---
+
+## List vs detail: which endpoints carry line items (probed 2026-06-05)
+
+Empirically measured (Task #583) on a real shop with a read-only probe
+(`scripts/probe-protractor-list-vs-detail.ts`):
+
+- **`/Invoice/?startDate=…&endDate=…` list responses ARE rich** — each list row
+  already includes full `ServicePackages` + `ServicePackageLines` (Type,
+  Description, Quantity, PartNumber, pricing) and `DeferredServicePackages`, at
+  parity with `/Invoice/{id}` detail. The per-invoice detail fetch in the backfill
+  is an **avoidable** N+1.
+- **`/WorkOrder/?…&readInProgress=True` list responses are THIN** — `ServiceItem`,
+  `Contact`, employees and odometer are present, but `ServicePackages` is absent;
+  only `/WorkOrder/{id}` detail carries packages/lines.
+- **Pricing shape:** list lines use flat fields (`Price`, `Total`,
+  `ExtendedTotal`, `Cost`/`TotalCost`), not a nested `PriceSummary`.
+
+Full finding + recommendation for the backfill rewrite:
+`docs/protractor-list-vs-detail-probe-2026-06-05.md`.

@@ -432,6 +432,7 @@ const ALLOWED_PREFIXES = [
   'scripts/drain-',
   'lib/backfill-metrics/',
   'scripts/reregister-',
+  'scripts/probe-',
 ];
 
 const ALLOWED_SUBSTRINGS = [
