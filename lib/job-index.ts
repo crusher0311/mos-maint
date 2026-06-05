@@ -5,16 +5,55 @@ import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
 import { enrichVinsWithAces } from "@/lib/job-index-aces";
 
-// Compute a deterministic hash of job entry content for change detection
+// Round a money value to cents so float-representation blips
+// (e.g. 267.29999999999995 vs 267.3) don't flip the content hash.
+function roundMoneyForHash(n: number): number {
+  return typeof n === "number" && Number.isFinite(n) ? Math.round(n * 100) / 100 : n;
+}
+
+// Canonicalize a line item for hashing: preserve ALL fields (so optional
+// identity fields like pcdbPartTypeId/partsTechPartId still affect the hash),
+// only rounding money to cents so float-representation blips don't flip it.
+// Non-object entries (null/undefined/malformed) pass through untouched so a
+// bad upstream payload can't throw here.
+function canonicalizeLineForHash(line: any) {
+  if (line === null || typeof line !== "object") return line;
+  return {
+    ...line,
+    unitPrice: roundMoneyForHash(line.unitPrice),
+    extendedPrice: roundMoneyForHash(line.extendedPrice),
+  };
+}
+
+// Compute a deterministic hash of job entry content for change detection.
+// The hash is canonical: line items are sorted into a stable order and money
+// is rounded to cents, so the SAME job produces the SAME hash regardless of
+// which source path extracted it (e.g. Protractor list vs detail line order,
+// or float-rounding differences). This avoids spurious "changed" detections
+// and the redundant re-index writes they trigger. (excludes metadata.indexedAt)
 export function computeJobHash(entry: JobIndexEntry): string {
-  // Only hash the content that matters for equality (exclude metadata.indexedAt)
+  const lines = Array.isArray(entry.lines)
+    ? entry.lines
+        .map(canonicalizeLineForHash)
+        .map((l) => ({ l, k: JSON.stringify(l) }))
+        .sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0))
+        .map((x) => x.l)
+    : entry.lines;
+  const totals = entry.totals
+    ? {
+        laborHours: entry.totals.laborHours,
+        laborAmount: roundMoneyForHash(entry.totals.laborAmount),
+        partsAmount: roundMoneyForHash(entry.totals.partsAmount),
+        totalAmount: roundMoneyForHash(entry.totals.totalAmount),
+      }
+    : entry.totals;
   const hashContent = {
     workOrderId: entry.workOrderId,
     servicePackageId: entry.servicePackageId,
     vehicle: entry.vehicle,
     job: entry.job,
-    lines: entry.lines,
-    totals: entry.totals,
+    lines,
+    totals,
   };
   return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }

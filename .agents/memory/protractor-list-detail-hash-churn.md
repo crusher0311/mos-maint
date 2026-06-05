@@ -31,14 +31,24 @@ data. The float blip can also cause ongoing list-vs-detail-fallback hash
 flip-flopping on a few records. Given the shared-Mongo write-overload incident,
 that churn is worth avoiding.
 
-**Fix options (decision pending, not yet done):**
-- Make the fingerprint canonical: sort `lines` deterministically before hashing
-  and round money to cents in `computeJobHash` (lib/job-index.ts). This makes
-  list and detail produce identical hashes → no one-time churn, no flip-flop.
-  **Caveat:** changing `computeJobHash` rehashes ALL providers' jobs once
-  (global one-time churn), and affects Tekmetric too — treat as its own
-  reviewed change, run off-peak.
-- Or accept the one-time churn from the list-path switch and do nothing.
+**Decision:** make `computeJobHash` canonical — sort line items into a stable
+order and round money to cents before hashing — so the same job hashes
+identically no matter which path extracted it. This kills the recurring
+false-"changed" churn permanently rather than just accepting a one-time switch.
+**Why:** the order/float differences are cosmetic, not data; an order-sensitive
+hash turned them into endless redundant re-index writes, which matters under
+shared-Mongo write pressure.
+
+**Watch out when changing this hash:**
+- It is SHARED by Protractor AND Shop-Ware. Tekmetric is NOT affected — it has
+  its own separate content hash. AutoFlow/AutoVitals don't use this path.
+- Any change re-fingerprints existing Protractor+Shop-Ware jobs once, gradually,
+  as each is next scanned (sync cadence) — not a big-bang. Roll out off-peak and
+  watch Mongo write load.
+- Canonicalize by PRESERVING all line fields and only rounding money (don't
+  whitelist) — optional identity fields (pcdbPartTypeId, partsTechPartId) must
+  still affect the hash or genuine line updates get missed. Guard non-object
+  line entries so malformed upstream payloads can't throw.
 
 **How to apply:** before relying on the faster Protractor list path at scale (or
 proposing the hash fix), remember the differences are cosmetic — do not chase
