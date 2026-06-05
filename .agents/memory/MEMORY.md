@@ -3,6 +3,7 @@
 - [DB cutover flips are operator-only](db-cutover-operator-gated.md) — flipping *_PG_CANONICAL, running backfills, soaking, removing fallbacks are prod actions; never do them from an isolated env.
 - [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
 - [Background lane starvation](background-lane-starvation.md) — same backfill hangs on the busy WEB process but flies on the idle WORKER; interactive-first + unbounded background wait → silent fleet-wide head-of-line block. Levers: BACKFILL_QUEUE_SHOPS + bounded wait.
+- [Backfill worker → Mongo saturation](backfill-worker-mongo-saturation.md) — too-aggressive worker backfill saturates shared Mongo → fleet-wide login/ro-context/cron timeouts (looks like an auth bug). Fast reversible fix: suspend the Render worker (no rebuild), resume gently.
 - [Mongo db-name split](mongo-db-name-split.md) — cron bookkeeping is in db `mos`; app data is in db `mos-maintenance-mvp`; reading cron state via lib/mongo returns empty and fakes a "dead scheduler."
 - [Tekmetric full-page completion](tekmetric-fullpage-completion.md) — `completed` flips only after an optional full-page reindex; that cron head-of-line-blocks on giant shops, starving the rest for days.
 - [Full-page cron queue hand-off ordering](fullpage-queue-handoff-ordering.md) — enqueue queue-routed shops in an up-front pass BEFORE deadline-bounded inline work, or giants starve allowlisted/canary shops out of the queue entirely.
