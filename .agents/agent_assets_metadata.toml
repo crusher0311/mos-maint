@@ -24,3 +24,9 @@ id = "Q91PuHXhGk9ZGxrRQiVTZ"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-gaps-all-shops-20260501.csv"
 type = "table"
 title = "Appointment Gaps — All 3 Shops (call list for front desk)"
+
+[[outputs]]
+id = "OJ4_rKx1PG7calgLDrPRT"
+uri = "file://docs/runbooks/mongo-cutover-sequence.md"
+type = "text"
+title = "Mongo → Postgres Cutover Sequence (load-relief ordering)"
