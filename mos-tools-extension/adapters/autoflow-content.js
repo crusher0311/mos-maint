@@ -427,7 +427,7 @@ let lastInjectedUrl = null;
 function createPrintButton() {
   const button = document.createElement('button');
   button.id = 'mos-print-btn-af';
-  button.title = 'MOS Oil Sticker — Left-click: Print';
+  button.title = 'MOS Oil Sticker\nLeft-click: Print | Right-click: Intervals';
   button.type = 'button';
   const imgUrl = chrome.runtime.getURL('icons/mos-print-button.png');
   button.innerHTML = `<img src="${imgUrl}" alt="MOS Print" style="height:26px;display:block;" />`;
@@ -460,7 +460,173 @@ function createPrintButton() {
       }
     );
   });
+  // Right-click: show interval-selection dropdown (Tekmetric parity).
+  button.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showIntervalDropdown(e, button);
+  });
   return button;
+}
+
+async function showIntervalDropdown(event, buttonElement) {
+  // Toggle: clicking again closes an open dropdown.
+  const existingDropdown = document.getElementById('mos-interval-dropdown');
+  if (existingDropdown) {
+    existingDropdown.remove();
+    return;
+  }
+
+  const context = detectContext();
+
+  const dropdown = document.createElement('div');
+  dropdown.id = 'mos-interval-dropdown';
+  Object.assign(dropdown.style, {
+    position: 'fixed',
+    backgroundColor: '#fff',
+    border: '1px solid #e0e0e0',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    zIndex: '999999',
+    minWidth: '180px',
+    padding: '4px 0',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  });
+
+  const rect = buttonElement.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + 4}px`;
+  dropdown.style.left = `${rect.left}px`;
+
+  dropdown.innerHTML = '<div style="padding: 12px 16px; color: #666; font-size: 13px;">Loading intervals...</div>';
+  document.body.appendChild(dropdown);
+
+  // Fetch shop's configured intervals (same contract as Tekmetric).
+  let intervals = [];
+  let useKilometers = false;
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'autoflow'}`
+      }, resolve);
+    });
+
+    if (result && result.config) {
+      useKilometers = result.config.useKilometers === true;
+      const unitLabel = useKilometers ? 'km' : 'mi';
+
+      if (result.config.intervals) {
+        const cfg = result.config.intervals;
+        const BUILTIN_LABELS = {
+          conventional: 'Conventional',
+          synthetic: 'Synthetic',
+          euro: 'Euro',
+          diesel: 'Diesel'
+        };
+        ['conventional', 'synthetic', 'euro', 'diesel'].forEach((type) => {
+          const entry = cfg[type];
+          if (!entry || entry.hidden === true) return;
+          const name = (entry.label && entry.label.trim()) || BUILTIN_LABELS[type];
+          intervals.push({
+            label: `${name}: ${entry.mileage.toLocaleString()} ${unitLabel} / ${entry.months} mo`,
+            miles: entry.mileage,
+            months: entry.months,
+            type
+          });
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[MOS] Failed to fetch sticker config:', err);
+  }
+
+  // Fallback to defaults if no intervals fetched.
+  if (intervals.length === 0) {
+    const unitLabel = useKilometers ? 'km' : 'mi';
+    intervals = [
+      { label: `Conventional: 3,000 ${unitLabel} / 3 mo`, miles: 3000, months: 3, type: 'conventional' },
+      { label: `Synthetic: 5,000 ${unitLabel} / 6 mo`, miles: 5000, months: 6, type: 'synthetic' },
+      { label: `Euro: 10,000 ${unitLabel} / 12 mo`, miles: 10000, months: 12, type: 'euro' },
+      { label: `Diesel: 7,500 ${unitLabel} / 6 mo`, miles: 7500, months: 6, type: 'diesel' }
+    ];
+  }
+
+  intervals.push({ label: 'Customize...', action: 'customize' });
+
+  dropdown.innerHTML = '';
+
+  intervals.forEach(interval => {
+    const item = document.createElement('div');
+    item.textContent = interval.label;
+    Object.assign(item.style, {
+      padding: '8px 16px',
+      cursor: 'pointer',
+      fontSize: '13px',
+      color: '#333',
+      transition: 'background-color 0.15s'
+    });
+
+    item.addEventListener('mouseenter', () => {
+      item.style.backgroundColor = '#f5f5f5';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.backgroundColor = 'transparent';
+    });
+
+    item.addEventListener('click', () => {
+      dropdown.remove();
+      if (interval.action === 'customize') {
+        openStickerPanel();
+      } else {
+        handleImmediatePrintWithInterval(interval.miles, interval.months, useKilometers);
+      }
+    });
+
+    dropdown.appendChild(item);
+  });
+
+  // Close dropdown when clicking outside.
+  const closeDropdown = (e) => {
+    if (!dropdown.contains(e.target) && e.target !== buttonElement) {
+      dropdown.remove();
+      document.removeEventListener('click', closeDropdown);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+}
+
+function handleImmediatePrintWithInterval(miles, months, useKm) {
+  const ctx = detectContext();
+  if (!ctx.roId || !ctx.shopId) {
+    showToast('No work order detected on this page', 'error');
+    return;
+  }
+
+  const unitLabel = useKm ? 'km' : 'mi';
+  showToast(`Generating sticker (${miles.toLocaleString()} ${unitLabel})...`, 'info');
+
+  chrome.runtime.sendMessage({
+    action: 'PRINT_STICKER_IMMEDIATE',
+    context: {
+      ...ctx,
+      useKilometers: !!useKm
+    },
+    overrideInterval: { miles, months }
+  }, (response) => {
+    if (response && response.success) {
+      printStickerFromContentScript(response.sticker);
+    } else {
+      showToast(response?.error || 'Failed to generate sticker', 'error');
+      reportActionDropped("print_sticker", "generation_failed", { reason: response?.error || null });
+    }
+  });
+}
+
+function openStickerPanel() {
+  chrome.runtime.sendMessage({
+    action: 'OPEN_STICKER_PANEL',
+    context: detectContext()
+  });
 }
 
 function injectPrintButton() {
