@@ -1744,6 +1744,7 @@ async function handleAfPrefill(btn) {
   }
 
   const statusId = dvi.statusId || ctx.roId;
+  const sheetId = dvi.sheetId || null;
   const inspectionTasks = dvi.items.map((it) => ({ id: it.inspecId, name: it.name, inspectionGroup: '' }));
   showToast('Matching VHI maintenance data…', 'info');
 
@@ -1796,10 +1797,9 @@ async function handleAfPrefill(btn) {
               status_id: statusId,
               inspec_id: String(u.taskId),
               inspec_status: af,
-              inspec_sub_status: it.subStatus || 'X',
-              customer_approval: 'no',
               notes: row.text || '',
             };
+            if (sheetId) params.sheet_id = sheetId;
             if (it.resultsId) params.results_id = it.resultsId;
             if (it.techId) params.prev_tech_id = it.techId;
             const res = await writeAutoflowSheet(params);
@@ -1835,6 +1835,7 @@ async function handleAfEnhance(btn) {
   }
 
   const statusId = dvi.statusId || ctx.roId;
+  const sheetId = dvi.sheetId || null;
   const findings = withNotes.map((it) => ({ taskId: it.inspecId, taskName: it.name, finding: it.notes }));
   showToast('Enhancing notes with AI…', 'info');
 
@@ -1878,10 +1879,9 @@ async function handleAfEnhance(btn) {
               request_type: 'update_sheet',
               status_id: statusId,
               inspec_id: row._taskId,
-              inspec_sub_status: it.subStatus || 'X',
-              customer_approval: 'no',
               notes: row.text || '',
             };
+            if (sheetId) params.sheet_id = sheetId;
             // Preserve the item's existing status when only rewriting notes.
             if (it.status !== '' && it.status != null) params.inspec_status = it.status;
             if (it.resultsId) params.results_id = it.resultsId;

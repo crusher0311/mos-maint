@@ -32,13 +32,36 @@ behind per-shop flags default OFF + review modal; can't be tested from the isola
 env (no AutoFlow session) — needs a logged-in shop tester. Lock `update_sheet` field
 names with one real capture before enabling.
 
-**Built (Task 586), still UNVERIFIED live:** all 3 actions ship in
-`adapters/autoflow-content.js` + MAIN-world `adapters/autoflow-dvi-bridge.js`
-(reuses page `$.fn.request`/`$.fn.requestRVH`, reads `window.defaults`). Writes
-were implemented with `update_sheet` (status_id, inspec_id, inspec_status 0/1/2,
-inspec_sub_status, results_id, prev_tech_id, notes, customer_approval) and
-`add_rvh` (status_id, details, notes, skip_mapping) — but the **add_rvh payload
-field names were never confirmed against a real capture** and nothing was tested
-from the isolated env (no AutoFlow session). Lock both payloads with one logged-in
-shop capture before turning the per-shop flags on. WAR gotcha: button icons must be
-listed in the AutoFlow web_accessible_resources block (per-origin), not just Tekmetric's.
+**Built (Task 586), payloads now verified against source JS (Task 590):** all 3
+actions ship in `adapters/autoflow-content.js` + MAIN-world
+`adapters/autoflow-dvi-bridge.js` (reuses page `$.fn.request`/`$.fn.requestRVH`,
+reads `window.defaults`). Payloads were confirmed by fetching AutoFlow's PUBLIC,
+un-authed DVI source JS at `https://admin.autotext.me/Admin/dvi_v3/js/...`:
+- `update_sheet` lives in `jquery.atme.notes.js`. Real params: `request_type`,
+  `status_id`, `sheet_id`, `group_id?`, `recommendation[]`+`rec_sms_code` (notes
+  only), plus every popup input by `name` (`inspec_id`, `results_id`,
+  `prev_tech_id`, `inspec_status` 0/1/2, `notes`). **`inspec_sub_status` and
+  `customer_approval` DO NOT EXIST anywhere in the DVI source** — they were
+  dead params (PHP ignores them); removed. `sheet_id` (always sent by the UI)
+  was MISSING from our payload; now added (bridge `readDvi` surfaces
+  `sheetId` from `defaults.sheet_id`).
+- `add_rvh` lives in `jquery.atme.rvh.js`. Real params built from a modal:
+  `status_id`, `request_type:"add_rvh"`, `details`, `notes`, `private_notes?`,
+  `type` (status select), `mappings[]`, `skip_mapping`. Our guessed fields
+  (`details`, `notes`, `skip_mapping:1`) were CORRECT — no change. (`type` is
+  an optional severity select we omit; can't pick a value without a live capture.)
+
+**GOTCHA — `$.fn.requestRVH` never rejects:** unlike `$.fn.request` (which
+`dfd.reject(data)` on no-`success`), `$.fn.requestRVH`'s deferred ONLY resolves
+when `data['success']` is truthy and otherwise just `alert()`s — it never
+resolves OR rejects. So a failed `add_rvh` leaves the page deferred pending
+forever; the MAIN-world bridge's `$.when(...).then` never fires. This is bounded
+only by the content-script `afBridgeSend` 8s `bridge_timeout`, so failed adds
+still get counted (as failures) but ~8s each. Don't assume the page helper will
+report errors.
+
+**Still needs a live pilot:** per-shop flags `dvi_prefill`/`enhance_notes` ship
+default OFF; a logged-in shop tester must still run all 3 actions end-to-end once
+(can't be done from the isolated env — no AutoFlow session). WAR gotcha: button
+icons must be listed in the AutoFlow web_accessible_resources block (per-origin),
+not just Tekmetric's.

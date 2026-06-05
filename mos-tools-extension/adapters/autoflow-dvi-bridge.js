@@ -30,6 +30,11 @@
     if (!d) return { ok: false, error: "no_defaults" };
     var statusId =
       d.status_id || (d.loadedsheet && d.loadedsheet.status_id) || null;
+    // sheet_id is sent by AutoFlow's own update_sheet payload (confirmed in
+    // jquery.atme.notes.js: params["sheet_id"] = sheet_id). Surface it so the
+    // content script can include it on writes.
+    var sheetId =
+      d.sheet_id || (d.loadedsheet && d.loadedsheet.sheet_id) || null;
     var names = (d.loadedsheet && d.loadedsheet.items) || {};
     var results = d.results || {};
     var items = [];
@@ -42,13 +47,17 @@
           r.inspec_status !== undefined && r.inspec_status !== null
             ? String(r.inspec_status)
             : "",
-        subStatus: r.inspec_sub_status || "",
         resultsId: r.results_id || "",
         techId: r.tech_id || "",
         notes: r.notes || "",
       });
     });
-    return { ok: true, statusId: statusId ? String(statusId) : null, items: items };
+    return {
+      ok: true,
+      statusId: statusId ? String(statusId) : null,
+      sheetId: sheetId ? String(sheetId) : null,
+      items: items,
+    };
   }
 
   function post(type, requestId, payload) {

@@ -1,5 +1,23 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.22 — 2026-06-05
+
+### Fixed
+- **AutoFlow DVI write-back payloads verified and corrected against AutoFlow's
+  own source JS.** The write-back actions shipped in 1.27.21 were built from
+  reference patterns and had never been checked against AutoFlow's real request
+  format. Confirmed the actual payloads from AutoFlow's public DVI scripts
+  (`/Admin/dvi_v3/js/jquery.atme.notes.js` for `update_sheet`,
+  `jquery.atme.rvh.js` for `add_rvh`):
+  - The **Add Recommendations** (`add_rvh`) fields (`details`, `notes`,
+    `skip_mapping`) were correct — no change.
+  - **Pre-fill DVI** / **Enhance Notes** (`update_sheet`) now send `sheet_id`
+    (which AutoFlow's own UI always includes) and no longer send
+    `inspec_sub_status` / `customer_approval`, which do not exist anywhere in
+    AutoFlow's DVI and were silently ignored by the server.
+  Per-shop flags remain default OFF; one logged-in pilot shop should still run
+  all three actions end-to-end before broader rollout.
+
 ## 1.27.21 — 2026-06-05
 
 ### Added
