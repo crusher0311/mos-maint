@@ -1,5 +1,34 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.25 — 2026-06-05
+
+### Fixed
+- **Shopmonkey shop detection now resolves the real company/location id from a
+  live session.** The initial Shopmonkey adapter (1.27.24) discovered the
+  per-shop identifier with a best-effort localStorage scan written from the API
+  shape, without a live browser session. Verified on a real logged-in
+  Shopmonkey order page, that heuristic was wrong in two ways:
+  - It would have matched `algoliaCompanySearchAppIdKey` (an Algolia app id like
+    `"C6099O1RSQ"`, not a Shopmonkey id) because the key name contains
+    "company"/"id", producing a bogus `shopId`.
+  - The canonical company/location ids are not in their own localStorage keys or
+    in the auth JWT — they live in Shopmonkey's LaunchDarkly context, stored as
+    a base64-encoded JSON payload inside the localStorage **key name**
+    (`ld:<envId>:<base64>` → `{ company: { key }, location: { key }, ... }`).
+
+  The adapter now decodes the LaunchDarkly context as the primary id source, and
+  the generic localStorage fallback now requires an ObjectId/UUID-shaped value
+  and skips third-party keys (Algolia/Pendo/Canny) so they can't masquerade as a
+  Shopmonkey id. As a result `SET_SMS_CONTEXT` fires on order pages and the
+  `no_shop_identifier` telemetry drop is eliminated.
+- **Order-number detection gains a `document.title` fallback.** Shopmonkey order
+  detail pages don't render an "Order #" string in the page body, so the human
+  order number is now also derived from the browser tab title when present (the
+  order is still resolved by its URL id regardless).
+
+> Note: the order route (`/order/{id}`) and vehicle (year/make/model)
+> extraction were confirmed correct against the live session and are unchanged.
+
 ## 1.27.24 — 2026-06-05
 
 ### Added

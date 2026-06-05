@@ -1,0 +1,153 @@
+(() => {
+  const report = { url: location.href, hash: location.hash, ts: new Date().toISOString() };
+
+  // --- mirror current adapter id discovery ---
+  const out = { companyId: null, locationId: null };
+  try {
+    const u = new URL(location.href);
+    out.companyId = u.searchParams.get('companyId');
+    out.locationId = u.searchParams.get('locationId');
+    const cp = location.href.match(/\/compan(?:y|ies)\/([a-zA-Z0-9-]+)/);
+    const lp = location.href.match(/\/locations?\/([a-zA-Z0-9-]+)/);
+    if (!out.companyId && cp) out.companyId = cp[1];
+    if (!out.locationId && lp) out.locationId = lp[1];
+  } catch (e) {}
+  report.idsFromUrl = out;
+
+  // --- order id from url ---
+  const om = location.href.match(/\/(?:#\/)?orders?\/([a-zA-Z0-9-]+)/);
+  report.orderIdFromUrl = om ? om[1] : null;
+
+  // --- localStorage / sessionStorage key dump (names + id-ish values) ---
+  const dumpStore = (store) => {
+    const keys = [], idish = {}, jwtClaims = {};
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i); keys.push(k);
+      const v = store.getItem(k) || '';
+      const lk = k.toLowerCase();
+      if (/(company|location|tenant|shop|org)/.test(lk) && /id/.test(lk)) idish[k] = v.slice(0, 80);
+      // decode JWT-looking values to find company/location/tenant claims
+      const parts = v.split('.');
+      if (parts.length === 3) {
+        try {
+          const c = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+          const hit = {};
+          Object.keys(c).forEach(ck => { if (/(company|location|tenant|shop|org)/i.test(ck)) hit[ck] = c[ck]; });
+          if (Object.keys(hit).length) jwtClaims[k] = hit;
+        } catch (e) {}
+      }
+    }
+    return { keys, idish, jwtClaims };
+  };
+  report.localStorage = dumpStore(localStorage);
+  report.sessionStorage = dumpStore(sessionStorage);
+
+  // --- app globals that might hold ids ---
+  const globals = {};
+  ['__APOLLO_CLIENT__','__NEXT_DATA__','__INITIAL_STATE__','store','app'].forEach(g => { globals[g] = typeof window[g]; });
+  report.globals = globals;
+
+  // --- page-text extraction (same regexes as adapter) ---
+  const t = document.body?.innerText || '';
+  const pick = (re) => { const m = t.match(re); return m ? m.slice(1).filter(Boolean) : null; };
+  report.pageText = {
+    orderNumber: pick(/(?:Order|RO)\s*#\s*(\d{1,7})/i),
+    vehicle: pick(/\b(19\d{2}|20\d{2})\s+([A-Z][a-zA-Z-]+)\s+([A-Z][a-zA-Z0-9\s-]+?)(?:\s+VIN|\s+In:|\s+Out:|\n|$)/i),
+    vin: pick(/\b([A-HJ-NPR-Z0-9]{17})\b/),
+    mileage: pick(/(?:Odometer|Mileage|Miles|In)\s*:?\s*([\d,]{1,8})/i),
+  };
+
+  // --- did the extension content script load + emit context? ---
+  report.note = "Also scroll up in the console for a line like '[MOS Tools] Shopmonkey context:' and tell me whether the VHI Coach overlay/icon appeared on the page.";
+
+  console.log('%c=== MOS Shopmonkey Diagnostic ===','font-weight:bold;color:#0a0');
+  console.log(JSON.stringify(report, null, 2));
+  return report;
+})();
+_app-f48191ff76f16296.js?dpl=fa45c76:10 === MOS Shopmonkey Diagnostic ===
+_app-f48191ff76f16296.js?dpl=fa45c76:10 {
+  "url": "https://app.shopmonkey.cloud/order/21dcb082-38c5-4d0e-9b8b-09d7ccf7a465",
+  "hash": "",
+  "ts": "2026-06-05T22:17:42.746Z",
+  "idsFromUrl": {
+    "companyId": null,
+    "locationId": null
+  },
+  "orderIdFromUrl": "21dcb082-38c5-4d0e-9b8b-09d7ccf7a465",
+  "localStorage": {
+    "keys": [
+      "_pendo_visitorId.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "algoliaGlobalSearchAuthKey",
+      "state",
+      "canny-identify-hash",
+      "680e9eb176b83e3378db92cb.givenName",
+      "__anon_id",
+      "__user_id",
+      "algoliaCompanySearchAuthTokenKey",
+      "zd_email",
+      "ld:63c52d742313aa1271da0bd8:eyJjb21wYW55Ijp7ImtleSI6IjYyNDFmYjk0ZDBhOTk3MDAxNGRiMTljYiIsIm5hbWUiOiJBIGxpbmUgTWFyaW5lIEF1dG8gSW5jIChOb3J0aHNpZGUgQXV0bykifSwibG9jYXRpb24iOnsia2V5IjoiNjI0MWZiOTRkMGE5OTcwMDE0ZGIxOWNiIiwibmFtZSI6IkEtbGluZSBNYXJpbmUgIn0sInVzZXIiOnsia2V5IjoiNjI0MWZiOTRkMGE5OTcwMDE0ZGIxOWNkIiwibmFtZSI6IlJ5YW4gQWxlbWFuIn0sImNsaWVudCI6eyJrZXkiOiJ3ZWIifSwia2luZCI6Im11bHRpIn0=",
+      "natsAuthKey",
+      "smBranchKey",
+      "_pendo_accountId.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "ZD-suid",
+      "680e9eb176b83e3378db92cb.surname",
+      "auth",
+      "_pendo_meta.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "680e9eb176b83e3378db92cb.appUserId",
+      "algoliaCompanySearchAppIdKey",
+      "ZD-buid",
+      "680e9eb176b83e3378db92cb.email",
+      "algoliaEntityAuthKey",
+      "680e9eb176b83e3378db92cb.clientId",
+      "_pendo_feedback_ping_sent.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "_pendo_guides_blocked.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "algoliaGlobalSearchAppIdKey",
+      "_pendo_sessionId.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "_pendo_feedback_notification_count.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "_pendo_utm.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "scribe_extension_state",
+      "__user_traits",
+      "ld:63c52d742313aa1271da0bd8:$diagnostics"
+    ],
+    "idish": {
+      "algoliaCompanySearchAppIdKey": "C6099O1RSQ"
+    },
+    "jwtClaims": {}
+  },
+  "sessionStorage": {
+    "keys": [
+      "pendo_srId.ed5316a4-bf71-45a8-6070-a4c81b1665d3",
+      "shopmonkey-sessionid",
+      "shopmonkey-tab-id",
+      "pendo_srLastUserInteractionEvent",
+      "pendo_tabId",
+      "ZD-widgetOpen",
+      "shopmonkey-session-version",
+      "previous_page_loads"
+    ],
+    "idish": {
+      "shopmonkey-sessionid": "c2e02a02-a8b7-4904-abed-04c4aac309d3",
+      "shopmonkey-tab-id": "a87a2504-7c04-4528-80ed-aff83ad9e42c"
+    },
+    "jwtClaims": {}
+  },
+  "globals": {
+    "__APOLLO_CLIENT__": "undefined",
+    "__NEXT_DATA__": "object",
+    "__INITIAL_STATE__": "undefined",
+    "store": "undefined",
+    "app": "undefined"
+  },
+  "pageText": {
+    "orderNumber": null,
+    "vehicle": [
+      "1988",
+      "Starcraft",
+      "Islander 221V"
+    ],
+    "vin": null,
+    "mileage": null
+  },
+  "note": "Also scroll up in the console for a line like '[MOS Tools] Shopmonkey context:' and tell me whether the VHI Coach overlay/icon appeared on the page."
+}
+{url: 'https://app.shopmonkey.cloud/order/21dcb082-38c5-4d0e-9b8b-09d7ccf7a465', hash: '', ts: '2026-06-05T22:17:42.746Z', idsFromUrl: {…}, orderIdFromUrl: '21dcb082-38c5-4d0e-9b8b-09d7ccf7a465', …}

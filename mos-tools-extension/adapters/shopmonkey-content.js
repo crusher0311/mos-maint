@@ -74,11 +74,47 @@ function hydrateContextFromCache(ctx) {
   return ctx;
 }
 
+// A Shopmonkey id is a 24-char Mongo ObjectId (or, defensively, a UUID). Used to
+// reject 3rd-party values (e.g. Algolia app ids like "C6099O1RSQ") that merely
+// contain a "company"/"id" substring in their localStorage key name.
+function looksLikeShopmonkeyId(v) {
+  return /^[a-f0-9]{24}$/i.test(v) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+
+// Shopmonkey stores its LaunchDarkly multi-context in a localStorage KEY of the
+// form `ld:<envId>:<base64-json>`. The decoded JSON carries the canonical
+// Shopmonkey company/location ids and is the most reliable per-shop identifier
+// source on the SPA (verified on a live session — Task #594):
+//   { company: { key, name }, location: { key, name }, user: {...}, kind: "multi" }
+// There can be a sibling `ld:<envId>:$diagnostics` key whose suffix is not
+// base64 JSON, so we skip anything that fails to decode.
+function detectLaunchDarklyContext() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i) || '';
+      if (key.slice(0, 3) !== 'ld:') continue;
+      const parts = key.split(':');
+      if (parts.length < 3) continue;
+      const b64 = parts.slice(2).join(':');
+      if (!b64 || b64.charAt(0) === '$') continue;
+      let json;
+      try {
+        json = JSON.parse(atob(b64.replace(/-/g, '+').replace(/_/g, '/')));
+      } catch (_) { continue; }
+      const companyId = json && json.company && json.company.key ? json.company.key : null;
+      const locationId = json && json.location && json.location.key ? json.location.key : null;
+      if (companyId || locationId) return { companyId, locationId };
+    }
+  } catch (e) {}
+  return { companyId: null, locationId: null };
+}
+
 // Discover the Shopmonkey per-shop identifier (companyId / locationId). Shopmonkey
-// is a single-host SPA, so we probe the URL, then localStorage. The resolved
-// value is used as context.shopId so the background worker can resolve the MOS
-// shop via /api/extension/ro-context (extension-shop-lookup keys shopmonkey shops
-// by shopmonkey.locationId / shopmonkey.companyId).
+// is a single-host SPA, so we probe (1) the URL, (2) the LaunchDarkly context in
+// localStorage, then (3) a guarded generic localStorage scan. The resolved value
+// is used as context.shopId so the background worker can resolve the MOS shop via
+// /api/extension/ro-context (extension-shop-lookup keys shopmonkey shops by
+// shopmonkey.locationId / shopmonkey.companyId).
 function detectShopIdentifiers() {
   const out = { companyId: null, locationId: null };
   try {
@@ -94,19 +130,28 @@ function detectShopIdentifiers() {
     if (!out.locationId && locationPath) out.locationId = locationPath[1];
   } catch (e) {}
 
-  // localStorage fallbacks. Key names are best-effort and pending live
-  // verification; we scan for likely candidates without assuming one shape.
+  // Primary source: the LaunchDarkly context key (canonical ids).
+  if (!out.companyId || !out.locationId) {
+    const ld = detectLaunchDarklyContext();
+    if (!out.companyId && ld.companyId) out.companyId = ld.companyId;
+    if (!out.locationId && ld.locationId) out.locationId = ld.locationId;
+  }
+
+  // Generic localStorage fallback — only fires if the LD context is missing.
+  // Requires an ObjectId/UUID-shaped value and skips known 3rd-party keys so a
+  // value like Algolia's "C6099O1RSQ" can't masquerade as a Shopmonkey id.
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i) || '';
       const lk = key.toLowerCase();
+      if (lk.includes('algolia') || lk.includes('pendo') || lk.includes('canny')) continue;
       if (!out.companyId && lk.includes('company') && lk.includes('id')) {
         const v = localStorage.getItem(key);
-        if (v && /^[a-zA-Z0-9-]+$/.test(v)) out.companyId = v;
+        if (v && looksLikeShopmonkeyId(v)) out.companyId = v;
       }
       if (!out.locationId && lk.includes('location') && lk.includes('id')) {
         const v = localStorage.getItem(key);
-        if (v && /^[a-zA-Z0-9-]+$/.test(v)) out.locationId = v;
+        if (v && looksLikeShopmonkeyId(v)) out.locationId = v;
       }
     }
   } catch (e) {}
@@ -165,6 +210,13 @@ function _detectContextRaw() {
         const t = el.textContent || '';
         const hm = t.match(/#\s*(\d{1,7})/);
         if (hm && hm[1]) { context.roNumber = hm[1]; break; }
+      }
+      // document.title fallback — Shopmonkey order detail pages don't render an
+      // "Order #" string in the body, so derive the human number from the tab
+      // title (e.g. "Order 1234 ...") when present.
+      if (!context.roNumber) {
+        const tm = (document.title || '').match(/(?:order|invoice|ro)\s*#?\s*(\d{1,7})/i);
+        if (tm && tm[1]) context.roNumber = tm[1];
       }
     }
   } catch (e) {}
