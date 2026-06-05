@@ -1923,6 +1923,10 @@ async function handleAfConcerns(btn) {
         return;
       }
       const colorFor = (st) => ({ overdue: '#ef4444', 'due-soon': '#f59e0b', dueSoon: '#f59e0b' }[String(st)] || '#6b7280');
+      // AutoFlow add-RVH "type" select (jquery.atme.rvh.js): 0=Concern, 1=Information, 2=Service.
+      // Map our recommendation status onto it so added items reflect severity instead of
+      // landing on AutoFlow's default ("Concern"): overdue -> Concern, due-soon -> Service.
+      const afRvhTypeFor = (st) => ({ overdue: '0', 'due-soon': '2', dueSoon: '2' }[String(st)] || '1');
       const rows = proposed.map((p) => ({
         _p: p,
         label: p.title || p.serviceKey || 'Recommendation',
@@ -1946,6 +1950,7 @@ async function handleAfConcerns(btn) {
               status_id: statusId,
               details: row.label || '',
               notes: row.text || '',
+              type: afRvhTypeFor(row._p && row._p.status),
               skip_mapping: 1,
             };
             const res = await writeAutoflowRvh(params);

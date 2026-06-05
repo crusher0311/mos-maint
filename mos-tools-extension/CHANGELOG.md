@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.23 — 2026-06-05
+
+### Fixed
+- **AutoFlow VHI recommendations now carry the correct severity.** When adding
+  VHI recommendations to an AutoFlow RO (`add_rvh`), the payload previously
+  omitted the modal's `type` (severity/category) select, so every added item
+  landed on AutoFlow's default ("Concern") regardless of urgency. The accepted
+  values were confirmed from AutoFlow's own source JS
+  (`/Admin/dvi_v3/js/jquery.atme.rvh.js`): `0` = Concern, `1` = Information,
+  `2` = Service. We now map recommendation status onto `type` — overdue → Concern,
+  due-soon → Service, unknown → Information — so added items reflect whether they
+  are overdue vs. due-soon.
+
 ## 1.27.22 — 2026-06-05
 
 ### Fixed

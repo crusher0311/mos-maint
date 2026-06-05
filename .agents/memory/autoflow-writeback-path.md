@@ -48,8 +48,12 @@ un-authed DVI source JS at `https://admin.autotext.me/Admin/dvi_v3/js/...`:
 - `add_rvh` lives in `jquery.atme.rvh.js`. Real params built from a modal:
   `status_id`, `request_type:"add_rvh"`, `details`, `notes`, `private_notes?`,
   `type` (status select), `mappings[]`, `skip_mapping`. Our guessed fields
-  (`details`, `notes`, `skip_mapping:1`) were CORRECT — no change. (`type` is
-  an optional severity select we omit; can't pick a value without a live capture.)
+  (`details`, `notes`, `skip_mapping:1`) were CORRECT — no change. `type` is the
+  severity/category select; its options are fixed in the source JS (no live capture
+  needed): **0=Concern (label-warning), 1=Information (label-info), 2=Service
+  (label-success)**. We now send it, mapping recommendation status: overdue→0
+  (Concern), due-soon→2 (Service), unknown→1 (Information). Omitting it defaults to
+  AutoFlow's first option (Concern/0), so every add looked overdue before.
 
 **GOTCHA — `$.fn.requestRVH` never rejects:** unlike `$.fn.request` (which
 `dfd.reject(data)` on no-`success`), `$.fn.requestRVH`'s deferred ONLY resolves
