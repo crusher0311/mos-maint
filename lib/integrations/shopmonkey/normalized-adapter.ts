@@ -24,7 +24,9 @@ import {
   parseDate,
   parseNumber,
   cleanString,
+  generateEntityId,
 } from "@/lib/integrations/core/normalized-adapter";
+import type { CustomerContact, Address } from "@/lib/normalized-schema";
 
 // =============================================================================
 // SHOPMONKEY ADAPTER
@@ -80,11 +82,11 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
       licensePlate: cleanString(v.licensePlate),
       licensePlateState: cleanString(v.licensePlateState),
       exteriorColor: cleanString(v.color),
-      odometerUnit: "miles" as DistanceUnit,
+      odometerUnit: this.mapMileageUnit(v.mileageUnit),
       odometerHistory: [],
       isFleet: Boolean(v.fleet),
       fleetUnitNumber: cleanString(v.unitNumber),
-      notes: cleanString(v.notes),
+      notes: cleanString(v.notes ?? v.note),
       tags: [],
       customFields: {},
       customerIds: [],
@@ -99,6 +101,73 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
     const firstName = cleanString(c.firstName);
     const lastName = cleanString(c.lastName);
 
+    // Live v3 carries emails[] and phoneNumbers[]. Build canonical
+    // CustomerContact records (one per email/phone). Fall back to the legacy
+    // scalar `email`.
+    const contacts: CustomerContact[] = [];
+    const emails = Array.isArray(c.emails) ? c.emails : [];
+    for (const e of emails) {
+      const email = cleanString(e?.email);
+      if (!email) continue;
+      contacts.push({
+        id: generateEntityId(),
+        role: "owner",
+        isPrimary: Boolean(e.primary),
+        email,
+        emailVerified: false,
+        phoneVerified: false,
+        doNotContact: false,
+      });
+    }
+    if (!emails.length && c.email) {
+      const email = cleanString(c.email);
+      if (email) {
+        contacts.push({
+          id: generateEntityId(),
+          role: "owner",
+          isPrimary: true,
+          email,
+          emailVerified: false,
+          phoneVerified: false,
+          doNotContact: false,
+        });
+      }
+    }
+    const phones = Array.isArray(c.phoneNumbers) ? c.phoneNumbers : [];
+    for (const p of phones) {
+      const phone = cleanString(p?.number);
+      if (!phone) continue;
+      contacts.push({
+        id: generateEntityId(),
+        role: "owner",
+        isPrimary: Boolean(p.primary),
+        phone,
+        phoneType: this.mapPhoneType(p.type),
+        emailVerified: false,
+        phoneVerified: false,
+        doNotContact: false,
+      });
+    }
+
+    // Live v3 returns flat address fields; nested `address` is a fallback.
+    const addr = c.address || {};
+    const street1 = cleanString(c.address1 ?? addr.address1);
+    const city = cleanString(c.city ?? addr.city);
+    const state = cleanString(c.state ?? addr.state);
+    const postalCode = cleanString(c.zip ?? c.postalCode ?? addr.zip ?? addr.postalCode);
+    const hasAddress = Boolean(street1 || city || state || postalCode);
+    const billingAddress: Address | undefined = hasAddress
+      ? {
+          street1,
+          street2: cleanString(c.address2 ?? addr.address2),
+          city,
+          state,
+          postalCode,
+          country: cleanString(c.country ?? addr.country),
+          isVerified: false,
+        }
+      : undefined;
+
     return {
       enterpriseId,
       shopId,
@@ -107,7 +176,8 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
       lastName,
       fullName: [firstName, lastName].filter(Boolean).join(" ") || cleanString(c.companyName),
       companyName: cleanString(c.companyName),
-      contacts: [],
+      contacts,
+      ...(billingAddress ? { billingAddress } : {}),
       taxExempt: Boolean(c.taxExempt),
       arBalance: parseNumber(c.balance) || 0,
       marketingConsent: Boolean(c.marketingOptIn),
@@ -143,31 +213,45 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
       customer: customer as CustomerSnapshot,
       odometerIn: parseNumber(ro.mileageIn ?? ro.mileage),
       odometerOut: parseNumber(ro.mileageOut),
-      odometerUnit: "miles",
+      odometerUnit: this.mapMileageUnit(ro.vehicle?.mileageUnit),
       promisedDate: parseDate(ro.promisedDate),
-      checkInDate: parseDate(ro.createdDate),
+      checkInDate: parseDate(ro.createdDate ?? ro.orderCreatedDate),
       completedDate: parseDate(ro.completedDate),
-      closedDate: parseDate(ro.postedDate ?? ro.closedDate),
+      // Live v3: the order is "closed" once invoiced; fall back to completed/posted.
+      closedDate: parseDate(ro.invoicedDate ?? ro.completedDate ?? ro.postedDate ?? ro.closedDate),
       serviceAdvisorName: cleanString(ro.serviceWriterName),
       technicians: [],
-      customerConcern: cleanString(ro.customerConcern),
+      customerConcern: cleanString(ro.complaint ?? ro.customerConcern),
       technicianNotes: cleanString(ro.technicianNotes),
       internalNotes: cleanString(ro.notes),
       serviceJobs: [],
       inspections: [],
       recommendations: [],
-      subtotal: centsToDollars(ro.laborTotalCents) + centsToDollars(ro.partsTotalCents) + centsToDollars(ro.subletTotalCents),
-      taxTotal: centsToDollars(ro.taxTotalCents),
-      discountTotal: centsToDollars(ro.discountTotalCents),
-      grandTotal: centsToDollars(ro.totalCents),
-      laborTotal: centsToDollars(ro.laborTotalCents),
-      partsTotal: centsToDollars(ro.partsTotalCents),
-      subletTotal: centsToDollars(ro.subletTotalCents),
-      feesTotal: centsToDollars(ro.feesTotalCents),
+      // Live v3 money fields are flat per-category cents on the order (there is
+      // no top-level `totalCents`; the grand total is `totalCostCents`).
+      subtotal:
+        centsToDollars(ro.laborCents) +
+        centsToDollars(ro.partsCents) +
+        centsToDollars(ro.tiresCents) +
+        centsToDollars(ro.subcontractsCents),
+      taxTotal:
+        centsToDollars(ro.taxCents) +
+        centsToDollars(ro.gstCents) +
+        centsToDollars(ro.pstCents) +
+        centsToDollars(ro.hstCents),
+      discountTotal: centsToDollars(ro.discountCents) + centsToDollars(ro.appliedDiscountCents),
+      grandTotal: centsToDollars(ro.totalCostCents),
+      laborTotal: centsToDollars(ro.laborCents),
+      partsTotal: centsToDollars(ro.partsCents) + centsToDollars(ro.tiresCents),
+      subletTotal: centsToDollars(ro.subcontractsCents),
+      feesTotal:
+        centsToDollars(ro.feesCents) +
+        centsToDollars(ro.shopSuppliesCents) +
+        centsToDollars(ro.epaCents),
       laborHoursTotal: parseNumber(ro.totalLaborHours) || 0,
       laborHoursBilled: parseNumber(ro.billedLaborHours) || 0,
       payments: [],
-      balanceDue: centsToDollars(ro.balanceDueCents),
+      balanceDue: centsToDollars(ro.remainingCostCents),
       isWarranty: Boolean(ro.warranty),
       isInternal: Boolean(ro.internal),
       isComeback: Boolean(ro.comeback),
@@ -285,22 +369,77 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
   extractServiceJobsFromWorkOrder(sourceData: any): Partial<NormalizedServiceJob>[] {
     const jobs = sourceData.services || [];
 
-    if (!Array.isArray(jobs)) return [];
+    if (Array.isArray(jobs) && jobs.length > 0) {
+      return jobs.map((job: any, index: number) => ({
+        sequence: index,
+        title: cleanString(job.name || job.title || job.description) || "Unknown Service",
+        description: cleanString(job.description),
+        laborHoursBilled: parseNumber(job.billedHours) || parseNumber(job.hours),
+        total: job.totalCents != null ? job.totalCents / 100 : undefined,
+        laborTotal: job.laborCents != null ? job.laborCents / 100 : undefined,
+        partsTotal: job.partsCents != null ? job.partsCents / 100 : undefined,
+      }));
+    }
 
-    return jobs.map((job: any, index: number) => ({
-      sequence: index,
-      title: cleanString(job.name || job.title || job.description) || "Unknown Service",
-      description: cleanString(job.description),
-      laborHoursBilled: parseNumber(job.billedHours) || parseNumber(job.hours),
-      total: job.totalCents != null ? job.totalCents / 100 : undefined,
-      laborTotal: job.laborCents != null ? job.laborCents / 100 : undefined,
-      partsTotal: job.partsCents != null ? job.partsCents / 100 : undefined,
-    }));
+    // Live v3 has no embedded `services[]`; line items come from `/service_item`
+    // and are attached to the order as `serviceItems`. Collapse them into one
+    // synthetic job carrying the order-level totals.
+    const items = sourceData.serviceItems || [];
+    if (Array.isArray(items) && items.length > 0) {
+      return [this.synthServiceJobFromOrder(sourceData)];
+    }
+    return [];
   }
 
   extractRawServiceJobsFromWorkOrder(sourceData: any): any[] {
     const jobs = sourceData.services || [];
-    return Array.isArray(jobs) ? jobs : [];
+    if (Array.isArray(jobs) && jobs.length > 0) return jobs;
+
+    // Live v3: wrap the flat `/service_item` lines (attached as `serviceItems`)
+    // into a single synthetic raw job so `mapServiceJob` /
+    // `extractLineItemsFromServiceJob` can consume them like the embedded shape.
+    const items = sourceData.serviceItems || [];
+    if (Array.isArray(items) && items.length > 0) {
+      return [
+        {
+          id: sourceData.id,
+          name:
+            cleanString(sourceData.generatedName || sourceData.name) || "Service",
+          sortOrder: 0,
+          laborCents: sourceData.laborCents,
+          partsCents: sourceData.partsCents,
+          subletCents: sourceData.subcontractsCents,
+          discountCents: sourceData.discountCents,
+          totalCents: sourceData.totalCostCents,
+          serviceItems: items,
+        },
+      ];
+    }
+    return [];
+  }
+
+  /**
+   * Build the normalized single-job summary for a live order whose line items
+   * live on `/service_item` (attached as `order.serviceItems`). Totals come from
+   * the order-level cent fields.
+   */
+  private synthServiceJobFromOrder(sourceData: any): Partial<NormalizedServiceJob> {
+    const items: any[] = Array.isArray(sourceData.serviceItems)
+      ? sourceData.serviceItems
+      : [];
+    const laborHours = items
+      .filter((i) => String(i?.type ?? "").toLowerCase() === "labor")
+      .reduce((sum, i) => sum + (parseNumber(i.hours) ?? 0), 0);
+    return {
+      sequence: 0,
+      title:
+        cleanString(sourceData.generatedName || sourceData.name) || "Service",
+      description: cleanString(sourceData.notes),
+      laborHoursBilled: laborHours || undefined,
+      total: sourceData.totalCostCents != null ? sourceData.totalCostCents / 100 : undefined,
+      laborTotal: sourceData.laborCents != null ? sourceData.laborCents / 100 : undefined,
+      partsTotal: sourceData.partsCents != null ? sourceData.partsCents / 100 : undefined,
+    };
   }
 
   /**
@@ -312,6 +451,58 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
    * dedupe key.
    */
   extractLineItemsFromServiceJob(job: any): any[] {
+    // Live v3: the synthetic job carries flat `/service_item` lines. Each item is
+    // already typed (labor/part/tire/fee/subcontract) and prices are in CENTS;
+    // normalize to dollars here so `mapLineItem` stays generic.
+    const serviceItems = Array.isArray(job?.serviceItems) ? job.serviceItems : [];
+    if (serviceItems.length > 0) {
+      return serviceItems.map((item: any, idx: number) => {
+        const type = String(item?.type ?? "").toLowerCase();
+        const isLabor = type === "labor";
+        const extended =
+          item.priceCents != null
+            ? item.priceCents / 100
+            : item.subtotalCents != null
+              ? item.subtotalCents / 100
+              : 0;
+        if (isLabor) {
+          const hours = parseNumber(item.hours) || 0;
+          const rate = (parseNumber(item.laborRateCents) || 0) / 100;
+          return {
+            _sourceId: `labor-${item.id ?? idx}`,
+            id: item.id,
+            type: "labor",
+            sortOrder: idx,
+            name: item.name || job.name,
+            description: item.name || item.note || job.name,
+            quantity: 1,
+            hours,
+            rate,
+            price: rate,
+            cost: 0,
+            total: extended || hours * rate,
+          };
+        }
+        const qty = parseNumber(item.quantity) || 1;
+        const retail = (parseNumber(item.retailCostCents) || 0) / 100;
+        return {
+          _sourceId: `${type || "item"}-${item.id ?? idx}`,
+          id: item.id,
+          type: type || "item",
+          sortOrder: idx,
+          name: item.name || item.tireModelName || item.note || "",
+          description: item.name || item.tireModelName || item.note || "",
+          partNumber: item.partNumber,
+          brand: item.brand,
+          manufacturer: item.brand || item.vendor?.name,
+          quantity: qty,
+          price: retail || (qty ? extended / qty : extended),
+          cost: 0,
+          total: extended || qty * retail,
+        };
+      });
+    }
+
     const out: any[] = [];
     const labor = Array.isArray(job?.labors) ? job.labors : [];
     for (let idx = 0; idx < labor.length; idx++) {
@@ -570,6 +761,21 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
       info: "informational",
     };
     return urgencyMap[String(urgency).toLowerCase()] || "next_visit";
+  }
+
+  private mapMileageUnit(unit: any): DistanceUnit {
+    const u = String(unit ?? "").toLowerCase();
+    if (u.startsWith("kilom") || u === "km") return "kilometers";
+    return "miles";
+  }
+
+  private mapPhoneType(type: any): "mobile" | "home" | "work" | "fax" | undefined {
+    const t = String(type ?? "").toLowerCase();
+    if (t.includes("mobile") || t.includes("cell")) return "mobile";
+    if (t.includes("home")) return "home";
+    if (t.includes("work") || t.includes("office") || t.includes("business")) return "work";
+    if (t.includes("fax")) return "fax";
+    return undefined;
   }
 
   private mapShopmonkeyStatus(status: string): WorkOrderStatus {

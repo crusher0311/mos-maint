@@ -7,6 +7,7 @@ import type {
   ShopmonkeyOrder,
   ShopmonkeyVehicle,
   ShopmonkeyCustomer,
+  ShopmonkeyServiceItem,
   ShopmonkeyCannedService,
 } from "./types";
 
@@ -206,12 +207,59 @@ export async function getOrders(
     customerId?: string;
   },
 ): Promise<ShopmonkeyOrder[]> {
-  const extra: Record<string, string> = {};
+  const extra: Record<string, string> = {
+    // The order LIST endpoint returns only vehicleId/customerId by default;
+    // ask it to embed the vehicle and customer objects (it accepts an `include`
+    // object via bracket notation). Line items are NOT embeddable here — they
+    // must be fetched separately from `/service_item`.
+    "include[vehicle]": "true",
+    "include[customer]": "true",
+  };
   if (params?.updatedAfter) extra.updatedAfter = params.updatedAfter;
   if (params?.closedAfter) extra.closedAfter = params.closedAfter;
   if (params?.vehicleId) extra.vehicleId = params.vehicleId;
   if (params?.customerId) extra.customerId = params.customerId;
   return getAllPages<ShopmonkeyOrder>(shopId, `/order`, extra);
+}
+
+/**
+ * Fetch flat order line items from the `/service_item` endpoint. Shopmonkey v3
+ * does NOT embed labor/part arrays inside an order, and the endpoint REQUIRES a
+ * `customerId` or `vehicleId` in a JSON `where` clause (returning 400
+ * otherwise), so callers must supply at least one. Items reference their order
+ * via the nested `order` object.
+ */
+export async function getServiceItems(
+  shopId: number,
+  filter: { vehicleId?: string; customerId?: string },
+): Promise<ShopmonkeyServiceItem[]> {
+  const where: Record<string, string> = {};
+  if (filter.vehicleId) where.vehicleId = filter.vehicleId;
+  if (filter.customerId) where.customerId = filter.customerId;
+  if (!where.vehicleId && !where.customerId) {
+    throw new Error("getServiceItems requires a vehicleId or customerId filter");
+  }
+  return getAllPages<ShopmonkeyServiceItem>(shopId, `/service_item`, {
+    where: JSON.stringify(where),
+  });
+}
+
+/**
+ * Fetch the line items belonging to a single order. Resolves the order's
+ * vehicle/customer id (the only valid `/service_item` filters) and keeps only
+ * the items whose nested `order.id` matches. Returns an empty list if neither
+ * id is available.
+ */
+export async function getOrderServiceItems(
+  shopId: number,
+  order: Pick<ShopmonkeyOrder, "id" | "vehicleId" | "customerId" | "vehicle" | "customer">,
+): Promise<ShopmonkeyServiceItem[]> {
+  const vehicleId = order.vehicleId ?? order.vehicle?.id ?? undefined;
+  const customerId = order.customerId ?? order.customer?.id ?? undefined;
+  if (!vehicleId && !customerId) return [];
+
+  const all = await getServiceItems(shopId, { vehicleId, customerId });
+  return all.filter((item) => String(item.order?.id ?? "") === String(order.id));
 }
 
 export async function getCannedServices(shopId: number): Promise<ShopmonkeyCannedService[]> {

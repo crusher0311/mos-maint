@@ -7,10 +7,14 @@ description: Non-obvious facts about the Shopmonkey v3 API and how the MOS integ
 
 - **Base URL** `https://api.shopmonkey.cloud/v3`. Auth is a per-shop **API key sent as `Authorization: Bearer <key>`** — NOT OAuth. Validate via `GET /auth/api_key/status` → `{"valid":true}`. Orders list via `GET /order` (envelope `{data:[...]}`).
 
-- **`locationId` is effectively optional.** Shopmonkey accounts frequently expose NO location_id at all (the operator/Brandon confirmed he couldn't find one). The API key alone authorizes all `/v3` requests. `locationId`/`companyId` are only used for matching an existing MOS shop in extension-shop-lookup and for the (default-OFF) webhook-subscribe — they are nullable everywhere in `getCredentials`.
+- **`locationId` is effectively optional.** Shopmonkey accounts frequently expose NO location_id at all. The API key alone authorizes all `/v3` requests. `locationId`/`companyId` are only used for matching an existing MOS shop in extension-shop-lookup and for the (default-OFF) webhook-subscribe — they are nullable everywhere in `getCredentials`.
   **How to apply:** never require a location/company id to consider Shopmonkey "configured"; key presence is sufficient. Don't block on a missing `SHOPMONKEY_LOCATION_ID`.
 
-- **Amounts are in CENTS** (e.g. order field `appliedDiscountCents`). Confirmed against live `/order` data. Mirror Tekmetric's cents handling; do not divide/treat as dollars.
+- **Amounts are in CENTS** (e.g. order field `appliedDiscountCents`). Confirmed against live `/order` data. Mirror Tekmetric's cents handling; do not divide/treat as dollars. The order grand total is `totalCostCents` (there is NO top-level `totalCents`); balance due is `remainingCostCents`.
+
+- **Line items are NOT embedded on an order — fetch `/service_item` separately.** The `/order` LIST endpoint embeds vehicle + customer ONLY when you pass an `include` *object* via bracket notation (`include[vehicle]=true&include[customer]=true`); `include=`/`expand=` do NOT work. But `include[serviceItems]` is ignored — labor/parts/tire/fee lines live on a flat `/service_item` endpoint that REQUIRES a `vehicleId` or `customerId` filter (no unfiltered bulk list), and each item carries `order.id` for grouping. There is no service/job grouping under a Shopmonkey order, so the normalized path synthesizes ONE service job per order from the order-level cent totals and collapses all `/service_item` lines into it.
+  **Why:** the read adapter (getWorkOrder(s)) and the ingestion sync paths (runBackfill/runIncrementalSync via `attachServiceItems`) must both fetch `/service_item` and attach it as `order.serviceItems` — relying on embedded `services[].labors/parts` yields zero line items on live data.
+  **How to apply:** any new Shopmonkey read/ingest path must fetch `/service_item` for the order's vehicle/customer and filter by `order.id`; don't expect lines inside the order payload.
 
 - **Single-host SPA** at `app.shopmonkey.cloud`. Unlike Shop-Ware/AutoFlow (tenant subdomain), there is no per-shop hostname, so the extension content adapter must discover companyId/locationId from the page rather than the hostname.
 

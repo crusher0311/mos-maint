@@ -21,9 +21,12 @@ import {
   searchVehiclesByVin,
   getOrder,
   getOrders,
+  getOrderServiceItems,
+  getServiceItems,
   getCannedServices,
 } from "./client";
 import { transformVehicle, transformOrder, transformCannedService } from "./transform";
+import type { ShopmonkeyOrder, ShopmonkeyServiceItem } from "./types";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
 
 /**
@@ -120,7 +123,9 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
         getOrder(shopId, workOrderId),
         getMileageUnit(shopId),
       ]);
-      return { ok: true, data: transformOrder(order, { mileageUnit }) };
+      // Shopmonkey orders don't embed line items; fetch them separately.
+      const serviceItems = await getOrderServiceItems(shopId, order);
+      return { ok: true, data: transformOrder(order, { mileageUnit }, serviceItems) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? "Work order not found" };
     }
@@ -136,7 +141,39 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
         vehicleId: options?.vehicleId,
         customerId: options?.customerId,
       });
-      return { ok: true, data: orders.map((o) => transformOrder(o, { mileageUnit })) };
+
+      // Line items live on the separate `/service_item` endpoint. When the
+      // query is scoped to a single vehicle/customer we can fetch every item in
+      // one call and group by order id, avoiding an N+1 fan-out.
+      if (options?.vehicleId || options?.customerId) {
+        const items = await getServiceItems(shopId, {
+          vehicleId: options?.vehicleId,
+          customerId: options?.customerId,
+        });
+        const itemsByOrder = new Map<string, ShopmonkeyServiceItem[]>();
+        for (const item of items) {
+          const oid = String(item.order?.id ?? "");
+          if (!oid) continue;
+          const list = itemsByOrder.get(oid) ?? [];
+          list.push(item);
+          itemsByOrder.set(oid, list);
+        }
+        return {
+          ok: true,
+          data: orders.map((o) =>
+            transformOrder(o, { mileageUnit }, itemsByOrder.get(String(o.id)) ?? []),
+          ),
+        };
+      }
+
+      // Unscoped: fetch line items per order in parallel.
+      const data = await Promise.all(
+        orders.map(async (o) => {
+          const serviceItems = await getOrderServiceItems(shopId, o);
+          return transformOrder(o, { mileageUnit }, serviceItems);
+        }),
+      );
+      return { ok: true, data };
     } catch (err: any) {
       return { ok: false, error: err.message ?? "Failed to fetch work orders" };
     }
@@ -170,6 +207,9 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
         : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       const orders = await getOrders(shopId, { updatedAfter: lastSyncAt });
+      // Live v3 orders carry no embedded line items; attach `/service_item`
+      // lines so the normalized ingestion path can map jobs/line items.
+      await attachServiceItems(shopId, orders);
 
       await db.collection("shops").updateOne(
         { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
@@ -190,6 +230,10 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
     try {
       const fromDate = options?.fromDate ?? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
       const orders = await getOrders(shopId, { closedAfter: fromDate.toISOString() });
+      // Attach `/service_item` lines to each order so the normalized ingestion
+      // path produces real service jobs + line items (live v3 has no embedded
+      // line items on the order).
+      await attachServiceItems(shopId, orders);
 
       const db = await getDb();
       await db.collection("shops").updateOne(
@@ -202,13 +246,37 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
         },
       );
 
-      const totalJobs = orders.reduce((sum, o) => sum + (o.services?.length ?? 0), 0);
+      // One synthetic job per order that has line items (Shopmonkey v3 has no
+      // job grouping under an order); fall back to any embedded `services[]`.
+      const totalJobs = orders.reduce(
+        (sum, o) => sum + (o.services?.length || (o.serviceItems?.length ? 1 : 0)),
+        0,
+      );
 
       return { ok: true, chunksProcessed: 1, totalJobsIndexed: totalJobs, complete: true };
     } catch (err: any) {
       return { ok: false, chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: err.message };
     }
   }
+}
+
+/**
+ * Fetch `/service_item` line items for each order and attach them as
+ * `order.serviceItems` (in place). Shopmonkey v3 does not embed line items on an
+ * order, so the ingestion/normalized path relies on this to produce real
+ * service jobs + line items. Failures per order are swallowed to an empty list
+ * so one bad order can't abort the whole batch.
+ */
+async function attachServiceItems(shopId: number, orders: ShopmonkeyOrder[]): Promise<void> {
+  await Promise.all(
+    orders.map(async (o) => {
+      try {
+        o.serviceItems = await getOrderServiceItems(shopId, o);
+      } catch {
+        o.serviceItems = o.serviceItems ?? [];
+      }
+    }),
+  );
 }
 
 export const shopmonkeyAdapter = new ShopmonkeyAdapter();
