@@ -1,5 +1,21 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.20 — 2026-06-05
+
+### Added
+- **VHI Coach overlay now runs on AutoFlow (read-only).** The on-page
+  Vehicle Health Indicator coach — previously Tekmetric-only — now appears
+  on AutoFlow / autotext.me DVI and ticket pages. It surfaces the same
+  vehicle-health insights (overdue / due-soon / OK service items and the
+  health score) driven from the VIN, shop, and mileage the AutoFlow adapter
+  already detects. Because AutoFlow is read-only for the extension, the
+  coach is fed the standard maintenance-service catalog instead of a live
+  inspection, so it shows the vehicle's full VHI plan. The overlay mounts,
+  refreshes, and tears down on VIN/RO change through AutoFlow's SPA, honors
+  the existing per-shop VHI Coach feature flag, and uses the same live
+  Realtime push (with polling fallback) as Tekmetric. No write-back into
+  AutoFlow is performed.
+
 ## 1.27.19 — 2026-06-02
 
 ### Performance

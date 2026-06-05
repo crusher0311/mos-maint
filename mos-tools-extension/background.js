@@ -318,10 +318,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
 
-    // Fetch and relay inspections for this RO
+    // Fetch and relay inspections for this RO (Tekmetric reads the live
+    // inspection via its SMS API). AutoFlow is read-only — we can't read
+    // its inspection, so the VHI Coach overlay is driven straight from the
+    // VIN + shop + mileage the AutoFlow adapter scrapes.
     if (currentSmsContext?.roId && currentSmsContext?.provider === 'tekmetric') {
       fetchAndRelayInspections(currentSmsContext).catch(err => {
         console.warn("[MOS Inspections] Fetch error:", err.message);
+      });
+    } else if (currentSmsContext?.provider === 'autoflow' && currentSmsContext?.vin) {
+      fetchVhiCoachForAutoflow(currentSmsContext).catch(err => {
+        console.warn("[VHI Coach] AutoFlow fetch error:", err.message);
       });
     } else if (sender?.tab?.id) {
       chrome.tabs.sendMessage(sender.tab.id, { action: "VHI_COACH_HIDE" }).catch(() => {});
@@ -529,7 +536,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            provider: "tekmetric",
+            provider: message.provider || currentSmsContext?.provider || "tekmetric",
             smsShopId: message.smsShopId,
           }),
         });
@@ -563,6 +570,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (currentSmsContext?.roId && currentSmsContext?.provider === "tekmetric") {
       fetchAndRelayInspections(currentSmsContext).catch((err) => {
         console.warn("[VHI Coach] Realtime-triggered refetch error:", err.message);
+      });
+    } else if (currentSmsContext?.provider === "autoflow" && currentSmsContext?.vin) {
+      fetchVhiCoachForAutoflow(currentSmsContext).catch((err) => {
+        console.warn("[VHI Coach] Realtime-triggered AutoFlow refetch error:", err.message);
       });
     }
     sendResponse({ success: true });
@@ -2410,6 +2421,122 @@ async function fetchAndRelayInspections(context) {
 
 let lastCoachRoId = null;
 
+// Canonical maintenance-service catalog used to drive the VHI Coach overlay
+// on providers where the extension cannot read the live inspection from the
+// SMS API. AutoFlow is read-only for us, so instead of inspection task names
+// we send the full standard catalog: the /api/extension/vhi-coach endpoint
+// maps each name to a service key and only the ones present in the vehicle's
+// VHI plan get a real (overdue / due-soon / OK) status — yielding the
+// vehicle's complete plan in the overlay. Mirrors lib/service-keys.ts's
+// SERVICE_KEY_DISPLAY_NAMES.
+const DEFAULT_VHI_COACH_TASKS = [
+  "Oil Change",
+  "Tire Rotation",
+  "Cabin Air Filter",
+  "Engine Air Filter",
+  "Coolant Service",
+  "Brake Fluid Service",
+  "Automatic Transmission Fluid",
+  "Manual Transmission Fluid",
+  "Transfer Case Fluid",
+  "Front Differential Fluid",
+  "Rear Differential Fluid",
+  "Power Steering Fluid",
+  "Fuel Filter",
+  "Spark Plugs",
+  "Serpentine Belt",
+  "Timing Belt",
+  "Fuel System Cleaning",
+  "Front Brake Pads",
+  "Rear Brake Pads",
+  "Front Brake Rotors",
+  "Rear Brake Rotors",
+  "Front Shocks / Struts",
+  "Rear Shocks / Struts",
+  "Wheel Alignment",
+  "Battery",
+  "Wiper Blades",
+  "A/C Service",
+  "Emissions Inspection",
+  "Coolant Hoses",
+];
+
+// Shared POST to the VHI Coach endpoint + relay of the result to the page
+// overlay. Provider-agnostic: Tekmetric supplies real inspection task names,
+// AutoFlow supplies the canonical catalog above. Returns the parsed payload
+// on success (truthy) so callers can update their dedup key.
+async function postVhiCoachData(context, taskNames, provider) {
+  if (!mosApiToken || !mosApiUrl) return null;
+  try {
+    const res = await fetch(`${mosApiUrl}/api/extension/vhi-coach`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${mosApiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vin: context.vin,
+        smsShopId: context.shopId,
+        provider: provider,
+        mileage: context.mileage || null,
+        inspectionTasks: taskNames,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[VHI Coach] API error ${res.status}:`, text.substring(0, 200));
+      return null;
+    }
+
+    const data = await res.json();
+    console.log(`[VHI Coach] Got data:`, data.summary);
+
+    const tabId = context._tabId;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, {
+        action: "VHI_COACH_DATA",
+        data: data,
+      }).catch(() => {});
+    }
+    return data;
+  } catch (err) {
+    console.warn("[VHI Coach] Error:", err.message);
+    return null;
+  }
+}
+
+// AutoFlow VHI Coach (read-only parity with Tekmetric). We can't read the
+// AutoFlow inspection, so we drive the overlay from the VIN + shop + mileage
+// the AutoFlow adapter scrapes, feeding the canonical service catalog as the
+// task list. Realtime/polling refresh reuses the same path via
+// REFETCH_VHI_COACH.
+async function fetchVhiCoachForAutoflow(context) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return;
+  if (!context?.vin || !context?.shopId) return;
+  if (context.vin.length !== 17) return;
+
+  // The endpoint requires a mileage for the VHI analysis. If AutoFlow hasn't
+  // surfaced one yet, hide any stale overlay rather than 400-looping.
+  if (!context.mileage) {
+    if (context._tabId) {
+      chrome.tabs.sendMessage(context._tabId, { action: "VHI_COACH_HIDE" }).catch(() => {});
+    }
+    return;
+  }
+
+  const coachKey = `${context.shopId}:${context.roId || context.vin}`;
+  if (coachKey === lastCoachRoId) return;
+
+  console.log(
+    `[VHI Coach] AutoFlow fetch for VIN ${context.vin} (${DEFAULT_VHI_COACH_TASKS.length} catalog tasks)`
+  );
+
+  const data = await postVhiCoachData(context, DEFAULT_VHI_COACH_TASKS, "autoflow");
+  if (data) lastCoachRoId = coachKey;
+}
+
 async function fetchVhiCoachData(context, inspections) {
   await _stateReady;
   if (!mosApiToken || !mosApiUrl) return;
@@ -2449,43 +2576,8 @@ async function fetchVhiCoachData(context, inspections) {
 
   console.log(`[VHI Coach] Fetching for VIN ${context.vin}, ${taskNames.length} tasks`);
 
-  try {
-    const res = await fetch(`${mosApiUrl}/api/extension/vhi-coach`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${mosApiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        vin: context.vin,
-        smsShopId: context.shopId,
-        provider: "tekmetric",
-        mileage: context.mileage || null,
-        inspectionTasks: taskNames,
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.warn(`[VHI Coach] API error ${res.status}:`, text.substring(0, 200));
-      return;
-    }
-
-    const data = await res.json();
-    console.log(`[VHI Coach] Got data:`, data.summary);
-
-    lastCoachRoId = coachKey;
-
-    const tabId = context._tabId;
-    if (tabId) {
-      chrome.tabs.sendMessage(tabId, {
-        action: "VHI_COACH_DATA",
-        data: data,
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.warn("[VHI Coach] Error:", err.message);
-  }
+  const data = await postVhiCoachData(context, taskNames, "tekmetric");
+  if (data) lastCoachRoId = coachKey;
 }
 
 async function prefillDviInspection(context, inspId, tabId) {
