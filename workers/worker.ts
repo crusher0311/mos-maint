@@ -27,16 +27,33 @@ import { processTekmetricPrePass } from "./processors/tekmetric-prepass";
 import { processDrainTekmetric } from "./processors/drain-tekmetric";
 import { processDrainProtractor } from "./processors/drain-protractor";
 
-// Concurrency per queue. The Tekmetric workloads are gated by the
-// shared cross-process rate limiter (`shared-rate-limiter.ts`), so
-// these caps just prevent us from queueing too many BullMQ jobs against
-// one Redis instance — not from rate-limiting Tekmetric itself.
-const CONCURRENCY = {
-  [QUEUE_NAMES.TEKMETRIC_FULLPAGE]: 4,
-  [QUEUE_NAMES.TEKMETRIC_PREPASS]: 6,
+// Concurrency per queue. The Tekmetric workloads share the cross-process
+// rate limiter (`shared-rate-limiter.ts`), so when too many full-page /
+// pre-pass chunks run at once they all contend for the same ~5 RPS budget:
+// callers starve waiting for a token (logged as "rate limit budget
+// exhausted (waited 30000ms)"), the chunk blows its 300s hard timeout, the
+// job fails all retries, and the shop never makes progress. Keeping these
+// low keeps the shared rate limiter — not BullMQ fan-out — the binding
+// constraint. Tunable via env so the throttle can be adjusted in prod
+// WITHOUT a code deploy (set e.g. WORKER_CONCURRENCY_TEKMETRIC_FULLPAGE=1
+// to ease off further, or back to 4 to push harder).
+function concurrencyFromEnv(name: string, fallback: number): number {
+  const v = parseInt(process.env[name] || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+const CONCURRENCY: Record<string, number> = {
+  [QUEUE_NAMES.TEKMETRIC_FULLPAGE]: concurrencyFromEnv(
+    "WORKER_CONCURRENCY_TEKMETRIC_FULLPAGE",
+    2,
+  ),
+  [QUEUE_NAMES.TEKMETRIC_PREPASS]: concurrencyFromEnv(
+    "WORKER_CONCURRENCY_TEKMETRIC_PREPASS",
+    3,
+  ),
   [QUEUE_NAMES.DRAIN_TEKMETRIC]: 1, // singleton drain
   [QUEUE_NAMES.DRAIN_PROTRACTOR]: 1, // singleton drain
-} as const;
+};
 
 const workers: BullWorker[] = [];
 
