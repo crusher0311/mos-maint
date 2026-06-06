@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.27 — 2026-06-06
+
+### Added
+- **The AI Customer Concern Assistant is now built into the Create RO flow.** On
+  the Create RO "Details" step, advisors with the Concern Assistant feature see a
+  new **"Use AI Assistant"** button under the Customer concern box. It launches
+  the same assistant used on the dashboard and the standalone Concern tab —
+  describe the concern, answer the AI-generated follow-up questions, and finish to
+  get a cleaned, professional write-up. The write-up flows straight back into the
+  new repair order via a **"Use for Repair Order"** button, so the polished
+  concern is saved on the RO when it's created in Protractor. The button only
+  appears when the shop has the Concern Assistant feature enabled.
+
 ## 1.27.26 — 2026-06-06
 
 ### Fixed

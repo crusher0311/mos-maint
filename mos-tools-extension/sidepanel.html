@@ -449,6 +449,12 @@
             </div>
             <div id="concern-cleaned-text" class="concern-cleaned-text"></div>
             <div class="concern-result-actions">
+              <button id="concern-use-for-ro-btn" class="btn-primary concern-action-btn hidden" title="Use this write-up for the repair order you're creating">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Use for Repair Order
+              </button>
               <button id="concern-inject-btn" class="btn-primary concern-action-btn" title="Send to repair order">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"/>
@@ -760,6 +766,14 @@
               </div>
               <label class="create-ro-label" for="cro-concern">Customer concern</label>
               <textarea id="cro-concern" class="input-modern" rows="3" placeholder="Customer's reported concern…"></textarea>
+              <button id="cro-concern-ai-btn" class="btn-secondary concern-action-btn hidden" type="button" title="Use the AI Customer Concern Assistant to build a complete write-up">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 12h8"/>
+                  <path d="M12 8v8"/>
+                </svg>
+                Use AI Assistant
+              </button>
               <label class="create-ro-label" for="cro-mileage">Mileage in</label>
               <input type="number" id="cro-mileage" class="input-modern" placeholder="Mileage" min="0" />
               <label class="create-ro-label" for="cro-note">Note (optional)</label>

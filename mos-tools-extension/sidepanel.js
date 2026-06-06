@@ -119,6 +119,16 @@ let concernState = {
   cleanedText: ''
 };
 
+// When true, the Concern Assistant was launched from the Create RO flow, so its
+// finished write-up should flow back into the new repair order instead of being
+// injected into an already-open RO.
+let concernReturnToCro = false;
+
+// One-shot guard: when returning from the Concern Assistant we re-enter the
+// Create RO tab without resetting the in-progress wizard (which would wipe the
+// customer/vehicle/job selections and the concern we just wrote back).
+let croPreserveStateOnInit = false;
+
 // ==================== DOM ELEMENTS ====================
 const elements = {
   // States
@@ -252,7 +262,9 @@ const elements = {
   concernCopyBtn: document.getElementById('concern-copy-btn'),
   concernInjectBtn: document.getElementById('concern-inject-btn'),
   concernNewBtn: document.getElementById('concern-new-btn'),
-  concernError: document.getElementById('concern-error')
+  concernUseForRoBtn: document.getElementById('concern-use-for-ro-btn'),
+  concernError: document.getElementById('concern-error'),
+  croConcernAiBtn: document.getElementById('cro-concern-ai-btn')
 };
 
 // ==================== SHOP RESOLUTION ====================
@@ -482,6 +494,12 @@ function setupEventListeners() {
   if (elements.concernNewBtn) {
     elements.concernNewBtn.addEventListener('click', handleConcernNew);
   }
+  if (elements.concernUseForRoBtn) {
+    elements.concernUseForRoBtn.addEventListener('click', handleConcernUseForRo);
+  }
+  if (elements.croConcernAiBtn) {
+    elements.croConcernAiBtn.addEventListener('click', handleCroConcernAi);
+  }
 
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
@@ -607,6 +625,16 @@ function switchJobsSubTab(subtab) {
 function switchTab(tab) {
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
+
+  // Leaving the Concern Assistant for anywhere other than itself cancels the
+  // Create RO "return" mode, so a later standalone concern doesn't wrongly show
+  // the "Use for Repair Order" button. (handleConcernUseForRo already cleared
+  // the flag before it switches here.)
+  if (currentTab === 'concern' && tab !== 'concern' && concernReturnToCro) {
+    concernReturnToCro = false;
+    if (elements.concernUseForRoBtn) elements.concernUseForRoBtn.classList.add('hidden');
+    if (elements.concernInjectBtn) elements.concernInjectBtn.classList.remove('hidden');
+  }
 
   currentTab = tab;
   
@@ -923,7 +951,13 @@ function updateTabAccessibility() {
       btn.setAttribute('data-tooltip', 'Upgrade to unlock');
     }
   });
-  
+
+  // The Create RO "Use AI Assistant" button is only meaningful when the shop
+  // has the Concern Assistant feature.
+  if (elements.croConcernAiBtn) {
+    elements.croConcernAiBtn.classList.toggle('hidden', !shopFeatures.concern_assistant);
+  }
+
   let targetTab = currentTab;
   
   if (userDefaultTab) {
@@ -4276,6 +4310,15 @@ async function handleConcernFinish() {
     concernState.cleanedText = response.cleanedText;
     elements.concernCleanedText.textContent = response.cleanedText;
 
+    // In Create RO mode, hand the write-up back to the new RO instead of
+    // injecting it into an already-open repair order.
+    if (elements.concernUseForRoBtn) {
+      elements.concernUseForRoBtn.classList.toggle('hidden', !concernReturnToCro);
+    }
+    if (elements.concernInjectBtn) {
+      elements.concernInjectBtn.classList.toggle('hidden', concernReturnToCro);
+    }
+
     elements.concernLoading.classList.add('hidden');
     elements.concernResult.classList.remove('hidden');
   } catch (err) {
@@ -4338,11 +4381,51 @@ function handleConcernNew() {
   elements.concernCleanedText.textContent = '';
   elements.concernSubmitBtn.disabled = false;
 
+  // Back to the standalone behaviour (inject into an open RO) until the Create
+  // RO flow re-launches the assistant.
+  concernReturnToCro = false;
+  if (elements.concernUseForRoBtn) elements.concernUseForRoBtn.classList.add('hidden');
+  if (elements.concernInjectBtn) elements.concernInjectBtn.classList.remove('hidden');
+
   elements.concernStart.classList.remove('hidden');
   elements.concernConversation.classList.add('hidden');
   elements.concernResult.classList.add('hidden');
   elements.concernLoading.classList.add('hidden');
   hideConcernError();
+}
+
+// ==================== CREATE RO ↔ CONCERN ASSISTANT BRIDGE ====================
+// Launch the AI Concern Assistant from the Create RO "Details" step. Reuses the
+// exact same assistant the Concern tab (and dashboard) use; the only difference
+// is that the finished write-up flows back into the new repair order.
+function handleCroConcernAi() {
+  if (!shopFeatures.concern_assistant) return;
+  // Reset to a clean assistant session, then seed it with whatever the advisor
+  // has already typed into the Create RO concern box.
+  handleConcernNew();
+  const seed = (getCroEl('cro-concern')?.value || '').trim();
+  if (seed && elements.concernInput) elements.concernInput.value = seed;
+  concernReturnToCro = true;
+  switchTab('concern');
+  elements.concernInput?.focus();
+}
+
+function handleConcernUseForRo() {
+  const text = concernState.cleanedText;
+  if (!text) return;
+  concernReturnToCro = false;
+  if (elements.concernUseForRoBtn) elements.concernUseForRoBtn.classList.add('hidden');
+  if (elements.concernInjectBtn) elements.concernInjectBtn.classList.remove('hidden');
+  // Re-enter the Create RO tab WITHOUT resetting the in-progress wizard, then
+  // write the cleaned write-up into the concern box (after the switch, so the
+  // reset path can never wipe it).
+  croPreserveStateOnInit = true;
+  switchTab('create-ro');
+  const concernBox = getCroEl('cro-concern');
+  if (concernBox) concernBox.value = text;
+  getCroEl('cro-details-section')?.classList.remove('hidden');
+  concernBox?.focus();
+  showNotification('Concern added to the repair order.', 'success');
 }
 
 function showConcernError(msg) {
@@ -4846,6 +4929,13 @@ function initCreateRoTab() {
   if (!createRoState.initialized) {
     bindCreateRoListeners();
     createRoState.initialized = true;
+  }
+  // Returning from the Concern Assistant: keep the in-progress wizard intact
+  // (the cleaned write-up was just placed in cro-concern) and skip the reset +
+  // context prefill below.
+  if (croPreserveStateOnInit) {
+    croPreserveStateOnInit = false;
+    return;
   }
   resetCroState();
   mosTelemetry('create_ro_panel_opened_sidepanel', {
