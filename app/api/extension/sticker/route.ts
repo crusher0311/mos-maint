@@ -493,8 +493,12 @@ async function resolveMosShopId(
         // Protractor
         { "protractor.connectionId": smsShopId },
         { protractorConnectionId: smsShopId },
-        // AutoFlow
+        // AutoFlow — the extension reports the page's subdomain / path slug
+        // (e.g. "harrells-nc87"), so match it against the subdomain/domain the
+        // shop is linked under, not just a numeric autoflow.shopId.
         { "autoflow.shopId": smsShopId },
+        { "autoflow.subdomain": smsShopId },
+        { "autoflow.domain": smsShopId },
       ],
     };
     if (!isPlatformAdmin) {
@@ -506,9 +510,17 @@ async function resolveMosShopId(
       console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for SMS shop ${smsShopId}, provider: ${shop.integrationProvider || 'unknown'}`);
       return { mosShopId: shop.shopId, shop };
     }
+    // An explicit shop context was provided but matched no shop. Do NOT fall
+    // back to the user's primary shop: a platform_admin's query is
+    // unrestricted, so the fallback would stamp the admin's own home-shop
+    // logo/phone onto every unrecognized shop's sticker (wrong-shop branding).
+    // Refuse instead so the caller returns 404.
+    console.warn(`[Extension Sticker] No MOS shop matches smsShopId=${smsShopId}; refusing primary-shop fallback to avoid wrong-shop branding`);
+    return { mosShopId: null, shop: null };
   }
 
-  // Fallback to user's primary shop
+  // No explicit shop context (e.g. side panel opened without a page): fall
+  // back to the user's primary shop.
   if (authResult.user?.shopId) {
     const primaryShopId = authResult.user.shopId;
     const shop = await db.collection("shops").findOne({ shopId: { $in: [Number(primaryShopId), String(primaryShopId)] } });
@@ -539,7 +551,7 @@ async function _GET(request: NextRequest) {
 
     if (!shop) {
       return NextResponse.json(
-        { error: "Shop not found" },
+        { error: "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
         { status: 404, headers: corsHeaders }
       );
     }
@@ -637,7 +649,7 @@ async function _POST(request: NextRequest) {
 
     if (!shop) {
       return NextResponse.json(
-        { error: "Shop not found" },
+        { error: "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
         { status: 404, headers: corsHeaders }
       );
     }
