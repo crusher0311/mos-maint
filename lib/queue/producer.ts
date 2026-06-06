@@ -67,6 +67,48 @@ async function safeAdd(
     return { enqueued: false, reason: "queue_unavailable", queue: queueName };
   }
   try {
+    // Self-heal dead-lettered shops. Queues run `removeOnFail: false`, so a
+    // job that exhausts its retries persists in the `failed` set forever
+    // under this stable per-shop jobId. A plain `q.add` with the same jobId
+    // is a no-op against an existing job (BullMQ dedupes), so the cron's
+    // re-drive could never resurrect a failed shop — it stayed stuck until a
+    // human hit the admin "retry". Here we detect that case and move the
+    // failed job back to `waiting` so the worker re-runs it on the next poll.
+    //
+    // Completed jobs can't collide (removeOnComplete: true removes them
+    // immediately), so any pre-existing job is active/waiting/delayed/paused
+    // (a genuine "someone else has it" duplicate) OR failed (our stuck case).
+    const existing = await q.getJob(jobId);
+    if (existing) {
+      let state: string | undefined;
+      try {
+        state = await existing.getState();
+      } catch {
+        // If we can't read state, fall through to the duplicate branch — we
+        // never want this best-effort re-drive to throw away an enqueue.
+      }
+      if (state === "failed") {
+        try {
+          await existing.retry();
+          console.log(
+            `[Queue ${queueName}] re-drove dead-lettered job jobId=${jobId} (failed -> waiting)`,
+          );
+          return {
+            enqueued: true,
+            jobId: String(existing.id),
+            queue: queueName,
+          };
+        } catch {
+          // Race: another producer already re-drove this job, so `retry()`
+          // throws ("job is not in the failed state"). The queue now owns it
+          // (waiting/active), so report a duplicate — NEVER fall open to the
+          // in-process path here, which would double-run the chunk.
+          return { enqueued: false, reason: "duplicate", queue: queueName };
+        }
+      }
+      // Active / waiting / delayed / paused — a real in-flight duplicate.
+      return { enqueued: false, reason: "duplicate", queue: queueName };
+    }
     const job = await q.add(jobName, data, { jobId });
     // BullMQ returns the existing job (same instance, same id) when a
     // duplicate is rejected — but it also returns a job object for a
