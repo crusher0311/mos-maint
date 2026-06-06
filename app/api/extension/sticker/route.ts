@@ -9,6 +9,7 @@ import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -479,36 +480,22 @@ async function resolveMosShopId(
     ...(authResult.user?.shopIds || []).map((id: any) => Number(id)),
   ];
 
-  // Search across all integration types
+  // Resolve via the SHARED extension lookup (lib/extension-shop-lookup) so the
+  // sticker route matches shops exactly like every other extension endpoint:
+  // Tekmetric/Protractor/Shop-Ware/Shopmonkey IDs plus the AutoFlow address
+  // (autoflow.subdomain/domain AND the legacy autoflowDomain field, with an
+  // automatic ".autotext.me" variant). The extension on an AutoFlow page only
+  // knows the page's subdomain (e.g. "harrells-nc87"), so this is the only
+  // identifier available to bridge back to a MOS shop.
   if (smsShopId) {
-    const tekShopIdNum = parseInt(smsShopId);
-    const tekShopIdStr = String(smsShopId);
-    const query: any = {
-      $or: [
-        // Tekmetric
-        { "tekmetric.shopId": tekShopIdNum },
-        { "tekmetric.shopId": tekShopIdStr },
-        { tekmetricShopId: tekShopIdNum },
-        { tekmetricShopId: tekShopIdStr },
-        // Protractor
-        { "protractor.connectionId": smsShopId },
-        { protractorConnectionId: smsShopId },
-        // AutoFlow — the extension reports the page's subdomain / path slug
-        // (e.g. "harrells-nc87"), so match it against the subdomain/domain the
-        // shop is linked under, not just a numeric autoflow.shopId.
-        { "autoflow.shopId": smsShopId },
-        { "autoflow.subdomain": smsShopId },
-        { "autoflow.domain": smsShopId },
-      ],
-    };
-    if (!isPlatformAdmin) {
-      const shopIdVariants = userShopIds.flatMap((id: number) => [id, String(id)]);
-      query.shopId = { $in: shopIdVariants };
-    }
-    const shop = await db.collection("shops").findOne(query);
-    if (shop) {
-      console.log(`[Extension Sticker] Found MOS shop ${shop.shopId} for SMS shop ${smsShopId}, provider: ${shop.integrationProvider || 'unknown'}`);
-      return { mosShopId: shop.shopId, shop };
+    const result = await findShopBySmsId(String(smsShopId), {
+      userShopIds,
+      isPlatformAdmin,
+      providerHint: _provider || undefined,
+    });
+    if (result?.shopDoc) {
+      console.log(`[Extension Sticker] Found MOS shop ${result.mosShopId} for SMS shop ${smsShopId}, provider: ${result.provider}`);
+      return { mosShopId: result.mosShopId, shop: result.shopDoc };
     }
     // An explicit shop context was provided but matched no shop. Do NOT fall
     // back to the user's primary shop: a platform_admin's query is
