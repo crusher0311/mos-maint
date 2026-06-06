@@ -15,6 +15,58 @@ function reportActionDropped(action, reason, extra) {
 let lastContext = null;
 let contextCheckInterval = null;
 
+// AutoFlow shop id detection across v3 (per-shop subdomain) and v4 (shared
+// host with the shop slug in the path). Generic infrastructure subdomains
+// (app/www/admin/...) are NOT shop ids, so on v4 we read the path instead.
+// The returned id must match what the backend resolves against
+// (autoflow.subdomain / autoflow.domain / autoflow.shopId / autoflowDomain).
+function detectAutoflowShopId(hostname, pathname) {
+  const GENERIC = new Set(["app", "www", "admin", "secure", "api", "portal"]);
+  const sub = (hostname || "").match(/^([^.]+)\.(autotext\.me|autoflow\.com)/i);
+  if (sub && !GENERIC.has(sub[1].toLowerCase())) return sub[1];
+  const pathSlug = (pathname || "").match(/\/shop\/([^/?#]+)/i);
+  if (pathSlug) {
+    try { return decodeURIComponent(pathSlug[1]); } catch (_) { return pathSlug[1]; }
+  }
+  return null;
+}
+
+// Collect form-field values paired with a lowercase "hint" (name/id/
+// placeholder/aria-label/data-testid + associated <label> text). DVI pages
+// hold VIN + mileage in editable inputs whose values never appear in
+// document.body.innerText, so the text-based scrapes can't see them.
+function collectFormFieldHints() {
+  const out = [];
+  let els;
+  try { els = document.querySelectorAll("input, textarea, select"); }
+  catch (_) { return out; }
+  for (const el of els) {
+    const value = (el && el.value != null ? String(el.value) : "").trim();
+    if (!value) continue;
+    let label = "";
+    try {
+      if (el.id) {
+        const sel = window.CSS && CSS.escape ? CSS.escape(el.id) : el.id;
+        const l = document.querySelector('label[for="' + sel + '"]');
+        if (l) label = l.textContent || "";
+      }
+      if (!label && el.closest) {
+        const wrap = el.closest("label");
+        if (wrap) label = wrap.textContent || "";
+      }
+    } catch (_) {}
+    const hint = [
+      el.name, el.id,
+      el.getAttribute && el.getAttribute("placeholder"),
+      el.getAttribute && el.getAttribute("aria-label"),
+      el.getAttribute && el.getAttribute("data-testid"),
+      label
+    ].filter(Boolean).join(" ").toLowerCase();
+    out.push({ hint, value });
+  }
+  return out;
+}
+
 function detectContext() {
   const url = window.location.href;
   const hostname = window.location.hostname;
@@ -36,12 +88,16 @@ function detectContext() {
     mileage: null
   };
 
-  const tenantMatch = hostname.match(/^([^.]+)\.(autotext\.me|autoflow\.com)/);
-  if (tenantMatch) {
-    context.shopId = tenantMatch[1];
-  }
+  // Shop identifier — AutoFlow is mid-transition from v3 to v4:
+  //   v3: per-shop subdomain  (harrells-nc87.autotext.me)
+  //   v4: shared host + shop in the path (app.autoflow.com/shop/<slug>/...)
+  context.shopId = detectAutoflowShopId(hostname, window.location.pathname);
 
   const pageText = document.body?.innerText || "";
+
+  // VIN + mileage live in editable form fields on DVI pages, whose values are
+  // not in innerText. Collect them once for the VIN/mileage fallbacks below.
+  const fieldHints = collectFormFieldHints();
 
   const ticketPatterns = [
     /\/tickets?\/(\d+)/,
@@ -49,6 +105,9 @@ function detectContext() {
     /\/inspections?\/(\d+)/,
     /\/dvi[_v0-9]*\/.*[?&]status_id=(\d+)/,
     /\/dvi\/(\d+)/,
+    // v4 path-based RO/ticket locations under app.autoflow.com/shop/<slug>/...
+    /\/shop\/[^/]+\/(?:repair[-_]?orders?|work[-_]?orders?|ro|tickets?|invoices?|inspections?)\/(\d+)/i,
+    /\/(?:repair[-_]?orders?|work[-_]?orders?|ro)\/(\d+)/i,
     /[?&](?:status_id|ticket_id|invoice_id|ro_id)=(\d+)/
   ];
   for (const pattern of ticketPatterns) {
@@ -100,6 +159,22 @@ function detectContext() {
       const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
       if (vinMatch) {
         context.vin = vinMatch[1].toUpperCase();
+      }
+    }
+    // Form-field fallback: the VIN usually sits in an editable input on DVI
+    // pages, so it never reaches innerText. Prefer a VIN-hinted field, then
+    // fall back to any field holding a valid 17-char VIN.
+    if (!context.vin) {
+      for (const f of fieldHints) {
+        if (!/vin/.test(f.hint)) continue;
+        const m = f.value.replace(/\s/g, "").match(/[A-HJ-NPR-Z0-9]{17}/i);
+        if (m) { context.vin = m[0].toUpperCase(); break; }
+      }
+    }
+    if (!context.vin) {
+      for (const f of fieldHints) {
+        const cleaned = f.value.replace(/\s/g, "");
+        if (/^[A-HJ-NPR-Z0-9]{17}$/i.test(cleaned)) { context.vin = cleaned.toUpperCase(); break; }
       }
     }
   } catch (e) {}
@@ -167,10 +242,25 @@ function detectContext() {
       if (context.mileage) break;
     }
 
+    // Form-field fallback: DVI pages keep mileage in an editable input whose
+    // label renders "Mileage *", so its value is not in innerText.
     if (!context.mileage) {
+      for (const f of fieldHints) {
+        if (!/mileage|odometer|odom|miles/.test(f.hint)) continue;
+        const m = f.value.replace(/,/g, "").match(/\d+/);
+        if (m) {
+          const v = parseInt(m[0]);
+          if (v > 100 && v < 1000000) { context.mileage = v; break; }
+        }
+      }
+    }
+
+    if (!context.mileage) {
+      // Tolerate a required-asterisk and assorted separators between the label
+      // ("Mileage"/"Odometer") and the number ("Mileage *: 191,485").
       const patterns = [
-        /(?:Odometer|Mileage)[:\s]*([\d,]+)/i,
-        /(?:Miles|KM)[:\s]*([\d,]+)/i
+        /(?:Odometer|Mileage)\s*\*?\s*[:\-]?\s*([\d,]+)/i,
+        /(?:Miles|KM)\s*\*?\s*[:\-]?\s*([\d,]+)/i
       ];
       for (const p of patterns) {
         const m = pageText.match(p);

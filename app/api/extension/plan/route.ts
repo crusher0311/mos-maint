@@ -1265,10 +1265,92 @@ async function _GET(request: NextRequest) {
     let currentRoAuthorizedJobs: string[] = [];
     let currentRoAllJobs: string[] = [];
 
+    // AutoFlow pages anchor on the AutoFlow flag rather than the resolved
+    // provider: a dual-integration shop (e.g. Protractor+AutoFlow) resolves to
+    // `provider === "protractor"`, yet the RO id on screen is AutoFlow's, so it
+    // must be resolved via AutoFlow's DVI ingest + VIN-matched enrichment.
+    const isAutoflowAnchored = providerHint === "autoflow" || provider === "autoflow";
+
     if (roId && !vin) {
       let workOrder = null;
       
-      if (provider === "tekmetric") {
+      if (isAutoflowAnchored) {
+        // AutoFlow has no native work_orders table in our DB. Source VIN +
+        // mileage from dvi_results (mirrors app/api/extension/ro-context/
+        // route.ts), then enrich from the linked read provider matched BY VIN
+        // — AutoFlow and the linked provider use different RO numbers, so the
+        // vehicle VIN is the only reliable cross-provider key.
+        const dvi = await db.collection("dvi_results").findOne({
+          shopId: { $in: [mosShopId, String(mosShopId)] },
+          roNumber: { $in: [roId, String(roId)] },
+        });
+        console.log(`[Extension] Autoflow DVI lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!dvi}, resolvedProvider=${provider}`);
+        if (dvi) {
+          vin = vin || (dvi.vin ? String(dvi.vin).toUpperCase() : null);
+          mileage = mileage || dvi.mileage || null;
+          repairOrderNumber = dvi.roNumber ? String(dvi.roNumber) : null;
+          customerName = dvi.customerName || null;
+          currentRoDate = dvi.updatedAt ? new Date(dvi.updatedAt)
+            : (dvi.createdAt ? new Date(dvi.createdAt) : null);
+        }
+
+        // Dual-integration enrichment: pull the latest RO snapshot / vehicle
+        // from the linked read provider, matched by VIN.
+        const linkedProvider =
+          (shopDoc?.protractorConnectionId || shopDoc?.protractor?.connectionId) ? "protractor"
+          : (shopDoc?.tekmetricShopId || shopDoc?.tekmetric?.shopId) ? "tekmetric"
+          : (shopDoc?.shopware?.tenantId) ? "shopware"
+          : null;
+        if (vin && linkedProvider === "protractor") {
+          const upperVin = vin.toUpperCase();
+          const shopIdVariants = [Number(mosShopId), String(mosShopId)];
+          if (!mileage || !customerName || !currentRoDate || !repairOrderNumber) {
+            const pwo: any = await db.collection("protractor_work_orders").findOne(
+              { shopId: { $in: shopIdVariants }, vin: upperVin },
+              { sort: { updatedAt: -1, createdAt: -1 } }
+            );
+            if (pwo) {
+              if (!mileage) mileage = pwo.odometer || pwo.mileage || pwo.mileageIn || null;
+              if (!customerName) customerName = pwo.contactName || pwo.customerName || null;
+              if (!repairOrderNumber && pwo.workOrderNumber) repairOrderNumber = String(pwo.workOrderNumber);
+              if (!currentRoDate) currentRoDate = pwo.updatedAt ? new Date(pwo.updatedAt) : (pwo.createdAt ? new Date(pwo.createdAt) : null);
+              console.log(`[Extension] Autoflow dual-shop enrich from Protractor WO: vin=${upperVin}, mileage=${mileage}, customer=${customerName}`);
+            }
+          }
+          if (!mileage) {
+            const pv: any = await db.collection("protractor_vehicles").findOne({ shopId: { $in: shopIdVariants }, vin: upperVin });
+            if (pv) {
+              mileage = pv.odometer || pv.mileage || null;
+              if (mileage) console.log(`[Extension] Autoflow dual-shop enrich from Protractor vehicle: vin=${upperVin}, mileage=${mileage}`);
+            }
+          }
+        } else if (vin && linkedProvider === "tekmetric") {
+          const two: any = await db.collection("tekmetric_work_orders").findOne(
+            { shopId: { $in: [Number(mosShopId), String(mosShopId)] }, vin: vin.toUpperCase() },
+            { sort: { updatedDate: -1, createdDate: -1 } }
+          );
+          if (two) {
+            if (!mileage) mileage = two.odometer || two.mileageIn || two.mileage || two.odometerIn || null;
+            if (!customerName) customerName = two.customerName || null;
+            console.log(`[Extension] Autoflow dual-shop enrich from Tekmetric WO: vin=${vin}, mileage=${mileage}`);
+          }
+        }
+
+        // Enrich missing fields from the customers collection if the VIN is
+        // known but the DVI row + linked provider were sparse.
+        if (vin && (!customerName || !mileage)) {
+          const customer = await db.collection("customers").findOne({
+            shopId: { $in: [mosShopId, Number(mosShopId)] },
+            "vehicle.vin": vin,
+          });
+          if (customer) {
+            customerName = customerName || customer.name || null;
+            if (!mileage) mileage = customer.vehicle?.odometer || null;
+          }
+        }
+        // AutoFlow has no entries in work_orders; suppress that fallthrough.
+        workOrder = null;
+      } else if (provider === "tekmetric") {
         workOrder = await db.collection("tekmetric_work_orders").findOne({
           shopId: { $in: [String(mosShopId), Number(mosShopId)] },
           workOrderId: String(roId)
@@ -1400,40 +1482,6 @@ async function _GET(request: NextRequest) {
             console.error(`[Extension] Shop-Ware API fetch failed:`, e.message);
           }
         }
-      } else if (provider === "autoflow") {
-        // Autoflow has no native work_orders table in our DB. Source VIN +
-        // mileage from the dvi_results collection (the AutoFlow content
-        // script + DVI ingest writes to it), mirroring the resolution
-        // already used in app/api/extension/ro-context/route.ts so the VHI
-        // panel and the RO header agree on the vehicle.
-        const dvi = await db.collection("dvi_results").findOne({
-          shopId: { $in: [mosShopId, String(mosShopId)] },
-          roNumber: { $in: [roId, String(roId)] },
-        });
-        console.log(`[Extension] Autoflow DVI lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!dvi}`);
-        if (dvi) {
-          vin = vin || (dvi.vin ? String(dvi.vin).toUpperCase() : null);
-          mileage = mileage || dvi.mileage || null;
-          repairOrderNumber = dvi.roNumber ? String(dvi.roNumber) : null;
-          customerName = dvi.customerName || null;
-          currentRoDate = dvi.updatedAt ? new Date(dvi.updatedAt)
-            : (dvi.createdAt ? new Date(dvi.createdAt) : null);
-        }
-        // Enrich missing fields from the customers collection if the VIN
-        // is known but the DVI row was sparse.
-        if (vin && (!customerName || !mileage)) {
-          const customer = await db.collection("customers").findOne({
-            shopId: { $in: [mosShopId, Number(mosShopId)] },
-            "vehicle.vin": vin,
-          });
-          if (customer) {
-            customerName = customerName || customer.name || null;
-            if (!mileage) mileage = customer.vehicle?.odometer || null;
-          }
-        }
-        // Suppress the generic work_orders fallthrough below: AutoFlow has
-        // no entries there and its VIN/mileage are already populated.
-        workOrder = null;
       } else {
         workOrder = await db.collection("work_orders").findOne({
           shopId: mosShopId,

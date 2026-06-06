@@ -1,5 +1,35 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.26 — 2026-06-06
+
+### Fixed
+- **AutoFlow DVI pages now resolve the shop, vehicle, and mileage reliably on
+  both v3 (`*.autotext.me`) and v4 (`app.autoflow.com/shop/*`).** Advisors on a
+  DVI page (e.g. `harrells-nc87.autotext.me/Admin/dvi_v3/...`) were seeing no
+  VHI Coach data, a "Could not detect vehicle mileage" message, and a
+  "No accessible shop configured for SMS shop ID …" error even though the
+  mileage and VIN were on screen. Three root causes:
+  - **Shop detection** was subdomain-only, so AutoFlow v4's shared host
+    (`app.autoflow.com`) produced a wrong/generic id. Detection is now
+    deterministic: the per-shop subdomain on v3, or the `/shop/<slug>` path
+    segment on v4, and generic infrastructure subdomains (`app`/`www`/`admin`/…)
+    are never treated as a shop id.
+  - **VIN + mileage live in editable form fields** on the DVI page, so their
+    values are not in the page text the scraper read. The adapter now also reads
+    `<input>`/`<textarea>`/`<select>` values matched by field name/label, and the
+    text-based mileage match tolerates a required-field asterisk and assorted
+    separators (e.g. `Mileage *: 191,485`).
+  - **RO/ticket detection** gained AutoFlow v4 path forms
+    (`/shop/<slug>/repair-orders/<id>`, `/ro/<id>`, …) alongside the existing v3
+    `status_id`/`dvi` URL patterns.
+- **Dual-integration AutoFlow shops now get a real maintenance plan.** Shops
+  that pair AutoFlow with a write/read provider (e.g. Protractor or Tekmetric)
+  resolve under that provider, so the plan endpoint never took its AutoFlow
+  path. The backend now anchors on the AutoFlow hint, resolves the VIN from
+  AutoFlow's DVI ingest, and enriches the vehicle/mileage/customer from the
+  linked provider matched **by VIN** (AutoFlow and the linked provider use
+  different RO numbers).
+
 ## 1.27.25 — 2026-06-05
 
 ### Fixed
