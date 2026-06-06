@@ -43,3 +43,22 @@ assuming an infra/wiring problem.
   missing" from a service-level env-var listing — check the running logs.
 - The dev repl shell has its own env; `REDIS_URL` unset there says nothing about
   prod.
+
+## Dead-lettered queued shops do NOT self-heal (redeploy/restart won't re-drive them)
+The fullpage queue is configured `removeOnFail: false`, so a job that exhausts its
+5 retries persists in the BullMQ **failed set** keyed by its stable jobId
+(`tekmetric-fullpage_<shopId>`). The cron re-drive re-`add`s with that SAME jobId,
+which BullMQ treats as a no-op while the failed job still exists → **the shop is
+silently never retried again.** Symptom: worker boots ("Started N BullMQ workers",
+"Redis ready") then goes totally silent — no chunks — because every allowlisted
+shop is sitting dead in the failed set and nothing new can enqueue. A code
+deploy/worker restart does NOT clear this (failed jobs live in Redis, not process
+memory).
+**To re-drive:** use the built-in platform-admin action — POST
+`/api/platform-admin/queues` `{action:"retry", queue, jobId}` →
+`retryFailedJob` → `job.retry()` moves it failed→waiting. So after shipping a
+throttle/concurrency fix, you must ALSO retry the already-dead jobs or the fix
+can't be observed (worker has nothing to run).
+**Evidence the throttle fix is correct:** pre-failure, shop 101's fullpage chunks
+were completing in ~240–298s — right at the 300s cliff — then tipped into 300s
+timeouts. Halving concurrency restores the missing headroom.
