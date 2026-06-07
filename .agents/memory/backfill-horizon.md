@@ -17,13 +17,22 @@ completion check: a shop whose parked cursor is already older than the new
 (shorter) oldestDate flips to complete cleanly on its next tick — no re-walk,
 no crash. No extra code needed.
 
-**Operational caveat (don't over-sell shrink as a catch-up lever):** shrinking
-only completes shops whose cursor has *already* passed the new, shorter horizon.
-When the real backlog is shops still early in their pull (cursor within the last
-year), shrinking 2y→1y barely moves the "caught up" count — those shops haven't
-reached even the 1y mark yet, so they stay incomplete. Measured once: 2y horizon
-gave ~37/77 effectively done; 1y only added +3 (40/77). The dominant blocker in
-that case was raw throughput (single shared Tekmetric key ~5 RPS), not horizon.
+**PROD ACTUALLY RUNS 5y, not the 2y default.** `BACKFILL_HORIZON_YEARS=5` is set
+on the Render services (confirmed 2026-06-07 via Render API on `mos-tools`). So
+every shop walks a full 5 years of history — this is the dominant reason backfills
+are slow and "not done," NOT a bug. Earlier notes that assumed a 2y baseline were
+wrong.
+
+**Shrink IS the biggest catch-up lever when the horizon is large.** A previous
+"2y→1y only +3 shops" measurement assumed a 2y baseline; under the real 5y horizon
+the picture is opposite. Shrinking 5y→2y/3y is a free, instant, reversible env flip
+that (a) immediately flips every shop whose parked cursor already passed the new
+oldestDate, and (b) cuts remaining work for all others by years. Example measured
+2026-06-07: Protractor at 5y = 7/29 complete; dropping to 2y (oldest≈2024-06-07)
+would instantly complete ~5 more (shops whose cursorEnd is already ≤2024-06). It's
+a **product decision** (how much history to keep) → ask Brandon before changing.
+Caveat still holds: shrink only helps shops whose cursor already passed the *new*
+horizon; shops still pulling recent months aren't flipped, only shortened.
 
 ## Raising the horizon → resume deeper history
 `reopenCompletedShopsForHorizon()` runs at the top of each provider's selection

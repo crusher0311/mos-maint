@@ -62,3 +62,16 @@ to widen the pipe (external, needs Brandon/Tekmetric). All are operator/prod act
 
 **Dev does NOT run these crons** (workflow logs show only dashboard polling + HostLoadSampler),
 so the dev repl isn't stealing prod's Tekmetric budget despite sharing the prod Mongo/key.
+
+**Protractor completion lives in a DIFFERENTLY-NAMED collection — the status script lies.**
+Protractor progress/cursor is in collection `backfill_progress` (keyed by shopId) with
+`completed:true` + the shop-doc flag `protractorBackfillComplete`. `scripts/check-backfill-status.ts`
+reads `protractor_backfill_progress` (note the prefix) which is EMPTY, so it always reports
+"Protractor: 0 shops" — a false zero. To get real Protractor status, query `backfill_progress`
+for shops with `shops.protractor.configured:true`. Measured 2026-06-07: 29 configured, 7 complete.
+
+**Tekmetric page size is hard-capped at 100 (probe-confirmed 2026-06-07).** Requesting
+`/repair-orders?...&size=200` or `&size=500` still returns exactly 100 items with unchanged
+`totalPages` — Tekmetric ignores size>100. So "pull bigger pages to go faster" is NOT available;
+the only throughput levers left are RPS (already maxed at the 10/key documented cap), a 2nd API
+key, or shrinking the history horizon. See tekmetric-throughput-ceilings.md.
