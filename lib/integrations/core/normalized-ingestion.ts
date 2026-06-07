@@ -33,7 +33,8 @@ import { updateRepairPattern } from '@/lib/repair-patterns';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
-import { enrichVinWithAces, extractShopWarePcdb, extractTekmetricPcdb } from '@/lib/job-index-aces';
+import { enrichVinWithAces, acesFromDecoded, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
+import { batchDecodeSquishes, toSquishPublic } from '@/lib/integrations/dataone-local';
 
 // =============================================================================
 // TYPES
@@ -87,6 +88,24 @@ export class NormalizedIngestionService {
   private enterpriseId?: string;
   private options: IngestionOptions;
   private supabaseDualWriter: SupabaseDualWriter | null = null;
+  /**
+   * Per-batch ACES cache. Populated once at the top of
+   * `ingestWorkOrderBatchWithAllEntities` with a SINGLE bulk DataOne lookup
+   * for every VIN in the batch, then read by `writeToJobIndex` so the
+   * per-work-order dual-write no longer fires one DataOne round-trip each
+   * (~400 sequential lookups per dense backfill chunk → 1). `null` outside a
+   * batch — in that case `writeToJobIndex` falls back to the per-VIN lookup,
+   * preserving behaviour for single-WO callers (webhooks, dashboard replay,
+   * the standalone rebuild script). Values come from the SAME
+   * `acesFromDecoded` path as the per-VIN call, so job_index content (and its
+   * contentHash, which doesn't include ACES anyway) is identical — no churn.
+   *
+   * NOTE: this is per-instance mutable state. A service instance must not run
+   * two batches concurrently. Safe today because `createIngestionService`
+   * returns a FRESH instance per chunk and a shop's chunks are serialized by
+   * an in-flight lock; don't share one instance across concurrent batches.
+   */
+  private _acesBatchCache: Map<string, AcesEnrichment> | null = null;
   
   constructor(
     db: Db,
@@ -1445,7 +1464,64 @@ export class NormalizedIngestionService {
     let payCreated = 0, payUpdated = 0, paySkipped = 0, payErrors = 0;
     let inspCreated = 0, inspUpdated = 0, inspSkipped = 0, inspErrors = 0;
     let recCreated = 0, recUpdated = 0, recSkipped = 0, recErrors = 0;
-    
+
+    // Pre-fetch ACES for every VIN in this batch in ONE DataOne round-trip
+    // (previously one lookup per work order inside writeToJobIndex — ~400
+    // sequential round-trips on a dense backfill chunk). writeToJobIndex reads
+    // this cache instead.
+    //
+    // We map EVERY VIN to its enrichment — including multiple distinct VINs
+    // that collapse to the same squish — so the cached value is identical to
+    // calling enrichVinWithAces() per VIN (acesFromDecoded on the same decoded
+    // row). That avoids the squish-dedup gap where a second same-squish VIN
+    // would otherwise miss the cache and write null ACES on a content-change
+    // update. job_index content is therefore unchanged (and contentHash
+    // excludes ACES anyway → no churn).
+    //
+    // On a bulk-lookup failure we leave the cache `null` so writeToJobIndex
+    // falls back to the per-VIN path, preserving the old soft-fail resilience
+    // (a single batch hiccup no longer nulls ACES for the whole chunk).
+    const vinsBySquish = new Map<string, string[]>();
+    for (const wo of workOrders) {
+      const vin = this.adapter.extractVehicleFromWorkOrder(wo)?.vin;
+      if (!vin || typeof vin !== 'string' || vin.length < 11) continue;
+      let squish: string;
+      try {
+        squish = toSquishPublic(vin);
+      } catch {
+        continue;
+      }
+      const existing = vinsBySquish.get(squish);
+      if (existing) {
+        if (!existing.includes(vin)) existing.push(vin);
+      } else {
+        vinsBySquish.set(squish, [vin]);
+      }
+    }
+    if (vinsBySquish.size === 0) {
+      this._acesBatchCache = new Map<string, AcesEnrichment>();
+    } else {
+      try {
+        const decoded = await batchDecodeSquishes([...vinsBySquish.keys()]);
+        const cache = new Map<string, AcesEnrichment>();
+        for (const [squish, vins] of vinsBySquish) {
+          const enriched = acesFromDecoded(decoded.get(squish));
+          if (enriched) {
+            for (const vin of vins) cache.set(vin, enriched);
+          }
+        }
+        this._acesBatchCache = cache;
+      } catch (err) {
+        console.warn(
+          `[ingest] Bulk ACES prefetch failed for shop ${this.shopId} ` +
+            `(${vinsBySquish.size} squishes); falling back to per-VIN: ` +
+            `${(err as Error)?.message || err}`,
+        );
+        this._acesBatchCache = null;
+      }
+    }
+
+    try {
     for (const wo of workOrders) {
       const result = await this.ingestWorkOrderWithAllEntities(wo);
       workOrderResults.push(result.workOrder);
@@ -1501,6 +1577,9 @@ export class NormalizedIngestionService {
           case 'error': recErrors++; break;
         }
       }
+    }
+    } finally {
+      this._acesBatchCache = null;
     }
     
     return {
@@ -1566,7 +1645,14 @@ export class NormalizedIngestionService {
 
     // Task #382 — ACES enrichment from DataOne squish lookup. Soft-fails so
     // an indexer outage doesn't block the underlying job_index write.
-    const aces = await enrichVinWithAces(vehicle?.vin);
+    // When a batch is in flight (`_acesBatchCache` set), read the pre-fetched
+    // bulk result instead of firing a per-work-order DataOne round-trip; the
+    // batch already attempted every VIN, so a miss means "did not decode"
+    // (same as the per-VIN call returning null). Single-WO callers leave the
+    // cache null and keep the direct per-VIN lookup.
+    const aces = this._acesBatchCache
+      ? (vehicle?.vin ? this._acesBatchCache.get(vehicle.vin) ?? null : null)
+      : await enrichVinWithAces(vehicle?.vin);
 
     // Task #382 — Build per-service-job line arrays with PCDB / PartsTech
     // IDs attached to each part line. Only applies to Tekmetric and Shop-Ware

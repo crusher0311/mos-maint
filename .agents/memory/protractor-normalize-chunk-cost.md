@@ -33,11 +33,26 @@ neither can preempt an in-flight `runProtractorBackfill` chunk (architect's
 accepted caveat). The time-shrink only adapts the *next* chunk after the current
 one finally records its `durationMs`, so the first slow chunk still runs full-size.
 
-**Where the real fix lives (needs Brandon approval + push):** make chunk normalize
-cheaper/parallel — e.g. pre-fetch ACES once per chunk via `enrichVinsWithAces`,
-and/or skip the redundant per-WO `writeToJobIndex` dual-write (the Protractor sync
-already does a single fast `job_index` bulkWrite for the chunk), and/or batch the
-per-WO PG writes. Diagnosis only so far; no fix shipped.
+**Fix shipped (ACES batching):** `ingestWorkOrderBatchWithAllEntities` now
+pre-fetches ACES for the whole batch in ONE DataOne round-trip (instance field
+`_acesBatchCache`, built from a `Map<squish, vin[]>` + one `batchDecodeSquishes`,
+applying `acesFromDecoded` to every VIN sharing a squish), and `writeToJobIndex`
+reads that cache instead of a per-WO `enrichVinWithAces`. This removes the ~400
+sequential external DataOne lookups per chunk. Cache is `null` for single-WO
+callers (webhooks/dashboard/rebuild) and on bulk-lookup failure → they keep the
+per-VIN fallback. Zero job_index churn (contentHash excludes ACES; same decode
+values). **Why squish-keyed-by-all-VINs, not `enrichVinsWithAces`:** that bulk
+helper dedups by squish keeping only the first VIN, so a second same-squish VIN
+would miss the cache and null its ACES on a content-change update.
+
+**Still NOT done (the bigger lever):** the dominant per-chunk cost is the many
+serial per-WO Supabase/Mongo writes (WO + service jobs + line items + payments +
+inspections + recommendations + per-job `job_index` findOne/write). The redundant
+per-WO `writeToJobIndex` dual-write is NOT safely removable — it keys job_index by
+`(shopId, sourceSystem, workOrderId, title)` while the Protractor sync's own
+bulkWrite keys by `servicePackageId` (different rows). Parallelizing the per-WO
+writes is risky (shared-Mongo saturation → fleet outage, see
+`backfill-worker-mongo-saturation`). Scope any further speedup carefully.
 
 **How to confirm next time:** if cursor is frozen but `touched=0` and all DBs are
 idle/healthy, it's the serial normalize, not a wedge. Sampling the DataOne PG
