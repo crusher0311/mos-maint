@@ -31,9 +31,29 @@ Protractor shops to drain" and active chunking). Verify via the worker's Render 
 a lone Mongo lock read.
 
 **Why Protractor still finishes slowly even with the drain on:** singleton drain (one
-Protractor process at a time, by design, to spare shared Mongo + per-shop API) walking 22
-shops × 5-year horizon. Plus some shops hit write errors that waste cycles — e.g. shop 141
-(2026-06-07) threw E11000 dup-key on `normalized_work_orders` (the known WO dual-unique
-race) AND Postgres `23503` FK violations on dependent `service_job` rows (parent WO write
-failed first, so child FK fails). Those don't hard-crash the drain but can keep a shop from
-completing cleanly.
+Protractor process at a time, by design, to spare shared Mongo + per-shop API) walking the
+backlog × 5-year horizon. The drain script re-scans ALL incomplete shops every ~25 min
+(`loadIncompleteProtractorShops` selects by `protractor.connectionId` exists — ~44 shops,
+WIDER than the ~29 `protractor.configured:true` set — and sorts OLDEST-cursor-first), then
+spawns/exits and repeats.
+
+**Stuck-shop signature (write errors are a SYMPTOM, not the cause).** A few big, oldest-data
+shops (e.g. 141 cursor stuck at 2022-06-29, 109) get worked first EVERY cycle yet their
+`backfill_progress.currentChunkEnd` never advances (lastRunAt can read days stale even while
+the drain is actively writing their WOs right now). The tell: they throw E11000 dup-key on
+`normalized_work_orders` + Postgres `23503` FK on `service_job` — because they are
+**re-ingesting the same date range's work orders they already stored** (cursor didn't move,
+so same invoices re-fetched and re-written). Strong hypothesis: a giant shop's chunk can't
+fetch-AND-commit within the ~25-min run window before the script respawns, so it restarts the
+same chunk forever = head-of-line stall that also starves newer shops behind it.
+
+Completion gate is `isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate`
+(`lib/integrations/protractor/sync.ts`). `chunkHadError` is set ONLY by a fetch failure
+(L343/513/518) — the normalized-ingestion writes are in their own try/catch (L621-623) and
+the dup-key/FK failures are caught "non-fatal" deeper still, so they do NOT set chunkHadError
+and do NOT by themselves block completion. The blocker is the cursor never advancing, not the
+write errors.
+
+Levers (all prod/operator-gated — confirm with Brandon): shrink horizon for stuck giants,
+smaller chunk size so a chunk commits within the run window, fix oldest-first ordering so
+giants don't starve the rest, narrow the selection to actually-configured shops.
