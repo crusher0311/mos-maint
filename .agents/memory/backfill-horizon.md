@@ -17,6 +17,14 @@ completion check: a shop whose parked cursor is already older than the new
 (shorter) oldestDate flips to complete cleanly on its next tick — no re-walk,
 no crash. No extra code needed.
 
+**Operational caveat (don't over-sell shrink as a catch-up lever):** shrinking
+only completes shops whose cursor has *already* passed the new, shorter horizon.
+When the real backlog is shops still early in their pull (cursor within the last
+year), shrinking 2y→1y barely moves the "caught up" count — those shops haven't
+reached even the 1y mark yet, so they stay incomplete. Measured once: 2y horizon
+gave ~37/77 effectively done; 1y only added +3 (40/77). The dominant blocker in
+that case was raw throughput (single shared Tekmetric key ~5 RPS), not horizon.
+
 ## Raising the horizon → resume deeper history
 `reopenCompletedShopsForHorizon()` runs at the top of each provider's selection
 entry (Tekmetric `getShopsNeedingBackfill`, Protractor
