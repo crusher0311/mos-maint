@@ -147,6 +147,11 @@ const elements = {
   // Header
   refreshBtn: document.getElementById('refresh-btn'),
   logoutBtn: document.getElementById('logout-btn'),
+
+  // Floating launcher button (per-user) setting
+  floatingBtnSetting: document.getElementById('floating-btn-setting'),
+  floatingBtnCheckbox: document.getElementById('floating-btn-checkbox'),
+  floatingBtnLockedNote: document.getElementById('floating-btn-locked-note'),
   
   // Context
   noContext: document.getElementById('no-context'),
@@ -400,6 +405,11 @@ function setupEventListeners() {
 
   // Logout
   elements.logoutBtn.addEventListener('click', handleLogout);
+
+  // Floating launcher button per-user toggle
+  if (elements.floatingBtnCheckbox) {
+    elements.floatingBtnCheckbox.addEventListener('change', handleFloatingButtonToggle);
+  }
   
   // Tab navigation - allow clicking locked tabs to show upgrade overlay
   elements.tabBtns.forEach(btn => {
@@ -891,11 +901,81 @@ async function fetchShopFeatures() {
       if (result.integrations && currentContext) {
         currentContext.integrations = result.integrations;
       }
+      // Floating launcher button: owner per-shop gate + per-user preference.
+      floatingOwnerEnabled =
+        typeof result.floatingButtonOwnerEnabled === 'boolean'
+          ? result.floatingButtonOwnerEnabled
+          : null;
+      floatingUserPreference =
+        typeof result.floatingButtonUserPreference === 'boolean'
+          ? result.floatingButtonUserPreference
+          : null;
+      renderFloatingButtonSetting();
     } else if (result && result.error) {
       console.error('[MOS] Features API error:', result.error);
     }
   } catch (err) {
     console.error('[MOS] Error fetching features:', err);
+  }
+}
+
+// Per-user control of the floating "Detect Dog" launcher button. The owner's
+// per-shop switch is a hard gate: when the owner has it off, the user cannot
+// turn it on (checkbox is disabled and an explanatory note shows). When the
+// owner has it on, the user may turn it off for themselves.
+let floatingOwnerEnabled = null;   // null = unknown, true/false once resolved
+let floatingUserPreference = null; // null = unset (defaults on), true/false explicit
+let floatingSaveInFlight = false;
+
+function renderFloatingButtonSetting() {
+  if (!elements.floatingBtnSetting || !elements.floatingBtnCheckbox) return;
+  // Only show the control once we know the owner state.
+  if (floatingOwnerEnabled === null) {
+    elements.floatingBtnSetting.classList.add('hidden');
+    return;
+  }
+  elements.floatingBtnSetting.classList.remove('hidden');
+
+  const ownerOff = floatingOwnerEnabled === false;
+  const userResolved = floatingUserPreference === null ? true : floatingUserPreference;
+
+  elements.floatingBtnCheckbox.disabled = ownerOff || floatingSaveInFlight;
+  elements.floatingBtnCheckbox.checked = ownerOff ? false : userResolved;
+
+  if (elements.floatingBtnLockedNote) {
+    elements.floatingBtnLockedNote.classList.toggle('hidden', !ownerOff);
+  }
+}
+
+async function handleFloatingButtonToggle() {
+  if (!elements.floatingBtnCheckbox) return;
+  if (floatingOwnerEnabled === false) {
+    // Hard gate — shouldn't be reachable (disabled), but guard anyway.
+    renderFloatingButtonSetting();
+    return;
+  }
+  const desired = elements.floatingBtnCheckbox.checked;
+  floatingSaveInFlight = true;
+  elements.floatingBtnCheckbox.disabled = true;
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/preferences`,
+      options: {
+        method: 'PUT',
+        body: JSON.stringify({ floatingDetectDogEnabled: desired })
+      }
+    });
+    if (result && result.success) {
+      floatingUserPreference = desired;
+    } else {
+      console.error('[MOS] Failed to save floating button preference:', result && result.error);
+    }
+  } catch (err) {
+    console.error('[MOS] Error saving floating button preference:', err);
+  } finally {
+    floatingSaveInFlight = false;
+    renderFloatingButtonSetting();
   }
 }
 

@@ -395,6 +395,41 @@ body {
   text-align: center;
 }
 
+.floating-btn-setting {
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.floating-btn-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--gray-600, #4b5563);
+  cursor: pointer;
+}
+
+.floating-btn-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.floating-btn-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.floating-btn-toggle:has(input:disabled) {
+  color: var(--gray-400, #9ca3af);
+  cursor: not-allowed;
+}
+
+.floating-btn-locked-note {
+  margin: 4px 0 0 22px;
+  font-size: 11px;
+  color: var(--gray-400, #9ca3af);
+}
+
 .logout-footer-btn {
   display: inline-flex;
   align-items: center;

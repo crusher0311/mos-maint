@@ -1160,6 +1160,8 @@ function checkAndInjectButton() {
 
 let prefillButtonInjected = false;
 let cachedFeatures = null;
+let cachedFloatingEnabled = null; // null = unknown (show), true = show, false = hide FAB launcher
+let floatingFabFetchInFlight = false;
 let featuresFetchInFlight = false;
 
 function fetchShopFeatures(shopId, callback) {
@@ -1920,7 +1922,41 @@ let fabDragging = false;
 let fabDragStartY = 0;
 let fabStartTop = 0;
 
+function applyFloatingToFab() {
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById('mos-fab');
+    if (ex) ex.remove();
+    fabInjected = false;
+  } else if (cachedFloatingEnabled === true) {
+    injectFloatingButton();
+  }
+}
+
+// Resolve the owner + user floating-launcher decision and show/hide the FAB.
+// Fail-open: only an explicit `false` hides it; unknown / errors leave it shown.
+function refreshFloatingSetting() {
+  if (cachedFloatingEnabled !== null) { applyFloatingToFab(); return; }
+  if (floatingFabFetchInFlight) return;
+  const ctx = detectContext();
+  if (!ctx.shopId) return;
+  floatingFabFetchInFlight = true;
+  safeSendMessage({ action: 'GET_SHOP_FEATURES', shopId: ctx.shopId, provider: 'tekmetric' }, (resp) => {
+    floatingFabFetchInFlight = false;
+    if (resp && resp.success) {
+      cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
+      applyFloatingToFab();
+    }
+  });
+}
+
 function injectFloatingButton() {
+  // Owner/user gate: the launcher (FAB) is disabled for this shop+user.
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById('mos-fab');
+    if (ex) ex.remove();
+    fabInjected = false;
+    return;
+  }
   if (fabInjected) return;
   if (document.getElementById('mos-fab')) {
     fabInjected = true;
@@ -2113,8 +2149,9 @@ function init() {
   // Initial context check
   updateContext();
   
-  // Inject floating action button
+  // Inject floating action button (launcher) — gated by owner/user setting.
   injectFloatingButton();
+  refreshFloatingSetting();
   
   // Try to inject print button
   checkAndInjectButton();

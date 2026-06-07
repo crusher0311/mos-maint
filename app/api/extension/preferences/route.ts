@@ -47,9 +47,11 @@ async function _GET(request: NextRequest) {
     const shopSwMode = shop?.preferences?.shopwareAddMode || "finding-published";
     const effectiveSwMode = smsShopId ? shopSwMode : (auth.user.shopwareAddMode || shopSwMode);
 
+    const floatingPref = (auth.user as any).floatingDetectDogEnabled;
     return NextResponse.json({
       defaultExtensionTab: auth.user.defaultExtensionTab || null,
       shopwareAddMode: effectiveSwMode,
+      floatingDetectDogEnabled: typeof floatingPref === "boolean" ? floatingPref : null,
       shopId
     }, { headers: corsHeaders });
   } catch (error: any) {
@@ -66,7 +68,7 @@ async function _PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { defaultExtensionTab, shopwareAddMode } = body;
+    const { defaultExtensionTab, shopwareAddMode, floatingDetectDogEnabled } = body;
 
     if (defaultExtensionTab !== undefined && defaultExtensionTab !== null && !VALID_TABS.includes(defaultExtensionTab)) {
       return NextResponse.json({ error: "Invalid tab value" }, { status: 400, headers: corsHeaders });
@@ -76,20 +78,42 @@ async function _PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid Shop-Ware add mode" }, { status: 400, headers: corsHeaders });
     }
 
+    if (
+      floatingDetectDogEnabled !== undefined &&
+      floatingDetectDogEnabled !== null &&
+      typeof floatingDetectDogEnabled !== "boolean"
+    ) {
+      return NextResponse.json({ error: "Invalid floatingDetectDogEnabled value" }, { status: 400, headers: corsHeaders });
+    }
+
     const updateFields: Record<string, any> = { updatedAt: new Date() };
+    const unsetFields: Record<string, any> = {};
     if (defaultExtensionTab !== undefined) updateFields.defaultExtensionTab = defaultExtensionTab;
     if (shopwareAddMode !== undefined) updateFields.shopwareAddMode = shopwareAddMode;
+    // null clears the per-user override so the user falls back to the owner /
+    // shop default; a boolean records an explicit per-user choice.
+    if (floatingDetectDogEnabled === null) {
+      unsetFields.floatingDetectDogEnabled = "";
+    } else if (typeof floatingDetectDogEnabled === "boolean") {
+      updateFields.floatingDetectDogEnabled = floatingDetectDogEnabled;
+    }
+
+    const updateOps: Record<string, any> = { $set: updateFields };
+    if (Object.keys(unsetFields).length > 0) updateOps.$unset = unsetFields;
 
     const db = await getDb();
     await db.collection("users").updateOne(
       { _id: auth.user._id },
-      { $set: updateFields }
+      updateOps
     );
 
     return NextResponse.json({ 
       success: true, 
       defaultExtensionTab: defaultExtensionTab ?? auth.user.defaultExtensionTab,
-      shopwareAddMode: shopwareAddMode ?? auth.user.shopwareAddMode ?? "finding-published"
+      shopwareAddMode: shopwareAddMode ?? auth.user.shopwareAddMode ?? "finding-published",
+      floatingDetectDogEnabled: floatingDetectDogEnabled === undefined
+        ? ((auth.user as any).floatingDetectDogEnabled ?? null)
+        : floatingDetectDogEnabled
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Preferences] PUT error:", error);

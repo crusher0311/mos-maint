@@ -25,6 +25,7 @@ export default function PreferencesPage() {
   const [showRecalls, setShowRecalls] = useState(true);
   const [recallsExpanded, setRecallsExpanded] = useState(true);
   const [shopwareAddMode, setShopwareAddMode] = useState("finding-published");
+  const [floatingDetectDog, setFloatingDetectDog] = useState<"default" | "on" | "off">("default");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -60,6 +61,13 @@ export default function PreferencesPage() {
         setEnterpriseShops(data.enterpriseShops || []);
         setJobHistoryShopIds(data.jobHistoryShopIds || null);
         setShopwareAddMode(data.shopwareAddMode || "finding-published");
+        setFloatingDetectDog(
+          data.floatingDetectDogEnabled === true
+            ? "on"
+            : data.floatingDetectDogEnabled === false
+              ? "off"
+              : "default"
+        );
       }
       
       if (integrationsRes.ok) {
@@ -133,7 +141,9 @@ export default function PreferencesPage() {
           recallsExpanded,
           tekmetricLabels: selectedTekmetricLabels,
           jobHistoryShopIds,
-          shopwareAddMode
+          shopwareAddMode,
+          floatingDetectDogEnabled:
+            floatingDetectDog === "on" ? true : floatingDetectDog === "off" ? false : null
         }),
       });
       if (res.ok) {
@@ -214,6 +224,50 @@ export default function PreferencesPage() {
                   </div>
                 </label>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Eye className="w-5 h-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Detect Dog Extension Button</h2>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Floating Detect Dog button (this location)
+            </label>
+            <p className="text-sm text-gray-500">
+              Controls the floating button that opens the Detect Dog side panel on your shop
+              management screens, for everyone at this location. Staff can still hide it for
+              themselves, but if you turn it off here it stays off for everyone. This setting
+              applies only to the shop currently selected in the sidebar.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {([
+                { value: "default", label: "Use default", desc: "On for full plans; off for shops that only do oil stickers and keytags" },
+                { value: "on", label: "Always on", desc: "Everyone at this location sees the floating button" },
+                { value: "off", label: "Always off", desc: "Hidden for everyone at this location" },
+              ] as const).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${floatingDetectDog === opt.value ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+                >
+                  <input
+                    type="radio"
+                    name="floatingDetectDog"
+                    value={opt.value}
+                    checked={floatingDetectDog === opt.value}
+                    onChange={() => setFloatingDetectDog(opt.value)}
+                    className="w-4 h-4 text-blue-600 mt-0.5"
+                  />
+                  <div>
+                    <p className="font-medium text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
         </div>

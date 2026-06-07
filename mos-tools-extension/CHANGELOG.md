@@ -1,5 +1,24 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.28 — 2026-06-07
+
+### Added
+- **The floating Detect Dog button can now be turned on or off.** The round
+  button that opens the Detect Dog side panel on your shop management screens
+  (Tekmetric and Shop-Ware) is now controllable two ways:
+  - **Owners (per location):** In the web app under **Settings → Preferences →
+    Detect Dog Extension Button**, an owner can set the floating button to
+    "Use default", "Always on", or "Always off" for the location currently
+    selected in the sidebar. Turning it off here hides it for *everyone* at that
+    location — it's a hard switch staff cannot override.
+  - **Each user:** At the bottom of the side panel, every user gets a
+    **"Show floating button on shop pages"** checkbox to hide it just for
+    themselves. If the owner has turned it off for the whole shop, this checkbox
+    is disabled with a note explaining why.
+  - **Smart default:** For shops whose only enabled features are oil stickers and
+    keytags, the floating button now defaults to **off** (since the side panel's
+    other tools don't apply). Owners can still force it on.
+
 ## 1.27.27 — 2026-06-06
 
 ### Added

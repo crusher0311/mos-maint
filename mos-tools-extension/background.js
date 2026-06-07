@@ -372,6 +372,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           integrations: data.integrations || [],
           shopId: data.shopId || null,
           canWrite,
+          floatingButtonEnabled: data.floatingButtonEnabled,
+          floatingButtonOwnerEnabled: data.floatingButtonOwnerEnabled,
+          floatingButtonUserPreference: data.floatingButtonUserPreference,
         });
       } catch (err) {
         console.warn("[MOS] Feature fetch error:", err.message);

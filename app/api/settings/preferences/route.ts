@@ -43,6 +43,10 @@ export async function GET() {
     tekmetricLabels: shop?.preferences?.tekmetricLabels || [],
     jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null,
     shopwareAddMode: shop?.preferences?.shopwareAddMode || "finding-published",
+    floatingDetectDogEnabled:
+      typeof shop?.preferences?.floatingDetectDogEnabled === "boolean"
+        ? shop.preferences.floatingDetectDogEnabled
+        : null,
     enterpriseShops,
   });
 }
@@ -60,10 +64,18 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, shopwareAddMode } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, shopwareAddMode, floatingDetectDogEnabled } = await req.json();
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
+  }
+
+  if (
+    floatingDetectDogEnabled !== undefined &&
+    floatingDetectDogEnabled !== null &&
+    typeof floatingDetectDogEnabled !== "boolean"
+  ) {
+    return NextResponse.json({ error: "Invalid floatingDetectDogEnabled value" }, { status: 400 });
   }
 
   const db = await getDb();
@@ -107,10 +119,26 @@ export async function PUT(req: NextRequest) {
     updates["preferences.shopwareAddMode"] = shopwareAddMode;
   }
 
-  await db.collection("shops").updateOne(
-    { shopId: Number(sess.shopId) },
-    { $set: updates }
-  );
+  // Floating Detect Dog launcher (per-shop owner switch). A boolean records an
+  // explicit owner choice; null clears it so the shop falls back to the default
+  // (off when only oil-sticker/keytag features are enabled, otherwise on).
+  const unsets: Record<string, any> = {};
+  if (floatingDetectDogEnabled === null) {
+    unsets["preferences.floatingDetectDogEnabled"] = "";
+  } else if (typeof floatingDetectDogEnabled === "boolean") {
+    updates["preferences.floatingDetectDogEnabled"] = floatingDetectDogEnabled;
+  }
+
+  const ops: Record<string, any> = {};
+  if (Object.keys(updates).length > 0) ops.$set = updates;
+  if (Object.keys(unsets).length > 0) ops.$unset = unsets;
+
+  if (Object.keys(ops).length > 0) {
+    await db.collection("shops").updateOne(
+      { shopId: Number(sess.shopId) },
+      ops
+    );
+  }
 
   return NextResponse.json({ success: true });
 }

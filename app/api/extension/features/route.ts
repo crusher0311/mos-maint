@@ -92,12 +92,41 @@ async function _GET(request: NextRequest) {
         ? "kilometers"
         : "miles";
 
+    // Floating "Detect Dog" launcher button visibility. Two independent
+    // switches resolve to one effective on/off the content scripts honor:
+    //   * Owner (per-shop): shops.preferences.floatingDetectDogEnabled.
+    //     When unset, defaults OFF for shops whose only enabled features are
+    //     oil stickers / keytags, otherwise ON.
+    //   * User (per-account): users.floatingDetectDogEnabled. When unset,
+    //     defaults ON. A user may turn it off for themselves, but the owner's
+    //     OFF is a hard gate the user cannot override.
+    const effFeatures = (entitlements.effectiveFeatures || {}) as Record<string, boolean>;
+    const enabledFeatureKeys = Object.keys(effFeatures).filter((k) => effFeatures[k]);
+    const STICKER_KEYTAG_ONLY = new Set(["oil_sticker", "keytags"]);
+    const onlyStickerKeytag =
+      enabledFeatureKeys.length > 0 &&
+      enabledFeatureKeys.every((k) => STICKER_KEYTAG_ONLY.has(k));
+
+    const ownerPref = shopDoc?.preferences?.floatingDetectDogEnabled;
+    const floatingButtonOwnerEnabled =
+      typeof ownerPref === "boolean" ? ownerPref : !onlyStickerKeytag;
+
+    const userPref = (auth.user as any)?.floatingDetectDogEnabled;
+    const floatingButtonUserPreference =
+      typeof userPref === "boolean" ? userPref : null;
+    const userResolved = floatingButtonUserPreference === null ? true : floatingButtonUserPreference;
+
+    const floatingButtonEnabled = floatingButtonOwnerEnabled && userResolved;
+
     return NextResponse.json({ 
       features: entitlements.effectiveFeatures,
       shopId: mosShopId,
       integrations,
       writeProvider,
       distanceUnit,
+      floatingButtonEnabled,
+      floatingButtonOwnerEnabled,
+      floatingButtonUserPreference,
       billing: {
         plan: entitlements.billing.plan,
         status: entitlements.billing.status

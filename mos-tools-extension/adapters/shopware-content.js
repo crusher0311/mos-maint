@@ -823,6 +823,44 @@ function printStickerFromContentScript(sticker) {
   }
 }
 
+// Floating launcher (FAB) visibility (owner per-shop + per-user, resolved
+// server-side). null = unknown (show, fail-open), true = show, false = hide.
+let cachedFloatingEnabled = null;
+let floatingFetchInFlight = false;
+
+function applyFloatingToFab() {
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById('mos-fab-sw');
+    if (ex) ex.remove();
+  } else if (cachedFloatingEnabled === true) {
+    injectFAB();
+  }
+}
+
+function refreshFloatingSetting() {
+  if (cachedFloatingEnabled !== null) { applyFloatingToFab(); return; }
+  if (floatingFetchInFlight) return;
+  const context = detectContext();
+  const shopId = context.shopId;
+  if (!shopId) return;
+  floatingFetchInFlight = true;
+  try {
+    chrome.runtime.sendMessage(
+      { action: 'GET_SHOP_FEATURES', shopId, provider: 'shopware' },
+      (resp) => {
+        floatingFetchInFlight = false;
+        if (chrome.runtime.lastError) return;
+        if (resp && resp.success) {
+          cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
+          applyFloatingToFab();
+        }
+      }
+    );
+  } catch (e) {
+    floatingFetchInFlight = false;
+  }
+}
+
 function checkAndInjectButton() {
   const context = detectContext();
   if (context.roId) injectPrintButton();
@@ -1162,6 +1200,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ==================== FLOATING ACTION BUTTON ====================
 function injectFAB() {
+  // Owner/user gate: the launcher is disabled for this shop+user.
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById('mos-fab-sw');
+    if (ex) ex.remove();
+    return;
+  }
   if (document.getElementById('mos-fab-sw')) return;
 
   const fab = document.createElement('button');
@@ -1231,6 +1275,7 @@ function init() {
   updateContext();
   checkAndInjectButton();
   injectFAB();
+  refreshFloatingSetting();
 
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {
