@@ -17,6 +17,24 @@ fallback if auto-deploy is ever off or a redeploy of the same commit is needed.
 `mos-tools-east` (srv-d6ujdima2pns73a3pobg) is an OLD inactive web service — do
 NOT deploy it.
 
+**There are THREE active processes that run Tekmetric backfill / read its
+rate-limit env** (all same image, role via env): `mos-tools` (web,
+srv-d55jaqkhg0os73a5dd8g), `backfill-drain-worker` (srv-d86qipd7vvec73ahur00),
+and `mos-maint-background-v2` (srv-d8g15v3eo5us73fvajhg). The shared rate limiter
+reads cap/reserve from **each process's own env at call time**, so an env-based
+throttle change (e.g. `TEKMETRIC_SHARED_RPS_CAP` / `_USER_RESERVE`) must be set
+on ALL THREE or an under-configured process self-throttles its own backfill
+contribution. Confirm IDs by name each time — never hardcode.
+
+**Env-var change ≠ live: Render does NOT auto-deploy on an API env-var edit.**
+`PUT /v1/services/{id}/env-vars/{KEY}` (body `{"value":"..."}`, returns 200)
+persists the value but the running container keeps the OLD value until it
+restarts (env is injected at container start; our getters re-read process.env but
+process.env is frozen per-container). To apply WITHOUT a 7-8 min rebuild, use
+**`POST /v1/services/{id}/restart`** (returns 200) — spins a fresh container that
+picks up the new env, web stays zero-downtime. Use this for transient throttle
+tweaks; reserve full `POST .../deploys` for actual code changes.
+
 **Why:** chasing a "still broken after the fix" report led to discovering prod
 was several commits behind main; the fix was never deployed. Render's last-built
 commit was an *ancestor* of main HEAD (prod simply behind, not diverged).
