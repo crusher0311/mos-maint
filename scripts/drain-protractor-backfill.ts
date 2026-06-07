@@ -29,6 +29,19 @@ import { getDb } from "@/lib/mongo";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 
 const PARALLELISM = Math.max(1, Number(process.env.DRAIN_PARALLELISM) || 3);
+// Round-robin tuning. CHUNKS_PER_TURN is how many chunks a shop walks before
+// yielding its worker to the next shop — kept small so a giant shop can't
+// monopolise a worker and starve everyone behind it. MAX_RUN_MS bounds the
+// whole pass so the process still exits and the parent loop respawns it
+// (reloading the shop list and picking up shops the cron finished meanwhile).
+const CHUNKS_PER_TURN = Math.max(
+  1,
+  Number(process.env.DRAIN_CHUNKS_PER_TURN) || 3
+);
+const MAX_RUN_MS = Math.max(
+  60_000,
+  Number(process.env.DRAIN_MAX_RUN_MS) || 25 * 60 * 1000
+);
 const HEARTBEAT_MS = Math.max(
   5000,
   Number(process.env.DRAIN_HEARTBEAT_MS) || 30000
@@ -202,6 +215,19 @@ export type DrainProtractorShopChunkOptions = {
    * deadline-based predicate so each queue attempt is bounded.
    */
   shouldStop?: () => boolean;
+  /**
+   * When true, run a single bounded turn (singlePass + `maxChunks`) and
+   * return, instead of riding the shop to completion. The round-robin
+   * scheduler sets this so each shop yields after a short turn. Legacy
+   * callers (BullMQ processor, new-shop sweep) leave it unset and keep the
+   * full "run until complete / 30-min cap" behaviour.
+   */
+  singlePass?: boolean;
+  /**
+   * Per-turn chunk cap, forwarded to runProtractorBackfill. Only meaningful
+   * together with `singlePass`.
+   */
+  maxChunks?: number;
 };
 
 export async function drainProtractorShopChunk(
@@ -233,10 +259,17 @@ export async function drainProtractorShopChunk(
 
     let result: Awaited<ReturnType<typeof runProtractorBackfill>>;
     try {
-      // runProtractorBackfill loops chunks to completion internally.
-      // Default mode (no singlePass) self-recurses until the shop is done
-      // or hits the 30-min wall-clock cap, whichever comes first.
-      result = await runProtractorBackfill(job.shopId);
+      // Round-robin mode (singlePass): run one short, bounded turn
+      // (`maxChunks` chunks) and return so the scheduler can hand the next
+      // shop a turn. Legacy mode (no singlePass): runProtractorBackfill loops
+      // chunks and self-recurses until the shop is done or hits the 30-min
+      // wall-clock cap — preserved for the BullMQ processor and new-shop sweep.
+      result = options.singlePass
+        ? await runProtractorBackfill(job.shopId, {
+            singlePass: true,
+            maxChunks: options.maxChunks,
+          })
+        : await runProtractorBackfill(job.shopId);
     } catch (err: any) {
       const msg = err?.message ? String(err.message) : String(err);
       log(`ERROR shop=${job.shopId}: ${msg.slice(0, 200)}`);
@@ -356,26 +389,59 @@ export async function drainProtractorShopChunk(
   };
 }
 
-async function runWithParallelism<T>(
-  items: T[],
+// Round-robin scheduler. Each worker pulls a shop, runs ONE short turn
+// (CHUNKS_PER_TURN chunks), records its latest outcome, and — if the shop
+// still has history left and didn't terminally fail — pushes it to the BACK
+// of the queue so every shop keeps getting turns. This replaces the old
+// "ride one shop to completion" loop that let giant shops head-of-line-block
+// everyone behind them. Bounded by `deadlineAt`: when the pass budget is
+// spent every worker drains out and the process exits for the parent to
+// respawn. `latestByShop` is updated live so the heartbeat reflects progress.
+async function runRoundRobinDrain(
+  initialJobs: ShopJob[],
   workers: number,
-  fn: (item: T) => Promise<ShopOutcome>,
-  results: ShopOutcome[]
+  perTurnChunks: number,
+  deadlineAt: number,
+  latestByShop: Map<number, ShopOutcome>
 ): Promise<void> {
-  const queue = [...items];
+  const queue: ShopJob[] = [...initialJobs];
+  let active = 0;
 
   async function workerLoop(workerId: number) {
-    while (queue.length > 0) {
-      if (stopRequested) return;
-      const item = queue.shift();
-      if (!item) return;
+    while (!stopRequested && Date.now() < deadlineAt) {
+      const job = queue.shift();
+      if (!job) {
+        // Nothing queued right now. If no worker is mid-turn either, the pass
+        // is done; otherwise wait briefly for an in-flight turn to re-queue.
+        if (active === 0) return;
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+      active++;
       try {
-        const outcome = await fn(item);
-        results.push(outcome);
+        const outcome = await drainProtractorShopChunk(job, {
+          singlePass: true,
+          maxChunks: perTurnChunks,
+          // Honour the pass deadline inside lock-waits and between attempts so
+          // a worker can't get stuck past the budget.
+          shouldStop: () => stopRequested || Date.now() >= deadlineAt,
+        });
+        latestByShop.set(job.shopId, outcome);
+        // Re-queue shops that still have history left and didn't terminally
+        // fail. Terminal states (complete/completed_by_other/error/stopped)
+        // drop out of rotation.
+        const keepGoing =
+          (outcome.finalState === "incomplete" ||
+            outcome.finalState === "lock_wait_timeout") &&
+          !stopRequested &&
+          Date.now() < deadlineAt;
+        if (keepGoing) queue.push(job);
       } catch (err: any) {
         log(
           `WORKER_${workerId} unexpected error: ${err?.message || String(err)}`
         );
+      } finally {
+        active--;
       }
     }
   }
@@ -416,24 +482,36 @@ async function main() {
     process.exit(0);
   }
 
-  const outcomes: ShopOutcome[] = [];
+  // Latest outcome per shop — a shop takes several round-robin turns before it
+  // finishes, so we keep only its most recent state. Updated live by the
+  // scheduler so the heartbeat reflects real progress mid-pass.
+  const latestByShop = new Map<number, ShopOutcome>();
   const startedAt = Date.now();
-  const heartbeat = startHeartbeat(
-    () =>
-      `done=${outcomes.length}/${jobs.length} ` +
-      `complete=${outcomes.filter((o) => o.finalState === "complete" || o.finalState === "completed_by_other").length} ` +
-      `error=${outcomes.filter((o) => o.finalState === "error").length} ` +
-      `lockWait=${outcomes.filter((o) => o.finalState === "lock_wait_timeout").length} ` +
-      `elapsed=${((Date.now() - startedAt) / 1000 / 60).toFixed(1)}min`
+  log(
+    `round-robin: chunksPerTurn=${CHUNKS_PER_TURN} ` +
+      `maxRun=${(MAX_RUN_MS / 60000).toFixed(0)}min`
   );
+  const heartbeat = startHeartbeat(() => {
+    const vals = [...latestByShop.values()];
+    return (
+      `touched=${vals.length}/${jobs.length} ` +
+      `complete=${vals.filter((o) => o.finalState === "complete" || o.finalState === "completed_by_other").length} ` +
+      `error=${vals.filter((o) => o.finalState === "error").length} ` +
+      `lockWait=${vals.filter((o) => o.finalState === "lock_wait_timeout").length} ` +
+      `elapsed=${((Date.now() - startedAt) / 1000 / 60).toFixed(1)}min`
+    );
+  });
 
-  await runWithParallelism(
+  await runRoundRobinDrain(
     jobs,
     PARALLELISM,
-    (job) => drainProtractorShopChunk(job),
-    outcomes
+    CHUNKS_PER_TURN,
+    startedAt + MAX_RUN_MS,
+    latestByShop
   );
   clearInterval(heartbeat);
+
+  const outcomes: ShopOutcome[] = [...latestByShop.values()];
 
   const totalJobs = outcomes.reduce((s, o) => s + o.totalJobsIndexed, 0);
   const totalChunks = outcomes.reduce((s, o) => s + o.chunksProcessed, 0);
@@ -461,7 +539,7 @@ async function main() {
   const incomplete = outcomes.filter((o) => o.finalState === "incomplete");
   if (incomplete.length > 0) {
     log("");
-    log("Incomplete shops (hit 30-min wall-clock cap; rerun to continue):");
+    log("Incomplete shops (still have history left; next pass resumes):");
     for (const o of incomplete) {
       log(`  shop=${o.shopId} (${o.name}) chunks=${o.chunksProcessed} jobs=${o.totalJobsIndexed}`);
     }

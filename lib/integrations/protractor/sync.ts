@@ -310,6 +310,28 @@ async function backfillShopChunk(
       daysToProcess = Math.min(180, Math.floor(pace.chunkDays * 1.5));
     }
   }
+
+  // Time-based shrink. The invoice-count heuristic above sizes a chunk by how
+  // MANY records the previous chunk pulled, but a chunk can also run long for
+  // reasons count doesn't capture (slow downstream, detail-fallback fan-out).
+  // If the previous chunk overran the per-chunk time budget, cut the window so
+  // the next chunk fetches AND commits its cursor inside one drain turn.
+  // Without this, a giant shop's chunk keeps getting interrupted before it
+  // records progress, so its cursor never advances and it re-walks the same
+  // window forever (the duplicate-key write churn seen on the most-behind
+  // shops). Floors at 7 days and caps the shrink factor so one slow chunk
+  // can't pin the window to the floor permanently — a later fast chunk grows
+  // it back via the count heuristic. Implausible durations (> the wall-clock
+  // cap, i.e. corrupt metrics) are ignored. Tunable via PROTRACTOR_TARGET_CHUNK_MS.
+  const lastDurationMs = Number(progress?.lastChunkMetrics?.durationMs) || 0;
+  const targetChunkMs = Math.max(
+    15000,
+    Number(process.env.PROTRACTOR_TARGET_CHUNK_MS) || 120000,
+  );
+  if (lastDurationMs > targetChunkMs && lastDurationMs <= MAX_WALL_CLOCK_MS) {
+    const overrunFactor = Math.min(4, Math.ceil(lastDurationMs / targetChunkMs));
+    daysToProcess = Math.max(7, Math.floor(daysToProcess / overrunFactor));
+  }
   
   const chunkStart = new Date(chunkEnd);
   chunkStart.setDate(chunkStart.getDate() - daysToProcess);
@@ -738,7 +760,7 @@ async function backfillShopChunk(
 
 export async function runProtractorBackfill(
   shopId: number,
-  options: { singlePass?: boolean } = {},
+  options: { singlePass?: boolean; maxChunks?: number } = {},
 ): Promise<{
   chunksProcessed: number;
   totalJobsIndexed: number;
@@ -752,6 +774,12 @@ export async function runProtractorBackfill(
   // the route's `maxDuration` budget and always returns chunk metrics
   // inline. Scheduled cron callers (which want full "run until complete")
   // leave the option unset and keep the existing behaviour.
+  //
+  // `maxChunks` caps how many chunks this call walks (clamped to the pace
+  // profile's `maxChunksPerRun`). The round-robin drain sets a small cap so
+  // each shop takes a short turn and then yields to the next shop, instead of
+  // one giant shop monopolising a worker for the whole 30-min wall clock and
+  // starving everyone behind it.
   const singlePass = options.singlePass === true;
   const startTime = Date.now();
   const db = await getDb();
@@ -827,9 +855,13 @@ export async function runProtractorBackfill(
   const shopTz = (shopDoc as any)?.timezone || "America/Chicago";
   const runPace = getPaceConfig("protractor", shopTz);
   const maxChunksPerRun = runPace.maxChunksPerRun;
+  const chunkCap =
+    options.maxChunks && options.maxChunks > 0
+      ? Math.min(options.maxChunks, maxChunksPerRun)
+      : maxChunksPerRun;
 
   try {
-    while (chunksProcessed < maxChunksPerRun) {
+    while (chunksProcessed < chunkCap) {
       if (Date.now() - startTime > MAX_WALL_CLOCK_MS) {
         console.log(`[Backfill] Shop ${shopId}: Wall clock limit reached after ${chunksProcessed} chunks`);
         break;
