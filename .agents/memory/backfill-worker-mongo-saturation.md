@@ -21,6 +21,22 @@ print while their history is catching up.
 backfill saturates the cluster's connections/IO, those reads time out. It looks
 like an auth/extension bug but it's DB starvation.
 
+**Also presents as a fake subscription/paywall + slow stickers (2026-06-08, Endress shop 90):**
+the same saturation also starves the shared **Tekmetric RPS budget**, so live
+extension Tekmetric calls time out and get "negative-cached — skipping live call,"
+and the features endpoint fail-closes → the extension shows "not included in your
+subscription" on tabs the shop actually HAS enabled (confirmed Mongo
+`enabledFeatures` had them true; `IDENTITY_PG_CANONICAL` unset so entitlements read
+Mongo, not the broken PG shadow). Sticker/keytag printing also crawls (minutes each).
+Suspending the workers fixed both: negative-caching → 0 and `Canvas rendered in ~109ms`.
+NOT a browser issue (user guessed Chrome→Edge; irrelevant). NOTE there are now TWO
+backfill workers to suspend: background-v2 + the drain worker. The web-process
+full-page cron (`fullpage-backfill-tekmetric`, every 2 min) keeps running after the
+workers are off but, with the workers' load gone + interactive RPS reserve, it no
+longer harms live users — so backfill still progresses. That full-page cron is
+intentionally EXEMPT from `PAUSE_TEKMETRIC_CRON` (which instead kills the *live*
+incremental-sync), so that flag is the wrong lever for relieving live load.
+
 **How to apply — fast, fully reversible mitigation (no rebuild):**
 Suspend the worker via Render API: `POST /v1/services/<workerId>/suspend`
 (resume with `/resume`). This stops the write storm in one in-flight chunk
