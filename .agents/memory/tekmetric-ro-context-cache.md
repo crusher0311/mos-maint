@@ -33,6 +33,17 @@ and/or decode vin locally (DataOne) so completeness never depends on a live Tekm
 Existing incomplete rows need a one-time enrichment pass; the handler fix only helps
 rows touched by a future webhook.
 
+## Can't backfill make/model from our own data
+`normalized_vehicles` is keyed by **vin** (fields: vin, year, make, model, engineDescription)
+— NOT by Tekmetric vehicleId — AND it's sparse for some shops (0 matches for Endress's
+incomplete-row VINs). So a one-time fill-in cannot copy year/make/model from normalized
+data; it must call Tekmetric `getVehicle(vehicleId, tekShopId)`. The one-off lives at
+`scripts/one-off/enrich-incomplete-tekmetric-rows.ts` (idempotent, fills only blanks,
+throttled, rides the shared rate limiter). A chunk of "incomplete" rows are simply
+vehicles with NO vin upstream — unfixable, they stay on the slow path (small minority).
+NB: `npx tsx` background output is block-buffered to a pipe — use `stdbuf -oL -eL` or you
+see no progress and wrongly think it hung.
+
 ## Mongo query gotchas (these caused a false "stale/empty cache" diagnosis)
 - `shopId` is stored as a **STRING** ("90") on webhook-written rows (and as a number on
   some older rows) — `{shopId: 90}` misses the string rows. Query `tekmetricShopId`

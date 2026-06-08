@@ -518,7 +518,34 @@ export async function POST(req: NextRequest) {
         // Captured-by-value: `repairOrder`, `existingWO`, `payloadCustomerName`,
         // `newOdometer`, `setFields` are all derived from the inbound payload
         // and unchanged after this point — closing over them is safe.
-        const needsVehicle = !!repairOrder.vehicleId && !(existingWO?.vin);
+        // Enrich the vehicle when the cached row lacks a vin OR any of
+        // year/make/model. ro-context (keytag + oil sticker) treats a row as
+        // "incomplete" and falls back to the slow live Tekmetric API unless
+        // vin + customerName + vehicleYear + vehicleMake + vehicleModel are ALL
+        // present. The old check (`!existingWO?.vin`) skipped enrichment for rows
+        // that already had a vin but never got make/model, leaving them stuck on
+        // the slow path forever. See .agents/memory/tekmetric-ro-context-cache.md.
+        // Backoff guard: if we recently fetched this exact vehicle and Tekmetric
+        // still returned no make/model/vin, don't re-fetch on every subsequent
+        // webhook — structurally-incomplete rows would otherwise burn the shared
+        // Tekmetric rate budget (the very thing that makes keytags slow). Retry
+        // after the window in case the upstream vehicle record gets fixed, or
+        // immediately if the RO's vehicleId changes.
+        const VEHICLE_ENRICH_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
+        const recentlyTriedUnfillable =
+          !!existingWO?.vehicleEnrichUnfillableAt &&
+          existingWO?.vehicleEnrichVehicleId === repairOrder.vehicleId &&
+          Date.now() - new Date(existingWO.vehicleEnrichUnfillableAt).getTime() <
+            VEHICLE_ENRICH_RETRY_MS;
+        const needsVehicle =
+          !!repairOrder.vehicleId &&
+          !recentlyTriedUnfillable &&
+          !(
+            existingWO?.vin &&
+            existingWO?.vehicleYear &&
+            existingWO?.vehicleMake &&
+            existingWO?.vehicleModel
+          );
         const needsCustomer =
           !!repairOrder.customerId &&
           !(existingWO?.customerName && existingWO.customerName !== "Unknown Customer") &&
@@ -571,6 +598,24 @@ export async function POST(req: NextRequest) {
                 { $set: enrichFields }
               );
               console.log(`[Tekmetric Webhook] Enriched RO #${roNumber} with: ${Object.keys(enrichFields).filter(k => k !== 'updatedAt').join(', ')}`);
+            }
+
+            // If we attempted vehicle enrichment but the row is STILL missing
+            // structural fields (Tekmetric has no make/model/vin for this vehicle),
+            // stamp a backoff marker so future webhooks don't re-fetch it endlessly.
+            // Clear the marker if the row is now complete.
+            if (needsVehicle) {
+              const finalYear = enrichFields.vehicleYear ?? existingWO?.vehicleYear;
+              const finalMake = enrichFields.vehicleMake ?? existingWO?.vehicleMake;
+              const finalModel = enrichFields.vehicleModel ?? existingWO?.vehicleModel;
+              const finalVinForCheck = enrichFields.vin ?? existingWO?.vin;
+              const nowComplete = !!(finalVinForCheck && finalYear && finalMake && finalModel);
+              await db.collection("tekmetric_work_orders").updateOne(
+                { workOrderId: String(roId) },
+                nowComplete
+                  ? { $unset: { vehicleEnrichUnfillableAt: "", vehicleEnrichVehicleId: "" } }
+                  : { $set: { vehicleEnrichUnfillableAt: new Date(), vehicleEnrichVehicleId: repairOrder.vehicleId } }
+              );
             }
 
             // Trigger VHI build once we have vin + mileage (from payload, existing row, or enrichment)
