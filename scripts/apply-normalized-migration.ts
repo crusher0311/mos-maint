@@ -420,7 +420,29 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "nsj_provenance_source_ids_idx" ON "normalized_service_jobs" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
     `CREATE INDEX IF NOT EXISTS "nli_provenance_source_ids_idx" ON "normalized_line_items" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
     `CREATE INDEX IF NOT EXISTS "np_provenance_source_ids_idx" ON "normalized_payments" USING gin ((provenance -> 'sourceIds') jsonb_path_ops)`,
+
+    // Job-history search trigram GIN indexes. The search filters with
+    // leading-wildcard `ILIKE '%token%'` across title/description/
+    // canned_job_name; these `gin_trgm_ops` indexes let those predicates use
+    // a Bitmap Index Scan instead of walking the created_at index and
+    // filtering every row (which timed out for rare/multi-token terms on
+    // large enterprise shops). Requires the pg_trgm extension created above.
+    // On prod these were built with CREATE INDEX CONCURRENTLY to avoid a
+    // write lock; here they are plain idempotent CREATEs for fresh
+    // environments. See drizzle/0019_job_search_trgm.sql.
+    `CREATE INDEX IF NOT EXISTS "nsj_title_trgm_idx" ON "normalized_service_jobs" USING gin ("title" gin_trgm_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nsj_description_trgm_idx" ON "normalized_service_jobs" USING gin ("description" gin_trgm_ops)`,
+    `CREATE INDEX IF NOT EXISTS "nsj_canned_job_name_trgm_idx" ON "normalized_service_jobs" USING gin ("canned_job_name" gin_trgm_ops)`,
   ];
+
+  console.log("Creating extensions...");
+  // pg_trgm backs the trigram GIN indexes used by job-history search
+  // (leading-wildcard ILIKE on title/description/canned_job_name). Without
+  // it, those ILIKE searches cannot be index-assisted and degrade to a full
+  // created_at scan that times out for rare/multi-token terms on large
+  // enterprise shops. See drizzle/0019_job_search_trgm.sql.
+  await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+  console.log("  ✓ pg_trgm");
 
   console.log("Creating enums...");
   for (const stmt of enumStatements) {

@@ -75,23 +75,39 @@ async function _GET(request: NextRequest) {
               totalCost: job.totalCost || 0,
             }));
 
-            await db.collection("protractor_canned_jobs_cache").updateOne(
-              { shopId: mosShopId },
-              {
-                $set: {
-                  shopId: mosShopId,
-                  cannedJobs,
-                  fetchedAt: new Date(),
-                }
-              },
-              { upsert: true }
-            );
-
-            source = "api";
-            console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Protractor API`);
+            // Only cache a non-empty result so a transient empty/error can't
+            // poison the cache (the cache-hit check requires length > 0).
+            if (cannedJobs.length > 0) {
+              await db.collection("protractor_canned_jobs_cache").updateOne(
+                { shopId: mosShopId },
+                {
+                  $set: {
+                    shopId: mosShopId,
+                    cannedJobs,
+                    fetchedAt: new Date(),
+                  }
+                },
+                { upsert: true }
+              );
+              source = "api";
+              console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Protractor API`);
+            } else {
+              console.warn(`[Extension Canned Jobs] Protractor returned 0 jobs for shop ${mosShopId}; not overwriting cache`);
+            }
           }
         } catch (err: any) {
           console.error("[Extension Canned Jobs] Protractor API error:", err.message);
+        }
+
+        // Graceful fallback: serve last-known-good cache (ignore TTL) when the
+        // live fetch produced nothing.
+        if (cannedJobs.length === 0) {
+          const stale = await db.collection("protractor_canned_jobs_cache").findOne({ shopId: mosShopId });
+          if (stale?.cannedJobs?.length > 0) {
+            cannedJobs = stale.cannedJobs;
+            source = "stale_cache";
+            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale Protractor canned jobs for shop ${mosShopId} (fetchedAt=${stale.fetchedAt})`);
+          }
         }
       }
     } else if (provider === "tekmetric" && tekmetricShopId) {
@@ -124,13 +140,25 @@ async function _GET(request: NextRequest) {
             // timeout we break the loop with whatever pages we already
             // collected (still better than blocking the extension for
             // the full 14s+ we saw in production), and if we got nothing
-            // the catch/cache fallthrough below kicks in.
-            const response = await withUpstreamTimeout(
+            // the stale-cache fallback below kicks in.
+            let response = await withUpstreamTimeout(
               getCannedJobs(tekmetricShopId, { page, size: 100 }),
               5000,
               `tekmetric canned-jobs page=${page} shop=${tekmetricShopId}`,
               null as any,
             );
+            // One retry on the first page with a slightly longer budget — a
+            // single transient slow response shouldn't leave the extension
+            // with nothing when a warm cache exists/can be built.
+            if (!response && page === 0) {
+              console.warn(`[Extension Canned Jobs] page 0 timed out for shop ${tekmetricShopId} — retrying once (8s)`);
+              response = await withUpstreamTimeout(
+                getCannedJobs(tekmetricShopId, { page, size: 100 }),
+                8000,
+                `tekmetric canned-jobs retry page=0 shop=${tekmetricShopId}`,
+                null as any,
+              );
+            }
             if (!response) {
               console.warn(`[Extension Canned Jobs] page ${page} timed out — using ${allCannedJobs.length} jobs collected so far`);
               break;
@@ -157,23 +185,46 @@ async function _GET(request: NextRequest) {
             packagePrice: job.packagePrice || false,
           }));
 
-          await db.collection("tekmetric_canned_jobs_cache").updateOne(
-            { shopId: tekmetricShopId },
-            {
-              $set: {
-                shopId: tekmetricShopId,
-                mosShopId: mosShopId,
-                cannedJobs: cannedJobs,
-                fetchedAt: new Date(),
-              }
-            },
-            { upsert: true }
-          );
-
-          source = "api";
-          console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Tekmetric API`);
+          // Only cache a non-empty result. Caching an empty array (e.g. from a
+          // timed-out fetch) used to poison the cache: the cache-hit check
+          // requires `cannedJobs.length > 0`, so a 0-row row behaves as a
+          // permanent miss that re-fetches (and re-caches empty) on every
+          // request. Skipping the write on empty preserves the last good row.
+          if (cannedJobs.length > 0) {
+            await db.collection("tekmetric_canned_jobs_cache").updateOne(
+              { shopId: tekmetricShopId },
+              {
+                $set: {
+                  shopId: tekmetricShopId,
+                  mosShopId: mosShopId,
+                  cannedJobs: cannedJobs,
+                  fetchedAt: new Date(),
+                }
+              },
+              { upsert: true }
+            );
+            source = "api";
+            console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Tekmetric API`);
+          } else {
+            console.warn(`[Extension Canned Jobs] Tekmetric returned 0 jobs for shop ${tekmetricShopId}; not overwriting cache`);
+          }
         } catch (err: any) {
           console.error("[Extension Canned Jobs] Tekmetric API error:", err.message);
+        }
+
+        // Graceful fallback: if the live fetch produced nothing (timeout,
+        // error, or a transient empty), serve the last-known-good cached row
+        // even if it's past its 1h TTL. Better to show slightly stale canned
+        // jobs than an empty list.
+        if (cannedJobs.length === 0) {
+          const stale = await db.collection("tekmetric_canned_jobs_cache").findOne({
+            shopId: tekmetricShopId,
+          });
+          if (stale?.cannedJobs?.length > 0) {
+            cannedJobs = stale.cannedJobs;
+            source = "stale_cache";
+            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale canned jobs for shop ${tekmetricShopId} (fetchedAt=${stale.fetchedAt})`);
+          }
         }
       }
     }

@@ -38,15 +38,22 @@ JSONB filter, joins work orders, and `ORDER BY created_at DESC LIMIT`.
 (internal ids 32,36,37,82,112,122,123), ~1.77M Mongo `job_index` docs and ~246k PG service
 jobs combined. So every search at one HEART location scans all 7 shops' data.
 
-## Fix directions (all need Brandon to deploy; some are prod-DB ops)
-1. **Durable:** add `pg_trgm` and a GIN trigram index on title/description/canned_job_name
-   (CREATE EXTENSION + CREATE INDEX CONCURRENTLY on prod Supabase — operator/deploy action),
-   then the ILIKE can use it.
-2. **Quick mitigation (code-only):** add an app statement_timeout (~8s) to the PG query so
-   pathological searches fail fast with the existing "Search timed out, try a more specific
-   term" UX instead of hanging.
-3. **Scope:** default search to the current shop (or set `jobHistoryShopIds`) instead of the
-   whole enterprise — behavior change, ask first.
+## Fix applied (durable, option 1)
+`pg_trgm` is now installed on prod Supabase and three `gin_trgm_ops` GIN indexes exist on
+`normalized_service_jobs` (`nsj_title_trgm_idx`, `nsj_description_trgm_idx`,
+`nsj_canned_job_name_trgm_idx`), built with `CREATE INDEX CONCURRENTLY` (all valid).
+Re-EXPLAIN: the timing-out cases dropped from 25s+ to sub-second (rare term ~887ms,
+two-token ~613ms, zero-match ~2ms); common "brake" stayed ~68ms. Persisted idempotently in
+`scripts/apply-normalized-migration.ts` (CREATE EXTENSION + 3 CREATE INDEX IF NOT EXISTS)
+and `drizzle/0019_job_search_trgm.sql`.
+**Watch out:** the persisted SQL is plain (non-concurrent) `CREATE INDEX IF NOT EXISTS` —
+fine for fresh/empty envs, but on a populated live table use `CREATE INDEX CONCURRENTLY`
+outside a transaction to avoid a write lock.
+
+## Other options NOT taken (Brandon's call)
+- App-level statement_timeout (~8s fail-fast) — Brandon explicitly did **not** want this.
+- Narrowing search to the current shop instead of the whole enterprise — behavior change,
+  not done.
 
 ## Entitlement is NOT the cause
 Founder plan code is the string `"detect_dog_founder"` (`FOUNDER_PLAN` in
