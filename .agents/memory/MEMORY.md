@@ -1,5 +1,7 @@
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
 - [job_index retirement blocked](job-index-retirement-blocked.md) — legacy Mongo job_index still has live readers (job-search fallback, plan-build, parts, dashboard); cannot drop until PG backfill+soak done.
+- [Job search PG slowness](job-search-pg-slowness.md) — normalized_service_jobs IS populated (route's "never wired" comment is stale); slow = leading-wildcard ILIKE w/o pg_trgm + created_at-backward-scan that explodes on rare/multi/zero-match terms; enterprise fan-out (all shops) amplifies; no app statement_timeout.
+- [Canned jobs new-shop miss](canned-jobs-new-shop-cache.md) — newly onboarded shops have no tekmetric_canned_jobs_cache row; live Tekmetric getCannedJobs is slow for HEART (14s+) → 5s/page cap returns empty → "canned jobs not pulling."
 - [DB cutover flips are operator-only](db-cutover-operator-gated.md) — flipping *_PG_CANONICAL, running backfills, soaking, removing fallbacks are prod actions; never do them from an isolated env.
 - [Tekmetric drain wedge](tekmetric-drain-wedge.md) — backfills stall when a drain worker hangs on a no-timeout fetch yet keeps refreshing the global lease, blocking the cron fallback.
 - [Protractor normalize chunk cost](protractor-normalize-chunk-cost.md) — dense Protractor chunks take 15-20min via serial per-WO normalize (+per-WO single-VIN ACES); the real multi-day-stall cause, NOT a DB hang. Bulk enrichVinsWithAces unused on this path.
