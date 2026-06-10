@@ -26,3 +26,10 @@ someone adds missing-subscription alerting.
 **How to apply:** when touching `tekmetric-webhook-health` alerting, the
 `webhook-subscription-status` route, or the sweep cron, keep the gate. See
 `docs/runbooks/webhook-freshness.md` for the full freshness contract.
+
+**To confirm webhooks are actually LIVE, never read the subscriptions
+collection — read `tekmetric_webhook_logs` recency.** An empty
+`tekmetric_webhook_subscriptions` is the normal/expected state (auto-subscribe
+off; subscriptions are configured Tekmetric-side), NOT an outage. The real
+liveness signal is event volume: e.g. ~1,275 events landed in 6h on 2026-06-10,
+newest seconds old. Don't conclude "webhooks are dark" from the empty sub table.
