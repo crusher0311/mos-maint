@@ -56,15 +56,16 @@
     // without any DOM scraping. Computed up front so it fires regardless of
     // whether the sniffer wrapper also runs below.
     var roLoadMatch = typeof url === 'string'
-      ? url.match(/\/api\/shop\/\d+\/repair-order\/(\d+)(?:\?|$)/)
+      ? url.match(/\/api\/shop\/(\d+)\/repair-order\/(\d+)(?:\?|$)/)
       : null;
-    var roLoadId = roLoadMatch ? roLoadMatch[1] : null;
+    var roLoadShopId = roLoadMatch ? roLoadMatch[1] : null;
+    var roLoadId = roLoadMatch ? roLoadMatch[2] : null;
     var fireRoLoaded = function(response) {
       if (!roLoadId) return;
       if (response.status >= 200 && response.status < 300) {
         try {
           response.clone().json().then(function(data) {
-            window.postMessage({ type: 'MOS_RO_LOADED', roId: roLoadId, data: data }, '*');
+            window.postMessage({ type: 'MOS_RO_LOADED', shopId: roLoadShopId, roId: roLoadId, data: data }, '*');
           }).catch(function() {});
         } catch(e) {}
       }
@@ -188,15 +189,16 @@
 
     // Passive RO load capture (XHR path) — see fetch hook above for rationale.
     if (this._mosUrl && (!this._mosMethod || this._mosMethod === 'GET')) {
-      var roMatchXhr = this._mosUrl.match(/\/api\/shop\/\d+\/repair-order\/(\d+)(?:\?|$)/);
+      var roMatchXhr = this._mosUrl.match(/\/api\/shop\/(\d+)\/repair-order\/(\d+)(?:\?|$)/);
       if (roMatchXhr) {
-        var roLoadIdXhr = roMatchXhr[1];
+        var roLoadShopIdXhr = roMatchXhr[1];
+        var roLoadIdXhr = roMatchXhr[2];
         var xhrSelf = this;
         this.addEventListener('load', function() {
           try {
             if (xhrSelf.status >= 200 && xhrSelf.status < 300 && xhrSelf.responseText) {
               var parsedRo = JSON.parse(xhrSelf.responseText);
-              window.postMessage({ type: 'MOS_RO_LOADED', roId: roLoadIdXhr, data: parsedRo }, '*');
+              window.postMessage({ type: 'MOS_RO_LOADED', shopId: roLoadShopIdXhr, roId: roLoadIdXhr, data: parsedRo }, '*');
             }
           } catch(e) {}
         });

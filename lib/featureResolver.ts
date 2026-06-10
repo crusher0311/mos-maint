@@ -201,7 +201,23 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
   }
 }
 
-export async function getFeatureEntitlements(shopId: number): Promise<FeatureEntitlements> {
+/**
+ * Thrown by getFeatureEntitlements({ throwIfMissing: true }) when the shop
+ * row can't be loaded. Callers that serve the extension treat this as a
+ * transient "couldn't load" signal (HTTP 503) rather than emitting an
+ * all-features-off answer, which would wrongly lock paid features mid-shift.
+ */
+export class ShopEntitlementsUnavailableError extends Error {
+  constructor(shopId: number) {
+    super(`Feature entitlements unavailable for shop ${shopId}`);
+    this.name = "ShopEntitlementsUnavailableError";
+  }
+}
+
+export async function getFeatureEntitlements(
+  shopId: number,
+  opts: { throwIfMissing?: boolean } = {},
+): Promise<FeatureEntitlements> {
   // W4 cutover (#346): PG-canonical shop + enterprise lookup when the
   // flag is on. Both branches return Mongo-shaped docs; PG uses the
   // typed `MongoShapedShop` / `MongoShapedEnterprise`.
@@ -209,7 +225,10 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
   let enterpriseFeatures: Partial<FeatureSettings> = {};
   if (isIdentityPgCanonical()) {
     shop = await pgFindShop(shopId);
-    if (!shop) return createDefaultEntitlements();
+    if (!shop) {
+      if (opts.throwIfMissing) throw new ShopEntitlementsUnavailableError(shopId);
+      return createDefaultEntitlements();
+    }
     if (shop.enterpriseId) {
       const enterprise: MongoShapedEnterprise | null = await pgFindEnterprise(
         String(shop.enterpriseId),
@@ -223,7 +242,10 @@ export async function getFeatureEntitlements(shopId: number): Promise<FeatureEnt
     shop = (await db.collection("shops").findOne({ shopId })) as unknown as
       | MongoShapedShop
       | null;
-    if (!shop) return createDefaultEntitlements();
+    if (!shop) {
+      if (opts.throwIfMissing) throw new ShopEntitlementsUnavailableError(shopId);
+      return createDefaultEntitlements();
+    }
     if (shop.enterpriseId) {
       const enterprise = await db.collection("enterprise_accounts").findOne({
         _id: shop.enterpriseId

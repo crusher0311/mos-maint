@@ -871,51 +871,88 @@ function updateContext(context) {
   }
 }
 
+// Features can fail to load transiently (a brief DB / shop-resolution blip on
+// the server, now signalled as a 503). When that happens we must NOT clobber
+// the last-known-good feature set with an all-off default — that flashes the
+// scary "not included in your subscription" lock at a writer mid-shift.
+// Instead: keep what we have, retry quietly with backoff, and only ever apply
+// a real features payload.
+const FEATURES_RETRY_DELAYS_MS = [800, 2000, 4000, 8000];
+let featuresFetchSeq = 0;
+
+function applyShopFeatures(result) {
+  shopFeatures = result.features;
+  // Task #340: pick up shop distance preference early so the mileage
+  // chip and any tooltips that fire before the plan response use the
+  // right unit.
+  if (result.distanceUnit === 'kilometers' || result.distanceUnit === 'miles') {
+    shopDistanceUnit = result.distanceUnit;
+  }
+  updateTabAccessibility();
+
+  if (result.shopId && currentContext) {
+    currentContext.mosShopId = result.shopId;
+    resolvedMosShopId = result.shopId;
+  }
+  if (result.writeProvider && currentContext) {
+    resolvedWriteProvider = result.writeProvider;
+    currentContext.writeProvider = result.writeProvider;
+  }
+  if (result.integrations && currentContext) {
+    currentContext.integrations = result.integrations;
+  }
+  // Floating launcher button: owner per-shop gate + per-user preference.
+  floatingOwnerEnabled =
+    typeof result.floatingButtonOwnerEnabled === 'boolean'
+      ? result.floatingButtonOwnerEnabled
+      : null;
+  floatingUserPreference =
+    typeof result.floatingButtonUserPreference === 'boolean'
+      ? result.floatingButtonUserPreference
+      : null;
+  renderFloatingButtonSetting();
+}
+
 async function fetchShopFeatures() {
   if (!currentContext || !currentContext.shopId) return;
-  
-  try {
-    const result = await sendMessage({
-      action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/features?shopId=${currentContext.shopId}&provider=${currentContext.provider || ''}`
-    });
-    
-    if (result && result.features) {
-      shopFeatures = result.features;
-      // Task #340: pick up shop distance preference early so the mileage
-      // chip and any tooltips that fire before the plan response use the
-      // right unit.
-      if (result.distanceUnit === 'kilometers' || result.distanceUnit === 'miles') {
-        shopDistanceUnit = result.distanceUnit;
-      }
-      updateTabAccessibility();
-      
-      if (result.shopId && currentContext) {
-        currentContext.mosShopId = result.shopId;
-        resolvedMosShopId = result.shopId;
-      }
-      if (result.writeProvider && currentContext) {
-        resolvedWriteProvider = result.writeProvider;
-        currentContext.writeProvider = result.writeProvider;
-      }
-      if (result.integrations && currentContext) {
-        currentContext.integrations = result.integrations;
-      }
-      // Floating launcher button: owner per-shop gate + per-user preference.
-      floatingOwnerEnabled =
-        typeof result.floatingButtonOwnerEnabled === 'boolean'
-          ? result.floatingButtonOwnerEnabled
-          : null;
-      floatingUserPreference =
-        typeof result.floatingButtonUserPreference === 'boolean'
-          ? result.floatingButtonUserPreference
-          : null;
-      renderFloatingButtonSetting();
-    } else if (result && result.error) {
-      console.error('[MOS] Features API error:', result.error);
+
+  // Sequence guard: a newer call (the writer switched ROs/shops) cancels any
+  // in-flight retry loop so we never apply a stale shop's features.
+  const mySeq = ++featuresFetchSeq;
+  const shopAtStart = currentContext.shopId;
+
+  for (let attempt = 0; ; attempt++) {
+    if (mySeq !== featuresFetchSeq) return;
+
+    let result;
+    try {
+      result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: `/api/extension/features?shopId=${shopAtStart}&provider=${currentContext.provider || ''}`
+      });
+    } catch (err) {
+      result = { error: (err && err.message) || 'fetch failed' };
     }
-  } catch (err) {
-    console.error('[MOS] Error fetching features:', err);
+
+    // Superseded while awaiting — drop this result.
+    if (mySeq !== featuresFetchSeq) return;
+
+    if (result && result.features) {
+      applyShopFeatures(result);
+      return;
+    }
+
+    // Transient / error (e.g. 503): keep last-known-good features and retry
+    // quietly. Never overwrite with an all-off lock.
+    console.warn(
+      `[MOS] Features load transient (attempt ${attempt + 1}); keeping last-known-good`,
+      result && result.error
+    );
+    if (attempt >= FEATURES_RETRY_DELAYS_MS.length) {
+      console.error('[MOS] Features load failed after retries; left last-known-good in place');
+      return;
+    }
+    await new Promise((r) => setTimeout(r, FEATURES_RETRY_DELAYS_MS[attempt]));
   }
 }
 
@@ -3049,14 +3086,38 @@ async function loadKeytagSection() {
     return;
   }
 
-  // New / different RO context: clear the form (DOM scrape is unreliable —
-  // Tekmetric sometimes renders literal label text like "Name"/"Vehicle"
-  // before React hydrates) and lock Print until the API responds.
-  if (elements.keytagCustomer) elements.keytagCustomer.value = '';
-  if (elements.keytagVehicle) elements.keytagVehicle.value = '';
-  if (elements.keytagRo) elements.keytagRo.value = '';
-  if (elements.keytagMileage) elements.keytagMileage.value = '';
-  keytagStatus = 'loading';
+  // New / different RO context.
+  //
+  // Instant-fill: the interceptor parses Tekmetric's own /repair-order/{id}
+  // API response into a per-RO cache, which flows into currentContext as
+  // customerName + vehicleDisplay (RO-scoped — the cache is keyed by roId and
+  // the panel's smart-merge only carries fields within the same RO, so this is
+  // never a previous customer). When that captured identity is already here,
+  // populate the form and UNLOCK Print immediately. The backend ro-context
+  // call still runs below to confirm/refine, but it no longer gates the writer
+  // behind a round-trip or flashes a "loading" lock on a known-good RO.
+  const haveInstantIdentity = !!(
+    currentContext &&
+    currentContext.customerName &&
+    currentContext.vehicleDisplay
+  );
+
+  if (haveInstantIdentity) {
+    updateKeytagFields();
+    keytagStatus = 'ready';
+    keytagContextEnriched = true;
+    if (roKey) keytagLastEnrichedKey = roKey;
+  } else {
+    // No reliable captured identity yet — clear the form (DOM scrape is
+    // unreliable: Tekmetric sometimes renders literal label text like
+    // "Name"/"Vehicle" before React hydrates) and lock Print until the API
+    // responds.
+    if (elements.keytagCustomer) elements.keytagCustomer.value = '';
+    if (elements.keytagVehicle) elements.keytagVehicle.value = '';
+    if (elements.keytagRo) elements.keytagRo.value = '';
+    if (elements.keytagMileage) elements.keytagMileage.value = '';
+    keytagStatus = 'loading';
+  }
   recomputeKeytagPrintLock();
 
   if (!roKey) return;
@@ -3101,15 +3162,18 @@ async function loadKeytagSection() {
         keytagStatus = 'ready';
         keytagContextEnriched = true;
         keytagLastEnrichedKey = roKey;
-      } else {
+      } else if (!haveInstantIdentity) {
+        // Only fall to "insufficient" if we never had a good instant fill —
+        // a sparse backend reply must not re-lock an already-populated form.
         keytagStatus = 'insufficient';
       }
-    } else {
+    } else if (!haveInstantIdentity) {
       keytagStatus = 'insufficient';
     }
   } catch (e) {
     console.log('[MOS] Keytag context enrichment failed:', e);
-    if (makeRoKey(currentContext) === roKey) {
+    // A backend blip must never re-lock a form we already instant-filled.
+    if (makeRoKey(currentContext) === roKey && !haveInstantIdentity) {
       keytagStatus = 'error';
     }
   } finally {

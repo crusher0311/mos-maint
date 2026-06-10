@@ -1,5 +1,34 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.29 — 2026-06-10
+
+### Fixed
+- **The subscription lock no longer flashes on a momentary backend hiccup.** If
+  the server briefly couldn't look up a shop's plan (a transient error, not a
+  real "not subscribed" answer), the side panel used to treat that as "no
+  features" and show the upgrade/lock screen — even for paying shops. Now the
+  server clearly signals a temporary problem, and the panel quietly keeps the
+  last known-good features and retries in the background instead of locking the
+  user out. A genuine "not entitled" answer still shows the lock as before.
+
+### Changed
+- **The Print tab (keytags + oil stickers) now fills in instantly.** When a
+  repair order loads, the customer name, vehicle, RO number, and mileage are
+  taken straight from the data the shop page already fetched, so the keytag and
+  oil sticker populate immediately and Print unlocks right away. The backend
+  still confirms in the background, but a slow or incomplete reply can no longer
+  blank out or re-lock fields that were already filled correctly.
+- **Captured page data is now trusted over screen-scraping.** The extension
+  prefers the repair order's own loaded data (VIN, vehicle, customer, mileage)
+  as the source of truth, using on-screen text only to fill gaps. This stops the
+  occasional wrong values (like the literal words "Name" or "Vehicle") that
+  appeared while the shop page was still drawing, and lets the Specs and Common
+  Failures tabs skip redundant lookups when the data is already on hand.
+
+### Internal
+- Captured repair-order data is cached per shop **and** repair order, so a
+  repair-order id can never be confused between two shops.
+
 ## 1.27.28 — 2026-06-07
 
 ### Added

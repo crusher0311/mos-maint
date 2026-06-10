@@ -4,7 +4,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // to learn which features are enabled.
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
-import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { getFeatureEntitlements, ShopEntitlementsUnavailableError } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
 const corsHeaders = {
@@ -12,6 +12,18 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+
+// A transient "couldn't load features right now" answer. The extension treats
+// a 503 as transient: it keeps its last-known-good feature set and retries,
+// instead of rendering the "not included in your subscription" lock. NEVER
+// return an all-features-off 200 for a load/resolution failure — that wrongly
+// locks paid features for an entitled shop.
+function transientFeaturesResponse(reason: string) {
+  return NextResponse.json(
+    { error: reason, code: "FEATURES_TRANSIENT", transient: true },
+    { status: 503, headers: corsHeaders }
+  );
+}
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -47,24 +59,23 @@ async function _GET(request: NextRequest) {
     }
 
     if (!mosShopId) {
-      return NextResponse.json({
-        features: {
-          maintenance: false,
-          job_lookup: false,
-          common_failures: false,
-          oil_sticker: false,
-          keytags: false,
-          auto_booking: false,
-          part_xref: false,
-          concern_assistant: false,
-          estimate_assist: false,
-          dvi_prefill: false,
-          enhance_notes: false
-        }
-      }, { headers: corsHeaders });
+      // Could not resolve a shop for this request — a transient shop-resolution
+      // miss or a degraded auth state. Signal transient instead of emitting an
+      // all-features-off answer that would lock an entitled shop's features.
+      return transientFeaturesResponse("Could not resolve shop for features");
     }
 
-    const entitlements = await getFeatureEntitlements(mosShopId);
+    let entitlements: Awaited<ReturnType<typeof getFeatureEntitlements>>;
+    try {
+      entitlements = await getFeatureEntitlements(mosShopId, { throwIfMissing: true });
+    } catch (e: any) {
+      if (e instanceof ShopEntitlementsUnavailableError) {
+        // Shop row couldn't be loaded this instant (DB blip / read race) even
+        // though the user is authenticated for it — treat as transient.
+        return transientFeaturesResponse("Entitlements temporarily unavailable");
+      }
+      throw e;
+    }
 
     let integrations: string[] = [];
     let writeProvider: string | null = null;
@@ -135,10 +146,9 @@ async function _GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error("[Extension Features] Error:", error);
-    return NextResponse.json(
-      { error: "Failed to load features" },
-      { status: 500, headers: corsHeaders }
-    );
+    // Fail transient, not closed: a thrown error here must not lock the shop's
+    // features. The extension keeps last-known-good and retries.
+    return transientFeaturesResponse("Failed to load features");
   }
 }
 

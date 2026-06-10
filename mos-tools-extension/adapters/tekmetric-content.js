@@ -29,50 +29,70 @@ let contextCheckInterval = null;
 // tab, so once we've ever seen these fields for an RO, we reuse them.
 const roContextCache = new Map();
 
+// Identity fields tracked per RO. Once the interceptor captures any of these
+// from the Tekmetric API, that value is AUTHORITATIVE and a later DOM scrape
+// must never overwrite it — the SPA briefly renders literal label text
+// ("Name", "Vehicle") before React hydrates, so scrape is bootstrap / fallback
+// only. We record which fields came from the API in `_apiKeys`.
+const RO_IDENTITY_FIELDS = [
+  'vin', 'mileage', 'vehicle', 'vehicleDisplay', 'vehicleId', 'roNumber',
+  'customer', 'customerName', 'customerId', 'customerPhone', 'customerEmail',
+];
+
+function getApiKeys(entry) {
+  return (entry && Array.isArray(entry._apiKeys)) ? entry._apiKeys : [];
+}
+
+// Cache key is shop-scoped so a Tekmetric RO id can never collide across shops
+// (which would otherwise risk showing one shop's customer on another's keytag).
+function roCacheKey(shopId, roId) {
+  if (!roId) return null;
+  return `${shopId != null ? shopId : '?'}:${roId}`;
+}
+
 function rememberRoContext(ctx) {
   if (!ctx?.roId) return;
-  const prior = roContextCache.get(ctx.roId) || {};
-  const merged = {
-    vin: ctx.vin || prior.vin || null,
-    mileage: ctx.mileage || prior.mileage || null,
-    vehicle: ctx.vehicle || prior.vehicle || null,
-    vehicleDisplay: ctx.vehicleDisplay || prior.vehicleDisplay || null,
-    vehicleId: ctx.vehicleId || prior.vehicleId || null,
-    roNumber: ctx.roNumber || prior.roNumber || null,
-    customer: ctx.customer || prior.customer || null,
-    customerName: ctx.customerName || prior.customerName || null,
-    customerId: ctx.customerId || prior.customerId || null,
-    customerPhone: ctx.customerPhone || prior.customerPhone || null,
-    customerEmail: ctx.customerEmail || prior.customerEmail || null,
-  };
+  const key = roCacheKey(ctx.shopId, ctx.roId);
+  const prior = roContextCache.get(key) || {};
+  const apiKeys = getApiKeys(prior);
+  // API-sourced fields keep their cached value; everything else takes the
+  // fresh scrape, falling back to whatever was cached.
+  const merged = {};
+  for (const field of RO_IDENTITY_FIELDS) {
+    merged[field] = apiKeys.includes(field)
+      ? (prior[field] ?? null)
+      : (ctx[field] || prior[field] || null);
+  }
+  merged._apiKeys = apiKeys;
   roContextCache.set(ctx.roId, merged);
   return merged;
 }
 
 function hydrateContextFromCache(ctx) {
   if (!ctx?.roId) return ctx;
-  const cached = roContextCache.get(ctx.roId);
+  const cached = roContextCache.get(roCacheKey(ctx.shopId, ctx.roId));
   if (!cached) return ctx;
-  if (!ctx.vin && cached.vin) ctx.vin = cached.vin;
-  if (!ctx.mileage && cached.mileage) ctx.mileage = cached.mileage;
-  if (!ctx.vehicle && cached.vehicle) ctx.vehicle = cached.vehicle;
-  if (!ctx.vehicleDisplay && cached.vehicleDisplay) ctx.vehicleDisplay = cached.vehicleDisplay;
-  if (!ctx.vehicleId && cached.vehicleId) ctx.vehicleId = cached.vehicleId;
-  if (!ctx.roNumber && cached.roNumber) ctx.roNumber = cached.roNumber;
-  if (!ctx.customer && cached.customer) ctx.customer = cached.customer;
-  if (!ctx.customerName && cached.customerName) ctx.customerName = cached.customerName;
-  if (!ctx.customerId && cached.customerId) ctx.customerId = cached.customerId;
-  if (!ctx.customerPhone && cached.customerPhone) ctx.customerPhone = cached.customerPhone;
-  if (!ctx.customerEmail && cached.customerEmail) ctx.customerEmail = cached.customerEmail;
+  const apiKeys = getApiKeys(cached);
+  for (const field of RO_IDENTITY_FIELDS) {
+    if (cached[field] == null) continue;
+    // API-sourced fields OVERWRITE the scraped ctx (API wins); non-API fields
+    // only fill gaps the scrape left behind.
+    if (apiKeys.includes(field) || ctx[field] == null) {
+      ctx[field] = cached[field];
+    }
+  }
   return ctx;
 }
 
 // Merge fields parsed from the Tekmetric SPA's own /repair-order/{id} response
 // into the per-RO cache, so the next detectContext() picks them up without any
-// DOM scraping. Fed by the MOS_RO_LOADED message from interceptor.js.
-function mergeApiRoData(roId, data) {
+// DOM scraping. Fed by the MOS_RO_LOADED message from interceptor.js. Anything
+// the API supplies here becomes authoritative for that RO (tracked in
+// `_apiKeys`) and is protected from being clobbered by a later DOM scrape.
+function mergeApiRoData(shopId, roId, data) {
   if (!roId || !data) return;
-  const prior = roContextCache.get(String(roId)) || {};
+  const key = roCacheKey(shopId, roId);
+  const prior = roContextCache.get(key) || {};
   const v = data.vehicle || {};
   const c = data.customer || {};
   const yearMakeModel = (v.year || v.make || v.model)
@@ -82,20 +102,35 @@ function mergeApiRoData(roId, data) {
     ? [c.firstName, c.lastName].filter(Boolean).join(' ').trim()
     : null;
   const mileageIn = data.milesIn ?? data.mileageIn ?? v.mileageIn ?? null;
-  const merged = {
-    vin: prior.vin || v.vin || null,
-    mileage: prior.mileage || (typeof mileageIn === 'number' ? mileageIn : null),
-    vehicle: prior.vehicle || (yearMakeModel ? { year: v.year, make: v.make, model: v.model } : null),
-    vehicleDisplay: prior.vehicleDisplay || yearMakeModel || null,
-    vehicleId: prior.vehicleId || (v.id ? String(v.id) : null),
-    roNumber: prior.roNumber || (data.repairOrderNumber != null ? String(data.repairOrderNumber) : null),
-    customer: prior.customer || (customerName ? { id: c.id, firstName: c.firstName, lastName: c.lastName } : null),
-    customerName: prior.customerName || customerName,
-    customerId: prior.customerId || (c.id ? String(c.id) : null),
-    customerPhone: prior.customerPhone || null,
-    customerEmail: prior.customerEmail || null,
+
+  // Values the API actually provided this time (null = not present, so we
+  // don't mark it authoritative and the scrape can still fill it).
+  const apiValues = {
+    vin: v.vin || null,
+    mileage: typeof mileageIn === 'number' ? mileageIn : null,
+    vehicle: yearMakeModel ? { year: v.year, make: v.make, model: v.model } : null,
+    vehicleDisplay: yearMakeModel || null,
+    vehicleId: v.id ? String(v.id) : null,
+    roNumber: data.repairOrderNumber != null ? String(data.repairOrderNumber) : null,
+    customer: customerName ? { id: c.id, firstName: c.firstName, lastName: c.lastName } : null,
+    customerName: customerName,
+    customerId: c.id ? String(c.id) : null,
+    customerPhone: null,
+    customerEmail: null,
   };
-  roContextCache.set(String(roId), merged);
+
+  const apiKeys = new Set(getApiKeys(prior));
+  const merged = {};
+  for (const field of RO_IDENTITY_FIELDS) {
+    if (apiValues[field] != null) {
+      merged[field] = apiValues[field]; // API is authoritative
+      apiKeys.add(field);
+    } else {
+      merged[field] = prior[field] ?? null;
+    }
+  }
+  merged._apiKeys = Array.from(apiKeys);
+  roContextCache.set(key, merged);
 }
 
 function detectContext() {
@@ -2127,7 +2162,7 @@ function startCategoryChangeObserver() {
     // and re-emit context so the side panel updates on first paint.
     if (e.data && e.data.type === 'MOS_RO_LOADED' && e.data.roId && e.data.data) {
       try {
-        mergeApiRoData(e.data.roId, e.data.data);
+        mergeApiRoData(e.data.shopId, e.data.roId, e.data.data);
         console.log('[MOS Tools] RO data captured from SPA network response for', e.data.roId);
         updateContext();
       } catch (err) {
