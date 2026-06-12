@@ -12,6 +12,7 @@ import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
 import { buildReportUrl } from "@/lib/report-share";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
+import { LIFETIME_FLUID_SERVICE_KEYS } from "@/lib/service-keys";
 import {
   classifyEngineRisk,
   loadEngineRiskOverrides,
@@ -71,6 +72,21 @@ function isInspectItem(serviceName: string): boolean {
          name.includes('visual check');
 }
 
+/**
+ * Mirror the dashboard's protection: even when a shop turns OFF generic
+ * inspect items, never silently drop an OE inspect row for a known
+ * lifetime fluid (differential, transmission, transfer case, coolant,
+ * brake, power steering). For these fluids the OE "Inspect …" row is often
+ * the ONLY signal the customer gets that the fluid is due to be checked —
+ * roughly 40% of diff/trans OE rows are written as "Inspect", and DataOne
+ * lists no separate "Replace" row for them. The dashboard keeps these via
+ * its `inspectOnly` exemption; the extension previously had no equivalent,
+ * so the side panel dropped them while the dashboard showed them.
+ */
+function isProtectedFluidKey(key: string | null | undefined): boolean {
+  return !!key && LIFETIME_FLUID_SERVICE_KEYS.has(key);
+}
+
 function formatIntervalText(
   intervalMiles: number,
   intervalMonths?: number,
@@ -122,7 +138,7 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   brake_fluid: [/brake fluid/i],
   trans_auto: [/automatic trans/i, /\batf\b/i, /auto trans/i, /transmission fluid/i],
   trans_manual: [/manual trans/i, /\bmtf\b/i],
-  transfer_case: [/transfer case/i],
+  transfer_case: [/transfer case/i, /\bptu\b/i, /power transfer unit/i],
   front_differential: [/front differential/i],
   rear_differential: [/rear differential/i],
   power_steering: [/power steering/i],
@@ -799,7 +815,19 @@ export async function runOnDemandAnalysis(
       let skippedNoInterval = 0;
       let skippedInspect = 0;
       let skippedExcluded = 0;
-      
+
+      // Precompute which fluid keys have a real "Replace/Flush/Service" row in
+      // this vehicle's OE schedule. A protected fluid is only kept past the
+      // inspect filter when it has NO replacement counterpart (i.e. the
+      // "Inspect …" row is the sole OE signal). When both exist, the replace
+      // row already survives the filter, so hiding the duplicate inspect row
+      // matches the dashboard's `inspectOnly` (no-replace) exemption exactly.
+      const oemReplacementKeys = new Set<string>();
+      for (const it of oemResult.items) {
+        const k = mapServiceToKey(it.maintenance_name);
+        if (k && !isInspectItem(it.maintenance_name)) oemReplacementKeys.add(k);
+      }
+
       for (const item of oemResult.items) {
         // Task #336: OEM `item.miles` is real miles. Convert to shop unit
         // before mixing with `currentMileage` / `lastPerformed.mileage`
@@ -813,10 +841,16 @@ export async function runOnDemandAnalysis(
           continue;
         }
         
-        // Filter inspect items if preference is set
+        // Filter inspect items if preference is set — but never drop a
+        // protected fluid whose only OE signal is this "Inspect" row.
         if (!showInspectItems && isInspectItem(item.maintenance_name)) {
-          skippedInspect++;
-          continue;
+          const inspectKey = mapServiceToKey(item.maintenance_name);
+          const protectedInspectOnly =
+            isProtectedFluidKey(inspectKey) && !oemReplacementKeys.has(inspectKey!);
+          if (!protectedInspectOnly) {
+            skippedInspect++;
+            continue;
+          }
         }
         
         // Map to service key first to check exclusion
@@ -1808,7 +1842,7 @@ async function _GET(request: NextRequest) {
         ];
         const DUE_SOON_THRESHOLD = 1000;
         for (const item of allItems) {
-          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
           const dueAt = item.dueAtMiles;
           if (isComplimentaryItem(item)) {
             plan.complimentary.push(convertItem(item, "complimentary"));
@@ -1834,17 +1868,17 @@ async function _GET(request: NextRequest) {
         }
       } else {
         for (const item of (cachedPlan.plan.buckets.overdue || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.overdue.push(convertItem(item, "overdue"));
         }
         for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.dueSoon.push(convertItem(item, "dueSoon"));
         }
         for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key)) continue;
+          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.recommended.push(convertItem(item, "upcoming"));
         }

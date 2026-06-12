@@ -113,7 +113,17 @@ export async function POST(req: NextRequest) {
     const shopDoc = await db.collection("shops").findOne({ shopId });
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
-    const showInspectItems = shopDoc?.settings?.planPage?.showInspectItems ?? false;
+    // Unify with the dashboard plan page + extension, which both read
+    // `preferences.showInspectItems` defaulting to TRUE. The old
+    // `settings.planPage.showInspectItems` field is never written by the
+    // settings UI (it persists to preferences.showInspectItems), so the
+    // previous `?? false` silently hid inspect rows in every cached plan
+    // regardless of the shop's actual setting. Keep the legacy field as a
+    // last-resort fallback for any pre-migration shop docs.
+    const showInspectItems =
+      shopDoc?.preferences?.showInspectItems ??
+      shopDoc?.settings?.planPage?.showInspectItems ??
+      true;
     // Task #336: align with the dashboard + extension which both read
     // `preferences.distanceUnit`. Old `settings.distanceUnit` kept as a
     // legacy fallback so any pre-migration shop docs still resolve.

@@ -54,7 +54,9 @@ export const SERVICE_KEYS: Record<string, string[]> = {
   ],
   transfer_case: [
     "transfer case fluid", "transfer case flush", "transfer case oil",
-    "transfer case service", "t-case fluid", "t-case service"
+    "transfer case service", "t-case fluid", "t-case service",
+    "ptu", "ptu fluid", "ptu service", "power transfer unit",
+    "power transfer unit fluid", "power transfer unit service"
   ],
   front_differential: [
     "front differential", "front axle fluid", "front diff",
