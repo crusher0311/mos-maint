@@ -222,6 +222,105 @@ export async function fetchRenderDeploys(
   }));
 }
 
+async function makeRenderPost(
+  endpoint: string,
+  apiKey: string,
+  environment: string = 'unknown'
+): Promise<{ status: number; ok: boolean; body: string }> {
+  const startTime = Date.now();
+  const url = `${RENDER_API_BASE}${endpoint}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    const latencyMs = Date.now() - startTime;
+    const body = await response.text();
+
+    await trackApiRequest(
+      'render',
+      endpoint,
+      'POST',
+      response.status,
+      latencyMs,
+      0,
+      { sourceWorker: environment }
+    );
+
+    return { status: response.status, ok: response.ok, body };
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+
+    await trackApiRequest(
+      'render',
+      endpoint,
+      'POST',
+      500,
+      latencyMs,
+      0,
+      {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        sourceWorker: environment,
+      }
+    );
+
+    throw error;
+  }
+}
+
+// Fetch a single service. Unlike the list endpoint, GET /services/{id}
+// returns the service object directly (not wrapped in { service, cursor }).
+export async function fetchRenderService(
+  apiKey: string,
+  serviceId: string,
+  environment: string = 'unknown'
+): Promise<RenderService> {
+  const item = await makeRenderRequest<{
+    id: string;
+    name: string;
+    type: string;
+    suspended: string;
+    createdAt: string;
+    updatedAt: string;
+    dashboardUrl: string;
+    repo?: string;
+    branch?: string;
+  }>(`/services/${serviceId}`, apiKey, undefined, environment);
+
+  return {
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    suspended: item.suspended,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    dashboardUrl: item.dashboardUrl,
+    repo: item.repo,
+    branch: item.branch,
+  };
+}
+
+export async function suspendRenderService(
+  apiKey: string,
+  serviceId: string,
+  environment: string = 'unknown'
+): Promise<{ status: number; ok: boolean; body: string }> {
+  return makeRenderPost(`/services/${serviceId}/suspend`, apiKey, environment);
+}
+
+export async function resumeRenderService(
+  apiKey: string,
+  serviceId: string,
+  environment: string = 'unknown'
+): Promise<{ status: number; ok: boolean; body: string }> {
+  return makeRenderPost(`/services/${serviceId}/resume`, apiKey, environment);
+}
+
 export function getRenderEnvironments(): RenderEnvironment[] {
   const environments: RenderEnvironment[] = [];
 
