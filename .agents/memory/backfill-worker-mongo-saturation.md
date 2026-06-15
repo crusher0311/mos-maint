@@ -53,5 +53,23 @@ Lower the per-run page budget / concurrency (env knobs in
 `lib/integrations/tekmetric/full-page-backfill.ts` and the drain worker) and/or
 resume off-peak.
 
-**Lever IDs (prod):** web `srv-d55jaqkhg0os73a5dd8g`, worker
-`srv-d8g15v3eo5us73fvajhg`. Auth via `RENDER_API_KEY_PROD` / `RENDER_OWNER_ID_PROD`.
+**Lever IDs (prod):** web `srv-d55jaqkhg0os73a5dd8g`, workers
+`mos-maint-background-v2` `srv-d8g15v3eo5us73fvajhg` AND `backfill-drain-worker`
+`srv-d86qipd7vvec73ahur00` — suspend BOTH. Auth via `RENDER_API_KEY_PROD` (the key
+also lives in `.env.local` STALE → import-time dotenv override makes the lib helpers
+401 from the repl; pass the real shell `$RENDER_API_KEY_PROD` via direct curl to
+`api.render.com/v1/services/<id>/suspend|resume`).
+
+**How to confirm latency without the extension (no Better Stack host/user secrets here):**
+the prod Supabase `production_logs` table (synced from Better Stack) has per-request
+JSON — `message_json->'message'->>'responseTimeMS'` and `'path'`/`'statusCode'`/`'clientIP'`.
+Group by path for a shop's clientIP: saturation shows `/api/extension/{auth-token,features,labor-rates,inspections}`
+at 50–142 **seconds** (statusCode 200 but huge ms) + a burst of `499` (client aborted)
++ a request-count spike (one shop's retry storm = thousands/hr). The 30s sidepanel
+`sendMessage` timeout is the trip point: background login SUCCEEDS (console shows it)
+but the slow round-trip exceeds 30s → panel says "Request timed out." CAVEAT: the
+log-sync cron ITSELF stalls during saturation, so `max(dt)` in production_logs goes
+stale (hours) — that staleness is itself a saturation tell. Verify recovery by timing
+a live unauthenticated probe: `curl -w '%{time_total}' https://mos.tools/api/extension/features?...`
+(401 is fine) should be sub-second, and Mongo `serverStatus().globalLock.currentQueue.total`≈0.
+(Recurred 2026-06-15, Endress shopId 14158.)
