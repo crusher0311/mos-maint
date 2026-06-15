@@ -302,35 +302,37 @@ export const GET = createExternalEndpoint(
     // Task #476 + thrash fix: unify the mileage anchor with what the Detect
     // Dog overlay shows so the two surfaces don't build plans at different
     // mileages (which thrashes the shared plan cache — see memory
-    // vhi-partner-latency). Order:
-    //   (1) current/open-RO odometer  [fresh real reading]
-    //   (2) CARFAX estimate           [fresh projection]
-    //   (3) vehicles.currentMileage   [stale snapshot; no recurring sync]
-    //   (4) annual estimate           [year-based fallback, further below]
+    // vhi-partner-latency). `pickMileageInput` is the AUTHORITATIVE selector for
+    // the actual-data anchor: it prefers the open-RO odometer but applies the
+    // monotonic guard — if the open RO reads LOWER than vehicles.currentMileage
+    // (a stale/mistyped odometer) it keeps the larger vehicles value and emits a
+    // discrepancy flag (Task #391/#476). Resolution order:
+    //   (1) pickMileageInput → open-RO odometer, or vehicles.currentMileage when
+    //       the open RO reads lower (monotonic guard)   [actual readings]
+    //   (2) CARFAX estimate   [only when NO actual reading exists]
+    //   (3) annual estimate   [year-based fallback, further below]
     // Resolved fully BEFORE getCachedPlan so the cache key matches the anchor
-    // the extension uses. `pickMileageInput` is still used purely to derive the
-    // open-RO-vs-vehicles discrepancy flag (Task #391/#476).
+    // the extension uses.
     const picked = pickMileageInput({
       vehicleDocMileage: vehicleDocMileage ?? null,
       openRoLookup,
     });
     const openRoMileageDiscrepancy = picked.discrepancy;
 
-    let mileage: number | null = null;
-    let mileageInputSource: MileageInputSource | null = null;
+    // (1) Authoritative actual-mileage anchor from the helper (open-RO with the
+    // monotonic guard, else the vehicles snapshot).
+    let mileage: number | null =
+      picked.miles && picked.miles > 0 ? picked.miles : null;
+    let mileageInputSource: MileageInputSource | null = mileage
+      ? picked.mileageInputSource
+      : null;
     let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
     let mileageEstimateDetails: Record<string, unknown> | null = null;
 
-    // (1) Current/open-RO odometer (fresh real reading).
-    if (openRoLookup && openRoLookup.miles > 0) {
-      mileage = openRoLookup.miles;
-      mileageInputSource = "open_ro";
-    }
-
-    // (2) CARFAX estimate — preferred over the stale vehicles snapshot so the
-    // partner matches the overlay, which estimates when the open RO has no
-    // odometer. `estimateMileageFromCarfax` is a cached Mongo read (no external
-    // call), so it's cheap on the hot path; the timeout is a safety guard.
+    // (2) CARFAX estimate — only when NO actual reading (neither open-RO nor the
+    // vehicles snapshot) is available. `estimateMileageFromCarfax` is a cached
+    // Mongo read (no external call), so it's cheap on the hot path; the timeout
+    // is a safety guard.
     if (!mileage || mileage <= 0) {
       try {
         const est = await withUpstreamTimeout(
@@ -354,13 +356,6 @@ export const GET = createExternalEndpoint(
       } catch (err) {
         console.warn(`[VHI External] CARFAX estimate threw for ${vin}:`, err instanceof Error ? err.message : err);
       }
-    }
-
-    // (3) Stale vehicles snapshot — last real-data resort before annual.
-    if ((!mileage || mileage <= 0) && vehicleDocMileage && vehicleDocMileage > 0) {
-      mileage = vehicleDocMileage;
-      mileageInputSource = "vehicles_collection";
-      mileageSource = "actual";
     }
 
     if (mileage) {

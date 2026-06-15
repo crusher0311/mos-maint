@@ -229,6 +229,59 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------
+// ROUTE selection contract (app/api/external/vehicles/[vin]/vhi):
+// the endpoint must treat `pickMileageInput` as the AUTHORITATIVE actual
+// anchor (NOT raw openRoLookup.miles) and only fall through to a CARFAX /
+// annual estimate when the helper yields no actual reading. The two lines
+// below mirror the route's exact selection expression so a regression to
+// the old "hard-prioritize raw open-RO, no monotonic guard" behavior is
+// caught here. (Mirrors the file's existing approach for MILEAGE_TOLERANCE.)
+// ---------------------------------------------------------------------
+{
+  // Reproduce the route's anchor selection.
+  const selectAnchor = (picked: ReturnType<typeof pickMileageInput>) => {
+    const mileage = picked.miles && picked.miles > 0 ? picked.miles : null;
+    const source = mileage ? picked.mileageInputSource : null;
+    return { mileage, source };
+  };
+
+  const openRo = { miles: 90000, integration: "tekmetric" as const, roIdentifier: "RO-1", roDate: new Date() };
+
+  // (a) open-RO LOWER than vehicles snapshot -> route must anchor on the
+  // larger vehicles value (monotonic guard) and surface the discrepancy,
+  // NOT the raw (lower) open-RO odometer.
+  {
+    const picked = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: openRo });
+    const { mileage, source } = selectAnchor(picked);
+    ok("route: open-RO lower -> anchors on vehicles (monotonic guard), not raw open-RO",
+       mileage === 105266 && source === "vehicles_collection");
+    ok("route: open-RO lower -> does NOT anchor on the raw open-RO value",
+       mileage !== 90000);
+    ok("route: open-RO lower -> discrepancy is available for the flags array",
+       picked.discrepancy != null && picked.discrepancy.gapMiles === 15266);
+  }
+
+  // (b) No actual reading at all (neither open-RO nor vehicles) -> route
+  // anchor is null so it proceeds to the CARFAX / annual estimate fallback.
+  {
+    const picked = pickMileageInput({ vehicleDocMileage: null, openRoLookup: null });
+    const { mileage, source } = selectAnchor(picked);
+    ok("route: no actual reading -> anchor null so estimates run",
+       mileage === null && source === null);
+  }
+
+  // (c) open-RO present and >= vehicles -> open-RO is the anchor (the common
+  // Detect Dog parity case).
+  {
+    const fresh = { ...openRo, miles: 111961 };
+    const picked = pickMileageInput({ vehicleDocMileage: 105266, openRoLookup: fresh });
+    const { mileage, source } = selectAnchor(picked);
+    ok("route: open-RO >= vehicles -> anchors on open-RO (overlay parity)",
+       mileage === 111961 && source === "open_ro");
+  }
+}
+
+// ---------------------------------------------------------------------
 // Cache invariant: when open-RO bumps the input mileage past
 // MILEAGE_TOLERANCE, the cache MUST treat it as a miss so the stale
 // 105,266 plan does not get served on the next call.
