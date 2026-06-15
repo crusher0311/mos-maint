@@ -920,6 +920,13 @@ async function fetchShopFeatures() {
   // in-flight retry loop so we never apply a stale shop's features.
   const mySeq = ++featuresFetchSeq;
   const shopAtStart = currentContext.shopId;
+  // Snapshot the provider up front too. The retry loop below awaits between
+  // attempts, and currentContext can be cleared to null mid-loop (writer
+  // closes the RO / context re-detect races during login on a fresh machine).
+  // Reading currentContext.provider inside the loop then threw "Cannot read
+  // properties of null (reading 'provider')", which got swallowed as a
+  // transient error and retried until it gave up — so features never loaded.
+  const providerAtStart = currentContext.provider || '';
 
   for (let attempt = 0; ; attempt++) {
     if (mySeq !== featuresFetchSeq) return;
@@ -928,7 +935,7 @@ async function fetchShopFeatures() {
     try {
       result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/features?shopId=${shopAtStart}&provider=${currentContext.provider || ''}`
+        endpoint: `/api/extension/features?shopId=${shopAtStart}&provider=${providerAtStart}`
       });
     } catch (err) {
       result = { error: (err && err.message) || 'fetch failed' };
@@ -2911,6 +2918,11 @@ async function handleApplyLaborRateNow() {
 // ==================== STICKER & KEYTAG ====================
 let stickerConfig = null;
 let keytagEnabled = false;
+// Oil-sticker entitlement as last seen from /api/extension/sticker.
+//   true  = enabled, false = definitively disabled, null = unknown/transient.
+// Kept separate so a transient sticker-config fetch error never gets
+// downgraded into a permanent "not enabled" notice.
+let stickerEnabled = null;
 
 const STICKER_OIL_TYPE_ORDER = ['conventional', 'synthetic', 'euro', 'diesel'];
 const STICKER_OIL_BUILTIN_LABELS = {
@@ -2976,6 +2988,18 @@ function populateStickerIntervalOptions(config) {
   }
 }
 
+// The shared "Printing features are not enabled for your shop" notice covers
+// BOTH printing features (oil stickers + keytags). Only show it when we have a
+// definitive answer that BOTH are off — never on a transient/unknown sticker
+// state, and never while keytags are enabled (the keytag form would be visible
+// right above it, which is the contradiction users reported).
+function updatePrintDisabledMessage() {
+  if (!elements.stickerDisabled) return;
+  const keytagsOn = shopFeatures.keytags === true;
+  const allPrintingDefinitivelyOff = stickerEnabled === false && !keytagsOn;
+  elements.stickerDisabled.classList.toggle('hidden', !allPrintingDefinitivelyOff);
+}
+
 async function loadStickerConfig() {
   try {
     // Build endpoint with shop context if available
@@ -2991,23 +3015,31 @@ async function loadStickerConfig() {
     });
     
     if (result.error) {
-      console.error('[MOS] Sticker config error:', result.error);
-      if (elements.stickerSection) elements.stickerSection.classList.add('hidden');
-      elements.stickerDisabled.classList.remove('hidden');
+      // Transient fetch failure (e.g. backend slowness): do NOT render the
+      // permanent "not enabled — contact your administrator" notice, which
+      // wrongly implies the shop lost the feature. Keep the last-known-good
+      // sticker state and still refresh the (independent) keytag section.
+      console.error('[MOS] Sticker config error (transient — keeping last-known state):', result.error);
+      loadKeytagSection();
+      updatePrintDisabledMessage();
       return;
     }
     
     stickerConfig = result.config;
+    stickerEnabled = result.enabled === true;
     
-    if (!result.enabled) {
+    if (!stickerEnabled) {
+      // Oil sticker is genuinely off for this shop. Hide its section; the
+      // shared "no printing features" notice is decided centrally so it only
+      // appears when keytags are ALSO off.
       if (elements.stickerSection) elements.stickerSection.classList.add('hidden');
-      elements.stickerDisabled.classList.remove('hidden');
+      loadKeytagSection();
+      updatePrintDisabledMessage();
       return;
     }
     
     // Show sticker section
     if (elements.stickerSection) elements.stickerSection.classList.remove('hidden');
-    elements.stickerDisabled.classList.add('hidden');
     
     // Set default unit based on config
     if (stickerConfig.useKilometers) {
@@ -3028,6 +3060,7 @@ async function loadStickerConfig() {
     
     // Check if keytags feature is enabled and load keytag section (no await needed)
     loadKeytagSection();
+    updatePrintDisabledMessage();
     
   } catch (err) {
     console.error('[MOS] Failed to load sticker config:', err);

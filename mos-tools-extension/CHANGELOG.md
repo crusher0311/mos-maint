@@ -1,5 +1,25 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.30 — 2026-06-15
+
+### Fixed
+- **Features now load reliably right after signing in on a new computer.** During
+  login the panel could briefly lose track of the open repair order while it was
+  still fetching the shop's enabled features. That caused the feature load to
+  error out and retry until it gave up ("keeping last-known-good" with nothing
+  saved yet), so buttons and tabs could appear missing on a fresh sign-in. The
+  panel now locks onto the shop at the start of the fetch so the retries can't be
+  knocked off course.
+- **The Print tab no longer shows a false "Printing features are not enabled"
+  message.** If the server briefly couldn't load a shop's oil-sticker settings
+  (a temporary hiccup, like backend slowness — not a real "feature off" answer),
+  the panel used to show the permanent "not enabled — contact your administrator"
+  notice, even for shops that have printing fully enabled. It could even appear
+  right above a working Service Keytag form. Now that notice only appears when
+  **both** printing features (oil stickers and keytags) are genuinely turned off
+  for the shop; a temporary load failure quietly keeps the last-known-good state
+  and refreshes in the background instead.
+
 ## 1.27.29 — 2026-06-10
 
 ### Fixed
