@@ -7,7 +7,7 @@ import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import { verifyHovercode } from "@/lib/hovercode";
-import { getStickerSizeInches, pngBufferToSizedPdfBuffer } from "@/lib/sticker-pdf";
+import { getStickerSizeInches, pngBufferToSizedPdfBuffer, STICKER_PDF_SAFE_MARGIN_IN } from "@/lib/sticker-pdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -586,6 +586,9 @@ export async function POST(req: NextRequest) {
         imageBuffer,
         inches.width,
         inches.height,
+        // Quiet zone so AirPrint's scale-to-fit overshoot clips whitespace,
+        // not the design. The PDF page size stays == the true sticker size.
+        STICKER_PDF_SAFE_MARGIN_IN,
       );
       return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {

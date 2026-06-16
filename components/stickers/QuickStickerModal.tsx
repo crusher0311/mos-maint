@@ -8,6 +8,7 @@ import {
   resolveOilTypeLabel,
   type IntervalsConfig,
 } from "@/lib/sticker-defaults";
+import { buildStickerPrintHtml } from "@/lib/print-sticker";
 
 type UnitType = "mi" | "km" | "hrs";
 
@@ -218,22 +219,13 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         return;
       }
 
-      // Desktop path: write the PNG into a popup with `@page size` CSS so
-      // the browser's print dialog uses the sticker dimensions. This works
-      // on Chrome/Edge/Firefox/desktop Safari today and we keep it as-is to
-      // avoid regressing those flows.
+      // Desktop path: write the PNG into a popup whose page/body/image are
+      // sized in PHYSICAL INCHES (via buildStickerPrintHtml) so the print
+      // dialog uses the true sticker dimensions. Inch sizing (not viewport
+      // units) is what makes Mac match Windows — see lib/print-sticker.ts.
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
-
-        const sizeDimensions: Record<string, { width: string; height: string }> = {
-          "1.5x2.25": { width: "1.5in", height: "2.25in" },
-          "2x2": { width: "2in", height: "2in" },
-          "2x2.5": { width: "2in", height: "2.5in" },
-          "2x3": { width: "2in", height: "3in" },
-          "2x3.5": { width: "2in", height: "3.5in" },
-        };
-        const dims = sizeDimensions[stickerSize] || { width: "1.5in", height: "2.25in" };
 
         const printWindow = placeholderWindow && !placeholderWindow.closed ? placeholderWindow : null;
         if (!printWindow) {
@@ -266,86 +258,9 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         }
 
         printWindow.document.open();
-        printWindow.document.write(`<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Print Sticker</title>
-  <style>
-    @page { 
-      size: ${dims.width} ${dims.height}; 
-      margin: 0 !important; 
-    }
-
-    * {
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
-    }
-
-    html {
-      width: 100vw !important;
-      height: 100vh !important;
-    }
-
-    body {
-      width: 100vw !important;
-      height: 100vh !important;
-      overflow: hidden !important;
-      background: white !important;
-      position: relative !important;
-    }
-
-    img#printImg {
-      position: absolute !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      display: block !important;
-      object-fit: fill !important;
-    }
-
-    @media print {
-      @page { 
-        size: ${dims.width} ${dims.height}; 
-        margin: 0 !important; 
-      }
-      html, body {
-        width: 100% !important;
-        height: 100% !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      img#printImg {
-        width: 100% !important;
-        height: 100% !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <img id="printImg" src="${dataUrl}" />
-  <script>
-    const img = document.getElementById('printImg');
-    img.onload = () => {
-      setTimeout(() => {
-        window.focus();
-        window.print();
-      }, 100);
-    };
-    img.onerror = () => {
-      document.body.innerHTML = '<p>Failed to load image for printing.</p>';
-    };
-    if (img.complete) {
-      setTimeout(() => {
-        window.focus();
-        window.print();
-      }, 100);
-    }
-  </script>
-</body>
-</html>`);
+        printWindow.document.write(
+          buildStickerPrintHtml(dataUrl, stickerSize, { autoPrint: true }),
+        );
         printWindow.document.close();
       };
       reader.readAsDataURL(blob);

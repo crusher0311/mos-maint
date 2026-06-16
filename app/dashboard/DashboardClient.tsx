@@ -12,6 +12,7 @@ import NewWorkOrderModal from "@/components/NewWorkOrderModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
 import { isMobilePrintBrowser, openMobilePlaceholderWindow, navigateWindowToPdfBlob } from "@/lib/print-mobile";
+import { buildStickerPrintHtml } from "@/lib/print-sticker";
 import { getOELogoUrl } from "@/lib/oe-logos";
 
 function getRowMake(r: any): string | undefined {
@@ -388,14 +389,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
-        const sizeMap: Record<string, { width: string; height: string }> = {
-          '2x2': { width: '2in', height: '2in' },
-          '2x2.5': { width: '2in', height: '2.5in' },
-          '2x3': { width: '2in', height: '3in' },
-          '2x3.5': { width: '2in', height: '3.5in' },
-        };
-        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
-        
         const existingFrame = document.getElementById('sticker-print-frame');
         if (existingFrame) existingFrame.remove();
         
@@ -412,36 +405,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (iframeDoc) {
           iframeDoc.open();
-          iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Sticker</title>
-              <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
-                @media print {
-                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  overflow: hidden;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                }
-                img { 
-                  display: block; 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  object-fit: contain;
-                }
-              </style>
-            </head>
-            <body><img src="${dataUrl}" /></body>
-            </html>
-          `);
+          iframeDoc.write(buildStickerPrintHtml(dataUrl, stickerSize));
           iframeDoc.close();
           
           setTimeout(() => {
@@ -703,14 +667,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
         
-        const sizeMap: Record<string, { width: string; height: string }> = {
-          '2x2': { width: '2in', height: '2in' },
-          '2x2.5': { width: '2in', height: '2.5in' },
-          '2x3': { width: '2in', height: '3in' },
-          '2x3.5': { width: '2in', height: '3.5in' },
-        };
-        const dims = sizeMap[stickerSize] || sizeMap['2x2'];
-        
         const existingFrame = document.getElementById('sticker-print-frame');
         if (existingFrame) existingFrame.remove();
         
@@ -727,36 +683,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (iframeDoc) {
           iframeDoc.open();
-          iframeDoc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Print Sticker</title>
-              <style>
-                @page { size: ${dims.width} ${dims.height}; margin: 0 !important; }
-                @media print {
-                  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  overflow: hidden;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                }
-                img { 
-                  display: block; 
-                  width: ${dims.width}; 
-                  height: ${dims.height}; 
-                  object-fit: contain;
-                }
-              </style>
-            </head>
-            <body><img src="${dataUrl}" /></body>
-            </html>
-          `);
+          iframeDoc.write(buildStickerPrintHtml(dataUrl, stickerSize));
           iframeDoc.close();
           
           setTimeout(() => {
