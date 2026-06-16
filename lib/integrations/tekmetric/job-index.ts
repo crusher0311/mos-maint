@@ -41,6 +41,13 @@ export type TekmetricJobIndexEntry = {
   servicePackageId: string;
   performedAt: Date;
   mileage?: number | null; // Odometer at time of service
+  /**
+   * Task #608: per-job authorization from Tekmetric (`job.authorized`).
+   * `false` means the customer declined the job — it was NOT performed, so it
+   * must never anchor a maintenance interval. Omitted when the source job has
+   * no boolean authorization signal (legacy-safe; see isDeclinedJobIndexRow).
+   */
+  authorized?: boolean;
   
   vehicle: {
     vin?: string;
@@ -289,6 +296,8 @@ export async function indexTekmetricWorkOrderJobs(
         servicePackageId: String(job.id),
         performedAt: new Date(completedDate || new Date()),
         mileage: mileage ?? null,
+        // Task #608: capture declined jobs so they never anchor an interval.
+        ...(typeof job.authorized === "boolean" ? { authorized: job.authorized } : {}),
         vehicle: { ...enrichedVehicle, mileage: mileage ?? null },
         job: {
           title: job.name,
@@ -650,6 +659,8 @@ export async function reindexFromStoredData(
         workOrderNumber: wo.workOrderNumber,
         servicePackageId: String(job.id),
         performedAt: new Date(completedDate || new Date()),
+        // Task #608: capture declined jobs so they never anchor an interval.
+        ...(typeof job.authorized === "boolean" ? { authorized: job.authorized } : {}),
         vehicle,
         job: {
           title: job.name,

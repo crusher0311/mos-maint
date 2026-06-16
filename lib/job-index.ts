@@ -58,6 +58,38 @@ export function computeJobHash(entry: JobIndexEntry): string {
   return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }
 
+/**
+ * Task #608: decide whether a `job_index` row represents a DECLINED /
+ * unperformed job that must NEVER act as a "last done" maintenance anchor.
+ *
+ * Providers stamp authorization differently:
+ *   - Tekmetric: explicit `authorized: false` on the row (added Task #608).
+ *   - Protractor: `isDeferred: true` for DeferredServicePackages (declined).
+ *   - Shop-Ware: declined services are not written to job_index at all, and
+ *     authorized rows carry `status` ("completed"/"open"). We treat an
+ *     explicitly non-completed Shop-Ware row as not-performed.
+ *
+ * IMPORTANT — legacy safety: rows written before Task #608 have NO `authorized`
+ * field. We deliberately return `false` (treat as performed) for those so a
+ * half-migrated dataset doesn't silently drop real service history. Only an
+ * EXPLICIT declined/unperformed signal filters a row out. Existing rows pick
+ * up the real flag once re-indexed (content-hash bump on the next backfill).
+ */
+export function isDeclinedJobIndexRow(ji: any): boolean {
+  if (!ji) return false;
+  // Tekmetric (and any provider stamping explicit authorization).
+  if (ji.authorized === false) return true;
+  // Protractor deferred / declined service packages.
+  if (ji.isDeferred === true) return true;
+  // Shop-Ware per-service completion status. Only an explicit non-completed
+  // status filters the row; absent/unknown status stays performed (legacy safe).
+  if ((ji.provider === "shopware" || ji.sourceSystem === "shopware") &&
+      typeof ji.status === "string" && ji.status !== "completed") {
+    return true;
+  }
+  return false;
+}
+
 export type JobIndexEntry = {
   shopId: number;
   workOrderId: string;
@@ -65,6 +97,12 @@ export type JobIndexEntry = {
   servicePackageId: string;
   performedAt: Date;
   isDeferred?: boolean; // True if this was deferred/declined work (not completed)
+  /**
+   * Task #608: explicit per-job authorization. `false` means the customer
+   * declined the job (it was NOT performed) so it must never anchor a
+   * maintenance interval. Absent on legacy rows — see isDeclinedJobIndexRow.
+   */
+  authorized?: boolean;
   mileage?: number | null; // Odometer reading at time of service (top-level for fast access)
   
   vehicle: {

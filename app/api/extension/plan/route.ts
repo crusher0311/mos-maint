@@ -257,6 +257,10 @@ function getLastPerformedInfo(
       if (!wo.completedDate) continue;
       const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
+        // Task #608: a customer-declined (unauthorized) job was NOT performed,
+        // so it must never become a "last done" anchor — even on a completed
+        // RO. Skip declined jobs before pattern matching.
+        if (job.authorized === false) continue;
         const jobName = job.name || job.description || '';
         if (servicePatterns.some(p => p.test(jobName))) {
           // Treat 0 as "missing" — a historical RO with odometer=0 means the

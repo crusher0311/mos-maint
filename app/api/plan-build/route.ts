@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getCachedPlan, setCachedPlan, type CachedPlanData } from "@/lib/plan-cache";
 import { toKeyFromFreeText, toKeyFromName } from "@/lib/service-keys";
+import { isDeclinedJobIndexRow } from "@/lib/job-index";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
@@ -315,6 +316,11 @@ export async function POST(req: NextRequest) {
         : (wo.updatedDate ? new Date(wo.updatedDate) : null);
       const jobs = wo.data?.jobs ?? wo.jobs ?? [];
       for (const job of jobs) {
+        // Task #608: a customer-declined (unauthorized) job is NOT performed
+        // service, even on a posted/closed RO. It must never anchor an
+        // interval. The legacy filter below only skipped open ROs, so declined
+        // jobs on terminal ROs leaked through as false "last done" anchors.
+        if (job.authorized === false) continue;
         if (!isCompleted && !job.authorized) continue;
         const serviceName = job.name ?? job.description ?? "";
         if (serviceName) shopServiceHistory.push({ serviceName, mileage: wMileage, date });
@@ -363,6 +369,11 @@ export async function POST(req: NextRequest) {
         const svcId = String(ji.servicePackageId ?? "");
         const dedupKey = `${woId}:${svcId}`;
         if (woId && svcId && seenAppendedKeys.has(dedupKey)) continue;
+
+        // Task #608: skip declined/unperformed rows so they never become a
+        // "last done" anchor. Legacy rows lacking an explicit flag are treated
+        // as performed (conservative) — see isDeclinedJobIndexRow.
+        if (isDeclinedJobIndexRow(ji)) continue;
 
         const serviceName = ji.jobName || ji.job?.title || ji.title || "";
         if (!serviceName) continue;

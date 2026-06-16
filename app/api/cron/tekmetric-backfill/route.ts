@@ -149,6 +149,9 @@ function computeContentHash(entry: any): string {
     laborAmount: entry.laborAmount,
     partsAmount: entry.partsAmount,
     laborHours: entry.laborHours,
+    // Task #608: include authorization so existing rows get rewritten with the
+    // new `authorized` field on the next backfill pass (declined-job fix).
+    authorized: entry.authorized ?? null,
   };
   return crypto.createHash("sha256").update(JSON.stringify(hashContent)).digest("hex").slice(0, 16);
 }
@@ -1005,6 +1008,8 @@ async function backfillShopChunkInner(
           jobName: job.name,
           closedAt: ro.postedDate || ro.completedDate || ro.updatedDate,
           mileage: roMileage,
+          // Task #608: declined jobs must never anchor an interval.
+          ...(typeof job.authorized === "boolean" ? { authorized: job.authorized } : {}),
           vehicle: vehicle ? {
             vin: vehicle.vin,
             year: vehicle.year,
