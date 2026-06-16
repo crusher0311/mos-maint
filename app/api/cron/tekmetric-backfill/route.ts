@@ -69,6 +69,15 @@ const STALE_SKIPPED_RO_DAYS = 30;
 // where auto-clear flips the error off but the next attempt re-errors
 // immediately on the same window).
 const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
+// When a chunk fails AND it racked up meaningful 429 backoff, treat it as a
+// throttling failure (rate-limited), NOT bad data. Instead of holding the full
+// window and eventually FORCE_SKIPping it (which leaves a permanent history
+// gap), shrink the window span and retry the SAME chunk end so a smaller slice
+// can complete under the shared rate limit. The shrink halves each failed run
+// down to MIN_CHUNK_DAYS_ON_ERROR, then clears back to normal once a chunk
+// succeeds. Rate-limited failures do NOT count toward the FORCE_SKIP threshold.
+const RATE_LIMIT_SHRINK_BACKOFF_MS = 5000;
+const MIN_CHUNK_DAYS_ON_ERROR = 15;
 // Slot allocation per cron run. Splitting the budget between
 // never-started shops and the longest-stalled shops prevents either
 // bucket from starving the other. With 19 never-started shops and an
@@ -606,9 +615,16 @@ async function backfillShopChunkInner(
   // Pace config — off-hours boosts concurrency + chunk size
   const pace = getPaceConfig("tekmetric", shop?.timezone, new Date());
 
-  // Calculate chunk start (going backwards)
+  // Calculate chunk start (going backwards). If a prior run shrank this shop's
+  // window after a rate-limit failure, honor the smaller span (never larger
+  // than the normal pace size) until a chunk succeeds and clears the override.
+  const chunkDaysOverride =
+    typeof progress?.nextChunkDaysOverride === "number" && progress.nextChunkDaysOverride > 0
+      ? Math.min(progress.nextChunkDaysOverride, pace.chunkDays)
+      : null;
+  const effectiveChunkDays = chunkDaysOverride ?? pace.chunkDays;
   const chunkStart = new Date(chunkEnd);
-  chunkStart.setDate(chunkStart.getDate() - pace.chunkDays);
+  chunkStart.setDate(chunkStart.getDate() - effectiveChunkDays);
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
@@ -1143,11 +1159,20 @@ async function backfillShopChunkInner(
   // threshold check and for the human-readable "after N consecutive failures"
   // message — we want the message to say "3" even when the persisted counter
   // resets to 0 because we force-skipped past the bad window (see below).
-  const incrementedConsecutiveErrors = chunkHadError
+  // A chunk that failed while paying meaningful 429 backoff is a throttling
+  // failure, not bad data. The 429 accumulator is already live on
+  // `chunkBackoffCounter` by the time we reach the advance decision.
+  const chunkBackoffSoFarMs = chunkBackoffCounter?.ms || 0;
+  const errorWasRateLimited =
+    chunkHadError && chunkBackoffSoFarMs >= RATE_LIMIT_SHRINK_BACKOFF_MS;
+  // Only NON-rate-limited (bad-data) errors count toward the force-skip
+  // threshold; rate-limited windows shrink-and-retry and are never skipped.
+  const countableError = chunkHadError && !errorWasRateLimited;
+  const incrementedConsecutiveErrors = countableError
     ? (cursorIsSameWindow ? priorConsecutiveErrors + 1 : 1)
     : 0;
   const forceSkipBadWindow =
-    chunkHadError && incrementedConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
+    countableError && incrementedConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
   // Reset the persisted counter to 0 once we force-skip past a bad window
   // (task #449 / diagnosis #443). Without this, every subsequent run on the
   // new chunk window finds `cursorIsSameWindow === true` (because the cursor
@@ -1156,13 +1181,27 @@ async function backfillShopChunkInner(
   // shops 32/36/37/54/57/73/74/75. Cursor-moved-without-error already
   // resets to 0 via the `chunkHadError ? ... : 0` branch above.
   const nextConsecutiveErrors = forceSkipBadWindow ? 0 : incrementedConsecutiveErrors;
+  // Carry the current shrink override forward by default; the branches below
+  // set it (SHRINK), clear it (FULL/FORCE_SKIP), or leave it (HOLD/SPLIT).
+  let nextChunkDaysOverride: number | null = chunkDaysOverride;
   let nextChunkEnd: Date;
   let advanceMode: string;
-  if (chunkHadError && !forceSkipBadWindow) {
+  if (errorWasRateLimited) {
+    // SHRINK: keep the same chunk end, retry a smaller span next run so it can
+    // finish under the shared rate limit. Halve each failure down to the floor.
+    const shrunk = Math.max(MIN_CHUNK_DAYS_ON_ERROR, Math.floor(effectiveChunkDays / 2));
+    nextChunkDaysOverride = shrunk < effectiveChunkDays ? shrunk : MIN_CHUNK_DAYS_ON_ERROR;
+    nextChunkEnd = chunkEnd;
+    advanceMode = `SHRINK (rate-limited, chunkDays ${effectiveChunkDays}→${nextChunkDaysOverride}, backoff429=${Math.round(chunkBackoffSoFarMs)}ms)`;
+    console.warn(
+      `[Tekmetric Backfill] SHRINK shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} chunkDays ${effectiveChunkDays}->${nextChunkDaysOverride} backoff429=${Math.round(chunkBackoffSoFarMs)}ms`,
+    );
+  } else if (chunkHadError && !forceSkipBadWindow) {
     nextChunkEnd = chunkEnd;
     advanceMode = `HOLD (error in chunk, ${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
   } else if (forceSkipBadWindow) {
     nextChunkEnd = chunkStart;
+    nextChunkDaysOverride = null;
     advanceMode = `FORCE_SKIP (chunk errored ${incrementedConsecutiveErrors}x in a row, skipping window ${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]})`;
     console.warn(
       `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} consecutiveErrors=${incrementedConsecutiveErrors}`,
@@ -1172,6 +1211,7 @@ async function backfillShopChunkInner(
     advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split("T")[0]})`;
   } else {
     nextChunkEnd = chunkStart;
+    nextChunkDaysOverride = null;
     advanceMode = "FULL";
   }
   // A force-skipped chunk DID move the cursor — count that as forward
@@ -1429,6 +1469,7 @@ async function backfillShopChunkInner(
           ? { lastCursorMoveAt: now, previousChunkEnd: chunkEnd }
           : {}),
         consecutiveChunkErrors: nextConsecutiveErrors,
+        nextChunkDaysOverride: nextChunkDaysOverride,
         lastRoSkipCount: perRoExceptions,
         ...(perRoExceptions > 0 ? { lastRoSkipAt: now } : {}),
         consecutiveRoSkipRuns: nextConsecutiveRoSkipRuns,
@@ -1453,7 +1494,9 @@ async function backfillShopChunkInner(
               fullPageQueueReason: `auto-flagged by coverage probe: ${coverageCheck?.totalRosIndexed}/${coverageCheck?.totalElementsAvailable} ROs (${((coverageCheck?.ratio ?? 0) * 100).toFixed(1)}%)`,
             }
           : {}),
-        ...(chunkHadError && !forceSkipBadWindow
+        ...(errorWasRateLimited
+          ? { lastError: null, lastErrorAt: null }
+          : chunkHadError && !forceSkipBadWindow
           ? { lastError: `chunk had errors, holding cursor (${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
           : forceSkipBadWindow
           ? {

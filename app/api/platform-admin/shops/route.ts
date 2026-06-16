@@ -128,6 +128,31 @@ export async function GET() {
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
     const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shopId), b]));
+
+    // Bulk-migrated Tekmetric shops were seeded into `job_index` by the migration
+    // path, which never bumps the chunker's `totalJobsIndexed` $inc counter — so
+    // their backfill cell shows a misleading "0 jobs indexed" even though the
+    // jobs ARE there. Fix the display by counting `job_index` for ONLY the
+    // zero-counter shops (NOT the whole fleet — a fleet-wide job_index $group on
+    // every page load was deliberately removed for perf; see note above). Scoped
+    // to a handful of shops this is a cheap indexed count on the shopId-leading
+    // index, and it's a fallback only (real counters still win).
+    const zeroCounterTekShopIds = Array.from(tekmetricBackfillMap.values())
+      .filter((b: any) => !b?.totalJobsIndexed)
+      .map((b: any) => Number(b.shopId))
+      .filter((n) => !isNaN(n));
+    const jobIndexCountMap = new Map<string, number>();
+    if (zeroCounterTekShopIds.length > 0) {
+      const variants = zeroCounterTekShopIds.flatMap((id) => [id, String(id)]);
+      const jobIndexCounts = await db.collection("job_index").aggregate([
+        { $match: { shopId: { $in: variants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } },
+      ]).toArray();
+      for (const r of jobIndexCounts) {
+        const key = String(r._id);
+        jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + (r.count as number));
+      }
+    }
     
     
     const stickerCountMap = new Map<string, number>();
@@ -384,7 +409,7 @@ export async function GET() {
             inProgress: inProgress || isTekmetricActive || false,
             status,
             isStale,
-            totalJobsIndexed: bf?.totalJobsIndexed || 0,
+            totalJobsIndexed: bf?.totalJobsIndexed || jobIndexCountMap.get(String(shop.shopId)) || 0,
             currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
             source: activeIntegration,
             lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,
