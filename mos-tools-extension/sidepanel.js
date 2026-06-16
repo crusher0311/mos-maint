@@ -140,6 +140,7 @@ const elements = {
   loginForm: document.getElementById('login-form'),
   emailInput: document.getElementById('email'),
   passwordInput: document.getElementById('password'),
+  togglePasswordBtn: document.getElementById('toggle-password'),
   apiUrlInput: document.getElementById('api-url'),
   rememberMeCheckbox: document.getElementById('remember-me'),
   loginError: document.getElementById('login-error'),
@@ -374,9 +375,29 @@ async function init() {
   setupEventListeners();
 }
 
+function setPasswordVisibility(show) {
+  if (!elements.passwordInput || !elements.togglePasswordBtn) return;
+  elements.passwordInput.type = show ? 'text' : 'password';
+  const eye = elements.togglePasswordBtn.querySelector('.icon-eye');
+  const eyeOff = elements.togglePasswordBtn.querySelector('.icon-eye-off');
+  if (eye) eye.classList.toggle('hidden', show);
+  if (eyeOff) eyeOff.classList.toggle('hidden', !show);
+  const label = show ? 'Hide password' : 'Show password';
+  elements.togglePasswordBtn.setAttribute('aria-label', label);
+  elements.togglePasswordBtn.setAttribute('title', label);
+  elements.togglePasswordBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+}
+
 function setupEventListeners() {
   // Login form
   elements.loginForm.addEventListener('submit', handleLogin);
+
+  // Show/hide password toggle
+  if (elements.togglePasswordBtn) {
+    elements.togglePasswordBtn.addEventListener('click', () => {
+      setPasswordVisibility(elements.passwordInput.type === 'password');
+    });
+  }
   
   // Refresh
   elements.refreshBtn.addEventListener('click', () => {
@@ -581,6 +602,7 @@ function showLoginState() {
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.remove('hidden');
   elements.mainState.classList.add('hidden');
+  setPasswordVisibility(false);
   chrome.storage.local.get(['mosLoginEmail', 'mosRememberMe'], (stored) => {
     if (stored.mosRememberMe !== false && stored.mosLoginEmail) {
       elements.emailInput.value = stored.mosLoginEmail;

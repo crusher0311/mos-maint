@@ -1,5 +1,15 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.31 — 2026-06-16
+
+### Added
+- **Show/hide password toggle on the sign-in screen.** The Password field now has
+  an eye icon you can click (or tab to and press Enter/Space) to reveal what you
+  typed, so you can catch typos before signing in — handy on shared shop
+  computers. Click it again to re-mask. The password always starts hidden each
+  time the login screen appears, and the toggle only changes what you see — it
+  never changes what gets submitted.
+
 ## 1.27.30 — 2026-06-15
 
 ### Fixed
