@@ -32,3 +32,19 @@ the job (it fires ~every 6 min because each run ~270s), then check per-shop
 head shop's pre-pass is advancing, the fix is fairness/parallelism across shops or
 splitting giant shops — not "restart the worker." Any change here is a prod action;
 operator-gated.
+
+**Current state (post fairness fix):** the route no longer pins one giant to the head
+forever — it sorts by the freshest of `lastFullPageRunAt`/`lastPrePassRunAt` (rotates a
+shop to the back the moment it gets a slice), bounds each shop to `PER_SHOP_SLICE_MS`
+(60s), and caps giants (`prePassTotalPages >= GIANT_PREPASS_PAGES`=1500) to
+`MAX_GIANTS_PER_TICK`=1 per tick. So all flagged shops DO get touched (verify: most have
+a `lastFullPageRun` within the last hour). BUT giants now crawl: with ~19 giants all
+competing for the single giant slot per ~6-min tick, each giant gets ~one 60s slice
+every ~2 hours → a 1,300+ page giant can take weeks-to-months. **Also: the nightly drain
+worker does NOT accelerate this** — it only runs the date-window chunker (`drain:tekmetric-backfill`),
+which skips `fullPageMode`. Full-page reindex runs ONLY on the in-web 6-min cron, same
+slow rate 24/7, no night/weekend boost. Levers to speed it (all operator-gated prod
+actions): flip the dormant BullMQ/Redis queue lane (`BACKFILL_QUEUE_ENABLED` via
+`decideQueueFor`) to parallelize, raise `MAX_GIANTS_PER_TICK` (saturation risk), or split
+giants. "Frozen `lastCursorMoveAt`" is a FALSE alarm for these shops — the date-window
+cursor is done by design; what moves now is `fullPageNextPage`.
