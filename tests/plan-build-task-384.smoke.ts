@@ -78,9 +78,20 @@ function makeFakeCollection() {
       docs.push(doc);
       return { insertedId: docs.length };
     },
-    updateOne: async (q: any, update: any) => {
-      const target = docs.find((d) => matchesQuery(d, q));
-      if (!target) return { matchedCount: 0, modifiedCount: 0 };
+    updateOne: async (q: any, update: any, opts?: any) => {
+      let target = docs.find((d) => matchesQuery(d, q));
+      if (!target) {
+        if (!opts?.upsert) return { matchedCount: 0, modifiedCount: 0 };
+        // Emulate Mongo upsert: seed the new doc with the (non-operator)
+        // equality fields from the query filter, then apply $set below.
+        target = {};
+        for (const [k, v] of Object.entries(q)) {
+          if (v !== null && typeof v === "object" && "$in" in (v as any)) continue;
+          if (k.includes(".")) setNestedPath(target, k, v);
+          else target[k] = v;
+        }
+        docs.push(target);
+      }
       if (update.$set) {
         for (const [k, v] of Object.entries(update.$set)) {
           if (k.includes(".")) setNestedPath(target, k, v);

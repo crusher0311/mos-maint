@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/mongo";
-import { getCachedPlan, invalidateCachedPlan, type CachedPlan } from "@/lib/plan-cache";
+import { getCachedPlan, invalidateCachedPlan, type CachedPlan, type CachedPlanData } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
 
 /**
@@ -10,8 +10,8 @@ export const __deps = {
   getDb,
   getCachedPlan,
   invalidateCachedPlan,
-  triggerPlanBuild: (shopId: number, vin: string, mileage: number) =>
-    triggerPlanBuild(shopId, vin, mileage),
+  triggerPlanBuild: (shopId: number, vin: string, mileage: number, fast?: boolean) =>
+    triggerPlanBuild(shopId, vin, mileage, fast),
 };
 
 export type VhiRebuildFailedStage =
@@ -27,6 +27,14 @@ export interface PlanBuildTriggerResult {
   /** Set when plan-build returned 200 with `{ skipped: true }` (e.g. no mileage). */
   skipped?: boolean;
   skipReason?: string;
+  /**
+   * Task #613: the freshly-built plan returned inline by /api/plan-build so
+   * the caller can skip the post-build sleep + cache re-read. Present only on
+   * a successful build that actually constructed a plan (not the
+   * "already cached" short-circuit). May be absent for legacy responses.
+   */
+  plan?: CachedPlanData;
+  createdAt?: Date;
 }
 
 export interface VhiRebuildResult {
@@ -106,7 +114,8 @@ function getInternalSecret(): string {
 export async function triggerPlanBuild(
   shopId: number,
   vin: string,
-  mileage: number
+  mileage: number,
+  fast?: boolean
 ): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -116,7 +125,7 @@ export async function triggerPlanBuild(
         : `http://localhost:${process.env.PORT || 5000}`;
 
     const res = await fetch(
-      `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}`,
+      `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}${fast ? "&fast=1" : ""}`,
       {
         method: "POST",
         headers: {
@@ -172,6 +181,18 @@ export async function triggerPlanBuild(
           errorMessage: typeof body.reason === "string" ? body.reason : "Plan build skipped",
         };
       }
+      // Task #613: plan-build now returns the freshly-built plan inline so the
+      // caller can avoid the post-build sleep + cache re-read. The "already
+      // cached" short-circuit (`body.cached === true`) carries no plan — the
+      // caller falls back to a re-read in that case.
+      if (body && body.plan && typeof body.plan === "object") {
+        return {
+          ok: true,
+          status: res.status,
+          plan: body.plan as CachedPlanData,
+          createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+        };
+      }
     } catch {
       // Body wasn't JSON — treat as legacy success.
     }
@@ -205,6 +226,13 @@ export async function rebuildVhi(
      */
     mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
     mileageEstimateDetails?: Record<string, unknown> | null;
+    /**
+     * Task #613: latency-sensitive (interactive) build. Set by the extension
+     * VHI button path so the underlying plan-build tightens every upstream
+     * budget and prefers recent cached third-party data over blocking live
+     * fetches. Defaults off so background / partner builds stay freshness-first.
+     */
+    fast?: boolean;
   } = {}
 ): Promise<VhiRebuildResult> {
   const tStart = Date.now();
@@ -238,11 +266,11 @@ export async function rebuildVhi(
   const tAfterFirstRead = Date.now();
 
   if (!cached) {
-    console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build...`);
+    console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build${options.fast ? " (fast)" : ""}...`);
     const tBeforeBuild = Date.now();
-    const built = await __deps.triggerPlanBuild(shopId, vinUpper, mileage);
+    const built = await __deps.triggerPlanBuild(shopId, vinUpper, mileage, options.fast);
     const tAfterBuild = Date.now();
-    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
+    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} fast=${!!options.fast} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
 
     if (!built.ok) {
       // Distinguish "plan-build refused because there's no usable input
@@ -275,10 +303,20 @@ export async function rebuildVhi(
       };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const tBeforeReread = Date.now();
-    cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
-    console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} postBuildRead=${Date.now() - tBeforeReread}ms cacheVisible=${!!cached} totalRebuild=${Date.now() - tStart}ms`);
+    // Task #613: plan-build now returns the freshly-built plan inline. When
+    // present, use it directly — no 500ms sleep, no post-build DB re-read.
+    // The shape matches getCachedPlan's `{ plan, createdAt }`. Only fall back
+    // to a re-read when the build short-circuited as "already cached" (no plan
+    // in the body) — and even then skip the fixed sleep, since plan-build
+    // writes the cache before responding.
+    if (built.plan) {
+      cached = { plan: built.plan, createdAt: built.createdAt ?? new Date() } as CachedPlan;
+      console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} planFromBuild=true totalRebuild=${Date.now() - tStart}ms`);
+    } else {
+      const tBeforeReread = Date.now();
+      cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
+      console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} postBuildRead=${Date.now() - tBeforeReread}ms cacheVisible=${!!cached} totalRebuild=${Date.now() - tStart}ms`);
+    }
 
     if (!cached) {
       return {

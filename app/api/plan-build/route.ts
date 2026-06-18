@@ -5,7 +5,7 @@ import { getCachedPlan, setCachedPlan, type CachedPlanData } from "@/lib/plan-ca
 import { toKeyFromFreeText, toKeyFromName } from "@/lib/service-keys";
 import { isDeclinedJobIndexRow } from "@/lib/job-index";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
-import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { resolveCarfaxConfig, fetchCarfaxWithCache, fetchCarfaxStaleWhileRevalidate } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import {
   classifyEngineRisk,
@@ -87,6 +87,12 @@ export async function POST(req: NextRequest) {
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
     const mileageParam = req.nextUrl.searchParams.get("mileage");
     const mileage = mileageParam ? parseInt(mileageParam, 10) : null;
+    // Task #613: the extension VHI button is latency-sensitive. When the
+    // caller asks for the "fast" build, we tighten every upstream budget and
+    // prefer recent cached third-party data over blocking live fetches so the
+    // checkboxes appear in seconds instead of 45s+. Background/partner builds
+    // (no flag) keep the original, freshness-first behavior.
+    const fast = req.nextUrl.searchParams.get("fast") === "1";
     
     if (!vin || vin.length !== 17) {
       return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
@@ -151,13 +157,19 @@ export async function POST(req: NextRequest) {
     const vinUpper = vin.toUpperCase();
     const vinRegex = new RegExp(`^${vinUpper}$`, 'i');
 
+    // Task #613: on the interactive (fast) build, cap the DataOne OEM race at
+    // a few seconds instead of 15s. A cached OEM schedule (the common case)
+    // resolves well under this; a true cache MISS that needs a live decode
+    // falls back to building without OEM data rather than blocking the tech
+    // on the button. Background/partner builds keep the original 15s budget.
+    const oemTimeoutMs = fast ? 3000 : 15000;
     const oemWithTimeout = Promise.race([
       getMaintenanceScheduleCached(vin),
       new Promise<Awaited<ReturnType<typeof getMaintenanceScheduleCached>>>((resolve) =>
         setTimeout(() => {
-          console.warn(`[PlanBuild] DataOne timeout for ${vin}, continuing without OEM data`);
+          console.warn(`[PlanBuild] DataOne timeout (${oemTimeoutMs}ms${fast ? ", fast" : ""}) for ${vin}, continuing without OEM data`);
           resolve({ ok: false, vin, squish: '', count: 0, items: [], error: 'timeout', source: 'cache' as const });
-        }, 15000)
+        }, oemTimeoutMs)
       )
     ]);
     const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg, oemData] = await Promise.all([
@@ -240,7 +252,12 @@ export async function POST(req: NextRequest) {
           // (single-VIN plan-build × 50-WO ceiling × 4 concurrent ≈ 200 reqs
           // worst case, but in practice almost always ≤ a handful).
           const CONCURRENCY = 4;
-          const BUDGET_MS = 4000;
+          // Task #613: bound this on-demand backfill tightly on the interactive
+          // build so it can't add several seconds to the button. Inspections it
+          // does manage to fetch within the budget are still persisted below for
+          // future requests; the rest are picked up by a later (background or
+          // webhook) build. Background/partner builds keep the original 4s.
+          const BUDGET_MS = fast ? 1200 : 4000;
           const start = Date.now();
           let cursor = 0;
           const fetched: number[] = [];
@@ -537,8 +554,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Task #613: on the fast (interactive) path, prefer a recent cached CARFAX
+    // snapshot and refresh in the background rather than blocking the button on
+    // a live CARFAX call. Even the no-snapshot blocking fetch is capped by a
+    // small budget so a hung CARFAX upstream can't stall the build — on timeout
+    // we continue without CARFAX (the plan still builds from shop history/OEM).
+    const carfaxFetch = fast
+      ? Promise.race([
+          fetchCarfaxStaleWhileRevalidate(shopId, vin, CACHE_TTL_MS),
+          new Promise<{ ok: false }>((resolve) =>
+            setTimeout(() => {
+              console.warn(`[PlanBuild] CARFAX fast-path timeout for ${vin}, continuing without CARFAX`);
+              resolve({ ok: false });
+            }, 4000)
+          ),
+        ])
+      : fetchCarfaxWithCache(shopId, vin, CACHE_TTL_MS);
     const [carfaxResult, protractorVehicleResult, avInspectionResult] = await Promise.all([
-      carfaxCfg.configured ? fetchCarfaxWithCache(shopId, vin, CACHE_TTL_MS) : Promise.resolve({ ok: false }),
+      carfaxCfg.configured ? carfaxFetch : Promise.resolve({ ok: false }),
       protractorCfg.configured ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
       autoVitalsCfg.configured ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
     ]);
@@ -1006,6 +1039,7 @@ export async function POST(req: NextRequest) {
       console.warn(`[PlanBuild] dataQuality derivation failed for ${vin}: ${dqErr?.message}`);
     }
 
+    const cachedAt = new Date();
     await setCachedPlan(db, vin, shopId, mileage, planData);
 
     const duration = Date.now() - startTime;
@@ -1022,6 +1056,12 @@ export async function POST(req: NextRequest) {
         dueSoon: filteredBuckets.dueSoon.length,
         upcoming: filteredBuckets.upcoming.length,
       },
+      // Task #613: return the freshly-built plan so the caller (rebuildVhi) can
+      // use it directly instead of sleeping 500ms and re-reading the cache.
+      // The shape matches what getCachedPlan returns (`{ plan, createdAt }`),
+      // so the caller treats it identically to a cache row it read itself.
+      plan: planData,
+      createdAt: cachedAt.toISOString(),
     }, { status: 200 });
 
   } catch (err: any) {

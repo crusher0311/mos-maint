@@ -99,7 +99,11 @@ async function _POST(request: NextRequest) {
 
   let vhi;
   try {
-    vhi = await rebuildVhi(resolvedShopId, vin.toUpperCase(), resolvedMileage);
+    // Task #613: the AI VHI button is the latency-sensitive interactive path.
+    // Build in "fast" mode so plan-build tightens its upstream budgets and
+    // prefers recent cached CARFAX/OEM data over blocking live fetches, so the
+    // checkboxes appear in seconds instead of 45s+.
+    vhi = await rebuildVhi(resolvedShopId, vin.toUpperCase(), resolvedMileage, { fast: true });
   } catch (err: any) {
     console.error("[VHI Coach] Error rebuilding VHI:", err.message);
     return NextResponse.json(

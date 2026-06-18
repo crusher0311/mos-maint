@@ -665,3 +665,57 @@ export async function fetchCarfaxWithCache(
   await upsertCarfaxSnapshot(shopId, vin, live);
   return live;
 }
+
+/**
+ * Interactive (latency-sensitive) CARFAX read used by the extension VHI
+ * button path. Unlike `fetchCarfaxWithCache`, this NEVER blocks on a live
+ * CARFAX call when a snapshot already exists — it serves the most recent
+ * snapshot immediately (even if past `maxAgeMs`) and kicks off a
+ * fire-and-forget background refresh so the next request is fresh.
+ *
+ * A blocking live fetch only happens when there is no snapshot at all
+ * (first-ever view of this VIN), and even then the caller is expected to
+ * wrap it in its own timeout budget.
+ *
+ * The background refresh goes through `upsertCarfaxSnapshot`, whose in-band
+ * error handling guarantees a failed/empty refresh never overwrites a
+ * previously-good snapshot.
+ */
+export async function fetchCarfaxStaleWhileRevalidate(
+  shopId: number,
+  vin: string,
+  maxAgeMs = 7 * 24 * 60 * 60 * 1000,
+  doFetch: Fetcher = fetch
+): Promise<CarfaxResult> {
+  const db = await getDb();
+  const key = { shopId, vin };
+  const doc = await db.collection("carfax_reports").findOne(key);
+
+  const now = Date.now();
+  const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;
+
+  if (fresh) return snapshotToResult(doc);
+
+  // We have a (stale) snapshot — serve it instantly and refresh in the
+  // background. Only a snapshot that actually exists qualifies; a doc that
+  // is purely a prior failure record (no fetchedAt) falls through to the
+  // blocking path below.
+  if (doc?.fetchedAt) {
+    void (async () => {
+      try {
+        const live = await fetchCarfaxLive(shopId, vin, doFetch);
+        await upsertCarfaxSnapshot(shopId, vin, live);
+      } catch (err: any) {
+        console.warn(
+          `[CARFAX] Background SWR refresh failed for shop ${shopId} vin ${vin}: ${err?.message}`
+        );
+      }
+    })();
+    return snapshotToResult(doc);
+  }
+
+  // No usable snapshot at all — must block on a live fetch.
+  const live = await fetchCarfaxLive(shopId, vin, doFetch);
+  await upsertCarfaxSnapshot(shopId, vin, live);
+  return live;
+}
