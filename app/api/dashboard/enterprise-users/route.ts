@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
-import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
-import { deleteSessionsByShopId as pgDeleteSessionsByShopId } from "@/lib/data/repositories/pg/identity";
+import {
+  loadEnterpriseUsers,
+  grantShopAccess,
+  revokeShopAccess,
+  type ShopInfo,
+} from "@/lib/enterprise-access";
 
 export const runtime = "nodejs";
 
@@ -17,7 +20,7 @@ export async function GET() {
     const db = await getDb();
 
     const shop = await db.collection("shops").findOne({ shopId: session.shopId });
-    
+
     if (!shop?.enterpriseId) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 404 });
     }
@@ -30,44 +33,24 @@ export async function GET() {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    const shopIds = enterprise.shopIds || [];
+    const enterpriseShopIds = (enterprise.shopIds || [])
+      .map(Number)
+      .filter((n: number) => Number.isFinite(n));
 
     const shops = await db
       .collection("shops")
-      .find({ shopId: { $in: shopIds } })
+      .find({ shopId: { $in: enterprise.shopIds || [] } })
       .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
-    const shopMap = new Map(shops.map((s) => [s.shopId, s.name || `Shop ${s.shopId}`]));
-
-    const users = await db
-      .collection("users")
-      .find({ shopId: { $in: shopIds } })
-      .project({ _id: 1, email: 1, role: 1, shopId: 1, name: 1, createdAt: 1 })
-      .toArray();
-
-    const usersByEmail: Record<string, any> = {};
-    for (const u of users) {
-      const email = u.email.toLowerCase();
-      if (!usersByEmail[email]) {
-        usersByEmail[email] = {
-          email,
-          name: u.name || null,
-          role: u.role,
-          createdAt: u.createdAt,
-          shopAccess: [],
-        };
-      }
-      usersByEmail[email].shopAccess.push({
-        shopId: u.shopId,
-        shopName: shopMap.get(u.shopId) || `Shop ${u.shopId}`,
-        userId: u._id.toString(),
-      });
-    }
-
-    const userList = Object.values(usersByEmail).sort((a: any, b: any) =>
-      a.email.localeCompare(b.email)
+    const shopMap = new Map<number, ShopInfo>(
+      shops.map((s) => [
+        Number(s.shopId),
+        { name: s.name || `Shop ${s.shopId}`, locationIdentifier: s.locationIdentifier || null },
+      ]),
     );
+
+    const userList = await loadEnterpriseUsers(db, enterpriseShopIds, shopMap);
 
     return NextResponse.json({
       enterprise: {
@@ -75,7 +58,7 @@ export async function GET() {
         name: enterprise.name,
       },
       shops: shops.map((s) => ({
-        shopId: s.shopId,
+        shopId: Number(s.shopId),
         name: s.name || `Shop ${s.shopId}`,
         locationIdentifier: s.locationIdentifier || null,
       })),
@@ -107,7 +90,7 @@ export async function POST(req: Request) {
     const db = await getDb();
 
     const shop = await db.collection("shops").findOne({ shopId: session.shopId });
-    
+
     if (!shop?.enterpriseId) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 403 });
     }
@@ -116,7 +99,11 @@ export async function POST(req: Request) {
       _id: shop.enterpriseId,
     });
 
-    if (!enterprise || !enterprise.shopIds?.includes(shopId)) {
+    const enterpriseShopIds = (enterprise?.shopIds || [])
+      .map(Number)
+      .filter((n: number) => Number.isFinite(n));
+
+    if (!enterprise || !enterpriseShopIds.includes(Number(shopId))) {
       return NextResponse.json({ error: "Shop not in your enterprise" }, { status: 400 });
     }
 
@@ -124,71 +111,26 @@ export async function POST(req: Request) {
     const shopName = targetShop?.name || `Shop ${shopId}`;
 
     if (action === "grant") {
-      const existingUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId,
-      });
-
-      if (existingUser) {
-        return NextResponse.json({ error: "User already has access to this shop" }, { status: 400 });
-      }
-
-      const sourceUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId: { $in: enterprise.shopIds },
-      });
-
-      if (!sourceUser) {
-        return NextResponse.json({ error: "User not found in enterprise" }, { status: 404 });
-      }
-
-      const newUserDoc = {
-        email: email.toLowerCase(),
-        emailLower: email.toLowerCase(),
-        name: sourceUser.name,
-        role: sourceUser.role,
-        shopId,
-        passwordHash: sourceUser.passwordHash,
-        createdAt: new Date(),
+      const result = await grantShopAccess(db, {
+        enterpriseShopIds,
+        email,
+        shopId: Number(shopId),
         grantedBy: session.email,
-      };
-      assertNoLegacyPasswordField(newUserDoc);
-      await db.collection("users").insertOne(newUserDoc);
-
-      return NextResponse.json({
-        ok: true,
-        message: `Access granted to ${shopName}`,
       });
-    } else if (action === "revoke") {
-      const userAccounts = await db
-        .collection("users")
-        .find({ email: email.toLowerCase(), shopId: { $in: enterprise.shopIds } })
-        .toArray();
-
-      if (userAccounts.length <= 1) {
-        return NextResponse.json({
-          error: "Cannot revoke - user must have at least one shop access",
-        }, { status: 400 });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
       }
-
-      await db.collection("users").deleteOne({
-        email: email.toLowerCase(),
-        shopId,
+      return NextResponse.json({ ok: true, message: `Access granted to ${shopName}` });
+    } else if (action === "revoke") {
+      const result = await revokeShopAccess(db, {
+        enterpriseShopIds,
+        email,
+        shopId: Number(shopId),
       });
-
-      await db.collection("sessions").deleteMany({
-        shopId,
-      });
-
-      // W4 cutover (#346): mirror revocation into PG.
-      await dualWritePgIdentity("sessions.delete(enterprise revoke)", () =>
-        pgDeleteSessionsByShopId(shopId),
-      );
-
-      return NextResponse.json({
-        ok: true,
-        message: `Access revoked from ${shopName}`,
-      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+      }
+      return NextResponse.json({ ok: true, message: `Access revoked from ${shopName}` });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

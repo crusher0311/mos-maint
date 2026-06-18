@@ -1,12 +1,32 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { ObjectId } from "mongodb";
-import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
-import { deleteSessionsByShopId as pgDeleteSessionsByShopId } from "@/lib/data/repositories/pg/identity";
+import {
+  loadEnterpriseUsers,
+  grantShopAccess,
+  revokeShopAccess,
+  type ShopInfo,
+} from "@/lib/enterprise-access";
 
 export const runtime = "nodejs";
+
+/**
+ * Authorize enterprise user management. Platform admins may manage any
+ * enterprise; otherwise the caller must be an owner/admin whose session shop
+ * belongs to the target enterprise (mirrors the dashboard endpoint's scoping).
+ */
+async function canManageEnterprise(
+  db: Awaited<ReturnType<typeof getDb>>,
+  session: any,
+  enterprise: { _id: any },
+): Promise<boolean> {
+  if (session.isPlatformAdmin || session.role === "platform_admin") return true;
+  if (session.role !== "owner" && session.role !== "admin") return false;
+  const sessionShop = await db.collection("shops").findOne({ shopId: session.shopId });
+  if (!sessionShop?.enterpriseId) return false;
+  return String(sessionShop.enterpriseId) === String(enterprise._id);
+}
 
 export async function GET(req: Request) {
   try {
@@ -18,8 +38,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const enterpriseId = searchParams.get("enterpriseId");
 
-    if (!enterpriseId) {
-      return NextResponse.json({ error: "Enterprise ID required" }, { status: 400 });
+    if (!enterpriseId || !ObjectId.isValid(enterpriseId)) {
+      return NextResponse.json({ error: "Valid enterprise ID required" }, { status: 400 });
     }
 
     const db = await getDb();
@@ -32,49 +52,28 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
     }
 
-    const shopIds = enterprise.shopIds || [];
+    if (!(await canManageEnterprise(db, session, enterprise))) {
+      return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    }
+
+    const enterpriseShopIds = (enterprise.shopIds || [])
+      .map(Number)
+      .filter((n: number) => Number.isFinite(n));
 
     const shops = await db
       .collection("shops")
-      .find({ shopId: { $in: shopIds } })
+      .find({ shopId: { $in: enterprise.shopIds || [] } })
       .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
-    const shopMap = new Map(shops.map((s) => [s.shopId, { 
-      name: s.name || `Shop ${s.shopId}`, 
-      locationIdentifier: s.locationIdentifier || null 
-    }]));
-
-    const users = await db
-      .collection("users")
-      .find({ shopId: { $in: shopIds } })
-      .project({ _id: 1, email: 1, role: 1, shopId: 1, name: 1, createdAt: 1 })
-      .toArray();
-
-    const usersByEmail: Record<string, any> = {};
-    for (const u of users) {
-      const email = u.email.toLowerCase();
-      if (!usersByEmail[email]) {
-        usersByEmail[email] = {
-          email,
-          name: u.name || null,
-          role: u.role,
-          createdAt: u.createdAt,
-          shopAccess: [],
-        };
-      }
-      const shopInfo = shopMap.get(u.shopId);
-      usersByEmail[email].shopAccess.push({
-        shopId: u.shopId,
-        shopName: shopInfo?.name || `Shop ${u.shopId}`,
-        locationIdentifier: shopInfo?.locationIdentifier || null,
-        userId: u._id.toString(),
-      });
-    }
-
-    const userList = Object.values(usersByEmail).sort((a: any, b: any) =>
-      a.email.localeCompare(b.email)
+    const shopMap = new Map<number, ShopInfo>(
+      shops.map((s) => [
+        Number(s.shopId),
+        { name: s.name || `Shop ${s.shopId}`, locationIdentifier: s.locationIdentifier || null },
+      ]),
     );
+
+    const userList = await loadEnterpriseUsers(db, enterpriseShopIds, shopMap);
 
     return NextResponse.json({
       enterprise: {
@@ -82,7 +81,7 @@ export async function GET(req: Request) {
         name: enterprise.name,
       },
       shops: shops.map((s) => ({
-        shopId: s.shopId,
+        shopId: Number(s.shopId),
         name: s.name || `Shop ${s.shopId}`,
         locationIdentifier: s.locationIdentifier || null,
       })),
@@ -103,6 +102,10 @@ export async function POST(req: Request) {
 
     const { enterpriseId, email, shopId, action } = await req.json();
 
+    if (enterpriseId && !ObjectId.isValid(enterpriseId)) {
+      return NextResponse.json({ error: "Valid enterprise ID required" }, { status: 400 });
+    }
+
     if (!enterpriseId || !email || !shopId || !action) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
@@ -113,7 +116,19 @@ export async function POST(req: Request) {
       _id: new ObjectId(enterpriseId),
     });
 
-    if (!enterprise || !enterprise.shopIds?.includes(shopId)) {
+    if (!enterprise) {
+      return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
+    }
+
+    if (!(await canManageEnterprise(db, session, enterprise))) {
+      return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    }
+
+    const enterpriseShopIds = (enterprise.shopIds || [])
+      .map(Number)
+      .filter((n: number) => Number.isFinite(n));
+
+    if (!enterpriseShopIds.includes(Number(shopId))) {
       return NextResponse.json({ error: "Shop not in enterprise" }, { status: 400 });
     }
 
@@ -121,70 +136,26 @@ export async function POST(req: Request) {
     const shopName = shop?.name || `Shop ${shopId}`;
 
     if (action === "grant") {
-      const existingUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId,
-      });
-
-      if (existingUser) {
-        return NextResponse.json({ error: "User already has access to this shop" }, { status: 400 });
-      }
-
-      const sourceUser = await db.collection("users").findOne({
-        email: email.toLowerCase(),
-        shopId: { $in: enterprise.shopIds },
-      });
-
-      if (!sourceUser) {
-        return NextResponse.json({ error: "User not found in enterprise" }, { status: 404 });
-      }
-
-      const newUserDoc = {
-        email: email.toLowerCase(),
-        name: sourceUser.name,
-        role: sourceUser.role,
-        shopId,
-        passwordHash: sourceUser.passwordHash,
-        createdAt: new Date(),
+      const result = await grantShopAccess(db, {
+        enterpriseShopIds,
+        email,
+        shopId: Number(shopId),
         grantedBy: session.email,
-      };
-      assertNoLegacyPasswordField(newUserDoc);
-      await db.collection("users").insertOne(newUserDoc);
-
-      return NextResponse.json({
-        ok: true,
-        message: `Access granted to ${shopName}`,
       });
-    } else if (action === "revoke") {
-      const userAccounts = await db
-        .collection("users")
-        .find({ email: email.toLowerCase(), shopId: { $in: enterprise.shopIds } })
-        .toArray();
-
-      if (userAccounts.length <= 1) {
-        return NextResponse.json({
-          error: "Cannot revoke - user must have at least one shop access",
-        }, { status: 400 });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
       }
-
-      await db.collection("users").deleteOne({
-        email: email.toLowerCase(),
-        shopId,
+      return NextResponse.json({ ok: true, message: `Access granted to ${shopName}` });
+    } else if (action === "revoke") {
+      const result = await revokeShopAccess(db, {
+        enterpriseShopIds,
+        email,
+        shopId: Number(shopId),
       });
-
-      await db.collection("sessions").deleteMany({
-        shopId,
-      });
-
-      // W4 cutover (#346): mirror revocation into PG.
-      await dualWritePgIdentity("sessions.delete(enterprise revoke)", () =>
-        pgDeleteSessionsByShopId(shopId),
-      );
-
-      return NextResponse.json({
-        ok: true,
-        message: `Access revoked from ${shopName}`,
-      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+      }
+      return NextResponse.json({ ok: true, message: `Access revoked from ${shopName}` });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
