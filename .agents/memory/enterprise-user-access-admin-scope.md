@@ -42,11 +42,21 @@ tekmetric.shopId). Symptom: owner can manage the web Users page but the Chrome e
 at sibling stores. **Why:** owners' own multi-location access is frequently never set — the web
 Users UI is used to add *employees* to locations but nobody adds the owner themselves
 (Team Ryan: Jim & Dan both had `shopIds=[85]` only while their employees had `[85,117,118]`).
-**How to fix:** set the affected user's `shopIds` to include all their enterprise shopIds on the
-doc that carries their extension token / web session (for multi-doc users, that's the
-`shopId`-primary doc with `extensionToken`). Systemic fix (not yet done, needs deploy): expand
-`getUserShopIds`/`findShopBySmsId` to grant owners+admins access to all shops sharing their
-shop's `enterpriseId`.
+**One-off data fix:** set the affected user's `shopIds` to include all their enterprise shopIds
+on the doc that carries their extension token / web session (for multi-doc users, that's the
+`shopId`-primary doc with `extensionToken`).
+
+**Systemic fix (IMPLEMENTED in code — additive, role-gated, best-effort):** `validateExtensionToken`
+now calls `attachEnterpriseAccess(db, user)`, which — only for `owner`/`admin` — looks up the
+enterpriseId(s) of the user's base shops and unions in all sibling shops sharing those
+enterpriseId(s), stashing the result on `user.accessibleShopIds`. `getUserShopIds` then folds
+`accessibleShopIds` in (also role-gated as defense-in-depth), so EVERY extension route that gates
+via `getUserShopIds` picks it up with zero per-route change; the sticker route (inline list) was
+updated separately. Mirrors the dashboard `GET /api/shops/list` enterprise query (reads
+`enterpriseId` straight off the shop docs → string/ObjectId agnostic). DB hiccup → falls back to
+base shopIds, never a lockout. Regular users untouched (no extra Mongo lookup). Covered by
+`tests/extension-auth-enterprise-access.smoke.ts`. **Needs a deploy to take effect** (Brandon
+pushes; Render auto-deploys). Until deployed, owners still need the one-off data fix above.
 
 **smsId → shop resolution:** the extension's "SMS shop ID" is the provider's id, not the MOS
 shopId. For Team Ryan (tekmetric) it's `tekmetric.shopId` (e.g. 4346 = Cumming/shopId 117,

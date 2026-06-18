@@ -478,6 +478,9 @@ async function resolveMosShopId(
   const userShopIds = [
     ...(authResult.user?.shopId ? [Number(authResult.user.shopId)] : []),
     ...(authResult.user?.shopIds || []).map((id: any) => Number(id)),
+    // Enterprise auto-access: owners/admins get every shop sharing their
+    // enterpriseId, attached to the user during validateExtensionToken.
+    ...(authResult.user?.accessibleShopIds || []).map((id: any) => Number(id)),
   ];
 
   // Resolve via the SHARED extension lookup (lib/extension-shop-lookup) so the

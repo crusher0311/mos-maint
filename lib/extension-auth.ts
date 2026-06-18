@@ -60,6 +60,83 @@ export const __deps: {
 const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const TOKEN_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // refresh after 7 days of use
 
+/**
+ * Enterprise auto-access. So that an enterprise OWNER/ADMIN no longer has to be
+ * hand-added to every sibling location, we expand their accessible shops to
+ * include EVERY shop that shares an `enterpriseId` with one of their
+ * explicitly-assigned shops. The result is stashed on `user.accessibleShopIds`,
+ * which `getUserShopIds` then folds in — so every extension route that gates on
+ * `getUserShopIds` (or otherwise reads the user's shop list) picks it up with no
+ * change of its own.
+ *
+ * Properties that keep this safe:
+ *  - ADDITIVE only: it can never remove a shop a user already had.
+ *  - role-gated: regular users (techs / service writers) are untouched, so the
+ *    extra Mongo lookup only runs for the small owner/admin population.
+ *    `platform_admin` already bypasses shop scoping everywhere, so it is skipped.
+ *  - best-effort: any DB hiccup is swallowed and the user keeps their explicit
+ *    `shopIds` (base access) rather than getting locked out.
+ *
+ * Mirrors the enterprise query used by the dashboard `GET /api/shops/list`: it
+ * reads `enterpriseId` straight off the shop docs and reuses the value, so it is
+ * agnostic to whether the field is stored as a string or an ObjectId.
+ */
+async function attachEnterpriseAccess(
+  dbHandle: Awaited<ReturnType<typeof getDb>> | null,
+  user: any,
+): Promise<void> {
+  try {
+    const role = user?.role;
+    if (role !== "owner" && role !== "admin") return;
+
+    const base = getUserShopIds(user);
+    if (base.length === 0) return;
+
+    const db = dbHandle ?? (await __deps.getDb());
+
+    // shopId is stored as a number in some docs and a string in others, so
+    // match on both shapes (same defensive pattern as the dashboard routes).
+    const baseLookup = base.flatMap((id) => {
+      const num = Number(id);
+      return Number.isFinite(num) ? [id, num] : [id];
+    });
+
+    const ownShops = await db
+      .collection("shops")
+      .find({ shopId: { $in: baseLookup } })
+      .project({ enterpriseId: 1 })
+      .toArray();
+
+    const enterpriseIds = Array.from(
+      new Set(
+        ownShops
+          .map((s: any) => s.enterpriseId)
+          .filter((e: any) => e != null && e !== ""),
+      ),
+    );
+    if (enterpriseIds.length === 0) return;
+
+    const siblingShops = await db
+      .collection("shops")
+      .find({ enterpriseId: { $in: enterpriseIds } })
+      .project({ shopId: 1 })
+      .toArray();
+
+    const expanded = new Set<string>(base);
+    for (const s of siblingShops) {
+      if (s?.shopId != null) expanded.add(String(s.shopId));
+    }
+    if (expanded.size > base.length) {
+      user.accessibleShopIds = Array.from(expanded);
+    }
+  } catch (err) {
+    console.warn(
+      "[Extension Auth] enterprise access expansion failed (using base shopIds):",
+      err,
+    );
+  }
+}
+
 export async function validateExtensionToken(
   request: NextRequest, 
   requiredShopId?: string
@@ -253,16 +330,20 @@ export async function validateExtensionToken(
     }
   }
 
+  // Enterprise auto-access: expand owner/admin reach to all shops sharing their
+  // enterpriseId (additive, best-effort). Runs once here so the requiredShopId
+  // check below AND every downstream getUserShopIds() caller see the same set.
+  await attachEnterpriseAccess(db, user);
+
   if (requiredShopId) {
-    const userShopId = user.shopId?.toString();
-    const userShopIds = (user.shopIds || []).map((id: any) => id.toString());
+    const accessibleShopIds = getUserShopIds(user);
     
-    const hasAccess = userShopId === requiredShopId || userShopIds.includes(requiredShopId);
+    const hasAccess = accessibleShopIds.includes(requiredShopId);
     
     const isPlatformAdmin = user.role === "platform_admin";
     
     if (!hasAccess && !isPlatformAdmin) {
-      console.warn(`[Extension Auth] Unauthorized shop access: user ${user.email} (shop ${userShopId}) tried shop ${requiredShopId}`);
+      console.warn(`[Extension Auth] Unauthorized shop access: user ${user.email} (shops ${accessibleShopIds.join(",")}) tried shop ${requiredShopId}`);
       emitShopErrorEvent({
         group: "EXT_AUTH_401",
         shopId: requiredShopId,
@@ -310,6 +391,23 @@ export function getUserShopIds(user: any): string[] {
   
   if (user.shopIds && Array.isArray(user.shopIds)) {
     for (const id of user.shopIds) {
+      const strId = id.toString();
+      if (!shopIds.includes(strId)) {
+        shopIds.push(strId);
+      }
+    }
+  }
+
+  // Enterprise auto-access: owners/admins get every shop sharing their
+  // enterpriseId, computed once in validateExtensionToken and stashed here.
+  // Purely additive — only ever widens the set. Role-gated as defense-in-depth
+  // so a stray `accessibleShopIds` on a non-owner doc can never widen access.
+  if (
+    (user.role === "owner" || user.role === "admin") &&
+    user.accessibleShopIds &&
+    Array.isArray(user.accessibleShopIds)
+  ) {
+    for (const id of user.accessibleShopIds) {
       const strId = id.toString();
       if (!shopIds.includes(strId)) {
         shopIds.push(strId);
