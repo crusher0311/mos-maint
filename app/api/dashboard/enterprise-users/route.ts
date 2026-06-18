@@ -144,6 +144,7 @@ export async function POST(req: Request) {
 
       const newUserDoc = {
         email: email.toLowerCase(),
+        emailLower: email.toLowerCase(),
         name: sourceUser.name,
         role: sourceUser.role,
         shopId,
