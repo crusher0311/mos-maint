@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       
       const enterpriseId = sessionShop?.enterpriseId;
       
-      if (enterpriseId && session.role === "owner") {
+      if (enterpriseId && (session.role === "owner" || session.role === "admin")) {
         query = { enterpriseId };
       } else {
         const user = await db.collection("users").findOne({ email: session.email });

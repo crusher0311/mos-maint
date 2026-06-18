@@ -44,7 +44,7 @@ export async function GET(
     const sessionShopId = String(sess.shopId);
 
     if (userShopId !== sessionShopId) {
-      if (sess.role === "owner") {
+      if (sess.role === "owner" || sess.role === "admin") {
         const sessionShop = await db.collection("shops").findOne({
           shopId: { $in: [sessionShopId, Number(sessionShopId)] }
         });
@@ -126,7 +126,7 @@ export async function PATCH(
 
     let enterpriseId: string | undefined;
     if (userShopId !== sessionShopId) {
-      if (sess.role === "owner") {
+      if (sess.role === "owner" || sess.role === "admin") {
         const sessionShop = await db.collection("shops").findOne({
           shopId: { $in: [sessionShopId, Number(sessionShopId)] }
         });
@@ -172,7 +172,7 @@ export async function PATCH(
       const enterpriseId = sessionShop?.enterpriseId;
       let allowedShopIds: string[] = [sessionShopId];
       
-      if (enterpriseId && sess.role === "owner") {
+      if (enterpriseId && (sess.role === "owner" || sess.role === "admin")) {
         const enterpriseShops = await db.collection("shops")
           .find({ enterpriseId })
           .project({ shopId: 1 })
@@ -242,7 +242,7 @@ export async function DELETE(
   const sessionShopId = String(sess.shopId);
 
   if (userShopId !== sessionShopId) {
-    if (sess.role === "owner") {
+    if (sess.role === "owner" || sess.role === "admin") {
       const sessionShop = await db.collection("shops").findOne({
         shopId: { $in: [sessionShopId, Number(sessionShopId)] }
       });
