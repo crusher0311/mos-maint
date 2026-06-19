@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { fetchCannedJobsWithCache } from "@/lib/integrations/protractor";
+import { fetchCannedJobsWithCache, normalizeProtractorPackageLine } from "@/lib/integrations/protractor";
 
 function extractLines(raw: any): any[] {
   if (!raw) return [];
@@ -11,15 +11,10 @@ function extractLines(raw: any): any[] {
 }
 
 function normalizeLines(lines: any[]): any[] {
-  return lines.map((l: any) => ({
-    description: l.Description || l.description || "",
-    lineType: l.Type || l.LineType || l.lineType || "Labor",
-    quantity: l.Quantity ?? l.quantity ?? 1,
-    unitPrice: l.Price ?? l.UnitPrice ?? l.unitPrice ?? 0,
-    partNumber: l.PartNumber || l.partNumber || "",
-    manufacturer: l.Manufacturer || l.manufacturer || "",
-    rank: l.Rank ?? undefined,
-  }));
+  // Use the shared Protractor line normalizer so canned-job pricing carried
+  // under PriceSummary.SellPrice or labor Rate/Hours isn't zeroed here before
+  // it reaches the New Work Order modal and the create-work-order push.
+  return lines.map((l: any) => normalizeProtractorPackageLine(l));
 }
 
 export async function GET(req: NextRequest) {
