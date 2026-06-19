@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import Stripe from "stripe";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe } from "@/lib/stripe";
 
 export async function GET() {
   try {
@@ -11,6 +10,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const stripe = getStripe();
     const [products, prices] = await Promise.all([
       stripe.products.list({ active: true, limit: 100 }),
       stripe.prices.list({ active: true, limit: 100 }),
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const stripe = getStripe();
     const body = await request.json();
     const { name, description, price, type, interval } = body;
 
