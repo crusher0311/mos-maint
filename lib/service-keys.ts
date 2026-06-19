@@ -45,12 +45,14 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "transmission fluid service", "atf change", "atf exchange", "atf service",
     "trans fluid", "trans flush", "transmission fluid change",
     "transmission fluid exchange", "bg transmission", "cvt fluid", "cvt service",
-    "automatic trans service", "auto transmission service"
+    "automatic trans service", "auto transmission service",
+    "automatic transaxle fluid", "auto transaxle fluid"
   ],
   trans_manual: [
     "manual transmission fluid", "manual trans fluid", "mtf fluid",
     "manual trans service", "manual gearbox", "manual gearbox oil",
-    "standard transmission fluid"
+    "standard transmission fluid",
+    "manual transaxle fluid"
   ],
   transfer_case: [
     "transfer case fluid", "transfer case flush", "transfer case oil",
@@ -454,6 +456,13 @@ export function toKeyFromName(name: string): string | null {
   if (n === "air filter") return "engine_air";
   if (n.includes("exhaust system")) return "exhaust";
   if (n.includes("transmission fluid") || n.includes("transmission flush")) return "trans_auto";
+  // DataOne phrases the automatic-trans fluid service as "Replace automatic
+  // transmission / transaxle fluid.", which the substrings above miss because
+  // "transmission" and "fluid" are split by "/ transaxle". Catch any
+  // transaxle-fluid service here, routing manual transaxles to trans_manual.
+  if (n.includes("transaxle") && (n.includes("fluid") || n.includes("flush") || n.includes("exchange") || n.includes("service") || n.includes("drain"))) {
+    return n.includes("manual") ? "trans_manual" : "trans_auto";
+  }
   if (n.includes("differential") && !n.includes("front") && !n.includes("rear")) return "rear_differential";
   if (n.includes("coolant") && n.includes("hose")) return "coolant_hoses";
   if (n === "coolant/hoses") return "coolant_hoses";
@@ -623,5 +632,15 @@ export function toKeyFromFreeText(desc: string): string[] {
   }
   if (d.includes("oil") && !hits.includes("oil")) hits.push("oil");
   if (d.includes("rotate") && d.includes("tire") && !hits.includes("tire_rotation")) hits.push("tire_rotation");
+  // Mirror the toKeyFromName transaxle fallback so a shop-history row phrased
+  // with "transaxle" anchors the same trans key the OEM item resolves to.
+  if (
+    d.includes("transaxle") &&
+    (d.includes("fluid") || d.includes("flush") || d.includes("exchange") || d.includes("service") || d.includes("drain")) &&
+    !hits.includes("trans_auto") &&
+    !hits.includes("trans_manual")
+  ) {
+    hits.push(d.includes("manual") ? "trans_manual" : "trans_auto");
+  }
   return Array.from(new Set(hits));
 }
