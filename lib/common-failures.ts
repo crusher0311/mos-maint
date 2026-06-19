@@ -9,6 +9,12 @@ const MILEAGE_BUCKET_SIZE = 5000;
 const MIN_PATTERNS_FOR_SHOP_ONLY = 3;
 const MIN_PATTERN_OCCURRENCES = 2;
 
+// Bound the AI call so a stalled OpenAI request fails fast into the
+// `getDefaultFailures` fallback instead of riding the SDK's 10-minute
+// default timeout (+ default retries) and hanging the extension/dashboard.
+const AI_REQUEST_TIMEOUT_MS = 8000;
+const AI_REQUEST_MAX_RETRIES = 1;
+
 export interface CommonFailure {
   repair: string;
   description: string;
@@ -134,38 +140,45 @@ export async function getCommonFailures(
 ): Promise<CommonFailuresResult> {
   const cache = getNormalizedCache();
   const mileageBucket = getMileageBucket(mileage);
-  const db = await getDb();
   
-  // Step 1: Check shop's own repair patterns first
+  // Step 1: Check shop's own repair patterns first.
+  // The whole Mongo pattern lookup is best-effort: a Mongo blip here must
+  // degrade to the AI/defaults path (shopPatterns stay empty) rather than
+  // throwing and turning the route into a hard 500.
   let shopPatterns: PatternMatch[] = [];
-  let enterpriseId: string | undefined;
   
   if (shopIds.length > 0) {
-    const shop = await db.collection("shops").findOne({ shopId: String(shopIds[0]) });
-    enterpriseId = shop?.enterpriseId || undefined;
-    
-    if (enterpriseId && shopIds.length > 1) {
-      // Enterprise: aggregate patterns across all locations
-      shopPatterns = await getEnterprisePatterns({
-        enterpriseId,
-        year,
-        make,
-        model,
-        mileage,
-        limit: 15,
-      });
-    } else {
-      // Single shop patterns
-      shopPatterns = await getShopPatterns({
-        shopId: shopIds[0],
-        enterpriseId,
-        year,
-        make,
-        model,
-        mileage,
-        includeEnterprise: !!enterpriseId,
-        limit: 15,
-      });
+    try {
+      const db = await getDb();
+      const shop = await db.collection("shops").findOne({ shopId: String(shopIds[0]) });
+      const enterpriseId: string | undefined = shop?.enterpriseId || undefined;
+      
+      if (enterpriseId && shopIds.length > 1) {
+        // Enterprise: aggregate patterns across all locations
+        shopPatterns = await getEnterprisePatterns({
+          enterpriseId,
+          year,
+          make,
+          model,
+          mileage,
+          limit: 15,
+        });
+      } else {
+        // Single shop patterns
+        shopPatterns = await getShopPatterns({
+          shopId: shopIds[0],
+          enterpriseId,
+          year,
+          make,
+          model,
+          mileage,
+          includeEnterprise: !!enterpriseId,
+          limit: 15,
+        });
+      }
+    } catch (error) {
+      console.error("Common failures: shop-pattern lookup failed, falling back to AI/defaults:", error);
+      shopPatterns = [];
     }
   }
   
@@ -263,13 +276,22 @@ async function fetchFailuresFromAI(
 Identify the most common failures and repairs for this vehicle around this mileage.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: COMMON_FAILURES_PROMPT },
-        { role: "user", content: userPrompt }
-      ],
-    });
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: COMMON_FAILURES_PROMPT },
+          { role: "user", content: userPrompt }
+        ],
+      },
+      {
+        // Per-request override of the SDK defaults (10-min timeout, 2 retries).
+        // A stall now raises an APIConnectionTimeoutError that the catch below
+        // turns into `getDefaultFailures`, so the user never waits indefinitely.
+        timeout: AI_REQUEST_TIMEOUT_MS,
+        maxRetries: AI_REQUEST_MAX_RETRIES,
+      }
+    );
     
     const content = response.choices?.[0]?.message?.content || "";
     
@@ -370,9 +392,12 @@ async function matchFailuresToShopHistory(
     return result;
   });
   
-  // If no patterns, fall back to service jobs query (for shops without patterns yet)
+  // If no patterns, fall back to service jobs query (for shops without patterns yet).
+  // This enrichment is best-effort — a Mongo failure must degrade to the
+  // AI-only matches we already have, not throw and 500 the whole route.
   const unmatchedFailures = matchedFailures.filter(f => !f.shopMatch);
   if (unmatchedFailures.length > 0 && shopIds.length > 0 && existingPatterns.length === 0) {
+   try {
     const db = await getDb();
     const serviceJobsCollection = db.collection(NORMALIZED_COLLECTIONS.serviceJobs);
     
@@ -434,6 +459,9 @@ async function matchFailuresToShopHistory(
         }
       }
     }
+   } catch (error) {
+     console.error("Common failures: service-job enrichment failed, returning AI-only matches:", error);
+   }
   }
   
   return matchedFailures;

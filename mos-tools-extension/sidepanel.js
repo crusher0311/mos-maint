@@ -1859,7 +1859,12 @@ async function loadCommonFailures() {
     
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/vehicle/common-failures?${params}`
+      endpoint: `/api/vehicle/common-failures?${params}`,
+      // Fail fast: the server now bounds its own AI/Mongo work and degrades to
+      // defaults, so a request that hasn't returned in 30s is a hung network /
+      // proxy hop, not a slow-but-working call. Surface a clear message instead
+      // of spinning indefinitely.
+      options: { timeoutMs: 30000 }
     });
     
     if (result.error) throw new Error(result.error);

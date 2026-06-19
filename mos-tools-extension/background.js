@@ -1597,17 +1597,42 @@ const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID']);
 
 function _jitter(ms) { return ms + Math.floor(Math.random() * (ms / 3)); }
 
+// Hard wall-clock cap on a single MOS API fetch attempt. Without it a hung
+// server request (e.g. a stalled AI/upstream call) rides fetch's default
+// "wait forever" behavior and the sidepanel spins indefinitely. A caller can
+// pass `options.timeoutMs` to fail faster for a specific request; otherwise
+// this generous default still bounds the hang well below anything a user
+// would tolerate. On expiry we throw a clear, friendly error rather than
+// returning a response, which fails the request fast.
+const MOS_FETCH_TIMEOUT_MS = 45000;
+
 async function _doMosFetch(endpoint, options, token) {
   const separator = endpoint.includes('?') ? '&' : '?';
   const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(token)}`;
-  return fetch(urlWithToken, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const { timeoutMs, ...fetchOptions } = options || {};
+  const limitMs = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : MOS_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), limitMs);
+  try {
+    return await fetch(urlWithToken, {
+      ...fetchOptions,
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...fetchOptions.headers,
+      },
+    });
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      const err = new Error('The request took too long and was stopped. Please try again.');
+      err.code = 'MOS_REQUEST_TIMEOUT';
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function handleMosApiRequest(endpoint, options = {}) {
