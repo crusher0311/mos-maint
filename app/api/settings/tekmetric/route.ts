@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { validateShopAccess } from "@/lib/integrations/tekmetric";
 import { syncSingleShop } from "@/lib/integrations/tekmetric/sync";
@@ -83,17 +83,14 @@ async function triggerJobHistoryBackfill(shopId: number, tekmetricShopId: number
 }
 
 async function getUserShopId(): Promise<string | null> {
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) return null;
-
-  const db = await getDb();
-  const now = new Date();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
-  if (!sess) return null;
-
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.shopId ? String(user.shopId) : null;
+  // Resolve the ACTIVE session shop (the shop switcher updates
+  // session.shopId), so a platform admin viewing another shop sees THAT
+  // shop's connection state. This mirrors the carfax/autoflow/protractor/
+  // integrations routes and the Data Status panel. Reading the user's home
+  // shop here made the Tekmetric card report the admin's own shop instead
+  // of the viewed one (e.g. "not connected" while Data Status showed data).
+  const session = await getSession();
+  return session?.shopId ? String(session.shopId) : null;
 }
 
 export async function GET(request: NextRequest) {

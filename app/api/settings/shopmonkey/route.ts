@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { validateApiKey } from "@/lib/integrations/shopmonkey/auth";
 import { subscribeShopToShopmonkeyWebhooks } from "@/lib/integrations/shopmonkey/webhook-subscribe";
@@ -20,16 +20,12 @@ export const maxDuration = 60;
  */
 
 async function getUserShopId(): Promise<string | null> {
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) return null;
-
-  const db = await getDb();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: new Date() } });
-  if (!sess) return null;
-
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.shopId ? String(user.shopId) : null;
+  // Resolve the ACTIVE session shop (the shop switcher updates
+  // session.shopId), so a platform admin viewing another shop sees THAT
+  // shop's connection state. Mirrors the carfax/autoflow/protractor/
+  // integrations routes and the Data Status panel.
+  const session = await getSession();
+  return session?.shopId ? String(session.shopId) : null;
 }
 
 export async function GET() {

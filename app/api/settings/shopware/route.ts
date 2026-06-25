@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/mongo';
 import { testConnection, getShop, isConfigured } from '@/lib/integrations/shopware/client';
 import { prewarmShopWareJobsCacheForOnboarding } from '@/lib/shopware-jobs-prewarm';
@@ -25,17 +25,12 @@ async function triggerShopWareBackfillCron(shopId: number): Promise<void> {
 }
 
 async function getUserShopId(): Promise<string | null> {
-  const store = await cookies();
-  const sid = store.get('sid')?.value ?? store.get('session_token')?.value;
-  if (!sid) return null;
-
-  const db = await getDb();
-  const now = new Date();
-  const sess = await db.collection('sessions').findOne({ token: sid, expiresAt: { $gt: now } });
-  if (!sess) return null;
-
-  const user = await db.collection('users').findOne({ _id: sess.userId });
-  return user?.shopId ? String(user.shopId) : null;
+  // Resolve the ACTIVE session shop (the shop switcher updates
+  // session.shopId), so a platform admin viewing another shop sees THAT
+  // shop's connection state. Mirrors the carfax/autoflow/protractor/
+  // integrations routes and the Data Status panel.
+  const session = await getSession();
+  return session?.shopId ? String(session.shopId) : null;
 }
 
 export async function GET(_request: NextRequest) {
