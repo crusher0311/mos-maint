@@ -207,6 +207,12 @@ function buildCoreEntity(
   key: EntityKey,
   label: string,
   result: AggregateResult | null,
+  // Optional freshness signal that overrides `result.newest` when deciding
+  // the badge. Needed for entities whose displayed `oldest/newest` is a
+  // borrowed span (e.g. customers/vehicles mirroring the repair-order
+  // history): the span must NOT drive freshness — only the entity's own
+  // sync recency should. When omitted, the displayed `newest` is used.
+  freshnessNewest?: string | null,
 ): DataStatusEntity {
   if (!result) {
     return {
@@ -221,6 +227,8 @@ function buildCoreEntity(
       note: "Counts are taking longer than usual to load.",
     };
   }
+  const freshnessSignal =
+    freshnessNewest !== undefined ? freshnessNewest : result.newest;
   return {
     key,
     label,
@@ -229,7 +237,7 @@ function buildCoreEntity(
     oldest: result.oldest,
     newest: result.newest,
     lastUpdated: result.lastUpdated,
-    freshness: computeFreshness(result.newest, result.lastUpdated),
+    freshness: computeFreshness(freshnessSignal, result.lastUpdated),
   };
 }
 
@@ -341,12 +349,28 @@ export async function computeDataStatus(
     aggregateEntity(normalizedServiceJobs, shopId, serviceJobDate),
   ]);
 
+  // Customers and vehicles have no per-record business date in the synced
+  // data (the source date fields come back empty), so the panel mirrors the
+  // repair-order history span onto them — i.e. "records span <oldest RO> –
+  // <newest RO>". Their own count and lastUpdated (sync freshness) are kept;
+  // only the oldest/newest span is borrowed. If the work-order aggregate
+  // failed/returned no dates, leave their original values untouched.
+  const withHistorySpan = (
+    result: AggregateResult | null,
+  ): AggregateResult | null => {
+    if (!result || !workOrders) return result;
+    if (!workOrders.oldest && !workOrders.newest) return result;
+    return { ...result, oldest: workOrders.oldest, newest: workOrders.newest };
+  };
+  const customersSpanned = withHistorySpan(customers);
+  const vehiclesSpanned = withHistorySpan(vehicles);
+
   const woLabel =
     provider === "protractor" ? "Work Orders" : "Repair Orders";
 
   const entities: DataStatusEntity[] = [
-    buildCoreEntity("customers", "Customers", customers),
-    buildCoreEntity("vehicles", "Vehicles", vehicles),
+    buildCoreEntity("customers", "Customers", customersSpanned, customers?.newest ?? null),
+    buildCoreEntity("vehicles", "Vehicles", vehiclesSpanned, vehicles?.newest ?? null),
     buildCoreEntity("workOrders", woLabel, workOrders),
     buildCoreEntity("serviceJobs", "Service Jobs", serviceJobs),
   ];
