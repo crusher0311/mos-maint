@@ -1286,7 +1286,7 @@ function TekmetricSection({ status, onUpdate }: {
           )}
           {status.initialSyncState === "complete" && typeof status.initialSyncVehicles === "number" && status.initialSyncVehicles > 0 && (
             <div className="text-xs text-green-700 mt-2">
-              Initial sync done — imported {status.initialSyncVehicles} active vehicle{status.initialSyncVehicles === 1 ? "" : "s"}.
+              Initial sync done — {status.initialSyncVehicles} active vehicle{status.initialSyncVehicles === 1 ? "" : "s"} at time of connect.
             </div>
           )}
           {status.initialSyncState === "failed" && (
