@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import DataStatusPanel from "@/components/DataStatusPanel";
 
 type ShopManagementChoice = "protractor" | "tekmetric" | "shopware" | "shopmonkey" | "standalone" | null;
 type DviChoice = "autoflow" | "tekmetric" | null;
@@ -369,6 +370,10 @@ export default function IntegrationsPage() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <DataStatusPanel />
       </div>
 
       <PartnerApiSection />

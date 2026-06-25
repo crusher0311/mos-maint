@@ -9,6 +9,7 @@ import {
   MoreHorizontal, Users, Car, TrendingUp, Sparkles, Database, Zap, Pencil,
 } from "lucide-react";
 import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
+import DataStatusPanel from "@/components/DataStatusPanel";
 
 interface ShopBilling {
   plan: string;
@@ -2280,6 +2281,13 @@ function ShopRow(props: ShopRowProps) {
                 </div>
               )}
             </div>
+          </td>
+        </tr>
+      )}
+      {isExpanded && (
+        <tr className="bg-blue-50">
+          <td colSpan={6} className="px-4 pb-4">
+            <DataStatusPanel shopId={shop.shopId} />
           </td>
         </tr>
       )}

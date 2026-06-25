@@ -54,6 +54,32 @@ export async function GET(req: NextRequest) {
     console.error(`[Cron] Grace period check error:`, error);
   }
 
+  // Drain any customer-requested re-syncs first so their cursors are reset
+  // before the provider syncs below pick the shops up in this same pass.
+  try {
+    console.log(`[Cron] Draining customer re-sync queue...`);
+    const resyncResponse = await fetch(`${baseUrl}/api/cron/process-resync-requests`, {
+      method: "GET",
+      headers: {
+        ...(CRON_SECRET ? { "Authorization": `Bearer ${CRON_SECRET}` } : {}),
+      },
+    });
+
+    if (resyncResponse.ok) {
+      results.resyncQueue = await resyncResponse.json();
+      console.log(`[Cron] Re-sync queue drained`);
+    } else {
+      results.resyncQueue = {
+        error: `HTTP ${resyncResponse.status}`,
+        details: await resyncResponse.text(),
+      };
+      console.error(`[Cron] Re-sync queue drain failed:`, results.resyncQueue);
+    }
+  } catch (error: any) {
+    results.resyncQueue = { error: error.message };
+    console.error(`[Cron] Re-sync queue drain error:`, error);
+  }
+
   try {
     console.log(`[Cron] Running Protractor sync...`);
     const protractorResponse = await fetch(`${baseUrl}/api/cron/protractor-sync`, {
