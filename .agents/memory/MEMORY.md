@@ -55,3 +55,4 @@
 - [Protractor canned-job line pricing](protractor-canned-job-line-pricing.md) — canned/template lines hide price in PriceSummary.SellPrice + labor Rate/Hours, not flat Price; mirror lib/job-index.ts via shared normalizeProtractorPackageLine.
 - [Service-key OEM vs history mapping](service-key-oem-vs-history-mapping.md) — "no record" false-miss when OEM toKeyFromName & history toKeyFromFreeText disagree → OEM falls to misc_<id>; fix synonyms in BOTH, keep verb-guarded.
 - [Data Status provider detection](data-status-provider-detection.md) — shop provider detectors must check `integrationProvider` FIRST (+ legacy top-level fields) & include it in the Mongo projection; nested `*.configured`/`*.shopId` alone false-reports connected Tekmetric shops as disconnected.
+- [Mis-sync purge](shop-mis-sync-purge.md) — fixing a wrong provider connection: disconnect FIRST (stops cron inflow), purge children by parent REF in FK order, split the huge line_items DELETE.
