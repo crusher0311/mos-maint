@@ -1,6 +1,6 @@
 import "server-only";
 import { getDb } from "@/lib/mongo";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import {
   normalizedCustomers,
   normalizedVehicles,
@@ -156,17 +156,30 @@ interface AggregateResult {
 // normalized table, scoped to the shop. Uses the shopId index that exists
 // on every normalized table. Returns null on timeout/error so the caller
 // can render an "unknown" card.
+//
+// `oldest`/`newest` describe how far back the shop's real history goes, so
+// they're driven by the entity's actual business date (e.g. a repair
+// order's closed date) when one is supplied via `recordDate`. Without it
+// they fall back to `createdAt`, which is only the row's MOS import
+// timestamp — meaningful as "first synced", NOT as history depth. The
+// `recordDate` expression should COALESCE down to `createdAt` so rows that
+// lack a business date (e.g. an open RO) still contribute a value.
+// `lastUpdated` always tracks `updatedAt` (the sync/webhook freshness
+// signal) regardless of the record-date source.
 async function aggregateEntity(
   table: CoreTable,
   shopId: number,
+  recordDate?: SQL<unknown>,
 ): Promise<AggregateResult | null> {
   try {
     const { getDb: getPg } = await import("@/lib/db/drizzle");
+    const dateExpr: SQL<unknown> | typeof table.createdAt =
+      recordDate ?? table.createdAt;
     const query = getPg()
       .select({
         count: sql<number>`count(*)::int`,
-        oldest: sql<Date | null>`min(${table.createdAt})`,
-        newest: sql<Date | null>`max(${table.createdAt})`,
+        oldest: sql<Date | null>`min(${dateExpr})`,
+        newest: sql<Date | null>`max(${dateExpr})`,
         lastUpdated: sql<Date | null>`max(${table.updatedAt})`,
       })
       .from(table)
@@ -312,11 +325,20 @@ export async function computeDataStatus(
 
   const { provider, lastSyncAt } = detectProvider(shop);
 
+  // Repair/work orders and service jobs carry a real business date, so the
+  // panel reports true history depth from it rather than the MOS import
+  // timestamp. COALESCE down to createdAt so open/in-progress records (which
+  // have no closed/completed date yet) still contribute a value. Customers
+  // and vehicles have no per-record business date in the synced data (the
+  // source date fields come back empty), so they fall back to createdAt.
+  const workOrderDate = sql<unknown>`coalesce(${normalizedWorkOrders.closedDate}, ${normalizedWorkOrders.completedDate}, ${normalizedWorkOrders.createdAt})`;
+  const serviceJobDate = sql<unknown>`coalesce(${normalizedServiceJobs.completedAt}, ${normalizedServiceJobs.createdAt})`;
+
   const [customers, vehicles, workOrders, serviceJobs] = await Promise.all([
     aggregateEntity(normalizedCustomers, shopId),
     aggregateEntity(normalizedVehicles, shopId),
-    aggregateEntity(normalizedWorkOrders, shopId),
-    aggregateEntity(normalizedServiceJobs, shopId),
+    aggregateEntity(normalizedWorkOrders, shopId, workOrderDate),
+    aggregateEntity(normalizedServiceJobs, shopId, serviceJobDate),
   ]);
 
   const woLabel =
