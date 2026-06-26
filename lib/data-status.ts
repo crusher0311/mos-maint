@@ -413,12 +413,13 @@ export async function computeDataStatus(
 
   // Appointments / Employees are listed only when the connected source
   // exposes them. They are synced into the normalized layer only for
-  // providers MOS actually pulls them from (Tekmetric today, via the roster
-  // sync cron — see lib/integrations/tekmetric/sync-roster.ts). For other
-  // capable providers there is no sync path yet, so they still render an
-  // explicit "not synced" marker rather than zeros.
+  // providers MOS actually pulls them from via the roster sync cron —
+  // Tekmetric (lib/integrations/tekmetric/sync-roster.ts) and Protractor
+  // (lib/integrations/protractor/sync-roster.ts). For other capable
+  // providers there is no sync path yet, so they still render an explicit
+  // "not synced" marker rather than zeros.
   const caps = provider ? PROVIDER_CAPABILITIES[provider] : null;
-  const rosterSynced = provider === "tekmetric";
+  const rosterSynced = provider === "tekmetric" || provider === "protractor";
 
   const notSyncedEntity = (
     key: EntityKey,

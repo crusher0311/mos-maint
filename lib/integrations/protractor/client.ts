@@ -4579,6 +4579,67 @@ export async function getProtractorAppointments(
   return { ok: true, appointments };
 }
 
+// ============= Employee Functions =============
+
+// Protractor's Integration Services exposes the shop's staff under the
+// `/Employee` resource. Field naming varies across Protractor configs, so the
+// shape below is intentionally permissive and the roster sync normalizes it
+// defensively (see lib/integrations/protractor/sync-roster.ts).
+export type ProtractorEmployee = {
+  ID: string;
+  FileAs?: string;
+  Name?: {
+    FirstName?: string;
+    LastName?: string;
+    Title?: string;
+  };
+  FirstName?: string;
+  LastName?: string;
+  Email?: string;
+  EmailAddress?: string;
+  Phone?: string;
+  Phone1?: string;
+  Role?: string;
+  Type?: string;
+  Position?: string;
+  Active?: boolean;
+  Status?: string;
+  IsActive?: boolean;
+};
+
+export async function getProtractorEmployees(
+  shopId: number,
+  params: {
+    skip?: number;
+    top?: number;
+  } = {}
+): Promise<{ ok: boolean; employees?: ProtractorEmployee[]; error?: string }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+
+  const queryParams = new URLSearchParams();
+  const skip = params.skip || 0;
+  const top = params.top || 100;
+  queryParams.set("skip", String(skip));
+  queryParams.set("take", String(top));
+
+  const result = await protractorFetch<{ ItemCollection?: ProtractorEmployee[] }>(
+    `/Employee?${queryParams.toString()}`,
+    config,
+    {},
+    0,
+    shopId
+  );
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, employees: result.data?.ItemCollection || [] };
+}
+
 export async function addDeferredWorkToWorkOrder(
   shopId: number,
   workOrderGuid: string,

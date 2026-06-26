@@ -10,6 +10,7 @@ import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
+import { syncProtractorRoster } from "@/lib/integrations/protractor/sync-roster";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -67,6 +68,19 @@ const ROSTER_SYNC_MAX_SHOPS_PER_RUN = Math.max(
 );
 const ROSTER_SYNC_PARALLELISM = 3;
 const ROSTER_SYNC_COLLECTION = "tekmetric_roster_sync";
+// Protractor roster sync (Task #635). Same staleness-gated, bounded pass as the
+// Tekmetric one above, but over connected Protractor shops and into a dedicated
+// bookkeeping collection so the two providers' cursors never collide.
+const PROTRACTOR_ROSTER_SYNC_STALE_HOURS = Math.max(
+  1,
+  Number(process.env.PROTRACTOR_ROSTER_SYNC_STALE_HOURS) || 6,
+);
+const PROTRACTOR_ROSTER_SYNC_MAX_SHOPS_PER_RUN = Math.max(
+  1,
+  Number(process.env.PROTRACTOR_ROSTER_SYNC_MAX_SHOPS) || 10,
+);
+const PROTRACTOR_ROSTER_SYNC_PARALLELISM = 2;
+const PROTRACTOR_ROSTER_SYNC_COLLECTION = "protractor_roster_sync";
 // If a shop's lastError was set more than this many hours ago, clear it
 // before the next run so a transient failure can't permanently freeze the
 // cursor without anyone noticing.
@@ -1718,6 +1732,139 @@ async function runRosterSyncPass(
   return { attempted: candidates.length, synced, errors };
 }
 
+// Protractor roster sync (Task #635). Mirrors runRosterSyncPass but iterates
+// connected Protractor shops, picking the stalest whose last roster sync is
+// older than PROTRACTOR_ROSTER_SYNC_STALE_HOURS, and refreshes their upcoming
+// appointments + current employee roster into the same normalized PG tables.
+// Bounded per tick and run with limited parallelism so it stays light next to
+// backfill. Every shop is wrapped so one failure never sinks the pass.
+async function runProtractorRosterSyncPass(
+  db: any,
+): Promise<{ attempted: number; synced: number; errors: number }> {
+  const staleBefore = new Date(
+    Date.now() - PROTRACTOR_ROSTER_SYNC_STALE_HOURS * 60 * 60 * 1000,
+  );
+
+  // Connected Protractor shops store config under `protractor.*` (current) or
+  // the legacy top-level `protractor{ConnectionId,ApiKey}` fields.
+  const shops: any[] = await db
+    .collection("shops")
+    .find(
+      {
+        $or: [
+          { "protractor.connectionId": { $exists: true, $ne: null } },
+          { "protractor.apiKey": { $exists: true, $ne: null } },
+          { "protractor.configured": true },
+          { protractorConnectionId: { $exists: true, $ne: null } },
+          { protractorApiKey: { $exists: true, $ne: null } },
+        ],
+      },
+      { projection: { shopId: 1, enterpriseId: 1 } },
+    )
+    .toArray();
+
+  if (shops.length === 0) return { attempted: 0, synced: 0, errors: 0 };
+
+  const bookkeeping: any[] = await db
+    .collection(PROTRACTOR_ROSTER_SYNC_COLLECTION)
+    .find({}, { projection: { shopId: 1, lastRosterSyncAt: 1 } })
+    .toArray();
+  const lastSyncByShop = new Map<number, number>();
+  for (const b of bookkeeping) {
+    const t =
+      b?.lastRosterSyncAt instanceof Date
+        ? b.lastRosterSyncAt.getTime()
+        : b?.lastRosterSyncAt
+          ? new Date(b.lastRosterSyncAt).getTime()
+          : 0;
+    lastSyncByShop.set(Number(b.shopId), Number.isFinite(t) ? t : 0);
+  }
+
+  const candidates = shops
+    .map((s) => ({
+      shopId: Number(s.shopId),
+      enterpriseId: s.enterpriseId ? String(s.enterpriseId) : null,
+      lastSyncMs: lastSyncByShop.get(Number(s.shopId)) ?? 0,
+    }))
+    .filter(
+      (s) => Number.isFinite(s.shopId) && s.lastSyncMs < staleBefore.getTime(),
+    )
+    .sort((a, b) => a.lastSyncMs - b.lastSyncMs)
+    .slice(0, PROTRACTOR_ROSTER_SYNC_MAX_SHOPS_PER_RUN);
+
+  if (candidates.length === 0) return { attempted: 0, synced: 0, errors: 0 };
+
+  const limit = pLimit(PROTRACTOR_ROSTER_SYNC_PARALLELISM);
+  let synced = 0;
+  let errors = 0;
+
+  await Promise.all(
+    candidates.map((shop) =>
+      limit(async () => {
+        try {
+          const result = await syncProtractorRoster(
+            shop.shopId,
+            shop.enterpriseId,
+          );
+          if (result.errors.length > 0) {
+            errors++;
+            console.warn(
+              `[Protractor Roster Sync] Shop ${shop.shopId} partial errors: ${result.errors.join("; ")}`,
+            );
+          } else {
+            synced++;
+          }
+          await db
+            .collection(PROTRACTOR_ROSTER_SYNC_COLLECTION)
+            .updateOne(
+              { shopId: shop.shopId },
+              {
+                $set: {
+                  shopId: shop.shopId,
+                  lastRosterSyncAt: new Date(),
+                  lastResult: {
+                    appointments: result.appointments,
+                    employees: result.employees,
+                    errors: result.errors,
+                  },
+                },
+              },
+              { upsert: true },
+            );
+        } catch (err: any) {
+          errors++;
+          console.error(
+            `[Protractor Roster Sync] Shop ${shop.shopId} failed:`,
+            err?.message || err,
+          );
+          try {
+            await db
+              .collection(PROTRACTOR_ROSTER_SYNC_COLLECTION)
+              .updateOne(
+                { shopId: shop.shopId },
+                {
+                  $set: {
+                    shopId: shop.shopId,
+                    lastRosterSyncAt: new Date(),
+                    lastError: (err?.message || String(err)).slice(0, 500),
+                  },
+                },
+                { upsert: true },
+              );
+          } catch {
+            /* bookkeeping write is best-effort */
+          }
+        }
+      }),
+    ),
+  );
+
+  console.log(
+    `[Protractor Roster Sync] Attempted ${candidates.length} shop(s): ${synced} ok, ${errors} with errors.`,
+  );
+  return { attempted: candidates.length, synced, errors };
+}
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -1790,6 +1937,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Protractor roster sync pass (Task #635): same lightweight, staleness-gated
+    // refresh of upcoming appointments + current employee roster, but for
+    // connected Protractor shops. Fully wrapped so a Protractor roster failure
+    // can never block the Tekmetric backfill.
+    let protractorRosterSync: {
+      attempted: number;
+      synced: number;
+      errors: number;
+    } = { attempted: 0, synced: 0, errors: 0 };
+    try {
+      protractorRosterSync = await runProtractorRosterSyncPass(db);
+    } catch (rosterErr: any) {
+      console.warn(
+        `[Tekmetric Backfill] Protractor roster sync pass threw; continuing with backfill: ${rosterErr?.message || rosterErr}`,
+      );
+    }
+
     // Fastpath mode: when invoked as `?fastpath=newShops` (the
     // every-5-min cron), restrict the queue to shops created in the
     // last NEW_SHOP_FASTPATH_DAYS days so freshly onboarded clients
@@ -1836,6 +2000,7 @@ export async function GET(req: NextRequest) {
         shopsRemaining: 0,
         staleSweep,
         rosterSync,
+        protractorRosterSync,
         duration: `${Date.now() - startTime}ms`
       });
     }
@@ -1931,6 +2096,7 @@ export async function GET(req: NextRequest) {
       shopsRemaining: shopsToProcess.length - selectedShops.length,
       staleSweep,
       rosterSync,
+      protractorRosterSync,
       duration: `${duration}ms`,
       tekmetricApiCalls: apiCallCount,
     });
