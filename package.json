@@ -54,6 +54,7 @@
     "report:job-index-aces-coverage": "tsx scripts/job-index-aces-coverage.ts",
     "backfill:concern-conversations-mos-shop-id": "tsx scripts/backfill-concern-conversations-mos-shop-id.ts",
     "backfill:enhance-corrections-mos-shop-id": "tsx scripts/backfill-enhance-corrections-mos-shop-id.ts",
+    "backfill:protractor-history-dates": "tsx scripts/backfill-protractor-history-dates.ts",
     "test:engine-risk-csv": "tsx tests/engine-risk-csv.smoke.ts",
     "start": "next start -p ${PORT:-5000} -H 0.0.0.0",
     "start:with-workers": "node scripts/start-with-workers.js",

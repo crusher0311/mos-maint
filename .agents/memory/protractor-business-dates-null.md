@@ -47,7 +47,16 @@ real cached invoices (real 2022–2026 dates out). Adding these fields changes t
 content hash, so the next normal backfill sweep will update each Protractor RO once
 (bounded one-time re-index churn) — that is the going-forward fill mechanism.
 
-**Still PENDING (operator-gated):** existing rows stay null until a fleet-wide
-re-normalize re-processes already-imported Protractor records. Don't run it from an
-isolated/dev env — dev Mongo IS prod Mongo and an aggressive re-normalize saturates
-shared Mongo. The panel won't change for historical shops until that runs.
+**Still PENDING (operator-gated execution):** existing rows stay null until a
+fleet-wide re-normalize re-processes already-imported Protractor records. Tooling
+exists — `scripts/backfill-protractor-history-dates.ts` (npm
+`backfill:protractor-history-dates`): Protractor-only, paced, resumable, and
+DRY-RUN by default (only writes with `--confirm`). It re-ingests each WO off the
+stored raw payload (fills WO closed/completed/checkIn) and replays its service
+jobs (fills service-job completedAt). ~624k protractor WOs fleet-wide (2026-06).
+**Do NOT run `--confirm` from an isolated/dev env** — dev Mongo IS prod Mongo and
+an aggressive re-normalize saturates shared Mongo (fleet-wide login/cron outage);
+the operator runs it OFF-HOURS. The panel won't change for historical shops until
+then. **Why dry-run must stay namespaced from live in any such re-process script:**
+a dry-run-by-default tool that advances one shared checkpoint will make the later
+`--confirm` run resume *past* preview-visited rows and silently skip their writes.
