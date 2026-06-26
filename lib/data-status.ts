@@ -173,27 +173,59 @@ async function aggregateEntity(
 ): Promise<AggregateResult | null> {
   try {
     const { getDb: getPg } = await import("@/lib/db/drizzle");
-    const dateExpr: SQL<unknown> | typeof table.createdAt =
-      recordDate ?? table.createdAt;
-    const query = getPg()
-      .select({
-        count: sql<number>`count(*)::int`,
-        oldest: sql<Date | null>`min(${dateExpr})`,
-        newest: sql<Date | null>`max(${dateExpr})`,
-        lastUpdated: sql<Date | null>`max(${table.updatedAt})`,
-      })
+    const db = getPg();
+
+    // Run count, last-updated and the oldest/newest span as separate queries
+    // rather than one combined aggregate. Postgres only uses an index to
+    // answer min()/max() when the query contains *nothing but* index-backed
+    // min/max aggregates — adding count(*) or a max() over a different column
+    // disables that optimization and forces a full per-shop heap scan (30s+
+    // on large shops, which trips QUERY_TIMEOUT_MS and shows "Checking…").
+    // Split out, each part is served by its own (shop_id, …) index:
+    //   • count(*)            → shop_id index
+    //   • max(updatedAt)      → (shop_id, updated_at) index
+    //   • min/max(recordDate) → (shop_id, <date>) index
+    const countP = db
+      .select({ count: sql<number>`count(*)::int` })
       .from(table)
       .where(eq(table.shopId, shopId))
-      .then((rows) => rows[0] ?? null);
+      .then((rows) => rows[0]?.count ?? 0);
 
-    const row = await withTimeout(query, QUERY_TIMEOUT_MS, null);
+    const freshP = db
+      .select({ lastUpdated: sql<Date | null>`max(${table.updatedAt})` })
+      .from(table)
+      .where(eq(table.shopId, shopId))
+      .then((rows) => rows[0]?.lastUpdated ?? null);
+
+    // Only compute the history span when the caller supplies a business date
+    // (work/repair orders, service jobs). Customers and vehicles have no real
+    // per-record date, so the panel borrows the repair-order span for them
+    // (see withHistorySpan) — computing their createdAt min/max here would
+    // only surface the MOS import timestamp and waste a scan.
+    const spanP: Promise<{ oldest: Date | null; newest: Date | null }> =
+      recordDate
+        ? db
+            .select({
+              oldest: sql<Date | null>`min(${recordDate})`,
+              newest: sql<Date | null>`max(${recordDate})`,
+            })
+            .from(table)
+            .where(eq(table.shopId, shopId))
+            .then((rows) => rows[0] ?? { oldest: null, newest: null })
+        : Promise.resolve({ oldest: null, newest: null });
+
+    const combined = Promise.all([countP, spanP, freshP]).then(
+      ([count, span, lastUpdated]) => ({
+        count: Number(count ?? 0),
+        oldest: toIso(span.oldest),
+        newest: toIso(span.newest),
+        lastUpdated: toIso(lastUpdated),
+      }),
+    );
+
+    const row = await withTimeout(combined, QUERY_TIMEOUT_MS, null);
     if (!row) return null;
-    return {
-      count: Number(row.count ?? 0),
-      oldest: toIso(row.oldest),
-      newest: toIso(row.newest),
-      lastUpdated: toIso(row.lastUpdated),
-    };
+    return row;
   } catch (err) {
     console.warn(
       `[DataStatus] aggregate failed for shop ${shopId}:`,

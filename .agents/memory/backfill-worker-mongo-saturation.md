@@ -62,8 +62,8 @@ also lives in `.env.local` STALE → import-time dotenv override makes the lib h
 
 **How to confirm latency without the extension (no Better Stack host/user secrets here):**
 the prod Supabase `production_logs` table (synced from Better Stack) has per-request
-JSON — `message_json->'message'->>'responseTimeMS'` and `'path'`/`'statusCode'`/`'clientIP'`.
-Group by path for a shop's clientIP: saturation shows `/api/extension/{auth-token,features,labor-rates,inspections}`
+JSON — `message_json->'message'->>'responseTimeMS'` and `'path'`/`'statusCode'`.
+Group by path for a shop: saturation shows `/api/extension/{auth-token,features,labor-rates,inspections}`
 at 50–142 **seconds** (statusCode 200 but huge ms) + a burst of `499` (client aborted)
 + a request-count spike (one shop's retry storm = thousands/hr). The 30s sidepanel
 `sendMessage` timeout is the trip point: background login SUCCEEDS (console shows it)
