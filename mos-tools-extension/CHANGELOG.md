@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.32 — 2026-06-26
+
+### Fixed
+- **The VHI now uses the odometer you entered on the open repair order.** Before,
+  the overlay sometimes showed an *estimated* mileage (from CARFAX) that
+  disagreed with the actual "In:" reading on the RO — for example showing
+  116,266 when the screen said 119,500 — which threw off the overdue/due-soon
+  math. Detect Dog now sends the on-screen odometer to the server and anchors the
+  whole VHI on it. The CARFAX estimate is only used when there's genuinely no
+  entered odometer, and the mileage is still flagged when it's an estimate. A
+  clearly-too-low scrape won't drag a higher known mileage backward.
+
 ## 1.27.31 — 2026-06-16
 
 ### Added

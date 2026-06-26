@@ -1213,6 +1213,18 @@ async function _GET(request: NextRequest) {
     const roId = searchParams.get("roId");
     const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
     const forceRefresh = searchParams.get("refresh") === "true";
+    // Task #645: the odometer the advisor typed on the open RO, scraped from
+    // the page by the content script. This is the most dependable mileage
+    // source (it's literally what's on screen), so it anchors the VHI math
+    // above the cached WO odometer / CARFAX estimate / stale snapshot. Reject
+    // obviously-bad scrapes (non-integer or out of a sane range).
+    const enteredOdometer = ((): number | null => {
+      const raw = searchParams.get("odometer");
+      if (!raw) return null;
+      const n = parseInt(raw.replace(/[^\d]/g, ""), 10);
+      if (!Number.isFinite(n) || n <= 100 || n >= 1_000_000) return null;
+      return n;
+    })();
 
     if (!smsShopId) {
       return NextResponse.json(
@@ -1611,6 +1623,50 @@ async function _GET(request: NextRequest) {
 
     let mileageEstimated = false;
     let mileageEstimateDetails: any = null;
+
+    // Task #645: anchor on the odometer the advisor typed on the open RO.
+    // It sits at the top of the mileage waterfall — above the cached/live WO
+    // odometer (already resolved into `mileage` above), the CARFAX estimate
+    // (below), and the stale vehicles snapshot. Monotonicity guard: an
+    // odometer only moves forward, so ignore an entered value that's clearly
+    // LOWER than a higher already-known reading (a mis-scrape or typo should
+    // not regress a real higher mileage). Setting `mileage` here also short-
+    // circuits the CARFAX block (which only fills when mileage is empty) so
+    // the result is correctly tagged `actual`, not `estimated`.
+    if (enteredOdometer != null) {
+      const known = typeof mileage === "number" && mileage > 0 ? mileage : 0;
+      if (enteredOdometer >= known) {
+        if (mileage !== enteredOdometer) {
+          console.log(`[Extension] Anchoring on entered RO odometer ${enteredOdometer} (was ${mileage ?? "none"}) for ${vin ?? roId}`);
+        }
+        mileage = enteredOdometer;
+        mileageEstimated = false;
+
+        // Keep the shared plan cache consistent: the partner VHI endpoint and
+        // dashboard resolve their anchor from the Tekmetric WO mirror
+        // (`tekmetric_work_orders.odometer`, read by lib/plan-build/
+        // open-ro-mileage.ts), NOT from this `odometer` param. Persist the
+        // entered reading onto the mirror (fire-and-forget, monotonic — only
+        // when missing or lower) so all three plan-cache consumers converge on
+        // the same value instead of thrashing an entered-vs-estimate cache key.
+        // Not awaited → no added latency on the cached-hit path.
+        if (provider === "tekmetric" && roId) {
+          const enteredFinal = enteredOdometer;
+          db.collection("tekmetric_work_orders").updateOne(
+            {
+              workOrderId: String(roId),
+              shopId: { $in: [String(mosShopId), Number(mosShopId)] },
+              $or: [{ odometer: { $exists: false } }, { odometer: { $lt: enteredFinal } }],
+            },
+            { $set: { odometer: enteredFinal } },
+          ).catch((e: any) =>
+            console.warn(`[Extension] Failed to mirror entered odometer to tekmetric_work_orders RO ${roId}: ${e?.message}`),
+          );
+        }
+      } else {
+        console.log(`[Extension] Ignoring entered odometer ${enteredOdometer} < known ${known} (monotonicity guard) for ${vin ?? roId}`);
+      }
+    }
 
     if (vin) {
       try {

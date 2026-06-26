@@ -820,6 +820,10 @@ function updateContext(context) {
     if (prevContext.vehicleDisplay && !context.vehicleDisplay) currentContext.vehicleDisplay = prevContext.vehicleDisplay;
     if (prevContext.vin && !context.vin) currentContext.vin = prevContext.vin;
     if (prevContext.mileage && !context.mileage) currentContext.mileage = prevContext.mileage;
+    // Task #645: the scraped on-screen odometer must survive re-scrapes that
+    // momentarily miss it (and is never clobbered by the server-resolved
+    // mileage written into `.mileage` after a plan response).
+    if (prevContext.scrapedOdometer && !context.scrapedOdometer) currentContext.scrapedOdometer = prevContext.scrapedOdometer;
     if (prevContext.roNumber && !context.roNumber) currentContext.roNumber = prevContext.roNumber;
     if (prevContext.customerName && !context.customerName) currentContext.customerName = prevContext.customerName;
     if (prevContext.customerId && !context.customerId) currentContext.customerId = prevContext.customerId;
@@ -1203,6 +1207,9 @@ async function loadPlan(forceRefresh = false) {
   const reqShopId = currentContext.shopId;
   const reqProvider = currentContext.provider || '';
   const reqVin = currentContext.vin || '';
+  // Task #645: the on-screen RO odometer the advisor entered. Forwarded so the
+  // server can anchor the VHI on it instead of falling to a CARFAX estimate.
+  const reqOdometer = currentContext.scrapedOdometer || null;
   const cacheKey = planCacheKey(currentContext);
 
   // Stale-while-revalidate: paint cached content instantly when we have it.
@@ -1235,6 +1242,7 @@ async function loadPlan(forceRefresh = false) {
       provider: reqProvider
     });
     if (reqVin) params.set('vin', reqVin);
+    if (reqOdometer) params.set('odometer', String(reqOdometer));
     if (forceRefresh) params.set('refresh', 'true');
     
     let result;
@@ -1797,6 +1805,8 @@ async function loadCommonFailures() {
         provider: currentContext.provider || ''
       });
       if (currentContext.vin) params.set('vin', currentContext.vin);
+      // Task #645: keep the shared plan-cache key consistent with loadPlan.
+      if (currentContext.scrapedOdometer) params.set('odometer', String(currentContext.scrapedOdometer));
       
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
@@ -3721,6 +3731,8 @@ async function loadVehicleSpecs() {
         roId: currentContext.roId,
         provider: currentContext.provider || ''
       });
+      // Task #645: keep the shared plan-cache key consistent with loadPlan.
+      if (currentContext.scrapedOdometer) params.set('odometer', String(currentContext.scrapedOdometer));
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
         endpoint: `/api/extension/plan?${params}`

@@ -137,6 +137,14 @@ function detectContext() {
   const ctx = _detectContextRaw();
   rememberRoContext(ctx);
   hydrateContextFromCache(ctx);
+  // Task #645: preserve the on-screen odometer (the "In:" reading the advisor
+  // typed / the authoritative API milesIn) under a dedicated field. The side
+  // panel overwrites `mileage` with the server-resolved value after a plan
+  // response (which may be a CARFAX estimate), so `scrapedOdometer` keeps the
+  // real on-screen reading available to anchor the VHI on later refreshes.
+  if (typeof ctx.mileage === 'number' && ctx.mileage > 0) {
+    ctx.scrapedOdometer = ctx.mileage;
+  }
   return ctx;
 }
 
