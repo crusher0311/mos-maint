@@ -330,6 +330,11 @@ export class SupabaseDualWriter {
       cannedJobCode: doc.cannedJobCode || null,
       technicianId: doc.technicianId || null,
       technicianName: doc.technicianName || null,
+      // task #640: the service-job completion date was previously never
+      // written to PG, so the Data Status "Service Jobs" card always fell back
+      // to the row's import timestamp. Persist it (null-safe; adapters that do
+      // not set it stay unaffected — e.g. Tekmetric is unchanged).
+      completedAt: doc.completedAt || null,
       laborTotal: String(doc.laborTotal || 0),
       partsTotal: String(doc.partsTotal || 0),
       subletTotal: String(doc.subletTotal || 0),

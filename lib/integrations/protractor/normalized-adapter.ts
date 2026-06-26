@@ -144,7 +144,31 @@ export class ProtractorAdapter implements INormalizedAdapter {
     const customer = this.extractCustomerFromWorkOrder(inv);
     
     const status = this.mapProtractorStatus(inv.WorkflowStage || inv.Status);
-    const closedDate = parseDate(inv.ClosedDate || inv.InvoiceDate);
+    // Protractor invoices nest their business dates: the top-level
+    // `InvoiceTime` carries the invoice/close timestamp and `Header.*` carries
+    // creation / last-modified times. The previously-checked top-level
+    // `ClosedDate` / `InvoiceDate` / `DateIn` / `CreatedDate` fields are NOT
+    // present on the real API payload, so reading only those left every
+    // Protractor work-order date column empty (task #640). Fall back through
+    // the legacy names for safety, then to the header timestamps.
+    const closedDate = parseDate(
+      inv.InvoiceTime ||
+      inv.ClosedDate ||
+      inv.InvoiceDate ||
+      inv.Header?.LastModifiedTime,
+    );
+    const checkInDate = parseDate(
+      inv.Header?.CreationTime ||
+      inv.DateIn ||
+      inv.CreatedDate ||
+      inv.ScheduledTime,
+    );
+    // Invoices pulled from the `/Invoice/` endpoint are terminal records, so a
+    // real closed/completed date must land even when WorkflowStage maps to a
+    // non-"closed" terminal status (e.g. "Invoiced"/"Paid") instead of
+    // defaulting to "closed".
+    const isTerminal =
+      status === 'closed' || status === 'invoiced' || status === 'paid';
     
     return {
       enterpriseId,
@@ -160,9 +184,9 @@ export class ProtractorAdapter implements INormalizedAdapter {
       odometerIn: parseNumber(inv.OdometerIn || inv.InUsage || inv.Odometer || inv.ServiceItem?.Odometer || inv.ServiceItem?.Usage || inv.rawPayload?.OdometerIn || inv.rawPayload?.InUsage || inv.rawPayload?.Odometer),
       odometerOut: parseNumber(inv.OdometerOut || inv.OutUsage || inv.rawPayload?.OdometerOut || inv.rawPayload?.OutUsage),
       odometerUnit: 'miles',
-      checkInDate: parseDate(inv.DateIn || inv.CreatedDate),
-      completedDate: status === 'closed' ? closedDate : undefined,
-      closedDate: status === 'closed' ? closedDate : undefined,
+      checkInDate,
+      completedDate: isTerminal ? closedDate : undefined,
+      closedDate: isTerminal ? closedDate : undefined,
       serviceAdvisorName: cleanString(inv.ServiceAdvisor?.Name || inv.Advisor),
       technicians: [],
       customerConcern: cleanString(inv.CustomerConcern || inv.Concern),
@@ -202,6 +226,18 @@ export class ProtractorAdapter implements INormalizedAdapter {
       jobType: sp.CannedJobID ? 'canned' : 'custom',
       status: this.mapServiceJobStatus(sp.Status),
       statusHistory: [],
+      // Protractor service packages rarely carry their own completion date, so
+      // prefer the package's nested header timestamps and fall back to the
+      // parent invoice's business date stamped on by
+      // extractRawServiceJobsFromWorkOrder (task #640). Without this the
+      // service-job completion date was never set and the Data Status panel
+      // fell back to the MOS import timestamp.
+      completedAt: parseDate(
+        sp.Header?.LastModifiedTime ||
+        sp.Header?.CreationTime ||
+        sp.CompletedDate ||
+        sp._parentClosedAt,
+      ),
       title: cleanString(sp.Name || sp.Description || sp.ServiceDescription) || 'Unknown Service',
       description: cleanString(sp.Description || sp.Notes),
       cannedJobId: cleanString(sp.CannedJobID),
@@ -382,7 +418,25 @@ export class ProtractorAdapter implements INormalizedAdapter {
       sourceData.ServicePackages?.ItemCollection ||
       sourceData.ServicePackages ||
       [];
-    return Array.isArray(list) ? list : [];
+    if (!Array.isArray(list)) return [];
+    // Stamp the parent invoice's business date onto each raw service package so
+    // mapServiceJob can use it as a completion-date fallback when the package
+    // carries no date of its own (task #640). Mirrors mapWorkOrder's date
+    // resolution order.
+    const parentClosedAt =
+      sourceData.InvoiceTime ||
+      sourceData.ClosedDate ||
+      sourceData.InvoiceDate ||
+      sourceData.Header?.LastModifiedTime ||
+      sourceData.Header?.CreationTime;
+    if (parentClosedAt) {
+      for (const sp of list) {
+        if (sp && typeof sp === 'object' && sp._parentClosedAt == null) {
+          sp._parentClosedAt = parentClosedAt;
+        }
+      }
+    }
+    return list;
   }
 
   extractLineItemsFromServiceJob(sp: any): any[] {
