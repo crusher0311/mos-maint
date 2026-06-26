@@ -2,6 +2,7 @@ import { tekmetricRequest } from "./client";
 import type {
   TekmetricJob,
   TekmetricAppointment,
+  TekmetricEmployee,
   CreateAppointmentParams,
   PaginatedResponse,
 } from "./types";
@@ -212,4 +213,17 @@ export async function getAppointments(
   if (params.page !== undefined) queryParams.set('page', params.page.toString());
   if (params.size !== undefined) queryParams.set('size', params.size.toString());
   return tekmetricRequest(`/appointments?${queryParams}`, {}, shopId);
+}
+
+export async function listEmployees(
+  shopId: number,
+  params: {
+    page?: number;
+    size?: number;
+  } = {}
+): Promise<PaginatedResponse<TekmetricEmployee>> {
+  const queryParams = new URLSearchParams({ shop: shopId.toString() });
+  if (params.page !== undefined) queryParams.set('page', params.page.toString());
+  if (params.size !== undefined) queryParams.set('size', params.size.toString());
+  return tekmetricRequest(`/employees?${queryParams}`, {}, shopId);
 }

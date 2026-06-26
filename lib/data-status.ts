@@ -6,6 +6,8 @@ import {
   normalizedVehicles,
   normalizedWorkOrders,
   normalizedServiceJobs,
+  normalizedAppointments,
+  normalizedEmployees,
 } from "@/lib/db/schema/normalized";
 import {
   getLatestResyncRequest,
@@ -143,7 +145,9 @@ type CoreTable =
   | typeof normalizedCustomers
   | typeof normalizedVehicles
   | typeof normalizedWorkOrders
-  | typeof normalizedServiceJobs;
+  | typeof normalizedServiceJobs
+  | typeof normalizedAppointments
+  | typeof normalizedEmployees;
 
 interface AggregateResult {
   count: number;
@@ -408,34 +412,59 @@ export async function computeDataStatus(
   ];
 
   // Appointments / Employees are listed only when the connected source
-  // exposes them. MOS does not yet persist these in the normalized layer,
-  // so they render as an explicit "not synced" marker rather than zeros.
+  // exposes them. They are synced into the normalized layer only for
+  // providers MOS actually pulls them from (Tekmetric today, via the roster
+  // sync cron — see lib/integrations/tekmetric/sync-roster.ts). For other
+  // capable providers there is no sync path yet, so they still render an
+  // explicit "not synced" marker rather than zeros.
   const caps = provider ? PROVIDER_CAPABILITIES[provider] : null;
+  const rosterSynced = provider === "tekmetric";
+
+  const notSyncedEntity = (
+    key: EntityKey,
+    label: string,
+  ): DataStatusEntity => ({
+    key,
+    label,
+    available: false,
+    count: null,
+    oldest: null,
+    newest: null,
+    lastUpdated: null,
+    freshness: "unknown",
+    note: "Not synced to MOS",
+  });
+
   if (caps?.appointments) {
-    entities.push({
-      key: "appointments",
-      label: "Appointments",
-      available: false,
-      count: null,
-      oldest: null,
-      newest: null,
-      lastUpdated: null,
-      freshness: "unknown",
-      note: "Not synced to MOS",
-    });
+    if (rosterSynced) {
+      // Appointments carry a forward-looking scheduled date, so it drives the
+      // displayed oldest/newest span. Freshness must NOT come from that span
+      // (those dates are in the future → always "fresh"); pass an explicit
+      // null so only the row's own sync recency (lastUpdated) decides it.
+      const appointments = await aggregateEntity(
+        normalizedAppointments,
+        shopId,
+        sql<unknown>`${normalizedAppointments.scheduledDate}`,
+      );
+      entities.push(
+        buildCoreEntity("appointments", "Appointments", appointments, null),
+      );
+    } else {
+      entities.push(notSyncedEntity("appointments", "Appointments"));
+    }
   }
   if (caps?.employees) {
-    entities.push({
-      key: "employees",
-      label: "Employees",
-      available: false,
-      count: null,
-      oldest: null,
-      newest: null,
-      lastUpdated: null,
-      freshness: "unknown",
-      note: "Not synced to MOS",
-    });
+    if (rosterSynced) {
+      // Employees have no business date — the panel shows count + sync
+      // freshness only (no history span), so no recordDate is supplied and
+      // freshness is driven purely by lastUpdated.
+      const employees = await aggregateEntity(normalizedEmployees, shopId);
+      entities.push(
+        buildCoreEntity("employees", "Employees", employees, null),
+      );
+    } else {
+      entities.push(notSyncedEntity("employees", "Employees"));
+    }
   }
 
   // Re-sync is only offered for providers with a full-backfill path

@@ -201,6 +201,22 @@ export interface TekmetricAppointment {
   updatedDate?: string;
 }
 
+export interface TekmetricEmployee {
+  id: number;
+  shopId: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  type?: string;
+  certified?: boolean;
+  active?: boolean;
+  deletedDate?: string | null;
+  createdDate?: string;
+  updatedDate?: string;
+}
+
 export interface CreateAppointmentParams {
   shopId: number;
   customerId: number;

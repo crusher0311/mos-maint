@@ -706,9 +706,107 @@ export const normalizedPayments = pgTable("normalized_payments", {
   provenanceSourceIdsIdx: index("np_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
 }));
 
+// =============================================================================
+// APPOINTMENTS + EMPLOYEES (Task #632)
+//
+// Tekmetric-only sync of *upcoming* appointments (forward window) and the
+// *current* employee roster, so the client "Data Status" panel can show a real
+// count + freshness instead of "Not synced to MOS". These are refreshed
+// periodically by the cron (no webhooks) and are NOT historically backfilled —
+// only the forward-looking appointment window and the live roster are kept.
+//
+// Idempotent sync keys on (shop_id, source_id) — the provider's own appointment
+// / employee id — so a re-run UPDATEs in place rather than inserting duplicates.
+// =============================================================================
+
+export const normalizedAppointments = pgTable("normalized_appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: text("enterprise_id"),
+  shopId: integer("shop_id").notNull(),
+  locationId: text("location_id"),
+
+  provenance: jsonb("provenance").notNull(),
+  softDelete: jsonb("soft_delete").notNull().default(sql`'{"isDeleted":false}'::jsonb`),
+  version: integer("version").notNull().default(1),
+
+  // Provider's appointment id — natural key for idempotent upsert.
+  sourceId: text("source_id").notNull(),
+
+  appointmentNumber: text("appointment_number"),
+
+  customerId: text("customer_id"),
+  vehicleId: text("vehicle_id"),
+  repairOrderId: text("repair_order_id"),
+
+  status: text("status"),
+  appointmentType: text("appointment_type"),
+
+  // Forward-window business dates. scheduledDate (start) drives the panel's
+  // oldest/newest span.
+  scheduledDate: timestamp("scheduled_date"),
+  endDate: timestamp("end_date"),
+
+  title: text("title"),
+  description: text("description"),
+  color: text("color"),
+
+  rawData: jsonb("raw_data"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  shopIdSourceIdIdx: uniqueIndex("nap_shop_id_source_id_idx").on(table.shopId, table.sourceId),
+  shopIdIdx: index("nap_shop_id_idx").on(table.shopId),
+  enterpriseIdIdx: index("nap_enterprise_id_idx").on(table.enterpriseId),
+  shopScheduledDateIdx: index("nap_shop_scheduled_date_idx").on(table.shopId, table.scheduledDate),
+  shopUpdatedAtIdx: index("nap_shop_updated_at_idx").on(table.shopId, table.updatedAt),
+  createdAtIdx: index("nap_created_at_idx").on(table.createdAt),
+  updatedAtIdx: index("nap_updated_at_idx").on(table.updatedAt),
+}));
+
+export const normalizedEmployees = pgTable("normalized_employees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  enterpriseId: text("enterprise_id"),
+  shopId: integer("shop_id").notNull(),
+  locationId: text("location_id"),
+
+  provenance: jsonb("provenance").notNull(),
+  softDelete: jsonb("soft_delete").notNull().default(sql`'{"isDeleted":false}'::jsonb`),
+  version: integer("version").notNull().default(1),
+
+  // Provider's employee id — natural key for idempotent upsert.
+  sourceId: text("source_id").notNull(),
+
+  employeeNumber: text("employee_number"),
+
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  fullName: text("full_name"),
+
+  email: text("email"),
+  phone: text("phone"),
+
+  role: text("role"),
+  isActive: boolean("is_active").notNull().default(true),
+
+  rawData: jsonb("raw_data"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  shopIdSourceIdIdx: uniqueIndex("nemp_shop_id_source_id_idx").on(table.shopId, table.sourceId),
+  shopIdIdx: index("nemp_shop_id_idx").on(table.shopId),
+  enterpriseIdIdx: index("nemp_enterprise_id_idx").on(table.enterpriseId),
+  shopUpdatedAtIdx: index("nemp_shop_updated_at_idx").on(table.shopId, table.updatedAt),
+  createdAtIdx: index("nemp_created_at_idx").on(table.createdAt),
+  updatedAtIdx: index("nemp_updated_at_idx").on(table.updatedAt),
+}));
+
 export type NormalizedVehicleRow = typeof normalizedVehicles.$inferSelect;
 export type NormalizedCustomerRow = typeof normalizedCustomers.$inferSelect;
 export type NormalizedWorkOrderRow = typeof normalizedWorkOrders.$inferSelect;
 export type NormalizedServiceJobRow = typeof normalizedServiceJobs.$inferSelect;
 export type NormalizedLineItemRow = typeof normalizedLineItems.$inferSelect;
 export type NormalizedPaymentRow = typeof normalizedPayments.$inferSelect;
+export type NormalizedAppointmentRow = typeof normalizedAppointments.$inferSelect;
+export type NormalizedEmployeeRow = typeof normalizedEmployees.$inferSelect;

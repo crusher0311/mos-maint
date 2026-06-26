@@ -337,6 +337,54 @@ async function main() {
       "created_at" timestamp NOT NULL DEFAULT now(),
       "updated_at" timestamp NOT NULL DEFAULT now()
     )`,
+
+    // Task #632 — Tekmetric upcoming appointments + current employee roster.
+    `CREATE TABLE IF NOT EXISTS "normalized_appointments" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "enterprise_id" text,
+      "shop_id" integer NOT NULL,
+      "location_id" text,
+      "provenance" jsonb NOT NULL,
+      "soft_delete" jsonb NOT NULL DEFAULT '{"isDeleted":false}'::jsonb,
+      "version" integer NOT NULL DEFAULT 1,
+      "source_id" text NOT NULL,
+      "appointment_number" text,
+      "customer_id" text,
+      "vehicle_id" text,
+      "repair_order_id" text,
+      "status" text,
+      "appointment_type" text,
+      "scheduled_date" timestamp,
+      "end_date" timestamp,
+      "title" text,
+      "description" text,
+      "color" text,
+      "raw_data" jsonb,
+      "created_at" timestamp NOT NULL DEFAULT now(),
+      "updated_at" timestamp NOT NULL DEFAULT now()
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS "normalized_employees" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "enterprise_id" text,
+      "shop_id" integer NOT NULL,
+      "location_id" text,
+      "provenance" jsonb NOT NULL,
+      "soft_delete" jsonb NOT NULL DEFAULT '{"isDeleted":false}'::jsonb,
+      "version" integer NOT NULL DEFAULT 1,
+      "source_id" text NOT NULL,
+      "employee_number" text,
+      "first_name" text,
+      "last_name" text,
+      "full_name" text,
+      "email" text,
+      "phone" text,
+      "role" text,
+      "is_active" boolean NOT NULL DEFAULT true,
+      "raw_data" jsonb,
+      "created_at" timestamp NOT NULL DEFAULT now(),
+      "updated_at" timestamp NOT NULL DEFAULT now()
+    )`,
   ];
 
   const fkStatements = [
@@ -433,6 +481,25 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "nsj_title_trgm_idx" ON "normalized_service_jobs" USING gin ("title" gin_trgm_ops)`,
     `CREATE INDEX IF NOT EXISTS "nsj_description_trgm_idx" ON "normalized_service_jobs" USING gin ("description" gin_trgm_ops)`,
     `CREATE INDEX IF NOT EXISTS "nsj_canned_job_name_trgm_idx" ON "normalized_service_jobs" USING gin ("canned_job_name" gin_trgm_ops)`,
+
+    // Task #632 — appointments + employees. The (shop_id, source_id) unique
+    // index is the natural-key upsert target; (shop_id, updated_at) and
+    // (shop_id, scheduled_date) back the Data Status panel's cheap
+    // count / max(updated_at) / min-max(scheduled_date) aggregates.
+    `CREATE UNIQUE INDEX IF NOT EXISTS "nap_shop_id_source_id_idx" ON "normalized_appointments" ("shop_id", "source_id")`,
+    `CREATE INDEX IF NOT EXISTS "nap_shop_id_idx" ON "normalized_appointments" ("shop_id")`,
+    `CREATE INDEX IF NOT EXISTS "nap_enterprise_id_idx" ON "normalized_appointments" ("enterprise_id")`,
+    `CREATE INDEX IF NOT EXISTS "nap_shop_scheduled_date_idx" ON "normalized_appointments" ("shop_id", "scheduled_date")`,
+    `CREATE INDEX IF NOT EXISTS "nap_shop_updated_at_idx" ON "normalized_appointments" ("shop_id", "updated_at")`,
+    `CREATE INDEX IF NOT EXISTS "nap_created_at_idx" ON "normalized_appointments" ("created_at")`,
+    `CREATE INDEX IF NOT EXISTS "nap_updated_at_idx" ON "normalized_appointments" ("updated_at")`,
+
+    `CREATE UNIQUE INDEX IF NOT EXISTS "nemp_shop_id_source_id_idx" ON "normalized_employees" ("shop_id", "source_id")`,
+    `CREATE INDEX IF NOT EXISTS "nemp_shop_id_idx" ON "normalized_employees" ("shop_id")`,
+    `CREATE INDEX IF NOT EXISTS "nemp_enterprise_id_idx" ON "normalized_employees" ("enterprise_id")`,
+    `CREATE INDEX IF NOT EXISTS "nemp_shop_updated_at_idx" ON "normalized_employees" ("shop_id", "updated_at")`,
+    `CREATE INDEX IF NOT EXISTS "nemp_created_at_idx" ON "normalized_employees" ("created_at")`,
+    `CREATE INDEX IF NOT EXISTS "nemp_updated_at_idx" ON "normalized_employees" ("updated_at")`,
   ];
 
   console.log("Creating extensions...");
@@ -454,7 +521,7 @@ async function main() {
   for (const stmt of tableStatements) {
     await sql.unsafe(stmt);
   }
-  console.log("  ✓ 6 tables created/verified");
+  console.log(`  ✓ ${tableStatements.length} tables created/verified`);
 
   console.log("Adding foreign keys...");
   for (const stmt of fkStatements) {
@@ -469,22 +536,24 @@ async function main() {
   console.log(`  ✓ ${indexStatements.length} indexes created/verified`);
 
   console.log("\nVerifying tables exist...");
+  const expectedTables = [
+    'normalized_vehicles', 'normalized_customers', 'normalized_work_orders',
+    'normalized_service_jobs', 'normalized_line_items', 'normalized_payments',
+    'normalized_appointments', 'normalized_employees',
+  ];
   const tables = await sql`
     SELECT table_name FROM information_schema.tables 
     WHERE table_schema = 'public' 
-    AND table_name IN (
-      'normalized_vehicles', 'normalized_customers', 'normalized_work_orders',
-      'normalized_service_jobs', 'normalized_line_items', 'normalized_payments'
-    )
+    AND table_name IN ${sql(expectedTables)}
     ORDER BY table_name
   `;
 
-  console.log(`Found ${tables.length}/6 normalized tables:`);
+  console.log(`Found ${tables.length}/${expectedTables.length} normalized tables:`);
   for (const t of tables) {
     console.log(`  ✓ ${t.table_name}`);
   }
 
-  if (tables.length !== 6) {
+  if (tables.length !== expectedTables.length) {
     console.error("ERROR: Not all tables were created!");
     process.exit(1);
   }

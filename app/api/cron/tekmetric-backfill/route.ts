@@ -9,6 +9,7 @@ import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenComplete
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
+import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -49,6 +50,23 @@ const NEW_SHOP_FASTPATH_DAYS = Math.max(
 // as often as the weekend boost) and keeps the focus on the handful
 // of shops that are genuinely brand-new.
 const FASTPATH_MAX_SHOPS_PER_RUN = 3;
+// Roster sync (Task #632): upcoming appointments + current employee roster.
+// Runs as a separate, lightweight pass over ALL connected Tekmetric shops
+// (independent of the backfill queue) so it also keeps *completed* shops
+// fresh. Staleness-gated so each shop refreshes at most every
+// ROSTER_SYNC_STALE_HOURS, and bounded per tick so it never crowds out the
+// backfill budget. Bookkeeping (lastRosterSyncAt) lives in a dedicated Mongo
+// collection keyed by shopId.
+const ROSTER_SYNC_STALE_HOURS = Math.max(
+  1,
+  Number(process.env.TEKMETRIC_ROSTER_SYNC_STALE_HOURS) || 6,
+);
+const ROSTER_SYNC_MAX_SHOPS_PER_RUN = Math.max(
+  1,
+  Number(process.env.TEKMETRIC_ROSTER_SYNC_MAX_SHOPS) || 10,
+);
+const ROSTER_SYNC_PARALLELISM = 3;
+const ROSTER_SYNC_COLLECTION = "tekmetric_roster_sync";
 // If a shop's lastError was set more than this many hours ago, clear it
 // before the next run so a transient failure can't permanently freeze the
 // cursor without anyone noticing.
@@ -1555,6 +1573,151 @@ async function backfillShopChunkInner(
   });
 }
 
+// Roster sync (Task #632). Iterate ALL connected Tekmetric shops (NOT just the
+// backfill queue), pick the stalest ones whose last roster sync is older than
+// ROSTER_SYNC_STALE_HOURS, and refresh their upcoming appointments + current
+// employee roster into the normalized PG layer. Bounded per tick and run with
+// limited parallelism so it stays light next to backfill. Every shop is
+// wrapped so one failure never sinks the pass.
+async function runRosterSyncPass(
+  db: any,
+): Promise<{ attempted: number; synced: number; errors: number }> {
+  const staleBefore = new Date(
+    Date.now() - ROSTER_SYNC_STALE_HOURS * 60 * 60 * 1000,
+  );
+
+  // Connected Tekmetric shops store the Tekmetric shop id either under
+  // `tekmetric.shopId` (current) or the legacy top-level `tekmetricShopId`.
+  const shops: any[] = await db
+    .collection("shops")
+    .find(
+      {
+        $or: [
+          { "tekmetric.shopId": { $exists: true, $ne: null } },
+          { tekmetricShopId: { $exists: true, $ne: null } },
+        ],
+      },
+      { projection: { shopId: 1, tekmetric: 1, tekmetricShopId: 1, enterpriseId: 1 } },
+    )
+    .toArray();
+
+  if (shops.length === 0) return { attempted: 0, synced: 0, errors: 0 };
+
+  // Pull the last-sync bookkeeping for these shops in one query, then pick the
+  // stalest shops first (never-synced shops sort earliest via epoch 0).
+  const bookkeeping: any[] = await db
+    .collection(ROSTER_SYNC_COLLECTION)
+    .find({}, { projection: { shopId: 1, lastRosterSyncAt: 1 } })
+    .toArray();
+  const lastSyncByShop = new Map<number, number>();
+  for (const b of bookkeeping) {
+    const t =
+      b?.lastRosterSyncAt instanceof Date
+        ? b.lastRosterSyncAt.getTime()
+        : b?.lastRosterSyncAt
+          ? new Date(b.lastRosterSyncAt).getTime()
+          : 0;
+    lastSyncByShop.set(Number(b.shopId), Number.isFinite(t) ? t : 0);
+  }
+
+  const candidates = shops
+    .map((s) => {
+      const tekmetricShopId = Number(s.tekmetric?.shopId ?? s.tekmetricShopId);
+      return {
+        shopId: Number(s.shopId),
+        tekmetricShopId,
+        enterpriseId: s.enterpriseId ? String(s.enterpriseId) : null,
+        lastSyncMs: lastSyncByShop.get(Number(s.shopId)) ?? 0,
+      };
+    })
+    .filter(
+      (s) =>
+        Number.isFinite(s.shopId) &&
+        Number.isFinite(s.tekmetricShopId) &&
+        s.lastSyncMs < staleBefore.getTime(),
+    )
+    .sort((a, b) => a.lastSyncMs - b.lastSyncMs)
+    .slice(0, ROSTER_SYNC_MAX_SHOPS_PER_RUN);
+
+  if (candidates.length === 0) return { attempted: 0, synced: 0, errors: 0 };
+
+  const limit = pLimit(ROSTER_SYNC_PARALLELISM);
+  let synced = 0;
+  let errors = 0;
+
+  await Promise.all(
+    candidates.map((shop) =>
+      limit(async () => {
+        try {
+          const result = await syncTekmetricRoster(
+            shop.shopId,
+            shop.tekmetricShopId,
+            shop.enterpriseId,
+          );
+          if (result.errors.length > 0) {
+            errors++;
+            console.warn(
+              `[Roster Sync] Shop ${shop.shopId} partial errors: ${result.errors.join("; ")}`,
+            );
+          } else {
+            synced++;
+          }
+          // Always record the attempt so a persistently failing shop doesn't
+          // monopolize the staleness queue every tick; it still retries next
+          // window. Stamp regardless of partial errors.
+          await db
+            .collection(ROSTER_SYNC_COLLECTION)
+            .updateOne(
+              { shopId: shop.shopId },
+              {
+                $set: {
+                  shopId: shop.shopId,
+                  lastRosterSyncAt: new Date(),
+                  lastResult: {
+                    appointments: result.appointments,
+                    employees: result.employees,
+                    errors: result.errors,
+                  },
+                },
+              },
+              { upsert: true },
+            );
+        } catch (err: any) {
+          errors++;
+          console.error(
+            `[Roster Sync] Shop ${shop.shopId} failed:`,
+            err?.message || err,
+          );
+          // Stamp the attempt even on hard failure so it rotates out of the
+          // queue head and retries on the next staleness window.
+          try {
+            await db
+              .collection(ROSTER_SYNC_COLLECTION)
+              .updateOne(
+                { shopId: shop.shopId },
+                {
+                  $set: {
+                    shopId: shop.shopId,
+                    lastRosterSyncAt: new Date(),
+                    lastError: (err?.message || String(err)).slice(0, 500),
+                  },
+                },
+                { upsert: true },
+              );
+          } catch {
+            /* bookkeeping write is best-effort */
+          }
+        }
+      }),
+    ),
+  );
+
+  console.log(
+    `[Roster Sync] Attempted ${candidates.length} shop(s): ${synced} ok, ${errors} with errors.`,
+  );
+  return { attempted: candidates.length, synced, errors };
+}
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -1608,6 +1771,25 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Roster sync pass (Task #632): refresh upcoming appointments + current
+    // employee roster for connected Tekmetric shops. Placed BEFORE the
+    // "no shops need backfill" early-return below so it keeps running once
+    // backfill is complete (the steady state). Fully wrapped so a roster
+    // failure can never block backfill, and bounded/staleness-gated so it
+    // stays lightweight.
+    let rosterSync: {
+      attempted: number;
+      synced: number;
+      errors: number;
+    } = { attempted: 0, synced: 0, errors: 0 };
+    try {
+      rosterSync = await runRosterSyncPass(db);
+    } catch (rosterErr: any) {
+      console.warn(
+        `[Tekmetric Backfill] Roster sync pass threw; continuing with backfill: ${rosterErr?.message || rosterErr}`,
+      );
+    }
+
     // Fastpath mode: when invoked as `?fastpath=newShops` (the
     // every-5-min cron), restrict the queue to shops created in the
     // last NEW_SHOP_FASTPATH_DAYS days so freshly onboarded clients
@@ -1653,6 +1835,7 @@ export async function GET(req: NextRequest) {
           : "All Tekmetric shops have completed backfill",
         shopsRemaining: 0,
         staleSweep,
+        rosterSync,
         duration: `${Date.now() - startTime}ms`
       });
     }
@@ -1747,6 +1930,7 @@ export async function GET(req: NextRequest) {
       processed: results,
       shopsRemaining: shopsToProcess.length - selectedShops.length,
       staleSweep,
+      rosterSync,
       duration: `${duration}ms`,
       tekmetricApiCalls: apiCallCount,
     });
