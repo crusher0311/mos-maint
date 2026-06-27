@@ -69,3 +69,12 @@ This is gated by the compute cron, so OFF mode writes nothing.
 `SMART_BACKFILL_TIMING_MIN_CONFIDENCE` (default 0.5); below it the gate falls
 back to the generic schedule (eligible=true, fallback=true) so a low-data shop
 is never starved.
+
+## Demoing an actual skip
+- A sparse/demo shop (few organic events) profiles BELOW the 0.5 floor → enforce
+  always emits `reason=low_confidence fallback=true ALLOW`, i.e. it can NEVER show
+  a real skip. To demonstrate a genuine `shouldSkip=true`, pick a shop with a
+  CONFIDENT profile (>=0.5) that is currently OUTSIDE its derived quiet window,
+  and put it in the canary allowlist. Low-data shops only ever prove the
+  fallback-allow path, not the block path. (e.g. shop 66 "CAR Experts Protractor"
+  = conf 0.23, always falls back to allow.)
