@@ -6163,7 +6163,7 @@ async function handleCroHistorySearch(term) {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: `/api/extension/jobs/search?${params.toString()}`,
-    });
+    }, 48000);
     if (result?.error) throw new Error(result.error);
     createRoState.history = result?.jobs || [];
     renderCroHistory();
@@ -6174,6 +6174,36 @@ async function handleCroHistorySearch(term) {
     createRoState.historySearching = false;
     loadingEl?.classList.add('hidden');
   }
+}
+
+function croHistoryDetailHtml(job) {
+  const rows = [];
+  if (job.matchReason) rows.push(`<div class="cro-detail-row"><span class="cro-detail-k">Match:</span> ${escCro(job.matchReason)}</div>`);
+  const veh = croVehicleLabel(job.vehicle);
+  if (veh) rows.push(`<div class="cro-detail-row"><span class="cro-detail-k">Vehicle:</span> ${escCro(veh)}</div>`);
+  if (job.workOrderNumber) rows.push(`<div class="cro-detail-row"><span class="cro-detail-k">RO #:</span> ${escCro(String(job.workOrderNumber))}</div>`);
+  const labor = Array.isArray(job.laborItems) ? job.laborItems : [];
+  if (labor.length) {
+    rows.push('<div class="cro-detail-sub">Labor</div>');
+    labor.forEach((l) => {
+      const hrs = l.hours ? ` — ${l.hours} hr` : '';
+      rows.push(`<div class="cro-detail-line">${escCro(l.name || 'Labor')}${escCro(hrs)}</div>`);
+    });
+  }
+  const parts = Array.isArray(job.parts) ? job.parts : [];
+  if (parts.length) {
+    rows.push('<div class="cro-detail-sub">Parts</div>');
+    parts.forEach((p) => {
+      const qty = p.quantity ? `${p.quantity}× ` : '';
+      const brand = p.brand ? ` (${p.brand})` : '';
+      const price = p.retail ? ` — $${Number(p.retail).toFixed(2)}` : '';
+      rows.push(`<div class="cro-detail-line">${escCro(qty)}${escCro(p.name || 'Part')}${escCro(brand)}${escCro(price)}</div>`);
+    });
+  }
+  const t = job.totals || {};
+  if (t.totalAmount) rows.push(`<div class="cro-detail-row" style="margin-top:4px;"><span class="cro-detail-k">Total:</span> $${Number(t.totalAmount).toFixed(2)}</div>`);
+  if (!rows.length) return '<div class="cro-detail-row" style="color:#6b7280;">No additional detail available.</div>';
+  return rows.join('');
 }
 
 function renderCroHistory() {
@@ -6198,18 +6228,34 @@ function renderCroHistory() {
     ].filter(Boolean).join(' · ');
     return `
       <li class="job-item">
-        <div class="job-header" style="cursor: default;">
-          <div>
-            <div class="job-title">${escCro(title)}</div>
-            ${meta ? `<div class="job-meta">${escCro(meta)}</div>` : ''}
+        <div class="job-header cro-history-header" data-idx="${idx}">
+          <div class="cro-history-headleft">
+            <span class="cro-history-caret" data-idx="${idx}">▸</span>
+            <div style="min-width:0;">
+              <div class="job-title">${escCro(title)}</div>
+              ${meta ? `<div class="job-meta">${escCro(meta)}</div>` : ''}
+            </div>
           </div>
           <button class="btn-add cro-history-add-btn" data-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
         </div>
+        <div class="cro-history-detail hidden" data-detail="${idx}">${croHistoryDetailHtml(job)}</div>
       </li>
     `;
   }).join('');
+  listEl.querySelectorAll('.cro-history-header').forEach(h => {
+    h.addEventListener('click', (e) => {
+      if (e.target.closest('.cro-history-add-btn')) return;
+      const idx = h.dataset.idx;
+      const detail = listEl.querySelector(`[data-detail="${idx}"]`);
+      const caret = h.querySelector('.cro-history-caret');
+      if (!detail) return;
+      const nowHidden = detail.classList.toggle('hidden');
+      if (caret) caret.textContent = nowHidden ? '▸' : '▾';
+    });
+  });
   listEl.querySelectorAll('.cro-history-add-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const job = jobs[Number(btn.dataset.idx)];
       if (!job) return;
       const title = job.title || job.description || 'Job';
@@ -6247,15 +6293,10 @@ function renderCroSuccessLinks(result) {
   linksRow.className = 'create-ro-success-links';
   linksRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px;';
 
-  const protractorUrl = result?.portalUrl || 'https://app.protractor.com/';
-  const protractorLink = document.createElement('a');
-  protractorLink.href = protractorUrl;
-  protractorLink.target = '_blank';
-  protractorLink.rel = 'noopener noreferrer';
-  protractorLink.textContent = 'Open in Protractor';
-  protractorLink.style.cssText = 'font-size:12px;color:#2563eb;text-decoration:underline;';
-  linksRow.appendChild(protractorLink);
-
+  // We intentionally do NOT add an "Open in Protractor" deep link here. The
+  // Protractor portal URL lands on a sign-in screen and can't reliably open the
+  // specific work order, so the link was misleading. The RO number is shown in
+  // the success detail instead.
   const autoflowUrl = currentContext?.url || currentContext?.ticketUrl || null;
   const isAutoflow = currentContext?.provider === 'autoflow' && autoflowUrl;
   if (isAutoflow) {

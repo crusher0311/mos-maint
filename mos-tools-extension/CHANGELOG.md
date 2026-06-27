@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.39 — 2026-06-27
+
+### Changed
+- **History jobs now expand to show the details.** Tap a past job in the
+  **History** tab to open it up and see why it matched, the vehicle it came from,
+  the RO number, and the labor and parts on that job. Tap again to collapse. The
+  **+ Add** button still works without expanding the row.
+- **Removed the misleading "Open in Protractor" link** on the success screen. That
+  link only landed on the Protractor sign-in page and couldn't open the specific
+  work order, so it caused confusion. The RO number is still shown right there.
+- **History search waits a little longer** (up to ~45 seconds) before giving up,
+  so slow-but-working searches on busy shops finish instead of falsely timing out.
+
 ## 1.27.38 — 2026-06-27
 
 ### Changed

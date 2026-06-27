@@ -315,6 +315,20 @@ body {
   padding: 6px 12px !important;
   font-size: 12px !important;
 }
+.cro-history-header { cursor: pointer; }
+.cro-history-headleft { display: flex; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; }
+.cro-history-caret { font-size: 11px; color: #9ca3af; line-height: 1.5; user-select: none; }
+.cro-history-detail {
+  border-top: 1px solid var(--gray-100, #f3f4f6);
+  margin: 0 12px 10px;
+  padding-top: 8px;
+  font-size: 12px;
+  color: var(--gray-700, #374151);
+}
+.cro-detail-row { margin: 2px 0; }
+.cro-detail-k { font-weight: 600; color: var(--gray-600, #4b5563); }
+.cro-detail-sub { font-weight: 600; margin: 6px 0 2px; color: var(--gray-700, #374151); }
+.cro-detail-line { padding-left: 8px; color: var(--gray-600, #4b5563); }
 .create-ro-list {
   list-style: none;
   margin: 4px 0 0 0;

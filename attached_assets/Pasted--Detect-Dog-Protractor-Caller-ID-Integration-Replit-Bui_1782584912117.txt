@@ -1,0 +1,587 @@
+# Detect Dog × Protractor — Caller ID Integration
+## Replit Build Spec v2
+
+**Product:** Detect Dog Caller ID for Protractor
+**Owner:** App Fueled / Detect Dog
+**Builder:** Replit Agent
+**Stack:** Node.js + Express · React · SQLite · Protractor REST API · Detect Dog API
+
+---
+
+## What this is
+
+A local Node server + Chrome extension that surfaces vehicle maintenance context
+the moment a call comes in — before the advisor picks up the phone. It connects
+Detect Dog's maintenance intelligence to Protractor's customer and vehicle records,
+giving advisors a 3-second head start on every call.
+
+This is a Detect Dog feature. It lives in DD's product, ships under DD's brand,
+and is sold as part of DD's value proposition. A clean API hook is included so
+App Fueled CRM data can be layered in later for Bloodhound/Top Dog bundle customers.
+
+---
+
+## The advisor experience
+
+> A call rings. Before the advisor picks up, a card appears:
+>
+> **Linda Martinez** · 847-555-1234
+> 2021 Honda CR-V · 67,400 mi
+>
+> ⚠ Oil change overdue — 2,400 mi past interval
+> ⚠ Cabin air filter flagged at last visit (4 mo ago)
+> ✓ Tires rotated last visit — not due
+>
+> Recommended talk track: "Hi Linda — are you coming in for that oil change?"
+
+The advisor is prepared before saying hello. That's the whole product.
+
+---
+
+## Product context
+
+| Product | Price | Lane |
+|---|---|---|
+| My Oil Sticker (MOS) | $79.95/mo | Oil change reminder stickers |
+| Detect Dog (DD) | $249.95/mo | Maintenance intelligence + advisor efficiency |
+| Bloodhound bundle | $634/mo | DD + MOS + App Fueled or CallInBound |
+| Top Dog bundle | $984/mo | DD + MOS + App Fueled + CallInBound |
+
+App Fueled owns CRM (customer relationship, communication history, caller ID base layer).
+Detect Dog owns maintenance intelligence (service intervals, upsell prompts, inspection results).
+This integration is Detect Dog's lane — what does this vehicle need right now?
+
+---
+
+## Architecture
+
+```
+[VoIP web page in Chrome]
+        |
+        | phone number detected by MutationObserver
+        v
+[Chrome Extension — content.js]
+        |
+        | POST /lookup { phone }
+        v
+[Local Node Server — localhost:7432]
+        |              |                  |
+        v              v                  v
+[Protractor     [Detect Dog         [App Fueled API]
+ REST API]       API]                (optional hook —
+                                      bundle customers
+ contact +       maintenance          only)
+ vehicles +      intervals +
+ open ROs        upsell flags +
+                 inspection history
+        |
+        v
+[Chrome Extension — caller card popup]
+
+        [ Open in Protractor ]  [ Dismiss ]
+              |
+              v
+        protractorbridge://contact/{id}
+        (URI scheme → Protractor.Launcher.ShopManager.exe)
+```
+
+---
+
+## Module 1 — Local Node Server
+
+**Entry point:** `server/index.js`
+**Port:** 7432
+**Database:** SQLite via `better-sqlite3`
+
+### `/lookup` — main endpoint
+
+**POST /lookup**
+
+Request:
+```json
+{ "phone": "8475551234" }
+```
+
+Response:
+```json
+{
+  "source": "detect_dog",
+  "contact": {
+    "id": "GUID-from-protractor",
+    "firstName": "Linda",
+    "lastName": "Martinez",
+    "phone": "847-555-1234",
+    "email": "linda@email.com"
+  },
+  "vehicles": [
+    {
+      "id": "GUID",
+      "year": 2021,
+      "make": "Honda",
+      "model": "CR-V",
+      "mileage": 67400,
+      "lastServiceDate": "2026-02-14"
+    }
+  ],
+  "maintenance": {
+    "vehicleId": "GUID",
+    "alerts": [
+      {
+        "service": "Oil Change",
+        "status": "overdue",
+        "mileageOverdue": 2400,
+        "intervalMiles": 5000
+      },
+      {
+        "service": "Cabin Air Filter",
+        "status": "flagged",
+        "flaggedAt": "2026-02-14",
+        "note": "Flagged at last visit"
+      }
+    ],
+    "upToDate": [
+      {
+        "service": "Tire Rotation",
+        "completedDate": "2026-02-14",
+        "nextDue": "2026-08-14"
+      }
+    ],
+    "recommendedTalkTrack": "Hi Linda — are you coming in for that oil change?"
+  },
+  "openWorkOrders": [
+    {
+      "id": "4421",
+      "description": "State inspection",
+      "status": "Open",
+      "created": "2026-06-20"
+    }
+  ],
+  "appFueled": null
+}
+```
+
+Note: `appFueled` is null for DD-only customers. For bundle customers it will
+contain CRM context. Wire the field now, populate it later.
+
+### Protractor API integration
+
+Base URL: `https://integration.protractor.com/IntegrationServices/1.0/`
+
+Auth — compute HMAC-SHA1 on every request:
+```javascript
+const crypto = require('crypto');
+
+function protractorHeaders(connectionId, apiKey) {
+  const key = apiKey.replace(/-/g, '').toLowerCase();
+  const msg = connectionId.replace(/-/g, '').toLowerCase();
+  const auth = crypto.createHmac('sha1', key).update(msg).digest('base64');
+  return {
+    'connectionId': connectionId,
+    'apiKey': apiKey,
+    'authentication': auth,
+    'Accept': 'application/json'
+  };
+}
+```
+
+API call sequence for a phone lookup:
+1. `GET /Contact/Search/{phone}` → returns contact record with ID
+2. `GET /ServiceItem/Search/OwnerID/{contactId}` → returns vehicles
+3. `GET /WorkOrder/` → filter by contactId, status=Open (client-side filter if
+   endpoint doesn't support query params — flag this for Brandon to confirm)
+
+### Detect Dog API integration
+
+**Note to Replit:** DD API shape is TBD — Brandon to supply endpoint and auth.
+For Phase 1, mock this with realistic data:
+
+```javascript
+// MOCK — replace with real DD API in Phase 4
+async function detectDogLookup(phone, vehicleId) {
+  return {
+    alerts: [
+      { service: 'Oil Change', status: 'overdue', mileageOverdue: 2400 },
+      { service: 'Cabin Air Filter', status: 'flagged', flaggedAt: '2026-02-14' }
+    ],
+    upToDate: [
+      { service: 'Tire Rotation', completedDate: '2026-02-14' }
+    ],
+    recommendedTalkTrack: "Hi — are you coming in for that oil change?"
+  };
+}
+```
+
+### App Fueled hook (stub only — Phase 5)
+
+```javascript
+// STUB — populate for Bloodhound/Top Dog bundle customers only
+async function appFueledLookup(phone, settings) {
+  if (!settings.appFueledApiKey) return null;
+  // TODO: App Fueled CRM API call goes here
+  return null;
+}
+```
+
+### Other endpoints
+
+**GET /health**
+```json
+{ "ok": true, "version": "1.0.0", "protractorConnected": true, "ddConnected": false }
+```
+
+**GET /settings**
+Returns which credential fields are populated (never return key values).
+
+**POST /settings**
+```json
+{
+  "connectionId": "...",
+  "apiKey": "...",
+  "detectDogApiKey": "...",
+  "appFueledApiKey": ""
+}
+```
+
+**GET /log**
+Returns last 50 lookup events for the settings UI log view.
+
+### SQLite schema
+
+```sql
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
+
+CREATE TABLE lookup_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone        TEXT,
+  contact_name TEXT,
+  vehicle      TEXT,
+  alert_count  INTEGER DEFAULT 0,
+  matched      INTEGER DEFAULT 0,
+  timestamp    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Windows auto-start
+
+Provide `start-server.bat`:
+```bat
+@echo off
+cd /d "%~dp0"
+node index.js
+```
+
+Installer (or setup.bat) places a shortcut to this in:
+`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`
+
+---
+
+## Module 2 — Chrome Extension
+
+**Manifest V3**
+
+### manifest.json
+```json
+{
+  "manifest_version": 3,
+  "name": "Detect Dog for Protractor",
+  "version": "1.0.0",
+  "description": "Surfaces vehicle maintenance context when a customer calls.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "http://localhost:7432/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}
+```
+
+### content.js — phone number detection
+
+```javascript
+const PHONE_RE = /\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+
+function normalizePhone(raw) {
+  return raw.replace(/\D/g, '').slice(-10);
+}
+
+// Debounce to avoid duplicate triggers on DOM churn
+let lastPhone = null;
+let debounceTimer = null;
+
+function checkForIncomingCall() {
+  // Broad selector — catches most VoIP web apps
+  // TODO: tune these selectors to the specific VoIP app Heart Auto Care uses
+  const indicators = document.querySelectorAll([
+    '[class*="incoming"]',
+    '[class*="ringing"]',
+    '[class*="inbound"]',
+    '[class*="call-alert"]',
+    '[class*="caller"]',
+    '[data-call-state="ringing"]',
+    '[data-call-state="incoming"]'
+  ].join(','));
+
+  indicators.forEach(el => {
+    const match = el.textContent.match(PHONE_RE);
+    if (!match) return;
+    const phone = normalizePhone(match[0]);
+    if (phone === lastPhone) return;
+    lastPhone = phone;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { lastPhone = null; }, 30000);
+    chrome.runtime.sendMessage({ type: 'INCOMING_CALL', phone });
+  });
+}
+
+const observer = new MutationObserver(checkForIncomingCall);
+observer.observe(document.body, { childList: true, subtree: true });
+```
+
+### background.js
+
+```javascript
+chrome.runtime.onMessage.addListener(async (msg) => {
+  if (msg.type !== 'INCOMING_CALL') return;
+
+  let data;
+  try {
+    const res = await fetch('http://localhost:7432/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: msg.phone })
+    });
+    data = await res.json();
+  } catch (e) {
+    // Server not running or unreachable — fail silently
+    console.warn('Detect Dog server not reachable:', e.message);
+    return;
+  }
+
+  // Open caller card as a small popup window
+  const params = encodeURIComponent(JSON.stringify(data));
+  chrome.windows.create({
+    url: chrome.runtime.getURL(`card/card.html?data=${params}`),
+    type: 'popup',
+    width: 400,
+    height: 560,
+    top: 40,
+    left: 40
+  });
+});
+```
+
+---
+
+## Module 3 — Caller Card UI
+
+**File:** `extension/card/card.html`
+
+This is the most important UI surface. It needs to feel like a professional
+advisor tool — not a browser extension. Clean, scannable, fast to read in 3 seconds.
+
+### Layout (top to bottom)
+
+```
+┌─────────────────────────────────────┐
+│  DD logo (small)    Detect Dog      │  ← header bar, dark navy
+├─────────────────────────────────────┤
+│  LM   Linda Martinez                │  ← initials avatar + name
+│       847-555-1234                  │
+│       2021 Honda CR-V · 67,400 mi  │
+├─────────────────────────────────────┤
+│  MAINTENANCE ALERTS          2 ⚠   │  ← section header + count badge
+│                                     │
+│  ⚠ Oil change overdue               │  ← amber alert row
+│    2,400 mi past 5,000 mi interval  │
+│                                     │
+│  ⚠ Cabin air filter — flagged       │  ← amber alert row
+│    Noted at last visit (Feb 14)     │
+│                                     │
+│  ✓ Tire rotation — current          │  ← green ok row
+│    Done Feb 14 · Next Aug 14        │
+├─────────────────────────────────────┤
+│  OPEN WORK ORDERS            1      │  ← section header
+│  #4421 · State inspection · 6/20   │
+├─────────────────────────────────────┤
+│  SUGGESTED TALK TRACK               │
+│  "Hi Linda — are you coming in      │
+│   for that oil change?"             │
+├─────────────────────────────────────┤
+│  [ Open in Protractor ]  [ Dismiss ]│  ← action buttons
+└─────────────────────────────────────┘
+```
+
+### Design spec
+
+- Background: white `#ffffff`
+- Header bar: `#0f2744` (dark navy) with white text and small DD wordmark
+- Alert rows: amber left border `#f59e0b`, light amber bg `#fffbeb`
+- OK rows: green left border `#22c55e`, light green bg `#f0fdf4`
+- Talk track section: light gray bg, italic quote text, subtle left border
+- Open WO section: shows if any exist, hidden if none
+- "Open in Protractor" button: navy fill, white text
+- "Dismiss" button: ghost/outline style
+- Font: system-ui — no external font load, must be instant
+- No match state: show "New Customer" with name field empty, "Create in Protractor" button
+
+### "Open in Protractor" action
+
+```javascript
+document.getElementById('btn-open').addEventListener('click', () => {
+  // Fires the URI scheme — Protractor.Launcher.ShopManager.exe handles it
+  // via StartupNextInstance pattern (passes to running instance if open)
+  window.location.href = `protractorbridge://contact/${data.contact.id}`;
+  window.close();
+});
+```
+
+**Note:** `protractorbridge://` URI scheme must be registered in Windows registry.
+The setup.bat handles this — see Module 5.
+
+---
+
+## Module 4 — Settings UI
+
+Served at `http://localhost:7432` by the Node server.
+Plain HTML + vanilla JS — no framework needed here.
+
+### Sections
+
+**Status bar** (top of page)
+- Detect Dog server: ● Running (green) / ● Not running (red)
+- Protractor API: ● Connected / ● Not configured / ● Error
+- DD API: ● Connected / ● Not configured (mock active)
+
+**Protractor credentials**
+- Connection ID (text input)
+- API Key (password input, show/hide toggle)
+- [ Test Connection ] button → calls Protractor `/Contact/Search/0000000000`
+  and shows success or error message
+
+**Detect Dog credentials**
+- API Key (password input)
+- [ Test Connection ] button
+
+**App Fueled (optional — bundle customers)**
+- Collapsed by default with "Bloodhound / Top Dog bundle?" toggle
+- API Key field appears when expanded
+
+**Recent calls log**
+Table: Time · Phone · Customer · Vehicle · Alerts · Matched?
+Last 50 lookups from SQLite lookup_log table.
+
+**Manual test**
+- Phone number input + [ Test Lookup ] button
+- Shows full JSON response inline for debugging
+
+---
+
+## Module 5 — Windows Setup
+
+**File:** `setup.bat`
+
+Registers the `protractorbridge://` URI scheme and starts the server:
+
+```bat
+@echo off
+echo Installing Detect Dog Caller ID...
+
+REM Register URI scheme
+reg add "HKCU\Software\Classes\protractorbridge" /ve /d "URL:Protractor Bridge Protocol" /f
+reg add "HKCU\Software\Classes\protractorbridge" /v "URL Protocol" /d "" /f
+reg add "HKCU\Software\Classes\protractorbridge\shell\open\command" /ve /d "\"%~dp0shim\protractorbridge.exe\" \"%%1\"" /f
+
+REM Add to Windows startup
+set STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
+copy "%~dp0start-server.bat" "%STARTUP%\DetectDogCallerID.bat" /y
+
+echo Done. Starting server...
+start "" "%~dp0start-server.bat"
+echo Open http://localhost:7432 to configure your credentials.
+pause
+```
+
+**File:** `shim/protractorbridge-shim.js` (Node script compiled to .exe via pkg)
+
+```javascript
+const { execSync, spawn } = require('child_process');
+const uri = process.argv[2]; // e.g. protractorbridge://contact/GUID
+
+const contactId = uri.replace('protractorbridge://contact/', '');
+const protractorExe = 'C:\\Program Files\\Protractor Software\\Protractor.Net Shop Manager\\Protractor.Launcher.ShopManager.exe';
+
+// Check if Protractor is running
+try {
+  const procs = execSync('tasklist /FI "IMAGENAME eq Protractor.Client.ShopManager.exe"').toString();
+  if (procs.includes('Protractor.Client.ShopManager.exe')) {
+    // Already running — pass contact ID as arg (StartupNextInstance handles it)
+    spawn(protractorExe, [`/contact:${contactId}`], { detached: true });
+  } else {
+    // Launch fresh with contact arg
+    spawn(protractorExe, [`/contact:${contactId}`], { detached: true });
+  }
+} catch (e) {
+  console.error('Could not launch Protractor:', e.message);
+}
+```
+
+---
+
+## Phase plan
+
+| Phase | What Replit builds | Done when |
+|---|---|---|
+| **1** | Node server · Protractor API auth · `/lookup` with mocked DD data | `node test-lookup.js 8475551234` returns real Protractor contact + mock maintenance |
+| **2** | Chrome extension · `content.js` detection · `background.js` · basic card HTML | Card appears in Chrome when a phone number is detected |
+| **3** | Full caller card UI · all sections · alert/ok styling · talk track | Card is readable and actionable in under 3 seconds |
+| **4** | Settings UI at `localhost:7432` · credential management · lookup log | Shop can self-configure without touching code |
+| **5** | DD API live · setup.bat · URI scheme shim · startup script | Full install on a Windows machine with no manual steps |
+
+---
+
+## Known unknowns — Brandon to resolve before Phase 4+
+
+| # | Unknown | Blocks |
+|---|---|---|
+| 1 | **Detect Dog API** — endpoint URL, auth method, request/response shape for maintenance lookup by phone or vehicle | Phase 4 |
+| 2 | **VoIP platform** — which web phone system do Heart Auto Care shops use? content.js selectors need tuning to that app's DOM | Phase 2 QA |
+| 3 | **Protractor Work Order endpoint** — does `/WorkOrder/` support filtering by contactId as a query param, or do we pull all and filter? | Phase 1 |
+| 4 | **Test Protractor credentials** — need a live connectionId + apiKey to validate HMAC auth during build | Phase 1 |
+| 5 | **Protractor `/contact:` arg** — does the running ShopManager actually respond to a `/contact:GUID` arg via StartupNextInstance? Needs live testing | Phase 5 |
+
+---
+
+## Replit agent instructions
+
+1. Scaffold a monorepo: `/server` · `/extension` · `/shim`
+2. **Start with Phase 1 only.** Do not build the extension until the server
+   lookup is returning real Protractor data.
+3. Put all credentials in `.env` (gitignored). Provide `.env.example`.
+4. Include `server/test-lookup.js` — a CLI script that calls `/lookup` with
+   a phone number passed as an argument and pretty-prints the response.
+5. Use `better-sqlite3` for SQLite. Use `node-fetch` or native fetch for API calls.
+6. CORS: allow `chrome-extension://*` and `http://localhost:*` origins.
+7. The mocked DD response should look realistic — use the maintenance alert
+   structure defined above, not placeholder Lorem Ipsum data.
+8. Comment every section that will need to change when the real DD API is
+   available. Use `// TODO(DD-API):` as the marker.
+9. When Phase 1 is working, output the full folder structure and file list
+   before proceeding to Phase 2.
