@@ -430,30 +430,47 @@ export async function decodeVinLocal(vin: string, hint?: DecodeHint): Promise<De
   }
 }
 
-export async function batchDecodeSquishes(squishes: string[]): Promise<Map<string, VinReferenceData>> {
+async function batchDecodeSquishesInner(squishes: string[]): Promise<Map<string, VinReferenceData>> {
   const result = new Map<string, VinReferenceData>();
   if (squishes.length === 0) return result;
   const unique = [...new Set(squishes)];
-  try {
-    const rows = await withRetry((db) => db<VinReferenceData[]>`
-      SELECT * FROM dataone_vin_reference
-      WHERE vin_pattern = ANY(${unique})
-    `);
-    // Group by vin_pattern, then merge ambiguous candidates so callers don't
-    // get arbitrary trim/transmission picks. No hint available in the batch path.
-    const byPattern = new Map<string, VinReferenceData[]>();
-    for (const row of rows) {
-      const list = byPattern.get(row.vin_pattern);
-      if (list) list.push(row);
-      else byPattern.set(row.vin_pattern, [row]);
-    }
-    for (const [pattern, group] of byPattern) {
-      result.set(pattern, group.length === 1 ? group[0] : mergeCandidates(group).merged);
-    }
-  } catch (error) {
-    console.error("[DataOne] Batch decode error:", error);
+  const rows = await withRetry((db) => db<VinReferenceData[]>`
+    SELECT * FROM dataone_vin_reference
+    WHERE vin_pattern = ANY(${unique})
+  `);
+  // Group by vin_pattern, then merge ambiguous candidates so callers don't
+  // get arbitrary trim/transmission picks. No hint available in the batch path.
+  const byPattern = new Map<string, VinReferenceData[]>();
+  for (const row of rows) {
+    const list = byPattern.get(row.vin_pattern);
+    if (list) list.push(row);
+    else byPattern.set(row.vin_pattern, [row]);
+  }
+  for (const [pattern, group] of byPattern) {
+    result.set(pattern, group.length === 1 ? group[0] : mergeCandidates(group).merged);
   }
   return result;
+}
+
+export async function batchDecodeSquishes(squishes: string[]): Promise<Map<string, VinReferenceData>> {
+  try {
+    return await batchDecodeSquishesInner(squishes);
+  } catch (error) {
+    // Soft-fail: on-write indexers must never block their primary write on a
+    // DataOne hiccup. An empty map is returned and treated as "no match".
+    console.error("[DataOne] Batch decode error:", error);
+    return new Map<string, VinReferenceData>();
+  }
+}
+
+// Strict variant — lets a connection/infra error PROPAGATE instead of being
+// swallowed into an empty map. Use this from the historical ACES backfill so
+// it can tell "DataOne is down" (must abort, don't stamp) from "this VIN has
+// no ACES match" (legitimately unresolvable, safe to stamp). Mixing the two up
+// is what poisons the resume marker — see
+// docs/runbooks/job-index-aces-pcdb-parity.md.
+export async function batchDecodeSquishesStrict(squishes: string[]): Promise<Map<string, VinReferenceData>> {
+  return batchDecodeSquishesInner(squishes);
 }
 
 export function toSquishPublic(vin: string): string {

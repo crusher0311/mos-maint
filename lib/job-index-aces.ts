@@ -20,6 +20,7 @@
 
 import {
   batchDecodeSquishes,
+  batchDecodeSquishesStrict,
   toSquishPublic,
   type VinReferenceData,
 } from "@/lib/integrations/dataone-local";
@@ -78,9 +79,42 @@ export async function enrichVinWithAces(
 export async function enrichVinsWithAces(
   vins: ReadonlyArray<string | null | undefined>,
 ): Promise<Map<string, AcesEnrichment>> {
-  const result = new Map<string, AcesEnrichment>();
-  if (vins.length === 0) return result;
+  const squishToVin = buildSquishToVin(vins);
+  if (squishToVin.size === 0) return new Map<string, AcesEnrichment>();
 
+  let decoded: Map<string, VinReferenceData>;
+  try {
+    decoded = await batchDecodeSquishes([...squishToVin.keys()]);
+  } catch (err) {
+    console.warn(
+      `[ACES enrich] Bulk DataOne lookup failed (${vins.length} VINs): ${(err as Error)?.message || err}`,
+    );
+    return new Map<string, AcesEnrichment>();
+  }
+  return mapDecodedToEnrichment(squishToVin, decoded);
+}
+
+/**
+ * Strict bulk variant for the historical backfill. Unlike `enrichVinsWithAces`,
+ * a DataOne connection/infra failure is NOT swallowed — it THROWS. The backfill
+ * needs this so it can abort (without stamping `acesDecodedAt`) when DataOne is
+ * down, instead of marking every doc "unresolvable" and poisoning the resume
+ * marker. A successful lookup that simply has no row for a VIN still returns an
+ * empty entry (legitimately unresolvable). See
+ * docs/runbooks/job-index-aces-pcdb-parity.md.
+ */
+export async function enrichVinsWithAcesStrict(
+  vins: ReadonlyArray<string | null | undefined>,
+): Promise<Map<string, AcesEnrichment>> {
+  const squishToVin = buildSquishToVin(vins);
+  if (squishToVin.size === 0) return new Map<string, AcesEnrichment>();
+  const decoded = await batchDecodeSquishesStrict([...squishToVin.keys()]);
+  return mapDecodedToEnrichment(squishToVin, decoded);
+}
+
+function buildSquishToVin(
+  vins: ReadonlyArray<string | null | undefined>,
+): Map<string, string> {
   const squishToVin = new Map<string, string>();
   for (const v of vins) {
     if (!v || typeof v !== "string" || v.length < 11) continue;
@@ -91,18 +125,14 @@ export async function enrichVinsWithAces(
       /* skip unparseable */
     }
   }
-  if (squishToVin.size === 0) return result;
+  return squishToVin;
+}
 
-  let decoded: Map<string, VinReferenceData>;
-  try {
-    decoded = await batchDecodeSquishes([...squishToVin.keys()]);
-  } catch (err) {
-    console.warn(
-      `[ACES enrich] Bulk DataOne lookup failed (${vins.length} VINs): ${(err as Error)?.message || err}`,
-    );
-    return result;
-  }
-
+function mapDecodedToEnrichment(
+  squishToVin: Map<string, string>,
+  decoded: Map<string, VinReferenceData>,
+): Map<string, AcesEnrichment> {
+  const result = new Map<string, AcesEnrichment>();
   for (const [sq, vin] of squishToVin) {
     const row = decoded.get(sq);
     const enriched = acesFromDecoded(row);

@@ -40,14 +40,23 @@
 //
 //   Usage:  npm run backfill:job-index-aces -- [--shop 12345] [--limit 5000]
 //                                              [--dry-run] [--skip-reindex]
-//                                              [--skip-pg-mirror]
+//                                              [--skip-pg-mirror] [--skip-vin-recovery]
+//
+// `--skip-vin-recovery` skips Phase A2 (the PG `normalized_work_orders` VIN
+// recovery against the *app* Postgres). Combine with --skip-reindex +
+// --skip-pg-mirror to run only Phase B (job_index ACES decode), avoiding all
+// app-Postgres load. NOTE: this does NOT make the run Postgres-free — Phase B
+// decodes VINs against the DataOne dataset, which is itself a Postgres DB
+// (DATAONE_DATABASE_URL, see lib/integrations/dataone-local.ts). If that
+// endpoint is connection-saturated, the decode still fails. Run off-peak.
 
 import { getDb } from "@/lib/mongo";
 import {
-  enrichVinsWithAces,
+  enrichVinsWithAcesStrict,
   extractTekmetricPcdb,
   extractShopWarePcdb,
 } from "@/lib/job-index-aces";
+import { pingDataOneDb } from "@/lib/integrations/dataone-local";
 import { extractJobIndexFromWorkOrder, upsertJobIndexEntries } from "@/lib/job-index";
 import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
@@ -76,17 +85,19 @@ interface CliFlags {
   dryRun: boolean;
   skipReindex: boolean;
   skipPgMirror: boolean;
+  skipVinRecovery: boolean;
 }
 
 function parseFlags(): CliFlags {
   const argv = process.argv.slice(2);
-  const flags: CliFlags = { shopId: null, limit: null, dryRun: false, skipReindex: false, skipPgMirror: false };
+  const flags: CliFlags = { shopId: null, limit: null, dryRun: false, skipReindex: false, skipPgMirror: false, skipVinRecovery: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--shop" && argv[i + 1]) flags.shopId = Number(argv[++i]);
     else if (argv[i] === "--limit" && argv[i + 1]) flags.limit = Number(argv[++i]);
     else if (argv[i] === "--dry-run") flags.dryRun = true;
     else if (argv[i] === "--skip-reindex") flags.skipReindex = true;
     else if (argv[i] === "--skip-pg-mirror") flags.skipPgMirror = true;
+    else if (argv[i] === "--skip-vin-recovery") flags.skipVinRecovery = true;
   }
   return flags;
 }
@@ -353,6 +364,22 @@ async function enrichJobIndexAces(
   flags: CliFlags,
 ): Promise<void> {
   console.log("[backfill-aces] Phase B: ACES enrichment");
+
+  // Preflight: confirm DataOne (a Postgres DB) is reachable BEFORE we mutate any
+  // doc. At peak the DataOne/app Postgres can refuse connections (error 53300);
+  // if we ran anyway, every batch would decode to empty and we'd stamp the whole
+  // corpus "unresolvable", poisoning the resume marker. Abort loudly instead.
+  if (!flags.dryRun) {
+    const dataOneUp = await pingDataOneDb();
+    if (!dataOneUp) {
+      throw new Error(
+        "[backfill-aces] ABORT: DataOne Postgres is unreachable (likely connection-saturated). " +
+          "Refusing to run Phase B — it would stamp acesDecodedAt on undecoded docs and poison the " +
+          "resume marker. Re-run off-peak. See docs/runbooks/job-index-aces-pcdb-parity.md.",
+      );
+    }
+  }
+
   const collection = db.collection("job_index");
   const baseFilter: any = { "vehicle.acesDecodedAt": { $exists: false } };
   if (flags.shopId !== null) baseFilter.shopId = flags.shopId;
@@ -390,7 +417,21 @@ async function enrichJobIndexAces(
     const vinList = docs
       .map((d) => (d.vehicle?.vin as string | undefined) || (d as any)._recoveredVin)
       .filter((v): v is string => typeof v === "string" && v.length >= 11);
-    const enrichments = vinList.length > 0 ? await enrichVinsWithAces(vinList) : new Map();
+    // Strict decode: if DataOne fails mid-run (connection dropped / saturated),
+    // this THROWS instead of returning empty. We abort the whole run BEFORE
+    // writing this batch so we never stamp acesDecodedAt on docs we couldn't
+    // actually decode (which would skip them forever). A successful decode with
+    // no match for a given VIN is still legitimately "unresolvable".
+    let enrichments: Awaited<ReturnType<typeof enrichVinsWithAcesStrict>>;
+    try {
+      enrichments = vinList.length > 0 ? await enrichVinsWithAcesStrict(vinList) : new Map();
+    } catch (err) {
+      throw new Error(
+        `[backfill-aces] ABORT after processed=${processed}: DataOne decode failed mid-run ` +
+          `(${(err as Error)?.message || err}). Stopping WITHOUT stamping this batch to avoid ` +
+          `poisoning the resume marker. Re-run off-peak.`,
+      );
+    }
 
     const decodedAt = new Date();
     for (const doc of docs) {
@@ -494,7 +535,11 @@ async function main() {
   console.log(`[backfill-aces] start shop=${flags.shopId ?? "ALL"} limit=${flags.limit ?? "ALL"} dryRun=${flags.dryRun}`);
 
   await reindexFromSourceTables(db, flags);
-  await recoverNormalizedWorkOrderVins(db, flags);
+  if (flags.skipVinRecovery) {
+    console.log("[backfill-aces] Phase A2: skipped (--skip-vin-recovery)");
+  } else {
+    await recoverNormalizedWorkOrderVins(db, flags);
+  }
   await enrichJobIndexAces(db, flags);
   await mirrorAcesToPg(db, flags);
 

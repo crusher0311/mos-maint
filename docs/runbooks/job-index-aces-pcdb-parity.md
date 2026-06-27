@@ -110,11 +110,42 @@ ctrl-c and re-run). Phases:
    npm run backfill:job-index-aces -- --shop <SHOP_ID> --skip-reindex
    ```
    `--skip-reindex` runs Phase B (+ C) without the Phase-A source-table reindex —
-   the safe, free, cache-first path for VIN-rich-but-undecoded shops.
+   the cache-first path for VIN-rich-but-undecoded shops.
+   To run **only** the Mongo job_index decode and skip both Postgres-side
+   phases (app-PG Phase A2 VIN-recovery + Phase C mirror), add
+   `--skip-vin-recovery --skip-pg-mirror`. This avoids *app*-Postgres load but
+   is **not** Postgres-free — see the DataOne caveat below.
 4. **Re-run the coverage report** to confirm the shop moved, then widen to more
    shops. Run off-peak; this touches prod Mongo + DataOne.
 
 ### Caveats
+- **The DataOne VIN decode is itself a Postgres query.** `enrichVinsWithAces`
+  reads the DataOne dataset from a Postgres DB (`DATAONE_DATABASE_URL`, see
+  `lib/integrations/dataone-local.ts`). There is **no** Postgres-free decode
+  path. During peak hours both the app Postgres (Supabase) **and** the DataOne
+  Postgres can hit their connection limit and reject new connections with
+  `53300 remaining connection slots are reserved for roles with the SUPERUSER
+  attribute`. When that happens the decode cannot run — **wait for off-peak**.
+  (Confirmed mid-afternoon CT 2026-06-27: both endpoints refused connections.)
+- **Resume-marker poisoning under connection pressure (now guarded in code).**
+  Historically Phase B stamped `vehicle.acesDecodedAt` even when a batch decode
+  *errored* — it couldn't tell a genuinely-unresolvable VIN from a failed
+  DataOne connection, so it marked the docs `unresolvable`. Because
+  `acesDecodedAt` is the resume marker, those docs were then **skipped on every
+  re-run** — silently stuck at null ACES. The script now protects against this:
+  - a **preflight `pingDataOneDb()`** runs before any doc is mutated and the
+    run **aborts** if DataOne is unreachable (a dry-run skips the preflight); and
+  - Phase B decodes via the **strict** path (`enrichVinsWithAcesStrict` →
+    `batchDecodeSquishesStrict`), so a connection failure *mid-run* throws and
+    the run aborts **before** stamping that batch, rather than marking it
+    unresolvable.
+  A genuine no-match (decode succeeded, no DataOne row) is still stamped
+  unresolvable — that's correct and avoids re-decoding it forever.
+  **Legacy cleanup:** for any shop decoded *before* this guard while DataOne was
+  saturated (symptom in old logs: `[DataOne] Batch decode error` then
+  `unresolvable=<batch size>`), unset the freshly-stamped-but-null docs'
+  `vehicle.acesDecodedAt` / `acesVehicleId` / `acesEngineId` / `submodelKey` so
+  they re-decode next time.
 - `shopware_repair_orders` is keyed by **`tenantId`, not `shopId`** — a
   shopId-filtered SW reindex/VIN-recovery matches nothing. (See memory:
   *ACES coverage gaps*.)
