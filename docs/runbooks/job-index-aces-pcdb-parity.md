@@ -51,6 +51,26 @@ to the SW entry would churn the whole SW corpus on every webhook.
   the shop runs a PartsTech-style catalog integration AND the SW API returns the
   `integrator_tags` association. When absent, part lines are still written (with
   number/brand/price) but without PCDB IDs — same honest behavior as Tekmetric.
+  - **Verified 2026-06-27 (Task #697) — currently unavailable for every connected
+    SW shop.** Across all cached prod SW ROs (81,726 docs; 67,368 with parts) for
+    the three connected shops (Shop-Ware Demo #77, State Street #136, Hoover Street
+    #174), **zero** parts carry an `integrator_tags` key. Their parts are
+    hand-entered/non-catalog (keys: `id,brand,description,number,*_cents,quantity,
+    part_inventory_id,taxable` — no PCDB/PartsTech fields; descriptions like "Misc
+    Bolts"). Shop-level `integrator_tags` is `[]` on every reachable shop, i.e. no
+    catalog integration is configured. Caveat: the cached `raw` is last-written by
+    the backfill/prewarm path (`lib/shopware-jobs-prewarm.ts`), which fetches with
+    the **base** association set (no `integrator_tags`), so the cache reflects that
+    path, not the webhook's enriched fetch — but the absence of any catalog
+    integration is the dispositive signal. Net: SW line-level PCDB stays empty in
+    practice for these tenants; `extractShopWarePcdb` is correct but has nothing to
+    map. It will only populate if/when an SW shop onboards a PartsTech-style
+    catalog. Direct live confirmation of the enriched fetch could not be done from
+    dev: dev creds are **sandbox-scoped** (`SHOPWARE_USE_SANDBOX=true`; prod API
+    returns 401), and the SW `services.parts.integrator_tags` association is itself
+    intermittently 500 (the exact flakiness the webhook's degrade-once logic
+    guards against). When the enriched single-RO fetch did return 200 in sandbox,
+    the demo ROs simply carried no parts at all.
 - **Protractor PCDB**: no line-rebuild path; historical Protractor payloads carry
   no PCDB.
 - **Line-level PCDB is ~0% across the historical corpus** — historical payloads
