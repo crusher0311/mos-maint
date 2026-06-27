@@ -193,6 +193,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [customDate, setCustomDate] = useState('');
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [showNewWorkOrder, setShowNewWorkOrder] = useState(false);
   const [concernAssistant, setConcernAssistant] = useState<{
@@ -217,25 +219,29 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   };
 
   useEffect(() => {
-    function handleClickOutsideContext(e: MouseEvent) {
+    function handleClickOutsideContext(e: Event) {
       if (stickerContextRef.current && !stickerContextRef.current.contains(e.target as Node)) {
         setStickerContextMenu(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutsideContext);
-    return () => document.removeEventListener("mousedown", handleClickOutsideContext);
+    document.addEventListener("touchstart", handleClickOutsideContext);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutsideContext);
+      document.removeEventListener("touchstart", handleClickOutsideContext);
+    };
   }, []);
 
-  const handleStickerRightClick = async (
-    e: React.MouseEvent, 
-    vin: string, 
+  const openStickerContextMenuAt = async (
+    x: number,
+    y: number,
+    vin: string,
     currentMileage: number | null,
     customerName?: string,
     vehicleYear?: number,
     vehicleMake?: string,
     vehicleModel?: string
   ) => {
-    e.preventDefault();
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
       return;
@@ -250,8 +256,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         setStickerContextMenu({
           vin,
           mileage: currentMileage,
-          x: e.clientX,
-          y: e.clientY,
+          x,
+          y,
           intervals: config.intervals || DEFAULT_INTERVALS,
           useKilometers: config.useKilometers || false,
           customerName,
@@ -263,6 +269,66 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     } catch (err) {
       console.error('Failed to fetch sticker settings', err);
     }
+  };
+
+  const handleStickerRightClick = (
+    e: React.MouseEvent, 
+    vin: string, 
+    currentMileage: number | null,
+    customerName?: string,
+    vehicleYear?: number,
+    vehicleMake?: string,
+    vehicleModel?: string
+  ) => {
+    e.preventDefault();
+    openStickerContextMenuAt(
+      e.clientX,
+      e.clientY,
+      vin,
+      currentMileage,
+      customerName,
+      vehicleYear,
+      vehicleMake,
+      vehicleModel
+    );
+  };
+
+  const resolveVehicleFields = (r: any) => {
+    let year = r.vehicle?.year;
+    let make = r.vehicle?.make;
+    let model = r.vehicle?.model;
+    if (!year && !make && !model && r.displayVehicle) {
+      const vehicleStr = r.displayVehicle || "";
+      const yearMatch = vehicleStr.match(/^(\d{4})/);
+      year = yearMatch ? parseInt(yearMatch[1]) : undefined;
+      const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
+      const parts = afterYear.split(" ").filter(Boolean);
+      make = parts[0] || undefined;
+      model = parts.slice(1).join(" ") || undefined;
+    }
+    return { year, make, model };
+  };
+
+  const cancelStickerLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleStickerTouchStart = (e: React.TouchEvent, r: any, vin: string) => {
+    if (!r.displayMiles) return;
+    cancelStickerLongPress();
+    longPressFiredRef.current = false;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const x = touch.clientX;
+    const y = touch.clientY;
+    const { year, make, model } = resolveVehicleFields(r);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      openStickerContextMenuAt(x, y, vin, r.displayMiles, r.displayName, year, make, model);
+    }, 500);
   };
 
   const handlePrintWithInterval = (intervalType: keyof IntervalsConfig) => {
@@ -1261,42 +1327,34 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           )}
                           <button
                             onClick={() => {
-                              let year = r.vehicle?.year;
-                              let make = r.vehicle?.make;
-                              let model = r.vehicle?.model;
-                              if (!year && !make && !model && r.displayVehicle) {
-                                const vehicleStr = r.displayVehicle || "";
-                                const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                const parts = afterYear.split(" ").filter(Boolean);
-                                make = parts[0] || undefined;
-                                model = parts.slice(1).join(" ") || undefined;
+                              if (longPressFiredRef.current) {
+                                longPressFiredRef.current = false;
+                                return;
                               }
+                              const { year, make, model } = resolveVehicleFields(r);
                               handleQuickPrintSticker(vin, r.displayMiles, r.displayName, year, make, model);
                             }}
                             onContextMenu={(e) => {
-                              let year = r.vehicle?.year;
-                              let make = r.vehicle?.make;
-                              let model = r.vehicle?.model;
-                              if (!year && !make && !model && r.displayVehicle) {
-                                const vehicleStr = r.displayVehicle || "";
-                                const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                const parts = afterYear.split(" ").filter(Boolean);
-                                make = parts[0] || undefined;
-                                model = parts.slice(1).join(" ") || undefined;
-                              }
+                              const { year, make, model } = resolveVehicleFields(r);
                               handleStickerRightClick(e, vin, r.displayMiles, r.displayName, year, make, model);
                             }}
+                            onTouchStart={(e) => handleStickerTouchStart(e, r, vin)}
+                            onTouchMove={cancelStickerLongPress}
+                            onTouchEnd={(e) => {
+                              cancelStickerLongPress();
+                              if (longPressFiredRef.current) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onTouchCancel={cancelStickerLongPress}
                             disabled={printingSticker === vin || !r.displayMiles}
-                            className={`p-1.5 rounded transition-colors ${
+                            className={`p-1.5 rounded transition-colors select-none ${
                               !r.displayMiles 
                                 ? "text-gray-300 cursor-not-allowed" 
                                 : "text-gray-400 hover:text-green-600 hover:bg-green-50"
                             }`}
-                            title={r.displayMiles ? "Quick Print Oil Sticker (Right-click for options)" : "Mileage required for sticker"}
+                            style={{ WebkitTouchCallout: "none", touchAction: "manipulation" }}
+                            title={r.displayMiles ? "Quick Print Oil Sticker (Right-click or long-press for options)" : "Mileage required for sticker"}
                           >
                             {printingSticker === vin ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1527,8 +1585,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           ref={stickerContextRef}
           className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[200px]"
           style={{ 
-            left: Math.min(stickerContextMenu.x, window.innerWidth - 280),
-            top: Math.min(stickerContextMenu.y, window.innerHeight - 250),
+            left: Math.max(8, Math.min(stickerContextMenu.x, window.innerWidth - 280)),
+            top: Math.max(8, Math.min(stickerContextMenu.y, window.innerHeight - 250)),
           }}
         >
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
