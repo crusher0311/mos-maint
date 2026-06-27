@@ -4519,6 +4519,14 @@ function renderConcernQuestions(questions) {
     `;
     container.appendChild(div);
   });
+
+  // Drop the cursor straight into the first unanswered box so the advisor can
+  // start typing immediately without clicking (Brandon feedback 2026-06-27).
+  // Deferred to the next frame because on the first round the conversation pane
+  // is still hidden at this point, and focus() is a no-op on hidden elements.
+  const allInputs = container.querySelectorAll('.concern-answer-input');
+  const firstEmpty = Array.from(allInputs).find(el => !el.value.trim()) || allInputs[0];
+  if (firstEmpty) requestAnimationFrame(() => firstEmpty.focus());
 }
 
 // Render the "no further questions" state in the conversation pane (Task #682).
@@ -5303,6 +5311,17 @@ function mosTelemetry(event, props) {
   } catch (_) { /* no-op */ }
 }
 
+// A customer-less RO often scrapes a UI button label (e.g. Protractor's
+// "Add Customer") instead of a real name. Treat those as "no name" so we don't
+// prefill the search box with junk the advisor must erase (Brandon 2026-06-27).
+function isPlaceholderCustomerName(name) {
+  // Strip leading CTA glyphs/punctuation so "+ Add Customer" matches too.
+  const n = String(name || '').trim().replace(/^[\s+\-•·*]+/, '').toLowerCase();
+  if (!n) return true;
+  return /^(add|select|choose|new)\s+(a\s+)?customer$/.test(n) ||
+    n === 'no customer' || n === 'customer';
+}
+
 function resetCroState() {
   createRoState.customer = null;
   createRoState.vehicle = null;
@@ -5406,7 +5425,10 @@ function initCreateRoTab() {
     // retype it. They still have to confirm the match.
     const customerName = currentContext.customerName ||
       (currentContext.customer && currentContext.customer.name) || '';
-    if (customerName) {
+    // Skip placeholder labels scraped from a customer-less RO (e.g. Protractor
+    // renders an "Add Customer" button when none is assigned). Pre-filling that
+    // forces the advisor to erase junk before typing (Brandon feedback 2026-06-27).
+    if (customerName && !isPlaceholderCustomerName(customerName)) {
       const search = getCroEl('cro-customer-search');
       if (search) search.value = customerName;
     }

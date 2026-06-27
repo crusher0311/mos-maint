@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.44 — 2026-06-27
+
+### Fixed
+- **Cursor now lands in the first question box of the AI Concern Assistant.**
+  When the assistant generates its follow-up questions, your cursor is placed in
+  the first answer box automatically, so you can start typing the customer's
+  response right away without clicking.
+- **Create RO no longer pre-fills "Add Customer" into the customer box.** On a
+  repair order with no customer assigned, the panel used to copy the page's
+  "Add Customer" button label into the customer search field, forcing you to
+  erase it before typing a real name. That placeholder is now ignored, so the box
+  starts empty and ready for the customer's name.
+
 ## 1.27.43 — 2026-06-27
 
 ### Fixed
