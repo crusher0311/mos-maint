@@ -317,6 +317,7 @@ body {
 }
 .cro-history-header { cursor: pointer; }
 .cro-history-headleft { display: flex; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; }
+.cro-history-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 3px 0; }
 .cro-history-caret { font-size: 11px; color: #9ca3af; line-height: 1.5; user-select: none; }
 .cro-history-detail {
   border-top: 1px solid var(--gray-100, #f3f4f6);

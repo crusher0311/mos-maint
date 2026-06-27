@@ -6265,10 +6265,11 @@ function renderCroHistory() {
   listEl.innerHTML = jobs.slice(0, 50).map((job, idx) => {
     const title = job.title || job.description || 'Job';
     const added = isCroJobSelected(croJobKey('history', title));
-    const meta = [
-      job.matchBandLabel || '',
-      croVehicleLabel(job.vehicle),
-    ].filter(Boolean).join(' · ');
+    const band = job.matchBand || 'poor';
+    const bandLabel = job.matchBandLabel || '';
+    const score = typeof job.matchScore === 'number' ? job.matchScore : null;
+    const vehLabel = croVehicleLabel(job.vehicle);
+    const loc = job.location ? `📍 ${job.location}` : '';
     return `
       <li class="job-item">
         <div class="job-header cro-history-header" data-idx="${idx}">
@@ -6276,7 +6277,12 @@ function renderCroHistory() {
             <span class="cro-history-caret" data-idx="${idx}">▸</span>
             <div style="min-width:0;">
               <div class="job-title">${escCro(title)}</div>
-              ${meta ? `<div class="job-meta">${escCro(meta)}</div>` : ''}
+              <div class="cro-history-badges">
+                ${bandLabel ? `<span class="match-badge ${getBandStyle(band)}">${escCro(bandLabel)}</span>` : ''}
+                ${score !== null ? `<span class="match-score">${score}%</span>` : ''}
+              </div>
+              ${vehLabel ? `<div class="job-meta">${escCro(vehLabel)}</div>` : ''}
+              ${loc ? `<div class="job-location">${escCro(loc)}</div>` : ''}
             </div>
           </div>
           <button class="btn-add cro-history-add-btn" data-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
@@ -6309,6 +6315,7 @@ function renderCroHistory() {
         description: job.description || undefined,
         code: job.code ? String(job.code) : undefined,
         chapter: 'Service',
+        lines: Array.isArray(job.lines) && job.lines.length ? job.lines : undefined,
       });
     });
   });

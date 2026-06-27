@@ -1,5 +1,25 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.45 — 2026-06-27
+
+### Fixed
+- **Adding a past job from Create RO now keeps its real labor and parts.** When
+  you picked a job from the History tab, the new repair order was filling in
+  Protractor's generic default for that job name (e.g. 0.6 hr spark plugs)
+  instead of the labor hours and parts from the exact past ticket you selected.
+  The selected job's actual lines are now carried straight onto the new RO, so a
+  2.2 hr job stays 2.2 hr with the parts that were really used.
+
+### Changed
+- **A "1 year off" match is no longer labeled "Exact Fit".** "Exact Fit" now
+  means the same model year (or a verified ACES catalog match). A strong match
+  on a different model year — which often has different labor times — is now
+  labeled **"Great Match"** so the confidence shown matches reality.
+- **History tab now shows the match score and color, plus the shop location.**
+  Each past-job result on the Create RO History tab now displays the colored
+  confidence badge, the match percentage, and the location identifier, matching
+  the main Jobs lookup.
+
 ## 1.27.44 — 2026-06-27
 
 ### Fixed

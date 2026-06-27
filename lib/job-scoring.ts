@@ -1045,7 +1045,17 @@ export function scoreJob(
     finalScore = Math.max(finalScore, SCORE_THRESHOLD_LIKELY);
   }
 
-  const band = getScoreBand(finalScore);
+  let band = getScoreBand(finalScore);
+
+  // "Exact Fit" must mean the same vehicle. A heuristic (non-ACES) match on a
+  // different model year — even ±1 year — can still score into the exact band,
+  // but it isn't a true exact fit and its labor/parts frequently differ
+  // materially, so labeling it "Exact Fit" misleads the advisor. Cap the label
+  // at "Great Match" unless the donor is the exact same model year. (True
+  // ACES-id matches return earlier via the short-circuit and are unaffected.)
+  if (band === "exact" && yearDiff !== 0) {
+    band = "likely";
+  }
 
   return {
     ...job,

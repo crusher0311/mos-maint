@@ -379,6 +379,7 @@ async function _GET(request: NextRequest) {
         code: job.job?.code,
         vehicle: job.vehicle,
         workOrderNumber: job.workOrderNumber,
+        lines,
         laborItems,
         parts: partLines.map((l: any) => {
           let retail = l.unitPrice || l.extendedPrice || 0;
