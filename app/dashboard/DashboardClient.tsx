@@ -14,6 +14,12 @@ import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
 import { isMobilePrintBrowser, openMobilePlaceholderWindow, navigateWindowToPdfBlob } from "@/lib/print-mobile";
 import { buildStickerPrintHtml } from "@/lib/print-sticker";
 import { getOELogoUrl } from "@/lib/oe-logos";
+import {
+  DEFAULT_INTERVALS,
+  getVisibleOilTypes,
+  resolveOilTypeLabel,
+  type IntervalsConfig,
+} from "@/lib/sticker-defaults";
 
 function getRowMake(r: any): string | undefined {
   const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
@@ -169,7 +175,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     mileage: number;
     x: number;
     y: number;
-    intervals: Record<string, { mileage: number; months: number }>;
+    intervals: Partial<IntervalsConfig>;
     useKilometers: boolean;
     customerName?: string;
     vehicleYear?: number;
@@ -241,18 +247,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         const config = settingsData.config || {};
-        const defaultIntervals = {
-          conventional: { mileage: 3000, months: 3 },
-          synthetic: { mileage: 5000, months: 6 },
-          euro: { mileage: 10000, months: 12 },
-          diesel: { mileage: 7500, months: 6 },
-        };
         setStickerContextMenu({
           vin,
           mileage: currentMileage,
           x: e.clientX,
           y: e.clientY,
-          intervals: config.intervals || defaultIntervals,
+          intervals: config.intervals || DEFAULT_INTERVALS,
           useKilometers: config.useKilometers || false,
           customerName,
           vehicleYear,
@@ -265,7 +265,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     }
   };
 
-  const handlePrintWithInterval = (intervalType: string) => {
+  const handlePrintWithInterval = (intervalType: keyof IntervalsConfig) => {
     if (!stickerContextMenu) return;
     const interval = stickerContextMenu.intervals[intervalType];
     if (!interval) return;
@@ -1534,42 +1534,21 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
             Oil Type Presets
           </div>
-          <button
-            onClick={() => handlePrintWithInterval('conventional')}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
-          >
-            <span>Conventional</span>
-            <span className="text-gray-400">
-              {stickerContextMenu.intervals.conventional?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.conventional?.months} mo
-            </span>
-          </button>
-          <button
-            onClick={() => handlePrintWithInterval('synthetic')}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
-          >
-            <span>Synthetic</span>
-            <span className="text-gray-400">
-              {stickerContextMenu.intervals.synthetic?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.synthetic?.months} mo
-            </span>
-          </button>
-          <button
-            onClick={() => handlePrintWithInterval('euro')}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
-          >
-            <span>European</span>
-            <span className="text-gray-400">
-              {stickerContextMenu.intervals.euro?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.euro?.months} mo
-            </span>
-          </button>
-          <button
-            onClick={() => handlePrintWithInterval('diesel')}
-            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
-          >
-            <span>Diesel</span>
-            <span className="text-gray-400">
-              {stickerContextMenu.intervals.diesel?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {stickerContextMenu.intervals.diesel?.months} mo
-            </span>
-          </button>
+          {getVisibleOilTypes(stickerContextMenu.intervals).map((oilType) => {
+            const interval = stickerContextMenu.intervals[oilType];
+            return (
+              <button
+                key={oilType}
+                onClick={() => handlePrintWithInterval(oilType)}
+                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex justify-between"
+              >
+                <span>{resolveOilTypeLabel(oilType, stickerContextMenu.intervals)}</span>
+                <span className="text-gray-400">
+                  {interval?.mileage?.toLocaleString()} {stickerContextMenu.useKilometers ? 'km' : 'mi'} / {interval?.months} mo
+                </span>
+              </button>
+            );
+          })}
           <div className="border-t border-gray-100 mt-1 pt-1">
             <button
               onClick={handleOpenCustomModal}
