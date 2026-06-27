@@ -6,6 +6,7 @@ import { createIngestionService } from "@/lib/integrations/core/normalized-inges
 import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking, runWithTekmetricAbortSignal } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
+import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
@@ -2029,12 +2030,30 @@ export async function GET(req: NextRequest) {
     }
     selectedShops = selectedShops.slice(0, effectiveMaxShops);
 
+    // Smart per-shop quiet-window gate (task #662). OFF by default: when the
+    // SMART_BACKFILL_TIMING flag is unset/off this does no DB read, no logging,
+    // and `shopsToRun === selectedShops` — byte-for-byte the previous behavior.
+    // In observe mode it logs what it *would* skip; only enforce mode drops
+    // out-of-quiet-window shops. The global SHOP_PARALLELISM cap below still
+    // applies regardless.
+    const quietGate = await prepareQuietWindowGate(
+      selectedShops.map((s) => Number(s.shopId)),
+    );
+    const shopsToRun =
+      quietGate.mode === "off"
+        ? selectedShops
+        : selectedShops.filter(
+            (shop) =>
+              !applyQuietWindowGate(quietGate, Number(shop.shopId), "tekmetric")
+                .shouldSkip,
+          );
+
     // Process shops in parallel up to SHOP_PARALLELISM. Per-shop concurrency
     // is already throttled by the pace config and the central Tekmetric
     // client tracks the global API budget.
     const shopLimit = pLimit(SHOP_PARALLELISM);
     const results = await Promise.all(
-      selectedShops.map(shop =>
+      shopsToRun.map(shop =>
         shopLimit(async () => {
           console.log(`[Tekmetric Backfill] Processing: ${shop.name} (Shop ${shop.shopId})`);
           try {

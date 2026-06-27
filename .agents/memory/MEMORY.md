@@ -61,3 +61,4 @@
 - [Mis-sync purge](shop-mis-sync-purge.md) — fixing a wrong provider connection: disconnect FIRST (stops cron inflow), purge children by parent REF in FK order, split the huge line_items DELETE.
 - [VHI entered-odometer anchor](vhi-entered-odometer-anchor.md) — on-screen RO odometer (param `odometer`, content-script `scrapedOdometer`) is TOP of VHI mileage waterfall w/ monotonicity guard; mirror-write to tekmetric_work_orders keeps partner/dashboard consistent. Tekmetric-only.
 - [Drizzle migration path](drizzle-migration-path.md) — `db:generate` is DEAD (journal drift since 0012); ship normalized-PG schema via hand-written `drizzle/00NN.sql` + mirror in `apply-normalized-migration.ts` (`db:migrate:normalized`).
+- [Smart backfill timing](smart-backfill-timing.md) — per-shop quiet-window gate from activity logs; `SMART_BACKFILL_TIMING` off/observe/enforce, OFF=no DB read/no log; flipping on is operator-gated like DB cutovers.

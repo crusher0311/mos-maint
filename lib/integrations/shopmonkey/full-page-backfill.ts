@@ -24,6 +24,7 @@ import {
   PROGRESS_COLLECTION,
 } from "./inflight-lock";
 import { getConfiguredShopmonkeyShops } from "./incremental-sync";
+import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import type { BackfillOptions } from "@/lib/integrations/core/types";
 
 export interface FullPageBackfillResult {
@@ -111,8 +112,25 @@ export async function runFullPageBackfillCycle(
     return { shopsConsidered: 0, results: [], skippedReason: "no Shopmonkey shops configured" };
   }
 
+  // Smart per-shop quiet-window gate (task #662). OFF by default: no DB read,
+  // no logging, no behavior change. Built once before the cycle loop.
+  const quietGate = await prepareQuietWindowGate(
+    shops.map((s) => Number(s.shopId)),
+  );
+
   const results: FullPageBackfillResult[] = [];
   for (const shop of shops) {
+    if (applyQuietWindowGate(quietGate, Number(shop.shopId), "shopmonkey").shouldSkip) {
+      results.push({
+        shopId: shop.shopId,
+        ran: false,
+        complete: false,
+        chunksProcessed: 0,
+        totalJobsIndexed: 0,
+        skippedReason: "deferred_quiet_window",
+      });
+      continue;
+    }
     results.push(await runFullPageBackfillChunk(shop.shopId, options));
   }
   return { shopsConsidered: shops.length, results };

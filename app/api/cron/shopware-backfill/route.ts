@@ -8,6 +8,7 @@ import {
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
 import { getPaceConfig, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
+import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -438,6 +439,12 @@ export async function GET(req: NextRequest) {
       .filter((n: number) => Number.isFinite(n)),
   });
 
+  // Smart per-shop quiet-window gate (task #662). OFF by default: no DB read,
+  // no logging, no behavior change. Built once per tick.
+  const quietGate = await prepareQuietWindowGate(
+    swShops.map((s: any) => Number(s.shopId)),
+  );
+
   const allResults: any[] = [];
 
   for (const shop of swShops) {
@@ -465,6 +472,15 @@ export async function GET(req: NextRequest) {
           continue;
         }
       }
+    }
+
+    // Quiet-window gate: defer this shop when it's outside its own quiet window
+    // (enforce mode only; observe just logs; off is a no-op). Placed after the
+    // already-completed / in-progress short-circuits so those still report their
+    // real status, and before any chunk work runs.
+    if (applyQuietWindowGate(quietGate, mosShopId, "shopware").shouldSkip) {
+      allResults.push({ shopId: mosShopId, status: "deferred_quiet_window" });
+      continue;
     }
 
     const yearsToBackfill = getBackfillYears();

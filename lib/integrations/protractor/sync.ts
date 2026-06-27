@@ -11,6 +11,7 @@ import {
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
+import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import pLimit from "p-limit";
 
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
@@ -1003,10 +1004,22 @@ export async function findAndResumeStaleBackfills(): Promise<{
   
   const configuredShopIds = new Set(protractorShops.map((s: any) => s.shopId));
   const shopIds: number[] = [];
-  
+
+  // Smart per-shop quiet-window gate (task #662). OFF by default: no DB read,
+  // no logging, no behavior change. Built once before the resume loop.
+  const quietGate = await prepareQuietWindowGate(
+    staleBackfills
+      .map((p: any) => Number(p.shopId))
+      .filter((n: number) => configuredShopIds.has(n)),
+  );
+
   for (const progress of staleBackfills) {
     if (!configuredShopIds.has(progress.shopId)) continue;
-    
+
+    if (applyQuietWindowGate(quietGate, Number(progress.shopId), "protractor").shouldSkip) {
+      continue;
+    }
+
     console.log(`[Backfill] Resuming stale backfill for shop ${progress.shopId}`);
     shopIds.push(progress.shopId);
     
