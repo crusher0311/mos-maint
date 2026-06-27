@@ -1,9 +1,41 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import bcrypt from "bcryptjs";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
+import { logAdminAction } from "@/lib/audit-log";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertUser as pgInsertUser } from "@/lib/data/repositories/pg/identity";
+import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MIN_PASSWORD_LENGTH = 12;
+const VALID_ROLES = ["owner", "admin", "manager", "user", "viewer"] as const;
+
+function validatePasswordStrength(password: string): string | null {
+  if (typeof password !== "string") {
+    return "Password must be a string.";
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
+  }
+  if (password.length > 200) {
+    return "Password is too long.";
+  }
+  const classes = [
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^a-zA-Z0-9]/.test(password),
+  ].filter(Boolean).length;
+  if (classes < 3) {
+    return "Password must include at least 3 of: lowercase, uppercase, digits, symbols.";
+  }
+  return null;
+}
 
 interface ShopInfo {
   shopId: number | string;
@@ -124,5 +156,188 @@ export async function GET() {
   } catch (err: any) {
     console.error("Platform users error:", err);
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!session.isPlatformAdmin) {
+    return NextResponse.json(
+      { error: "Forbidden - platform admin access required" },
+      { status: 403 }
+    );
+  }
+
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const email = String(body?.email || "").trim().toLowerCase();
+  const name = String(body?.name || "").trim();
+  const role = String(body?.role || "user").trim().toLowerCase();
+  const password: unknown = body?.password;
+  const sendWelcomeEmail = body?.sendWelcomeEmail === true;
+  const shopIdRaw = body?.shopId;
+
+  if (!email) {
+    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Please enter a valid email address" }, { status: 400 });
+  }
+  if (!(VALID_ROLES as readonly string[]).includes(role)) {
+    return NextResponse.json(
+      { error: `Role must be one of: ${VALID_ROLES.join(", ")}` },
+      { status: 400 }
+    );
+  }
+  if (shopIdRaw === undefined || shopIdRaw === null || String(shopIdRaw).trim() === "") {
+    return NextResponse.json({ error: "A target shop is required" }, { status: 400 });
+  }
+  const shopId = Number(shopIdRaw);
+  if (!Number.isFinite(shopId)) {
+    return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
+  }
+  if (typeof password !== "string" || !password) {
+    return NextResponse.json({ error: "Password is required" }, { status: 400 });
+  }
+  const strengthError = validatePasswordStrength(password);
+  if (strengthError) {
+    return NextResponse.json({ error: strengthError }, { status: 400 });
+  }
+
+  try {
+    const db = await getDb();
+
+    const existingUser = await db.collection("users").findOne({ emailLower: email });
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "A user with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    const shop = await db
+      .collection("shops")
+      .findOne({ shopId }, { projection: { shopId: 1, name: 1, locationIdentifier: 1 } });
+    if (!shop) {
+      return NextResponse.json({ error: "Selected shop not found" }, { status: 404 });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const now = new Date();
+    const userDoc: Record<string, any> = {
+      email,
+      emailLower: email,
+      passwordHash,
+      name: name || email.split("@")[0],
+      shopId,
+      role,
+      mustChangePassword: true,
+      createdAt: now,
+      updatedAt: now,
+      createdByAdminEmail: session.email,
+    };
+
+    assertNoLegacyPasswordField(userDoc);
+    const insertResult = await db.collection("users").insertOne(userDoc);
+    const newUserId = insertResult.insertedId.toString();
+
+    // Mirror the new user into the PG identity store so the next
+    // PG-canonical `getSession()` read can find them (same dual-write
+    // contract the admin reset-password route follows).
+    await dualWritePgIdentity("users.insert(admin create-user)", () =>
+      pgInsertUser({
+        id: newUserId,
+        email,
+        emailLower: email,
+        passwordHash,
+        role,
+        shopId,
+        shopIds: [],
+        isPlatformAdmin: false,
+        mustChangePassword: true,
+        profile: { name: userDoc.name },
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+
+    const shopName = shop.name || `Shop #${shopId}`;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
+    const loginUrl = `${baseUrl}/login`;
+    let emailSent = false;
+
+    if (sendWelcomeEmail) {
+      try {
+        const emailContent = makeCredentialsWelcomeEmail(
+          shopName,
+          email,
+          password,
+          loginUrl
+        );
+        await sendEmail({
+          to: email,
+          ...emailContent,
+          shopId,
+          emailKind: "credentials_welcome",
+        });
+        emailSent = true;
+        console.log(`[Platform Admin] Welcome email sent to ${email} for new user (shop ${shopId})`);
+      } catch (emailErr: any) {
+        console.error(`[Platform Admin] Failed to send welcome email to ${email}:`, emailErr?.message);
+      }
+    }
+
+    const headerStore = await headers();
+    await logAdminAction({
+      action: "user_created",
+      adminEmail: session.email,
+      targetShopId: shopId,
+      targetShopName: shopName,
+      targetUserEmail: email,
+      ipAddress:
+        headerStore.get("x-forwarded-for") ||
+        headerStore.get("x-real-ip") ||
+        undefined,
+      userAgent: headerStore.get("user-agent") || undefined,
+      details: {
+        role,
+        welcomeEmailRequested: sendWelcomeEmail,
+        welcomeEmailSent: emailSent,
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      user: {
+        _id: newUserId,
+        email,
+        name: userDoc.name,
+        role,
+        shopId,
+        shopName,
+      },
+      emailSent,
+      message: `User ${email} created${
+        sendWelcomeEmail
+          ? emailSent
+            ? ". Welcome email sent."
+            : ". Note: welcome email could not be sent."
+          : "."
+      }`,
+    });
+  } catch (err: any) {
+    console.error("Platform admin create user error:", err);
+    return NextResponse.json(
+      { error: err?.message || "Unknown error" },
+      { status: 500 }
+    );
   }
 }

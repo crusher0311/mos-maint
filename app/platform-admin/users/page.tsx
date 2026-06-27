@@ -68,6 +68,20 @@ export default function PlatformUsersPage() {
   const [resetPasswordResult, setResetPasswordResult] = useState<{ password: string; sessionsRevoked: number } | null>(null);
   const [resetPasswordCopied, setResetPasswordCopied] = useState(false);
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createShops, setCreateShops] = useState<{ shopId: string; name: string; locationIdentifier?: string | null }[]>([]);
+  const [createShopsLoading, setCreateShopsLoading] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createShopId, setCreateShopId] = useState("");
+  const [createRole, setCreateRole] = useState("user");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createSendEmail, setCreateSendEmail] = useState(true);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createResult, setCreateResult] = useState<{ email: string; message: string; password: string; emailSent: boolean } | null>(null);
+  const [createPasswordCopied, setCreatePasswordCopied] = useState(false);
+
   function generateStrongPassword(length = 18) {
     const lowers = "abcdefghijkmnopqrstuvwxyz";
     const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -172,6 +186,115 @@ export default function PlatformUsersPage() {
       }
       setResetPasswordCopied(true);
       setTimeout(() => setResetPasswordCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
+  }
+
+  async function openCreateDialog() {
+    setCreateOpen(true);
+    setCreateEmail("");
+    setCreateName("");
+    setCreateShopId("");
+    setCreateRole("user");
+    setCreatePassword("");
+    setCreateSendEmail(true);
+    setCreateError(null);
+    setCreateResult(null);
+    setCreatePasswordCopied(false);
+    if (createShops.length === 0) {
+      setCreateShopsLoading(true);
+      try {
+        const res = await fetch("/api/platform-admin/shops");
+        const data = await res.json();
+        const shops = (data.shops || []).map((s: any) => ({
+          shopId: String(s.shopId),
+          name: s.name || `Shop ${s.shopId}`,
+          locationIdentifier: s.locationIdentifier || null,
+        }));
+        shops.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        setCreateShops(shops);
+      } catch (err) {
+        console.error("Failed to load shops:", err);
+        setCreateError("Failed to load shop list");
+      } finally {
+        setCreateShopsLoading(false);
+      }
+    }
+  }
+
+  function closeCreateDialog() {
+    setCreateOpen(false);
+    setCreateError(null);
+    setCreateResult(null);
+    setCreateSubmitting(false);
+    setCreatePasswordCopied(false);
+  }
+
+  async function handleConfirmCreateUser() {
+    setCreateError(null);
+    const email = createEmail.trim().toLowerCase();
+    if (!email) {
+      setCreateError("Email is required.");
+      return;
+    }
+    if (!createShopId) {
+      setCreateError("Please select a shop.");
+      return;
+    }
+    if (!createPassword || createPassword.length < 12) {
+      setCreateError("Password must be at least 12 characters long.");
+      return;
+    }
+    setCreateSubmitting(true);
+    try {
+      const res = await fetch("/api/platform-admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          name: createName.trim(),
+          shopId: createShopId,
+          role: createRole,
+          password: createPassword,
+          sendWelcomeEmail: createSendEmail,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCreateError(data?.error || "Failed to create user");
+        return;
+      }
+      setCreateResult({
+        email,
+        message: data.message || "User created.",
+        password: createPassword,
+        emailSent: !!data.emailSent,
+      });
+      loadUsers();
+    } catch (err: any) {
+      setCreateError(err?.message || "Failed to create user");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
+  async function copyCreatePasswordToClipboard(value: string) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCreatePasswordCopied(true);
+      setTimeout(() => setCreatePasswordCopied(false), 2000);
     } catch (err) {
       console.error("Copy failed:", err);
     }
@@ -319,12 +442,21 @@ export default function PlatformUsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">All Users</h1>
           <p className="text-gray-600">View and manage all users across all shops</p>
         </div>
-        <button
-          onClick={loadUsers}
-          className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openCreateDialog}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[rgba(60,129,195,0.85)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Create User
+          </button>
+          <button
+            onClick={loadUsers}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4">
@@ -843,6 +975,210 @@ export default function PlatformUsersPage() {
               ) : (
                 <button
                   onClick={closeResetPasswordDialog}
+                  className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-[#3c81c3]" />
+                {createResult ? "User created" : "Create User"}
+              </h2>
+              <button
+                onClick={closeCreateDialog}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {!createResult ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                    <input
+                      type="email"
+                      value={createEmail}
+                      onChange={(e) => setCreateEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      autoComplete="off"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+                    <input
+                      type="text"
+                      value={createName}
+                      onChange={(e) => setCreateName(e.target.value)}
+                      placeholder="Full name (optional)"
+                      autoComplete="off"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Shop</label>
+                    <select
+                      value={createShopId}
+                      onChange={(e) => setCreateShopId(e.target.value)}
+                      disabled={createShopsLoading}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent disabled:opacity-50"
+                    >
+                      <option value="">
+                        {createShopsLoading ? "Loading shops…" : "Select a shop…"}
+                      </option>
+                      {createShops.map((shop) => (
+                        <option key={shop.shopId} value={shop.shopId}>
+                          {shop.name}{shop.locationIdentifier ? ` (${shop.locationIdentifier})` : ""} — ID: {shop.shopId}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
+                    <select
+                      value={createRole}
+                      onChange={(e) => setCreateRole(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="admin">Admin</option>
+                      <option value="manager">Manager</option>
+                      <option value="user">User</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={createPassword}
+                        onChange={(e) => setCreatePassword(e.target.value)}
+                        placeholder="Type a password or generate one"
+                        autoComplete="off"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreatePassword(generateStrongPassword(18));
+                          setCreateError(null);
+                        }}
+                        className="px-3 py-2 text-sm font-medium text-[#3c81c3] border border-[#3c81c3] rounded-lg hover:bg-[rgba(60,129,195,0.1)] transition-colors whitespace-nowrap"
+                      >
+                        Generate
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Must be at least 12 characters with a mix of upper/lower case, digits, and symbols. The user is prompted to change it on first login.
+                    </p>
+                  </div>
+
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createSendEmail}
+                      onChange={(e) => setCreateSendEmail(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-[#3c81c3] rounded border-gray-300 focus:ring-[#3c81c3]"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">Email credentials to user</div>
+                      <div className="text-xs text-gray-500">
+                        Sends the standard welcome email with login details. If off, share the password yourself.
+                      </div>
+                    </div>
+                  </label>
+
+                  {createError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                      {createError}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-green-900">{createResult.message}</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={createResult.email}
+                      className="w-full px-3 py-2 border border-gray-300 bg-gray-50 rounded-lg text-sm select-all"
+                    />
+                  </div>
+
+                  {!createResult.emailSent && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Password (shown once)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={createResult.password}
+                          className="flex-1 px-3 py-2 border border-gray-300 bg-gray-50 rounded-lg font-mono text-sm select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => copyCreatePasswordToClipboard(createResult.password)}
+                          className="px-3 py-2 text-sm font-medium text-white bg-[#3c81c3] rounded-lg hover:bg-[rgba(60,129,195,0.85)] transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          {createPasswordCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {createPasswordCopied ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                      <p className="text-xs text-amber-700 mt-2 font-medium">
+                        No welcome email was sent. Copy this password now and deliver it to the user securely.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+              {!createResult ? (
+                <>
+                  <button
+                    onClick={closeCreateDialog}
+                    disabled={createSubmitting}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmCreateUser}
+                    disabled={createSubmitting || !createEmail || !createShopId || !createPassword}
+                    className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {createSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Create User
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={closeCreateDialog}
                   className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] transition-colors"
                 >
                   Done
