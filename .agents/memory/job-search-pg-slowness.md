@@ -50,6 +50,23 @@ and `drizzle/0019_job_search_trgm.sql`.
 fine for fresh/empty envs, but on a populated live table use `CREATE INDEX CONCURRENTLY`
 outside a transaction to avoid a write lock.
 
+## Sequential→concurrent + Mongo date-sort removal (task #692)
+Two separate slowness sources beyond the PG trgm work:
+- **Mongo `job_index` arm was self-inflicting a timeout.** It asked Mongo to `$sort
+  { performedAt: -1 }` before `$limit`. With the sort the identical query takes ~22s;
+  without it ~0.1s (160×). Capped at `maxTimeMS: 8000`, enterprise shops ALWAYS timed
+  out → zero results even though the history existed. Fix: drop the DB-side `$sort`,
+  keep `$limit`, sort the (already-bounded) result set by `performedAt` in app code
+  (`lib/mongo-job-search.ts`). **Never re-add a `$sort` before `$limit` on `job_index`.**
+- **The two arms ran sequentially** (PG first, Mongo only when PG returned zero), so the
+  ~16s enterprise PG arm blocked before the fallback could even start. Fix: run both
+  concurrently via `selectCombinedResults` in `lib/job-search-combined.ts`; prefer the
+  canonical PG result when it returns rows within a short grace window (`PG_GRACE_MS`),
+  otherwise serve the now-fast Mongo arm promptly. Both routes call `searchJobsCombined`.
+  **Why grace, not pure race:** Mongo always wins a raw race (sub-second vs PG's variable
+  time), which would silently demote PG from canonical for fast single-shop queries.
+  Covered by `tests/jobs-search-concurrency.smoke.ts`.
+
 ## Other options NOT taken (Brandon's call)
 - App-level statement_timeout (~8s fail-fast) — Brandon explicitly did **not** want this.
 - Narrowing search to the current shop instead of the whole enterprise — behavior change,

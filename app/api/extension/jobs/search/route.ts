@@ -6,8 +6,7 @@ import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
-import { searchSupabaseServiceJobs } from "@/lib/supabase-job-search";
-import { searchMongoJobIndex } from "@/lib/mongo-job-search";
+import { searchJobsCombined } from "@/lib/job-search-combined";
 import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
 
 const MODEL_VARIANTS: Record<string, string[]> = {
@@ -251,54 +250,21 @@ async function _GET(request: NextRequest) {
 
     const { coreTokens } = buildSearchQuery(query);
 
-    // Job search reads exclusively from Supabase `normalized_service_jobs` (task #299).
-    // The legacy Mongo `job_index` and Mongo `normalized_*` aggregation arms (and the
-    // Mongo title-regex fallback) have been retired here in favor of a single PG query.
-    const supabaseResults = await searchSupabaseServiceJobs(
-      searchShopIds,
-      coreTokens,
-      make || undefined,
-      limit * 2,
-      model || undefined,
-    );
+    // Run the canonical Supabase (`normalized_service_jobs`) and legacy Mongo
+    // (`job_index`) arms concurrently. We prefer the canonical PG result when it
+    // returns rows quickly, but never block on the slow PG arm: the fast Mongo
+    // fallback is served promptly when PG is empty or slow. See task #692.
+    const combined = await searchJobsCombined(db, searchShopIds, coreTokens, {
+      make: make || undefined,
+      model: model || undefined,
+      supabaseLimit: limit * 2,
+      mongoLimit: limit * 5,
+    });
+    const jobs = combined.jobs;
+    const supabaseResults = { length: combined.supabaseCount };
+    const mongoResultCount = combined.mongoCount;
 
-    const seenKeys = new Set<string>();
-    const jobs: any[] = [];
-
-    for (const job of supabaseResults) {
-      const key = `${job.workOrderId || ''}-${job.job?.title || ''}-${job.sourceSystem}-pg`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        jobs.push(job);
-      }
-    }
-
-    // Fallback to legacy Mongo `job_index` arm when the primary Supabase arm
-    // returns nothing. PG ingestion of `normalized_service_jobs` was never
-    // wired up, so without this fallback both routes return empty for every
-    // shop. Once ingestion is fixed, supabaseResults will be non-empty and
-    // this branch becomes dormant. See task #359.
-    let mongoResultCount = 0;
-    if (supabaseResults.length === 0) {
-      const mongoResults = await searchMongoJobIndex(
-        db,
-        searchShopIds,
-        coreTokens,
-        make || undefined,
-        limit * 5,
-        model || undefined,
-      );
-      mongoResultCount = mongoResults.length;
-      for (const job of mongoResults) {
-        const key = `${job.workOrderId || ''}-${job.job?.title || ''}-mongo`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
-          jobs.push(job);
-        }
-      }
-    }
-
-    console.log(`[Jobs Search] Served from supabase=${supabaseResults.length} mongo=${mongoResultCount} total=${jobs.length}`);
+    console.log(`[Jobs Search] Served from supabase=${combined.supabaseCount} mongo=${mongoResultCount} total=${jobs.length} source=${combined.source}`);
 
     const { targetSpecs, jobSpecsMap } = await resolveDataOneSpecs(vin || null, jobs);
     
