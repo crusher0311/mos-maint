@@ -2455,6 +2455,16 @@ async function handleAddJob(job) {
         endpoint: `/api/extension/jobs/add-to-ro`,
         options: {
           method: 'POST',
+          // Task #661 (follows #657): like the canned add-to-RO paths,
+          // this Protractor custom-job add runs several slow upstream
+          // calls server-side (open-WO search, vehicle-by-VIN, fetch
+          // WOs, then write), so a valid session can straddle a
+          // transient MOS-auth blip and surface a false "session may
+          // have expired" prompt mid-shift. Widen the 401 retry budget
+          // to ride that blip out. Safe because a 401 is rejected at
+          // auth time, before any write — and a sustained TOKEN_INVALID
+          // still clears the token once the budget is exhausted.
+          authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
           body: JSON.stringify({
             shopId: Number(mosShopId),
             roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
