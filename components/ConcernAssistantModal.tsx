@@ -13,6 +13,7 @@ import {
   HelpCircle,
   X
 } from "lucide-react";
+import { dedupeFollowUpQuestions } from "@/lib/concernSkipLearning";
 
 interface Exchange {
   question: string;
@@ -49,6 +50,8 @@ export default function ConcernAssistantModal({
   const [stage, setStage] = useState<Stage>("start");
   const [concern, setConcern] = useState("");
   const [questions, setQuestions] = useState<string[]>([]);
+  const [askedQuestions, setAskedQuestions] = useState<string[]>([]);
+  const [noMoreQuestions, setNoMoreQuestions] = useState(false);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [cleanedText, setCleanedText] = useState("");
@@ -67,6 +70,8 @@ export default function ConcernAssistantModal({
   function reset() {
     setConcern("");
     setQuestions([]);
+    setAskedQuestions([]);
+    setNoMoreQuestions(false);
     setExchanges([]);
     setAnswers({});
     setCleanedText("");
@@ -116,6 +121,8 @@ export default function ConcernAssistantModal({
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed to generate questions");
       setQuestions(data.questions);
+      setAskedQuestions(data.questions || []);
+      setNoMoreQuestions(false);
       setConversationId(data.conversationId);
       setStage("questions");
     } catch (err: any) {
@@ -133,6 +140,7 @@ export default function ConcernAssistantModal({
     }
     setLoading(true);
     setError("");
+    setNoMoreQuestions(false);
     const allExchanges = [...exchanges, ...answered.filter(a => !exchanges.some(e => e.question === a.question))];
     setExchanges(allExchanges);
     const roundResults = gatherRoundResults();
@@ -150,7 +158,18 @@ export default function ConcernAssistantModal({
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Failed to get more questions");
-      setQuestions(data.questions);
+      // Client-side safety net: even though the server already dedupes, filter
+      // again against every question shown so far so a reworded re-ask never
+      // slips through (Task #682).
+      const priorAsked = [...askedQuestions, ...allExchanges.map(e => e.question)];
+      const fresh = dedupeFollowUpQuestions(data.questions || [], priorAsked);
+      if (data.noMoreQuestions || fresh.length === 0) {
+        setQuestions([]);
+        setNoMoreQuestions(true);
+      } else {
+        setQuestions(fresh);
+        setAskedQuestions(prev => [...prev, ...fresh]);
+      }
       setAnswers({});
     } catch (err: any) {
       setError(err.message);
@@ -334,6 +353,13 @@ export default function ConcernAssistantModal({
                   ))}
                 </div>
 
+                {noMoreQuestions && questions.length === 0 && (
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+                    <CheckCircle className="w-4 h-4 text-gray-400" />
+                    No further questions — you&apos;ve covered everything in the guide. Click &quot;Finish &amp; Generate Write-Up&quot; when ready.
+                  </div>
+                )}
+
                 {exchanges.length > 0 && (
                   <p className="text-xs text-gray-400 mt-2">Previous answers recorded: {exchanges.length}</p>
                 )}
@@ -397,8 +423,9 @@ export default function ConcernAssistantModal({
           <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
             <button
               onClick={handleReview}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white disabled:opacity-50 transition-colors text-sm font-medium"
+              disabled={loading || noMoreQuestions}
+              title={noMoreQuestions ? "No further questions to ask" : undefined}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
               More Questions

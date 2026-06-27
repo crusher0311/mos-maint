@@ -9,6 +9,7 @@ import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/pro
 import { SYMPTOM_QUESTION_GUIDE } from "@/lib/symptomQuestionGuide";
 import {
   biasSymptomGuide,
+  dedupeFollowUpQuestions,
   getSkipHints,
   inferSymptomCategory,
   recordRoundResults,
@@ -59,6 +60,57 @@ Return ONLY the cleaned paragraph, no extra commentary.`;
 }
 
 const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Gather every question that has ever been shown in this conversation so a
+ * fresh "More Questions" round can be hard-deduped against it (Task #682).
+ * Combines the accumulated answered exchanges, the current round's results,
+ * and the conversation's stored round history (which already includes the
+ * just-pushed current round).
+ */
+async function collectAskedQuestions(opts: {
+  db: any;
+  conversationId?: string;
+  answeredQuestions?: { question?: string }[];
+  roundResults?: { question?: string }[];
+}): Promise<string[]> {
+  const { db, conversationId, answeredQuestions, roundResults } = opts;
+  const asked: string[] = [];
+
+  if (Array.isArray(answeredQuestions)) {
+    for (const a of answeredQuestions) {
+      if (a?.question) asked.push(String(a.question));
+    }
+  }
+  if (Array.isArray(roundResults)) {
+    for (const r of roundResults) {
+      if (r?.question) asked.push(String(r.question));
+    }
+  }
+
+  if (conversationId) {
+    try {
+      const { ObjectId } = await import("mongodb");
+      const conv = await db.collection("concern_conversations").findOne(
+        { _id: new ObjectId(conversationId) },
+        { projection: { roundResults: 1 } },
+      );
+      const rounds = (conv as any)?.roundResults;
+      if (Array.isArray(rounds)) {
+        for (const round of rounds) {
+          for (const item of round?.results || []) {
+            if (item?.question) asked.push(String(item.question));
+          }
+        }
+      }
+    } catch {
+      // Best-effort: a bad/aged conversationId just means we dedup against
+      // the request-provided history only.
+    }
+  }
+
+  return asked;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -194,10 +246,23 @@ export async function POST(request: NextRequest) {
       trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:review", completion, elapsed);
 
       const responseText = completion.choices[0]?.message?.content || "";
-      const questions = responseText
+      const rawQuestions = responseText
         .split('\n')
         .map(line => line.replace(/^\d+\.\s*/, '').replace(/^-\s*/, '').replace(/^Q:\s*/i, '').trim())
         .filter(line => line.length > 5 && line.endsWith('?'));
+
+      // Hard-enforce no-repeats (Task #682). The model is only softly asked
+      // to avoid repeats, so filter against every question ever shown in this
+      // conversation: the accumulated answered exchanges, the current round's
+      // results, and the conversation's stored round history.
+      const alreadyAsked = await collectAskedQuestions({
+        db,
+        conversationId,
+        answeredQuestions,
+        roundResults,
+      });
+      const questions = dedupeFollowUpQuestions(rawQuestions, alreadyAsked);
+      const noMoreQuestions = questions.length === 0;
 
       if (conversationId) {
         const { ObjectId } = await import("mongodb");
@@ -208,7 +273,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ ok: true, questions });
+      return NextResponse.json({ ok: true, questions, noMoreQuestions });
     }
 
     if (action === "cleanup") {

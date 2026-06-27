@@ -57,6 +57,35 @@ export function normalizeQuestion(q: string): string {
     .trim();
 }
 
+/**
+ * Filter a freshly generated follow-up question set so it never repeats a
+ * question the advisor was already asked (across all prior rounds) and never
+ * repeats a question within the returned set itself. Matching uses
+ * `normalizeQuestion` so reworded / re-cased / re-punctuated near-duplicates
+ * are also dropped — the model is only *softly* told to avoid repeats, so
+ * this is the hard enforcement (Task #682).
+ */
+export function dedupeFollowUpQuestions(
+  newQuestions: string[],
+  alreadyAsked: string[],
+): string[] {
+  const seen = new Set<string>();
+  for (const q of alreadyAsked || []) {
+    const norm = normalizeQuestion(String(q || ""));
+    if (norm) seen.add(norm);
+  }
+  const out: string[] = [];
+  for (const q of newQuestions || []) {
+    const text = String(q || "");
+    const norm = normalizeQuestion(text);
+    if (!norm) continue;
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(text);
+  }
+  return out;
+}
+
 const CATEGORY_KEYWORDS: { category: string; keywords: string[] }[] = [
   { category: "CHECK ENGINE LIGHT", keywords: ["check engine", "cel", "engine light", "warning light"] },
   { category: "BATTERY / ALTERNATOR", keywords: ["battery", "alternator", "won't start", "wont start", "will not start", "no start", "jump start", "dead battery"] },

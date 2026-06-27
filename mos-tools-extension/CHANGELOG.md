@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.35 — 2026-06-27
+
+### Fixed
+- **No more duplicate follow-up questions in the Concern Assistant.** When you
+  clicked **More Questions**, the new set sometimes repeated questions you'd
+  already been asked or answered, making the advisor re-cover the same ground.
+  Repeats are now filtered out — both against everything asked in earlier rounds
+  and within each new set — using a forgiving match that also catches reworded,
+  re-cased, or re-punctuated near-duplicates. When there's nothing new left to
+  ask, you'll see a clear "No further questions" message and the **More
+  Questions** button is disabled, so you can go straight to Finish.
+
 ## 1.27.34 — 2026-06-27
 
 ### Fixed

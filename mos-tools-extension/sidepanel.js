@@ -121,9 +121,45 @@ let concernState = {
   concern: '',
   conversationId: null,
   questions: [],
+  askedQuestions: [],
+  noMoreQuestions: false,
   exchanges: [],
   cleanedText: ''
 };
+
+// Mirror of lib/concernSkipLearning.ts normalizeQuestion — keep in sync so the
+// extension client-side dedup matches the server (Task #682).
+function normalizeConcernQuestion(q) {
+  if (!q) return '';
+  return String(q)
+    .toLowerCase()
+    .replace(/^\s*\d+[.)]\s*/, '')
+    .replace(/^\s*[-*]\s*/, '')
+    .replace(/[\s\u00a0]+/g, ' ')
+    .trim()
+    .replace(/[?!.,;:"'()\[\]]+$/g, '')
+    .trim();
+}
+
+// Drop any new question that repeats one already asked (across all rounds) or
+// repeats within the returned set itself. Client-side safety net on top of the
+// server-side dedup (Task #682).
+function dedupeConcernQuestions(newQuestions, alreadyAsked) {
+  const seen = new Set();
+  (alreadyAsked || []).forEach(q => {
+    const norm = normalizeConcernQuestion(q);
+    if (norm) seen.add(norm);
+  });
+  const out = [];
+  (newQuestions || []).forEach(q => {
+    const text = String(q || '');
+    const norm = normalizeConcernQuestion(text);
+    if (!norm || seen.has(norm)) return;
+    seen.add(norm);
+    out.push(text);
+  });
+  return out;
+}
 
 // When true, the Concern Assistant was launched from the Create RO flow, so its
 // finished write-up should flow back into the new repair order instead of being
@@ -4437,6 +4473,8 @@ async function handleConcernSubmit() {
     concernState.concern = concern;
     concernState.conversationId = response.conversationId;
     concernState.questions = response.questions || [];
+    concernState.askedQuestions = [...(response.questions || [])];
+    concernState.noMoreQuestions = false;
     concernState.exchanges = [];
 
     renderConcernQuestions(concernState.questions);
@@ -4455,6 +4493,12 @@ function renderConcernQuestions(questions) {
   const container = elements.concernQuestions;
   container.innerHTML = '';
 
+  // Any fresh round means "More Questions" is usable again.
+  if (elements.concernReviewBtn) {
+    elements.concernReviewBtn.disabled = false;
+    elements.concernReviewBtn.title = '';
+  }
+
   questions.forEach((q, i) => {
     const existingExchange = concernState.exchanges.find(e => e.question === q);
     const div = document.createElement('div');
@@ -4465,6 +4509,36 @@ function renderConcernQuestions(questions) {
     `;
     container.appendChild(div);
   });
+}
+
+// Render the "no further questions" state in the conversation pane (Task #682).
+// Keeps any already-answered questions visible so the advisor can still review
+// and Finish, and disables the "More Questions" button.
+function renderConcernNoMoreQuestions() {
+  const container = elements.concernQuestions;
+  container.innerHTML = '';
+
+  // Re-show answered questions (read-only context) so the advisor keeps the
+  // conversation in view.
+  concernState.exchanges.forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'concern-question-item';
+    div.innerHTML = `
+      <label class="concern-question-label">Q${i + 1}: ${escapeHtml(e.question)}</label>
+      <textarea class="concern-answer-input" data-question="${escapeHtml(e.question)}" rows="2" placeholder="Customer's response...">${escapeHtml(e.response)}</textarea>
+    `;
+    container.appendChild(div);
+  });
+
+  const notice = document.createElement('div');
+  notice.className = 'concern-no-more-questions';
+  notice.textContent = "No further questions — you've covered everything in the guide. Click Finish to generate the write-up.";
+  container.appendChild(notice);
+
+  if (elements.concernReviewBtn) {
+    elements.concernReviewBtn.disabled = true;
+    elements.concernReviewBtn.title = 'No further questions to ask';
+  }
 }
 
 function gatherAnsweredQuestions() {
@@ -4529,16 +4603,31 @@ async function handleConcernReview() {
 
     if (!response.ok) throw new Error(response.error || 'Failed to get more questions');
 
-    const newQuestions = response.questions || [];
-    if (newQuestions.length === 0) {
-      showNotification('No additional questions needed. Ready to finish.', 'info');
-    } else {
-      concernState.questions = [...concernState.questions, ...newQuestions];
-    }
+    // Client-side safety net on top of the server-side dedup (Task #682):
+    // filter the fresh set against every question ever shown so far so a
+    // reworded re-ask can never slip through.
+    const priorAsked = [
+      ...(concernState.askedQuestions || []),
+      ...concernState.exchanges.map(e => e.question),
+    ];
+    const newQuestions = dedupeConcernQuestions(response.questions || [], priorAsked);
 
-    renderConcernQuestions([...concernState.questions.filter(q =>
-      !concernState.exchanges.some(e => e.question === q)
-    ), ...newQuestions]);
+    if (response.noMoreQuestions || newQuestions.length === 0) {
+      concernState.noMoreQuestions = true;
+      renderConcernNoMoreQuestions();
+      showNotification('No additional questions — ready to finish.', 'info');
+    } else {
+      concernState.noMoreQuestions = false;
+      concernState.questions = [...concernState.questions, ...newQuestions];
+      concernState.askedQuestions = [...(concernState.askedQuestions || []), ...newQuestions];
+      // Show only questions not yet answered, plus the fresh deduped set.
+      renderConcernQuestions([
+        ...concernState.questions.filter(q =>
+          !concernState.exchanges.some(e => e.question === q) && !newQuestions.includes(q)
+        ),
+        ...newQuestions,
+      ]);
+    }
 
     elements.concernLoading.classList.add('hidden');
     elements.concernConversation.classList.remove('hidden');
@@ -4656,6 +4745,8 @@ function handleConcernNew() {
     concern: '',
     conversationId: null,
     questions: [],
+    askedQuestions: [],
+    noMoreQuestions: false,
     exchanges: [],
     cleanedText: ''
   };
@@ -4664,6 +4755,10 @@ function handleConcernNew() {
   elements.concernQuestions.innerHTML = '';
   elements.concernCleanedText.textContent = '';
   elements.concernSubmitBtn.disabled = false;
+  if (elements.concernReviewBtn) {
+    elements.concernReviewBtn.disabled = false;
+    elements.concernReviewBtn.title = '';
+  }
 
   // Back to the standalone behaviour (inject into an open RO) until the Create
   // RO flow re-launches the assistant.
