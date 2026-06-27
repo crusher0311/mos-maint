@@ -10,6 +10,11 @@ import { trackViewedVin, getCachedPlan } from "@/lib/plan-cache";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
+import {
+  detectMileageDiscrepancy,
+  buildMileageDiscrepancyFlag,
+  shopHistoryLabelFromProvider,
+} from "@/lib/plan-build/mileage-discrepancy";
 import { buildReportUrl } from "@/lib/report-share";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
 import { LIFETIME_FLUID_SERVICE_KEYS } from "@/lib/service-keys";
@@ -1624,6 +1629,14 @@ async function _GET(request: NextRequest) {
     let mileageEstimated = false;
     let mileageEstimateDetails: any = null;
 
+    // Task #649: capture the best already-known reading BEFORE the entered
+    // odometer overwrites `mileage` below. This is the most-recent open-RO /
+    // cached WO odometer the route resolved above and serves as the "last
+    // record" we compare the advisor's typed value against for the
+    // disagreement warning. (The monotonicity guard may discard a too-low
+    // entered value, so we must remember the prior reading independently.)
+    const priorKnownMileage = typeof mileage === "number" && mileage > 0 ? mileage : null;
+
     // Task #645: anchor on the odometer the advisor typed on the open RO.
     // It sits at the top of the mileage waterfall — above the cached/live WO
     // odometer (already resolved into `mileage` above), the CARFAX estimate
@@ -1710,6 +1723,46 @@ async function _GET(request: NextRequest) {
         console.log(`[Extension] Using vehicles snapshot mileage ${mileage} for ${vin} (open RO + CARFAX unavailable)`);
       }
     }
+
+    // Task #649: warn the advisor when the odometer they typed on the open RO
+    // disagrees sharply with what we already have on record. Now that the VHI
+    // anchors on the entered value (Task #645), a typo (a dropped digit, or a
+    // value far below the last reading) drives the overdue/due-soon math
+    // directly. This mirrors the partner endpoint's `mileage_discrepancy`
+    // signal (lib/plan-build/open-ro-mileage.ts `pickMileageInput`) — it fires
+    // when the entered reading is below a higher prior reading beyond the
+    // existing tolerance, since an odometer is monotonic. We compare against
+    // the entered value itself (not the resolved `mileage`, which the
+    // monotonicity guard may have left at the higher prior reading). The flag
+    // is advisory only; the math still runs on the anchored mileage.
+    let mileageDiscrepancyFlag: ReturnType<typeof buildMileageDiscrepancyFlag> | null = null;
+    if (enteredOdometer != null) {
+      const shopHistoryReadings = priorKnownMileage != null
+        ? [{ mileage: priorKnownMileage, date: currentRoDate ?? null }]
+        : [];
+      const snapshotMiles = vehicle?.currentMileage || vehicle?.mileage || vehicle?.lastMileage || null;
+      const carfaxReadings: { odometer: number; date: string | null }[] = [];
+      if (snapshotMiles && snapshotMiles > 0) carfaxReadings.push({ odometer: snapshotMiles, date: null });
+      if (mileageEstimateDetails?.lastRecordedMileage) {
+        carfaxReadings.push({
+          odometer: mileageEstimateDetails.lastRecordedMileage,
+          date: mileageEstimateDetails.lastRecordedDate ?? null,
+        });
+      }
+      const discrepancy = detectMileageDiscrepancy({
+        currentMiles: enteredOdometer,
+        shopHistory: shopHistoryReadings,
+        carfaxRecords: carfaxReadings,
+        shopHistoryLabel: shopHistoryLabelFromProvider(provider),
+      });
+      if (discrepancy) {
+        mileageDiscrepancyFlag = buildMileageDiscrepancyFlag(discrepancy);
+        console.log(
+          `[Extension] Mileage discrepancy for ${vin ?? roId}: entered ${enteredOdometer} vs ${discrepancy.priorSource} ${discrepancy.priorMiles} (gap ${discrepancy.gapMiles})`,
+        );
+      }
+    }
+    const mileageFlags = mileageDiscrepancyFlag ? [mileageDiscrepancyFlag] : [];
 
     if (!vin) {
       return NextResponse.json({
@@ -2049,6 +2102,7 @@ async function _GET(request: NextRequest) {
         mileage: cachedPlan.plan.currentMiles || mileage,
         mileageEstimated,
         mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
+        flags: mileageFlags,
         ...plan,
         deferredWork: cachedPlan.plan.deferredWork || [],
         fromDashboardCache: true,
@@ -2365,6 +2419,7 @@ async function _GET(request: NextRequest) {
       mileage,
       mileageEstimated,
       mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
+      flags: mileageFlags,
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended,

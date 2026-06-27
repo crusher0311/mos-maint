@@ -160,6 +160,7 @@ const elements = {
   vehicleDisplay: document.getElementById('vehicle-display'),
   roDisplay: document.getElementById('ro-display'),
   mileageDisplay: document.getElementById('mileage-display'),
+  mileageWarning: document.getElementById('mileage-warning'),
   
   // Tabs
   tabBtns: document.querySelectorAll('.tab-btn'),
@@ -862,10 +863,14 @@ function updateContext(context) {
       } else {
         elements.mileageDisplay.classList.add('hidden');
       }
+      // Task #649: cached context carries no discrepancy flag; clear any stale
+      // warning until the fresh plan response decides whether to re-show it.
+      elements.mileageWarning?.classList.add('hidden');
     } else {
       elements.vehicleDisplay.textContent = '';
       elements.roDisplay.textContent = '';
       elements.mileageDisplay.classList.add('hidden');
+      elements.mileageWarning?.classList.add('hidden');
     }
     
     fetchShopFeatures();
@@ -1284,6 +1289,33 @@ async function loadPlan(forceRefresh = false) {
   }
 }
 
+// Task #649: render a subtle, non-blocking odometer-disagreement warning.
+// The plan endpoint emits a `mileage_discrepancy` flag (same contract as the
+// partner VHI endpoint) when the advisor-entered odometer is below a higher
+// recorded reading beyond tolerance — a likely typo (dropped digit) that would
+// otherwise silently skew the overdue/due-soon math. We show what was entered
+// vs the last record so the advisor can confirm or correct.
+function renderMileageWarning(data) {
+  const el = elements.mileageWarning;
+  if (!el) return;
+  const flag = Array.isArray(data && data.flags)
+    ? data.flags.find(f => f && f.code === 'mileage_discrepancy')
+    : null;
+  if (!flag || !flag.details) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    el.title = '';
+    return;
+  }
+  const d = flag.details;
+  const entered = typeof d.currentMiles === 'number' ? d.currentMiles.toLocaleString() : d.currentMiles;
+  const prior = typeof d.priorMiles === 'number' ? d.priorMiles.toLocaleString() : d.priorMiles;
+  const unit = getDistLabel();
+  el.textContent = `Entered ${entered} ${unit} — last record ${prior} ${unit}${d.priorSource ? ` (${d.priorSource})` : ''}. Confirm the odometer.`;
+  el.title = flag.message || '';
+  el.classList.remove('hidden');
+}
+
 function renderPlan(data, reqRoId, reqShopId) {
   // Stale-response guard: if the user has switched to a different RO (or shop —
   // roIds can collide across shops/providers) while this response or background
@@ -1346,6 +1378,9 @@ function renderPlan(data, reqRoId, reqShopId) {
       elements.mileageDisplay.title = '';
     }
   }
+  // Task #649: subtle, non-blocking warning when the entered odometer
+  // disagrees sharply with the vehicle's recorded history.
+  renderMileageWarning(data);
   // Update RO number from API response (repairOrderNumber is the friendly number)
   if (data.repairOrderNumber && currentContext) {
     currentContext.roNumber = String(data.repairOrderNumber);

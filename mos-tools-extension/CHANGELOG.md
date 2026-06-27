@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.33 — 2026-06-26
+
+### Added
+- **A heads-up when the odometer you entered looks off.** Now that the VHI runs
+  on the odometer typed on the open repair order, a slip — like a dropped digit
+  that lands well below the vehicle's last known reading — would quietly skew the
+  overdue/due-soon math. Detect Dog now shows a small, non-blocking note under
+  the mileage (e.g. "Entered 11,950 mi — last record 116,266 mi") so you can
+  confirm or correct the reading before it affects the plan. The math still runs
+  on the entered value; the note is just a nudge.
+
 ## 1.27.32 — 2026-06-26
 
 ### Fixed
