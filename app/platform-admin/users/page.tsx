@@ -74,6 +74,8 @@ export default function PlatformUsersPage() {
   const [createEmail, setCreateEmail] = useState("");
   const [createName, setCreateName] = useState("");
   const [createShopId, setCreateShopId] = useState("");
+  const [createShopIds, setCreateShopIds] = useState<string[]>([]);
+  const [createLocationSearch, setCreateLocationSearch] = useState("");
   const [createRole, setCreateRole] = useState("user");
   const [createPassword, setCreatePassword] = useState("");
   const [createSendEmail, setCreateSendEmail] = useState(true);
@@ -196,6 +198,8 @@ export default function PlatformUsersPage() {
     setCreateEmail("");
     setCreateName("");
     setCreateShopId("");
+    setCreateShopIds([]);
+    setCreateLocationSearch("");
     setCreateRole("user");
     setCreatePassword("");
     setCreateSendEmail(true);
@@ -231,6 +235,14 @@ export default function PlatformUsersPage() {
     setCreatePasswordCopied(false);
   }
 
+  function toggleCreateShopSelection(shopId: string) {
+    setCreateShopIds((prev) =>
+      prev.includes(shopId)
+        ? prev.filter((id) => id !== shopId)
+        : [...prev, shopId]
+    );
+  }
+
   async function handleConfirmCreateUser() {
     setCreateError(null);
     const email = createEmail.trim().toLowerCase();
@@ -255,6 +267,7 @@ export default function PlatformUsersPage() {
           email,
           name: createName.trim(),
           shopId: createShopId,
+          shopIds: createShopIds.filter((id) => id !== createShopId),
           role: createRole,
           password: createPassword,
           sendWelcomeEmail: createSendEmail,
@@ -1032,7 +1045,11 @@ export default function PlatformUsersPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Shop</label>
                     <select
                       value={createShopId}
-                      onChange={(e) => setCreateShopId(e.target.value)}
+                      onChange={(e) => {
+                        const newPrimary = e.target.value;
+                        setCreateShopId(newPrimary);
+                        setCreateShopIds((prev) => prev.filter((id) => id !== newPrimary));
+                      }}
                       disabled={createShopsLoading}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent disabled:opacity-50"
                     >
@@ -1045,6 +1062,103 @@ export default function PlatformUsersPage() {
                         </option>
                       ))}
                     </select>
+                    <p className="text-xs text-gray-500 mt-1">This is the user's main shop for login.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Additional locations (optional)
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Give this user access to more shops beyond their primary. You can also change these later by editing the user.
+                    </p>
+                    <div className="border border-gray-200 rounded-lg p-2 space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search locations..."
+                          value={createLocationSearch}
+                          onChange={(e) => setCreateLocationSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] focus:border-transparent"
+                        />
+                      </div>
+                      <div className="max-h-[160px] overflow-y-auto space-y-1">
+                        {createShops
+                          .filter((shop) => shop.shopId !== createShopId)
+                          .filter(
+                            (shop) =>
+                              !createLocationSearch ||
+                              shop.name.toLowerCase().includes(createLocationSearch.toLowerCase()) ||
+                              shop.shopId.toLowerCase().includes(createLocationSearch.toLowerCase())
+                          )
+                          .map((shop) => (
+                            <div
+                              key={shop.shopId}
+                              className={`flex items-center gap-3 p-2 rounded-lg ${createShopIds.includes(shop.shopId) ? 'bg-[rgba(60,129,195,0.1)]' : 'hover:bg-gray-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={createShopIds.includes(shop.shopId)}
+                                onChange={() => toggleCreateShopSelection(shop.shopId)}
+                                className="w-4 h-4 text-[#3c81c3] rounded border-gray-300 focus:ring-[#3c81c3]"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-gray-900 text-sm truncate">
+                                  {shop.name}
+                                  {shop.locationIdentifier && (
+                                    <span className="ml-1 text-gray-500">({shop.locationIdentifier})</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-400">ID: {shop.shopId}</div>
+                            </div>
+                          ))}
+                        {createShops
+                          .filter((shop) => shop.shopId !== createShopId)
+                          .filter(
+                            (shop) =>
+                              !createLocationSearch ||
+                              shop.name.toLowerCase().includes(createLocationSearch.toLowerCase()) ||
+                              shop.shopId.toLowerCase().includes(createLocationSearch.toLowerCase())
+                          ).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-2">
+                            {createShopsLoading
+                              ? "Loading shops…"
+                              : createLocationSearch
+                                ? "No locations match your search"
+                                : "No other locations"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {createShopIds.length > 0 && (
+                      <div className="mt-2">
+                        <div className="text-xs font-medium text-gray-700 mb-1.5">
+                          Selected additional locations ({createShopIds.length})
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {createShopIds.map((shopId) => {
+                            const shop = createShops.find((s) => s.shopId === shopId);
+                            return (
+                              <span
+                                key={shopId}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(60,129,195,0.15)] text-[#3c81c3] rounded-full text-xs"
+                              >
+                                {shop?.name || `Shop ${shopId}`}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCreateShopSelection(shopId)}
+                                  className="hover:text-[#3c81c3]"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>

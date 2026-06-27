@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
   const password: unknown = body?.password;
   const sendWelcomeEmail = body?.sendWelcomeEmail === true;
   const shopIdRaw = body?.shopId;
+  const shopIdsRaw = body?.shopIds;
 
   if (!email) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -203,6 +204,19 @@ export async function POST(request: NextRequest) {
   const shopId = Number(shopIdRaw);
   if (!Number.isFinite(shopId)) {
     return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
+  }
+  let extraShopIds: string[] = [];
+  if (shopIdsRaw !== undefined && shopIdsRaw !== null) {
+    if (!Array.isArray(shopIdsRaw)) {
+      return NextResponse.json({ error: "shopIds must be an array" }, { status: 400 });
+    }
+    extraShopIds = Array.from(
+      new Set(
+        shopIdsRaw
+          .map((id: any) => String(id).trim())
+          .filter((id: string) => id !== "" && id !== String(shopId))
+      )
+    );
   }
   if (typeof password !== "string" || !password) {
     return NextResponse.json({ error: "Password is required" }, { status: 400 });
@@ -230,6 +244,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Selected shop not found" }, { status: 404 });
     }
 
+    if (extraShopIds.length > 0) {
+      const numericExtraIds = extraShopIds
+        .map((id) => Number(id))
+        .filter((n) => Number.isFinite(n));
+      const foundExtraShops = await db
+        .collection("shops")
+        .find({ shopId: { $in: numericExtraIds } })
+        .project({ shopId: 1 })
+        .toArray();
+      const foundExtraSet = new Set(foundExtraShops.map((s) => String(s.shopId)));
+      const missingExtra = extraShopIds.filter((id) => !foundExtraSet.has(id));
+      if (missingExtra.length > 0) {
+        return NextResponse.json(
+          { error: `Some selected shops were not found: ${missingExtra.join(", ")}` },
+          { status: 404 }
+        );
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
     const now = new Date();
     const userDoc: Record<string, any> = {
@@ -238,6 +271,7 @@ export async function POST(request: NextRequest) {
       passwordHash,
       name: name || email.split("@")[0],
       shopId,
+      shopIds: extraShopIds,
       role,
       mustChangePassword: true,
       createdAt: now,
@@ -260,7 +294,7 @@ export async function POST(request: NextRequest) {
         passwordHash,
         role,
         shopId,
-        shopIds: [],
+        shopIds: extraShopIds,
         isPlatformAdmin: false,
         mustChangePassword: true,
         profile: { name: userDoc.name },
@@ -311,6 +345,8 @@ export async function POST(request: NextRequest) {
         role,
         welcomeEmailRequested: sendWelcomeEmail,
         welcomeEmailSent: emailSent,
+        additionalShopIds: extraShopIds,
+        additionalShopCount: extraShopIds.length,
       },
     });
 
