@@ -4796,7 +4796,14 @@ function handleCroConcernAi() {
   if (seed && elements.concernInput) elements.concernInput.value = seed;
   concernReturnToCro = true;
   switchTab('concern');
-  elements.concernInput?.focus();
+  // If the advisor already typed a concern in Create RO, generate the
+  // follow-up questions immediately instead of making them press Enter again
+  // after the tab switch. With no seed text, just focus so they can type.
+  if (seed) {
+    handleConcernSubmit();
+  } else {
+    elements.concernInput?.focus();
+  }
 }
 
 function handleConcernUseForRo() {

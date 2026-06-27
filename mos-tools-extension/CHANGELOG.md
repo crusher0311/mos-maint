@@ -1,5 +1,14 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.43 — 2026-06-27
+
+### Fixed
+- **AI Concern Assistant launched from Create RO now generates right away.**
+  When you click the AI button on the Create RO concern box, it switches to the
+  Concern tab with your text already filled in — and now generates the follow-up
+  questions immediately, instead of making you press Enter a second time. If the
+  concern box is empty, it just focuses the field so you can start typing.
+
 ## 1.27.42 — 2026-06-27
 
 ### Changed
