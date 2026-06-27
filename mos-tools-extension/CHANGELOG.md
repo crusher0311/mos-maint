@@ -1,5 +1,14 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.40 — 2026-06-27
+
+### Added
+- **Floating Detect Dog button on AutoFlow.** AutoFlow pages (including the
+  dashboard) now show the same draggable floating Detect Dog launcher that
+  Tekmetric and Shop-Ware shops already had. Click it to open the side panel;
+  drag it up or down to reposition (the position is remembered). It can still be
+  turned off per shop/user from the floating-button setting.
+
 ## 1.27.39 — 2026-06-27
 
 ### Changed

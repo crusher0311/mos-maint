@@ -447,17 +447,136 @@ function refreshWriteProvider() {
   );
 }
 
+// ==================== FLOATING LAUNCHER (FAB) ====================
+// AutoFlow had no floating Detect Dog launcher (only Tekmetric / Shop-Ware did),
+// so there was no way to re-open the side panel from the AutoFlow dashboard.
+// This mirrors the Tekmetric FAB so advisors can open the panel from any
+// AutoFlow page. Fail-open: only an explicit floatingButtonEnabled === false
+// hides it; unknown / errors leave it shown.
+let fabInjected = false;
+let fabDragging = false;
+let fabDragStartY = 0;
+let fabStartTop = 0;
+let cachedFloatingEnabled = null; // null = unknown (show), true = show, false = hide
+let floatingFabFetchInFlight = false;
+
+function applyFloatingToFab() {
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById("mos-fab");
+    if (ex) ex.remove();
+    fabInjected = false;
+  } else {
+    injectAutoflowFloatingButton();
+  }
+}
+
+function refreshFloatingSetting() {
+  if (cachedFloatingEnabled !== null) { applyFloatingToFab(); return; }
+  if (floatingFabFetchInFlight) return;
+  const ctx = lastContext || detectContext();
+  if (!ctx || !ctx.shopId) return;
+  floatingFabFetchInFlight = true;
+  chrome.runtime.sendMessage(
+    { action: "GET_SHOP_FEATURES", shopId: ctx.shopId, provider: "autoflow" },
+    (resp) => {
+      floatingFabFetchInFlight = false;
+      if (chrome.runtime.lastError) return;
+      if (resp && resp.success) {
+        cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
+        applyFloatingToFab();
+      }
+    }
+  );
+}
+
+function injectAutoflowFloatingButton() {
+  if (cachedFloatingEnabled === false) {
+    const ex = document.getElementById("mos-fab");
+    if (ex) ex.remove();
+    fabInjected = false;
+    return;
+  }
+  if (fabInjected) return;
+  if (document.getElementById("mos-fab")) { fabInjected = true; return; }
+
+  const fab = document.createElement("button");
+  fab.id = "mos-fab";
+  fab.title = "Open Detect Dog";
+  fab.type = "button";
+  const imgUrl = chrome.runtime.getURL("icons/mos-fab.png");
+  fab.innerHTML = `<img src="${imgUrl}" alt="Detect Dog" style="width:100%;height:100%;object-fit:contain;border-radius:4px;display:block;" />`;
+
+  const savedTop = localStorage.getItem("mos-fab-top");
+  const topPosition = savedTop ? parseInt(savedTop) : 200;
+  Object.assign(fab.style, {
+    position: "fixed", right: "12px", top: `${topPosition}px`,
+    width: "48px", height: "48px", borderRadius: "8px",
+    backgroundColor: "#ffffff", border: "1px solid #e0e0e0",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.2)", cursor: "grab",
+    zIndex: "2147483647", display: "flex", alignItems: "center",
+    justifyContent: "center", padding: "0", overflow: "hidden",
+    transition: "transform 0.15s, box-shadow 0.15s", userSelect: "none",
+  });
+
+  fab.addEventListener("mouseenter", () => {
+    if (!fabDragging) { fab.style.transform = "scale(1.08)"; fab.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)"; }
+  });
+  fab.addEventListener("mouseleave", () => {
+    if (!fabDragging) { fab.style.transform = "scale(1)"; fab.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)"; }
+  });
+  fab.addEventListener("mousedown", (e) => {
+    fabDragging = true; fabDragStartY = e.clientY; fabStartTop = parseInt(fab.style.top);
+    fab.style.cursor = "grabbing"; fab.style.transition = "none"; e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!fabDragging) return;
+    const deltaY = e.clientY - fabDragStartY;
+    let newTop = fabStartTop + deltaY;
+    newTop = Math.max(10, Math.min(window.innerHeight - 58, newTop));
+    fab.style.top = `${newTop}px`;
+  });
+  document.addEventListener("mouseup", (e) => {
+    if (!fabDragging) return;
+    const movedDistance = Math.abs(e.clientY - fabDragStartY);
+    fabDragging = false; fab.style.cursor = "grab";
+    fab.style.transition = "transform 0.15s, box-shadow 0.15s";
+    localStorage.setItem("mos-fab-top", fab.style.top.replace("px", ""));
+    if (movedDistance < 5) openAutoflowSidePanel();
+  });
+
+  document.body.appendChild(fab);
+  fabInjected = true;
+  console.log("[MOS Tools] AutoFlow floating button injected");
+}
+
+function openAutoflowSidePanel() {
+  chrome.runtime.sendMessage({ action: "PING" }, () => {
+    void chrome.runtime.lastError;
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => {
+        if (chrome.runtime.lastError) {
+          setTimeout(() => {
+            chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => { void chrome.runtime.lastError; });
+          }, 500);
+        }
+      });
+    }, 100);
+  });
+}
+
 setTimeout(() => {
   checkForContextChanges();
   checkAndInjectButton();
   checkAndInjectCreateRoButton();
   checkAndInjectVhiButtons();
   refreshWriteProvider();
+  refreshFloatingSetting();
   contextCheckInterval = setInterval(() => {
     checkForContextChanges();
     checkAndInjectButton();
     checkAndInjectCreateRoButton();
     checkAndInjectVhiButtons();
+    refreshFloatingSetting();
   }, 2000);
 }, 1000);
 
@@ -477,6 +596,7 @@ setTimeout(() => {
         checkAndInjectButton();
         checkAndInjectCreateRoButton();
         checkAndInjectVhiButtons();
+        refreshFloatingSetting();
       } catch (e) {
         console.warn("[MOS Tools] AutoFlow re-inject error:", e.message);
       }
