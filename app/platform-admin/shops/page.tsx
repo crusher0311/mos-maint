@@ -9,6 +9,7 @@ import {
   MoreHorizontal, Users, Car, TrendingUp, Sparkles, Database, Zap, Pencil,
 } from "lucide-react";
 import { REVIEW_REASON_LABELS, type ShopReviewStatus } from "@/lib/shop-review";
+import { featuresForPlan } from "@/lib/plan-feature-tiers";
 import DataStatusPanel from "@/components/DataStatusPanel";
 
 interface ShopBilling {
@@ -1186,12 +1187,15 @@ export default function PlatformShopsPage() {
                       onChange={(e) => {
                         const newPlan = e.target.value;
                         setBillingEdits({ ...billingEdits, plan: newPlan });
-                        if (newPlan === "demo") {
-                          setFeatureEdits({
-                            maintenance: true, job_lookup: true, common_failures: true,
-                            oil_sticker: true, keytags: true, auto_booking: true,
-                            part_xref: true, labor_rates: true,
-                          });
+                        // Reset the feature toggles to the newly selected
+                        // plan's tier so changing a shop down from a higher
+                        // tier (e.g. Enterprise -> Starter) clears leftover
+                        // features instead of leaving them all checked. The
+                        // founder plan is a wildcard whose per-feature
+                        // overrides are intentionally never written (see the
+                        // updateShopSettings call below), so skip it.
+                        if (newPlan !== "detect_dog_founder") {
+                          setFeatureEdits(featuresForPlan(newPlan) as ShopFeatures);
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
@@ -1454,14 +1458,17 @@ export default function PlatformShopsPage() {
                     value={createShopData.plan}
                     onChange={(e) => {
                       const plan = e.target.value;
-                      const newData = { ...createShopData, plan };
+                      // Deterministically reset the feature checkboxes to the
+                      // selected plan's tier so switching to a lower tier (e.g.
+                      // Enterprise -> Starter) clears leftover enterprise
+                      // features instead of leaving everything checked.
+                      const newData = {
+                        ...createShopData,
+                        plan,
+                        features: featuresForPlan(plan) as ShopFeatures,
+                      };
                       if (plan === "enterprise" || plan === "demo") {
                         newData.status = plan === "demo" ? "demo" : "active";
-                        newData.features = {
-                          maintenance: true, job_lookup: true, common_failures: true,
-                          oil_sticker: true, keytags: true, auto_booking: true,
-                          part_xref: true, labor_rates: true,
-                        };
                       }
                       setCreateShopData(newData);
                     }}

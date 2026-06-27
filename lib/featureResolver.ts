@@ -30,45 +30,38 @@ import {
  */
 export const __deps = { getDb, getPgDb };
 
-export const FEATURE_KEYS = [
-  "maintenance",
-  "job_lookup",
-  "common_failures",
-  "oil_sticker",
-  "keytags",
-  "auto_booking",
-  "part_xref",
-  "labor_rates",
-  "concern_assistant",
-  "estimate_assist",
-  "dvi_prefill",
-  "enhance_notes",
-] as const;
+// Feature keys, plan-tier definitions and the small pure helpers around
+// them now live in a dependency-free module (`lib/plan-feature-tiers.ts`)
+// so client components (e.g. the platform-admin shop page) can derive a
+// plan's feature set without bundling Mongo/Postgres. They are re-exported
+// here so existing server-side imports of these symbols keep working.
+import {
+  FEATURE_KEYS,
+  buildFeatures,
+  buildAllFeaturesEnabled,
+  isFounderPlan,
+  FOUNDER_PLAN,
+  PLAN_FALLBACK_KEYS,
+  FALLBACK_PLAN_FEATURES,
+  featuresForPlan,
+  type FeatureKey,
+  type FeatureSettings,
+  type BillingPlan,
+} from "./plan-feature-tiers";
 
-export type FeatureKey = typeof FEATURE_KEYS[number];
-
-export type FeatureSettings = Record<FeatureKey, boolean>;
+export {
+  FEATURE_KEYS,
+  buildFeatures,
+  buildAllFeaturesEnabled,
+  isFounderPlan,
+  FOUNDER_PLAN,
+  PLAN_FALLBACK_KEYS,
+  FALLBACK_PLAN_FEATURES,
+  featuresForPlan,
+};
+export type { FeatureKey, FeatureSettings, BillingPlan };
 
 export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
-
-export type BillingPlan = "trial" | "starter" | "plus" | "elite" | "professional" | "enterprise" | "oil_sticker_legacy" | "demo" | "detect_dog_founder";
-
-export const FOUNDER_PLAN: BillingPlan = "detect_dog_founder";
-
-export function isFounderPlan(plan: string | null | undefined): boolean {
-  return plan === FOUNDER_PLAN;
-}
-
-/**
- * Build a FeatureSettings object that has every key in FEATURE_KEYS set
- * to `true`. Reads `FEATURE_KEYS` at call time so newly added features
- * are picked up automatically (the whole point of the founder wildcard).
- */
-export function buildAllFeaturesEnabled(): FeatureSettings {
-  const out = {} as FeatureSettings;
-  for (const k of FEATURE_KEYS) out[k] = true;
-  return out;
-}
 
 export interface ShopBilling {
   plan: BillingPlan;
@@ -104,13 +97,6 @@ export const FEATURE_METADATA: Record<FeatureKey, { name: string; description: s
   enhance_notes:      { name: "Enhance Notes",               description: "Rewrite technician findings into customer-facing language with AI" },
 };
 
-function buildFeatures(enabledKeys: readonly FeatureKey[] | Set<FeatureKey>): FeatureSettings {
-  const enabled = enabledKeys instanceof Set ? enabledKeys : new Set<FeatureKey>(enabledKeys);
-  const out = {} as FeatureSettings;
-  for (const k of FEATURE_KEYS) out[k] = enabled.has(k);
-  return out;
-}
-
 const DEFAULT_FEATURES: FeatureSettings = buildFeatures(["maintenance"]);
 
 const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
@@ -139,26 +125,6 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "enhance-notes": "enhance_notes",
   "enhance_notes": "enhance_notes",
 };
-
-const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
-  trial:              ["maintenance"],
-  starter:            ["maintenance", "oil_sticker"],
-  plus:               ["maintenance", "job_lookup", "common_failures", "oil_sticker", "concern_assistant", "estimate_assist", "dvi_prefill", "enhance_notes"],
-  elite:              [...FEATURE_KEYS],
-  professional:       [...FEATURE_KEYS],
-  enterprise:         [...FEATURE_KEYS],
-  demo:               [...FEATURE_KEYS],
-  oil_sticker_legacy: ["oil_sticker", "auto_booking", "labor_rates"],
-  // The founder plan is a wildcard — every current and future feature is
-  // on. The fallback list is computed dynamically below in
-  // `getPlanFeaturesFromDatabase` / `getFeatureEntitlements`, but we
-  // include all current keys here for callers that read this map directly.
-  detect_dog_founder: [...FEATURE_KEYS],
-};
-
-const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = Object.fromEntries(
-  (Object.keys(PLAN_FALLBACK_KEYS) as BillingPlan[]).map(plan => [plan, buildFeatures(PLAN_FALLBACK_KEYS[plan])])
-) as Record<BillingPlan, FeatureSettings>;
 
 async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
   // Founder plan is a wildcard — every current and future feature is on.

@@ -406,6 +406,30 @@ export async function PATCH(
         adminEmail: session.email,
         createdAt: new Date(),
       });
+
+      // When an admin moves a shop to "active", end the trial cleanly:
+      // clear the trial-end markers and stamp the conversion, mirroring
+      // what the trial-check cron does on conversion. Without this, only
+      // the status flips and the shop still looks like it's mid-trial
+      // (trialEndsAt / trial.endsAt linger, trialConvertedAt is unset).
+      if (billing.status === "active" && shop.billing?.status !== "active") {
+        const convertedAt = new Date();
+        await db.collection("shops").updateOne(
+          { shopId },
+          {
+            $set: { trialConvertedAt: convertedAt, updatedAt: convertedAt },
+            $unset: { trialEndsAt: "", "trial.endsAt": "", trialSuspendedAt: "" },
+          },
+        );
+        await db.collection("audit_logs").insertOne({
+          type: "shop_trial_converted",
+          shopId,
+          shopName: shop.name,
+          reason: "manual_activation",
+          adminEmail: session.email,
+          createdAt: convertedAt,
+        });
+      }
     }
 
     // The effective plan after this PATCH (incoming change wins over the
