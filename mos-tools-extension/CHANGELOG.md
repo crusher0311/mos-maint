@@ -1,5 +1,14 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.41 — 2026-06-27
+
+### Fixed
+- **"Mileage in" no longer prefills with an estimated mileage.** When the only
+  mileage we have is a CARFAX *estimate*, the Create RO "Mileage in" field is now
+  left blank so the advisor enters the real odometer, rather than committing a
+  guessed number as the repair order's official mileage. An actual scraped/
+  entered odometer still prefills as before.
+
 ## 1.27.40 — 2026-06-27
 
 ### Added

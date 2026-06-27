@@ -5377,7 +5377,11 @@ function initCreateRoTab() {
       const c = getCroEl('cro-concern');
       if (c) c.value = currentContext.concern;
     }
-    if (currentContext.mileage) {
+    // Only prefill an ACTUAL odometer (scraped/entered on the page). A CARFAX
+    // estimate (mileageEstimated) must NOT be written into "Mileage in" — that
+    // field becomes the RO's official odometer, so leave it blank and let the
+    // advisor type the real number rather than committing a guess.
+    if (currentContext.mileage && !currentContext.mileageEstimated) {
       const m = getCroEl('cro-mileage');
       if (m) m.value = String(currentContext.mileage).replace(/[^\d]/g, '');
     }
