@@ -319,7 +319,20 @@ const elements = {
 // ==================== SHOP RESOLUTION ====================
 function resolveAutoflowShop(autoflowSubdomain) {
   if (!mosShops.length || !autoflowSubdomain) return null;
-  
+
+  const wanted = String(autoflowSubdomain).replace(/\.autotext\.me$/i, '').toLowerCase();
+
+  // Primary: match the explicit AutoFlow subdomain the server now sends on
+  // every shop. This resolves dual shops (AutoFlow front-end backed by
+  // Protractor/Tekmetric) whose `provider` is the back-end, not "autoflow" —
+  // the case that previously fell through to the "Could not resolve" warning.
+  for (const shop of mosShops) {
+    if (shop.autoflowSubdomain &&
+        String(shop.autoflowSubdomain).replace(/\.autotext\.me$/i, '').toLowerCase() === wanted) {
+      return shop;
+    }
+  }
+
   for (const shop of mosShops) {
     if (shop.smsShopId === autoflowSubdomain && shop.provider === 'autoflow') {
       return shop;

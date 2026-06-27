@@ -550,18 +550,34 @@ function injectAutoflowFloatingButton() {
 }
 
 function openAutoflowSidePanel() {
-  chrome.runtime.sendMessage({ action: "PING" }, () => {
-    void chrome.runtime.lastError;
-    setTimeout(() => {
-      chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => {
-        if (chrome.runtime.lastError) {
-          setTimeout(() => {
-            chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => { void chrome.runtime.lastError; });
-          }, 500);
-        }
-      });
-    }, 100);
-  });
+  // When the extension is reloaded/updated, this already-injected content
+  // script's context dies. `chrome.runtime.id` goes undefined and any
+  // `chrome.runtime.*` call throws "Extension context invalidated"
+  // SYNCHRONOUSLY (the lastError callback never runs), so it must be guarded
+  // here, not just in the callback. A page refresh re-injects a fresh script.
+  if (!chrome.runtime?.id) return;
+  try {
+    chrome.runtime.sendMessage({ action: "PING" }, () => {
+      void chrome.runtime.lastError;
+      setTimeout(() => {
+        if (!chrome.runtime?.id) return;
+        try {
+          chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => {
+            if (chrome.runtime.lastError) {
+              setTimeout(() => {
+                if (!chrome.runtime?.id) return;
+                try {
+                  chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" }, () => { void chrome.runtime.lastError; });
+                } catch (_) { /* context invalidated mid-call */ }
+              }, 500);
+            }
+          });
+        } catch (_) { /* context invalidated mid-call */ }
+      }, 100);
+    });
+  } catch (_) {
+    // Extension context invalidated (reload/update). Safe to ignore.
+  }
 }
 
 setTimeout(() => {

@@ -1,5 +1,27 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.47 — 2026-06-27
+
+### Fixed
+- **Vehicle specs now load even when the spec database is busy.** The Specs tab
+  pulls engine, fluid, and tire data from the DataOne VIN database. When that
+  database was maxed out on connections (during big backfill/catch-up jobs), the
+  lookup was refused and the tab showed "No specifications found." Each VIN's
+  specs are now cached after the first successful lookup, so a vehicle you've
+  already viewed loads instantly from cache and no longer depends on the spec
+  database being free.
+- **"Could not resolve AutoFlow subdomain" warning on dual shops is gone.** Shops
+  that run AutoFlow on screen but are backed by Protractor or Tekmetric (e.g.
+  Harrell's) weren't matched by the side panel because it only recognized
+  "pure AutoFlow" shops. The shop list now carries the AutoFlow subdomain for
+  these dual shops, so the side panel resolves them correctly instead of logging
+  a warning. (Vehicle data already loaded fine via the server; this clears the
+  console noise and fixes client-side shop matching.)
+- **No more "Extension context invalidated" error after reloading the
+  extension.** Clicking the floating button on an AutoFlow page right after the
+  extension updated or reloaded could throw this error. The button now safely
+  detects the stale state and does nothing until the page is refreshed.
+
 ## 1.27.46 — 2026-06-27
 
 ### Fixed

@@ -181,6 +181,7 @@ async function _POST(request: NextRequest) {
         "autoflow.domain": 1,
         "autoflow.subdomain": 1,
         "autoflow.shopId": 1,
+        autoflowDomain: 1,
         integrationProvider: 1,
         "billing.plan": 1,
         "billing.status": 1,
@@ -220,11 +221,27 @@ async function _POST(request: NextRequest) {
         if (writeIntegration) writeProvider = writeIntegration;
       }
 
+      // AutoFlow subdomain for client-side shop matching. Dual shops (an
+      // AutoFlow on-screen system backed by Protractor/Tekmetric) carry the
+      // legacy top-level `autoflowDomain` and have `provider` = the back-end,
+      // NOT "autoflow" — so the extension can't match them by provider. Expose
+      // the bare subdomain (no `.autotext.me`) so the side panel resolves them.
+      const stripAutotext = (v: any): string | null =>
+        typeof v === "string" && v.trim()
+          ? v.trim().replace(/\.autotext\.me$/i, "").toLowerCase()
+          : null;
+      const autoflowSubdomain =
+        stripAutotext(s.autoflow?.subdomain) ||
+        stripAutotext(s.autoflow?.domain) ||
+        stripAutotext(s.autoflowDomain) ||
+        null;
+
       return {
         shopId: s.shopId,
         name: s.name || s.shopName || s.tekmetric?.shopName || `Shop ${s.shopId}`,
         provider,
         smsShopId,
+        autoflowSubdomain,
         integrations,
         writeProvider,
         plan: s.billing?.plan || "trial",

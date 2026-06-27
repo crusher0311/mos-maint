@@ -11,6 +11,7 @@ import {
   DataOneCallError,
   type DataOneCallers,
 } from "./unit-resolver";
+import { readSpecsCache, writeSpecsCache } from "./specs-cache";
 
 // Re-export so other code paths can import from the route module if needed.
 export { resolveSpecsUnitDisplayFromShop, callDataOneWithRetry } from "./unit-resolver";
@@ -79,6 +80,25 @@ async function _GET(req: NextRequest) {
     const shopDoc = await loadShopDoc(shopId);
     const { distanceUnit, unitDisplay } = resolveSpecsUnitDisplayFromShop(shopDoc);
 
+    // Serve a previously-decoded VIN straight from cache. A VIN's specs are
+    // static, so this skips the live DataOne hit entirely — instant for the
+    // user and zero extra load on DataOne (which under connection pressure
+    // refuses queries with PG 53300 and makes specs silently disappear).
+    // Shop-specific unit display is still applied per-request above.
+    const cached = await readSpecsCache(upperVin);
+    if (cached) {
+      return NextResponse.json({
+        ok: true,
+        vin: upperVin,
+        vehicleInfo: cached.vehicleInfo,
+        grouped: cached.grouped,
+        specsCount: cached.specsCount,
+        distanceUnit,
+        unitDisplay,
+        cached: true,
+      }, { headers: corsHeaders });
+    }
+
     let activeHint: DecodeHint | undefined = hasSmsHint ? smsHint : undefined;
     let { specsResult, decodeResult } = await callDataOneWithRetry(upperVin, activeHint, {
       vin: upperVin,
@@ -138,6 +158,17 @@ async function _GET(req: NextRequest) {
       ambiguous: decodeResult.ambiguous || false,
       ambiguousFields: decodeResult.ambiguousFields || [],
     } : null;
+
+    // Cache only confident results: a successful, UNAMBIGUOUS decode with
+    // specs. We never cache a failure (e.g. DataOne refused the connection)
+    // or an ambiguous decode (those need live per-RO hints to resolve).
+    if (decodeResult.ok && !decodeResult.ambiguous && specsResult.ok) {
+      await writeSpecsCache(upperVin, {
+        vehicleInfo,
+        grouped: specsResult.grouped,
+        specsCount: specsResult.specs.length,
+      });
+    }
 
     return NextResponse.json({
       ok: specsResult.ok,

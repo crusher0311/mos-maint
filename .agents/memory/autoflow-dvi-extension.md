@@ -17,12 +17,24 @@ name/id/placeholder/aria-label/associated `<label>` text, as a fallback after th
 text scrapes. The mileage label renders with a required asterisk ("Mileage *"),
 so the text-regex must tolerate `*` and assorted separators.
 
-## Shop id: v3 = subdomain, v4 = path
-v3 puts the shop in the subdomain (`harrells-nc87.autotext.me`); v4 uses a shared
-host (`app.autoflow.com`) with the shop in the path (`/shop/<slug>/...`).
+## Shop id: v3 = subdomain, v4 = path (AutoFlow framework upgrade, in progress)
+AutoFlow is mid framework upgrade and the fleet is **split across two URL shapes
+at the same time** — do not assume one or the other:
+- v3 (legacy): per-shop subdomain `harrells-nc87.autotext.me`.
+- v4 (new): shared host `app.autoflow.com` with the shop in the path,
+  `/shop/<slug>/...` where the slug is often a **shop number**.
+
 Subdomain-only detection breaks v4 and can emit a bogus generic id (e.g. `app`,
 or in the field a stray `qc`). Treat generic infra subdomains
 (app/www/admin/secure/api/portal) as NOT-a-shop and read the `/shop/<slug>` path.
+
+**How to apply:** whatever id the extension extracts (v3 subdomain OR v4
+path slug/shop-number) must match what the backend resolves against
+(`autoflow.subdomain` / `autoflow.domain` / `autoflow.shopId` / legacy top-level
+`autoflowDomain`). As shops migrate v3→v4 their stored AutoFlow identifier may
+change form, so resolution must tolerate both. The auth route now also emits a
+normalized `autoflowSubdomain` per shop so the side panel can match dual shops
+regardless of `provider`.
 
 ## Dual-integration AutoFlow shops never resolve as provider="autoflow"
 **Why:** shops that pair AutoFlow with a read/write provider (Protractor, Tekmetric)
