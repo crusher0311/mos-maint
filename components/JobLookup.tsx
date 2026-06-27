@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign, Check } from "lucide-react";
-import { getAcesTierBadge, type AcesTier } from "@/lib/aces-tier-badge";
+import { getMatchConfidenceBadge, type AcesTier } from "@/lib/aces-tier-badge";
 
 type JobResult = {
   _id: string;
@@ -42,6 +42,8 @@ type JobResult = {
   matchBand?: "exact" | "likely" | "possible" | "low_confidence";
   matchBandLabel?: string;
   matchReason: string;
+  sameVinFastPath?: boolean;
+  gatePass?: boolean;
   isCurrentLocation?: boolean;
   locationName?: string;
   locationShopId?: number;
@@ -220,19 +222,6 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
     });
   };
 
-  const getBandStyle = (band?: string) => {
-    switch (band) {
-      case "exact":
-        return "text-green-700 bg-green-100 border-green-200";
-      case "likely":
-        return "text-blue-700 bg-blue-100 border-blue-200";
-      case "possible":
-        return "text-amber-700 bg-amber-100 border-amber-200";
-      default:
-        return "text-gray-600 bg-gray-100 border-gray-200";
-    }
-  };
-
   return (
     <div className="space-y-3 sm:space-y-4">
       <div className="flex gap-2">
@@ -278,7 +267,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
 
       {acesUnavailable && results.length > 0 && (
         <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm">
-          <strong>ACES match unavailable</strong> — vehicle VIN didn&apos;t decode through DataOne, so scores below are from the heuristic scorer only.
+          <strong>Precise match unavailable</strong> — this vehicle&apos;s VIN didn&apos;t decode, so the matches below are based on year, make, and model only.
         </div>
       )}
 
@@ -328,21 +317,22 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                       <Wrench className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
                       <span className="font-medium text-gray-900 text-sm sm:text-base truncate">{job.job.title}</span>
-                      <span className={`text-xs px-1.5 sm:px-2 py-0.5 rounded-full border ${getBandStyle(job.matchBand)}`}>
-                        {job.matchBandLabel}
-                      </span>
                       {(() => {
-                        const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
-                        return aces ? (
+                        const badge = getMatchConfidenceBadge({
+                          sameVinFastPath: job.sameVinFastPath,
+                          acesTier: job.scoreBreakdown?.acesTier,
+                          gatePass: job.gatePass,
+                        });
+                        return (
                           <span
-                            title={aces.tooltip}
-                            className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full border cursor-help ${aces.className}`}
+                            title={badge.tooltip}
+                            className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full border cursor-help ${badge.className}`}
                           >
-                            {aces.label}
+                            {badge.label}
                           </span>
-                        ) : null;
+                        );
                       })()}
-                      <span className="text-xs sm:text-sm font-semibold text-blue-600">{job.matchScore}%</span>
+                      <span className="text-xs sm:text-sm font-semibold text-gray-700">{job.matchScore}%</span>
                     </div>
                     <div className="mt-1 text-xs sm:text-sm text-gray-500 flex flex-wrap items-center gap-1 sm:gap-2">
                       <span>{job.vehicle.year} {job.vehicle.make} {job.vehicle.model}</span>

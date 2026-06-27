@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Loader2, Check, AlertCircle, ChevronDown, ChevronUp, X, Package, Wrench, DollarSign, Clock } from "lucide-react";
 import { AddToROButton } from "./AddToROButton";
-import { getAcesTierBadge, type AcesTier } from "@/lib/aces-tier-badge";
+import { getMatchConfidenceBadge, type AcesTier } from "@/lib/aces-tier-badge";
 
 type HistoricalJob = {
   _id: string;
@@ -32,6 +32,8 @@ type HistoricalJob = {
   matchScore?: number;
   matchBand?: "exact" | "likely" | "possible" | "poor";
   matchBandLabel?: string;
+  sameVinFastPath?: boolean;
+  gatePass?: boolean;
   scoreBreakdown?: {
     acesTier?: AcesTier;
     [key: string]: any;
@@ -291,19 +293,6 @@ export function AddToROWithHistory({
     return bits.join(", ");
   }
 
-  function getBandColor(band?: string) {
-    switch (band) {
-      case "exact":
-        return "bg-green-100 text-green-700 border-green-200";
-      case "likely":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-      case "possible":
-        return "bg-amber-100 text-amber-700 border-amber-200";
-      default:
-        return "bg-gray-100 text-gray-600 border-gray-200";
-    }
-  }
-
   async function handleAddDeferred(deferredId?: string) {
     const idToUse = deferredId || protractorDeferredId || matchedDeferred?.id;
     if (!idToUse || !workOrderGuid) return;
@@ -457,26 +446,23 @@ export function AddToROWithHistory({
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span
-                                className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${getBandColor(
-                                  job.matchBand
-                                )}`}
-                              >
-                                {job.matchBandLabel || job.matchBand}
-                              </span>
                               {(() => {
-                                const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
-                                return aces ? (
+                                const badge = getMatchConfidenceBadge({
+                                  sameVinFastPath: job.sameVinFastPath,
+                                  acesTier: job.scoreBreakdown?.acesTier,
+                                  gatePass: job.gatePass,
+                                });
+                                return (
                                   <span
-                                    title={aces.tooltip}
-                                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-help ${aces.className}`}
+                                    title={badge.tooltip}
+                                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-help ${badge.className}`}
                                   >
-                                    {aces.label}
+                                    {badge.label}
                                   </span>
-                                ) : null;
+                                );
                               })()}
-                              {job.matchScore && (
-                                <span className="text-[10px] text-gray-400">
+                              {typeof job.matchScore === "number" && (
+                                <span className="text-[10px] font-semibold text-gray-600">
                                   {job.matchScore}%
                                 </span>
                               )}

@@ -626,7 +626,7 @@ export function scoreJob(
 
   // Tier A — exact ACES vehicle match. Short-circuits to score 100.
   if (tAcesVid !== null && jAcesVid !== null && tAcesVid === jAcesVid) {
-    const acesPositives: string[] = [`Exact ACES match (vehicle_id ${tAcesVid})`];
+    const acesPositives: string[] = ["Same year, make, model, trim & engine"];
     if (targetYear && jobYear && targetYear === jobYear) {
       acesPositives.push("Exact year");
     }
@@ -696,11 +696,11 @@ export function scoreJob(
     let baseScore: number;
     if (tierBApplies) {
       acesTier = "engine_match";
-      acesPositives.push(`Same engine (ACES engine_id ${tAcesEid})`);
+      acesPositives.push("Same engine");
       baseScore = SCORE_THRESHOLD_EXACT - 5; // 75 → likely band, just under exact
     } else {
       acesTier = "submodel_match";
-      acesPositives.push("Same submodel (ACES) — engine ignored");
+      acesPositives.push("Same body/chassis (engine not relevant)");
       baseScore = SCORE_THRESHOLD_EXACT - 10; // 70 → likely band
     }
 

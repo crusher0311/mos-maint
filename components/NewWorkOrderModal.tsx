@@ -26,7 +26,7 @@ import {
   ChevronDown,
   HelpCircle,
 } from "lucide-react";
-import { getAcesTierBadge } from "@/lib/aces-tier-badge";
+import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
@@ -1836,12 +1836,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                         const vehicleInfo = job.vehicle;
                         const vehicleLabel = vehicleInfo ? `${vehicleInfo.year || ""} ${vehicleInfo.make || ""} ${vehicleInfo.model || ""}`.trim() : "";
                         const isExactVehicle = selectedVehicle && vehicleInfo?.make?.toLowerCase() === selectedVehicle.make?.toLowerCase() && vehicleInfo?.model?.toLowerCase() === selectedVehicle.model?.toLowerCase();
-                        const bandColors: Record<string, string> = {
-                          exact: "bg-green-100 text-green-700",
-                          likely: "bg-blue-100 text-blue-700",
-                          possible: "bg-yellow-100 text-yellow-700",
-                          poor: "bg-gray-100 text-gray-500",
-                        };
+                        const matchBadge = getMatchConfidenceBadge({
+                          sameVinFastPath: job.sameVinFastPath,
+                          acesTier: job.scoreBreakdown?.acesTier,
+                          gatePass: job.gatePass,
+                        });
                         const isExpanded = expandedHistoryIdx === idx;
                         const lines = job.lines || [];
                         return (
@@ -1853,20 +1852,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                               <div className="flex items-center gap-1.5">
                                 <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                                 <span className="text-sm font-medium text-gray-900 truncate">{title}</span>
-                                {job.matchBandLabel && (
-                                  <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded flex-shrink-0 ${bandColors[job.matchBand] || "bg-gray-100 text-gray-500"}`}>{job.matchBandLabel}</span>
+                                <span
+                                  title={matchBadge.tooltip}
+                                  className={`text-[9px] font-medium px-1 py-0.5 rounded border flex-shrink-0 cursor-help ${matchBadge.className}`}
+                                >
+                                  {matchBadge.label}
+                                </span>
+                                {typeof job.matchScore === "number" && (
+                                  <span className="text-[9px] font-semibold text-gray-600 flex-shrink-0">{job.matchScore}%</span>
                                 )}
-                                {(() => {
-                                  const aces = getAcesTierBadge(job.scoreBreakdown?.acesTier);
-                                  return aces ? (
-                                    <span
-                                      title={aces.tooltip}
-                                      className={`text-[9px] font-medium px-1 py-0.5 rounded border flex-shrink-0 cursor-help ${aces.className}`}
-                                    >
-                                      {aces.label}
-                                    </span>
-                                  ) : null;
-                                })()}
                               </div>
                               <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap pl-5">
                                 {job.performedAt && <span>{new Date(job.performedAt).toLocaleDateString()}</span>}

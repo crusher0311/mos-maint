@@ -6,6 +6,7 @@
 // and breakdown.acesTier discriminator. No DB / network access.
 
 import { scoreJob, type VehicleSpecs } from "@/lib/job-scoring";
+import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
 
 function fail(msg: string): never {
   console.error(`✗ ${msg}`);
@@ -62,7 +63,8 @@ function donorJob(over: any = {}): any {
   if (r.matchBand !== "exact") fail(`Tier A expected band exact, got ${r.matchBand}`);
   if (r.matchBandLabel !== "Exact Fit (ACES)") fail(`Tier A expected label "Exact Fit (ACES)", got ${r.matchBandLabel}`);
   if ((r.scoreBreakdown as any).acesTier !== "exact_aces") fail(`Tier A acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
-  ok("Tier A (exact_aces) returns score 100 with Exact Fit (ACES) label");
+  if (/ACES/i.test(r.matchReason)) fail(`Tier A matchReason must not contain "ACES": ${r.matchReason}`);
+  ok("Tier A (exact_aces) returns score 100 with plain-language matchReason");
 }
 
 // -- Tier B: engine_match (powertrain) -------------------------------------
@@ -73,6 +75,7 @@ function donorJob(over: any = {}): any {
   const r = scoreJob(donorJob({ title: "Oil Change", job: { title: "Oil Change" } }), baseTargetVehicle, t, j, "oil change");
   if ((r.scoreBreakdown as any).acesTier !== "engine_match") fail(`Tier B acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
   if (r.matchScore < 70) fail(`Tier B expected score >= 70, got ${r.matchScore}`);
+  if (/ACES/i.test(r.matchReason)) fail(`Tier B matchReason must not contain "ACES": ${r.matchReason}`);
   ok("Tier B (engine_match) fires for powertrain donor with same engine_id");
 }
 
@@ -94,6 +97,7 @@ function donorJob(over: any = {}): any {
   const r = scoreJob(donorJob({ title: "Brake Pad Replacement Front" }), baseTargetVehicle, t, j, "brake pad");
   if ((r.scoreBreakdown as any).acesTier !== "submodel_match") fail(`Tier C acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
   if (r.matchScore < 60) fail(`Tier C expected score >= 60, got ${r.matchScore}`);
+  if (/ACES/i.test(r.matchReason)) fail(`Tier C matchReason must not contain "ACES": ${r.matchReason}`);
   ok("Tier C (submodel_match) fires for chassis donor with same submodelKey");
 }
 
@@ -106,6 +110,28 @@ function donorJob(over: any = {}): any {
     fail(`Fall-through expected acesTier=null, got ${(r.scoreBreakdown as any).acesTier}`);
   }
   ok("Missing ACES IDs falls through to legacy heuristic (acesTier=null)");
+}
+
+// -- Advisor-facing badge labels are plain language (no "ACES") ------------
+{
+  const cases = [
+    { in: { sameVinFastPath: true }, label: "Verified — this exact vehicle" },
+    { in: { acesTier: "exact_aces" as const }, label: "Verified match" },
+    { in: { acesTier: "engine_match" as const }, label: "Strong match" },
+    { in: { acesTier: "submodel_match" as const }, label: "Strong match" },
+    { in: { acesTier: null }, label: "General match" },
+    { in: { gatePass: false }, label: "Not a match" },
+  ];
+  for (const c of cases) {
+    const badge = getMatchConfidenceBadge(c.in);
+    if (badge.label !== c.label) {
+      fail(`Badge label mismatch for ${JSON.stringify(c.in)}: expected "${c.label}", got "${badge.label}"`);
+    }
+    if (/ACES/i.test(badge.label) || /ACES/i.test(badge.tooltip)) {
+      fail(`Badge for ${JSON.stringify(c.in)} must not contain "ACES": ${badge.label} / ${badge.tooltip}`);
+    }
+  }
+  ok("getMatchConfidenceBadge returns plain-language labels with no ACES jargon");
 }
 
 console.log("\nALL ACES TIER SMOKE TESTS PASSED");
