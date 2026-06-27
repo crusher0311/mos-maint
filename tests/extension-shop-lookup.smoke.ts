@@ -128,6 +128,24 @@ async function run() {
     }
   }
 
+  // 5b. Legacy top-level autoflowDomain match (legacy PHP AutoFlow shops, e.g.
+  //     Harrell's NC87 → harrells-nc87.autotext.me) — these store the AutoFlow
+  //     link in the flat `autoflowDomain` field, not nested `autoflow.*`.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 29, autoflowDomain: "harrells-nc87.autotext.me", "protractor": { connectionId: "harrells-pt" }, integrationProvider: "protractor" },
+      ],
+    });
+    try {
+      const r = await findShopBySmsId("harrells-nc87", { isPlatformAdmin: true });
+      ok("legacy autoflowDomain (with .autotext.me suffix) resolves", r?.mosShopId === 29);
+      ok("legacy autoflowDomain shop keeps its write provider (protractor)", r?.provider === "protractor");
+    } finally {
+      restore();
+    }
+  }
+
   // 6. Provider inference when integrationProvider is missing
   {
     const { restore } = withFakeDb({

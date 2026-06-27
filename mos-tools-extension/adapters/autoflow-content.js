@@ -894,7 +894,14 @@ function isAutoflowDashboardView() {
   if (/\/tickets?\/\d+/.test(url)) return false;
   if (/\/invoices?\/\d+/.test(url)) return false;
   if (/\/inspections?\/\d+/.test(url)) return false;
+  // Legacy PHP AutoFlow DVI/inspection pages (e.g. /Admin/dvi_v3/index.php)
+  // are per-ticket views — never inject Create RO there.
   if (/\/dvi[_v0-9]*\//.test(url)) return false;
+  // Legacy PHP AutoFlow workflow board (e.g. /Admin/v5.php). These shops run
+  // the old AutoFlow front-end and browse versioned .php board pages instead
+  // of the modern /workflow|/board routes. The DVI exclusion above already
+  // keeps dvi_v3 etc. out, so this only matches the board itself.
+  if (/\/Admin\/v\d+\.php/i.test(url)) return true;
   // Common AutoFlow dashboard / list paths.
   return /\/(dashboard|tickets?|workflow|board|home|inspections?)\/?(\?|$|#)/i.test(url) ||
     url.endsWith(window.location.host + "/") ||

@@ -84,7 +84,11 @@ async function _GET(request: NextRequest) {
       if (shopDoc.tekmetric?.shopId || shopDoc.tekmetricShopId) integrations.push("tekmetric");
       if (shopDoc.protractor?.connectionId || shopDoc.protractorConnectionId) integrations.push("protractor");
       if (shopDoc.shopware?.tenantId) integrations.push("shopware");
-      if (shopDoc.autoflow?.domain || shopDoc.autoflow?.subdomain || shopDoc.autoflow?.shopId) integrations.push("autoflow");
+      // Recognize both modern nested AutoFlow config and the legacy top-level
+      // `autoflowDomain` field (e.g. Harrell's NC87 → harrells-nc87.autotext.me),
+      // so the reported integrations list and writeProvider resolution are
+      // consistent for legacy-AutoFlow + Protractor shops.
+      if (shopDoc.autoflow?.domain || shopDoc.autoflow?.subdomain || shopDoc.autoflow?.shopId || shopDoc.autoflowDomain) integrations.push("autoflow");
       
       const provider = searchParams.get("provider");
       if (provider === "autoflow") {
