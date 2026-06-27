@@ -181,6 +181,7 @@ async function _POST(request: NextRequest) {
         "autoflow.domain": 1,
         "autoflow.subdomain": 1,
         "autoflow.shopId": 1,
+        "autoflow.shopNumbers": 1,
         autoflowDomain: 1,
         integrationProvider: 1,
         "billing.plan": 1,
@@ -236,12 +237,21 @@ async function _POST(request: NextRequest) {
         stripAutotext(s.autoflowDomain) ||
         null;
 
+      // Learned v4 AutoFlow shop numbers (app.autoflow.com/shop/<number>), so
+      // the side panel resolves dual shops on the new URL shape too.
+      const autoflowShopNumbers = Array.isArray(s.autoflow?.shopNumbers)
+        ? s.autoflow.shopNumbers
+            .filter((x: any) => typeof x === "string" && x.trim())
+            .map((x: string) => x.trim())
+        : [];
+
       return {
         shopId: s.shopId,
         name: s.name || s.shopName || s.tekmetric?.shopName || `Shop ${s.shopId}`,
         provider,
         smsShopId,
         autoflowSubdomain,
+        autoflowShopNumbers,
         integrations,
         writeProvider,
         plan: s.billing?.plan || "trial",

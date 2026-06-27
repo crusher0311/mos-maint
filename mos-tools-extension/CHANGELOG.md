@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.48 — 2026-06-27
+
+### Changed
+- **Shops on AutoFlow's new web address now connect automatically.** AutoFlow is
+  rolling out a new look where shops are reached at `app.autoflow.com` with a
+  shop number in the address, instead of the old `your-shop.autotext.me` web
+  address — and during the rollout most shops can be opened either way. The
+  extension now recognizes a shop on the new address the first time an advisor
+  uses it there (when it can be matched to that shop for certain) and remembers
+  it, so the side panel, vehicle specs, and job history keep working on the new
+  AutoFlow without anyone having to reconfigure anything.
+
 ## 1.27.47 — 2026-06-27
 
 ### Fixed

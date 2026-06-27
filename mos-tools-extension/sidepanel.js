@@ -333,6 +333,16 @@ function resolveAutoflowShop(autoflowSubdomain) {
     }
   }
 
+  // v4 URLs carry a shop NUMBER (app.autoflow.com/shop/<number>), a different
+  // identifier than the v3 subdomain. Match any number the server has already
+  // learned for a shop (see the AutoFlow auto-learn in findShopBySmsId).
+  for (const shop of mosShops) {
+    if (Array.isArray(shop.autoflowShopNumbers) &&
+        shop.autoflowShopNumbers.some(n => String(n).toLowerCase() === wanted)) {
+      return shop;
+    }
+  }
+
   for (const shop of mosShops) {
     if (shop.smsShopId === autoflowSubdomain && shop.provider === 'autoflow') {
       return shop;
@@ -345,6 +355,20 @@ function resolveAutoflowShop(autoflowSubdomain) {
       return shop;
     }
   }
+
+  // Single AutoFlow shop in this user's list → any AutoFlow page must be it.
+  // Mirrors the server's single-candidate auto-learn and clears the "could not
+  // resolve" warning on a brand-new v4 URL before the learned number has
+  // synced into this shop list (the list refreshes at next login).
+  const autoflowShops = mosShops.filter(s =>
+    s.autoflowSubdomain ||
+    (Array.isArray(s.autoflowShopNumbers) && s.autoflowShopNumbers.length > 0) ||
+    s.provider === 'autoflow'
+  );
+  if (autoflowShops.length === 1) {
+    return autoflowShops[0];
+  }
+
   if (mosShops.length === 1) {
     return mosShops[0];
   }
