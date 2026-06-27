@@ -74,6 +74,26 @@ const withPcdbB = {
   ],
 };
 
+// Task #695 — ACES IDs on the vehicle MUST affect the hash (a different decode
+// is a real content change), but the volatile `acesDecodedAt` timestamp (a
+// fresh Date on every webhook re-decode) MUST NOT, or every re-fire would
+// rewrite the row forever.
+const acesT1 = {
+  ...base,
+  vehicle: { ...base.vehicle, acesVehicleId: 12345, acesEngineId: 678, acesDecodedAt: new Date("2026-01-01T00:00:00Z") },
+  lines: partThenLabor.lines,
+};
+const acesT2 = {
+  ...base,
+  vehicle: { ...base.vehicle, acesVehicleId: 12345, acesEngineId: 678, acesDecodedAt: new Date("2026-06-27T12:34:56Z") },
+  lines: partThenLabor.lines,
+};
+const acesDifferentId = {
+  ...base,
+  vehicle: { ...base.vehicle, acesVehicleId: 99999, acesEngineId: 678, acesDecodedAt: new Date("2026-01-01T00:00:00Z") },
+  lines: partThenLabor.lines,
+};
+
 // Malformed lines (null element, non-array) must not throw and must be stable.
 const malformed = { ...base, lines: [null, { lineType: "labor", description: "Labor", quantity: 1, unitPrice: 0, extendedPrice: 17 }] };
 const noLines = { ...base, lines: undefined };
@@ -89,6 +109,8 @@ ok("hash is stable across repeated calls", computeJobHash(partThenLabor) === hPa
 ok("a real content change DOES change the hash", hPartThenLabor !== hRealChange, `${hPartThenLabor} vs ${hRealChange}`);
 ok("hash is the expected 16-hex-char length", /^[0-9a-f]{16}$/.test(hPartThenLabor), hPartThenLabor);
 ok("differing PCDB part-type id DOES change the hash", computeJobHash(withPcdbA) !== computeJobHash(withPcdbB));
+ok("volatile acesDecodedAt does NOT change the hash", computeJobHash(acesT1) === computeJobHash(acesT2), `${computeJobHash(acesT1)} vs ${computeJobHash(acesT2)}`);
+ok("a different ACES vehicle id DOES change the hash", computeJobHash(acesT1) !== computeJobHash(acesDifferentId));
 
 let threw = false;
 let hMalformed = "";

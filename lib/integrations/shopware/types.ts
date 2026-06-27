@@ -110,6 +110,11 @@ export interface ShopWarePart {
   taxable: boolean;
   quantity: number;
   quantity_needed?: number | null;
+  // Task #695 — PCDB / PartsTech part classification, carried by Shop-Ware in
+  // its integration metadata. Present only when the SW API returns the
+  // `integrator_tags` association AND the shop runs a PartsTech-style catalog
+  // integration; `extractShopWarePcdb` reads these into per-line PCDB IDs.
+  integrator_tags?: ShopWareIntegratorTag[];
 }
 
 export interface ShopWareHazmat {

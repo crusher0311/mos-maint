@@ -6,6 +6,8 @@ import {
   transformCustomer,
 } from "@/lib/integrations/shopware/transform";
 import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
+import { enrichVinWithAces } from "@/lib/job-index-aces";
+import { extractShopwareJobIndex } from "@/lib/integrations/shopware/webhook-job-index";
 import { extractAuthorizedJobsFromShopWareRo } from "@/lib/vhi-webhook-trigger";
 import { findShopByQuery } from "@/lib/data/repositories/shops";
 import {
@@ -52,62 +54,6 @@ async function findShopByTenant(tenantId: number, roShopId?: number) {
   return null;
 }
 
-function extractShopwareJobIndex(
-  mosShopId: number,
-  ro: ShopWareRepairOrder,
-  tenantId: number
-) {
-  const vin = ro.vehicle?.vin?.toUpperCase() ?? null;
-  const entries = [];
-
-  const roMileage =
-    (typeof (ro as any).odometer_out === "number" && (ro as any).odometer_out > 0 ? (ro as any).odometer_out : null) ??
-    (typeof (ro as any).odometer === "number" && (ro as any).odometer > 0 ? (ro as any).odometer : null) ??
-    (typeof (ro as any).odometer_in === "number" && (ro as any).odometer_in > 0 ? (ro as any).odometer_in : null) ??
-    null;
-
-  for (const service of ro.services ?? []) {
-    const laborHours = (service.labors ?? []).reduce((s, l) => s + l.hours, 0);
-    const partsAmount = (service.parts ?? []).reduce(
-      (s, p) => s + ((p.sell_price_cents ?? 0) / 100) * p.quantity,
-      0
-    );
-    const subletsAmount = (service.sublets ?? []).reduce(
-      (s, sub) => s + (sub.price_cents ?? 0) / 100,
-      0
-    );
-    let laborAmount = 0;
-    if (service.is_fixed_price_service && service.fixed_price_labor_total_cents != null) {
-      laborAmount = service.fixed_price_labor_total_cents / 100;
-    }
-    const totalAmount = laborAmount + partsAmount + subletsAmount;
-
-    entries.push({
-      shopId: mosShopId,
-      provider: "shopware",
-      tenantId,
-      workOrderId: String(ro.id),
-      workOrderNumber: ro.number,
-      servicePackageId: String(service.id),
-      title: service.title,
-      status: service.completed ? "completed" : "open",
-      vin,
-      vehicleYear: ro.vehicle?.year ? parseInt(ro.vehicle.year, 10) : undefined,
-      vehicleMake: ro.vehicle?.make,
-      vehicleModel: ro.vehicle?.model,
-      laborHours,
-      laborAmount,
-      partsAmount,
-      totalAmount,
-      completedAt: ro.closed_at ? new Date(ro.closed_at) : undefined,
-      mileage: roMileage,
-      indexedAt: new Date(),
-    });
-  }
-
-  return entries;
-}
-
 async function handleRepairOrderEvent(
   event: string,
   tenantId: number,
@@ -133,11 +79,28 @@ async function handleRepairOrderEvent(
 
   let ro: ShopWareRepairOrder | null = null;
   const maxRetries = 3;
+  // Task #695 — request the `integrator_tags` association on parts so
+  // line-level PCDB / PartsTech IDs are available to attach on write. The
+  // single-RO fetch only auto-falls-back on 5xx, so guard against the SW API
+  // rejecting the extra association (4xx) by degrading to the base association
+  // once before treating it as a real failure — never break SW indexing over a
+  // best-effort enrichment.
+  const ENRICHED_ASSOCIATIONS =
+    "services,services.labors,services.parts,services.parts.integrator_tags,customer,vehicle";
+  const BASE_ASSOCIATIONS = "services,services.labors,services.parts,customer,vehicle";
+  let associations = ENRICHED_ASSOCIATIONS;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      ro = await getRepairOrder(tenantId, roId, mosShopId);
+      ro = await getRepairOrder(tenantId, roId, mosShopId, associations);
       break;
     } catch (err: any) {
+      if (associations === ENRICHED_ASSOCIATIONS) {
+        console.warn(
+          `[SW Webhook] Fetch RO ${roId} with integrator_tags association failed (${err.message}); retrying without it.`
+        );
+        associations = BASE_ASSOCIATIONS;
+        continue;
+      }
       const isServerError = err.message?.includes("500") || err.message?.includes("502") || err.message?.includes("503");
       if (isServerError && attempt < maxRetries) {
         const delay = attempt * 2000;
@@ -247,7 +210,16 @@ async function handleRepairOrderEvent(
 
   if (isInvoiced && ro.vehicle?.vin) {
     try {
-      const entries = extractShopwareJobIndex(mosShopId, ro, tenantId);
+      // Task #695 — decode the RO VIN to ACES once (one VIN per RO) and attach
+      // the IDs to every job_index entry on write, matching the Tekmetric live
+      // indexer. Best-effort: a null decode still indexes the jobs.
+      const aces = await enrichVinWithAces(ro.vehicle.vin.toUpperCase()).catch(
+        (err: any) => {
+          console.warn(`[SW Webhook] ACES decode failed for ${ro.vehicle?.vin}:`, err.message);
+          return null;
+        }
+      );
+      const entries = extractShopwareJobIndex(mosShopId, ro, tenantId, aces);
       const { indexed, skipped } = await upsertShopwareJobIndexEntries(entries);
 
       if (indexed > 0) {

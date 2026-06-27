@@ -36,3 +36,18 @@ coverage reporter — the gaps are mostly "enrichment never ran" (fixable) vs
 "no VIN / skeletal source" (inherent), and SW is consistently mis-bucketed.
 **How to apply:** use `report:job-index-aces-coverage -- --by-shop` to re-rank;
 treat Protractor + undecoded VIN-rich Tek shops as fixable, SW + PCDB as inherent.
+
+## On-write parity per provider (Task #695)
+- **The SW live write path is the WEBHOOK, NOT NormalizedIngestionService.** So
+  SW needed its own on-write ACES+PCDB builder (`lib/integrations/shopware/
+  webhook-job-index.ts`, called from `app/api/webhooks/shopware/route.ts`).
+  Tek/Shopmonkey/Protractor all go through `writeToJobIndex` and already enrich
+  ACES on write; Shopmonkey & Protractor have NO PCDB source (inherent).
+- **`computeJobHash` strips `acesDecodedAt` before hashing** (it's a fresh Date
+  each decode). Any volatile per-write timestamp added to a hashed subdoc MUST
+  be stripped or it churns the whole corpus on every re-fire. ACES *IDs* still
+  hash. Runbook: `docs/runbooks/job-index-aces-pcdb-parity.md`.
+- **Don't broaden the SW `getRepairOrder` association blindly.** Requesting
+  `integrator_tags` is best-effort: the single-RO fetch only auto-falls-back on
+  5xx, so the webhook degrades to the base association on ANY error before giving
+  up — an invalid association must never break SW indexing fleet-wide.

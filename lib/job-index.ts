@@ -47,10 +47,23 @@ export function computeJobHash(entry: JobIndexEntry): string {
         totalAmount: roundMoneyForHash(entry.totals.totalAmount),
       }
     : entry.totals;
+  // Task #695 — the ACES decode *timestamp* (`acesDecodedAt`) is volatile: a
+  // fresh `Date` lands on every webhook re-decode. If it participated in the
+  // content hash, each re-fire would look like a content change and rewrite
+  // the row forever. Strip it before hashing; the ACES IDs themselves stay in
+  // the hash (they're stable for a VIN), so a real decode change still flips
+  // the hash.
+  const vehicle =
+    entry.vehicle && typeof entry.vehicle === "object"
+      ? (() => {
+          const { acesDecodedAt, ...rest } = entry.vehicle as Record<string, unknown>;
+          return rest;
+        })()
+      : entry.vehicle;
   const hashContent = {
     workOrderId: entry.workOrderId,
     servicePackageId: entry.servicePackageId,
-    vehicle: entry.vehicle,
+    vehicle,
     job: entry.job,
     lines,
     totals,

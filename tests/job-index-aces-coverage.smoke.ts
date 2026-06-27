@@ -222,5 +222,71 @@ function ok(msg: string): void {
   ok("ACES IDs land under vehicle.* (PG mirror extract resolves correctly)");
 }
 
+// 9. Task #695 — Shop-Ware LIVE webhook write path. The webhook
+//    (app/api/webhooks/shopware/route.ts) does NOT go through
+//    NormalizedIngestionService, so it has its own extractShopwareJobIndex.
+//    Guard that it (a) nests ACES IDs under vehicle.*, (b) uppercases the VIN,
+//    and (c) attaches per-line PCDB to part lines from integrator_tags —
+//    matching the Tekmetric live indexer.
+{
+  const { extractShopwareJobIndex } = require("@/lib/integrations/shopware/webhook-job-index");
+  const ro = {
+    id: 555,
+    number: 2200,
+    closed_at: "2026-06-01T00:00:00Z",
+    vehicle: { vin: "1hgcv1f3xla000001", year: "2020", make: "Honda", model: "Accord" },
+    services: [
+      {
+        id: 9001,
+        title: "Front Brakes",
+        completed: true,
+        labors: [{ name: "R&R pads", hours: 1.2 }],
+        parts: [
+          {
+            description: "Wagner ThermoQuiet",
+            number: "QC1665",
+            brand: "Wagner",
+            quantity: 2,
+            sell_price_cents: 8500,
+            integrator_tags: [
+              { name: "PCDB_Part_Type_Id", value: 5340 },
+              { name: "PCDB_Part_Type_Name", value: "Disc Brake Pad Set" },
+              { name: "PartsTech_Part_Id", value: "pt-sw-22" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const aces = {
+    acesVehicleId: 12345,
+    acesEngineId: 678,
+    submodelKey: "2020|honda|accord|ex-l",
+    acesDecodedAt: new Date(),
+  };
+  const entries = extractShopwareJobIndex(1, ro, 42, aces) as any[];
+  if (!entries || entries.length !== 1) fail(`SW webhook entries length: ${entries?.length}`);
+  const e = entries[0];
+  if (e.vehicle?.acesVehicleId !== 12345) fail(`SW webhook vehicle.acesVehicleId: ${e.vehicle?.acesVehicleId}`);
+  if (e.vehicle?.acesEngineId !== 678) fail(`SW webhook vehicle.acesEngineId: ${e.vehicle?.acesEngineId}`);
+  if (e.vehicle?.submodelKey !== "2020|honda|accord|ex-l") fail("SW webhook submodelKey missing");
+  if (e.vehicle?.vin !== "1HGCV1F3XLA000001") fail(`SW webhook VIN not uppercased: ${e.vehicle?.vin}`);
+  if (!Array.isArray(e.lines) || e.lines.length !== 2) fail(`SW webhook lines length: ${e.lines?.length}`);
+  const part = e.lines.find((l: any) => l.lineType === "part");
+  const labor = e.lines.find((l: any) => l.lineType === "labor");
+  if (!labor || labor.hours !== 1.2) fail("SW webhook labor line missing hours");
+  if (!part || part.pcdbPartTypeId !== 5340) fail(`SW webhook part missing PCDB id: ${part?.pcdbPartTypeId}`);
+  if (part.partsTechPartId !== "pt-sw-22") fail("SW webhook part missing partsTechPartId");
+  ok("Shop-Ware webhook extractShopwareJobIndex nests ACES + attaches per-line PCDB");
+
+  // 9b. A null ACES decode (ambiguous squish / decode failure) must still
+  //     index the jobs with their lines+PCDB — best-effort enrichment.
+  const noAces = extractShopwareJobIndex(1, ro, 42, null) as any[];
+  if (noAces[0].vehicle?.acesVehicleId !== null) fail("SW webhook null-ACES should leave acesVehicleId null");
+  if (noAces[0].lines.find((l: any) => l.lineType === "part")?.pcdbPartTypeId !== 5340)
+    fail("SW webhook null-ACES still keeps per-line PCDB");
+  ok("Shop-Ware webhook indexes jobs (with lines+PCDB) even when ACES decode is null");
+}
+
 console.log("\nALL ACES COVERAGE SMOKE TESTS PASSED");
 process.exit(0);

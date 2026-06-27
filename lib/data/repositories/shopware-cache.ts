@@ -330,6 +330,25 @@ export interface ShopwareJobIndexEntry {
   completedAt?: Date;
   mileage: number | null;
   indexedAt: Date;
+  // Task #695 — ACES VIN-decode parity with Tekmetric. The flat
+  // vehicleYear/Make/Model fields above are retained for legacy readers; the
+  // `vehicle` subdoc carries the DataOne ACES IDs under the same canonical
+  // `vehicle.*` nesting the coverage tooling + Tek live-indexer use. Null IDs
+  // when the squish is ambiguous.
+  vehicle?: {
+    vin: string | null;
+    year?: number;
+    make?: string;
+    model?: string;
+    acesVehicleId: number | null;
+    acesEngineId: number | null;
+    submodelKey: string | null;
+    acesDecodedAt: Date | null;
+  };
+  // Task #695 — per-line PCDB / PartsTech part IDs (line-level part
+  // classification parity with Tekmetric), extracted from each part's
+  // Shop-Ware `integrator_tags`.
+  lines?: Array<Record<string, unknown>>;
 }
 
 interface JobIndexCacheDoc extends Document {
