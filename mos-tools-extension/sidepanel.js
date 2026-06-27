@@ -111,6 +111,12 @@ let shopDistanceUnit = 'miles';
 function getDistLabel() {
   return shopDistanceUnit === 'kilometers' ? 'km' : 'mi';
 }
+// Full-word distance axis label for progress-bar rows ("Kilometers" / "Miles").
+// Drives the VHI Coach progress-bar axis label off the shop's resolved unit so
+// metric shops never see a hardcoded "Miles" row next to km values.
+function getDistAxisLabel() {
+  return shopDistanceUnit === 'kilometers' ? 'Kilometers' : 'Miles';
+}
 let concernState = {
   concern: '',
   conversationId: null,
@@ -1677,7 +1683,7 @@ function renderProgressBars(item, type) {
       </div>
     `;
   };
-  const milesRow = renderProgressBars && p.miles ? axisRow('Miles', p.miles) : '';
+  const milesRow = renderProgressBars && p.miles ? axisRow(getDistAxisLabel(), p.miles) : '';
   const timeRow = renderProgressBars && p.time ? axisRow('Time', p.time) : '';
   if (!milesRow && !timeRow) return '';
   return `<div class="vhi-bars">${milesRow}${timeRow}</div>`;

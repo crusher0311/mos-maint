@@ -1771,6 +1771,7 @@ async function _GET(request: NextRequest) {
         overdue: [],
         dueSoon: [],
         recommended: [],
+        distanceUnit: shopDistanceUnit,
         message: "VIN not available for this repair order"
       }, { headers: corsHeaders });
     }
@@ -2103,6 +2104,7 @@ async function _GET(request: NextRequest) {
         mileageEstimated,
         mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
         flags: mileageFlags,
+        distanceUnit: shopDistanceUnit,
         ...plan,
         deferredWork: cachedPlan.plan.deferredWork || [],
         fromDashboardCache: true,
@@ -2420,6 +2422,7 @@ async function _GET(request: NextRequest) {
       mileageEstimated,
       mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
       flags: mileageFlags,
+      distanceUnit: shopDistanceUnit,
       overdue: plan.overdue,
       dueSoon: plan.dueSoon,
       recommended: plan.recommended,
