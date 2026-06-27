@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.34 — 2026-06-27
+
+### Fixed
+- **No more false "session may have expired" when adding a Canned Job to an RO.**
+  Adding a job from the **Canned Jobs** tab sometimes showed a "Session may have
+  expired — click to re-login" prompt even though you were still signed in, while
+  the same action from the **Job Lookup** tab worked fine. The canned path does
+  more slow work behind the scenes, so it was more likely to land on a brief,
+  harmless auth hiccup that the standard retry budget couldn't ride out. Those
+  add-to-RO requests now get a longer retry window so a momentary blip clears
+  quietly instead of interrupting you. A genuinely expired/invalid login still
+  correctly prompts you to sign in again.
+
 ## 1.27.33 — 2026-06-26
 
 ### Added

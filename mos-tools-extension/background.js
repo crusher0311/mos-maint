@@ -1609,7 +1609,7 @@ const MOS_FETCH_TIMEOUT_MS = 45000;
 async function _doMosFetch(endpoint, options, token) {
   const separator = endpoint.includes('?') ? '&' : '?';
   const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(token)}`;
-  const { timeoutMs, ...fetchOptions } = options || {};
+  const { timeoutMs, authRetryDelaysMs, ...fetchOptions } = options || {};
   const limitMs = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : MOS_FETCH_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), limitMs);
@@ -1648,6 +1648,23 @@ async function handleMosApiRequest(endpoint, options = {}) {
   let lastErrBody = null;
   let lastCode = null;
 
+  // Task #657: callers performing a slow, important write (e.g. the
+  // canned add-to-RO endpoints) can widen the 401 retry schedule via
+  // `options.authRetryDelaysMs`. Those requests run several slow
+  // upstream calls server-side (open-WO search, vehicle-by-VIN, fetch
+  // WOs, then apply), so they're far more likely to straddle a
+  // transient MOS-auth blip (a PG identity-lookup race, a token-refresh
+  // write race, or a brief deploy/failover) than the quick lookup-tab
+  // calls — which for Tekmetric bypass MOS auth entirely. A wider budget
+  // rides that blip out instead of surfacing a false "session may have
+  // expired" prompt mid-shift. The terminal-vs-transient decision below
+  // is unchanged: a sustained TOKEN_INVALID still clears the token once
+  // the budget is exhausted. Retrying is safe because a 401 is rejected
+  // at auth time, before any write happens server-side.
+  const retryDelays = (options.authRetryDelaysMs && options.authRetryDelaysMs.length > 0)
+    ? options.authRetryDelaysMs
+    : MOS_AUTH_RETRY_DELAYS_MS;
+
   if (response.status === 401) {
     lastErrBody = await response.clone().json().catch(() => ({}));
     lastCode = lastErrBody?.code || null;
@@ -1656,9 +1673,9 @@ async function handleMosApiRequest(endpoint, options = {}) {
     // alike — the point of the retry is to absorb upstream blips, and
     // a TOKEN_INVALID from a single PG identity-lookup race should not
     // be trusted on the first hit.
-    for (let attempt = 0; attempt < MOS_AUTH_RETRY_DELAYS_MS.length; attempt += 1) {
-      const delay = _jitter(MOS_AUTH_RETRY_DELAYS_MS[attempt]);
-      console.log(`[MOS] 401 transient retry ${attempt + 1}/${MOS_AUTH_RETRY_DELAYS_MS.length} on ${endpoint} | code=${lastCode || 'none'} | sleep=${delay}ms`);
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      const delay = _jitter(retryDelays[attempt]);
+      console.log(`[MOS] 401 transient retry ${attempt + 1}/${retryDelays.length} on ${endpoint} | code=${lastCode || 'none'} | sleep=${delay}ms`);
       await new Promise(r => setTimeout(r, delay));
 
       response = await _doMosFetch(endpoint, options, tokenUsed);

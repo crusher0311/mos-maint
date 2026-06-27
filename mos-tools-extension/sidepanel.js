@@ -2557,6 +2557,14 @@ async function handleAddCannedJob(job) {
           endpoint: `/api/extension/jobs/apply-canned`,
           options: {
             method: 'POST',
+            // Task #657: this endpoint runs several slow upstream calls
+            // server-side, so it's far more likely to straddle a
+            // transient MOS-auth blip than the quick lookup-tab calls.
+            // Widen the 401 retry budget so a valid session isn't
+            // surfaced as a false "session may have expired" prompt. A
+            // 401 is rejected at auth time (before any write), so the
+            // extra retries are safe.
+            authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
             body: JSON.stringify({
               shopId: Number(mosShopId),
               roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
@@ -2594,6 +2602,15 @@ async function handleAddCannedJob(job) {
         endpoint: `/api/tekmetric/apply-canned-job?shopId=${currentContext.shopId}&provider=tekmetric`,
         options: {
           method: 'POST',
+          // Task #657: this endpoint runs slow upstream calls server-side
+          // (open-RO search, vehicle-by-VIN, fetch WOs, then apply), so
+          // it's far more likely to straddle a transient MOS-auth blip
+          // than the Job Lookup tab — which for Tekmetric bypasses MOS
+          // auth entirely. Widen the 401 retry budget so a valid session
+          // isn't surfaced as a false "session may have expired" prompt.
+          // A 401 is rejected at auth time (before any write), so the
+          // extra retries are safe.
+          authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
           body: JSON.stringify({ 
             repairOrderId: currentContext.roId,
             cannedJobId: String(tekmetricId),

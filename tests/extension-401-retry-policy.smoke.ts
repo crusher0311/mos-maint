@@ -51,6 +51,15 @@ function loadHandler() {
   const context: any = {
     console,
     setTimeout: (fn: any, _ms: any) => fn(),  // collapse delays in tests
+    clearTimeout: () => {},
+    // `_doMosFetch` (added by the fetch-timeout task) arms an
+    // AbortController per attempt; the vm context only exposes ES
+    // intrinsics, so Node globals must be injected explicitly.
+    AbortController,
+    // `handleMosApiRequest` reports auth telemetry; the function lives
+    // above the extracted slice, so stub it as a no-op (the test asserts
+    // token state + error codes, not telemetry).
+    reportTelemetry: () => {},
     Promise,
     Error,
     Set,
@@ -208,6 +217,71 @@ async function run() {
       threw?.code === "MOS_SERVER_TRANSIENT",
       `code=${threw?.code}`,
     );
+  }
+
+  // (5) Task #657 — a widened per-request retry budget rides out a
+  // transient blip that the DEFAULT budget cannot. The default budget is
+  // 1 initial fetch + 3 retries = 4 attempts. A blip that returns 401 on
+  // attempts 1-5 and 200 on attempt 6 outlasts the default but is
+  // absorbed by a 5-retry override.
+  {
+    // (5a) control: default budget gives up before the blip clears.
+    const ctx = loadHandler();
+    ctx.mosApiToken = "ext_default_budget";
+    let calls = 0;
+    ctx.fetch = async () => {
+      calls += 1;
+      if (calls <= 5) return makeJsonResponse(401, { error: "blip", code: "AUTH_LOOKUP_FAILED" });
+      return makeJsonResponse(200, { ok: true });
+    };
+    let threw: any = null;
+    try {
+      await ctx.__handleMosApiRequest("/api/extension/jobs/apply-canned", { method: "POST" });
+    } catch (e) { threw = e; }
+    ok("default budget gives up before a 6-deep blip clears", threw != null);
+    ok("  → exactly 4 attempts (1 + 3 retries)", calls === 4, `calls=${calls}`);
+    ok("  → token preserved (transient)", ctx.mosApiToken === "ext_default_budget");
+    ok("  → soft error code", threw?.code === "MOS_SESSION_SOFT_EXPIRED", `code=${threw?.code}`);
+  }
+  {
+    // (5b) widened budget rides the same blip out to success.
+    const ctx = loadHandler();
+    ctx.mosApiToken = "ext_wide_budget";
+    let removed = false;
+    ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
+    let calls = 0;
+    ctx.fetch = async () => {
+      calls += 1;
+      if (calls <= 5) return makeJsonResponse(401, { error: "blip", code: "AUTH_LOOKUP_FAILED" });
+      return makeJsonResponse(200, { ok: true });
+    };
+    const result = await ctx.__handleMosApiRequest("/api/extension/jobs/apply-canned", {
+      method: "POST",
+      authRetryDelaysMs: [1, 1, 1, 1, 1],
+    });
+    ok("widened budget rides out the blip → succeeds", result?.ok === true, JSON.stringify(result));
+    ok("  → reached the 6th attempt", calls === 6, `calls=${calls}`);
+    ok("  → token preserved", ctx.mosApiToken === "ext_wide_budget");
+    ok("  → token NOT removed from storage", removed === false);
+  }
+  {
+    // (5c) a genuinely dead credential is still terminal even with a
+    // widened budget — TOKEN_INVALID persists, so the token is cleared.
+    const ctx = loadHandler();
+    ctx.mosApiToken = "ext_wide_but_dead";
+    let removed = false;
+    ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
+    ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "TOKEN_INVALID" });
+    let threw: any = null;
+    try {
+      await ctx.__handleMosApiRequest("/api/extension/jobs/apply-canned", {
+        method: "POST",
+        authRetryDelaysMs: [1, 1, 1, 1, 1],
+      });
+    } catch (e) { threw = e; }
+    ok("widened budget still clears a sustained TOKEN_INVALID", threw != null);
+    ok("  → token cleared", ctx.mosApiToken === null);
+    ok("  → token removed from storage", removed === true);
   }
 
   if (failed > 0) {
