@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllActivityProfiles } from "@/lib/data/repositories/activity-profiles";
 import {
+  getEnforceShopAllowlist,
   getMachineBurstThreshold,
   getQuietWindowMinConfidence,
   getSmartBackfillTimingMode,
@@ -36,10 +37,16 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const mode = getSmartBackfillTimingMode();
     const minConfidence = getQuietWindowMinConfidence();
+    const allowlist = getEnforceShopAllowlist();
     const profiles = await getAllActivityProfiles();
 
     const rows = profiles.map((p) => {
       const decision = decideQuietWindowGate({ profile: p, now, minConfidence });
+      const inCanary = allowlist === null || allowlist.has(Number(p.shopId));
+      // What ENFORCE mode would actually do for this shop right now, after the
+      // canary allowlist is applied (a non-allowlisted shop is never skipped).
+      const wouldSkipNow =
+        !decision.fallback && !decision.eligible && inCanary;
       return {
         shopId: p.shopId,
         provider: p.provider,
@@ -54,11 +61,13 @@ export async function GET(req: NextRequest) {
         sampleWindowDays: p.sampleWindowDays,
         perProviderCounts: p.perProviderCounts,
         computedAt: p.computedAt,
+        inCanary,
         decisionNow: {
           eligible: decision.eligible,
           fallback: decision.fallback,
           reason: decision.reason,
           localHour: decision.localHour,
+          wouldSkipNow,
           summary: describeGateDecision(p.shopId, decision),
         },
       };
@@ -70,7 +79,10 @@ export async function GET(req: NextRequest) {
       wouldBlockNow: rows.filter(
         (r) => !r.decisionNow.fallback && !r.decisionNow.eligible,
       ).length,
+      // After the canary allowlist: shops that would actually be skipped now.
+      wouldSkipNowEffective: rows.filter((r) => r.decisionNow.wouldSkipNow).length,
       fallbackNow: rows.filter((r) => r.decisionNow.fallback).length,
+      inCanary: rows.filter((r) => r.inCanary).length,
     };
 
     return NextResponse.json({
@@ -78,6 +90,7 @@ export async function GET(req: NextRequest) {
       mode,
       minConfidence,
       machineBurstThreshold: getMachineBurstThreshold(),
+      enforceAllowlist: allowlist ? [...allowlist].sort((a, b) => a - b) : null,
       now: now.toISOString(),
       summary,
       profiles: rows,

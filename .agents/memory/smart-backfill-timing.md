@@ -34,6 +34,22 @@ but ONLY when the shop has no tz set AND the source is address/activity (never t
 Central default, never overwrite an operator value). Marked `timezoneInferredBy`.
 This is gated by the compute cron, so OFF mode writes nothing.
 
+## Per-shop canary allowlist
+- Env `SMART_BACKFILL_TIMING_SHOP_IDS` (comma/space-separated shop IDs).
+- `getEnforceShopAllowlist()` → `Set<number>` or **null when unset/empty**.
+- **null = no allowlist = ENFORCE applies fleet-wide.** A non-empty set restricts
+  *actual skipping* to those shops only.
+- In the gate: `inCanary = allowlist===null || has(shopId)`;
+  `shouldSkip = enforce && !eligible && inCanary`. Non-canary shops still get a
+  logged decision (`ALLOW(not-in-canary)` / `would-BLOCK(not-in-canary)`) but run
+  on the generic schedule — observability without behavior change.
+- Has NO effect in off/observe (those never skip). Admin readout surfaces
+  `enforceAllowlist`, per-row `inCanary` + `decisionNow.wouldSkipNow`, and summary
+  `wouldSkipNowEffective`/`inCanary`.
+- **Rollout sequence:** observe → eyeball candidate quiet shops in the readout →
+  set `SMART_BACKFILL_TIMING_SHOP_IDS` to a small canary → flip to enforce →
+  widen the list → eventually unset (null) for fleet-wide.
+
 ## Flag + flip rules (IMPORTANT)
 - Env `SMART_BACKFILL_TIMING` = `off` (default) | `observe` | `enforce`.
 - **OFF = byte-for-byte previous behavior**: `prepareQuietWindowGate` returns

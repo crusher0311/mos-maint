@@ -98,6 +98,24 @@ export function getMachineBurstThreshold(
   return 20;
 }
 
+// Optional canary allowlist for ENFORCE mode. When SMART_BACKFILL_TIMING_SHOP_IDS
+// is set to a comma/space-separated list of MOS shop ids, enforcement (the only
+// mode that actually skips) is limited to *those* shops — every other shop runs
+// on the generic schedule exactly as it does today. Returns null when unset/empty
+// (= no allowlist = enforce applies fleet-wide). Has NO effect in off/observe.
+export function getEnforceShopAllowlist(
+  env: NodeJS.ProcessEnv = process.env,
+): Set<number> | null {
+  const raw = String(env.SMART_BACKFILL_TIMING_SHOP_IDS ?? "").trim();
+  if (!raw) return null;
+  const ids = raw
+    .split(/[\s,]+/)
+    .filter((s) => s.length > 0)
+    .map((s) => Number(s))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  return ids.length ? new Set(ids) : null;
+}
+
 /* --------------------------- small math helpers --------------------------- */
 
 function clamp01(n: number): number {

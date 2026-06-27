@@ -5,6 +5,7 @@ import {
   getSmartBackfillTimingMode,
   getQuietWindowMinConfidence,
   getMachineBurstThreshold,
+  getEnforceShopAllowlist,
   emptyHistogram,
   localHourForTimezone,
   timezoneOffsetHours,
@@ -84,6 +85,20 @@ check("min-confidence + burst threshold defaults and bounds", () => {
     getMachineBurstThreshold({ SMART_BACKFILL_TIMING_BURST_PER_MIN: "1" } as any),
     20,
   );
+});
+
+check("enforce shop allowlist parses list, null when unset", () => {
+  assert.equal(getEnforceShopAllowlist({} as any), null);
+  assert.equal(getEnforceShopAllowlist({ SMART_BACKFILL_TIMING_SHOP_IDS: "" } as any), null);
+  assert.equal(
+    getEnforceShopAllowlist({ SMART_BACKFILL_TIMING_SHOP_IDS: "  ,  " } as any),
+    null,
+  );
+  const set = getEnforceShopAllowlist({
+    SMART_BACKFILL_TIMING_SHOP_IDS: "151, 158  166,abc",
+  } as any);
+  assert.ok(set);
+  assert.deepEqual([...set!].sort((a, b) => a - b), [151, 158, 166]);
 });
 
 /* ----------------------------- tz / histogram ----------------------------- */
@@ -318,12 +333,14 @@ function makeCtx(
   mode: QuietWindowGateContext["mode"],
   profiles: Array<[number, ActivityProfile]> = [],
   now = new Date("2026-01-15T20:00:00Z"), // 14:00 Central -> busy/outside window
+  allowlist: Set<number> | null = null,
 ): QuietWindowGateContext {
   return {
     mode,
     minConfidence: 0.5,
     profiles: new Map(profiles),
     now,
+    allowlist,
   };
 }
 
@@ -377,6 +394,45 @@ check("gate wrapper: ENFORCE falls back (no skip) when no profile", () => {
   assert.equal(r.shouldSkip, false);
   assert.equal(r.decision!.fallback, true);
   assert.equal(r.decision!.reason, "no_profile");
+});
+
+check("gate wrapper: ENFORCE + canary allowlist only skips allowlisted shop", () => {
+  // Shop 42 is out-of-window and WOULD be skipped, but the allowlist only
+  // contains shop 7, so 42 runs as today (no skip) while still being decided.
+  const ctx = makeCtx(
+    "enforce",
+    [[42, makeProfile({ shopId: 42 })]],
+    new Date("2026-01-15T20:00:00Z"),
+    new Set([7]),
+  );
+  const r = applyQuietWindowGate(ctx, 42, "tekmetric");
+  assert.equal(r.shouldSkip, false); // not in canary -> not enforced
+  assert.equal(r.decision!.eligible, false);
+  assert.equal(r.decision!.reason, "outside_quiet_window");
+});
+
+check("gate wrapper: ENFORCE + canary allowlist skips an allowlisted out-of-window shop", () => {
+  const ctx = makeCtx(
+    "enforce",
+    [[42, makeProfile({ shopId: 42 })]],
+    new Date("2026-01-15T20:00:00Z"),
+    new Set([42]),
+  );
+  const r = applyQuietWindowGate(ctx, 42, "tekmetric");
+  assert.equal(r.shouldSkip, true); // in canary + out of window -> skipped
+  assert.equal(r.decision!.eligible, false);
+});
+
+check("gate wrapper: OBSERVE ignores allowlist (never skips)", () => {
+  const ctx = makeCtx(
+    "observe",
+    [[42, makeProfile({ shopId: 42 })]],
+    new Date("2026-01-15T20:00:00Z"),
+    new Set([42]),
+  );
+  const r = applyQuietWindowGate(ctx, 42, "tekmetric");
+  assert.equal(r.shouldSkip, false);
+  assert.equal(r.decision!.eligible, false);
 });
 
 console.log(`\nactivity-profile.smoke: ${passed} checks passed`);

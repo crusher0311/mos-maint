@@ -21,6 +21,7 @@ import {
   describeGateDecision,
   deriveQuietWindows,
   emptyHistogram,
+  getEnforceShopAllowlist,
   getMachineBurstThreshold,
   getQuietWindowMinConfidence,
   getSmartBackfillTimingMode,
@@ -577,6 +578,9 @@ export interface QuietWindowGateContext {
   minConfidence: number;
   profiles: Map<number, ActivityProfile>;
   now: Date;
+  // Optional canary allowlist: when non-null, only these shop ids are actually
+  // enforced (skipped); all others run on the generic schedule. null = fleet-wide.
+  allowlist: Set<number> | null;
 }
 
 // Build the gate context once per cron tick. When the feature is OFF this does
@@ -588,10 +592,16 @@ export async function prepareQuietWindowGate(
 ): Promise<QuietWindowGateContext> {
   const mode = getSmartBackfillTimingMode();
   if (mode === "off") {
-    return { mode, minConfidence: 0, profiles: new Map(), now };
+    return { mode, minConfidence: 0, profiles: new Map(), now, allowlist: null };
   }
   const profiles = await loadActivityProfileMap(shopIds);
-  return { mode, minConfidence: getQuietWindowMinConfidence(), profiles, now };
+  return {
+    mode,
+    minConfidence: getQuietWindowMinConfidence(),
+    profiles,
+    now,
+    allowlist: getEnforceShopAllowlist(),
+  };
 }
 
 // Decide (and log) whether a shop should be skipped this tick. In OFF mode it
@@ -608,19 +618,27 @@ export function applyQuietWindowGate(
     now: ctx.now,
     minConfidence: ctx.minConfidence,
   });
+  // Canary allowlist: in enforce mode, only allowlisted shops are actually
+  // skipped. A non-allowlisted shop still gets its decision logged (for
+  // observability) but runs on the generic schedule — same as today.
+  const inCanary =
+    ctx.allowlist === null || ctx.allowlist.has(Number(shopId));
+  const wouldSkip = ctx.mode === "enforce" && !decision.eligible;
+  const shouldSkip = wouldSkip && inCanary;
   const verb =
     ctx.mode === "enforce"
-      ? decision.eligible
-        ? "ALLOW"
-        : "BLOCK"
+      ? !inCanary
+        ? decision.eligible
+          ? "ALLOW(not-in-canary)"
+          : "would-BLOCK(not-in-canary)"
+        : decision.eligible
+          ? "ALLOW"
+          : "BLOCK"
       : decision.eligible
         ? "would-ALLOW"
         : "would-BLOCK";
   console.log(
     `[smart-timing][${ctx.mode}][${providerLabel}] ${verb} ${describeGateDecision(Number(shopId), decision)}`,
   );
-  return {
-    shouldSkip: ctx.mode === "enforce" && !decision.eligible,
-    decision,
-  };
+  return { shouldSkip, decision };
 }
