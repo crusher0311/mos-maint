@@ -3,6 +3,7 @@ import { type TriagedItemCache } from "@/lib/plan-cache";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
 import { getStatusIconSvg, type IconStatus } from "@/lib/vhi-icons";
+import { resolveServiceIconKey } from "@/lib/service-icons";
 
 export function categoryMultiplier(category: string): number {
   const cat = (category || "").toLowerCase();
@@ -204,6 +205,16 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
     progress,
     iconStatus,
     iconSvg: includeIconSvg ? getStatusIconSvg(iconStatus) : null,
+    /**
+     * Task #675: the per-service PICTOGRAM key (oil drop, differential, cabin
+     * air filter, etc.), resolved the same way our customer-facing VHI does.
+     * Partners look this up in the response's top-level `serviceIcons` map to
+     * render the same icon. This is DISTINCT from `iconStatus`/`iconSvg`, which
+     * is the red/amber/green status indicator. Always a real key present in
+     * `serviceIcons` (falls back to the general icon), so it never resolves to
+     * a missing icon.
+     */
+    serviceIconKey: resolveServiceIconKey(item.serviceKey, item.title),
     /**
      * Task #392: per-axis trigger statuses so partners can render
      * "Overdue by time" / "Overdue by mileage" themselves. Either field

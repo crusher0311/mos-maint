@@ -60,3 +60,40 @@ Every request emits a single structured log line:
 
 so the next "AppFueled and Detect Dog disagree" report is greppable in
 BetterStack within a minute.
+
+## Icons
+
+The response carries **two independent** icon systems. Do not confuse them.
+
+### Status icons (`iconStatus` / top-level `icons`)
+
+The red/amber/green/blue **status** indicator — i.e. is this item overdue,
+due soon, OK, or deferred.
+
+- Each VHI item has `iconStatus` (`"overdue" | "soon" | "ok" | "deferred"`).
+- The top-level `icons` map is `iconStatus -> inline SVG`. Look up the item's
+  `iconStatus` there to render the colored status dot.
+- `iconSvg` on the item stays `null` by default (the top-level map avoids
+  duplicating the SVG on every item).
+
+### Service icons (`serviceIconKey` / top-level `serviceIcons`) — Task #675
+
+The per-service **pictogram** — i.e. the oil drop, differential, cabin air
+filter, brake, etc. — the same artwork our customer-facing VHI shows.
+
+- Each VHI item has `serviceIconKey` (e.g. `"oil_change"`,
+  `"differential_rear"`, `"cabin_air_filter"`). It is resolved from the
+  item's `serviceKey`/`title` using the exact same logic as our UI, and is
+  always a real key (unmatched items fall back to `"general_service"`), so it
+  never resolves to a missing icon.
+- The top-level `serviceIcons` map is `serviceIconKey -> inline SVG markup`,
+  emitted once per response (not duplicated on every item). Look up the item's
+  `serviceIconKey` there to render the pictogram. The map always includes
+  `"general_service"` (the default fallback) and `"dvi_finding"` (the
+  inspection-finding warning triangle).
+- The SVG is self-contained inline markup (our relative
+  `/icons/service/*.svg` paths do **not** resolve on a partner's domain), so
+  drop it straight into the DOM or a `data:image/svg+xml` URI.
+
+Present on all response branches (`source: "cached_plan"`, `"analysis_cache"`,
+`"on_demand_build"`, and the stale-serve path).

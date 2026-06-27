@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ICON_KEY_TO_IMAGE, resolveServiceIconKey } from "@/lib/service-icons";
 
 const iconPaths: Record<string, JSX.Element> = {
   brake_pads_front: (
@@ -214,80 +215,10 @@ const iconPaths: Record<string, JSX.Element> = {
   ),
 };
 
-const titleKeywordMap: Array<[string[], string]> = [
-  [["torque", "re-torque", "retorque", "bolt", "nut"], "bolt_torque"],
-  [["propeller shaft", "prop shaft", "driveshaft", "drive shaft", "lubricate"], "lubricate"],
-  [["oil reminder", "maint reqd", "oil reset", "reset oil", "oil replacement reminder"], "oil_reminder"],
-  [["chassis", "body", "tighten"], "chassis_body"],
-  [["serpentine", "drive belt", "accessory belt", "v-belt", "timing belt"], "serpentine_belt"],
-  [["transfer case"], "transfer_case"],
-  [["differential front", "front differential"], "differential_front"],
-  [["differential rear", "rear differential"], "differential_rear"],
-  [["differential"], "differential_rear"],
-  [["transmission", "trans fluid", "atf"], "transmission_fluid"],
-  [["coolant hose", "radiator hose", "heater hose"], "coolant_hoses"],
-  [["coolant", "antifreeze"], "coolant"],
-  [["brake pad", "front brake", "rear brake", "brake shoe"], "brake_pads_front"],
-  [["brake fluid"], "brake_fluid"],
-  [["cabin filter", "cabin air"], "cabin_air_filter"],
-  [["air filter", "engine filter"], "engine_air_filter"],
-  [["spark plug", "ignition"], "spark_plugs"],
-  [["oil change", "engine oil", "motor oil", "oil filter"], "oil_change"],
-  [["tire rotat", "rotate tire"], "tires_rotate"],
-  [["wiper", "windshield wiper"], "wiper_blades"],
-  [["battery"], "battery"],
-  [["power steering", "steering fluid"], "power_steering"],
-  [["fuel system", "fuel inject", "fuel filter", "fuel induction"], "fuel_system"],
-  [["shock", "strut", "suspension"], "front_shocks"],
-  [["wheel align", "alignment"], "wheel_alignment"],
-  [["inspect", "check", "examine", "visual"], "general_service"],
-];
-
-const imageIcons: Record<string, string> = {
-  brake_pads_front: "/icons/service/brakes.svg",
-  brake_pads_rear: "/icons/service/brakes.svg",
-  brake_fluid: "/icons/service/brake_fluid.svg",
-  wiper_blades: "/icons/service/wiper_blades.svg",
-  transmission_fluid: "/icons/service/transmission_fluid.svg",
-  engine_air_filter: "/icons/service/air_filter.svg",
-  cabin_air_filter: "/icons/service/cabin_air_filter.svg",
-  spark_plugs: "/icons/service/spark_plugs.svg",
-  engine_oil: "/icons/service/oil_change.svg",
-  oil_change: "/icons/service/oil_change.svg",
-  tires_rotate: "/icons/service/tire_rotation.svg",
-  coolant: "/icons/service/coolant.svg",
-  differential_rear: "/icons/service/differential.svg",
-  differential_front: "/icons/service/differential.svg",
-  serpentine_belt: "/icons/service/serpentine_belt.svg",
-  transfer_case: "/icons/service/transfer_case.svg",
-  battery: "/icons/service/battery.svg",
-  power_steering: "/icons/service/power_steering.svg",
-  fuel_system: "/icons/service/fuel_system.svg",
-  coolant_hoses: "/icons/service/coolant_hoses.svg",
-  front_shocks: "/icons/service/shocks.svg",
-  rear_shocks: "/icons/service/shocks.svg",
-  wheel_alignment: "/icons/service/wheel_alignment.svg",
-  lubricate: "/icons/service/lubricate.svg",
-  bolt_torque: "/icons/service/bolt_torque.svg",
-  oil_reminder: "/icons/service/oil_reminder.svg",
-  chassis_body: "/icons/service/chassis_body.svg",
-  general_service: "/icons/service/general_service.svg",
-};
-
-function resolveIconKey(serviceKey: string | null, title?: string): string {
-  if (!serviceKey && !title) return "";
-
-  if (serviceKey?.startsWith("dvi_finding") || serviceKey?.startsWith("dvi_unmapped")) return "dvi_finding";
-
-  if (serviceKey && (imageIcons[serviceKey] || iconPaths[serviceKey])) return serviceKey;
-
-  const titleLower = (title || serviceKey || "").toLowerCase();
-  for (const [keywords, iconKey] of titleKeywordMap) {
-    if (keywords.some(kw => titleLower.includes(kw))) return iconKey;
-  }
-
-  return "";
-}
+// The service->icon resolution and the icon-key -> artwork-path map now live
+// in `lib/service-icons.ts` (a pure, server-importable module) so the
+// external/partner VHI API resolves icons identically to this component.
+const imageIcons = ICON_KEY_TO_IMAGE;
 
 const defaultIcon = (
   <g>
@@ -305,7 +236,7 @@ interface ServiceIconProps {
 }
 
 export default function ServiceIcon({ serviceKey, title, className = "", size = 32 }: ServiceIconProps) {
-  const key = resolveIconKey(serviceKey, title);
+  const key = resolveServiceIconKey(serviceKey, title);
 
   const imgSrc = imageIcons[key];
   if (imgSrc) {

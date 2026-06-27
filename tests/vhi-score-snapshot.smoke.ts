@@ -16,6 +16,7 @@ import {
   formatVhiItem,
   categoryMultiplier,
 } from "../lib/vhi-score";
+import { getServiceIconSet } from "../lib/vhi-icons";
 import type { TriagedItemCache } from "../lib/plan-cache";
 
 let failed = 0;
@@ -185,6 +186,51 @@ async function run() {
     const it = item({ key: "x", serviceKey: "x", title: "Deferred Job" });
     const out = formatVhiItem(it, { bucket: "deferred" });
     eq("deferred bucket → deferred iconStatus", out.iconStatus, "deferred");
+  }
+
+  // ---- service-icon contract (Task #675) --------------------------------
+  // Partners render the per-service pictogram by resolving an item's
+  // serviceIconKey against the top-level serviceIcons map. Pin that
+  // (a) a known oil item resolves to the oil icon, (b) the set has markup
+  // for that key + the default fallback, and (c) unmatched items fall back
+  // to the general icon — so serviceKey/title changes can't silently break
+  // partner icons.
+  {
+    const oil = formatVhiItem(
+      item({ key: "oil", serviceKey: null, title: "Oil Change" }),
+      { bucket: "overdue" },
+    );
+    eq("formatVhiItem: oil item → oil_change service icon key", oil.serviceIconKey, "oil_change");
+
+    const diff = formatVhiItem(
+      item({ key: "d", serviceKey: "differential_rear", title: "Rear Differential Service" }),
+      { bucket: "dueSoon" },
+    );
+    eq("formatVhiItem: differential item → differential service icon key", diff.serviceIconKey, "differential_rear");
+
+    const unmatched = formatVhiItem(
+      item({ key: "z", serviceKey: "zzz_unknown_widget", title: "Zorptastic Whatsit" }),
+      { bucket: "upcoming" },
+    );
+    eq("formatVhiItem: unmatched item → general_service fallback key", unmatched.serviceIconKey, "general_service");
+
+    const set = getServiceIconSet();
+    ok(
+      "getServiceIconSet: has markup for oil_change",
+      typeof set.oil_change === "string" && set.oil_change.includes("<svg"),
+    );
+    ok(
+      "getServiceIconSet: has markup for general_service fallback",
+      typeof set.general_service === "string" && set.general_service.includes("<svg"),
+    );
+    ok(
+      "getServiceIconSet: has markup for differential_rear",
+      typeof set.differential_rear === "string" && set.differential_rear.includes("<svg"),
+    );
+    ok(
+      "getServiceIconSet: has markup for dvi_finding",
+      typeof set.dvi_finding === "string" && set.dvi_finding.includes("<svg"),
+    );
   }
 
   if (failed > 0) {

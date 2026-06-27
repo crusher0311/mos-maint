@@ -3,7 +3,7 @@ import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
-import { getStatusIconSet } from "@/lib/vhi-icons";
+import { getStatusIconSet, getServiceIconSet } from "@/lib/vhi-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
@@ -119,6 +119,7 @@ function buildPlanResponse(
       ),
     },
     icons: getStatusIconSet(),
+    serviceIcons: getServiceIconSet(),
     reportUrl: buildReportUrl(opts.vin, opts.resolvedShopId),
     cachedAt: opts.cachedAt,
     source: opts.source,
@@ -427,6 +428,7 @@ export const GET = createExternalEndpoint(
           ),
         },
         icons: getStatusIconSet(),
+        serviceIcons: getServiceIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         cachedAt: cached.createdAt,
         source: "cached_plan",
@@ -465,6 +467,7 @@ export const GET = createExternalEndpoint(
         // Task #476: same provenance field on the analysis-cache branch.
         mileageInputSource: mileageInputSource ?? "vehicles_collection",
         icons: getStatusIconSet(),
+        serviceIcons: getServiceIconSet(),
         reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
         // Task #391: legacy analysis-cache rows generally have no flag,
@@ -679,6 +682,7 @@ export const GET = createExternalEndpoint(
       summary: result.summary,
       buckets: result.buckets,
       icons: getStatusIconSet(),
+      serviceIcons: getServiceIconSet(),
       reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
