@@ -37,10 +37,11 @@ async function _POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { shopId, roNumber, vin, job } = body as {
+    const { shopId, roNumber, vin, job, workOrderGuid: workOrderGuidHint } = body as {
       shopId: number;
       roNumber?: string;
       vin?: string;
+      workOrderGuid?: string;
       job: {
         title: string;
         description?: string;
@@ -103,7 +104,26 @@ async function _POST(req: NextRequest) {
 
     let workOrderGuid: string | null = null;
 
-    if (sanitizedRoNumber) {
+    // Reuse the WO GUID captured at Create-RO time when present. Protractor's
+    // OData WorkOrderNumber search does NOT return open work orders (confirmed
+    // live: an open WO returns 0 hits by number), and the VIN->cached-WO
+    // fallback lags for a freshly created RO, so a brand-new RO would otherwise
+    // 404 here. The GUID is the only reliable handle right after creation.
+    if (typeof workOrderGuidHint === "string" && workOrderGuidHint.trim()) {
+      const candidate = workOrderGuidHint.trim();
+      // Validate the GUID shape before using it in a path-construction sink
+      // (/WorkOrder/{guid}). A malformed hint is ignored, not fatal — we just
+      // fall through to the normal RO-number / VIN lookup below.
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(candidate);
+      if (isUuid) {
+        workOrderGuid = candidate;
+        console.log(`[Ext Add-to-RO:${requestId}] Using WO GUID from create-RO hint: ${workOrderGuid}`);
+      } else {
+        console.warn(`[Ext Add-to-RO:${requestId}] Ignoring malformed workOrderGuid hint; falling back to lookup`);
+      }
+    }
+
+    if (!workOrderGuid && sanitizedRoNumber) {
       const searchResult = await protractorFetch<any>(
         `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
         config,

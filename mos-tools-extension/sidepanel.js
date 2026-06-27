@@ -2521,6 +2521,10 @@ async function handleAddJob(job) {
             shopId: Number(mosShopId),
             roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
             vin: currentContext.vehicle?.vin || undefined,
+            // Prefer the GUID captured when this RO was just created in
+            // Protractor — its OData number-search returns nothing for open WOs
+            // and the VIN->cache fallback lags right after creation.
+            workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin, currentContext.roId),
             job: jobData
           })
         }
@@ -5248,6 +5252,29 @@ initEstimateAssist();
 // (components/NewWorkOrderModal.tsx): concern-first flow with the AI assistant +
 // multi-concern, customer, vehicle (photo scan / VIN decode / plate lookup),
 // notes & mileage, jobs (Canned / Deferred / History tabs), confirm.
+// Maps a freshly-created RO's vehicle VIN -> { guid, number, at } so an
+// immediate "add job" (VHI Coach or Create RO panel) can target the new
+// Protractor work order directly by GUID. Protractor's OData WorkOrderNumber
+// search does not return open WOs, and the VIN->cached-WO fallback lags right
+// after creation, so without this hint a brand-new RO 404s on add-job.
+const recentlyCreatedWoByVin = {};
+
+function getRecentlyCreatedWoGuid(vin, roNumber) {
+  if (!vin) return undefined;
+  const entry = recentlyCreatedWoByVin[String(vin).toUpperCase()];
+  if (!entry || !entry.guid) return undefined;
+  // Only trust the hint briefly; after the cache/webhook catches up the normal
+  // VIN lookup is authoritative and the RO may have changed state.
+  if (Date.now() - (entry.at || 0) > 30 * 60 * 1000) return undefined;
+  // Guard against same-VIN, multiple-open-RO mix-ups: if we know which RO is on
+  // screen, the captured RO number must match it before we target by GUID.
+  // Otherwise the hint is ambiguous, so fall back to the normal lookup.
+  if (roNumber != null && String(roNumber).trim() && entry.number != null) {
+    if (String(entry.number) !== String(roNumber).trim()) return undefined;
+  }
+  return entry.guid;
+}
+
 const createRoState = {
   initialized: false,
   customer: null,
@@ -6427,6 +6454,16 @@ async function handleCroSubmit() {
       }
     }, 125000);
     if (!result?.ok && !result?.success) throw new Error(result?.error || 'Create failed');
+    try {
+      const createdVin = (createRoState.vehicle?.vin || '').toUpperCase();
+      if (createdVin && result.workOrderId) {
+        recentlyCreatedWoByVin[createdVin] = {
+          guid: result.workOrderId,
+          number: result.workOrderNumber || null,
+          at: Date.now(),
+        };
+      }
+    } catch (_) {}
     const detail = getCroEl('cro-result-detail');
     if (detail) {
       const num = result.workOrderNumber || result.workOrderId;

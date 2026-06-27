@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.46 — 2026-06-27
+
+### Fixed
+- **Adding a job to a repair order you just created in Protractor now works.**
+  Right after you created an RO from the extension, adding a job (from the VHI
+  Coach or the Create RO panel) could fail with "No open work order found for
+  RO# …" even though the RO clearly existed in Protractor. Protractor's lookup
+  by RO number does not return brand-new open work orders, and the by-VIN backup
+  reads a list that hasn't refreshed yet for a just-created RO. The extension now
+  remembers the exact work order it just created and targets it directly, so the
+  job lands on the right RO immediately.
+
 ## 1.27.45 — 2026-06-27
 
 ### Fixed

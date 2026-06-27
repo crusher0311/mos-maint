@@ -591,6 +591,14 @@ async function _GET(request: NextRequest) {
 
 async function _POST(request: NextRequest) {
   try {
+    const _t0 = Date.now();
+    let _tPrev = _t0;
+    const _timings: Record<string, number> = {};
+    const _lap = (label: string) => {
+      const now = Date.now();
+      _timings[label] = now - _tPrev;
+      _tPrev = now;
+    };
     const authResult = await validateExtensionToken(request);
     if (!authResult.authorized || !authResult.user) {
       return NextResponse.json(
@@ -599,6 +607,7 @@ async function _POST(request: NextRequest) {
       );
     }
 
+    _lap("auth");
     const body = await request.json();
     const {
       currentMileage,
@@ -652,6 +661,7 @@ async function _POST(request: NextRequest) {
       });
       if (denied) return denied;
     }
+    _lap("shopResolve+gate");
 
     const stickerConfig: StickerConfig = shop.stickerConfig || {};
     const intervals = {
@@ -707,6 +717,7 @@ async function _POST(request: NextRequest) {
         console.error(`[Extension Sticker] Predictive date error for VIN ${vin}:`, err.message);
       }
     }
+    _lap("predictiveDate");
 
     const size = stickerConfig.defaultSize || "2x2.5";
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
@@ -717,6 +728,7 @@ async function _POST(request: NextRequest) {
     if (stickerConfig.logo || stickerConfig.logoObjectPath || mosShopId) {
       logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath, String(mosShopId));
     }
+    _lap("logo");
     const configWithLogo = { 
       ...stickerConfig, 
       logo: logoDataUrl || undefined,
@@ -754,6 +766,7 @@ async function _POST(request: NextRequest) {
       qrDataUrl = null;
       console.log("[Extension Sticker] QR code excluded by user for this sticker");
     }
+    _lap("qr");
 
     let image: Buffer;
     
@@ -813,6 +826,7 @@ async function _POST(request: NextRequest) {
         2
       );
     }
+    _lap("render");
 
     await db.collection("sticker_generations").insertOne({
       shopId: mosShopId,
@@ -822,6 +836,7 @@ async function _POST(request: NextRequest) {
       size,
       unit,
     });
+    _lap("insertGen");
 
     // Trigger auto booking — fire-and-forget so the sticker response is never
     // blocked by Tekmetric/MongoDB latency. Previously this awaited the
@@ -856,6 +871,10 @@ async function _POST(request: NextRequest) {
     const dataUrl = `data:image/png;base64,${base64Image}`;
 
     const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["2x2.5"];
+
+    console.log(
+      `[Extension Sticker][timing] shop=${mosShopId} provider=${provider} total=${Date.now() - _t0}ms phases=${JSON.stringify(_timings)}`,
+    );
 
     return NextResponse.json({
       success: true,
