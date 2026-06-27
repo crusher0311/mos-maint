@@ -553,6 +553,16 @@ function setupEventListeners() {
   if (elements.concernSubmitBtn) {
     elements.concernSubmitBtn.addEventListener('click', handleConcernSubmit);
   }
+  // Enter submits the concern (Shift+Enter for a new line), so advisors don't
+  // have to leave the keyboard and click "Generate Follow-Up Questions".
+  if (elements.concernInput) {
+    elements.concernInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleConcernSubmit();
+      }
+    });
+  }
   if (elements.concernReviewBtn) {
     elements.concernReviewBtn.addEventListener('click', handleConcernReview);
   }

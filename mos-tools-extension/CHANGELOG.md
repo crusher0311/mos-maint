@@ -1,5 +1,13 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.42 — 2026-06-27
+
+### Changed
+- **Press Enter to generate concern follow-up questions.** In the Concern tab,
+  pressing Enter in the concern box now runs "Generate Follow-Up Questions"
+  directly, instead of just adding a blank line and making you click the button
+  separately. Use Shift+Enter if you want a line break in the concern text.
+
 ## 1.27.41 — 2026-06-27
 
 ### Fixed
