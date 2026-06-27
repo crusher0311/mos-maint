@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA } from "@/lib/sticker-designer-types";
+import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA, resolveStickerElementContent } from "@/lib/sticker-designer-types";
 import { QrCode, Image as ImageIcon } from "lucide-react";
 
 interface StickerContentData {
@@ -264,7 +264,9 @@ export function StickerDesignerCanvas({
         );
 
       case "serviceLabel":
-        return <span style={style}>{element.content || contentData?.serviceLabel || STICKER_SAMPLE_DATA.serviceLabel}</span>;
+        // Resolve via the same shared rule the printer uses so the preview is
+        // WYSIWYG: per-element override -> global Service Label -> fallback.
+        return <span style={style}>{resolveStickerElementContent(element, { serviceLabel: contentData?.serviceLabel })}</span>;
 
       case "phone":
         return <span style={style}>{contentData?.phone || STICKER_SAMPLE_DATA.phone}</span>;

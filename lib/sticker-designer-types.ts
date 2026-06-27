@@ -409,13 +409,54 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
   };
 }
 
+// Single source of truth for the Service Label fallback. Used by BOTH the
+// designer preview and the node-canvas printer so they can never drift.
+export const SERVICE_LABEL_FALLBACK = 'Next Oil Service';
+
 export const STICKER_SAMPLE_DATA: Record<string, string> = {
   logo: '/api/sticker/logo/sample',
   phone: '(555) 123-4567',
   tagline: 'Your Trusted Auto Care',
   taglineLine2: 'Since 1985',
-  serviceLabel: 'Next Oil Service',
+  serviceLabel: SERVICE_LABEL_FALLBACK,
   serviceDate: 'Apr 15, 2026',
   serviceMileage: '165,000 mi',
   qrCode: 'qr-placeholder',
 };
+
+// Effective content values for a sticker, with date/mileage already formatted
+// the way they will be rendered.
+export interface StickerContentValues {
+  phone?: string;
+  tagline?: string;
+  taglineLine2?: string;
+  serviceLabel?: string;
+  serviceDate?: string;
+  serviceMileage?: string;
+}
+
+// Shared resolution rule for what text an element renders. This is the single
+// source of truth used by the designer preview (StickerDesignerCanvas) and the
+// node-canvas printer (renderStickerDesigner) so the preview is always WYSIWYG.
+// Priority for the service label: per-element override -> global config -> fallback.
+export function resolveStickerElementContent(
+  el: { type: string; content?: string },
+  data: StickerContentValues
+): string {
+  switch (el.type) {
+    case 'phone':
+      return data.phone || '';
+    case 'tagline':
+      return data.tagline || '';
+    case 'taglineLine2':
+      return data.taglineLine2 || '';
+    case 'serviceLabel':
+      return el.content || data.serviceLabel || SERVICE_LABEL_FALLBACK;
+    case 'serviceDate':
+      return data.serviceDate || '';
+    case 'serviceMileage':
+      return data.serviceMileage || '';
+    default:
+      return el.content || '';
+  }
+}

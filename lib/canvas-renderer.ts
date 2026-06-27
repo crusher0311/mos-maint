@@ -1,5 +1,6 @@
 import { createCanvas, loadImage, registerFont, type Canvas, type CanvasRenderingContext2D, type Image } from "canvas";
 import path from "path";
+import { resolveStickerElementContent } from "@/lib/sticker-designer-types";
 
 let fontsRegistered = false;
 
@@ -313,17 +314,16 @@ export async function renderStickerDesigner(
   const scaleX = w / layout.canvasWidth;
   const scaleY = h / layout.canvasHeight;
 
-  const getContent = (el: StickerDesignerElement): string => {
-    switch (el.type) {
-      case "phone": return data.phone || "";
-      case "tagline": return data.tagline || "";
-      case "taglineLine2": return data.taglineLine2 || "";
-      case "serviceLabel": return el.content || data.serviceLabel || "Next Oil Service";
-      case "serviceDate": return data.formattedDate;
-      case "serviceMileage": return data.formattedMileage ? `${data.formattedMileage} ${data.distanceUnit}` : "";
-      default: return el.content || "";
-    }
-  };
+  const serviceMileageText = data.formattedMileage ? `${data.formattedMileage} ${data.distanceUnit}` : "";
+  const getContent = (el: StickerDesignerElement): string =>
+    resolveStickerElementContent(el, {
+      phone: data.phone,
+      tagline: data.tagline,
+      taglineLine2: data.taglineLine2,
+      serviceLabel: data.serviceLabel,
+      serviceDate: data.formattedDate,
+      serviceMileage: serviceMileageText,
+    });
 
   for (const el of layout.elements) {
     if (!el.visible) continue;
