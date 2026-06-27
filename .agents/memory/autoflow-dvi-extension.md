@@ -18,23 +18,28 @@ text scrapes. The mileage label renders with a required asterisk ("Mileage *"),
 so the text-regex must tolerate `*` and assorted separators.
 
 ## Shop id: v3 = subdomain, v4 = path (AutoFlow framework upgrade, in progress)
-AutoFlow is mid framework upgrade and the fleet is **split across two URL shapes
-at the same time** — do not assume one or the other:
+AutoFlow is mid framework upgrade. **MOST shops are reachable via BOTH URL
+shapes at the same time** — it is not one-or-the-other per shop, so the same
+physical shop can show up under either:
 - v3 (legacy): per-shop subdomain `harrells-nc87.autotext.me`.
 - v4 (new): shared host `app.autoflow.com` with the shop in the path,
-  `/shop/<slug>/...` where the slug is often a **shop number**.
+  `/shop/<slug>/...` where the slug is often a **shop number** (a different
+  identifier from the v3 subdomain).
 
 Subdomain-only detection breaks v4 and can emit a bogus generic id (e.g. `app`,
 or in the field a stray `qc`). Treat generic infra subdomains
 (app/www/admin/secure/api/portal) as NOT-a-shop and read the `/shop/<slug>` path.
 
-**How to apply:** whatever id the extension extracts (v3 subdomain OR v4
-path slug/shop-number) must match what the backend resolves against
-(`autoflow.subdomain` / `autoflow.domain` / `autoflow.shopId` / legacy top-level
-`autoflowDomain`). As shops migrate v3→v4 their stored AutoFlow identifier may
-change form, so resolution must tolerate both. The auth route now also emits a
-normalized `autoflowSubdomain` per shop so the side panel can match dual shops
-regardless of `provider`.
+**How to apply:** because both shapes are live for the same shop, the v3
+subdomain and the v4 path slug/shop-number are two DIFFERENT identifiers that
+must BOTH resolve to the one MOS shop. Whatever id the extension extracts must
+match what the backend resolves against (`autoflow.subdomain` /
+`autoflow.domain` / `autoflow.shopId` / legacy top-level `autoflowDomain`) — so
+a shop ideally needs its v4 number stored too, not only its v3 subdomain, or v4
+access will miss. The auth route emits a normalized `autoflowSubdomain` per shop
+so the side panel can match dual-integration shops regardless of `provider`;
+**known gap** — that single field only carries the subdomain form, so a v4-only
+URL whose slug ≠ subdomain won't match unless the v4 number is also stored/sent.
 
 ## Dual-integration AutoFlow shops never resolve as provider="autoflow"
 **Why:** shops that pair AutoFlow with a read/write provider (Protractor, Tekmetric)
