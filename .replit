@@ -15,6 +15,10 @@ author = "agent"
 task = "workflow.run"
 args = "MOS Maintenance MVP"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "ACES backfill shop66"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -26,6 +30,17 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow]]
+name = "ACES backfill shop66"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash -c 'rm -f /tmp/aces-shop66.done; echo \"=== START $(date -u) ===\"; npm run backfill:job-index-aces -- --shop 66; echo \"=== job-index DONE $(date -u) ===\"; npm run backfill:normalized-vehicles-aces -- --shop 66; echo \"=== ALL DONE $(date -u) ===\"; touch /tmp/aces-shop66.done; sleep infinity'"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 3000
