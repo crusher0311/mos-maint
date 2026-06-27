@@ -70,8 +70,20 @@ async function _POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500, headers: corsHeaders });
     }
 
-    await finalizeProtractorWorkOrderCreation(numShopId, result.workOrderId, {
+    // The RO already exists in Protractor at this point. The finalize step is
+    // pure post-write bookkeeping (re-fetch the WO, VIN-decode via DataOne, and
+    // sync it into the dashboard/normalized tables) — the user doesn't need to
+    // wait on it, and the regular webhook/cron sync would reconcile it anyway.
+    // So we fire it without awaiting and return success immediately. Render runs
+    // a persistent Node process, so this keeps running after the response; if it
+    // does get interrupted, the next webhook/cron sweep picks the WO up.
+    void finalizeProtractorWorkOrderCreation(numShopId, result.workOrderId, {
       logPrefix: "[Extension Create WO]",
+    }).catch((e) => {
+      console.error(
+        `[Extension Create WO] Background finalize failed for WO ${result.workOrderId} (shop ${numShopId}); webhook/cron will reconcile:`,
+        e,
+      );
     });
 
     // Best-effort WO-specific portal URL. Protractor doesn't expose a

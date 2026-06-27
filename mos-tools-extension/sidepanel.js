@@ -6339,7 +6339,8 @@ async function handleCroSubmit() {
     const detail = getCroEl('cro-result-detail');
     if (detail) {
       const num = result.workOrderNumber || result.workOrderId;
-      detail.textContent = num ? `RO #${num} created in Protractor.` : 'Work order created in Protractor.';
+      const created = num ? `RO #${num} created in Protractor.` : 'Work order created in Protractor.';
+      detail.textContent = `${created} It may take a moment to appear in the MOS dashboard.`;
     }
     renderCroSuccessLinks(result);
     getCroEl('cro-concern-section')?.classList.add('hidden');

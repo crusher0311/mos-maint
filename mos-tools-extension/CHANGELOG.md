@@ -1,5 +1,14 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.38 — 2026-06-27
+
+### Changed
+- **Create RO submits much faster.** Submitting a new repair order now returns as
+  soon as the RO is created in Protractor — you still get the RO number and link
+  right away. The dashboard bookkeeping (VIN decode, syncing it into MOS) now
+  finishes in the background instead of making you wait. The success screen notes
+  that the RO may take a moment to appear in the MOS dashboard.
+
 ## 1.27.37 — 2026-06-27
 
 ### Fixed
