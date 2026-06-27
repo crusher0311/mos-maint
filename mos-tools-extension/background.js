@@ -2291,6 +2291,23 @@ function detectOilType(vehicle, intervals, defaultOilType) {
   return 'synthetic';
 }
 
+// Task #709: choose the oil type for a LEFT-CLICK (immediate) print. The shop
+// owner explicitly picks a default via the "Set as default" radio in Oil
+// Sticker settings, so left-click must honor that choice regardless of the
+// vehicle's make/engine. Right-click presets still let staff pick per-sticker.
+//  - default set + visible  -> use it directly (the explicit choice wins)
+//  - default set but hidden -> degrade to a visible vehicle-based bucket
+//  - no default configured  -> legacy vehicle-based auto-detect (backward compat)
+function resolveLeftClickOilType(vehicle, intervals, defaultOilType) {
+  const isHidden = (key) => intervals && intervals[key] && intervals[key].hidden === true;
+  if (defaultOilType && !isHidden(defaultOilType)) {
+    return defaultOilType;
+  }
+  // Either no default configured, or the configured default is hidden — fall
+  // back to vehicle-based auto-detect, which never returns a hidden bucket.
+  return detectOilType(vehicle, intervals, defaultOilType);
+}
+
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS. Please login first.");
@@ -2342,8 +2359,8 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     requestBody.customMonths = overrideInterval.months;
     console.log(`[MOS] Using custom interval: ${overrideInterval.miles} ${unit} / ${overrideInterval.months} mo`);
   } else {
-    requestBody.intervalType = detectOilType(context.vehicle, shopIntervals, shopDefaultOilType);
-    console.log(`[MOS] Auto-detected oil type: ${requestBody.intervalType} for ${context.vehicle?.make || 'unknown'}`);
+    requestBody.intervalType = resolveLeftClickOilType(context.vehicle, shopIntervals, shopDefaultOilType);
+    console.log(`[MOS] Left-click oil type: ${requestBody.intervalType} (shop default: ${shopDefaultOilType || 'none'}) for ${context.vehicle?.make || 'unknown'}`);
   }
 
   // Add customer/vehicle data for auto booking

@@ -296,6 +296,7 @@ interface StickerConfig {
     euro?: { mileage: number; months: number };
     diesel?: { mileage: number; months: number };
   };
+  defaultOilType?: "diesel" | "euro" | "synthetic" | "conventional";
   designerLayout?: DesignerLayout;
 }
 
@@ -578,6 +579,11 @@ async function _GET(request: NextRequest) {
           euro: stickerConfig.intervals?.euro || DEFAULT_INTERVALS.euro,
           diesel: stickerConfig.intervals?.diesel || DEFAULT_INTERVALS.diesel,
         },
+        // The shop's explicit "Set as default" oil-type choice. Passed through
+        // as-is (undefined when never configured) so the extension's left-click
+        // honors it when set but keeps vehicle-based auto-detect for shops that
+        // never picked one — see resolveLeftClickOilType in the extension.
+        defaultOilType: stickerConfig.defaultOilType,
       },
     }, { headers: corsHeaders });
   } catch (error: any) {

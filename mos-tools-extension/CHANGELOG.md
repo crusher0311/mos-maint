@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.49 — 2026-06-27
+
+### Fixed
+- **Left-clicking the sticker button now uses your shop's default oil type.**
+  If you set a default oil type (for example European, 6,000 miles) on the Oil
+  Stickers settings page, left-clicking the print button now calculates the
+  sticker with that default's miles/months on every vehicle — instead of
+  guessing the oil type from the make or engine. Your explicit choice is
+  honored regardless of the vehicle. If the type you set as default is hidden,
+  the sticker falls back to a visible interval instead of printing a hidden
+  one, and shops that never set a default keep the previous automatic
+  detection. Right-clicking to pick a different oil type per sticker, and the
+  "Custom Date/Mileage…" override, work exactly as before.
+
 ## 1.27.48 — 2026-06-27
 
 ### Changed
