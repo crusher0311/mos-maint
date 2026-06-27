@@ -427,6 +427,89 @@ body {
   margin: 0;
 }
 
+/* Concern step (multi-concern) */
+.cro-concern-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cro-concern-list {
+  list-style: none;
+  margin: 0 0 4px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cro-concern-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #1e3a8a;
+}
+.cro-concern-list li span { white-space: pre-wrap; word-break: break-word; }
+
+/* Vehicle scan / decode / plate */
+.cro-scan-row { display: flex; }
+.cro-scan-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px !important;
+}
+.cro-scan-status {
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--gray-600, #4b5563);
+}
+.cro-scan-status.is-error { color: #dc2626; }
+.cro-state-input { max-width: 64px; text-transform: uppercase; }
+
+/* Jobs tabs (Canned / Deferred / History) */
+.cro-jobs-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--gray-200, #e5e7eb);
+  margin-bottom: 8px;
+}
+.cro-jobs-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-500, #6b7280);
+  cursor: pointer;
+}
+.cro-jobs-tab:hover { color: var(--gray-700, #374151); }
+.cro-jobs-tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  font-weight: 600;
+}
+
+/* Confirm summary */
+.cro-confirm-summary {
+  font-size: 12px;
+  color: var(--gray-600, #4b5563);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cro-confirm-summary .cro-confirm-row strong { color: var(--gray-800, #1f2937); }
+
 .logout-footer {
   padding: 8px 16px;
   border-top: 1px solid var(--gray-200);

@@ -4802,7 +4802,8 @@ function handleConcernUseForRo() {
   switchTab('create-ro');
   const concernBox = getCroEl('cro-concern');
   if (concernBox) concernBox.value = text;
-  getCroEl('cro-details-section')?.classList.remove('hidden');
+  // Concern is step 1 (cro-concern-section, always visible) in the redesigned
+  // flow, so no section needs to be revealed here.
   concernBox?.focus();
   showNotification('Concern added to the repair order.', 'success');
 }
@@ -5218,15 +5219,26 @@ initEstimateAssist();
 // Platform-admin-only sidepanel UI that drives the server-side
 
 // ==================== CREATE RO (Protractor) — Task #348 ====================
+// Redesigned for full parity with the dashboard Create RO modal
+// (components/NewWorkOrderModal.tsx): concern-first flow with the AI assistant +
+// multi-concern, customer, vehicle (photo scan / VIN decode / plate lookup),
+// notes & mileage, jobs (Canned / Deferred / History tabs), confirm.
 const createRoState = {
   initialized: false,
   customer: null,
-  vehicle: null,
+  vehicle: null, // {id, display, vin, year, make, model}
   submitting: false,
+  concerns: [], // saved concern strings (multi-concern)
   cannedJobs: [],
   cannedJobsLoaded: false,
   cannedJobsLoading: false,
-  selectedJobs: [], // [{key, title, code, deferredId, source}]
+  deferred: [],
+  deferredLoaded: false,
+  deferredLoading: false,
+  history: [],
+  historySearching: false,
+  activeJobsTab: 'canned',
+  selectedJobs: [], // [{key, source, title, description?, code?, chapter?, originalWorkOrderId?, deferredId?, lines?}]
 };
 
 function escCro(str) {
@@ -5253,23 +5265,60 @@ function setCroError(elId, msg) {
   }
 }
 
+
+function mosTelemetry(event, props) {
+  // Lightweight structured-log telemetry. Centralized so we can swap in a
+  // real analytics push later without changing call sites.
+  try {
+    console.log('[MOS Telemetry]', event, props || {});
+  } catch (_) { /* no-op */ }
+}
+
 function resetCroState() {
   createRoState.customer = null;
   createRoState.vehicle = null;
   createRoState.submitting = false;
+  createRoState.concerns = [];
   createRoState.cannedJobs = [];
   createRoState.cannedJobsLoaded = false;
   createRoState.cannedJobsLoading = false;
+  createRoState.deferred = [];
+  createRoState.deferredLoaded = false;
+  createRoState.deferredLoading = false;
+  createRoState.history = [];
+  createRoState.historySearching = false;
+  createRoState.activeJobsTab = 'canned';
   createRoState.selectedJobs = [];
-  const jobsSearch = getCroEl('cro-jobs-search');
-  if (jobsSearch) jobsSearch.value = '';
+
+  ['cro-jobs-search', 'cro-history-search'].forEach(id => {
+    const el = getCroEl(id); if (el) el.value = '';
+  });
+  getCroEl('cro-vehicle-section')?.classList.add('hidden');
+  getCroEl('cro-details-section')?.classList.add('hidden');
   getCroEl('cro-jobs-section')?.classList.add('hidden');
-  getCroEl('cro-jobs-list')?.classList.add('hidden');
-  getCroEl('cro-jobs-empty')?.classList.add('hidden');
-  getCroEl('cro-jobs-loading')?.classList.add('hidden');
-  getCroEl('cro-jobs-error')?.classList.add('hidden');
+  getCroEl('cro-confirm-section')?.classList.add('hidden');
+  getCroEl('cro-result-section')?.classList.add('hidden');
+  getCroEl('cro-concern-section')?.classList.remove('hidden');
+  getCroEl('cro-customer-section')?.classList.remove('hidden');
+  getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
+
+  // Reset jobs tabs + panes.
+  setCroJobsTab('canned');
+  ['cro-jobs-list', 'cro-jobs-empty', 'cro-jobs-loading', 'cro-jobs-error',
+   'cro-deferred-list', 'cro-deferred-empty', 'cro-deferred-loading', 'cro-deferred-error',
+   'cro-history-list', 'cro-history-loading', 'cro-history-error'].forEach(id => {
+    getCroEl(id)?.classList.add('hidden');
+  });
+
+  // Scan/decode status.
+  const scanStatus = getCroEl('cro-vehicle-scan-status');
+  if (scanStatus) { scanStatus.textContent = ''; scanStatus.classList.add('hidden'); scanStatus.classList.remove('is-error'); }
+
   const sel = getCroEl('cro-jobs-selected');
   if (sel) { sel.innerHTML = ''; sel.classList.add('hidden'); }
+  const concernList = getCroEl('cro-concern-list');
+  if (concernList) { concernList.innerHTML = ''; concernList.classList.add('hidden'); }
+
   ['cro-customer-results', 'cro-vehicle-results'].forEach(id => {
     const el = getCroEl(id);
     if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
@@ -5281,7 +5330,8 @@ function resetCroState() {
   ['cro-customer-search', 'cro-new-customer-first', 'cro-new-customer-last',
    'cro-new-customer-phone', 'cro-new-customer-email', 'cro-new-vehicle-vin',
    'cro-new-vehicle-year', 'cro-new-vehicle-make', 'cro-new-vehicle-model',
-   'cro-new-vehicle-plate', 'cro-concern', 'cro-mileage', 'cro-note'].forEach(id => {
+   'cro-new-vehicle-plate', 'cro-new-vehicle-state', 'cro-concern',
+   'cro-mileage', 'cro-note'].forEach(id => {
     const el = getCroEl(id); if (el) el.value = '';
   });
   ['cro-customer-new-form', 'cro-vehicle-new-form'].forEach(id => {
@@ -5289,19 +5339,6 @@ function resetCroState() {
   });
   getCroEl('cro-customer-picked')?.classList.add('hidden');
   getCroEl('cro-vehicle-picked')?.classList.add('hidden');
-  getCroEl('cro-vehicle-section')?.classList.add('hidden');
-  getCroEl('cro-details-section')?.classList.add('hidden');
-  getCroEl('cro-result-section')?.classList.add('hidden');
-  getCroEl('cro-customer-section')?.classList.remove('hidden');
-  getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
-}
-
-function mosTelemetry(event, props) {
-  // Lightweight structured-log telemetry. Centralized so we can swap in a
-  // real analytics push later without changing call sites.
-  try {
-    console.log('[MOS Telemetry]', event, props || {});
-  } catch (_) { /* no-op */ }
 }
 
 function initCreateRoTab() {
@@ -5332,8 +5369,8 @@ function initCreateRoTab() {
       const m = getCroEl('cro-mileage');
       if (m) m.value = String(currentContext.mileage).replace(/[^\d]/g, '');
     }
-    // Prefill the customer search box with the AutoFlow-detected name so
-    // advisors don't retype it. They still have to confirm the match.
+    // Prefill the customer search box with the detected name so advisors don't
+    // retype it. They still have to confirm the match.
     const customerName = currentContext.customerName ||
       (currentContext.customer && currentContext.customer.name) || '';
     if (customerName) {
@@ -5341,7 +5378,7 @@ function initCreateRoTab() {
       if (search) search.value = customerName;
     }
     // Prefill the new-vehicle VIN field so a one-click "Create new vehicle"
-    // doesn't lose the VIN we already detected on the AutoFlow page.
+    // doesn't lose the VIN we already detected on the source page.
     const vin = currentContext.vin || currentContext.vehicle?.vin || '';
     if (vin) {
       const vinEl = getCroEl('cro-new-vehicle-vin');
@@ -5351,6 +5388,11 @@ function initCreateRoTab() {
 }
 
 function bindCreateRoListeners() {
+  // ---- Concern (multi-concern + AI assistant) ----
+  getCroEl('cro-concern-add-btn')?.addEventListener('click', handleCroAddConcern);
+  // cro-concern-ai-btn is wired in the main element-binding pass (handleCroConcernAi).
+
+  // ---- Customer ----
   getCroEl('cro-customer-search-btn')?.addEventListener('click', handleCroCustomerSearch);
   getCroEl('cro-customer-search')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleCroCustomerSearch();
@@ -5367,10 +5409,12 @@ function bindCreateRoListeners() {
     getCroEl('cro-customer-picked')?.classList.add('hidden');
     getCroEl('cro-customer-search-wrap')?.classList.remove('hidden');
     getCroEl('cro-vehicle-section')?.classList.add('hidden');
-    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
+    getCroEl('cro-confirm-section')?.classList.add('hidden');
   });
 
+  // ---- Vehicle ----
   getCroEl('cro-vehicle-new-toggle')?.addEventListener('click', () => {
     getCroEl('cro-vehicle-new-form')?.classList.toggle('hidden');
   });
@@ -5379,18 +5423,45 @@ function bindCreateRoListeners() {
     createRoState.vehicle = null;
     getCroEl('cro-vehicle-picked')?.classList.add('hidden');
     getCroEl('cro-vehicle-pick-wrap')?.classList.remove('hidden');
-    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
+    getCroEl('cro-confirm-section')?.classList.add('hidden');
     if (createRoState.customer) loadCroVehicles(createRoState.customer.id);
   });
+  getCroEl('cro-vehicle-scan-btn')?.addEventListener('click', () => {
+    getCroEl('cro-vehicle-scan-input')?.click();
+  });
+  getCroEl('cro-vehicle-scan-input')?.addEventListener('change', handleCroScan);
+  getCroEl('cro-vehicle-decode-btn')?.addEventListener('click', () => handleCroVinDecode());
+  getCroEl('cro-new-vehicle-vin')?.addEventListener('input', (e) => {
+    const v = (e.target.value || '').trim();
+    if (v.length === 17) handleCroVinDecode();
+  });
+  getCroEl('cro-vehicle-plate-btn')?.addEventListener('click', handleCroPlateLookup);
 
+  // ---- Jobs tabs ----
+  document.querySelectorAll('.cro-jobs-tab').forEach(tab => {
+    tab.addEventListener('click', () => setCroJobsTab(tab.dataset.jobsTab));
+  });
   const jobsSearchEl = getCroEl('cro-jobs-search');
   if (jobsSearchEl) {
     jobsSearchEl.addEventListener('input', () => {
-      renderCroJobs(filterCroCannedJobs(jobsSearchEl.value));
+      renderCroCannedJobs(filterCroCannedJobs(jobsSearchEl.value));
+    });
+  }
+  const historySearchEl = getCroEl('cro-history-search');
+  if (historySearchEl) {
+    let histTimer = null;
+    historySearchEl.addEventListener('input', () => {
+      clearTimeout(histTimer);
+      histTimer = setTimeout(() => handleCroHistorySearch(historySearchEl.value), 350);
+    });
+    historySearchEl.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') { clearTimeout(histTimer); handleCroHistorySearch(historySearchEl.value); }
     });
   }
 
+  // ---- Confirm ----
   getCroEl('cro-submit')?.addEventListener('click', handleCroSubmit);
   getCroEl('cro-result-new')?.addEventListener('click', () => initCreateRoTab());
 }
@@ -5399,6 +5470,50 @@ function getCroShopId() {
   return currentContext?.shopId || resolvedMosShopId || null;
 }
 
+// ==================== CRO: Concern (multi-concern) ====================
+function handleCroAddConcern() {
+  const box = getCroEl('cro-concern');
+  const text = (box?.value || '').trim();
+  if (!text) return;
+  createRoState.concerns.push(text);
+  if (box) box.value = '';
+  renderCroConcerns();
+  box?.focus();
+}
+
+function removeCroConcern(idx) {
+  createRoState.concerns.splice(idx, 1);
+  renderCroConcerns();
+}
+
+function renderCroConcerns() {
+  const list = getCroEl('cro-concern-list');
+  if (!list) return;
+  if (createRoState.concerns.length === 0) {
+    list.innerHTML = '';
+    list.classList.add('hidden');
+    return;
+  }
+  list.classList.remove('hidden');
+  list.innerHTML = createRoState.concerns.map((c, i) => `
+    <li>
+      <span>${escCro(c)}</span>
+      <button class="create-ro-link-btn cro-concern-remove-btn" data-idx="${i}" type="button">Remove</button>
+    </li>
+  `).join('');
+  list.querySelectorAll('.cro-concern-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeCroConcern(Number(btn.dataset.idx)));
+  });
+}
+
+function gatherCroConcerns() {
+  const current = (getCroEl('cro-concern')?.value || '').trim();
+  const all = [...createRoState.concerns];
+  if (current) all.push(current);
+  return all;
+}
+
+// ==================== CRO: Customer ====================
 async function handleCroCustomerSearch() {
   setCroError('cro-customer-error', '');
   const q = (getCroEl('cro-customer-search')?.value || '').trim();
@@ -5494,9 +5609,11 @@ function selectCroCustomer(customer) {
   getCroEl('cro-customer-search-wrap')?.classList.add('hidden');
   getCroEl('cro-vehicle-section')?.classList.remove('hidden');
   getCroEl('cro-vehicle-picked')?.classList.add('hidden');
+  getCroEl('cro-vehicle-pick-wrap')?.classList.remove('hidden');
   loadCroVehicles(customer.id);
 }
 
+// ==================== CRO: Vehicle ====================
 async function loadCroVehicles(ownerId) {
   setCroError('cro-vehicle-error', '');
   const loadingEl = getCroEl('cro-vehicle-loading');
@@ -5520,10 +5637,10 @@ async function loadCroVehicles(ownerId) {
       getCroEl('cro-vehicle-new-form')?.classList.remove('hidden');
       return;
     }
-    listEl.innerHTML = vehicles.map(v => {
+    listEl.innerHTML = vehicles.map((v, idx) => {
       const display = [v.year, v.make, v.model].filter(Boolean).join(' ') || v.vin || '(vehicle)';
       const meta = [v.vin && ('VIN ' + v.vin), v.plate].filter(Boolean).join(' · ');
-      return `<li data-vid="${escCro(v.id)}" data-display="${escCro(display)}">
+      return `<li data-vidx="${idx}">
         <strong>${escCro(display)}</strong>
         ${meta ? `<span class="ro-list-meta">${escCro(meta)}</span>` : ''}
       </li>`;
@@ -5531,13 +5648,157 @@ async function loadCroVehicles(ownerId) {
     listEl.classList.remove('hidden');
     listEl.querySelectorAll('li').forEach(li => {
       li.addEventListener('click', () => {
-        selectCroVehicle({ id: li.dataset.vid, display: li.dataset.display });
+        const v = vehicles[Number(li.dataset.vidx)];
+        if (!v) return;
+        const display = [v.year, v.make, v.model].filter(Boolean).join(' ') || v.vin || '(vehicle)';
+        selectCroVehicle({
+          id: v.id, display, vin: v.vin || '',
+          year: v.year || '', make: v.make || '', model: v.model || '',
+        });
       });
     });
   } catch (err) {
     console.error('[MOS] CRO vehicle load error:', err);
     loadingEl?.classList.add('hidden');
     setCroError('cro-vehicle-error', err.message || 'Could not load vehicles.');
+  }
+}
+
+function setCroScanStatus(msg, isError) {
+  const el = getCroEl('cro-vehicle-scan-status');
+  if (!el) return;
+  if (!msg) { el.textContent = ''; el.classList.add('hidden'); el.classList.remove('is-error'); return; }
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  el.classList.toggle('is-error', !!isError);
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const comma = result.indexOf(',');
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error('Could not read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleCroScan(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // allow re-selecting the same file
+  if (!file) return;
+  const shopId = getCroShopId();
+  if (!shopId) { setCroScanStatus('No shop context.', true); return; }
+  setCroScanStatus('Reading photo…');
+  try {
+    const imageBase64 = await readFileAsBase64(file);
+    setCroScanStatus('Scanning VIN / plate…');
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/protractor/vin-plate-ocr',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({ shopId, imageBase64, mimeType: file.type || 'image/jpeg', type: 'auto' }),
+      }
+    });
+    if (result?.error) throw new Error(result.error);
+    // The OCR route returns { success, result: { type, vin, plate, state, ... } }.
+    const ocr = result?.result || result || {};
+    const vin = (ocr.vin || '').trim().toUpperCase();
+    const plate = (ocr.plate || '').trim().toUpperCase();
+    const state = (ocr.state || '').trim().toUpperCase();
+    if (vin) {
+      const vinEl = getCroEl('cro-new-vehicle-vin');
+      if (vinEl) vinEl.value = vin;
+      setCroScanStatus('VIN detected — decoding…');
+      await handleCroVinDecode();
+      return;
+    }
+    if (plate) {
+      const plateEl = getCroEl('cro-new-vehicle-plate');
+      if (plateEl) plateEl.value = plate;
+      if (state) { const sEl = getCroEl('cro-new-vehicle-state'); if (sEl) sEl.value = state; }
+      setCroScanStatus('Plate detected — looking up…');
+      await handleCroPlateLookup();
+      return;
+    }
+    setCroScanStatus('No VIN or plate found in the photo.', true);
+  } catch (err) {
+    console.error('[MOS] CRO scan error:', err);
+    setCroScanStatus(err.message || 'Scan failed.', true);
+  }
+}
+
+async function handleCroVinDecode() {
+  const vin = (getCroEl('cro-new-vehicle-vin')?.value || '').trim().toUpperCase();
+  if (vin.length !== 17) { setCroScanStatus('Enter a full 17-character VIN to decode.', true); return; }
+  const shopId = getCroShopId();
+  if (!shopId) { setCroScanStatus('No shop context.', true); return; }
+  const btn = getCroEl('cro-vehicle-decode-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  setCroScanStatus('Decoding VIN…');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/protractor/vin-decode?shopId=${encodeURIComponent(shopId)}&vin=${encodeURIComponent(vin)}`
+    });
+    if (result?.error) throw new Error(result.error);
+    const v = result?.vehicle || result || {};
+    const year = v.year || '';
+    const make = v.make || '';
+    const model = v.model || '';
+    if (year) { const el = getCroEl('cro-new-vehicle-year'); if (el) el.value = year; }
+    if (make) { const el = getCroEl('cro-new-vehicle-make'); if (el) el.value = make; }
+    if (model) { const el = getCroEl('cro-new-vehicle-model'); if (el) el.value = model; }
+    if (year || make || model) {
+      setCroScanStatus(`Decoded: ${[year, make, model].filter(Boolean).join(' ')}`);
+    } else {
+      setCroScanStatus('VIN could not be decoded. Enter details manually.', true);
+    }
+  } catch (err) {
+    console.error('[MOS] CRO VIN decode error:', err);
+    setCroScanStatus(err.message || 'VIN decode failed.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Decode'; }
+  }
+}
+
+async function handleCroPlateLookup() {
+  const plate = (getCroEl('cro-new-vehicle-plate')?.value || '').trim().toUpperCase();
+  const state = (getCroEl('cro-new-vehicle-state')?.value || '').trim().toUpperCase();
+  if (!plate) { setCroScanStatus('Enter a license plate first.', true); return; }
+  if (!state) { setCroScanStatus('Enter the 2-letter state for the plate.', true); return; }
+  const shopId = getCroShopId();
+  if (!shopId) { setCroScanStatus('No shop context.', true); return; }
+  const btn = getCroEl('cro-vehicle-plate-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  setCroScanStatus('Looking up plate…');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/protractor/plate-lookup',
+      options: { method: 'POST', body: JSON.stringify({ shopId, plate, state }) }
+    });
+    if (result?.error) throw new Error(result.error);
+    const v = result?.vehicle || result || {};
+    const vin = (v.vin || '').toUpperCase();
+    if (vin) { const el = getCroEl('cro-new-vehicle-vin'); if (el) el.value = vin; }
+    if (v.year) { const el = getCroEl('cro-new-vehicle-year'); if (el) el.value = v.year; }
+    if (v.make) { const el = getCroEl('cro-new-vehicle-make'); if (el) el.value = v.make; }
+    if (v.model) { const el = getCroEl('cro-new-vehicle-model'); if (el) el.value = v.model; }
+    if (vin || v.year || v.make || v.model) {
+      setCroScanStatus(`Found: ${[v.year, v.make, v.model].filter(Boolean).join(' ') || vin}`);
+    } else {
+      setCroScanStatus('No vehicle found for that plate.', true);
+    }
+  } catch (err) {
+    console.error('[MOS] CRO plate lookup error:', err);
+    setCroScanStatus(err.message || 'Plate lookup failed.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Look up'; }
   }
 }
 
@@ -5578,7 +5839,7 @@ async function handleCroCreateVehicle() {
     });
     if (!result?.success) throw new Error(result?.error || 'Create failed');
     const display = [yearStr, make, model].filter(Boolean).join(' ') || vin || 'New vehicle';
-    selectCroVehicle({ id: result.vehicleId, display });
+    selectCroVehicle({ id: result.vehicleId, display, vin, year: yearStr, make, model });
   } catch (err) {
     setCroError('cro-vehicle-error', err.message || 'Could not create vehicle.');
   } finally {
@@ -5588,120 +5849,72 @@ async function handleCroCreateVehicle() {
 
 function selectCroVehicle(vehicle) {
   createRoState.vehicle = vehicle;
+  // A new vehicle invalidates the vehicle-scoped deferred-work cache.
+  createRoState.deferred = [];
+  createRoState.deferredLoaded = false;
   const picked = getCroEl('cro-vehicle-picked');
   const label = getCroEl('cro-vehicle-picked-label');
   if (label) label.textContent = '✓ ' + vehicle.display;
   picked?.classList.remove('hidden');
   getCroEl('cro-vehicle-pick-wrap')?.classList.add('hidden');
-  getCroEl('cro-jobs-section')?.classList.remove('hidden');
   getCroEl('cro-details-section')?.classList.remove('hidden');
-  loadCroCannedJobs();
+  getCroEl('cro-jobs-section')?.classList.remove('hidden');
+  getCroEl('cro-confirm-section')?.classList.remove('hidden');
+  setCroScanStatus('');
+  renderCroConfirmSummary();
+  // Default to the canned tab and lazy-load it.
+  setCroJobsTab('canned');
 }
 
-async function loadCroCannedJobs() {
-  if (createRoState.cannedJobsLoaded || createRoState.cannedJobsLoading) {
-    renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
-    return;
-  }
-  const shopId = getCroShopId();
-  if (!shopId) return;
-  setCroError('cro-jobs-error', '');
-  createRoState.cannedJobsLoading = true;
-  getCroEl('cro-jobs-loading')?.classList.remove('hidden');
-  getCroEl('cro-jobs-empty')?.classList.add('hidden');
-  getCroEl('cro-jobs-list')?.classList.add('hidden');
-  try {
-    const result = await sendMessage({
-      action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/canned-jobs?shopId=${encodeURIComponent(shopId)}&provider=protractor`,
-    });
-    if (result?.error || result?.success === false) {
-      throw new Error(result?.error || 'Failed to load canned jobs');
-    }
-    createRoState.cannedJobs = result?.jobs || [];
-    createRoState.cannedJobsLoaded = true;
-    renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
-  } catch (err) {
-    console.error('[MOS] CRO canned jobs load error:', err);
-    setCroError('cro-jobs-error', err.message || 'Could not load canned jobs.');
-  } finally {
-    createRoState.cannedJobsLoading = false;
-    getCroEl('cro-jobs-loading')?.classList.add('hidden');
+// ==================== CRO: Jobs (Canned / Deferred / History) ====================
+function setCroJobsTab(tab) {
+  createRoState.activeJobsTab = tab;
+  document.querySelectorAll('.cro-jobs-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.jobsTab === tab);
+  });
+  getCroEl('cro-jobs-pane-canned')?.classList.toggle('hidden', tab !== 'canned');
+  getCroEl('cro-jobs-pane-deferred')?.classList.toggle('hidden', tab !== 'deferred');
+  getCroEl('cro-jobs-pane-history')?.classList.toggle('hidden', tab !== 'history');
+  if (tab === 'canned') loadCroCannedJobs();
+  else if (tab === 'deferred') loadCroDeferredWork();
+  else if (tab === 'history') {
+    const empty = getCroEl('cro-history-empty');
+    if (!createRoState.history.length && !createRoState.historySearching) empty?.classList.remove('hidden');
   }
 }
 
-function filterCroCannedJobs(term) {
-  const t = (term || '').toLowerCase().trim();
-  if (!t) return createRoState.cannedJobs;
-  const words = t.split(/\s+/).filter(w => w.length > 1);
-  return createRoState.cannedJobs.filter(j => {
-    const name = (j.name || '').toLowerCase();
-    const desc = (j.description || '').toLowerCase();
-    const combined = name + ' ' + desc;
-    if (name.includes(t) || desc.includes(t)) return true;
-    return words.length > 0 && words.every(w => combined.includes(w));
-  });
+// ---- selected-jobs model (cross-source) ----
+function croJobKey(source, ident) {
+  return `${source}:${String(ident || '')}`;
 }
 
-function cannedJobKey(job) {
-  return String(job.id || job.tekmetricId || job.code || job.name || '');
+function isCroJobSelected(key) {
+  return createRoState.selectedJobs.some(j => j.key === key);
 }
 
-function renderCroJobs(jobs) {
-  const listEl = getCroEl('cro-jobs-list');
-  const emptyEl = getCroEl('cro-jobs-empty');
-  if (!listEl) return;
-  if (!jobs || jobs.length === 0) {
-    listEl.classList.add('hidden');
-    listEl.innerHTML = '';
-    emptyEl?.classList.remove('hidden');
-    return;
-  }
-  emptyEl?.classList.add('hidden');
-  const selectedKeys = new Set(createRoState.selectedJobs.map(j => j.key));
-  listEl.classList.remove('hidden');
-  listEl.innerHTML = jobs.slice(0, 100).map((job, idx) => {
-    const key = cannedJobKey(job);
-    const added = selectedKeys.has(key);
-    return `
-      <li class="job-item">
-        <div class="job-header" style="cursor: default;">
-          <div>
-            <div class="job-title">${escCro(job.name || '(unnamed job)')}</div>
-            ${job.description ? `<div class="job-meta">${escCro(job.description)}</div>` : ''}
-          </div>
-          <button class="btn-add cro-job-add-btn" data-job-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
-        </div>
-      </li>
-    `;
-  }).join('');
-  listEl.querySelectorAll('.cro-job-add-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = Number(btn.dataset.jobIdx);
-      const job = jobs[idx];
-      if (job) addCroJob(job);
-    });
-  });
-}
-
-function addCroJob(job) {
-  const key = cannedJobKey(job);
-  if (!key || createRoState.selectedJobs.some(j => j.key === key)) return;
-  createRoState.selectedJobs.push({
-    key,
-    title: job.name || job.title || 'Job',
-    code: job.code ? String(job.code) : undefined,
-    deferredId: job.id ? String(job.id) : undefined,
-    source: 'canned',
-  });
+function addCroSelectedJob(job) {
+  if (!job.key || isCroJobSelected(job.key)) return;
+  createRoState.selectedJobs.push(job);
   renderCroSelectedJobs();
-  renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+  renderCroConfirmSummary();
+  refreshActiveCroJobsList();
 }
 
 function removeCroJob(key) {
   createRoState.selectedJobs = createRoState.selectedJobs.filter(j => j.key !== key);
   renderCroSelectedJobs();
-  renderCroJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+  renderCroConfirmSummary();
+  refreshActiveCroJobsList();
+}
+
+function refreshActiveCroJobsList() {
+  if (createRoState.activeJobsTab === 'canned') {
+    renderCroCannedJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+  } else if (createRoState.activeJobsTab === 'deferred') {
+    renderCroDeferred();
+  } else if (createRoState.activeJobsTab === 'history') {
+    renderCroHistory();
+  }
 }
 
 function renderCroSelectedJobs() {
@@ -5729,11 +5942,291 @@ function renderCroSelectedJobs() {
   });
 }
 
+// ---- Canned tab ----
+async function loadCroCannedJobs() {
+  if (createRoState.cannedJobsLoaded || createRoState.cannedJobsLoading) {
+    renderCroCannedJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) return;
+  setCroError('cro-jobs-error', '');
+  createRoState.cannedJobsLoading = true;
+  getCroEl('cro-jobs-loading')?.classList.remove('hidden');
+  getCroEl('cro-jobs-empty')?.classList.add('hidden');
+  getCroEl('cro-jobs-list')?.classList.add('hidden');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/canned-jobs?shopId=${encodeURIComponent(shopId)}&provider=protractor`,
+    });
+    if (result?.error || result?.success === false) {
+      throw new Error(result?.error || 'Failed to load canned jobs');
+    }
+    createRoState.cannedJobs = result?.jobs || [];
+    createRoState.cannedJobsLoaded = true;
+    renderCroCannedJobs(filterCroCannedJobs(getCroEl('cro-jobs-search')?.value || ''));
+  } catch (err) {
+    console.error('[MOS] CRO canned jobs load error:', err);
+    setCroError('cro-jobs-error', err.message || 'Could not load canned jobs.');
+  } finally {
+    createRoState.cannedJobsLoading = false;
+    getCroEl('cro-jobs-loading')?.classList.add('hidden');
+  }
+}
+
+function filterCroCannedJobs(term) {
+  const t = (term || '').toLowerCase().trim();
+  if (!t) return createRoState.cannedJobs;
+  const words = t.split(/\s+/).filter(w => w.length > 1);
+  return createRoState.cannedJobs.filter(j => {
+    const name = (j.name || '').toLowerCase();
+    const desc = (j.description || '').toLowerCase();
+    const combined = name + ' ' + desc;
+    if (name.includes(t) || desc.includes(t)) return true;
+    return words.length > 0 && words.every(w => combined.includes(w));
+  });
+}
+
+function cannedJobKey(job) {
+  return String(job.id || job.tekmetricId || job.code || job.name || '');
+}
+
+function renderCroCannedJobs(jobs) {
+  const listEl = getCroEl('cro-jobs-list');
+  const emptyEl = getCroEl('cro-jobs-empty');
+  if (!listEl) return;
+  if (!jobs || jobs.length === 0) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
+    return;
+  }
+  emptyEl?.classList.add('hidden');
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = jobs.slice(0, 100).map((job, idx) => {
+    const added = isCroJobSelected(croJobKey('canned', cannedJobKey(job)));
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escCro(job.name || '(unnamed job)')}</div>
+            ${job.description ? `<div class="job-meta">${escCro(job.description)}</div>` : ''}
+          </div>
+          <button class="btn-add cro-canned-add-btn" data-job-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+  listEl.querySelectorAll('.cro-canned-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const job = jobs[Number(btn.dataset.jobIdx)];
+      if (!job) return;
+      addCroSelectedJob({
+        key: croJobKey('canned', cannedJobKey(job)),
+        source: 'canned',
+        title: job.name || job.title || 'Job',
+        code: job.code ? String(job.code) : undefined,
+        deferredId: job.id ? String(job.id) : undefined,
+      });
+    });
+  });
+}
+
+// ---- Deferred tab ----
+async function loadCroDeferredWork() {
+  if (createRoState.deferredLoaded || createRoState.deferredLoading) {
+    renderCroDeferred();
+    return;
+  }
+  const shopId = getCroShopId();
+  const vehicle = createRoState.vehicle;
+  if (!shopId || !vehicle) return;
+  if (!vehicle.vin || !vehicle.id) {
+    setCroError('cro-deferred-error', 'Deferred work needs a vehicle VIN on file.');
+    getCroEl('cro-deferred-list')?.classList.add('hidden');
+    getCroEl('cro-deferred-empty')?.classList.add('hidden');
+    return;
+  }
+  setCroError('cro-deferred-error', '');
+  createRoState.deferredLoading = true;
+  getCroEl('cro-deferred-loading')?.classList.remove('hidden');
+  getCroEl('cro-deferred-empty')?.classList.add('hidden');
+  getCroEl('cro-deferred-list')?.classList.add('hidden');
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/protractor/deferred-work?shopId=${encodeURIComponent(shopId)}&vin=${encodeURIComponent(vehicle.vin)}&serviceItemId=${encodeURIComponent(vehicle.id)}`,
+    });
+    if (result?.error) throw new Error(result.error);
+    createRoState.deferred = result?.items || [];
+    createRoState.deferredLoaded = true;
+    renderCroDeferred();
+  } catch (err) {
+    console.error('[MOS] CRO deferred work load error:', err);
+    setCroError('cro-deferred-error', err.message || 'Could not load deferred work.');
+  } finally {
+    createRoState.deferredLoading = false;
+    getCroEl('cro-deferred-loading')?.classList.add('hidden');
+  }
+}
+
+function renderCroDeferred() {
+  const listEl = getCroEl('cro-deferred-list');
+  const emptyEl = getCroEl('cro-deferred-empty');
+  if (!listEl) return;
+  const items = createRoState.deferred;
+  if (!items || items.length === 0) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
+    return;
+  }
+  emptyEl?.classList.add('hidden');
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = items.map((item, idx) => {
+    const added = isCroJobSelected(croJobKey('deferred', item.id || item.title));
+    const meta = [
+      item.date ? new Date(item.date).toLocaleDateString() : '',
+      item.lines && item.lines.length ? `${item.lines.length} line${item.lines.length !== 1 ? 's' : ''}` : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escCro(item.title || 'Deferred job')}</div>
+            ${meta ? `<div class="job-meta">${escCro(meta)}</div>` : ''}
+          </div>
+          <button class="btn-add cro-deferred-add-btn" data-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+  listEl.querySelectorAll('.cro-deferred-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = items[Number(btn.dataset.idx)];
+      if (!item) return;
+      addCroSelectedJob({
+        key: croJobKey('deferred', item.id || item.title),
+        source: 'deferred',
+        title: item.title || 'Deferred job',
+        description: item.description || undefined,
+        code: item.code || undefined,
+        chapter: item.chapter || 'Service',
+        originalWorkOrderId: item.originalWorkOrderId || undefined,
+        deferredId: item.id || undefined,
+        lines: item.lines && item.lines.length ? item.lines : undefined,
+      });
+    });
+  });
+}
+
+// ---- History tab ----
+async function handleCroHistorySearch(term) {
+  const q = (term || '').trim();
+  const listEl = getCroEl('cro-history-list');
+  const emptyEl = getCroEl('cro-history-empty');
+  const loadingEl = getCroEl('cro-history-loading');
+  setCroError('cro-history-error', '');
+  if (q.length < 2) {
+    createRoState.history = [];
+    listEl?.classList.add('hidden');
+    if (listEl) listEl.innerHTML = '';
+    emptyEl?.classList.remove('hidden');
+    return;
+  }
+  const shopId = getCroShopId();
+  if (!shopId) { setCroError('cro-history-error', 'No shop context.'); return; }
+  createRoState.historySearching = true;
+  loadingEl?.classList.remove('hidden');
+  emptyEl?.classList.add('hidden');
+  listEl?.classList.add('hidden');
+  try {
+    const vehicle = createRoState.vehicle || {};
+    const params = new URLSearchParams({ shopId: String(shopId), q });
+    if (vehicle.vin) params.set('vin', vehicle.vin);
+    if (vehicle.year) params.set('year', String(vehicle.year));
+    if (vehicle.make) params.set('make', vehicle.make);
+    if (vehicle.model) params.set('model', vehicle.model);
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/jobs/search?${params.toString()}`,
+    });
+    if (result?.error) throw new Error(result.error);
+    createRoState.history = result?.jobs || [];
+    renderCroHistory();
+  } catch (err) {
+    console.error('[MOS] CRO history search error:', err);
+    setCroError('cro-history-error', err.message || 'History search failed.');
+  } finally {
+    createRoState.historySearching = false;
+    loadingEl?.classList.add('hidden');
+  }
+}
+
+function renderCroHistory() {
+  const listEl = getCroEl('cro-history-list');
+  const emptyEl = getCroEl('cro-history-empty');
+  if (!listEl) return;
+  const jobs = createRoState.history;
+  if (!jobs || jobs.length === 0) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    if (emptyEl) { emptyEl.textContent = 'No matching past jobs.'; emptyEl.classList.remove('hidden'); }
+    return;
+  }
+  emptyEl?.classList.add('hidden');
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = jobs.slice(0, 50).map((job, idx) => {
+    const title = job.title || job.description || 'Job';
+    const added = isCroJobSelected(croJobKey('history', title));
+    const meta = [
+      job.matchBandLabel || '',
+      job.vehicle || '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escCro(title)}</div>
+            ${meta ? `<div class="job-meta">${escCro(meta)}</div>` : ''}
+          </div>
+          <button class="btn-add cro-history-add-btn" data-idx="${idx}" ${added ? 'disabled' : ''}>${added ? 'Added' : '+ Add'}</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+  listEl.querySelectorAll('.cro-history-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const job = jobs[Number(btn.dataset.idx)];
+      if (!job) return;
+      const title = job.title || job.description || 'Job';
+      addCroSelectedJob({
+        key: croJobKey('history', title),
+        source: 'history',
+        title,
+        description: job.description || undefined,
+        code: job.code ? String(job.code) : undefined,
+        chapter: 'Service',
+      });
+    });
+  });
+}
+
+// ==================== CRO: Confirm + submit ====================
+function renderCroConfirmSummary() {
+  const host = getCroEl('cro-confirm-summary');
+  if (!host) return;
+  const concerns = gatherCroConcerns();
+  const rows = [];
+  rows.push(`<div class="cro-confirm-row"><strong>Customer:</strong> ${escCro(createRoState.customer?.name || '—')}</div>`);
+  rows.push(`<div class="cro-confirm-row"><strong>Vehicle:</strong> ${escCro(createRoState.vehicle?.display || '—')}</div>`);
+  rows.push(`<div class="cro-confirm-row"><strong>Concerns:</strong> ${concerns.length}</div>`);
+  rows.push(`<div class="cro-confirm-row"><strong>Jobs:</strong> ${createRoState.selectedJobs.length}</div>`);
+  host.innerHTML = rows.join('');
+}
+
 function renderCroSuccessLinks(result) {
-  // Inject a small links row underneath the success detail line. We render
-  // (a) "Open in Protractor" — using the tenant-agnostic portal URL, and
-  // (b) "Back to AutoFlow" — only when we still have an AutoFlow source URL
-  // in context. Either link is omitted when not actionable.
   const host = getCroEl('cro-result-section');
   if (!host) return;
   let linksRow = host.querySelector('.create-ro-success-links');
@@ -5781,7 +6274,7 @@ async function handleCroSubmit() {
   }
   const shopId = getCroShopId();
   if (!shopId) { setCroError('cro-submit-error', 'No shop context.'); return; }
-  const concern = (getCroEl('cro-concern')?.value || '').trim();
+  const concerns = gatherCroConcerns();
   const note = (getCroEl('cro-note')?.value || '').trim();
   const mileageStr = (getCroEl('cro-mileage')?.value || '').trim();
   const mileage = mileageStr ? Number(mileageStr.replace(/[^\d]/g, '')) : undefined;
@@ -5792,7 +6285,7 @@ async function handleCroSubmit() {
   mosTelemetry('create_ro_submit_started', {
     shopId,
     sourceProvider: currentContext?.provider || null,
-    hasConcern: !!concern,
+    concernCount: concerns.length,
     hasMileage: !!mileage,
     jobCount: createRoState.selectedJobs.length,
   });
@@ -5806,15 +6299,20 @@ async function handleCroSubmit() {
           shopId,
           contactId: createRoState.customer.id,
           vehicleId: createRoState.vehicle.id,
-          concernText: concern || undefined,
+          vin: createRoState.vehicle.vin || undefined,
+          concerns: concerns.length ? concerns : undefined,
           note: note || undefined,
           mileage,
           servicePackages: createRoState.selectedJobs.length > 0
             ? createRoState.selectedJobs.map(j => ({
                 title: j.title,
-                source: 'canned',
+                source: j.source,
+                description: j.description || undefined,
                 code: j.code || undefined,
+                chapter: j.chapter || undefined,
+                originalWorkOrderId: j.originalWorkOrderId || undefined,
                 deferredId: j.deferredId || undefined,
+                lines: j.lines || undefined,
               }))
             : undefined,
         }),
@@ -5827,10 +6325,12 @@ async function handleCroSubmit() {
       detail.textContent = num ? `RO #${num} created in Protractor.` : 'Work order created in Protractor.';
     }
     renderCroSuccessLinks(result);
+    getCroEl('cro-concern-section')?.classList.add('hidden');
     getCroEl('cro-customer-section')?.classList.add('hidden');
     getCroEl('cro-vehicle-section')?.classList.add('hidden');
-    getCroEl('cro-jobs-section')?.classList.add('hidden');
     getCroEl('cro-details-section')?.classList.add('hidden');
+    getCroEl('cro-jobs-section')?.classList.add('hidden');
+    getCroEl('cro-confirm-section')?.classList.add('hidden');
     getCroEl('cro-result-section')?.classList.remove('hidden');
     mosTelemetry('create_ro_succeeded', {
       shopId,

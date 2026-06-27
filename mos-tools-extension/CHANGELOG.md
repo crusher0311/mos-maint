@@ -1,6 +1,22 @@
 # Detect Dog by MOS Tools — Changelog
 
-## 1.27.35 — 2026-06-27
+## 1.27.36 — 2026-06-27
+
+### Changed
+- **Create Repair Order now works just like the dashboard.** The "Create Repair
+  Order in Protractor" side panel has been redesigned to match the full-screen
+  Create RO experience step for step: start with the **Customer Concern** (with
+  the AI Concern Assistant and the option to add more than one concern), then
+  pick the **Customer**, then the **Vehicle**, then **Notes & Mileage**, then
+  **Jobs**, and finish on a **Confirm** summary before you submit.
+- **Snap a photo of the VIN or plate.** On the Vehicle step you can now take or
+  upload a photo and we'll read the VIN or license plate from it, then fill in
+  the year/make/model automatically. You can also type a 17-character VIN to
+  decode it on the spot, or enter a plate + state to look the vehicle up.
+- **Add jobs from three places.** The Jobs step now has **Canned**, **Deferred**,
+  and **History** tabs, so you can pull in shop canned jobs, the vehicle's
+  previously declined/deferred work, or anything from past repair orders — all
+  into one new RO.
 
 ### Fixed
 - **No more duplicate follow-up questions in the Concern Assistant.** When you

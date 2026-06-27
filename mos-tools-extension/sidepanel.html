@@ -689,10 +689,32 @@
           <div class="create-ro-wrap">
             <h3 class="create-ro-heading">Create Repair Order in Protractor</h3>
 
-            <!-- Step 1: Customer -->
-            <section class="create-ro-section" id="cro-customer-section">
+            <!-- Step 1: Concern -->
+            <section class="create-ro-section" id="cro-concern-section">
               <div class="create-ro-section-head">
                 <span class="create-ro-step-num">1</span>
+                <span class="create-ro-step-label">Concern</span>
+              </div>
+              <ul id="cro-concern-list" class="cro-concern-list hidden"></ul>
+              <label class="create-ro-label" for="cro-concern">Customer concern</label>
+              <textarea id="cro-concern" class="input-modern" rows="3" placeholder="Customer's reported concern…"></textarea>
+              <div class="cro-concern-actions">
+                <button id="cro-concern-ai-btn" class="btn-secondary concern-action-btn hidden" type="button" title="Use the AI Customer Concern Assistant to build a complete write-up">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 8v8"/>
+                  </svg>
+                  Use AI Assistant
+                </button>
+                <button id="cro-concern-add-btn" class="create-ro-link-btn" type="button">+ Add another concern</button>
+              </div>
+            </section>
+
+            <!-- Step 2: Customer -->
+            <section class="create-ro-section" id="cro-customer-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">2</span>
                 <span class="create-ro-step-label">Customer</span>
               </div>
               <div id="cro-customer-picked" class="create-ro-picked hidden">
@@ -720,10 +742,10 @@
               </div>
             </section>
 
-            <!-- Step 2: Vehicle -->
+            <!-- Step 3: Vehicle -->
             <section class="create-ro-section hidden" id="cro-vehicle-section">
               <div class="create-ro-section-head">
-                <span class="create-ro-step-num">2</span>
+                <span class="create-ro-step-num">3</span>
                 <span class="create-ro-step-label">Vehicle</span>
               </div>
               <div id="cro-vehicle-picked" class="create-ro-picked hidden">
@@ -740,57 +762,108 @@
                 <p id="cro-vehicle-error" class="error-text hidden"></p>
                 <button id="cro-vehicle-new-toggle" class="create-ro-link-btn" type="button">+ Create new vehicle</button>
                 <div id="cro-vehicle-new-form" class="create-ro-form hidden">
-                  <input type="text" id="cro-new-vehicle-vin" class="input-modern" placeholder="VIN" maxlength="17" />
+                  <div class="cro-scan-row">
+                    <button id="cro-vehicle-scan-btn" class="btn-secondary cro-scan-btn" type="button" title="Take or upload a photo of the VIN or license plate">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                      Scan VIN / plate photo
+                    </button>
+                    <input type="file" id="cro-vehicle-scan-input" accept="image/*" capture="environment" class="hidden" />
+                  </div>
+                  <p id="cro-vehicle-scan-status" class="cro-scan-status hidden"></p>
+                  <div class="create-ro-search-row">
+                    <input type="text" id="cro-new-vehicle-vin" class="input-modern" placeholder="VIN" maxlength="17" />
+                    <button id="cro-vehicle-decode-btn" class="btn-primary create-ro-inline-btn" type="button">Decode</button>
+                  </div>
+                  <div class="create-ro-search-row">
+                    <input type="text" id="cro-new-vehicle-plate" class="input-modern" placeholder="License plate" />
+                    <input type="text" id="cro-new-vehicle-state" class="input-modern cro-state-input" placeholder="State" maxlength="2" />
+                    <button id="cro-vehicle-plate-btn" class="btn-primary create-ro-inline-btn" type="button">Look up</button>
+                  </div>
                   <div class="create-ro-form-row">
                     <input type="number" id="cro-new-vehicle-year" class="input-modern" placeholder="Year" min="1900" max="2100" />
                     <input type="text" id="cro-new-vehicle-make" class="input-modern" placeholder="Make" />
                   </div>
                   <input type="text" id="cro-new-vehicle-model" class="input-modern" placeholder="Model" />
-                  <input type="text" id="cro-new-vehicle-plate" class="input-modern" placeholder="License plate" />
                   <button id="cro-new-vehicle-save" class="btn-primary" type="button">Save vehicle</button>
                 </div>
               </div>
             </section>
 
-            <!-- Step 3: Jobs (optional) -->
-            <section class="create-ro-section hidden" id="cro-jobs-section">
-              <div class="create-ro-section-head">
-                <span class="create-ro-step-num">3</span>
-                <span class="create-ro-step-label">Jobs (optional)</span>
-              </div>
-              <div id="cro-jobs-selected" class="create-ro-jobs-selected hidden"></div>
-              <div class="canned-search-container">
-                <input type="text" id="cro-jobs-search" class="search-input" placeholder="Search canned jobs to add…" />
-              </div>
-              <div id="cro-jobs-loading" class="panel-loading hidden">
-                <div class="spinner-small"></div>
-                <span>Loading canned jobs…</span>
-              </div>
-              <p id="cro-jobs-empty" class="create-ro-empty hidden">No canned jobs found.</p>
-              <ul id="cro-jobs-list" class="job-list hidden"></ul>
-              <p id="cro-jobs-error" class="error-text hidden"></p>
-            </section>
-
-            <!-- Step 4: Details -->
+            <!-- Step 4: Notes & Mileage -->
             <section class="create-ro-section hidden" id="cro-details-section">
               <div class="create-ro-section-head">
                 <span class="create-ro-step-num">4</span>
-                <span class="create-ro-step-label">Details</span>
+                <span class="create-ro-step-label">Notes &amp; Mileage</span>
               </div>
-              <label class="create-ro-label" for="cro-concern">Customer concern</label>
-              <textarea id="cro-concern" class="input-modern" rows="3" placeholder="Customer's reported concern…"></textarea>
-              <button id="cro-concern-ai-btn" class="btn-secondary concern-action-btn hidden" type="button" title="Use the AI Customer Concern Assistant to build a complete write-up">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M8 12h8"/>
-                  <path d="M12 8v8"/>
-                </svg>
-                Use AI Assistant
-              </button>
               <label class="create-ro-label" for="cro-mileage">Mileage in</label>
               <input type="number" id="cro-mileage" class="input-modern" placeholder="Mileage" min="0" />
               <label class="create-ro-label" for="cro-note">Note (optional)</label>
               <textarea id="cro-note" class="input-modern" rows="2" placeholder="Internal note…"></textarea>
+            </section>
+
+            <!-- Step 5: Jobs (optional) -->
+            <section class="create-ro-section hidden" id="cro-jobs-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">5</span>
+                <span class="create-ro-step-label">Jobs (optional)</span>
+              </div>
+              <div id="cro-jobs-selected" class="create-ro-jobs-selected hidden"></div>
+              <div class="cro-jobs-tabs">
+                <button class="cro-jobs-tab active" data-jobs-tab="canned" type="button">Canned</button>
+                <button class="cro-jobs-tab" data-jobs-tab="deferred" type="button">Deferred</button>
+                <button class="cro-jobs-tab" data-jobs-tab="history" type="button">History</button>
+              </div>
+
+              <!-- Canned pane -->
+              <div class="cro-jobs-pane" id="cro-jobs-pane-canned">
+                <div class="canned-search-container">
+                  <input type="text" id="cro-jobs-search" class="search-input" placeholder="Search canned jobs to add…" />
+                </div>
+                <div id="cro-jobs-loading" class="panel-loading hidden">
+                  <div class="spinner-small"></div>
+                  <span>Loading canned jobs…</span>
+                </div>
+                <p id="cro-jobs-empty" class="create-ro-empty hidden">No canned jobs found.</p>
+                <ul id="cro-jobs-list" class="job-list hidden"></ul>
+                <p id="cro-jobs-error" class="error-text hidden"></p>
+              </div>
+
+              <!-- Deferred pane -->
+              <div class="cro-jobs-pane hidden" id="cro-jobs-pane-deferred">
+                <div id="cro-deferred-loading" class="panel-loading hidden">
+                  <div class="spinner-small"></div>
+                  <span>Loading deferred work…</span>
+                </div>
+                <p id="cro-deferred-empty" class="create-ro-empty hidden">No deferred work found for this vehicle.</p>
+                <ul id="cro-deferred-list" class="job-list hidden"></ul>
+                <p id="cro-deferred-error" class="error-text hidden"></p>
+              </div>
+
+              <!-- History pane -->
+              <div class="cro-jobs-pane hidden" id="cro-jobs-pane-history">
+                <div class="canned-search-container">
+                  <input type="text" id="cro-history-search" class="search-input" placeholder="Search job history…" />
+                </div>
+                <div id="cro-history-loading" class="panel-loading hidden">
+                  <div class="spinner-small"></div>
+                  <span>Searching history…</span>
+                </div>
+                <p id="cro-history-empty" class="create-ro-empty hidden">Type to search past jobs.</p>
+                <ul id="cro-history-list" class="job-list hidden"></ul>
+                <p id="cro-history-error" class="error-text hidden"></p>
+              </div>
+            </section>
+
+            <!-- Step 6: Confirm -->
+            <section class="create-ro-section hidden" id="cro-confirm-section">
+              <div class="create-ro-section-head">
+                <span class="create-ro-step-num">6</span>
+                <span class="create-ro-step-label">Confirm</span>
+              </div>
+              <div id="cro-confirm-summary" class="cro-confirm-summary"></div>
               <button id="cro-submit" class="btn-primary create-ro-submit" type="button">Create Repair Order</button>
               <p id="cro-submit-error" class="error-text hidden"></p>
             </section>
