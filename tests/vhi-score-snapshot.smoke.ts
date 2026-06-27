@@ -79,35 +79,60 @@ async function run() {
   }
 
   // ---- computeScore + getScoreTier — pinned fixtures --------------------
+  // Task #678: the score is now a PROPORTIONAL, severity-weighted ratio of
+  // unhealthy applicable items vs. the worst they could be — NOT a fixed
+  // 100-minus-points subtraction. The denominator counts overdue + due-soon
+  // + upcoming (excluding complimentary), so healthy items dilute the score
+  // upward and a heavily neglected vehicle lands in a believable low band
+  // (teens–low-40s) with a soft floor of 12 — never exactly 0.
+
   // FIXTURE A — pristine vehicle: nothing overdue or due soon → 100, Excellent.
   {
-    const score = computeScore({ overdue: [], dueSoon: [] });
+    const score = computeScore({ overdue: [], dueSoon: [], upcoming: [] });
     eq("FIXTURE A: pristine score", score, 100);
     eq("FIXTURE A: pristine tier", getScoreTier(score), { label: "Excellent", color: "green" });
   }
 
-  // FIXTURE B — one overdue brake job (red bump) + one due-soon oil change.
-  // Pinned values so a refactor of the deduction weights is a loud test
-  // failure, not a silent shift in customer-facing scores.
-  //   overdue brakes red:   7 * 1.5 = 10.5
-  //   dueSoon engine oil:   2 * 1.3 = 2.6
-  //   100 - 10.5 - 2.6 = 86.9 → round → 87 → "Good" (lime)
+  // FIXTURE A2 — a vehicle with ONLY upcoming/healthy items scores at the top.
   {
     const buckets = {
-      overdue: [item({ key: "brake_pads", title: "Brake Pads", category: "brakes", bump: "red" as const })],
-      dueSoon: [item({ key: "oil_change", title: "Engine Oil", category: "engine" })],
+      overdue: [],
+      dueSoon: [],
+      upcoming: [
+        item({ key: "oil_change", title: "Oil", category: "engine" }),
+        item({ key: "brake_pads", title: "Brakes", category: "brakes" }),
+        item({ key: "cabin", title: "Cabin Filter", category: "cabin" }),
+      ],
     };
     const score = computeScore(buckets);
-    eq("FIXTURE B: score", score, 87);
-    eq("FIXTURE B: tier", getScoreTier(score), { label: "Good", color: "lime" });
+    eq("FIXTURE A2: only-upcoming score", score, 100);
+    eq("FIXTURE A2: only-upcoming tier", getScoreTier(score).label, "Excellent");
   }
 
-  // FIXTURE C — heavily neglected vehicle: multiple overdue critical items.
-  //   overdue brakes red:        7 * 1.5 = 10.5
-  //   overdue tires (default):   5 * 1.5 = 7.5
-  //   overdue engine red+decl:  (7 * 1.3) + 1 = 10.1
-  //   overdue suspension:        5 * 1.5 = 7.5
-  //   100 - 10.5 - 7.5 - 10.1 - 7.5 = 64.4 → round → 64 → "Poor" (orange)
+  // FIXTURE B — mostly-current vehicle: a couple of issues among many healthy
+  // items still scores high. Without an `upcoming` bucket the denominator is
+  // tiny so the same two issues read much lower (legacy callers that omit
+  // upcoming get the pessimistic score) — pin both to lock the contract.
+  {
+    const withUpcoming = {
+      overdue: [item({ key: "brake_pads", title: "Brake Pads", category: "brakes", bump: "red" as const })],
+      dueSoon: [item({ key: "oil_change", title: "Engine Oil", category: "engine" })],
+      upcoming: Array.from({ length: 8 }, (_, i) =>
+        item({ key: `up_${i}`, title: `Up ${i}`, category: "misc" })),
+    };
+    const score = computeScore(withUpcoming);
+    ok("FIXTURE B: mostly-current scores high", score >= 85, `score=${score}`);
+    eq("FIXTURE B: mostly-current tier", getScoreTier(score).label, "Good");
+    ok("FIXTURE B: never 0", score > 0);
+
+    // Same two issues with NO healthy items → small denominator → low score.
+    const noUpcoming = { overdue: withUpcoming.overdue, dueSoon: withUpcoming.dueSoon };
+    eq("FIXTURE B2: no-upcoming pessimistic score", computeScore(noUpcoming), 47);
+  }
+
+  // FIXTURE C — heavily neglected vehicle: multiple overdue critical items
+  // (incl. a declined safety item) and nothing healthy. Lands low-but-
+  // believable (Critical band) — NOT a flat 0.
   {
     const buckets = {
       overdue: [
@@ -117,14 +142,39 @@ async function run() {
         item({ key: "shocks", title: "Shocks", category: "suspension" }),
       ],
       dueSoon: [],
+      upcoming: [],
     };
     const score = computeScore(buckets);
-    eq("FIXTURE C: score", score, 64);
-    eq("FIXTURE C: tier", getScoreTier(score), { label: "Poor", color: "orange" });
+    eq("FIXTURE C: score", score, 24);
+    ok("FIXTURE C: lands in believable low band (teens–40)", score >= 13 && score <= 40, `score=${score}`);
+    eq("FIXTURE C: tier", getScoreTier(score), { label: "Critical", color: "red" });
+    ok("FIXTURE C: never exactly 0", score > 0);
   }
 
-  // FIXTURE D — complimentary items must NOT count toward the score even
-  // if they leak into the priced buckets (computeScore filters them out).
+  // FIXTURE C2 — the absolute worst realistic vehicle: every applicable item
+  // overdue, red, safety-critical, and declined. Must hit the soft floor, not 0.
+  {
+    const buckets = {
+      overdue: Array.from({ length: 12 }, (_, i) =>
+        item({
+          key: `bad_${i}`,
+          title: `Bad ${i}`,
+          category: "brakes",
+          bump: "red" as const,
+          declined: { serviceKey: `bad_${i}`, serviceName: `Bad ${i}`, declinedAt: "2026-01-01" } as any,
+        })),
+      dueSoon: [],
+      upcoming: [],
+    };
+    const score = computeScore(buckets);
+    eq("FIXTURE C2: worst-case hits soft floor", score, 12);
+    ok("FIXTURE C2: worst case is NEVER 0", score > 0);
+    eq("FIXTURE C2: tier", getScoreTier(score).label, "Critical");
+  }
+
+  // FIXTURE D — complimentary items must NOT count toward the score, AND a
+  // vehicle whose only "applicable" items are complimentary has zero
+  // applicable items → top of range (nothing to fault).
   {
     const buckets = {
       overdue: [
@@ -133,8 +183,47 @@ async function run() {
       dueSoon: [
         item({ key: "multi_point_inspection", title: "Multi-Point Inspection" }),
       ],
+      upcoming: [],
     };
-    eq("FIXTURE D: complimentary items don't deduct", computeScore(buckets), 100);
+    eq("FIXTURE D: complimentary-only → 100 (zero applicable)", computeScore(buckets), 100);
+  }
+
+  // FIXTURE E — overdue weighs heavier than due-soon: the same item overdue
+  // must drop the score more than when it's only due-soon.
+  {
+    const base = Array.from({ length: 5 }, (_, i) =>
+      item({ key: `u_${i}`, title: `U ${i}`, category: "misc" }));
+    const overdueScore = computeScore({
+      overdue: [item({ key: "x", title: "X", category: "engine" })],
+      dueSoon: [],
+      upcoming: base,
+    });
+    const dueSoonScore = computeScore({
+      overdue: [],
+      dueSoon: [item({ key: "x", title: "X", category: "engine" })],
+      upcoming: base,
+    });
+    ok("FIXTURE E: overdue penalized more than due-soon", overdueScore < dueSoonScore,
+      `overdue=${overdueScore} dueSoon=${dueSoonScore}`);
+  }
+
+  // FIXTURE F — safety-critical categories weigh heavier than convenience:
+  // an overdue brake item drops the score more than an overdue wiper item.
+  {
+    const base = Array.from({ length: 5 }, (_, i) =>
+      item({ key: `u_${i}`, title: `U ${i}`, category: "misc" }));
+    const safetyScore = computeScore({
+      overdue: [item({ key: "b", title: "Brakes", category: "brakes" })],
+      dueSoon: [],
+      upcoming: base,
+    });
+    const convenienceScore = computeScore({
+      overdue: [item({ key: "w", title: "Wipers", category: "wiper" })],
+      dueSoon: [],
+      upcoming: base,
+    });
+    ok("FIXTURE F: safety penalized more than convenience", safetyScore < convenienceScore,
+      `safety=${safetyScore} convenience=${convenienceScore}`);
   }
 
   // ---- getScoreTier boundaries ------------------------------------------

@@ -139,35 +139,68 @@ function isApprovedItem(item: PlanItem, approvedKeys?: string[]): boolean {
   return approvedKeys.some(k => k.toLowerCase() === sk);
 }
 
+/*
+ * Task #678: client-side mirror of the canonical proportional score in
+ * `lib/vhi-score.ts`. The math MUST stay in lockstep with the server so the
+ * live "What If You Repair Today?" simulation and the server-rendered gauge
+ * agree. See the canonical module for the full rationale. Differences from
+ * the server version: this mirror additionally excludes customer-approved
+ * items (the report-only `approvedServiceKeys` concept) from scoring.
+ */
+const VHI_OVERDUE_BASE = 1.0;
+const VHI_DUE_SOON_BASE = 0.4;
+const VHI_OVERDUE_RED_BONUS = 0.15;
+const VHI_OVERDUE_DECLINED_BONUS = 0.1;
+const VHI_DUE_SOON_RED_BONUS = 0.1;
+const VHI_DUE_SOON_YELLOW_BONUS = 0.05;
+const VHI_MAX_STATE_FACTOR = VHI_OVERDUE_BASE + VHI_OVERDUE_RED_BONUS + VHI_OVERDUE_DECLINED_BONUS; // 1.25
+const VHI_SOFT_FLOOR = 12;
+const VHI_CURVE_EXPONENT = 1.15;
+
+function vhiCategoryMultiplier(category: string): number {
+  const cat = (category || "").toLowerCase();
+  if (cat.includes("brake") || cat.includes("tire") || cat.includes("steering") || cat.includes("suspension")) return 1.5;
+  if (cat.includes("engine") || cat.includes("transmission") || cat.includes("drivetrain")) return 1.3;
+  if (cat.includes("wiper") || cat.includes("light") || cat.includes("cabin") || cat.includes("body")) return 0.7;
+  return 1.0;
+}
+
 function computeScore(data: VHIData): number {
-  let score = 100;
   const approved = data.approvedServiceKeys;
 
-  const categoryMultiplier = (category: string): number => {
-    const cat = category.toLowerCase();
-    if (cat.includes("brake") || cat.includes("tire") || cat.includes("steering") || cat.includes("suspension")) return 1.5;
-    if (cat.includes("engine") || cat.includes("transmission") || cat.includes("drivetrain")) return 1.3;
-    if (cat.includes("wiper") || cat.includes("light") || cat.includes("cabin") || cat.includes("body")) return 0.7;
-    return 1.0;
+  let penalty = 0;
+  let maxPenalty = 0;
+
+  const accrue = (item: PlanItem, stateFactor: number) => {
+    if (isComplimentaryItem(item)) return;
+    if (isApprovedItem(item, approved)) return;
+    const weight = vhiCategoryMultiplier(item.category);
+    penalty += weight * stateFactor;
+    maxPenalty += weight * VHI_MAX_STATE_FACTOR;
   };
 
   for (const item of data.buckets.overdue) {
-    if (isComplimentaryItem(item)) continue;
-    if (isApprovedItem(item, approved)) continue;
-    let deduction = item.bump === "red" ? 7 : item.bump === "yellow" ? 5 : 5;
-    deduction *= categoryMultiplier(item.category);
-    if (item.declined) deduction += 1;
-    score -= deduction;
+    let s = VHI_OVERDUE_BASE;
+    if (item.bump === "red") s += VHI_OVERDUE_RED_BONUS;
+    if (item.declined) s += VHI_OVERDUE_DECLINED_BONUS;
+    accrue(item, s);
   }
 
   for (const item of data.buckets.dueSoon) {
-    if (isComplimentaryItem(item)) continue;
-    if (isApprovedItem(item, approved)) continue;
-    let deduction = item.bump === "yellow" ? 2.5 : item.bump === "red" ? 3 : 2;
-    deduction *= categoryMultiplier(item.category);
-    score -= deduction;
+    let s = VHI_DUE_SOON_BASE;
+    if (item.bump === "red") s += VHI_DUE_SOON_RED_BONUS;
+    else if (item.bump === "yellow") s += VHI_DUE_SOON_YELLOW_BONUS;
+    accrue(item, s);
   }
 
+  for (const item of data.buckets.upcoming) {
+    accrue(item, 0);
+  }
+
+  if (maxPenalty <= 0) return 100;
+
+  const ratio = Math.min(1, Math.max(0, penalty / maxPenalty));
+  const score = 100 - (100 - VHI_SOFT_FLOOR) * Math.pow(ratio, VHI_CURVE_EXPONENT);
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 

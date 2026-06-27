@@ -40,24 +40,103 @@ export function separateComplimentary(buckets: {
   };
 }
 
-export function computeScore(buckets: { overdue: TriagedItemCache[]; dueSoon: TriagedItemCache[] }): number {
-  let score = 100;
+/* -------------------------------------------------------------------------
+ * Task #678: proportional, severity-weighted VHI score.
+ *
+ * The old model started at 100 and subtracted a FIXED number of points per
+ * overdue / due-soon item, then clamped with Math.max(0, …). A genuinely
+ * neglected vehicle with many overdue safety items bottomed out at exactly
+ * 0, which reads to shops and customers like the tool is broken rather than
+ * "this vehicle is in rough shape."
+ *
+ * The redesign scores the vehicle as a RATIO of how unhealthy its applicable
+ * service items are vs. how unhealthy they could possibly be:
+ *
+ *   - Denominator = every applicable item (overdue + due-soon + upcoming,
+ *     excluding complimentary), each weighted by its category multiplier so
+ *     a vehicle with more tracked items isn't punished for breadth alone.
+ *   - Each item contributes a "state factor": overdue items weigh heaviest,
+ *     due-soon lighter, healthy/upcoming items contribute nothing. Red bumps
+ *     and declined work add a little more.
+ *   - The worst an item can be (overdue + red + declined) defines MAX_STATE_
+ *     FACTOR, so maxPenalty = "every applicable item at its worst".
+ *   - ratio = penalty / maxPenalty ∈ [0, 1]. A mostly-current vehicle has a
+ *     small ratio (high score); a vehicle where most items are overdue has a
+ *     large ratio (low score).
+ *   - The ratio is shaped by a mild non-linear curve and mapped onto a band
+ *     whose bottom is SOFT_FLOOR, NOT 0 — so the worst realistic vehicles
+ *     land in a believable low range (roughly the teens–low-40s) and a
+ *     scoreable vehicle effectively never reads exactly 0.
+ *
+ * Edge cases:
+ *   - Zero applicable items (or only complimentary) → 100 (nothing to fault).
+ *   - Only upcoming / healthy items → ratio 0 → 100.
+ *
+ * NOTE: the customer-facing "Insufficient Service History" state (gray "?")
+ * is a SEPARATE concern handled via `dataQuality` / `buildApiScore` — it is
+ * the legitimate "we can't score honestly" case and is untouched here.
+ * ----------------------------------------------------------------------- */
+
+/** Base weight of an overdue item before category + bump/declined bonuses. */
+const OVERDUE_BASE = 1.0;
+/** Base weight of a due-soon item (always lighter than overdue). */
+const DUE_SOON_BASE = 0.4;
+/** Extra weight for a red-bump overdue item. */
+const OVERDUE_RED_BONUS = 0.15;
+/** Extra weight for a previously-declined overdue item. */
+const OVERDUE_DECLINED_BONUS = 0.1;
+/** Extra weight for a red/yellow-bump due-soon item. */
+const DUE_SOON_RED_BONUS = 0.1;
+const DUE_SOON_YELLOW_BONUS = 0.05;
+/** The worst a single item can be — defines the per-item max penalty. */
+const MAX_STATE_FACTOR = OVERDUE_BASE + OVERDUE_RED_BONUS + OVERDUE_DECLINED_BONUS; // 1.25
+/** Soft floor: the worst realistic vehicle lands here, never at 0. */
+const SOFT_FLOOR = 12;
+/** Non-linear shaping exponent applied to the unhealthy ratio. */
+const CURVE_EXPONENT = 1.15;
+
+export function computeScore(buckets: {
+  overdue: TriagedItemCache[];
+  dueSoon: TriagedItemCache[];
+  // Optional so legacy callers that only pass the two priced buckets still
+  // work, but the canonical callers (separateComplimentary output) pass it so
+  // healthy items dilute the ratio. Omitting it makes the denominator smaller
+  // (a more pessimistic score), which is the safe direction.
+  upcoming?: TriagedItemCache[];
+}): number {
+  let penalty = 0;
+  let maxPenalty = 0;
+
+  const accrue = (item: TriagedItemCache, stateFactor: number) => {
+    if (isComplimentaryItem(item)) return; // complimentary items never score
+    const weight = categoryMultiplier(item.category || "");
+    penalty += weight * stateFactor;
+    maxPenalty += weight * MAX_STATE_FACTOR;
+  };
 
   for (const item of buckets.overdue) {
-    if (isComplimentaryItem(item)) continue;
-    let deduction = item.bump === "red" ? 7 : 5;
-    deduction *= categoryMultiplier(item.category || "");
-    if (item.declined) deduction += 1;
-    score -= deduction;
+    let s = OVERDUE_BASE;
+    if (item.bump === "red") s += OVERDUE_RED_BONUS;
+    if (item.declined) s += OVERDUE_DECLINED_BONUS;
+    accrue(item, s);
   }
 
   for (const item of buckets.dueSoon) {
-    if (isComplimentaryItem(item)) continue;
-    let deduction = item.bump === "yellow" ? 2.5 : item.bump === "red" ? 3 : 2;
-    deduction *= categoryMultiplier(item.category || "");
-    score -= deduction;
+    let s = DUE_SOON_BASE;
+    if (item.bump === "red") s += DUE_SOON_RED_BONUS;
+    else if (item.bump === "yellow") s += DUE_SOON_YELLOW_BONUS;
+    accrue(item, s);
   }
 
+  for (const item of buckets.upcoming ?? []) {
+    accrue(item, 0); // healthy items dilute the ratio but never add penalty
+  }
+
+  // No applicable items at all (or only complimentary) → nothing to fault.
+  if (maxPenalty <= 0) return 100;
+
+  const ratio = Math.min(1, Math.max(0, penalty / maxPenalty));
+  const score = 100 - (100 - SOFT_FLOOR) * Math.pow(ratio, CURVE_EXPONENT);
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
