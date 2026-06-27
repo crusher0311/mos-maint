@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.37 — 2026-06-27
+
+### Fixed
+- **Bigger customer search box.** The "Search" button next to the customer search
+  field was taking the full row width and squashing the input. The input now
+  fills the row and the button only takes its own width.
+- **History jobs read clearly.** Past jobs in the **History** tab were showing
+  "[object Object]" for the vehicle; they now show the year/make/model.
+- **Create RO no longer times out as easily.** Submitting a new repair order now
+  waits up to 120 seconds (instead of 45) because creating the RO runs several
+  slow lookups in Protractor behind the scenes on busy shops.
+
 ## 1.27.36 — 2026-06-27
 
 ### Changed

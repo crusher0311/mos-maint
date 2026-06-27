@@ -305,8 +305,13 @@ body {
   display: flex;
   gap: 6px;
 }
-.create-ro-search-row .input-modern { flex: 1; }
+.create-ro-search-row .input-modern { flex: 1; min-width: 0; }
 .create-ro-inline-btn {
+  /* Override the global .btn-primary width:100% so the inline button only takes
+     its own content width and doesn't squash the flex:1 input next to it. */
+  width: auto !important;
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 6px 12px !important;
   font-size: 12px !important;
 }

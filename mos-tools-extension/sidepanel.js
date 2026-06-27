@@ -5253,6 +5253,18 @@ function escCro(str) {
 
 function getCroEl(id) { return document.getElementById(id); }
 
+// The extension job-search route returns `vehicle` as an object
+// ({year,make,model}); older shapes return a plain string. Normalize both to a
+// readable label so the UI never prints "[object Object]".
+function croVehicleLabel(vehicle) {
+  if (!vehicle) return '';
+  if (typeof vehicle === 'string') return vehicle;
+  if (typeof vehicle === 'object') {
+    return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
+  }
+  return '';
+}
+
 function setCroError(elId, msg) {
   const el = getCroEl(elId);
   if (!el) return;
@@ -6182,7 +6194,7 @@ function renderCroHistory() {
     const added = isCroJobSelected(croJobKey('history', title));
     const meta = [
       job.matchBandLabel || '',
-      job.vehicle || '',
+      croVehicleLabel(job.vehicle),
     ].filter(Boolean).join(' · ');
     return `
       <li class="job-item">
@@ -6295,6 +6307,11 @@ async function handleCroSubmit() {
       endpoint: '/api/extension/protractor/create-work-order',
       options: {
         method: 'POST',
+        // Creating the RO runs several slow upstream calls server-side
+        // (open-WO lookup, vehicle-by-VIN, line resolution from job_index,
+        // then the Protractor write). The default 45s proxy cap can trip on
+        // big shops, so give this write a wider 120s window.
+        timeoutMs: 120000,
         body: JSON.stringify({
           shopId,
           contactId: createRoState.customer.id,
@@ -6317,7 +6334,7 @@ async function handleCroSubmit() {
             : undefined,
         }),
       }
-    });
+    }, 125000);
     if (!result?.ok && !result?.success) throw new Error(result?.error || 'Create failed');
     const detail = getCroEl('cro-result-detail');
     if (detail) {
