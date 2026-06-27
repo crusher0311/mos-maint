@@ -25,6 +25,7 @@ import {
 } from "@/lib/service-keys";
 import type { ProtractorDeferredWork } from "@/lib/integrations/protractor";
 import type { TriagedItemCache } from "@/lib/plan-cache";
+import { normalizeCarfaxDescription } from "@/lib/carfax-match-log";
 import {
   OIL_INTERVAL_RISK_THRESHOLD_MILES,
   SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
@@ -357,6 +358,7 @@ export function triage({
   oilDutyPreference = "severe",
   distanceUnit = "miles",
   dviBestPractices = null,
+  carfaxKeyOverrides = null,
 }: {
   oemItems: OEMItem[];
   carfaxRecords: Array<{ date?: string; odometer?: number; description?: string }>;
@@ -408,6 +410,15 @@ export function triage({
    */
   distanceUnit?: DistanceUnit;
   dviBestPractices?: Map<string, string> | Record<string, string> | null;
+  /**
+   * Task #655 (manual edit): operator-defined CARFAX-description →
+   * service-key overrides, keyed by normalized description. When a CARFAX
+   * record/category description matches an override, the override's key is
+   * added to whatever the built-in dictionary resolved (usually nothing, for
+   * the wordings this feature exists to fix). Implied-reset matching is left
+   * to the curated dictionary. Null/empty = no overrides.
+   */
+  carfaxKeyOverrides?: Map<string, string[]> | null;
 }): Buckets {
   const isMetricShop = distanceUnit === "kilometers";
   const oemToShopMiles = (mi: number | null | undefined): number | null => {
@@ -489,11 +500,23 @@ export function triage({
   // `odometerOfLastService` is null on the rollup row.
   const perRecordWithMilesByKey = new Map<string, Array<{ date: Date | null; miles: number }>>();
 
+  // Task #655 (manual edit): resolve a CARFAX description to keys via the
+  // built-in dictionary, then union in any operator override for that exact
+  // (normalized) wording. Overrides only ADD keys — they never remove a
+  // dictionary match — so this stays purely additive.
+  const carfaxKeysFor = (desc: string): string[] => {
+    const keys = toKeyFromFreeText(desc);
+    if (!carfaxKeyOverrides || carfaxKeyOverrides.size === 0) return keys;
+    const overrideKeys = carfaxKeyOverrides.get(normalizeCarfaxDescription(desc));
+    if (!overrideKeys || overrideKeys.length === 0) return keys;
+    return Array.from(new Set([...keys, ...overrideKeys]));
+  };
+
   for (const r of enrichedRecords) {
     const date = r.date;
     const miles = r.miles;
     const desc = String(r.description || "").trim();
-    const keys = toKeyFromFreeText(desc);
+    const keys = carfaxKeysFor(desc);
     for (const k of keys) {
       if (miles != null) {
         if (!perRecordWithMilesByKey.has(k)) perRecordWithMilesByKey.set(k, []);
@@ -534,7 +557,7 @@ export function triage({
     const date = parseCarfaxDate(cat.date ?? null);
     if (date && (date < earliestDate || date > today)) continue;
     let miles: number | null = typeof cat.odometer === "number" ? cat.odometer : null;
-    const keys = toKeyFromFreeText(name);
+    const keys = carfaxKeysFor(name);
     for (const k of keys) {
       const shopRecords = shopHistoryByKey.get(k) || [];
       const matchesShop = shopRecords.some(sr => isMatchingHistory(sr, { miles, date }));

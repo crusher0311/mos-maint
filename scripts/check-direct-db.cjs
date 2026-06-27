@@ -230,6 +230,7 @@ const ALLOWLIST = new Set([
   "app/api/platform-admin/backfill/route.ts",
   "app/api/platform-admin/billing/export/route.ts",
   "app/api/platform-admin/billing/route.ts",
+  "app/api/platform-admin/carfax-overrides/route.ts",
   "app/api/platform-admin/client-health/route.ts",
   "app/api/platform-admin/cron-status/route.ts",
   "app/api/platform-admin/emergency-reset/route.ts",

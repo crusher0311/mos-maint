@@ -11,7 +11,7 @@ export const SERVICE_KEYS: Record<string, string[]> = {
   tire_rotation: [
     "rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels",
     "tire rotate", "rotation service", "wheel rotation", "rotate & balance",
-    "rotate and balance", "tire service rotation", "4 tire rotation"
+    "rotate and balance", "tire service rotation", "4 tire rotation", "wheels rotated"
   ],
   cabin_air: [
     "cabin air filter", "cabin filter", "pollen filter", "hvac filter",
@@ -140,7 +140,7 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "wheel alignment", "alignment", "all wheel alignment",
     "front alignment", "rear alignment", "4 wheel alignment",
     "four wheel alignment", "thrust alignment", "alignment check",
-    "alignment service", "align wheels", "toe adjustment"
+    "alignment service", "align wheels", "toe adjustment", "wheels aligned"
   ],
   battery: [
     "battery replaced", "battery replacement", "battery/charging", "replace battery",
@@ -641,6 +641,57 @@ export function toKeyFromFreeText(desc: string): string[] {
     !hits.includes("trans_manual")
   ) {
     hits.push(d.includes("manual") ? "trans_manual" : "trans_auto");
+  }
+  // Task #655: mirror the post-loop special cases in `toKeyFromName` so the
+  // OEM-name matcher and this free-text (CARFAX / shop-history) matcher stay
+  // in sync. Without these, common CARFAX phrasings ("Air filter",
+  // "Transmission fluid replaced", "Brakes serviced", "Wipers replaced", …)
+  // resolve to a key when they arrive as an OEM item name but to nothing as
+  // a CARFAX record, so the service reads "not done" even though it was.
+  // Each branch is additive and guarded so it never duplicates or overrides
+  // a more specific list hit above.
+  if (d.includes("air filter") && !d.includes("cabin") && !hits.includes("engine_air")) {
+    hits.push("engine_air");
+  }
+  if (
+    (d.includes("transmission fluid") || d.includes("transmission flush")) &&
+    !hits.includes("trans_auto") &&
+    !hits.includes("trans_manual")
+  ) {
+    hits.push(d.includes("manual") ? "trans_manual" : "trans_auto");
+  }
+  if (
+    d.includes("differential") &&
+    !d.includes("front") &&
+    !d.includes("rear") &&
+    !hits.includes("rear_differential") &&
+    !hits.includes("front_differential")
+  ) {
+    hits.push("rear_differential");
+  }
+  if (d.includes("coolant") && d.includes("hose") && !hits.includes("coolant_hoses")) {
+    hits.push("coolant_hoses");
+  }
+  if (d.includes("shock") || d.includes("strut")) {
+    const k = d.includes("rear") ? "rear_shocks" : "front_shocks";
+    if (!hits.includes("front_shocks") && !hits.includes("rear_shocks")) hits.push(k);
+  }
+  if (d.includes("brake rotor") || d.includes("rotor replaced") || d.includes("rotor(s) replaced")) {
+    const k = d.includes("rear") ? "rear_brake_rotors" : "front_brake_rotors";
+    if (!hits.includes(k)) hits.push(k);
+  }
+  if (
+    d.includes("brake pad") ||
+    d.includes("brake lining") ||
+    d.includes("brakes replaced") ||
+    d.includes("brakes serviced") ||
+    d.includes("disc brake")
+  ) {
+    const k = d.includes("rear") ? "rear_brake_pads" : "front_brake_pads";
+    if (!hits.includes(k)) hits.push(k);
+  }
+  if ((d.includes("windshield wiper") || d.includes("wipers")) && !hits.includes("wiper_blades")) {
+    hits.push("wiper_blades");
   }
   return Array.from(new Set(hits));
 }

@@ -42,6 +42,9 @@ import {
   type ShopServiceHistory,
 } from "@/lib/plan-build/triage";
 import { resolveCustomerName } from "@/lib/plan-build/customer-name";
+import { buildCarfaxMatchDiagnostics } from "@/lib/plan-build/carfax-match-diagnostic";
+import { recordUnmatchedCarfaxDescription } from "@/lib/carfax-match-log";
+import { getCarfaxOverridesMap } from "@/lib/carfax-overrides";
 import {
   detectMileageDiscrepancy,
   shopHistoryLabelFromProvider,
@@ -66,6 +69,13 @@ export async function POST(req: NextRequest) {
   try {
     let shopId: number;
 
+    // Task #655: operator CARFAX match diagnostic. When `diag=carfax` and the
+    // caller is a platform admin, the route returns a per-record breakdown of
+    // how each CARFAX entry matched (or didn't) instead of building/caching a
+    // plan. Gated below; ignored for everyone else so the hot path is unchanged.
+    const diag = req.nextUrl.searchParams.get("diag");
+    let isPlatformAdmin = false;
+
     const internalSecret = req.headers.get("x-internal-secret");
     const internalShopId = req.headers.get("x-internal-shop-id");
     if (
@@ -81,8 +91,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       shopId = Number(session.shopId);
+      isPlatformAdmin = !!session.isPlatformAdmin;
+      // Platform admins running the CARFAX diagnostic may target any shop's
+      // vehicle via ?shopId=, since their own session shop is rarely the one
+      // a support ticket is about.
+      if (isPlatformAdmin && diag === "carfax") {
+        const shopIdOverride = req.nextUrl.searchParams.get("shopId");
+        if (shopIdOverride && Number.isFinite(Number(shopIdOverride))) {
+          shopId = Number(shopIdOverride);
+        }
+      }
     }
     shopIdForError = shopId;
+
+    if (diag === "carfax" && !isPlatformAdmin) {
+      return NextResponse.json(
+        { error: "Platform admin access required" },
+        { status: 403 },
+      );
+    }
+    const carfaxDiagMode = diag === "carfax" && isPlatformAdmin;
 
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
     const mileageParam = req.nextUrl.searchParams.get("mileage");
@@ -104,8 +132,13 @@ export async function POST(req: NextRequest) {
 
     const db = await getDb();
 
+    // Task #655 (manual edit): operator-defined CARFAX-description → service-key
+    // overrides. Loaded once (cached in-process) and consulted live by both the
+    // diagnostic and triage so a manual fix applies without a code deploy.
+    const carfaxKeyOverrides = await getCarfaxOverridesMap(db);
+
     const existingCache = await getCachedPlan(db, vin, shopId, mileage);
-    if (existingCache) {
+    if (existingCache && !carfaxDiagMode) {
       return NextResponse.json({
         ok: true,
         vin,
@@ -760,7 +793,48 @@ export async function POST(req: NextRequest) {
 
     const carfaxRecords = (carfaxResult as any).ok ? ((carfaxResult as any).serviceRecords || []) : [];
     const carfaxCategories = (carfaxResult as any).ok ? ((carfaxResult as any).serviceCategories || []) : [];
-    
+
+    // Task #655: classify how every CARFAX record / category matched the
+    // canonical service keys (mirrors triage's matching + shop-history dedup).
+    // Always log the unmatched ones so wording gaps surface fleet-wide; when a
+    // platform admin asks for `diag=carfax`, return the full per-record
+    // breakdown instead of building/caching a plan.
+    const carfaxDiagnostics = buildCarfaxMatchDiagnostics({
+      carfaxRecords,
+      carfaxCategories,
+      shopServiceHistory,
+      vehicleYear,
+      today: new Date(),
+      carfaxKeyOverrides,
+    });
+    for (const d of carfaxDiagnostics.entries) {
+      if (d.unmatched) {
+        recordUnmatchedCarfaxDescription(d.description, {
+          vin,
+          shopId,
+          source: d.source,
+        });
+      }
+    }
+    if (carfaxDiagMode) {
+      return NextResponse.json(
+        {
+          ok: true,
+          vin,
+          shopId,
+          mileage,
+          vehicleYear,
+          carfaxAvailable: !!(carfaxResult as any).ok,
+          shopHistoryCount: shopServiceHistory.length,
+          summary: carfaxDiagnostics.summary,
+          entries: carfaxDiagnostics.entries,
+          note: "Diagnostic only — no plan was built or cached.",
+          duration: Date.now() - startTime,
+        },
+        { status: 200 },
+      );
+    }
+
     let mpdBlended: number | null = null;
     if ((carfaxResult as any).ok && Array.isArray((carfaxResult as any).serviceRecords)) {
       const recs = (carfaxResult as any).serviceRecords
@@ -894,6 +968,9 @@ export async function POST(req: NextRequest) {
       // Task #336: pass shop unit so OEM intervals are converted to km
       // for Canadian shops before being persisted to cached_plans.
       distanceUnit,
+      // Task #655 (manual edit): apply operator CARFAX-description overrides
+      // live so manual fixes anchor VHI services without a code deploy.
+      carfaxKeyOverrides,
     });
 
     const isInspectItem = (item: TriagedItem) => {
