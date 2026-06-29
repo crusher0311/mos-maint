@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
 import { getStatusIconSet, getServiceIconSet, getStatusIconSvg } from "@/lib/vhi-icons";
+import { resolveServiceIconKey, getServiceIconUrl } from "@/lib/service-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
@@ -65,24 +66,34 @@ function buildFlags(opts: {
 }
 
 /**
- * Ensure every bucket item carries a non-null `iconSvg` for partners.
+ * Ensure every bucket item carries a non-null `iconSvg` and `serviceIconUrl`
+ * for partners.
  *
  * The fresh-build paths pass `includeIconSvg: true` to `formatVhiItem`, but the
  * `analysis_cache` and `on_demand_build` branches serve buckets produced
  * elsewhere (cached snapshots / `rebuildVhi`) that may still have
- * `iconSvg: null`. Partners (e.g. AppFueled) read the per-item `iconSvg`, so we
- * backfill it from `iconStatus` here. Idempotent: items that already have a
- * non-null `iconSvg`, or lack an `iconStatus`, are left untouched.
+ * `iconSvg: null` and predate the `serviceIconUrl` field. Partners (e.g.
+ * AppFueled) read the per-item `iconSvg` and save the per-item `serviceIconUrl`,
+ * so we backfill both here: `iconSvg` from `iconStatus`, and `serviceIconUrl`
+ * from the item's `serviceIconKey` (or re-resolved from serviceKey/title).
+ * Idempotent: items that already carry the fields are left untouched.
  */
 function ensureItemIconSvg(buckets: any) {
   if (!buckets || typeof buckets !== "object") return buckets;
   const fill = (arr: any) =>
     Array.isArray(arr)
-      ? arr.map((it) =>
-          it && it.iconSvg == null && it.iconStatus
-            ? { ...it, iconSvg: getStatusIconSvg(it.iconStatus) }
-            : it,
-        )
+      ? arr.map((it) => {
+          if (!it) return it;
+          let next = it;
+          if (it.iconSvg == null && it.iconStatus) {
+            next = { ...next, iconSvg: getStatusIconSvg(it.iconStatus) };
+          }
+          if (it.serviceIconUrl == null) {
+            const key = it.serviceIconKey || resolveServiceIconKey(it.serviceKey ?? null, it.title);
+            next = { ...next, serviceIconUrl: getServiceIconUrl(key) };
+          }
+          return next;
+        })
       : arr;
   return {
     ...buckets,

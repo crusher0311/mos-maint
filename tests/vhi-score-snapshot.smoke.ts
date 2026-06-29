@@ -290,6 +290,11 @@ async function run() {
       { bucket: "overdue" },
     );
     eq("formatVhiItem: oil item → oil_change service icon key", oil.serviceIconKey, "oil_change");
+    ok(
+      "formatVhiItem: oil item → absolute serviceIconUrl",
+      typeof oil.serviceIconUrl === "string" &&
+        /^https?:\/\/.+\/icons\/service\/oil_change\.svg$/.test(oil.serviceIconUrl),
+    );
 
     const diff = formatVhiItem(
       item({ key: "d", serviceKey: "differential_rear", title: "Rear Differential Service" }),

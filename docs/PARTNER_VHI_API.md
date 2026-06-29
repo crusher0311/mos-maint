@@ -96,6 +96,14 @@ filter, brake, etc. — the same artwork our customer-facing VHI shows.
 - The SVG is self-contained inline markup (our relative
   `/icons/service/*.svg` paths do **not** resolve on a partner's domain), so
   drop it straight into the DOM or a `data:image/svg+xml` URI.
+- Each VHI item also has **`serviceIconUrl`**: an absolute, publicly reachable
+  URL to that pictogram's artwork (e.g.
+  `https://mos.tools/icons/service/oil_change.svg`). Save this URL in your DB
+  and render it with `<img src="…">` instead of storing the inline SVG — it is
+  much smaller. Always populated (falls back to the general-service icon), and
+  populated on all partner response branches. Prefer `serviceIconUrl` over
+  `serviceIcons[serviceIconKey]` when you want to keep your stored payload
+  small; the inline `serviceIcons` map remains available for now.
 
 Present on all response branches (`source: "cached_plan"`, `"analysis_cache"`,
 `"on_demand_build"`, and the stale-serve path).

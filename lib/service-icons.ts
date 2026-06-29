@@ -13,6 +13,7 @@
  * (`getServiceIconSet`/`getServiceIconSvg`) so we don't pull ~160KB of SVG
  * strings into the client bundle.
  */
+import { getAppBaseUrl } from "@/lib/app-host";
 
 /**
  * icon-key -> public artwork path. The browser component renders these files
@@ -118,6 +119,24 @@ export const KNOWN_ICON_KEYS: Set<string> = new Set([
  *  3. Keyword match against the title (then serviceKey).
  *  4. The general/default icon.
  */
+/**
+ * Resolve a service-icon key to an absolute public URL for its artwork.
+ *
+ * Partners (e.g. AppFueled) save this URL in their own DB instead of the inline
+ * SVG blob, which shrinks the response payload. The artwork files live in
+ * `public/icons/service/*.svg` and are publicly reachable without auth. The
+ * host is resolved via the shared `getAppBaseUrl()` so the URL is always on the
+ * same domain partners already receive in `reportUrl` (prod `mos.tools`, qa,
+ * dev). Always returns a usable URL: keys without a hosted file (e.g. the
+ * JSX-only `dvi_finding` marker) fall back to the general-service icon.
+ */
+export function getServiceIconUrl(key: string | null | undefined): string {
+  const path =
+    (key ? ICON_KEY_TO_IMAGE[key] : undefined) ||
+    ICON_KEY_TO_IMAGE[DEFAULT_SERVICE_ICON_KEY];
+  return `${getAppBaseUrl()}${path}`;
+}
+
 export function resolveServiceIconKey(serviceKey: string | null, title?: string): string {
   if (!serviceKey && !title) return DEFAULT_SERVICE_ICON_KEY;
 

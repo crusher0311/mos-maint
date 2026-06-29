@@ -3,7 +3,7 @@ import { type TriagedItemCache } from "@/lib/plan-cache";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
 import { getStatusIconSvg, type IconStatus } from "@/lib/vhi-icons";
-import { resolveServiceIconKey } from "@/lib/service-icons";
+import { resolveServiceIconKey, getServiceIconUrl } from "@/lib/service-icons";
 
 export function categoryMultiplier(category: string): number {
   const cat = (category || "").toLowerCase();
@@ -255,6 +255,8 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
   const byMiles = progress?.miles.status ?? item.byMiles ?? null;
   const byTime = progress?.time.status ?? item.byTime ?? null;
 
+  const serviceIconKey = resolveServiceIconKey(item.serviceKey, item.title);
+
   return {
     key: item.key,
     serviceKey: item.serviceKey,
@@ -293,7 +295,14 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
      * `serviceIcons` (falls back to the general icon), so it never resolves to
      * a missing icon.
      */
-    serviceIconKey: resolveServiceIconKey(item.serviceKey, item.title),
+    serviceIconKey,
+    /**
+     * Absolute URL to the per-service pictogram artwork. Partners (e.g.
+     * AppFueled) save this URL in their own DB instead of the inline `iconSvg`
+     * blob. Always populated (resolves the service key to a hosted file, with
+     * a general-icon fallback), so it never points at a missing image.
+     */
+    serviceIconUrl: getServiceIconUrl(serviceIconKey),
     /**
      * Task #392: per-axis trigger statuses so partners can render
      * "Overdue by time" / "Overdue by mileage" themselves. Either field
