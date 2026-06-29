@@ -71,10 +71,12 @@ The red/amber/green/blue **status** indicator — i.e. is this item overdue,
 due soon, OK, or deferred.
 
 - Each VHI item has `iconStatus` (`"overdue" | "soon" | "ok" | "deferred"`).
-- The top-level `icons` map is `iconStatus -> inline SVG`. Look up the item's
-  `iconStatus` there to render the colored status dot.
-- `iconSvg` on the item stays `null` by default (the top-level map avoids
-  duplicating the SVG on every item).
+- Each VHI item also has `iconSvg`: the inline status SVG for that item's
+  `iconStatus`, ready to drop straight into the DOM. This is populated on all
+  partner response branches.
+- The top-level `icons` map is `iconStatus -> inline SVG`. It is equivalent to
+  `iconSvg` (same artwork) — use whichever is more convenient: the per-item
+  `iconSvg`, or look the item's `iconStatus` up in the `icons` map.
 
 ### Service icons (`serviceIconKey` / top-level `serviceIcons`) — Task #675
 

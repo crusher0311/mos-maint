@@ -3,7 +3,7 @@ import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
-import { getStatusIconSet, getServiceIconSet } from "@/lib/vhi-icons";
+import { getStatusIconSet, getServiceIconSet, getStatusIconSvg } from "@/lib/vhi-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
@@ -65,6 +65,35 @@ function buildFlags(opts: {
 }
 
 /**
+ * Ensure every bucket item carries a non-null `iconSvg` for partners.
+ *
+ * The fresh-build paths pass `includeIconSvg: true` to `formatVhiItem`, but the
+ * `analysis_cache` and `on_demand_build` branches serve buckets produced
+ * elsewhere (cached snapshots / `rebuildVhi`) that may still have
+ * `iconSvg: null`. Partners (e.g. AppFueled) read the per-item `iconSvg`, so we
+ * backfill it from `iconStatus` here. Idempotent: items that already have a
+ * non-null `iconSvg`, or lack an `iconStatus`, are left untouched.
+ */
+function ensureItemIconSvg(buckets: any) {
+  if (!buckets || typeof buckets !== "object") return buckets;
+  const fill = (arr: any) =>
+    Array.isArray(arr)
+      ? arr.map((it) =>
+          it && it.iconSvg == null && it.iconStatus
+            ? { ...it, iconSvg: getStatusIconSvg(it.iconStatus) }
+            : it,
+        )
+      : arr;
+  return {
+    ...buckets,
+    overdue: fill(buckets.overdue),
+    dueSoon: fill(buckets.dueSoon),
+    upcoming: fill(buckets.upcoming),
+    complimentary: fill(buckets.complimentary),
+  };
+}
+
+/**
  * Format a persisted plan document into the partner VHI response shape.
  * Shared by the cache-hit path and the rebuild-timeout "serve stale" path so
  * both branches return an identical contract. `source` distinguishes them.
@@ -106,16 +135,16 @@ function buildPlanResponse(
     },
     buckets: {
       overdue: separated.overdue.map((it: any) =>
-        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue", includeIconSvg: true })
       ),
       dueSoon: separated.dueSoon.map((it: any) =>
-        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon", includeIconSvg: true })
       ),
       upcoming: separated.upcoming.map((it: any) =>
-        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming", includeIconSvg: true })
       ),
       complimentary: separated.complimentary.map((it: any) =>
-        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+        formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary", includeIconSvg: true })
       ),
     },
     icons: getStatusIconSet(),
@@ -415,16 +444,16 @@ export const GET = createExternalEndpoint(
         },
         buckets: {
           overdue: separated.overdue.map((it) =>
-            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue" })
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "overdue", includeIconSvg: true })
           ),
           dueSoon: separated.dueSoon.map((it) =>
-            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon" })
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "dueSoon", includeIconSvg: true })
           ),
           upcoming: separated.upcoming.map((it) =>
-            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming" })
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "upcoming", includeIconSvg: true })
           ),
           complimentary: separated.complimentary.map((it) =>
-            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary" })
+            formatVhiItem(it, { currentMiles: plan.currentMiles, bucket: "complimentary", includeIconSvg: true })
           ),
         },
         icons: getStatusIconSet(),
@@ -461,6 +490,9 @@ export const GET = createExternalEndpoint(
         success: true,
         vin,
         ...analysisResult,
+        // Backfill per-item iconSvg from iconStatus for partners (snapshot
+        // buckets predate includeIconSvg). Overrides the spread `buckets`.
+        buckets: ensureItemIconSvg((analysisResult as any).buckets),
         mileageSource: aSource,
         mileageEstimated: aSource !== "actual",
         mileageEstimateDetails: aDetails,
@@ -680,7 +712,9 @@ export const GET = createExternalEndpoint(
         result.dataQuality
       ),
       summary: result.summary,
-      buckets: result.buckets,
+      // Backfill per-item iconSvg for partners — rebuildVhi's formatVhiItem
+      // calls don't pass includeIconSvg, so the items arrive with iconSvg null.
+      buckets: ensureItemIconSvg(result.buckets),
       icons: getStatusIconSet(),
       serviceIcons: getServiceIconSet(),
       reportUrl: buildReportUrl(vin, resolvedShopId),
