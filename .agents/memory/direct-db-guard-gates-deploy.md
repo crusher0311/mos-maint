@@ -22,3 +22,13 @@ repository OR be added to the allowlist with a justifying comment. After adding,
 run `node scripts/check-direct-db.cjs` locally — it must print `0 unauthorized` AND
 report no *stale* entries. A merge that adds DB-touching files without updating this
 allowlist will pass the merge but break the next prod deploy.
+
+**Silent prod freeze:** a build_failed deploy does NOT roll back — Render just keeps
+serving the last green commit, so prod can sit frozen for days with no obvious alert.
+Symptom can masquerade as "feature built but not working in prod" or "partner doesn't
+see field X" (e.g. AppFueled not seeing VHI service-icons: code was correct on `main`
+but never shipped). When a feature is on `main` yet absent in prod, FIRST check the
+live deploy commit vs `main` via the Render API
+(`/v1/services/{id}/deploys?limit=5` → look for `build_failed` + the live `commit.id`),
+not the app code. `git merge-base --is-ancestor <feature-sha> <live-sha>` confirms
+whether prod actually has it.

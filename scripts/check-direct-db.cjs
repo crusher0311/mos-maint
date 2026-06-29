@@ -441,6 +441,20 @@ const ALLOWLIST = new Set([
   "scripts/protractor-job-index-catchup.ts",
   "scripts/repair-corrupted-carfax-snapshots.ts",
   "scripts/wave1-backfill.ts",
+  // Task #629 — customer-requested re-sync on the Data Status panel. The cron
+  // processor and the settings route read/write the operational
+  // data-status re-sync request bookkeeping (operational state, not entity
+  // data), matching the data-quality / sync-health cron precedent above.
+  "app/api/cron/process-resync-requests/route.ts",
+  "app/api/settings/data-status/resync/route.ts",
+  // Task #635 — Data Status helper backing the panel + appointment/employee
+  // roster sync. Reads cross-collection data-status counts/dates (operational
+  // reporting, not a single entity), mirroring lib/data-quality.ts above.
+  "lib/data-status.ts",
+  // Vehicle-spec cache helper backing the already-allowlisted
+  // app/api/extension/specs/route.ts; caches DataOne spec lookups in an
+  // operational cache collection, same precedent as the route it serves.
+  "app/api/extension/specs/specs-cache.ts",
 ]);
 
 // Paths that are *always* allowed to use getDb()/getMongoClient():
