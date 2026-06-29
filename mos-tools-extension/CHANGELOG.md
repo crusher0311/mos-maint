@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.50 — 2026-06-27
+
+### Fixed
+- **The AutoFlow DVI page now refreshes itself after you apply changes.** When you
+  used **Apply to DVI** (Pre-fill DVI), the new statuses, notes, and
+  recommendations were saved to AutoFlow but the page didn't update — so it looked
+  like nothing happened until you manually refreshed. Now, after a successful
+  apply, the page reloads on its own (after a brief moment so you can still read
+  the success message) and you immediately see the applied changes. The same
+  automatic refresh now also happens for **Enhance Notes** and **Add to
+  Concerns**. If an apply fully fails (nothing was written), the page stays put so
+  you can read the error.
+
 ## 1.27.49 — 2026-06-27
 
 ### Fixed

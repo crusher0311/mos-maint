@@ -649,6 +649,18 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 4000);
 }
 
+// After a successful DVI write-back (Apply to DVI / Enhance Notes / Add to
+// Concerns), AutoFlow's page doesn't re-render the applied statuses/notes/
+// recommendations until a manual refresh. Reload the page so the technician
+// immediately sees the changes — but only when at least one item was written,
+// so an all-failed apply leaves the error toast visible. The short delay keeps
+// the success toast readable before the reload happens.
+function reloadAfterApply() {
+  setTimeout(() => {
+    try { window.location.reload(); } catch (e) {}
+  }, 1200);
+}
+
 // ==================== PRINT BUTTON ====================
 let printButtonInjected = false;
 let lastInjectedUrl = null;
@@ -2041,6 +2053,7 @@ async function handleAfPrefill(btn) {
           if (added) showToast(`DVI pre-filled: ${added} updated${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
           else showToast(`Pre-fill failed (${failed} item${failed === 1 ? '' : 's'})`, 'error');
           if (failedNames.length) console.warn('[MOS Tools] AF prefill failed items:', failedNames);
+          if (added) reloadAfterApply();
         },
       });
     }
@@ -2124,6 +2137,7 @@ async function handleAfEnhance(btn) {
           }
           if (added) showToast(`Updated ${added} note${added === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
           else showToast(`Enhance apply failed (${failed})`, 'error');
+          if (added) reloadAfterApply();
         },
       });
     }
@@ -2191,6 +2205,7 @@ async function handleAfConcerns(btn) {
           }
           if (added) showToast(`Added ${added} recommendation${added === 1 ? '' : 's'} to RO${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
           else showToast(`Add recommendations failed (${failed})`, 'error');
+          if (added) reloadAfterApply();
         },
       });
     }
