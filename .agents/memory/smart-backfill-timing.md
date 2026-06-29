@@ -70,6 +70,23 @@ This is gated by the compute cron, so OFF mode writes nothing.
 back to the generic schedule (eligible=true, fallback=true) so a low-data shop
 is never starved.
 
+## Reading runtime status from logs (DON'T trust build smoke lines)
+- `[smart-timing]` lines with `appname=bld-*` (Render BUILD) and the synthetic
+  `shop=42`/`shop=99` fixtures are the **smoke test** (`test:smoke` in prebuild),
+  NOT runtime decisions. Shop 42 appears at two `localHour`s and both providers in
+  one millisecond, shop 99 is `no_profile` — fixtures, not the fleet. They show
+  enforce BLOCK / would-BLOCK(not-in-canary) / observe would-BLOCK regardless of
+  the live env mode, so they false-signal "enforce is skipping prod."
+- **To judge the LIVE runtime mode**, query `production_logs` for `[smart-timing]`
+  lines where `appname NOT LIKE 'bld-%'` (i.e. runtime web-*/srv-*). Observe/enforce
+  log EVERY tick for EVERY evaluated shop, so **zero non-build runtime lines = the
+  runtime gate is effectively OFF** (or unwired). Env can't be trusted alone (Render
+  hides env-group values); the runtime log presence is the authoritative signal.
+- Profiles keep getting computed by the `compute-activity-profiles` cron regardless
+  of mode, so fresh profiles + a populated readout do NOT mean observe is running.
+- Confirmed 2026-06-29: 128 profiles / 115 confident, cron healthy, but NO runtime
+  smart-timing lines in 30d → observe was not actually live in prod.
+
 ## Demoing an actual skip
 - A sparse/demo shop (few organic events) profiles BELOW the 0.5 floor → enforce
   always emits `reason=low_confidence fallback=true ALLOW`, i.e. it can NEVER show
