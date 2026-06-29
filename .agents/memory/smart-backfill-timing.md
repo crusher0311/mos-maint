@@ -85,7 +85,24 @@ is never starved.
 - Profiles keep getting computed by the `compute-activity-profiles` cron regardless
   of mode, so fresh profiles + a populated readout do NOT mean observe is running.
 - Confirmed 2026-06-29: 128 profiles / 115 confident, cron healthy, but NO runtime
-  smart-timing lines in 30d → observe was not actually live in prod.
+  smart-timing lines in 30d → observe was not actually live in prod. Fixed by
+  setting `SMART_BACKFILL_TIMING=observe` on prod web svc (Render, srv-d55jaq... ),
+  which auto-triggered a redeploy (live 11:29Z).
+
+## Coverage gap: Tekmetric FULL-PAGE route is NOT gated
+- The gate (`prepareQuietWindowGate`/`applyQuietWindowGate`) is wired into the
+  **standard** per-shop routes only: `tekmetric-backfill`, `shopware-backfill`,
+  protractor resume, shopmonkey `runFullPageBackfillCycle`. The **Tekmetric
+  full-page** route `app/api/cron/tekmetric-fullpage-backfill/route.ts` has NO gate
+  call (greps for the gate symbols return nothing; it only matched generic
+  "eligible"/"skip" words in earlier searches).
+- Consequence: during Monday/heavy full-page catch-up, the full-page path does all
+  the work and the gated standard route no-ops (returns ~68ms, "lock held by
+  another instance") → smart-timing logs ZERO even though observe is correctly on.
+  So "no observe lines right now" can be expected, not a bug. Observe lines appear
+  only when a gated route actually iterates shops.
+- This also means enforce would NOT defer full-page Tekmetric backfills — a real
+  feature gap if quiet-window deferral of the big catch-up pulls is ever wanted.
 
 ## Demoing an actual skip
 - A sparse/demo shop (few organic events) profiles BELOW the 0.5 floor → enforce
