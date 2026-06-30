@@ -21,6 +21,10 @@ import {
 } from "@/lib/integrations/tekmetric/inflight-lock";
 import { enqueueTekmetricFullPage } from "@/lib/queue/producer";
 import { decideQueueFor } from "@/lib/queue/feature-flag";
+import {
+  prepareQuietWindowGate,
+  applyQuietWindowGate,
+} from "@/lib/data/repositories/activity-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -233,6 +237,29 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Smart per-shop quiet-window gate (task #662), mirroring the standard
+  // `/api/cron/tekmetric-backfill` route. OFF by default: when the
+  // SMART_BACKFILL_TIMING flag is unset/off `prepareQuietWindowGate` does no
+  // Mongo read and emits no logging, and `shopsToRun === shops` —
+  // byte-for-byte the previous behavior. In observe mode it logs the
+  // would-ALLOW/would-BLOCK decision per shop; only enforce mode defers
+  // out-of-quiet-window shops (respecting the SMART_BACKFILL_TIMING_SHOP_IDS
+  // canary allowlist and the confidence floor — low-confidence shops fall
+  // back to the generic schedule and are never starved). Deferred shops are
+  // simply not handled this tick and naturally count toward shopsRemaining,
+  // so the next tick picks them up.
+  const quietGate = await prepareQuietWindowGate(
+    shops.map((s) => Number(s.shopId)),
+  );
+  const shopsToRun =
+    quietGate.mode === "off"
+      ? shops
+      : shops.filter(
+          (shop) =>
+            !applyQuietWindowGate(quietGate, Number(shop.shopId), "tekmetric")
+              .shouldSkip,
+        );
+
   const results: any[] = [];
 
   // ── Pass 1: fast queue hand-off (Task #513 fairness fix) ───────────
@@ -258,7 +285,7 @@ export async function GET(req: NextRequest) {
   // through to `inlineShops` and run in-process below, preserving the
   // fail-open contract.
   const inlineShops: ShopRow[] = [];
-  for (const shop of shops) {
+  for (const shop of shopsToRun) {
     if (!decideQueueFor(shop.shopId).useQueue) {
       inlineShops.push(shop);
       continue;
