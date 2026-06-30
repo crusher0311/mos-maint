@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
 import { getCachedPlan } from "@/lib/plan-cache";
-import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
+import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore, buildItemDetail } from "@/lib/vhi-score";
 import { getStatusIconSet, getServiceIconSet, getStatusIconSvg } from "@/lib/vhi-icons";
 import { resolveServiceIconKey, getServiceIconUrl } from "@/lib/service-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
@@ -91,6 +91,12 @@ function ensureItemIconSvg(buckets: any) {
           if (it.serviceIconUrl == null) {
             const key = it.serviceIconKey || resolveServiceIconKey(it.serviceKey ?? null, it.title);
             next = { ...next, serviceIconUrl: getServiceIconUrl(key) };
+          }
+          // Task #730: backfill the partner-facing `detail` on cached/rebuilt
+          // snapshots that predate the field so the analysis_cache branch never
+          // leaves a DVI finding with only the raw status color to show.
+          if (it.detail == null) {
+            next = { ...next, detail: buildItemDetail(it) };
           }
           return next;
         })

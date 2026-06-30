@@ -48,6 +48,7 @@ export const ICON_KEY_TO_IMAGE: Record<string, string> = {
   bolt_torque: "/icons/service/bolt_torque.svg",
   oil_reminder: "/icons/service/oil_reminder.svg",
   chassis_body: "/icons/service/chassis_body.svg",
+  lighting: "/icons/service/lighting.svg",
   general_service: "/icons/service/general_service.svg",
 };
 
@@ -83,6 +84,7 @@ export const titleKeywordMap: Array<[string[], string]> = [
   [["fuel system", "fuel inject", "fuel filter", "fuel induction"], "fuel_system"],
   [["shock", "strut", "suspension"], "front_shocks"],
   [["wheel align", "alignment"], "wheel_alignment"],
+  [["headlight", "head lamp", "tail light", "taillight", "turn signal", "marker light", "fog light", "license plate light", "bulb", "lamp", "lighting", "exterior lights", "interior lights"], "lighting"],
   [["inspect", "check", "examine", "visual"], "general_service"],
 ];
 
@@ -140,16 +142,33 @@ export function getServiceIconUrl(key: string | null | undefined): string {
 export function resolveServiceIconKey(serviceKey: string | null, title?: string): string {
   if (!serviceKey && !title) return DEFAULT_SERVICE_ICON_KEY;
 
-  if (serviceKey?.startsWith("dvi_finding") || serviceKey?.startsWith("dvi_unmapped")) {
-    return DVI_FINDING_ICON_KEY;
-  }
+  // DVI findings used to be hard-forced to the warning triangle here, which
+  // made every inspection finding render with the same icon. Instead, run them
+  // through the same keyword matching as everything else (so a
+  // "Battery/Electrical System" finding resolves to the battery icon), and only
+  // fall back to the triangle when nothing meaningful matches. The synthetic
+  // `dvi_unmapped_*` serviceKey never matches a real icon key, so the title is
+  // what actually drives resolution for those.
+  const isDviFinding =
+    serviceKey?.startsWith("dvi_finding") || serviceKey?.startsWith("dvi_unmapped");
 
   if (serviceKey && KNOWN_ICON_KEYS.has(serviceKey)) return serviceKey;
 
   const titleLower = (title || serviceKey || "").toLowerCase();
   for (const [keywords, iconKey] of titleKeywordMap) {
-    if (keywords.some((kw) => titleLower.includes(kw))) return iconKey;
+    if (keywords.some((kw) => titleLower.includes(kw))) {
+      // A DVI finding that only matches the generic "inspect/check" catch-all
+      // reads better as the inspection triangle than the generic gear icon.
+      if (isDviFinding && iconKey === DEFAULT_SERVICE_ICON_KEY) {
+        return DVI_FINDING_ICON_KEY;
+      }
+      return iconKey;
+    }
   }
+
+  // Unmatched DVI findings still fall back to the inspection triangle (never a
+  // missing image); everything else falls back to the general-service icon.
+  if (isDviFinding) return DVI_FINDING_ICON_KEY;
 
   return DEFAULT_SERVICE_ICON_KEY;
 }

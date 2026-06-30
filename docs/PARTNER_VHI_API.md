@@ -107,3 +107,23 @@ filter, brake, etc. — the same artwork our customer-facing VHI shows.
 
 Present on all response branches (`source: "cached_plan"`, `"analysis_cache"`,
 `"on_demand_build"`, and the stale-serve path).
+
+### Item description (`detail`) — Task #730
+
+Each VHI item also carries a **`detail`** string: a short, human-readable
+description suitable for showing under the item title. Use this for the
+"Details" line instead of the raw `bump` status color.
+
+- For a **DVI inspection finding** it is the technician's note when one was
+  provided; when the inspection sent only a status color and no note, `detail`
+  is a derived phrase built from the finding name plus a plain-language
+  condition — `"<finding> — Needs attention"` for a red finding,
+  `"<finding> — Monitor"` for a yellow one. It is **never** the bare
+  `"red"`/`"yellow"` color.
+- For non-DVI items with nothing extra to add, `detail` is `null` — keep your
+  existing interval-based copy in that case.
+
+Populated on all response branches (cached snapshots that predate the field are
+backfilled on read). The same icon resolver and `detail` logic feed both this
+partner API and our customer-facing Vehicle Health Report, so the two stay in
+lockstep.

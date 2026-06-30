@@ -218,6 +218,38 @@ export interface FormatVhiItemOptions {
   includeIconSvg?: boolean;
 }
 
+/**
+ * Task #730: human-readable "detail" string for an item, primarily for partner
+ * overlays (e.g. AppFueled) that would otherwise have nothing but the raw
+ * status color to show for a DVI finding. Prefers a real note / recommendation;
+ * for a DVI finding with no note it derives a readable phrase from the finding
+ * name plus a plain-language condition ("Needs attention" / "Monitor") instead
+ * of leaking the bare "red"/"yellow" bump. Returns null for non-DVI items with
+ * nothing meaningful to add (partners keep their existing interval-based copy).
+ */
+export function buildItemDetail(item: {
+  notes?: string | null;
+  recommendedReason?: string | null;
+  source?: string | null;
+  category?: string | null;
+  title?: string | null;
+  bump?: string | null;
+}): string | null {
+  const note = (item.notes ?? "").trim();
+  if (note) return note;
+
+  const reason = (item.recommendedReason ?? "").trim();
+  if (reason) return reason;
+
+  const isDvi = item.source === "dvi" || item.category === "DVI Finding";
+  if (!isDvi) return null;
+
+  const condition =
+    item.bump === "yellow" ? "Monitor" : "Needs attention";
+  const name = (item.title ?? "").trim();
+  return name ? `${name} — ${condition}` : condition;
+}
+
 function bucketToStatus(b?: FormatVhiItemOptions["bucket"]): IconStatus | null {
   if (b === "overdue") return "overdue";
   if (b === "dueSoon") return "soon";
@@ -283,6 +315,15 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
     notes: item.notes ?? null,
     recommendedDefault: !!item.recommendedDefault,
     recommendedReason: item.recommendedReason ?? null,
+    /**
+     * Task #730: a partner-facing human-readable description. For DVI findings
+     * it is the real inspection note when present, otherwise a derived phrase
+     * ("<finding> — Needs attention/Monitor") so partner overlays never have to
+     * fall back to showing the raw status color ("red"/"yellow"). Null for
+     * non-DVI items with no note so partners keep their interval-based copy.
+     * The customer-facing report ignores this field (it builds its own copy).
+     */
+    detail: buildItemDetail(item),
     progress,
     iconStatus,
     iconSvg: includeIconSvg ? getStatusIconSvg(iconStatus) : null,

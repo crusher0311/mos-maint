@@ -206,6 +206,13 @@ const iconPaths: Record<string, JSX.Element> = {
       <line x1="10" y1="8" x2="22" y2="8" stroke="currentColor" strokeWidth="2" />
     </g>
   ),
+  lighting: (
+    <g>
+      <path d="M16 4 A8 8 0 0 0 11 18 C11.8 18.6 12.4 19.4 12.6 20.4 L13 22 L19 22 L19.4 20.4 C19.6 19.4 20.2 18.6 21 18 A8 8 0 0 0 16 4Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="13" y1="25" x2="19" y2="25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <line x1="14" y1="28" x2="18" y2="28" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </g>
+  ),
   general_service: (
     <g>
       <path d="M10 6 L22 6 L26 12 L26 24 L6 24 L6 12 Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />

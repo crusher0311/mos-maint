@@ -325,6 +325,105 @@ async function run() {
       "getServiceIconSet: has markup for dvi_finding",
       typeof set.dvi_finding === "string" && set.dvi_finding.includes("<svg"),
     );
+    ok(
+      "getServiceIconSet: has markup for lighting",
+      typeof set.lighting === "string" && set.lighting.includes("<svg"),
+    );
+  }
+
+  // ---- DVI finding icon + detail contract (Task #730) -------------------
+  // DVI findings whose names don't map to a canonical SERVICE_KEY arrive with a
+  // synthetic `dvi_unmapped_*` serviceKey. These used to short-circuit to the
+  // warning triangle regardless of name; they must now run through keyword
+  // matching so recognizable findings get a real pictogram, and only truly
+  // unrecognizable ones fall back to the triangle. The `detail` field must
+  // carry a human-readable description, never the raw "red"/"yellow" bump.
+  {
+    // (a) Unmapped battery finding → battery icon via title keyword.
+    const battery = formatVhiItem(
+      item({
+        key: "dvi_unmapped_battery_electrical_system",
+        serviceKey: "dvi_unmapped_battery_electrical_system",
+        title: "Battery/Electrical System",
+        source: "dvi" as const,
+        category: "DVI Finding",
+        bump: "red" as const,
+      }),
+      { bucket: "overdue" },
+    );
+    eq("DVI battery finding → battery service icon key", battery.serviceIconKey, "battery");
+    ok(
+      "DVI red no-note finding → human detail, not bare 'red'",
+      typeof battery.detail === "string" &&
+        battery.detail !== "red" &&
+        /needs attention/i.test(battery.detail),
+      `detail=${JSON.stringify(battery.detail)}`,
+    );
+
+    // (b) Unmapped headlight/bulb finding → new lighting icon.
+    const lights = formatVhiItem(
+      item({
+        key: "dvi_unmapped_headlights_bulbs",
+        serviceKey: "dvi_unmapped_headlights_bulbs",
+        title: "Headlights/Bulbs",
+        source: "dvi" as const,
+        category: "DVI Finding",
+        bump: "yellow" as const,
+      }),
+      { bucket: "dueSoon" },
+    );
+    eq("DVI headlight finding → lighting service icon key", lights.serviceIconKey, "lighting");
+    ok(
+      "DVI yellow no-note finding → 'Monitor' detail, not bare 'yellow'",
+      typeof lights.detail === "string" &&
+        lights.detail !== "yellow" &&
+        /monitor/i.test(lights.detail),
+      `detail=${JSON.stringify(lights.detail)}`,
+    );
+
+    // (c) Genuinely unrecognizable finding → falls back to the DVI triangle.
+    const unknown = formatVhiItem(
+      item({
+        key: "dvi_unmapped_instrument_cluster",
+        serviceKey: "dvi_unmapped_instrument_cluster",
+        title: "Instrument Cluster",
+        source: "dvi" as const,
+        category: "DVI Finding",
+        bump: "red" as const,
+      }),
+      { bucket: "overdue" },
+    );
+    eq("unmappable DVI finding → dvi_finding triangle icon key", unknown.serviceIconKey, "dvi_finding");
+    ok(
+      "unmappable DVI finding → derived detail (name + condition)",
+      typeof unknown.detail === "string" &&
+        unknown.detail !== "red" &&
+        /instrument cluster/i.test(unknown.detail),
+      `detail=${JSON.stringify(unknown.detail)}`,
+    );
+
+    // (d) A DVI finding WITH a real note surfaces the note verbatim as detail.
+    const withNote = formatVhiItem(
+      item({
+        key: "dvi_unmapped_tires",
+        serviceKey: "dvi_unmapped_tires",
+        title: "Tires",
+        source: "dvi" as const,
+        category: "DVI Finding",
+        bump: "red" as const,
+        notes: "Left front at 3/32, recommend replacement",
+      }),
+      { bucket: "overdue" },
+    );
+    eq("DVI finding with note → note surfaced as detail", withNote.detail, "Left front at 3/32, recommend replacement");
+
+    // (e) Non-DVI item with no note → detail stays null (partner keeps its
+    //     existing interval-based copy).
+    const nonDvi = formatVhiItem(
+      item({ key: "oil", serviceKey: "oil", title: "Oil Change", source: "oem" as const }),
+      { bucket: "overdue" },
+    );
+    eq("non-DVI no-note item → null detail", nonDvi.detail, null);
   }
 
   if (failed > 0) {
