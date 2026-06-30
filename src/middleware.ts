@@ -19,6 +19,25 @@ const SESSION_COOKIE = "session_token";
 const TEST_AUTH_HEADER = "x-test-auth";
 const MUST_CHANGE_PASSWORD_COOKIE = "mcp_flag";
 
+// Backend API routes that the Chrome extension calls with a `Bearer ext_`
+// token instead of a `session_token` cookie, but which live OUTSIDE the
+// `/api/extension/*` namespace. The middleware's no-cookie short-circuit
+// below returns a bare `{ error: "Unauthorized" }` 401 with NO `code` field
+// (surfacing as `code=none` in the extension) BEFORE the route handler runs,
+// so an extension Bearer request could never satisfy it — the route's own
+// `validateExtensionToken` never got a chance to run. Allowlisting these
+// exact paths lets each route do its own auth (the same way
+// `/api/extension/*` is handled). Every route here MUST validate the
+// `Bearer ext_` token itself and fall back to `getSession()` for dashboard
+// callers, or this becomes an unauthenticated hole. See Task #734.
+const EXTENSION_BACKEND_PATHS = new Set([
+  "/api/tekmetric/apply-canned-job",
+  "/api/protractor/apply-canned-job",
+  "/api/estimate-assist/audit",
+  "/api/estimate-assist/job-builder",
+  "/api/vehicle/common-failures",
+]);
+
 // Paths a user with `mustChangePassword: true` is allowed to reach before
 // they have set a new password. Everything else is blocked / redirected.
 // Includes `/dashboard/setup-shop` so the existing first-time onboarding
@@ -48,6 +67,7 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/api/ping")) return true;
   if (pathname.startsWith("/api/e2e/")) return true;
   if (pathname.startsWith("/api/extension/")) return true;
+  if (EXTENSION_BACKEND_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/api/cron/")) return true;
   if (pathname.startsWith("/api/platform-admin/log-stream")) return true;
   if (pathname.startsWith("/api/platform-admin/emergency-reset")) return true;

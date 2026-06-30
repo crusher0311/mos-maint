@@ -11,8 +11,23 @@ import {
   ESTIMATE_COLLECTIONS,
 } from "@/lib/estimate-assist/job-knowledge-base";
 import { NORMALIZED_COLLECTIONS } from "@/lib/normalized-schema";
+import {
+  validateExtensionToken,
+  getAuthErrorStatus,
+  buildAuthErrorBody,
+} from "@/lib/extension-auth";
 
 export const dynamic = "force-dynamic";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
 
 export interface AuditFinding {
   id: string;
@@ -65,15 +80,35 @@ interface AuditRequest {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    // Dual auth: extension Bearer ext_ token OR dashboard session cookie.
+    // The middleware now allowlists this path (Task #734), so the route is
+    // the only auth gate — it must validate the ext token itself.
+    let sessionEmail: string | null = null;
+    let shopId: number;
+
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ext_")) {
+      const extAuth = await validateExtensionToken(req);
+      if (!extAuth.authorized || !extAuth.user) {
+        return NextResponse.json(
+          buildAuthErrorBody(extAuth, { ok: false }),
+          { status: getAuthErrorStatus(extAuth), headers: corsHeaders },
+        );
+      }
+      sessionEmail = extAuth.user.email ?? null;
+      shopId = Number(extAuth.user.shopId);
+    } else {
+      const session = await getSession();
+      if (!session) {
+        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      }
+      sessionEmail = session.email;
+      shopId = Number(session.shopId);
     }
 
     const body: AuditRequest = await req.json();
-    const shopId = Number(session.shopId);
 
-    const isAdmin = await isPlatformAdminEmail(session.email);
+    const isAdmin = await isPlatformAdminEmail(sessionEmail || "");
     {
       const blocked = await enforceAiBudget({
         shopId,
@@ -178,7 +213,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: false,
         error: "No line items to audit. Provide lineItems or a valid workOrderId.",
-      }, { status: 400 });
+      }, { status: 400, headers: corsHeaders });
     }
 
     const findings: AuditFinding[] = [];
@@ -453,7 +488,7 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
       const db = await getDb();
       await db.collection(ESTIMATE_COLLECTIONS.estimateAudits).insertOne({
         shopId,
-        userId: session.email,
+        userId: sessionEmail,
         workOrderId,
         workOrderNumber,
         lineItemCount: lineItems.length,
@@ -466,9 +501,9 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
       console.warn("[Estimate Audit] Failed to save audit history:", saveErr);
     }
 
-    return NextResponse.json({ ok: true, report });
+    return NextResponse.json({ ok: true, report }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Estimate Audit] Error:", error);
-    return NextResponse.json({ ok: false, error: error.message || "Audit failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error.message || "Audit failed" }, { status: 500, headers: corsHeaders });
   }
 }

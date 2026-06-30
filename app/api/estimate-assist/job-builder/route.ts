@@ -15,8 +15,23 @@ import {
 import { getDb } from "@/lib/db/drizzle";
 import { normalizedVehicles } from "@/lib/db/schema/normalized";
 import { eq, and } from "drizzle-orm";
+import {
+  validateExtensionToken,
+  getAuthErrorStatus,
+  buildAuthErrorBody,
+} from "@/lib/extension-auth";
 
 export const dynamic = "force-dynamic";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
 
 interface JobBuilderRequest {
   jobNameOrId: string;
@@ -41,16 +56,36 @@ interface AIEnhancedJobResult {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    // Dual auth: extension Bearer ext_ token OR dashboard session cookie.
+    // The middleware now allowlists this path (Task #734), so the route is
+    // the only auth gate — it must validate the ext token itself.
+    let sessionEmail: string | null = null;
+    let shopId: number;
+
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ext_")) {
+      const extAuth = await validateExtensionToken(req);
+      if (!extAuth.authorized || !extAuth.user) {
+        return NextResponse.json(
+          buildAuthErrorBody(extAuth, { ok: false }),
+          { status: getAuthErrorStatus(extAuth), headers: corsHeaders },
+        );
+      }
+      sessionEmail = extAuth.user.email ?? null;
+      shopId = Number(extAuth.user.shopId);
+    } else {
+      const session = await getSession();
+      if (!session) {
+        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      }
+      sessionEmail = session.email;
+      shopId = Number(session.shopId);
     }
 
     const body: JobBuilderRequest = await req.json();
     const { jobNameOrId, vin, year, make, model, submodel, drivetrain, engineCylinders, engineDescription, languageMode } = body;
-    const shopId = Number(session.shopId);
 
-    const isAdmin = await isPlatformAdminEmail(session.email);
+    const isAdmin = await isPlatformAdminEmail(sessionEmail || "");
     {
       const blocked = await enforceAiBudget({
         shopId,
@@ -61,7 +96,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!jobNameOrId) {
-      return NextResponse.json({ ok: false, error: "jobNameOrId is required" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "jobNameOrId is required" }, { status: 400, headers: corsHeaders });
     }
 
     let knowledgeBaseJob = getJobById(jobNameOrId);
@@ -287,9 +322,9 @@ export async function POST(req: NextRequest) {
       aiEnhanced: !!aiResult,
     };
 
-    return NextResponse.json({ ok: true, estimate: result });
+    return NextResponse.json({ ok: true, estimate: result }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Estimate Job Builder] Error:", error);
-    return NextResponse.json({ ok: false, error: error.message || "Failed to build estimate" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error.message || "Failed to build estimate" }, { status: 500, headers: corsHeaders });
   }
 }
