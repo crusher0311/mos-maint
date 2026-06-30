@@ -19,6 +19,7 @@ import {
   Shield,
   Eye,
   EyeOff,
+  RefreshCw,
 } from "lucide-react";
 import DataStatusPanel from "@/components/DataStatusPanel";
 
@@ -58,6 +59,9 @@ interface IntegrationStatus {
     configured: boolean;
     locationId?: string | null;
     companyId?: string | null;
+    locationIdSource?: "auto" | "manual" | null;
+    companyIdSource?: "auto" | "manual" | null;
+    idsDetectedAt?: string | null;
     connectedAt?: string | null;
     lastSyncAt?: string | null;
   };
@@ -137,6 +141,9 @@ export default function IntegrationsPage() {
           configured: Boolean(shopmonkeyData.configured),
           locationId: shopmonkeyData.locationId,
           companyId: shopmonkeyData.companyId,
+          locationIdSource: shopmonkeyData.locationIdSource,
+          companyIdSource: shopmonkeyData.companyIdSource,
+          idsDetectedAt: shopmonkeyData.idsDetectedAt,
           connectedAt: shopmonkeyData.connectedAt,
           lastSyncAt: shopmonkeyData.lastSyncAt,
         },
@@ -1403,11 +1410,45 @@ function TekmetricSection({ status, onUpdate }: {
   );
 }
 
+function ShopmonkeyIdRow({ label, value, source }: {
+  label: string;
+  value?: string | null;
+  source?: "auto" | "manual" | null;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-gray-500">{label}</span>
+      {value ? (
+        <span className="flex items-center gap-2 min-w-0">
+          <code className="text-xs bg-white px-1.5 py-0.5 rounded border border-gray-200 text-gray-700 truncate">
+            {value}
+          </code>
+          {source === "auto" && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              Auto-detected
+            </span>
+          )}
+          {source === "manual" && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700">
+              Manually entered
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="text-xs text-amber-600">Not set</span>
+      )}
+    </div>
+  );
+}
+
 function ShopmonkeySection({ status, onUpdate }: {
   status: {
     configured: boolean;
     locationId?: string | null;
     companyId?: string | null;
+    locationIdSource?: "auto" | "manual" | null;
+    companyIdSource?: "auto" | "manual" | null;
+    idsDetectedAt?: string | null;
     connectedAt?: string | null;
     lastSyncAt?: string | null;
   };
@@ -1419,6 +1460,7 @@ function ShopmonkeySection({ status, onUpdate }: {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [redetecting, setRedetecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
 
@@ -1465,6 +1507,29 @@ function ShopmonkeySection({ status, onUpdate }: {
     }
   }
 
+  async function handleRedetect() {
+    setRedetecting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings/shopmonkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "redetect" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: "Re-detected ids from the stored key." });
+        onUpdate();
+      } else {
+        setMessage({ type: "error", text: data.error || "Could not re-detect ids" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: "Could not re-detect ids" });
+    } finally {
+      setRedetecting(false);
+    }
+  }
+
   async function handleDisconnect() {
     if (!confirm("Disconnect Shopmonkey?")) return;
     setDisconnecting(true);
@@ -1487,8 +1552,30 @@ function ShopmonkeySection({ status, onUpdate }: {
         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
           <div className="flex items-center gap-2 text-sm text-green-800">
             <CheckCircle className="w-4 h-4" />
-            <span>Connected{status.locationId ? `: location ${status.locationId}` : ""}</span>
+            <span>Connected</span>
           </div>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Shopmonkey IDs</span>
+            <button
+              onClick={handleRedetect}
+              disabled={redetecting}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50"
+              title="Re-discover the company/location ids from the stored API key"
+            >
+              {redetecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Re-detect ids
+            </button>
+          </div>
+          <ShopmonkeyIdRow label="Location ID" value={status.locationId} source={status.locationIdSource} />
+          <ShopmonkeyIdRow label="Company ID" value={status.companyId} source={status.companyIdSource} />
+          {!status.locationId && !status.companyId && (
+            <p className="text-xs text-amber-600">
+              No ids detected yet. Click &ldquo;Re-detect ids&rdquo; to discover them from the stored key.
+            </p>
+          )}
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

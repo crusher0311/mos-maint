@@ -46,6 +46,11 @@ export async function GET() {
       hasApiKey: true,
       locationId: shop.shopmonkey.locationId ?? null,
       companyId: shop.shopmonkey.companyId ?? null,
+      // "auto" (discovered from the key) vs "manual" (operator-entered). Legacy
+      // shops connected before this was tracked report null (unknown).
+      locationIdSource: shop.shopmonkey.locationIdSource ?? null,
+      companyIdSource: shop.shopmonkey.companyIdSource ?? null,
+      idsDetectedAt: shop.shopmonkey.idsDetectedAt ?? null,
       connectedAt: shop.shopmonkey.connectedAt ?? null,
       lastSyncAt: shop.shopmonkey.lastSyncAt ?? null,
     });
@@ -61,6 +66,53 @@ export async function POST(request: NextRequest) {
     if (!userShopId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
+
+    // Re-detect path: use the shop's already-stored key to re-discover the
+    // Shopmonkey company/location ids and persist them. Lets an operator recover
+    // when discovery was rate-limited at connect time or the key was rotated,
+    // without waiting for an extension lookup. No API key is sent from the client.
+    if (body?.action === "redetect") {
+      const db = await getDb();
+      const shop = await db.collection("shops").findOne({ shopId: { $in: [userShopId, Number(userShopId)] } });
+      const storedKey: string | undefined = shop?.shopmonkey?.apiKey;
+      if (!storedKey) {
+        return NextResponse.json(
+          { error: "Connect Shopmonkey with an API key before re-detecting ids." },
+          { status: 400 },
+        );
+      }
+
+      const discovered = await discoverIdsFromKey(storedKey);
+      if (!discovered.locationId && !discovered.companyId) {
+        return NextResponse.json(
+          { error: "Could not detect ids. The key may be rate-limited or lack access — try again shortly." },
+          { status: 502 },
+        );
+      }
+
+      const set: Record<string, any> = { "shopmonkey.idsDetectedAt": new Date() };
+      if (discovered.locationId) {
+        set["shopmonkey.locationId"] = discovered.locationId;
+        set["shopmonkey.locationIdSource"] = "auto";
+      }
+      if (discovered.companyId) {
+        set["shopmonkey.companyId"] = discovered.companyId;
+        set["shopmonkey.companyIdSource"] = "auto";
+      }
+      await db.collection("shops").updateOne(
+        { shopId: { $in: [userShopId, Number(userShopId)] } },
+        { $set: set },
+      );
+
+      return NextResponse.json({
+        success: true,
+        locationId: discovered.locationId,
+        companyId: discovered.companyId,
+        locationIdSource: discovered.locationId ? "auto" : null,
+        companyIdSource: discovered.companyId ? "auto" : null,
+      });
+    }
+
     const apiKey: string | undefined = body?.apiKey?.trim();
     const locationId: string | undefined = body?.locationId?.trim() || undefined;
     const companyId: string | undefined = body?.companyId?.trim() || undefined;
@@ -84,10 +136,20 @@ export async function POST(request: NextRequest) {
     // forbidden/transient key returns nulls and we just store what we have.
     let resolvedLocationId = locationId ?? null;
     let resolvedCompanyId = companyId ?? null;
+    // Track origin per id so the UI can show "auto-detected" vs "manually
+    // entered": operator-pasted ids are "manual", key-derived ids are "auto".
+    let locationIdSource: "auto" | "manual" | null = locationId ? "manual" : null;
+    let companyIdSource: "auto" | "manual" | null = companyId ? "manual" : null;
     if (!resolvedLocationId || !resolvedCompanyId) {
       const discovered = await discoverIdsFromKey(apiKey);
-      resolvedLocationId = resolvedLocationId ?? discovered.locationId;
-      resolvedCompanyId = resolvedCompanyId ?? discovered.companyId;
+      if (!resolvedLocationId && discovered.locationId) {
+        resolvedLocationId = discovered.locationId;
+        locationIdSource = "auto";
+      }
+      if (!resolvedCompanyId && discovered.companyId) {
+        resolvedCompanyId = discovered.companyId;
+        companyIdSource = "auto";
+      }
     }
 
     const db = await getDb();
@@ -98,6 +160,9 @@ export async function POST(request: NextRequest) {
           "shopmonkey.apiKey": apiKey,
           "shopmonkey.locationId": resolvedLocationId,
           "shopmonkey.companyId": resolvedCompanyId,
+          "shopmonkey.locationIdSource": locationIdSource,
+          "shopmonkey.companyIdSource": companyIdSource,
+          "shopmonkey.idsDetectedAt": new Date(),
           "shopmonkey.connectedAt": new Date(),
           integrationProvider: "shopmonkey",
         },
