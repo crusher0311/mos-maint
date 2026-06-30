@@ -87,3 +87,50 @@ export async function validateApiKey(
     return { ok: false, error: err?.message ?? "Shopmonkey key validation error" };
   }
 }
+
+/**
+ * Discover the Shopmonkey company/location ids that a given API key belongs to.
+ *
+ * Shopmonkey keys are scoped to a single location, and `GET /location` returns
+ * that location's own record — its singular `id` is the locationId and the
+ * embedded `companyId` is the companyId. We use this to self-onboard shops that
+ * were connected with only an API key (so the extension can resolve them by the
+ * on-page Shopmonkey id) and to auto-fill those ids on connect.
+ *
+ * Each key reports ONLY its own id, so this is unambiguous even when one user
+ * can access several Shopmonkey shops. A forbidden/invalid key or any transient
+ * failure returns nulls rather than throwing — callers treat that as "could not
+ * discover" and fail closed.
+ */
+export async function discoverIdsFromKey(
+  apiKey: string,
+): Promise<{ companyId: string | null; locationId: string | null }> {
+  try {
+    const res = await fetch(`${getBaseUrl()}/location`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
+    });
+
+    if (!res.ok) {
+      return { companyId: null, locationId: null };
+    }
+
+    const json = await res.json().catch(() => ({}));
+    // `/location` may return the location object directly, wrapped in a `data`
+    // envelope, or (defensively) as a single-element list — normalize all three.
+    let data: any = json?.data ?? json;
+    if (Array.isArray(data)) data = data[0];
+
+    const companyId =
+      data?.companyId != null ? String(data.companyId) : null;
+    const locationId = data?.id != null ? String(data.id) : null;
+    return { companyId, locationId };
+  } catch {
+    return { companyId: null, locationId: null };
+  }
+}

@@ -7,11 +7,23 @@ export type ShopLookupResult = {
 } | null;
 
 /**
- * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
- * Production callers go through the real getDb() unchanged.
+ * Test seam: tests can override `__deps.getDb` to swap in a fake DB and
+ * `__deps.discoverShopmonkeyIds` to stub the Shopmonkey `/location` call.
+ * Production callers go through the real getDb()/discoverIdsFromKey() unchanged.
  */
-export const __deps: { getDb: typeof getDb } = {
+export const __deps: {
+  getDb: typeof getDb;
+  discoverShopmonkeyIds: (
+    apiKey: string,
+  ) => Promise<{ companyId: string | null; locationId: string | null }>;
+} = {
   getDb,
+  discoverShopmonkeyIds: async (apiKey: string) => {
+    const { discoverIdsFromKey } = await import(
+      "@/lib/integrations/shopmonkey/auth"
+    );
+    return discoverIdsFromKey(apiKey);
+  },
 };
 
 export async function findShopBySmsId(
@@ -158,6 +170,64 @@ export async function findShopBySmsId(
       );
     } else if (candidates.length > 1) {
       console.warn(`[Shop Lookup] AutoFlow fallback: ${candidates.length} candidate shops for AutoFlow id "${smsShopId}" — cannot auto-associate. Shops: ${candidates.map(s => s.shopId).join(', ')}`);
+    }
+  }
+
+  // Shopmonkey self-onboard (key present, ids missing). Shopmonkey is a
+  // single-host SPA, so the content script reads the shop's company/location id
+  // off the page (a 24-hex ObjectId). Shops connected with only an API key have
+  // `shopmonkey.companyId`/`locationId` set to null, so the primary $or above
+  // misses and we (correctly) fail closed. Here we derive each candidate key's
+  // own ids from Shopmonkey `GET /location` (every key reports ONLY its own
+  // location), persist them, and match against the on-page id. This is bounded
+  // and self-terminating: we only touch shops that are keyed-but-unidded, and
+  // once their ids are stored the primary $or resolves them directly. The
+  // per-key id check disambiguates a user with several Shopmonkey shops (each
+  // key returns a different id), and a genuine no-match still returns null.
+  const looksLikeShopmonkeyId =
+    typeof smsShopId === 'string' && /^[a-f0-9]{24}$/i.test(smsShopId.trim());
+  const shopmonkeyContext =
+    providerHint === 'shopmonkey' || (!providerHint && looksLikeShopmonkeyId);
+  if (!shopDoc && shopmonkeyContext) {
+    const smFallbackQuery: any = {
+      'shopmonkey.apiKey': { $exists: true, $ne: null },
+      $or: [
+        { 'shopmonkey.companyId': { $in: [null, undefined] } },
+        { 'shopmonkey.locationId': { $in: [null, undefined] } },
+      ],
+    };
+    if (!isPlatformAdmin && userShopIds.length > 0) {
+      const shopIdVariants = userShopIds.flatMap(id => [id, String(id)]);
+      smFallbackQuery.shopId = { $in: shopIdVariants };
+    }
+    const candidates = await db.collection("shops").find(smFallbackQuery).toArray();
+
+    for (const cand of candidates) {
+      const apiKey = cand?.shopmonkey?.apiKey;
+      if (!apiKey) continue;
+
+      const { companyId, locationId } = await __deps.discoverShopmonkeyIds(apiKey);
+      if (!companyId && !locationId) continue;
+
+      // Persist only the ids we learned that aren't already stored, so future
+      // lookups resolve through the primary $or instead of re-discovering.
+      const set: Record<string, string> = {};
+      if (companyId && !cand.shopmonkey?.companyId) set["shopmonkey.companyId"] = companyId;
+      if (locationId && !cand.shopmonkey?.locationId) set["shopmonkey.locationId"] = locationId;
+      if (Object.keys(set).length > 0) {
+        await db.collection("shops").updateOne({ _id: cand._id }, { $set: set });
+        cand.shopmonkey = {
+          ...cand.shopmonkey,
+          ...(companyId ? { companyId } : {}),
+          ...(locationId ? { locationId } : {}),
+        };
+      }
+
+      if (smsShopId === companyId || smsShopId === locationId) {
+        shopDoc = cand;
+        console.log(`[Shop Lookup] Shopmonkey self-heal: shop ${cand.shopId} matched on-page id "${smsShopId}" after discovering ids from its key`);
+        break;
+      }
     }
   }
 

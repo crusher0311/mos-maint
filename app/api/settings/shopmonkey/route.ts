@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { validateApiKey } from "@/lib/integrations/shopmonkey/auth";
+import { validateApiKey, discoverIdsFromKey } from "@/lib/integrations/shopmonkey/auth";
 import { subscribeShopToShopmonkeyWebhooks } from "@/lib/integrations/shopmonkey/webhook-subscribe";
 
 export const runtime = "nodejs";
@@ -77,14 +77,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Self-onboard the shop's Shopmonkey ids: when the operator didn't paste a
+    // company/location id, derive them from the validated key (each key reports
+    // only its own location's id/companyId). This is what lets the extension
+    // resolve the shop by the on-page Shopmonkey id without manual entry. A
+    // forbidden/transient key returns nulls and we just store what we have.
+    let resolvedLocationId = locationId ?? null;
+    let resolvedCompanyId = companyId ?? null;
+    if (!resolvedLocationId || !resolvedCompanyId) {
+      const discovered = await discoverIdsFromKey(apiKey);
+      resolvedLocationId = resolvedLocationId ?? discovered.locationId;
+      resolvedCompanyId = resolvedCompanyId ?? discovered.companyId;
+    }
+
     const db = await getDb();
     await db.collection("shops").updateOne(
       { shopId: { $in: [userShopId, Number(userShopId)] } },
       {
         $set: {
           "shopmonkey.apiKey": apiKey,
-          "shopmonkey.locationId": locationId ?? null,
-          "shopmonkey.companyId": companyId ?? null,
+          "shopmonkey.locationId": resolvedLocationId,
+          "shopmonkey.companyId": resolvedCompanyId,
           "shopmonkey.connectedAt": new Date(),
           integrationProvider: "shopmonkey",
         },
@@ -97,8 +110,8 @@ export async function POST(request: NextRequest) {
     // never block or fail on this; when disabled it's a safe no-op.
     subscribeShopToShopmonkeyWebhooks({
       mosShopId: Number(userShopId),
-      locationId,
-      companyId,
+      locationId: resolvedLocationId ?? undefined,
+      companyId: resolvedCompanyId ?? undefined,
     })
       .then((result) => {
         if (!result.ok && result.reason !== "auto_subscribe_disabled") {
@@ -112,8 +125,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       configured: true,
-      locationId: locationId ?? null,
-      companyId: companyId ?? null,
+      locationId: resolvedLocationId,
+      companyId: resolvedCompanyId,
     });
   } catch (error: any) {
     console.error("Error saving Shopmonkey settings:", error);

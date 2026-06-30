@@ -33,14 +33,20 @@ function ok(name: string, cond: boolean, detail?: string) {
   }
 }
 
-function withFakeDb(seed: Record<string, any[]>) {
+function withFakeDb(
+  seed: Record<string, any[]>,
+  discover?: (apiKey: string) => Promise<{ companyId: string | null; locationId: string | null }>,
+) {
   const fake = makeFakeDb(seed);
-  const original = __deps.getDb;
+  const originalGetDb = __deps.getDb;
+  const originalDiscover = __deps.discoverShopmonkeyIds;
   __deps.getDb = async () => fake.db as any;
+  if (discover) __deps.discoverShopmonkeyIds = discover;
   return {
     fake,
     restore: () => {
-      __deps.getDb = original;
+      __deps.getDb = originalGetDb;
+      __deps.discoverShopmonkeyIds = originalDiscover;
     },
   };
 }
@@ -249,6 +255,123 @@ async function run() {
     try {
       const r = await findShopBySmsId("nothing-here", { isPlatformAdmin: true });
       ok("empty shops collection returns null", r === null);
+    } finally {
+      restore();
+    }
+  }
+
+  // 12. Shopmonkey direct match on a stored locationId (primary $or path)
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 70, shopmonkey: { apiKey: "k", locationId: "6528009a97f3040022a9b62e", companyId: "comp-1" }, integrationProvider: "shopmonkey" },
+      ],
+    });
+    try {
+      const r = await findShopBySmsId("6528009a97f3040022a9b62e", { isPlatformAdmin: true, providerHint: "shopmonkey" });
+      ok("shopmonkey stored locationId resolves directly", r?.mosShopId === 70);
+      ok("shopmonkey provider preserved", r?.provider === "shopmonkey");
+    } finally {
+      restore();
+    }
+  }
+
+  // 13. Shopmonkey self-heal: keyed-but-unidded shop resolves after discovery
+  //     (mirrors Mason on Pro Transmission of Athens — API key present, ids null).
+  {
+    const onPageId = "6528009a97f3040022a9b62e";
+    let discoverCalls = 0;
+    const { fake, restore } = withFakeDb(
+      {
+        shops: [
+          { shopId: 195, shopmonkey: { apiKey: "key-195", locationId: null, companyId: null }, integrationProvider: "shopmonkey" },
+        ],
+      },
+      async (apiKey) => {
+        discoverCalls += 1;
+        return apiKey === "key-195"
+          ? { companyId: "company-195", locationId: onPageId }
+          : { companyId: null, locationId: null };
+      },
+    );
+    try {
+      const r = await findShopBySmsId(onPageId, { isPlatformAdmin: true, providerHint: "shopmonkey" });
+      ok("shopmonkey self-heal resolves keyed-but-unidded shop", r?.mosShopId === 195);
+      ok("shopmonkey self-heal called the discovery helper", discoverCalls === 1);
+      const persistOp = fake.ops.find(
+        (o) =>
+          o.op === "updateOne" &&
+          (o as any).collection === "shops" &&
+          JSON.stringify((o as any).update).includes("shopmonkey.locationId"),
+      );
+      ok("shopmonkey self-heal persists discovered ids back to the shop doc", !!persistOp);
+    } finally {
+      restore();
+    }
+  }
+
+  // 14. Shopmonkey self-heal: a user with TWO keyed shops resolves to the
+  //     correct one — each key reports only its own id.
+  {
+    const aLineId = "1111111111111111111111aa";
+    const proTransId = "6528009a97f3040022a9b62e";
+    const { restore } = withFakeDb(
+      {
+        shops: [
+          { shopId: 165, shopmonkey: { apiKey: "key-aline", locationId: null, companyId: null }, integrationProvider: "shopmonkey" },
+          { shopId: 195, shopmonkey: { apiKey: "key-protrans", locationId: null, companyId: null }, integrationProvider: "shopmonkey" },
+        ],
+      },
+      async (apiKey) =>
+        apiKey === "key-aline"
+          ? { companyId: "co-aline", locationId: aLineId }
+          : { companyId: "co-protrans", locationId: proTransId },
+    );
+    try {
+      const r = await findShopBySmsId(proTransId, { isPlatformAdmin: false, userShopIds: [165, 195] });
+      ok("shopmonkey self-heal picks the shop whose key matches the on-page id", r?.mosShopId === 195);
+    } finally {
+      restore();
+    }
+  }
+
+  // 15. Shopmonkey self-heal: genuine no-match still fails closed (null).
+  {
+    const { restore } = withFakeDb(
+      {
+        shops: [
+          { shopId: 165, shopmonkey: { apiKey: "key-aline", locationId: null, companyId: null }, integrationProvider: "shopmonkey" },
+        ],
+      },
+      async () => ({ companyId: "co-aline", locationId: "1111111111111111111111aa" }),
+    );
+    try {
+      const r = await findShopBySmsId("9999999999999999999999ff", { isPlatformAdmin: true, providerHint: "shopmonkey" });
+      ok("shopmonkey self-heal returns null when no key's id matches", r === null);
+    } finally {
+      restore();
+    }
+  }
+
+  // 16. Shopmonkey self-heal does NOT fire for already-idded shops (bounded):
+  //     a shop with ids stored is matched by the primary $or, and the discovery
+  //     helper is never invoked.
+  {
+    let discoverCalls = 0;
+    const { restore } = withFakeDb(
+      {
+        shops: [
+          { shopId: 70, shopmonkey: { apiKey: "k", locationId: "6528009a97f3040022a9b62e", companyId: "comp-1" }, integrationProvider: "shopmonkey" },
+        ],
+      },
+      async () => {
+        discoverCalls += 1;
+        return { companyId: null, locationId: null };
+      },
+    );
+    try {
+      const r = await findShopBySmsId("6528009a97f3040022a9b62e", { isPlatformAdmin: true, providerHint: "shopmonkey" });
+      ok("already-idded shopmonkey shop resolves without discovery", r?.mosShopId === 70 && discoverCalls === 0);
     } finally {
       restore();
     }
