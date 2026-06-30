@@ -355,6 +355,10 @@ const ALLOWLIST = new Set([
   "app/api/vehicles/[vin]/refresh/route.ts",
   "app/api/vehicles/[vin]/vhi/route.ts",
   "app/api/webhooks/autoflow/[token]/route.ts",
+  // Single-source AutoFlow webhook receiver: one URL for all locations, shop
+  // resolved from the payload's shop.domain (mirrors the allowlisted Tekmetric
+  // and per-token AutoFlow webhook receivers above).
+  "app/api/webhooks/autoflow/route.ts",
   "app/api/webhooks/protractor/[token]/route.ts",
   "app/api/webhooks/tekmetric/route.ts",
   // Task #587 — Shopmonkey inbound webhook receiver, mirroring the allowlisted

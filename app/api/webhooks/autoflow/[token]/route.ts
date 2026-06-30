@@ -1,64 +1,24 @@
 // app/api/webhooks/autoflow/[token]/route.ts
+//
+// Legacy per-shop AutoFlow webhook URL. Kept for backward compatibility with
+// any location already configured with a token URL. New configs should use the
+// single-source URL (app/api/webhooks/autoflow/route.ts) which resolves the
+// shop from the payload. Shared processing lives in lib/integrations/autoflow/webhook.ts.
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import crypto from "node:crypto";
-import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow";
-import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
-import { insertEvent } from "@/lib/data/repositories/events";
+import {
+  verifyHmacSHA256,
+  processAutoflowWebhookEvent,
+} from "@/lib/integrations/autoflow/webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// ---- Helpers -------------------------------------------------------------
-
-function timingSafeEqual(a: Buffer, b: Buffer) {
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-function verifyHmacSHA256(secret: string, rawBody: string, signatureHex: string) {
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  try {
-    return timingSafeEqual(Buffer.from(signatureHex, "hex"), Buffer.from(expected, "hex"));
-  } catch {
-    return false;
-  }
-}
 
 async function findShopByToken(token: string) {
   const db = await getDb();
   return db
     .collection("shops")
     .findOne({ webhookToken: token }, { projection: { shopId: 1, name: 1 } });
-}
-
-function getEventName(payload: any): string {
-  return (
-    payload?.event?.type ||
-    payload?.event ||
-    payload?.type ||
-    payload?.name ||
-    ""
-  );
-}
-
-function resolveVin(payload: any): string | null {
-  return (
-    payload?.vin ??
-    payload?.vehicle?.vin ??
-    payload?.data?.vehicle?.vin ??
-    payload?.ticket?.vehicle?.vin ??
-    null
-  )
-    ? String(
-        payload?.vin ??
-          payload?.vehicle?.vin ??
-          payload?.data?.vehicle?.vin ??
-          payload?.ticket?.vehicle?.vin
-      )
-        .trim()
-        .toUpperCase()
-    : null;
 }
 
 // ---- GET: token validity ------------------------------------------------
@@ -108,192 +68,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
   }
 
   const db = await getDb();
-
-  // Persist raw event for audit / console.
-  // task #345 (W3b): events ingress is PG-canonical via the
-  // repository; Mongo `events` is shadow-mirrored during soak so the
-  // legacy aggregate readers still see the row until they're flipped.
-  await insertEvent({
-    provider: "autoflow",
-    shopId: shop.shopId,
-    token,
-    payload,
-    raw,
-    receivedAt: new Date(),
-  });
-
-  // ---- Normalize into first-class docs so dashboards light up ---------
-  try {
-    const eventName = String(getEventName(payload)).toLowerCase();
-
-    // Task #519 — per-event diagnostic marker. AutoFlow is a DVI-only provider:
-    // it has no work-order snapshot collection, no NormalizedIngestionService
-    // adapter (`autoflow: null` in the adapter registry), and never bumps
-    // `dashboard_updates`. Its DVI snapshots are cross-referenced onto the
-    // primary SMS work order (Tekmetric/Protractor/Shop-Ware) which already
-    // drives dashboard visibility, so there is no normalized drift backstop to
-    // add here. The marker just lets a DVI event be traced. See Task #519 notes.
-    console.log(`[autoflow-webhook] received event=${eventName || "(none)"} shop=${shop.shopId}`);
-
-    // 1) Ensure/refresh a customer row for dashboard lists
-    await upsertCustomerFromEvent(db, Number(shop.shopId), payload);
-
-    // 2) Optionally mark a customer closed on terminal events
-    const closeTypes = new Set<string>([
-      "dvi_signoff",
-      "dvi.signoff",
-      "dvi_completed",
-      "dvi.completed",
-      "work_completed",
-      "ticket_closed",
-      "ticket.closed",
-      "close",
-      "closed",
-    ]);
-
-    if (closeTypes.has(eventName)) {
-      const now = new Date();
-      const vin = resolveVin(payload);
-      const shopOr = [{ shopId: shop.shopId }, { shopId: Number(shop.shopId) }];
-
-      await db.collection("customers").updateOne(
-        {
-          $and: [
-            { $or: shopOr as any },
-            vin ? { "vehicle.vin": vin } : {},
-          ],
-        },
-        { $set: { status: "closed", closedAt: now, updatedAt: now } }
-      );
-    }
-
-    // 3) Auto-fetch DVI snapshot on signoff/completion-ish events
-    const isDviEvent = /dvi/i.test(eventName) && /(signoff|complete|completed|update)/i.test(eventName);
-
-    const roNumber =
-      payload?.ticket?.invoice ??
-      payload?.ticket?.id ??
-      payload?.event?.invoice ??
-      null;
-
-    if (isDviEvent && roNumber != null) {
-      const dvi = await fetchDviByInvoice(Number(shop.shopId), String(roNumber));
-      await upsertDviSnapshot(Number(shop.shopId), String(roNumber), dvi);
-
-      // Cross-reference this DVI back to the matching primary-SMS work order
-      // so downstream joins are cheap and we can flag mismatches (a DVI for
-      // an RO we have no record of) for diagnostics. Reconciliation key is
-      // shopId + RO number, with VIN fallback when RO numbers don't line up
-      // (Autoflow sometimes carries the invoice number while the primary
-      // system carries a different work-order number).
-      try {
-        const sId = Number(shop.shopId);
-        const sIds: any[] = [sId, String(sId)];
-        const roStr = String(roNumber);
-        const vinForXref =
-          (dvi as any)?.vin?.toUpperCase() || resolveVin(payload) || null;
-        const vinOr = vinForXref ? [{ vin: vinForXref }] : [];
-
-        const [tekWo, protWo, swRo] = await Promise.all([
-          db.collection("tekmetric_work_orders").findOne(
-            {
-              shopId: { $in: sIds },
-              $or: [
-                { workOrderNumber: roStr },
-                { repairOrderNumber: roStr },
-                ...vinOr,
-              ],
-            },
-            { projection: { workOrderId: 1, workOrderNumber: 1, repairOrderNumber: 1, vin: 1 } }
-          ),
-          db.collection("protractor_work_orders").findOne(
-            {
-              shopId: { $in: sIds },
-              $or: [
-                { workOrderNumber: roStr },
-                { "data.WorkOrderNumber": roStr },
-                ...vinOr,
-              ],
-            },
-            { projection: { workOrderGuid: 1, workOrderNumber: 1, vin: 1 } }
-          ),
-          db.collection("shopware_repair_orders").findOne(
-            {
-              mosShopId: { $in: sIds },
-              $or: [
-                { number: roStr },
-                { number: Number(roStr) },
-                ...vinOr,
-              ],
-            },
-            { projection: { roId: 1, number: 1, vin: 1 } }
-          ),
-        ]);
-
-        const xref: Record<string, any> = {};
-        if (tekWo) {
-          xref.tekmetric = {
-            workOrderId: tekWo.workOrderId ?? null,
-            workOrderNumber: tekWo.workOrderNumber ?? tekWo.repairOrderNumber ?? null,
-            matchedBy: String(tekWo.workOrderNumber ?? tekWo.repairOrderNumber ?? "") === roStr ? "ro" : "vin",
-          };
-        }
-        if (protWo) {
-          xref.protractor = {
-            workOrderGuid: protWo.workOrderGuid ?? null,
-            workOrderNumber: protWo.workOrderNumber ?? null,
-            matchedBy: String(protWo.workOrderNumber ?? "") === roStr ? "ro" : "vin",
-          };
-        }
-        if (swRo) {
-          xref.shopware = {
-            roId: swRo.roId ?? null,
-            number: swRo.number ?? null,
-            matchedBy: String(swRo.number ?? "") === roStr ? "ro" : "vin",
-          };
-        }
-
-        const matched = Object.keys(xref).length > 0;
-        // Normalize shopId/roNumber forms so the cross-reference always
-        // lands on the snapshot we just upserted, even if a future caller
-        // stores `shopId` as a string or `roNumber` as a number.
-        const updateRes = await db.collection("dvi_results").updateOne(
-          {
-            shopId: { $in: sIds },
-            $or: [
-              { roNumber: roStr },
-              { roNumber: Number(roStr) },
-            ],
-          },
-          {
-            $set: {
-              primaryRefs: xref,
-              primaryMatched: matched,
-              primaryMatchedAt: new Date(),
-            },
-          }
-        );
-        if (updateRes.matchedCount === 0) {
-          console.warn(
-            `[autoflow-webhook] DVI cross-reference write missed dvi_results for shop ${sId} RO ${roStr} (snapshot may not have been written yet)`
-          );
-        }
-
-        if (!matched) {
-          console.log(
-            `[autoflow-webhook] DVI for shop ${sId} RO ${roStr} (VIN ${vinForXref || "?"}) has no matching Tekmetric/Protractor/Shop-Ware work order`
-          );
-        }
-      } catch (xerr: any) {
-        console.warn(
-          `[autoflow-webhook] DVI cross-reference failed for shop ${shop.shopId} RO ${roNumber}: ${xerr.message}`
-        );
-      }
-    }
-  } catch (e) {
-    // Swallow normalization errors; raw event is still stored for replay
-    console.error("Webhook normalization error:", e);
-  }
+  await processAutoflowWebhookEvent({ db, shop, token, raw, payload });
 
   return NextResponse.json({ ok: true, shopId: shop.shopId });
 }
