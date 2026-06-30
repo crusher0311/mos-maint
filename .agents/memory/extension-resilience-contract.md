@@ -39,6 +39,19 @@ backend blip.**
   Keep the interceptor sending `shopId` with `MOS_RO_LOADED`; the scrape side derives
   the same numeric shop id from the page URL.
 
+## Extension-auth 401 bodies must carry the stable `code` (even outside /api/extension/*)
+- Any route the extension calls with a `Bearer ext_` token MUST return the canonical
+  auth-error body via `buildAuthErrorBody(extAuth)` (includes the stable `code`), not a
+  hand-rolled `{ error: "Unauthorized" }`. This applies to extension-facing routes that
+  live OUTSIDE `/api/extension/*` too (e.g. `app/api/tekmetric/apply-canned-job`).
+- **Why:** the background 401-retry loop classifies terminal vs transient purely off the
+  body `code` (`TERMINAL_AUTH_CODES = {TOKEN_INVALID}`). A missing code shows up as
+  `code=none`, so every failure is treated as transient — the loop retries the full
+  widened budget and we lose all diagnostics about the real reason (was it
+  TOKEN_EXPIRED? SHOP_FORBIDDEN? a lookup race?).
+- **How to apply:** mirror the Protractor twin `app/api/extension/jobs/apply-canned`
+  (already correct). grep for hand-rolled `{ error:` 401s in any `Bearer ext_` branch.
+
 ## Print tab instant-fill
 - Keytag/oil sticker fill immediately from captured `currentContext` identity and
   unlock Print; the backend ro-context reconcile may enrich but must NOT downgrade or

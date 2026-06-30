@@ -1,0 +1,43 @@
+background.js:4126 [MOS Tools] Background service worker loaded
+background.js:221 [MOS] Side panel opens on action click
+background.js:130 [Tekmetric] Shop ID captured: 14245
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:306 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: GET_SHOP_FEATURES
+background.js:244 [MOS] Message received: SET_SMS_CONTEXT
+background.js:306 [MOS] SMS context updated: Object
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: MOS_LOGIN
+background.js:1450 [MOS] Login successful: brandoncrusha@gmail.com | token: ext_68c416928db17121...
+background.js:1462 [MOS] Token verify: 200
+background.js:244 [MOS] Message received: GET_MOS_AUTH
+background.js:244 [MOS] Message received: GET_SMS_CONTEXT
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:1434 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1441 [MOS] Updated VIN from API: JTMBF4DV3B5044553
+sidepanel.js:1444 [MOS] Plan response mileage: 119500 estimated: false fromCache: true
+sidepanel.js:1434 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1441 [MOS] Updated VIN from API: JTMBF4DV3B5044553
+sidepanel.js:1444 [MOS] Plan response mileage: 119500 estimated: false fromCache: true
+sidepanel.js:1434 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1441 [MOS] Updated VIN from API: JTMBF4DV3B5044553
+sidepanel.js:1444 [MOS] Plan response mileage: 119500 estimated: false fromCache: true
+sidepanel.js:2660 [MOS] handleAddCannedJob called: Object
+sidepanel.js:2750 [MOS] Adding canned job: Object
+background.js:244 [MOS] Message received: MOS_API_REQUEST
+background.js:1678 [MOS] 401 transient retry 1/5 on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric | code=none | sleep=564ms
+background.js:1678 [MOS] 401 transient retry 2/5 on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric | code=none | sleep=1908ms
+background.js:1678 [MOS] 401 transient retry 3/5 on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric | code=none | sleep=5051ms
+background.js:1678 [MOS] 401 transient retry 4/5 on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric | code=none | sleep=10055ms
+background.js:1678 [MOS] 401 transient retry 5/5 on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric | code=none | sleep=12717ms
+sidepanel.js:2776 [MOS] Tekmetric canned job add result: Object
+sidepanel.js:2786 [MOS] Error adding canned job: Error: Request timed out. Please try again.
+    at handleAddCannedJob (sidepanel.js:2779:15)
+handleAddCannedJob @ sidepanel.js:2786
+background.js:1724 [MOS] 401 unresolved on /api/tekmetric/apply-canned-job?shopId=14245&provider=tekmetric (code=none) — keeping token, surfacing soft session-expired
+handleMosApiRequest @ background.js:1724

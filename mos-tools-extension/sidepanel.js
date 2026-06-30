@@ -2717,7 +2717,7 @@ async function handleAddCannedJob(job) {
               cannedJobTitle
             })
           }
-        });
+        }, 60000);
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
@@ -2771,7 +2771,7 @@ async function handleAddCannedJob(job) {
             cannedJobTitle: job.name
           })
         }
-      });
+      }, 60000);
       
       console.log('[MOS] Tekmetric canned job add result:', result);
       

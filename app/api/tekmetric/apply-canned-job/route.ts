@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { addCannedJobsToRepairOrder } from "@/lib/integrations/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody } from "@/lib/extension-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +29,12 @@ export async function POST(req: NextRequest) {
   if (authHeader?.startsWith("Bearer ext_")) {
     const extAuth = await validateExtensionToken(req);
     if (!extAuth.authorized || !extAuth.user) {
+      // Return the canonical body (incl. the stable `code`) so the extension
+      // can distinguish a terminal credential failure from a transient blip
+      // and so the real reason is visible in diagnostics — a hand-rolled
+      // `{ error }` body dropped the code and showed up as `code=none`.
       return NextResponse.json(
-        { error: extAuth.error || "Unauthorized" },
+        buildAuthErrorBody(extAuth),
         { status: getAuthErrorStatus(extAuth), headers: corsHeaders }
       );
     }
