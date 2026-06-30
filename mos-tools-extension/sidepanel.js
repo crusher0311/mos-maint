@@ -2615,6 +2615,47 @@ async function handleAddJob(job) {
   }
 }
 
+// Notify the SMS page tab(s) that a job was added so they refresh and the
+// mechanic sees the new job without a manual reload. Replaces the old silent
+// `.catch(() => {})` fire-and-forget: we now log a diagnostic when no matching
+// tab is open or when every delivery fails, so a missing auto-refresh is
+// visible in the console instead of being swallowed.
+function notifyPageJobCreated(urlPatterns, jobName, providerLabel) {
+  try {
+    chrome.tabs.query({ url: urlPatterns }, (tabs) => {
+      if (chrome.runtime.lastError) {
+        console.warn(`[MOS] JOB_CREATED tab query failed (${providerLabel}):`, chrome.runtime.lastError.message);
+        return;
+      }
+      if (!tabs || tabs.length === 0) {
+        console.warn(`[MOS] JOB_CREATED: no open ${providerLabel} tab found to refresh after adding "${jobName}". Mechanic may need to reload manually.`);
+        return;
+      }
+      let pending = tabs.length;
+      let delivered = 0;
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { action: 'JOB_CREATED', jobName })
+          .then(() => { delivered++; })
+          .catch((err) => {
+            console.warn(`[MOS] JOB_CREATED message to ${providerLabel} tab ${tab.id} failed:`, err?.message || err);
+          })
+          .finally(() => {
+            pending--;
+            if (pending === 0) {
+              if (delivered === 0) {
+                console.warn(`[MOS] JOB_CREATED: found ${tabs.length} ${providerLabel} tab(s) but none acknowledged the refresh for "${jobName}".`);
+              } else {
+                console.log(`[MOS] JOB_CREATED delivered to ${delivered}/${tabs.length} ${providerLabel} tab(s) for "${jobName}".`);
+              }
+            }
+          });
+      }
+    });
+  } catch (err) {
+    console.warn(`[MOS] JOB_CREATED notify (${providerLabel}) threw:`, err?.message || err);
+  }
+}
+
 async function handleAddCannedJob(job) {
   console.log('[MOS] handleAddCannedJob called:', job);
   
@@ -2680,6 +2721,16 @@ async function handleAddCannedJob(job) {
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
+
+          // Refresh the Protractor shop's page so the new job appears without a
+          // manual reload — mirrors the Tekmetric JOB_CREATED path. These shops
+          // are viewed through AutoFlow/autotext (and occasionally protractor.com),
+          // so target all three; missing-tab cases are logged, not swallowed.
+          notifyPageJobCreated(
+            ["*://*.autoflow.com/*", "*://*.autotext.me/*", "*://*.protractor.com/*"],
+            result.jobName || cannedJobTitle,
+            'Protractor'
+          );
         } else {
           throw new Error(result.error || 'Failed to add canned job');
         }
@@ -2729,12 +2780,8 @@ async function handleAddCannedJob(job) {
       }
       
       showNotification(`Added: ${job.name}`, 'success');
-      
-      chrome.tabs.query({ url: "*://*.tekmetric.com/*" }, (tabs) => {
-        for (const tab of tabs) {
-          chrome.tabs.sendMessage(tab.id, { action: 'JOB_CREATED', jobName: job.name }).catch(() => {});
-        }
-      });
+
+      notifyPageJobCreated(["*://*.tekmetric.com/*"], job.name, 'Tekmetric');
     } catch (err) {
       console.error('[MOS] Error adding canned job:', err);
       showNotification(err.message || 'Failed to add canned job', 'error');

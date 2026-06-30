@@ -14,6 +14,7 @@ import { findShopByShopId } from '@/lib/data/repositories/shops';
 import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection } from './client';
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
 import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
+import { withUpstreamTimeout } from '@/lib/with-upstream-timeout';
 
 interface ProtractorShopDoc {
   shopId: number | string;
@@ -213,15 +214,29 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       params.set('take', String(pageSize));
       params.set('skip', String(skip));
 
-      const result = await protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
-        `/CannedJob/?${params.toString()}`,
-        config,
-        {},
-        0,
-        shopId
+      // Cap each page at 6s. A slow/hung Protractor API must not block the
+      // extension canned-jobs request indefinitely — on timeout we return
+      // whatever pages we already collected and let the caller's stale-cache
+      // fallback cover a total miss (mirrors the Tekmetric branch's per-page
+      // timeout in app/api/extension/canned-jobs/route.ts). The sentinel is a
+      // synthetic non-ok Result so the existing handling below kicks in.
+      const result = await withUpstreamTimeout(
+        protractorFetch<{ ItemCollection?: ProtractorCannedJob[] }>(
+          `/CannedJob/?${params.toString()}`,
+          config,
+          {},
+          0,
+          shopId
+        ),
+        6000,
+        `protractor canned-jobs skip=${skip} shop=${shopId}`,
+        { ok: false as const, error: 'protractor canned-jobs page timed out' },
       );
 
       if (!result.ok) {
+        // On the very first page, a timeout/error means we have nothing to
+        // return — surface the failure so the route falls back to stale cache.
+        // On a later page, keep the pages we already collected (partial result).
         if (skip === 0) {
           return { ok: false, error: result.error || 'Failed to fetch canned jobs' };
         }

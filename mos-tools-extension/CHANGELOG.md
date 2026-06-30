@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.51 — 2026-06-30
+
+### Fixed
+- **Adding a canned job now refreshes the page for Protractor shops too.** After
+  you add a canned job to a Protractor (AutoFlow) repair order, the page now
+  reloads on its own so the new job appears — just like it already did for
+  Tekmetric, instead of leaving you to refresh manually.
+- **The Tekmetric auto-refresh is more reliable.** When a job is added but no
+  open Tekmetric tab is found (or the page doesn't acknowledge the refresh), the
+  extension now logs a clear diagnostic instead of silently doing nothing, so a
+  missing refresh is easy to spot.
+
 ## 1.27.50 — 2026-06-27
 
 ### Fixed

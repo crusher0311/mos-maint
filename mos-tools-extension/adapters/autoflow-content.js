@@ -1538,6 +1538,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
     return false;
   }
+  if (message.action === 'JOB_CREATED') {
+    // A Protractor canned job was added from the side panel. AutoFlow (the
+    // front-end for these Protractor shops) doesn't re-render the new job until
+    // a manual refresh, so show a toast and reload — mirrors the Tekmetric
+    // content script's JOB_CREATED handler and the DVI write-back reload.
+    console.log('[MOS Tools] Job created (Protractor):', message.jobName);
+    showToast(`Job added: ${message.jobName}`, 'success');
+    reloadAfterApply();
+    sendResponse({ success: true });
+    return false;
+  }
   if (message.action === 'MOS_SNIFFER_STATE_UPDATE') {
     if (message.active) {
       if (!document.getElementById('mos-page-sniffer')) {
