@@ -55,6 +55,7 @@
     "backfill:job-index-aces": "tsx scripts/backfill-job-index-aces.ts",
     "backfill:normalized-vehicles-aces": "tsx scripts/backfill-normalized-vehicles-aces.ts",
     "report:job-index-aces-coverage": "tsx scripts/job-index-aces-coverage.ts",
+    "repair:poisoned-aces-markers": "tsx scripts/repair-poisoned-aces-markers.ts",
     "backfill:concern-conversations-mos-shop-id": "tsx scripts/backfill-concern-conversations-mos-shop-id.ts",
     "backfill:enhance-corrections-mos-shop-id": "tsx scripts/backfill-enhance-corrections-mos-shop-id.ts",
     "backfill:protractor-history-dates": "tsx scripts/backfill-protractor-history-dates.ts",

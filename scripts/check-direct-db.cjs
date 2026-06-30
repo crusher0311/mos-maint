@@ -444,6 +444,7 @@ const ALLOWLIST = new Set([
   "scripts/manual-protractor-active-sync.ts",
   "scripts/protractor-job-index-catchup.ts",
   "scripts/repair-corrupted-carfax-snapshots.ts",
+  "scripts/repair-poisoned-aces-markers.ts",
   "scripts/wave1-backfill.ts",
   // Task #629 — customer-requested re-sync on the Data Status panel. The cron
   // processor and the settings route read/write the operational

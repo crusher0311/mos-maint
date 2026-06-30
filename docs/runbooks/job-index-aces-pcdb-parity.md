@@ -154,6 +154,53 @@ ctrl-c and re-run). Phases:
 
 ---
 
+## Repair legacy poisoned markers (operator-only, off-peak)
+
+For docs poisoned *before* the strict-path guard landed (DataOne saturated mid-run
+→ a whole batch stamped `acesDecodedAt` with null ACES IDs → skipped on every
+re-run), use the dedicated repair script. It only **unsets** the poisoned markers
+so the normal enrichment pass can re-decode them — it does **not** call DataOne,
+so no Postgres reachability is required to run it.
+
+Script: `scripts/repair-poisoned-aces-markers.ts`
+(`npm run repair:poisoned-aces-markers`). Idempotent + resumable (clearing the
+marker removes the doc from the signature, so a re-run never re-touches it).
+
+### Poisoned-record signature (conservative)
+A doc is cleared only when ALL hold: `vehicle.acesDecodedAt` set, both
+`acesVehicleId` **and** `acesEngineId` null, a usable VIN (>= 11 chars), it sits
+in an exact-`acesDecodedAt` cluster of `>= --min-batch` such docs (a real batch),
+**and** no doc for that shop within `+/- --match-window-min` of that timestamp
+carries a real ACES id. That last guard is the key: if the batch decoded even one
+VIN, the whole cluster is left alone, so a genuine single-VIN "not in DataOne"
+no-match is never cleared. The script errs toward under-clearing (leaving some
+poison) rather than ever clearing a legitimate unresolvable VIN.
+
+### Recommended sequence
+1. **Dry run (report only — counts per shop, no writes):**
+   ```
+   npm run repair:poisoned-aces-markers
+   ```
+   Review the per-shop poisoned-batch counts. Narrow with `--shop <id>`, tune the
+   batch floor with `--min-batch <n>` (default 50) and the match window with
+   `--match-window-min <m>` (default 5).
+2. **Apply off-peak (unsets the 4 fields on the poisoned docs):**
+   ```
+   npm run repair:poisoned-aces-markers -- --apply
+   ```
+   Run with other backfills off so nothing re-poisons while clearing.
+3. **Re-decode the cleared docs off-peak** with the existing enrichment pass
+   (now strict/guarded, so it won't re-poison):
+   ```
+   npm run backfill:job-index-aces -- --skip-reindex
+   ```
+4. **Re-check coverage** to confirm the cleared docs decoded:
+   ```
+   npm run report:job-index-aces-coverage -- --by-shop
+   ```
+
+---
+
 ## Verify (no DB needed)
 
 ```
