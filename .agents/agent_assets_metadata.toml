@@ -30,3 +30,21 @@ id = "OJ4_rKx1PG7calgLDrPRT"
 uri = "file://docs/runbooks/mongo-cutover-sequence.md"
 type = "text"
 title = "Mongo → Postgres Cutover Sequence (load-relief ordering)"
+
+[[outputs]]
+id = "qPNDnZpWvQLp-E00Ax2zr"
+uri = "file://public/icons/service/oil_change.svg"
+type = "image"
+title = "Current oil-change icon (oil_change.svg)"
+
+[[outputs]]
+id = "oF08Uxr2A8eEkT8Jz3zoM"
+uri = "file://public/icons/service/oil_reminder.svg"
+type = "image"
+title = "Alternate oil icon already in the set (oil_reminder.svg)"
+
+[[outputs]]
+id = "IPwOsg4q6oAvVRLgwigzV"
+uri = "file://public/icons/service/icon_sheet.svg"
+type = "image"
+title = "The full imported icon sheet (not yet wired up)"
