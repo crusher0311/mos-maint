@@ -1518,9 +1518,12 @@ async function PlanContent({ params, searchParams }: PageProps) {
       },
       { sort: { fetchedAt: -1, createdAt: -1 } }
     ),
-    // Tekmetric work orders
+    // Tekmetric work orders — exact (uppercased) VIN match so this uses the
+    // { shopId, vin, completedDate } index. A case-insensitive `$regex` here is
+    // non-indexable and forces a per-shop scan of the ~1.7M-row collection.
+    // VINs are stored uppercased on write.
     db.collection("tekmetric_work_orders").findOne(
-      { shopId: { $in: [String(shopId), Number(shopId)] }, vin: { $regex: vinRegex } },
+      { shopId: { $in: [String(shopId), Number(shopId)] }, vin: vin.toUpperCase() },
       { sort: { updatedAt: -1, createdAt: -1 } }
     ),
     // AutoFlow work orders (via webhook events)

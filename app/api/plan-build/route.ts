@@ -879,15 +879,17 @@ export async function POST(req: NextRequest) {
     const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
     if (tekmetricShopId) {
       try {
+        // Match by internal shopId + exact (uppercased) VIN so this uses the
+        // { shopId, vin, completedDate } index. A case-insensitive `$regex` on
+        // `vin` is non-indexable, and combined with the unindexed
+        // `tekmetricShopId` $or branches it forced a full COLLSCAN of the
+        // ~1.7M-row collection — saturating shared Mongo and starving the sync
+        // crons fleet-wide. VINs are stored uppercased on write, so exact
+        // equality is both correct and index-optimal.
         const cachedWO = await db.collection("tekmetric_work_orders").findOne(
           {
-            vin: { $regex: new RegExp(`^${vin}$`, "i") },
-            $or: [
-              { tekmetricShopId: Number(tekmetricShopId) },
-              { tekmetricShopId: String(tekmetricShopId) },
-              { shopId: String(shopId) },
-              { shopId: Number(shopId) },
-            ],
+            shopId: { $in: [String(shopId), Number(shopId)] },
+            vin: vinUpper,
           },
           { sort: { updatedAt: -1, createdAt: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
         );

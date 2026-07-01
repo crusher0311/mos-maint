@@ -38,3 +38,15 @@ COLLSCANs on `tekmetric_work_orders` / `normalized_work_orders` and grep for
 `vin: { $regex` in plan-build paths. Diagnosis is Mongo saturation, not a broken
 webhook and not connection exhaustion. Indexes alone don't help while the `i`
 regex remains — the query has to change.
+
+**tekmetric_work_orders shop key:** the canonical/indexed shop field is `shopId`
+(index `{shopId, vin, completedDate}`). `tekmetricShopId` is ALSO stored but has
+NO index. The Tekmetric webhook upserts by `{ workOrderId }` alone and only sets
+`shopId` when the shops lookup succeeds, so ~275/1.68M rows are `shopId`-less
+(webhooks that landed before the shop was connected; they self-heal on the next
+webhook update). Query by `shopId: { $in: [String, Number] }` — do NOT add a
+`tekmetricShopId` $or/fallback branch to "catch" those rows: it's unindexed and
+reintroduces the COLLSCAN for a de-minimis, cosmetic (plan-cover name / RO#)
+gain. Protractor is different: `protractor_work_orders` has NO vin index and
+stores VINs as-is (mixed case), so its lookups legitimately keep a
+case-insensitive match and are per-shop-scoped (not the fleet saturator).
