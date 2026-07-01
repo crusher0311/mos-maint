@@ -53,6 +53,9 @@ import {
   isLifetimeFluidItem,
   isInspectOnlyFluidItem,
   parseServiceAction,
+  splitServicePhrases,
+  isInspectOnlyHistoryPhrase,
+  INSPECTION_SERVICE_KEYS,
   type ServiceAction,
 } from "@/lib/service-keys";
 import { getShopDviBestPracticeMap } from "@/lib/dvi-best-practices";
@@ -508,6 +511,27 @@ function toKeyFromFreeText(desc: string): string[] {
   return Array.from(new Set(hits));
 }
 
+// Resolve free-text history (CARFAX record / shop line item) to the service
+// keys it should ANCHOR as "last done", verb-guarding each phrase so an
+// inspection ("Drive belts checked") never resets a replacement clock. CARFAX
+// joins multiple bullet lines with "; " so we split first and guard per phrase.
+// Only INSPECTION_SERVICE_KEYS (e.g. emissions) may be anchored by an inspect
+// verb. Mirrors toAnchorKeysFromHistory in lib/service-keys.ts but reuses this
+// page's local key dictionary so anchor keys stay aligned with toKeyFromName.
+function toAnchorKeysLocal(text: string): string[] {
+  const out = new Set<string>();
+  for (const phrase of splitServicePhrases(text)) {
+    const keys = toKeyFromFreeText(phrase);
+    if (keys.length === 0) continue;
+    const inspectOnly = isInspectOnlyHistoryPhrase(phrase);
+    for (const k of keys) {
+      if (inspectOnly && !INSPECTION_SERVICE_KEYS.has(k)) continue;
+      out.add(k);
+    }
+  }
+  return Array.from(out);
+}
+
 // Find CARFAX records that may have addressed deferred work
 // Returns the best matching CARFAX record if found, considering date (must be after deferral)
 // Only returns HIGH confidence matches (service key match) to minimize false positives
@@ -726,7 +750,7 @@ function triage({
   // Build shop service history map (from Protractor and/or Tekmetric work orders)
   const shopHistoryByKey = new Map<string, { miles: number | null; date: Date | null }[]>();
   for (const sh of shopServiceHistory || []) {
-    const keys = toKeyFromFreeText(sh.serviceName || "");
+    const keys = toAnchorKeysLocal(sh.serviceName || "");
     for (const k of keys) {
       if (!shopHistoryByKey.has(k)) shopHistoryByKey.set(k, []);
       shopHistoryByKey.get(k)!.push({ miles: sh.mileage, date: sh.date });
@@ -738,7 +762,7 @@ function triage({
   
   // First, add all shop service history as shop source
   for (const sh of shopServiceHistory || []) {
-    const keys = toKeyFromFreeText(sh.serviceName || "");
+    const keys = toAnchorKeysLocal(sh.serviceName || "");
     for (const k of keys) {
       const prev = lastMap.get(k);
       const cand: LastDone = { miles: sh.mileage, date: sh.date, source: "shop" };
@@ -754,7 +778,7 @@ function triage({
     const miles = r.miles;
     
     const desc = String(r.description || "").trim();
-    const keys = toKeyFromFreeText(desc);
+    const keys = toAnchorKeysLocal(desc);
     for (const k of keys) {
       const prev = lastMap.get(k);
       

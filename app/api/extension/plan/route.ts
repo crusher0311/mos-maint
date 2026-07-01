@@ -17,7 +17,12 @@ import {
 } from "@/lib/plan-build/mileage-discrepancy";
 import { buildReportUrl } from "@/lib/report-share";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
-import { LIFETIME_FLUID_SERVICE_KEYS } from "@/lib/service-keys";
+import {
+  LIFETIME_FLUID_SERVICE_KEYS,
+  splitServicePhrases,
+  isInspectOnlyHistoryPhrase,
+  INSPECTION_SERVICE_KEYS,
+} from "@/lib/service-keys";
 import {
   classifyEngineRisk,
   loadEngineRiskOverrides,
@@ -267,7 +272,13 @@ function getLastPerformedInfo(
         // RO. Skip declined jobs before pattern matching.
         if (job.authorized === false) continue;
         const jobName = job.name || job.description || '';
-        if (servicePatterns.some(p => p.test(jobName))) {
+        // Verb-guard: an inspected/checked line ("Drive belts checked") must
+        // never anchor a replacement clock. Inspection-type keys (emissions)
+        // are exempt because the inspection IS the scheduled service.
+        const jobInspectBlocked =
+          isInspectOnlyHistoryPhrase(jobName) &&
+          !(serviceKey ? INSPECTION_SERVICE_KEYS.has(serviceKey) : false);
+        if (!jobInspectBlocked && servicePatterns.some(p => p.test(jobName))) {
           // Treat 0 as "missing" — a historical RO with odometer=0 means the
           // odometer wasn't captured, not that the car had zero miles. Without
           // this guard, downstream math anchors at 0 and reports the entire
@@ -291,13 +302,27 @@ function getLastPerformedInfo(
   }
   
   if (carfaxRecords?.length) {
+    // Inspection-type keys (emissions) may be anchored by an inspect verb
+    // because the inspection IS the scheduled service; every other key needs a
+    // performed verb.
+    const carfaxInspectExempt = serviceKey ? INSPECTION_SERVICE_KEYS.has(serviceKey) : false;
     for (const record of carfaxRecords) {
       const desc = record.description || '';
       const descLower = desc.toLowerCase();
-      
-      const regexMatch = servicePatterns?.some(p => p.test(desc));
+
+      // Verb-guard: CARFAX joins multiple bullet lines into one description
+      // with "; " and phrases the verb AFTER the noun ("Drive belts checked"),
+      // so split into phrases and only anchor from one that BOTH matches the
+      // service pattern AND is not inspect-only. Otherwise an inspection resets
+      // a replacement clock (the reported "checked = replaced" bug).
+      const regexMatch = !!servicePatterns && splitServicePhrases(desc).some(ph =>
+        servicePatterns.some(p => p.test(ph)) &&
+        !(isInspectOnlyHistoryPhrase(ph) && !carfaxInspectExempt)
+      );
+      // Operator overrides (admin mappings) are intentional and honored
+      // regardless of verb, matching the whole normalized description.
       const adminMatch = adminCarfaxName && descLower.includes(adminCarfaxName);
-      
+
       if (regexMatch || adminMatch) {
         // CARFAX records frequently have a service date but no odometer — keep
         // mileage undefined in that case so it stays "date known, mileage

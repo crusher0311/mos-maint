@@ -443,6 +443,77 @@ export function isInspectionAction(action: ServiceAction | null | undefined): bo
   return action === "inspect";
 }
 
+/**
+ * Service keys whose scheduled item IS an inspection (not a physical
+ * replacement/flush). For these, a "checked / inspected" history record is a
+ * legitimate completion and MAY anchor the interval clock. For every other
+ * key, an inspect-only record must NOT reset the "last done" anchor.
+ */
+export const INSPECTION_SERVICE_KEYS: ReadonlySet<string> = new Set(["emissions"]);
+
+/**
+ * Split a free-text service description into individual service phrases.
+ * CARFAX joins multiple bullet lines into one description with "; " (see
+ * lib/integrations/carfax.ts), so a single record often mixes performed
+ * services ("Oil and filter changed") with inspect-only notes ("Drive belts
+ * checked"). Splitting lets the verb be judged per phrase.
+ */
+export function splitServicePhrases(desc: string | null | undefined): string[] {
+  return (desc || "")
+    .split(/\s*;\s*|[\r\n]+|\s*[•\u2022]\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * True when a single service phrase describes an INSPECTION ONLY — the item
+ * was examined but not actually performed — so it must not anchor a
+ * replacement/service interval as "last done".
+ *
+ * CARFAX / shop-history phrasing puts the verb AFTER the noun ("Drive belts
+ * checked", "Tire condition and pressure checked", "Alignment checked"),
+ * which `parseServiceAction` (anchored to leading verbs) misses. Rule: a
+ * performed-service verb anywhere in the phrase (replaced, changed, flushed,
+ * rotated, balanced, serviced, aligned, …) means the work WAS done → not
+ * inspect-only. Otherwise a check / inspect / test verb means it was only
+ * examined. Word-stem boundaries avoid noun collisions (e.g. the "align" in
+ * "alignment checked" must not read as the verb "aligned").
+ */
+export function isInspectOnlyHistoryPhrase(phrase: string | null | undefined): boolean {
+  const s = (phrase || "").toLowerCase();
+  if (!s.trim()) return false;
+  const PERFORMED =
+    /\b(?:replac\w*|chang\w*|renew\w*|install\w*|flush\w*|exchang\w*|rotat\w*|balanc\w*|drain\w*|refill\w*|resurfac\w*|machin\w*|rebuil\w*|overhaul\w*|servic\w*|perform\w*|adjust\w*|aligned|lubricat\w*|greas\w*|clean\w*|topped)\b/;
+  if (PERFORMED.test(s)) return false;
+  const INSPECT = /\b(?:check\w*|inspect\w*|examin\w*|test\w*|verif\w*|monitor\w*|measur\w*)\b/;
+  return INSPECT.test(s);
+}
+
+/**
+ * Resolve free-text service history (a CARFAX record or a shop line item) to
+ * the service keys it should ANCHOR as "last done". CARFAX joins multiple
+ * bullet lines into one description with "; " (see lib/integrations/carfax.ts)
+ * and phrases the verb AFTER the noun ("Drive belts checked"), so we split
+ * into phrases and verb-guard each one: an inspect-only phrase never anchors a
+ * replacement service — only INSPECTION_SERVICE_KEYS (e.g. emissions) may be
+ * anchored by an inspect verb, since for those the inspection IS the service.
+ * A record mixing "Oil and filter changed" with "Drive belts checked" anchors
+ * the oil (performed) but not the belts (inspected).
+ */
+export function toAnchorKeysFromHistory(text: string | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const phrase of splitServicePhrases(text)) {
+    const keys = toKeyFromFreeText(phrase);
+    if (keys.length === 0) continue;
+    const inspectOnly = isInspectOnlyHistoryPhrase(phrase);
+    for (const k of keys) {
+      if (inspectOnly && !INSPECTION_SERVICE_KEYS.has(k)) continue;
+      out.add(k);
+    }
+  }
+  return Array.from(out);
+}
+
 export function toKeyFromName(name: string): string | null {
   const n = name.toLowerCase();
   const DVI_SKIP = ["oil change sticker", "walk around video", "walk around", "other"];

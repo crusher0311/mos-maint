@@ -15,11 +15,11 @@
 import {
   SERVICE_KEY_DISPLAY_NAMES,
   toKeyFromName,
-  toKeyFromFreeText,
   parseServiceAction,
   isLifetimeFluidItem,
   isInspectOnlyFluidItem,
   findImpliesResetMatches,
+  toAnchorKeysFromHistory,
   LIFETIME_FLUID_DEFAULT_MILES,
   type ServiceAction,
 } from "@/lib/service-keys";
@@ -438,7 +438,7 @@ export function triage({
 
   const shopHistoryByKey = new Map<string, { miles: number | null; date: Date | null }[]>();
   for (const sh of shopServiceHistory || []) {
-    const keys = toKeyFromFreeText(sh.serviceName || "");
+    const keys = toAnchorKeysFromHistory(sh.serviceName || "");
     for (const k of keys) {
       if (!shopHistoryByKey.has(k)) shopHistoryByKey.set(k, []);
       shopHistoryByKey.get(k)!.push({ miles: sh.mileage, date: sh.date });
@@ -488,7 +488,7 @@ export function triage({
   };
 
   for (const sh of shopServiceHistory || []) {
-    const keys = toKeyFromFreeText(sh.serviceName || "");
+    const keys = toAnchorKeysFromHistory(sh.serviceName || "");
     for (const k of keys) {
       const cand: LastDone = { miles: sh.mileage, date: sh.date, source: "shop" };
       lastMap.set(k, mergeLastDone(lastMap.get(k), cand));
@@ -504,12 +504,28 @@ export function triage({
   // built-in dictionary, then union in any operator override for that exact
   // (normalized) wording. Overrides only ADD keys — they never remove a
   // dictionary match — so this stays purely additive.
+  //
+  // Verb guard: CARFAX joins multiple bullet lines into one description with
+  // "; " (see lib/integrations/carfax.ts), and its phrasing puts the verb
+  // AFTER the noun ("Drive belts checked"). A "checked / inspected" item is
+  // an INSPECTION, not a completion — it must NOT anchor a replacement's
+  // "last done" clock (e.g. "Drive belts checked" wrongly resetting the
+  // serpentine-belt interval). We therefore evaluate each phrase's verb
+  // independently: a record mixing "Oil and filter changed" with "Drive
+  // belts checked" anchors the oil (performed) but not the belts (inspected).
+  // Only INSPECTION_SERVICE_KEYS (e.g. emissions) may be anchored by an
+  // inspect verb, since for those the inspection IS the scheduled service.
   const carfaxKeysFor = (desc: string): string[] => {
-    const keys = toKeyFromFreeText(desc);
-    if (!carfaxKeyOverrides || carfaxKeyOverrides.size === 0) return keys;
-    const overrideKeys = carfaxKeyOverrides.get(normalizeCarfaxDescription(desc));
-    if (!overrideKeys || overrideKeys.length === 0) return keys;
-    return Array.from(new Set([...keys, ...overrideKeys]));
+    const out = new Set<string>(toAnchorKeysFromHistory(desc));
+    // Operator overrides are keyed by the whole normalized description and are
+    // intentional/additive — honor them regardless of verb.
+    if (carfaxKeyOverrides && carfaxKeyOverrides.size > 0) {
+      const overrideKeys = carfaxKeyOverrides.get(normalizeCarfaxDescription(desc));
+      if (overrideKeys && overrideKeys.length > 0) {
+        for (const k of overrideKeys) out.add(k);
+      }
+    }
+    return Array.from(out);
   };
 
   for (const r of enrichedRecords) {
