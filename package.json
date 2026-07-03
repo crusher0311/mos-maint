@@ -11,7 +11,7 @@
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "prebuild": "npm run test:plan-build && npm run test:smoke",
     "build": "next build",
-    "test:plan-build": "npm run test:plan-build-task-163 && npm run test:plan-build-task-165 && npm run test:plan-build-task-181 && npm run test:plan-build-task-196 && npm run test:plan-build-task-198 && npm run test:plan-build-task-219 && npm run test:plan-build-task-236 && npm run test:plan-build-task-246 && npm run test:plan-build-task-253 && npm run test:plan-build-task-339 && npm run test:plan-build-task-476 && npm run test:plan-build-task-608 && npm run test:plan-build-task-617 && npm run test:plan-build-task-649 && npm run test:plan-build-triage-time-only",
+    "test:plan-build": "npm run test:plan-build-task-163 && npm run test:plan-build-task-165 && npm run test:plan-build-task-181 && npm run test:plan-build-task-196 && npm run test:plan-build-task-198 && npm run test:plan-build-task-219 && npm run test:plan-build-task-236 && npm run test:plan-build-task-246 && npm run test:plan-build-task-253 && npm run test:plan-build-task-339 && npm run test:plan-build-task-476 && npm run test:plan-build-task-608 && npm run test:plan-build-task-617 && npm run test:plan-build-task-649 && npm run test:plan-build-triage-time-only && npm run test:plan-cache-oem-missing && npm run test:plan-build-cache-write",
     "test:plan-build-task-649": "tsx tests/plan-build-task-649.smoke.ts",
     "test:plan-build-task-608": "tsx tests/plan-build-task-608.smoke.ts",
     "test:plan-build-task-617": "tsx tests/plan-build-task-617.smoke.ts",
@@ -139,7 +139,8 @@
     "drain:tekmetric-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-tekmetric-backfill.ts",
     "drain:protractor-backfill": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/drain-protractor-backfill.ts",
     "sweep:protractor-new-shops": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx scripts/sweep-new-protractor-shops.ts",
-    "worker:backfill-drain": "tsx scripts/backfill-drain-worker.ts"
+    "worker:backfill-drain": "tsx scripts/backfill-drain-worker.ts",
+    "test:plan-cache-oem-missing": "tsx tests/plan-cache-oem-missing.smoke.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",

@@ -1,6 +1,12 @@
 import { Db } from "mongodb";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
+// Task #737: plans built while the OEM/VIN-attribute lookup timed out are
+// cached with a much shorter TTL and skipped on read (outside the just-built
+// freshness window) so one slow DataOne moment can't poison a vehicle's plan
+// for 4 hours. The short row still exists so the freshness override keeps
+// working for partner "await build → read cache" flows.
+const OEM_MISSING_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
 
 /**
@@ -220,6 +226,16 @@ export interface CachedPlanData {
     shopHistoryCount: number;
     reasons: string[];
   };
+  /**
+   * Task #737: true when this plan was built WITHOUT OEM data because the
+   * DataOne/VIN-attribute lookup timed out or errored during the build.
+   * Such plans are degraded (no vehicle attributes, no OEM items) and must
+   * not be served as the long-lived cached truth: `setCachedPlan` stores
+   * them with a short TTL and `getCachedPlan` skips them outside the
+   * just-built freshness window so the next load retries the OEM fetch and
+   * upgrades the cached plan in place. Missing/false = plan is complete.
+   */
+  oemMissing?: boolean;
 }
 
 export interface CachedPlan {
@@ -273,6 +289,20 @@ export async function getCachedPlan(
     if (distanceUnit && entry.plan?.distanceUnit && entry.plan.distanceUnit !== distanceUnit) {
       console.log(`[PlanCache] SKIP: distanceUnit changed ${entry.plan.distanceUnit} -> ${distanceUnit} for ${vin}`);
       continue;
+    }
+
+    // Task #737: a plan built while the OEM lookup timed out has no vehicle
+    // attributes / OEM items. Serve it only within the just-built freshness
+    // window (so partner await-build→read-cache flows still work), otherwise
+    // treat it as a MISS so the next load retries the OEM fetch and replaces
+    // the degraded row with a complete one.
+    if (entry.plan?.oemMissing === true) {
+      const ageMs = Date.now() - entry.createdAt.getTime();
+      if (ageMs >= 30_000) {
+        console.log(`[PlanCache] SKIP: oemMissing plan (built without OEM data ${Math.round(ageMs / 1000)}s ago) for ${vin} — forcing rebuild to retry OEM fetch`);
+        continue;
+      }
+      console.log(`[PlanCache] HIT (oemMissing, just-built ${ageMs}ms ago) for ${vin} — serving degraded plan within freshness window`);
     }
 
     if (currentMiles != null && currentMiles > 0) {
@@ -346,6 +376,11 @@ export async function setCachedPlan(
     shopId: String(normalizedShopId),
   });
 
+  // Task #737: OEM-less (degraded) plans get a short TTL so they can't
+  // linger as stale truth; getCachedPlan additionally skips them outside
+  // the 30s freshness window.
+  const ttlMs = plan.oemMissing === true ? OEM_MISSING_TTL_MS : CACHE_TTL_MS;
+
   await db.collection("cached_plans").updateOne(
     { vin: normalizedVin, shopId: normalizedShopId },
     {
@@ -353,13 +388,15 @@ export async function setCachedPlan(
         mileage,
         plan,
         createdAt: now,
-        expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
+        expiresAt: new Date(now.getTime() + ttlMs),
         schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
       },
     },
     { upsert: true },
   );
-  console.log(`[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL 4h`);
+  console.log(
+    `[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL ${plan.oemMissing === true ? "10m (oemMissing — degraded, will retry OEM on next load)" : "4h"}`,
+  );
 }
 
 /**

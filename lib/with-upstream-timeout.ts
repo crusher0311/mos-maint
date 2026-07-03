@@ -18,6 +18,10 @@ export async function withUpstreamTimeout<T>(
   timeoutMs: number,
   label: string,
   fallback: T,
+  // Task #737: optional hook fired when the budget is exhausted (timeout
+  // only, not upstream throw) so callers can record WHICH budget was
+  // exhausted for slow-load observability without parsing log lines.
+  opts?: { onTimeout?: () => void },
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeoutSentinel = Symbol("upstream-timeout");
@@ -32,6 +36,9 @@ export async function withUpstreamTimeout<T>(
       console.warn(
         `[upstream-timeout] ${label} exceeded ${timeoutMs}ms — returning fallback`,
       );
+      try {
+        opts?.onTimeout?.();
+      } catch {}
       return fallback;
     }
     return result;

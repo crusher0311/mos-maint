@@ -798,11 +798,17 @@ export async function runOnDemandAnalysis(
     if (prefetched?.oemResult) {
       oemFetch = Promise.resolve(prefetched.oemResult);
     } else {
+      // Task #737: cancel the race timer once the OEM lookup resolves so the
+      // loser timer doesn't linger (same uncancelled-timer pattern that made
+      // the plan-build route log spurious DataOne timeouts).
+      let oemRaceTimer: NodeJS.Timeout | undefined;
       oemFetch = Promise.race([
-        getMaintenanceScheduleCached(vin),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("DataOne timeout — plan will load without OEM data")), 15000)
-        )
+        getMaintenanceScheduleCached(vin).finally(() => {
+          if (oemRaceTimer) clearTimeout(oemRaceTimer);
+        }),
+        new Promise<never>((_, reject) => {
+          oemRaceTimer = setTimeout(() => reject(new Error("DataOne timeout — plan will load without OEM data")), 15000);
+        })
       ]);
     }
     const oemResult = await oemFetch;

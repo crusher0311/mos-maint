@@ -80,6 +80,9 @@ const VHI_OEM_TIMEOUT_MS = 5000; // DataOne maintenance schedule
 const VHI_MILES_TIMEOUT_MS = 2000; // Mongo mileage lookup
 const VHI_EVENTS_TIMEOUT_MS = 2000; // Mongo events RO aggregate
 const VHI_DB_TIMEOUT_MS = 2500; // Mongo scan-style queries (RO-source + completed-WO finds)
+// Task #737: total-build duration at/above which a [PlanSlowLoad] line (and
+// a `slow_plan_load_logs` record) is emitted, even if no single budget blew.
+const SLOW_PLAN_LOAD_THRESHOLD_MS = 5000;
 export const dynamic = "force-dynamic";
 
 /* ---------------- small utils ---------------- */
@@ -1339,6 +1342,18 @@ export default function VehiclePlanPage({ params, searchParams }: PageProps) {
 }
 
 async function PlanContent({ params, searchParams }: PageProps) {
+  // Task #737: slow-load observability. Track the wall-clock duration of the
+  // whole build plus WHICH upstream budgets were exhausted, and emit a single
+  // structured [PlanSlowLoad] line (plus a Mongo record) when the load was
+  // slow or degraded, so reports like "VIN attributes take 30 minutes" can be
+  // traced to a shop/VIN/timestamp/budget.
+  const planLoadStart = Date.now();
+  const exhaustedBudgets: string[] = [];
+  const budgeted = <T,>(promise: Promise<T>, timeoutMs: number, label: string, fallback: T): Promise<T> =>
+    withUpstreamTimeout(promise, timeoutMs, label, fallback, {
+      onTimeout: () => exhaustedBudgets.push(label),
+    });
+
   const session = await requireSession();
   const db = await getDb();
   const resolvedSearchParams = await searchParams;
@@ -1393,7 +1408,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     }
   }
   
-  const cannedJobsCache = await withUpstreamTimeout(
+  const cannedJobsCache = await budgeted(
     fetchCannedJobsWithCache(shopId),
     VHI_CANNED_TIMEOUT_MS,
     `canned-jobs shop ${shopId}`,
@@ -1436,7 +1451,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
 
   // Early mileage check and cache lookup (skip cache if force refresh)
-  const earlyMilesResult = await withUpstreamTimeout(
+  const earlyMilesResult = await budgeted(
     getLatestMilesForVin(db, vin),
     VHI_MILES_TIMEOUT_MS,
     `miles ${vin}`,
@@ -1454,7 +1469,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Get repair orders from events collection (AutoFlow webhooks store RO data here)
   // This matches the detail page logic exactly
-  const eventRos = await withUpstreamTimeout(
+  const eventRos = await budgeted(
     db.collection("events").aggregate([
     {
       $match: {
@@ -1529,7 +1544,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Query all connected work order sources in parallel
   const vinRegex = new RegExp(`^${vin}$`, 'i');
   
-  const [protractorWO, tekmetricWO, autoflowWO] = await withUpstreamTimeout(
+  const [protractorWO, tekmetricWO, autoflowWO] = await budgeted(
     Promise.all([
     // Protractor work orders
     db.collection("protractor_work_orders").findOne(
@@ -1697,7 +1712,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
     const [localDvi, localCarfax, localProtractorVehicleResult, localAvInspectionResult, localProtractorCompletedWOs, localTekmetricCompletedWOs, localShopBranding] = await Promise.all([
       latestRoNumber && autoCfg.configured
-        ? withUpstreamTimeout(
+        ? budgeted(
             fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL),
             VHI_EXTERNAL_FETCH_TIMEOUT_MS,
             `autoflow-dvi ${vin}`,
@@ -1705,7 +1720,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           )
         : Promise.resolve({ ok: false, error: latestRoNumber ? "AutoFlow not connected." : "No RO found." }),
       carfaxCfg.configured
-        ? withUpstreamTimeout(
+        ? budgeted(
             fetchCarfaxWithCache(shopId, vin, CARFAX_CACHE_TTL),
             VHI_EXTERNAL_FETCH_TIMEOUT_MS,
             `carfax ${vin}`,
@@ -1713,7 +1728,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           )
         : Promise.resolve({ ok: false, error: "CARFAX not configured." as const }),
       protractorCfg.configured
-        ? withUpstreamTimeout(
+        ? budgeted(
             fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL),
             VHI_EXTERNAL_FETCH_TIMEOUT_MS,
             `protractor-vehicle ${vin}`,
@@ -1721,14 +1736,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
           )
         : Promise.resolve({ ok: false } as { ok: false }),
       autoVitalsCfg.configured
-        ? withUpstreamTimeout(
+        ? budgeted(
             fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL),
             VHI_EXTERNAL_FETCH_TIMEOUT_MS,
             `autovitals ${vin}`,
             { ok: false } as unknown as Awaited<ReturnType<typeof fetchAutoVitalsInspectionByVin>>,
           )
         : Promise.resolve({ ok: false } as { ok: false }),
-      withUpstreamTimeout(
+      budgeted(
         db.collection("protractor_work_orders").find({
           shopId,
           $or: [
@@ -1741,7 +1756,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         `protractor-completed-wos ${vin}`,
         [] as any[],
       ),
-      withUpstreamTimeout(
+      budgeted(
         db.collection("tekmetric_work_orders").find({
           shopId: Number(shopId),
           vin: vinUpper
@@ -1764,7 +1779,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   // Protractor Deferred Work - always fetch fresh for Protractor shops (it's dynamic)
   let protractorDeferredWork: ProtractorDeferredWork[] = [];
   if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
-    const deferredResult = await withUpstreamTimeout(
+    const deferredResult = await budgeted(
       fetchProtractorDeferredWork(
         shopId,
         vin,
@@ -1887,17 +1902,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
     console.log(`[Plan] Using cached currentMiles: ${currentMiles}`);
   } else {
     const [fetchedResult, fetchedOemData] = await Promise.all([
-      withUpstreamTimeout(
+      budgeted(
         getLatestMilesForVin(db, vin),
         VHI_MILES_TIMEOUT_MS,
         `miles ${vin}`,
         { miles: null, recordedDate: null },
       ),
-      withUpstreamTimeout(
+      budgeted(
         getMaintenanceScheduleCached(vin),
         VHI_OEM_TIMEOUT_MS,
         `dataone-oem ${vin}`,
-        { source: 'cache', count: 0, items: [], vehicle: null } as unknown as Awaited<ReturnType<typeof getMaintenanceScheduleCached>>,
+        // Task #737: mark the timeout fallback so the cache write below can
+        // flag the plan as oemMissing (degraded) instead of caching an
+        // empty-OEM plan as the 4h truth.
+        { ok: false, error: 'timeout', source: 'cache', count: 0, items: [], vehicle: null } as unknown as Awaited<ReturnType<typeof getMaintenanceScheduleCached>>,
       )
     ]);
     currentMiles = fetchedResult.miles;
@@ -1905,6 +1923,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
     mileageRecordedDate = fetchedResult.recordedDate;
     oemData = fetchedOemData;
     console.log(`[Plan] OEM data source: ${oemData.source}, count: ${oemData.count}`);
+  }
+
+  // Task #737: true when the OEM/VIN-attribute lookup FAILED during this
+  // build (budget exhausted above, or DataOne itself reported an error such
+  // as "DB unavailable"). A legitimately empty schedule (ok:true, count 0)
+  // is NOT degraded. On the cache-hit path oemData is a stub, so this stays
+  // false and the cached row's own flag (carried below) governs.
+  const oemLookupFailed = !useCachedData && oemData?.ok === false && !!oemData?.error;
+  if (oemLookupFailed) {
+    console.warn(`[Plan] OEM lookup failed for ${vin} (${oemData?.error}) — plan will be cached as degraded (oemMissing)`);
   }
 
   let mileageEstimated = false;
@@ -2370,11 +2398,45 @@ async function PlanContent({ params, searchParams }: PageProps) {
       // a date-projection from the last recorded reading (also CARFAX-backed).
       mileageSource: mileageEstimated ? "estimated_carfax" : "actual",
       mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : null,
+      // Task #737: flag plans built while the OEM lookup failed so the cache
+      // layer stores them with a short TTL and skips them on the next read
+      // (forcing the OEM fetch to be retried and the plan upgraded). On the
+      // re-cache path (deferred mismatch, cache hit) carry the cached row's
+      // own flag forward instead of silently clearing it.
+      oemMissing: useCachedData
+        ? (cachedPlan?.plan?.oemMissing === true ? true : undefined)
+        : (oemLookupFailed ? true : undefined),
     };
     
     setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {
       console.error(`[Plan] Failed to cache plan for ${vin}:`, err);
     });
+  }
+
+  // Task #737: slow-load observability. One structured line per slow or
+  // degraded load (plus a best-effort Mongo record in `slow_plan_load_logs`)
+  // so the next "VIN attributes take forever" report can be traced to a
+  // shop/VIN/timestamp and to WHICH upstream budget was exhausted. Fast,
+  // healthy loads log nothing.
+  {
+    const planLoadDurationMs = Date.now() - planLoadStart;
+    const slowLoad = planLoadDurationMs >= SLOW_PLAN_LOAD_THRESHOLD_MS;
+    if (slowLoad || exhaustedBudgets.length > 0 || oemLookupFailed) {
+      const record = {
+        shopId,
+        vin,
+        durationMs: planLoadDurationMs,
+        cacheHit: useCachedData,
+        forceRefresh,
+        exhaustedBudgets,
+        oemMissing: oemLookupFailed,
+        createdAt: new Date(),
+      };
+      console.warn(`[PlanSlowLoad] ${JSON.stringify(record)}`);
+      db.collection("slow_plan_load_logs").insertOne(record).catch((err) => {
+        console.error(`[PlanSlowLoad] Failed to record slow load for ${vin}:`, err);
+      });
+    }
   }
 
   return (

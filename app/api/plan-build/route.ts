@@ -196,14 +196,22 @@ export async function POST(req: NextRequest) {
     // falls back to building without OEM data rather than blocking the tech
     // on the button. Background/partner builds keep the original 15s budget.
     const oemTimeoutMs = fast ? 3000 : 15000;
+    // Task #737: cancel the race timer once the OEM lookup resolves so the
+    // "DataOne timeout" warning only fires on REAL timeouts. Before this fix
+    // the timer kept running after the lookup won the race, logging a
+    // spurious timeout line on essentially every build (~146/hour in prod)
+    // and drowning out genuine stalls.
+    let oemRaceTimer: NodeJS.Timeout | undefined;
     const oemWithTimeout = Promise.race([
-      getMaintenanceScheduleCached(vin),
-      new Promise<Awaited<ReturnType<typeof getMaintenanceScheduleCached>>>((resolve) =>
-        setTimeout(() => {
+      getMaintenanceScheduleCached(vin).finally(() => {
+        if (oemRaceTimer) clearTimeout(oemRaceTimer);
+      }),
+      new Promise<Awaited<ReturnType<typeof getMaintenanceScheduleCached>>>((resolve) => {
+        oemRaceTimer = setTimeout(() => {
           console.warn(`[PlanBuild] DataOne timeout (${oemTimeoutMs}ms${fast ? ", fast" : ""}) for ${vin}, continuing without OEM data`);
           resolve({ ok: false, vin, squish: '', count: 0, items: [], error: 'timeout', source: 'cache' as const });
-        }, oemTimeoutMs)
-      )
+        }, oemTimeoutMs);
+      })
     ]);
     const [autoCfg, carfaxCfg, protractorCfg, autoVitalsCfg, oemData] = await Promise.all([
       resolveAutoflowConfig(shopId),
@@ -592,15 +600,21 @@ export async function POST(req: NextRequest) {
     // a live CARFAX call. Even the no-snapshot blocking fetch is capped by a
     // small budget so a hung CARFAX upstream can't stall the build — on timeout
     // we continue without CARFAX (the plan still builds from shop history/OEM).
+    // Task #737: same uncancelled-timer pattern as the OEM race above — clear
+    // the timer once the CARFAX fetch resolves so the timeout warn only fires
+    // on real timeouts.
+    let carfaxRaceTimer: NodeJS.Timeout | undefined;
     const carfaxFetch = fast
       ? Promise.race([
-          fetchCarfaxStaleWhileRevalidate(shopId, vin, CACHE_TTL_MS),
-          new Promise<{ ok: false }>((resolve) =>
-            setTimeout(() => {
+          fetchCarfaxStaleWhileRevalidate(shopId, vin, CACHE_TTL_MS).finally(() => {
+            if (carfaxRaceTimer) clearTimeout(carfaxRaceTimer);
+          }),
+          new Promise<{ ok: false }>((resolve) => {
+            carfaxRaceTimer = setTimeout(() => {
               console.warn(`[PlanBuild] CARFAX fast-path timeout for ${vin}, continuing without CARFAX`);
               resolve({ ok: false });
-            }, 4000)
-          ),
+            }, 4000);
+          }),
         ])
       : fetchCarfaxWithCache(shopId, vin, CACHE_TTL_MS);
     const [carfaxResult, protractorVehicleResult, avInspectionResult] = await Promise.all([
@@ -1116,6 +1130,17 @@ export async function POST(req: NextRequest) {
       };
     } catch (dqErr: any) {
       console.warn(`[PlanBuild] dataQuality derivation failed for ${vin}: ${dqErr?.message}`);
+    }
+
+    // Task #737: if the OEM lookup timed out or errored during this build,
+    // the plan has no OEM items / vehicle attributes. Flag it so the cache
+    // layer stores it with a short TTL and skips it on the next read
+    // (forcing an OEM retry + rebuild) instead of serving the degraded plan
+    // as the 4h truth. A legitimately empty schedule (ok:true, count 0) is
+    // NOT flagged.
+    if (oemData?.ok === false && oemData?.error) {
+      planData.oemMissing = true;
+      console.warn(`[PlanBuild] OEM lookup failed for ${vin} (${oemData.error}) — caching plan as degraded (oemMissing)`);
     }
 
     const cachedAt = new Date();
