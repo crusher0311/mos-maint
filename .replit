@@ -35,12 +35,12 @@ outputType = "webview"
 name = "ACES backfill fleet"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash -c 'rm -f /tmp/aces-fleet.done; echo \"=== START $(date -u) ===\"; echo \"--- repair DRY-RUN (report only) ---\"; npm run repair:poisoned-aces-markers; echo \"=== repair dry-run DONE $(date -u) ===\"; echo \"--- repair APPLY ---\"; npm run repair:poisoned-aces-markers -- --apply; echo \"=== repair apply DONE $(date -u) ===\"; echo \"--- job-index-aces ALL shops ---\"; npm run backfill:job-index-aces; echo \"=== job-index DONE $(date -u) ===\"; echo \"--- normalized-vehicles-aces ALL shops ---\"; npm run backfill:normalized-vehicles-aces; echo \"=== ALL DONE $(date -u) ===\"; touch /tmp/aces-fleet.done; sleep infinity'"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash -c 'rm -f /tmp/aces-fleet.done; echo \"=== START $(date -u) ===\"; echo \"--- repair APPLY (prints counts + clears) ---\"; npm run repair:poisoned-aces-markers -- --apply; echo \"=== repair apply DONE $(date -u) ===\"; echo \"--- job-index-aces ALL shops ---\"; npm run backfill:job-index-aces; echo \"=== job-index DONE $(date -u) ===\"; echo \"--- normalized-vehicles-aces ALL shops ---\"; npm run backfill:normalized-vehicles-aces; echo \"=== ALL DONE $(date -u) ===\"; touch /tmp/aces-fleet.done; sleep infinity'"
 
 [[ports]]
 localPort = 3000
