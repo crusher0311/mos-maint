@@ -17,7 +17,7 @@ args = "MOS Maintenance MVP"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "ACES backfill shop66"
+args = "ACES backfill fleet"
 
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
@@ -32,12 +32,12 @@ waitForPort = 5000
 outputType = "webview"
 
 [[workflows.workflow]]
-name = "ACES backfill shop66"
+name = "ACES backfill fleet"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash -c 'rm -f /tmp/aces-shop66.done; echo \"=== START $(date -u) ===\"; npm run backfill:job-index-aces -- --shop 66; echo \"=== job-index DONE $(date -u) ===\"; npm run backfill:normalized-vehicles-aces -- --shop 66; echo \"=== ALL DONE $(date -u) ===\"; touch /tmp/aces-shop66.done; sleep infinity'"
+args = "bash -c 'rm -f /tmp/aces-fleet.done; echo \"=== START $(date -u) ===\"; echo \"--- repair DRY-RUN (report only) ---\"; npm run repair:poisoned-aces-markers; echo \"=== repair dry-run DONE $(date -u) ===\"; echo \"--- repair APPLY ---\"; npm run repair:poisoned-aces-markers -- --apply; echo \"=== repair apply DONE $(date -u) ===\"; echo \"--- job-index-aces ALL shops ---\"; npm run backfill:job-index-aces; echo \"=== job-index DONE $(date -u) ===\"; echo \"--- normalized-vehicles-aces ALL shops ---\"; npm run backfill:normalized-vehicles-aces; echo \"=== ALL DONE $(date -u) ===\"; touch /tmp/aces-fleet.done; sleep infinity'"
 
 [workflows.workflow.metadata]
 outputType = "console"
