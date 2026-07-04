@@ -48,6 +48,17 @@ when the worker resumes — no data loss.
 Verify recovery by watching WEB logs: `MongoNetworkTimeout` hits drop to 0 and
 `[Extension Auth Token] Stored x-auth-token` resumes flowing.
 
+**Second heavy Mongo writer — the fleet ACES reindex:** the ACES catch-up job
+(`backfill:job-index-aces` Phase A source-table reindex + the poisoned-marker
+repair scan) is itself write/scan-heavy on the SAME cluster. Running it while an
+aggressive drain worker is up (esp. `BACKFILL_HORIZON_YEARS` raised, which mass-
+reopens every completed shop) saturates Mongo: the heavy ACES steps FATAL with
+`MongoNetworkTimeoutError` while the light DataOne-bound decode
+(`backfill:normalized-vehicles-aces`) keeps going — so a partial-success run is a
+saturation tell. **Sequence them, don't run both hard:** suspend the drain worker,
+run ACES to completion, then resume the pull. Raising the horizon is the single
+biggest load multiplier here (mass reopen), not the parallelism bump.
+
 **Resume gently:** don't just un-suspend at full throttle or it re-saturates.
 Lower the per-run page budget / concurrency (env knobs in
 `lib/integrations/tekmetric/full-page-backfill.ts` and the drain worker) and/or
