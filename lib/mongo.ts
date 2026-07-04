@@ -37,7 +37,10 @@ const MONGO_OPTIONS = {
   minPoolSize: 5,
   maxIdleTimeMS: 30000,
   connectTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
+  // Default 45s keeps live-app reads failing fast. Batch/backfill scripts that
+  // run long per-shop aggregations (ACES repair + job-index reindex) override
+  // this via MONGODB_SOCKET_TIMEOUT_MS so a single slow op doesn't kill the run.
+  socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000,
   serverSelectionTimeoutMS: 10000,
   retryWrites: true,
   retryReads: true,
