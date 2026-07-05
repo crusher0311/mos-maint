@@ -15,10 +15,6 @@ author = "agent"
 task = "workflow.run"
 args = "MOS Maintenance MVP"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "ACES backfill fleet"
-
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -30,17 +26,6 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[[workflows.workflow]]
-name = "ACES backfill fleet"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash -c 'export MONGODB_SOCKET_TIMEOUT_MS=600000; rm -f /tmp/aces-fleet.done; echo \"=== START $(date -u) ===\"; echo \"--- normalized-vehicles-aces (resume) ---\"; npm run backfill:normalized-vehicles-aces; echo \"=== nv-aces DONE $(date -u) ===\"; echo \"--- job-index-aces DECODE (skip-reindex) ---\"; npm run backfill:job-index-aces -- --skip-reindex; echo \"=== job-index decode DONE $(date -u) ===\"; touch /tmp/aces-fleet.done; echo \"=== ALL DONE $(date -u) ===\"; sleep infinity'"
 
 [[ports]]
 localPort = 3000
