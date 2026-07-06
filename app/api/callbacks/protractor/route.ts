@@ -17,14 +17,28 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function signalDashboardUpdate(db: Db) {
+async function signalDashboardUpdate(
+  db: Db,
+  context?: { shopId?: number | string; workOrderId?: string },
+) {
   try {
     await db.collection("dashboard_updates").updateOne(
       { _id: "lastUpdate" } as any,
       { $set: { timestamp: Date.now() } },
       { upsert: true }
     );
-  } catch (e) {}
+  } catch (e: any) {
+    // Non-fatal for the callback's main path, but a swallowed failure
+    // here leaves the dashboard stale with no signal — log at error
+    // level (with shop/WO context) so it's visible to alerting.
+    const ctx = [
+      context?.shopId != null ? `shop ${context.shopId}` : null,
+      context?.workOrderId ? `WO ${context.workOrderId}` : null,
+    ].filter(Boolean).join(", ");
+    console.error(
+      `[Protractor Callback] Failed to signal dashboard update${ctx ? ` (${ctx})` : ""}: ${e?.message || e}`,
+    );
+  }
 }
 
 async function processCallbackEvent(
@@ -100,7 +114,7 @@ async function processCallbackEvent(
         }
       }
 
-      await signalDashboardUpdate(db);
+      await signalDashboardUpdate(db, { shopId, workOrderId: objectId });
       console.log(`[Protractor Callback] Deleted work order ${objectId} (WO#${existingWO?.workOrderNumber || '?'}) from dashboard`);
 
       await db.collection("protractor_callback_events").updateOne(
@@ -114,7 +128,7 @@ async function processCallbackEvent(
       const result = await fetchWorkOrderById(shopId, objectId);
       if (result.ok && result.workOrder) {
         await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
-        await signalDashboardUpdate(db);
+        await signalDashboardUpdate(db, { shopId, workOrderId: objectId });
         console.log(`[Protractor Callback] Processed work order ${objectId}`);
 
         const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
@@ -206,8 +220,14 @@ async function processCallbackEvent(
                 if (attribution.matched > 0) {
                   console.log(`[Protractor Callback] Revenue attribution: ${attribution.matched} jobs`);
                 }
-              } catch (e) {
-                // Revenue attribution is non-critical
+              } catch (e: any) {
+                // Revenue attribution is non-critical to the callback's
+                // success path, but a swallowed failure here silently
+                // skews revenue/reporting — log at error level with
+                // shop/WO context so the discrepancy is diagnosable.
+                console.error(
+                  `[Protractor Callback] Revenue attribution failed (shop ${shopId}, WO ${objectId}, vin ${vin}): ${e?.message || e}`,
+                );
               }
             }
           }
@@ -280,7 +300,7 @@ async function enrichOpenWorkOrderInBackground(
     }
 
     await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
-    await signalDashboardUpdate(db);
+    await signalDashboardUpdate(db, { shopId, workOrderId });
     console.log(`[Protractor Callback] Background enrich: upserted WO ${workOrderId} (shop ${shopId})`);
 
     const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
@@ -625,7 +645,7 @@ export async function POST(request: NextRequest) {
         { $set: { processed: true, processedAt: new Date() } }
       );
 
-      await signalDashboardUpdate(db);
+      await signalDashboardUpdate(db, { workOrderId });
     }
 
     return NextResponse.json({ 
