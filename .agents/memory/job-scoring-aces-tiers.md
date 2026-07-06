@@ -50,3 +50,26 @@ job category, undecoded, or displacementClose. yearDiff null (missing year) ⇒ 
 genuine ⇒ demoted (conservative).
 **How to apply:** if asked why a same-year sibling model shows "Great Match" not
 "Exact Fit", that's intended; only same-VIN/ACES or same-model+year+engine earn Exact.
+
+**Confidence ladder — the match % now encodes the SOURCE of certainty (2026-07).**
+Named consts in `job-scoring.ts` (`SCORE_VIN_MATCH=100`, `SCORE_ACES_EXACT=95`,
+`SCORE_HEURISTIC_EXACT_CAP=90`). Non-overlapping bands so the score alone ranks
+correctly:
+- **100 "VIN Match"** — same physical car (its own history). Same-VIN fast path;
+  label is "VIN Match", NOT "Exact Fit" (100 means "this exact car").
+- **95 "Exact Fit (ACES)"** — different car, catalog-confirmed identical spec
+  (Tier A exact_aces). Flat 95, no evidence bonus.
+- **80–90 "Exact Fit"** — genuine heuristic exact (same model+year+engine, not
+  VIN/ACES-confirmed), capped at 90.
+- **≤79 "Great Match"** — ACES Tier B/C SIBLINGS (engine-only / submodel-only,
+  always different vehicle) + all other heuristic likely. **Tier B/C finalAces is
+  clamped to SCORE_THRESHOLD_EXACT-1**; without that clamp evidence bonuses
+  (recent+5, same-shop+5, corroboration+6) pushed a sibling to ~91 → wrongly
+  "exact"/"Exact Fit" AND out-scored a real heuristic exact (blocking bug caught
+  in review).
+**Why:** advisors must be able to trust that 100% = the same car and that a bigger
+number = more certainty about fit. **How to apply:** any new exact-band or ACES
+path must respect the ladder — never emit 100 except same-VIN, never let a
+different-vehicle match reach the exact band. Route sort is matchScore-first then
+qualityRank on ties (keys off sameVinFastPath flag + acesTier, NOT the label
+string), so non-overlapping bands keep ordering correct.

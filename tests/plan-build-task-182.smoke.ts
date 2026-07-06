@@ -93,7 +93,7 @@ const heavyDutySpecs: VehicleSpecs = {
   const scored = scoreJob(donor, target, null, null, "brake", { now: FIXED_NOW });
   ok("same VIN scores 100", scored.matchScore === 100, `got ${scored.matchScore}`);
   ok("same VIN -> exact band", scored.matchBand === "exact", `got ${scored.matchBand}`);
-  ok("same VIN -> Exact Fit label", scored.matchBandLabel === "Exact Fit");
+  ok("same VIN -> VIN Match label", scored.matchBandLabel === "VIN Match");
   ok(
     "same VIN reason leads with positive",
     scored.matchReason.startsWith("Same vehicle (VIN match)"),

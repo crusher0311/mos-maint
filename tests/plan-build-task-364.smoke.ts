@@ -336,7 +336,7 @@ const mediumGasSpecs: VehicleSpecs = {
   };
   const scored = scoreJob(donor, target, null, null, "brake", { now: FIXED_NOW });
   ok("matchScore=100", scored.matchScore === 100);
-  ok("Exact Fit", scored.matchBandLabel === "Exact Fit");
+  ok("VIN Match", scored.matchBandLabel === "VIN Match");
   ok("sameVinFastPath=true", scored.sameVinFastPath === true);
   ok("vehicleSystem=brakes", scored.vehicleSystem === "brakes");
 }

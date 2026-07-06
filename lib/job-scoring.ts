@@ -338,6 +338,15 @@ export const SCORE_THRESHOLD_EXACT = 80;
 export const SCORE_THRESHOLD_LIKELY = 55;
 export const SCORE_THRESHOLD_POSSIBLE = 35;
 
+// Confidence ladder for the top ("Exact Fit") band. 100 is reserved for a
+// same-VIN match — this exact car's own history ("VIN Match"). An ACES-confirmed
+// identical-spec match on a *different* car scores just below it, and an
+// unconfirmed heuristic "same model + exact year + engine" match is capped lower
+// still, so the number itself communicates how sure we are.
+export const SCORE_VIN_MATCH = 100;
+export const SCORE_ACES_EXACT = 95;
+export const SCORE_HEURISTIC_EXACT_CAP = 90;
+
 export function getScoreBand(score: number): ScoreBand {
   if (score >= SCORE_THRESHOLD_EXACT) return "exact";
   if (score >= SCORE_THRESHOLD_LIKELY) return "likely";
@@ -539,9 +548,9 @@ export function scoreJob(
     }
     return {
       ...job,
-      matchScore: 100,
+      matchScore: SCORE_VIN_MATCH,
       matchBand: "exact" as ScoreBand,
-      matchBandLabel: "Exact Fit",
+      matchBandLabel: "VIN Match",
       matchReason: buildMatchReason(vinPositives, []),
       gatePass: true,
       lowConfidence: false,
@@ -605,7 +614,8 @@ export function scoreJob(
   // behaviour is preserved exactly.
   //
   //   Tier A (exact_aces)     → target.vehicle_id === donor.vehicle_id
-  //                              → Exact Fit (ACES), score 100. Identifies
+  //                              → Exact Fit (ACES), score SCORE_ACES_EXACT (95;
+  //                                just below a same-VIN match). Identifies
   //                                the same year/make/model/submodel/
   //                                engine/transmission build.
   //   Tier B (engine_match)   → same engine_id, different vehicle_id, AND
@@ -624,7 +634,7 @@ export function scoreJob(
   const tSubKey = targetSpecs?.submodelKey ?? null;
   const jSubKey = jobSpecs?.submodelKey ?? null;
 
-  // Tier A — exact ACES vehicle match. Short-circuits to score 100.
+  // Tier A — exact ACES vehicle match. Short-circuits to SCORE_ACES_EXACT (95).
   if (tAcesVid !== null && jAcesVid !== null && tAcesVid === jAcesVid) {
     const acesPositives: string[] = ["Same year, make, model, trim & engine"];
     if (targetYear && jobYear && targetYear === jobYear) {
@@ -637,7 +647,7 @@ export function scoreJob(
     }
     return {
       ...job,
-      matchScore: 100,
+      matchScore: SCORE_ACES_EXACT,
       matchBand: "exact" as ScoreBand,
       matchBandLabel: "Exact Fit (ACES)",
       matchReason: buildMatchReason(acesPositives, []),
@@ -739,7 +749,16 @@ export function scoreJob(
       if (corr >= 3) acesPositives.push(`${corr} matching jobs`);
     }
 
-    const finalAces = Math.max(0, Math.min(100, baseScore + acesEvidence));
+    // Tier B/C are *siblings*, not the same vehicle: same engine (diff vehicle)
+    // or same body/chassis (diff engine). They must never reach the exact band —
+    // evidence bonuses only differentiate siblings within "Great Match", they
+    // don't promote a sibling to "Exact Fit". Cap just below the exact threshold
+    // so the confidence ladder holds: VIN(100) > ACES exact(95) >
+    // heuristic exact(80–90) > engine/submodel siblings(≤79).
+    const finalAces = Math.max(
+      0,
+      Math.min(SCORE_THRESHOLD_EXACT - 1, baseScore + acesEvidence),
+    );
     return {
       ...job,
       matchScore: finalAces,
@@ -1064,6 +1083,13 @@ export function scoreJob(
     // a genuine "Exact Fit". Cap just below the exact threshold so a demoted
     // "Great Match" both ranks below and *reads* below a real exact fit.
     finalScore = Math.min(finalScore, SCORE_THRESHOLD_EXACT - 1);
+  } else if (band === "exact") {
+    // A genuine heuristic exact fit (same model + exact year + engine) is still
+    // *unconfirmed* — it wasn't matched by VIN (100, "VIN Match") or by the ACES
+    // catalog (95, "Exact Fit (ACES)"), both of which short-circuit earlier. Cap
+    // it below those so the number itself reflects lower certainty, while keeping
+    // it in the "Exact Fit" band.
+    finalScore = Math.min(finalScore, SCORE_HEURISTIC_EXACT_CAP);
   }
 
   return {

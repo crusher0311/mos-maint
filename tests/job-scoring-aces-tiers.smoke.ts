@@ -5,7 +5,7 @@
 // memory and asserts the scorer returns the right tier label, score band,
 // and breakdown.acesTier discriminator. No DB / network access.
 
-import { scoreJob, SCORE_THRESHOLD_EXACT, type VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, SCORE_THRESHOLD_EXACT, SCORE_ACES_EXACT, type VehicleSpecs } from "@/lib/job-scoring";
 import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
 
 function fail(msg: string): never {
@@ -59,12 +59,14 @@ function donorJob(over: any = {}): any {
   const t = specs({ acesVehicleId: 1234, acesEngineId: 555, submodelKey: "2018|honda|accord|ex-l" });
   const j = specs({ acesVehicleId: 1234, acesEngineId: 555, submodelKey: "2018|honda|accord|ex-l" });
   const r = scoreJob(donorJob(), baseTargetVehicle, t, j, "brake pad");
-  if (r.matchScore !== 100) fail(`Tier A expected score 100, got ${r.matchScore}`);
+  // ACES exact = confirmed identical spec on a *different* car; 100 is reserved
+  // for a same-VIN match, so ACES lands just below at SCORE_ACES_EXACT.
+  if (r.matchScore !== SCORE_ACES_EXACT) fail(`Tier A expected score ${SCORE_ACES_EXACT}, got ${r.matchScore}`);
   if (r.matchBand !== "exact") fail(`Tier A expected band exact, got ${r.matchBand}`);
   if (r.matchBandLabel !== "Exact Fit (ACES)") fail(`Tier A expected label "Exact Fit (ACES)", got ${r.matchBandLabel}`);
   if ((r.scoreBreakdown as any).acesTier !== "exact_aces") fail(`Tier A acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
   if (/ACES/i.test(r.matchReason)) fail(`Tier A matchReason must not contain "ACES": ${r.matchReason}`);
-  ok("Tier A (exact_aces) returns score 100 with plain-language matchReason");
+  ok("Tier A (exact_aces) returns score 95 (below VIN match) with plain-language matchReason");
 }
 
 // -- Tier B: engine_match (powertrain) -------------------------------------
@@ -77,6 +79,40 @@ function donorJob(over: any = {}): any {
   if (r.matchScore < 70) fail(`Tier B expected score >= 70, got ${r.matchScore}`);
   if (/ACES/i.test(r.matchReason)) fail(`Tier B matchReason must not contain "ACES": ${r.matchReason}`);
   ok("Tier B (engine_match) fires for powertrain donor with same engine_id");
+}
+
+// -- Tier B siblings never reach the exact band, even under max evidence ---
+//    An engine-only match is a *different vehicle*; evidence bonuses (recent +
+//    same shop + corroboration) differentiate siblings within "Great Match" but
+//    must NOT promote one into "Exact Fit" or let it out-score a genuine
+//    heuristic exact fit (capped 80–90). Confidence ladder must hold.
+{
+  const t = specs({ acesVehicleId: 1, acesEngineId: 999, submodelKey: "2018|honda|accord|ex-l" });
+  const j = specs({ acesVehicleId: 2, acesEngineId: 999, submodelKey: "2018|honda|accord|sport" });
+  const r = scoreJob(
+    donorJob({
+      title: "Oil Change",
+      job: { title: "Oil Change" },
+      performedAt: new Date().toISOString(), // recent
+      shopId: 100, // same shop
+    }),
+    baseTargetVehicle,
+    t,
+    j,
+    "oil change",
+    { currentShopId: 100, corroboratingCount: 5 }, // pile on all evidence
+  );
+  if ((r.scoreBreakdown as any).acesTier !== "engine_match") {
+    fail(`Max-evidence Tier B acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
+  }
+  if (r.matchScore >= SCORE_THRESHOLD_EXACT) {
+    fail(`Tier B sibling under max evidence must stay below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
+  }
+  if (r.matchBand === "exact") fail(`Tier B sibling must not be band "exact", got ${r.matchBand}`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Tier B sibling must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  }
+  ok("Tier B sibling stays below the exact band (≤79) even with max evidence");
 }
 
 // -- Tier B does NOT fire for chassis work --------------------------------
