@@ -1,0 +1,50 @@
+2026-07-06T14:56:54.53096617Z   ✓ job.keywords default empty
+2026-07-06T14:56:54.5309708Z   ✓ totals.laborAmount parses to 175
+2026-07-06T14:56:54.5309856Z   ✓ totals.partsAmount parses to 85.5
+2026-07-06T14:56:54.53098977Z   ✓ totals.totalAmount parses to 260.5
+2026-07-06T14:56:54.531039731Z   ✓ totals.laborHours prefers billed over actual (1.25 not 1.10)
+2026-07-06T14:56:54.531071662Z   ✓ job.totals matches top-level totals (canonical mirror)
+2026-07-06T14:56:54.531075602Z   ✓ lines length matches input
+2026-07-06T14:56:54.531108913Z   ✓ first line is PART
+2026-07-06T14:56:54.531112803Z   ✓ first line description from partDescription
+2026-07-06T14:56:54.531149774Z   ✓ first line partNumber preserved
+2026-07-06T14:56:54.531152794Z   ✓ first line manufacturer preserved
+2026-07-06T14:56:54.531158375Z   ✓ first line numeric coercion: extendedPrice=85.5
+2026-07-06T14:56:54.531168195Z   ✓ first line numeric coercion: cost=42
+2026-07-06T14:56:54.531281228Z   ✓ second line is LABOR
+2026-07-06T14:56:54.531287438Z   ✓ second line hours coerced
+2026-07-06T14:56:54.531561135Z   ✓ performedAt prefers woCompletedDate when present
+2026-07-06T14:56:54.531641087Z   ✓ performedAt falls back to createdAt when no completed/closed dates
+2026-07-06T14:56:54.531684458Z   ✓ empty lines array preserved (not undefined)
+2026-07-06T14:56:54.531737219Z   ✓ missing provenance falls back to sourceSystem='unknown'
+2026-07-06T14:56:54.53174285Z 
+2026-07-06T14:56:54.53174677Z All smoke checks passed.
+2026-07-06T14:56:54.725406232Z 
+2026-07-06T14:56:54.725427532Z > mos-maintenance-mvp@1.8.0 test:jobs-search-concurrency
+2026-07-06T14:56:54.725431432Z > tsx tests/jobs-search-concurrency.smoke.ts
+2026-07-06T14:56:54.725433913Z 
+2026-07-06T14:56:55.372054374Z jobs-search-concurrency smoke
+2026-07-06T14:56:55.372335361Z   ✓ fast non-empty Postgres serves canonical PG
+2026-07-06T14:56:55.372376052Z   ✓ PG path returns its rows
+2026-07-06T14:56:55.372494805Z   ✓ empty Postgres falls back to Mongo
+2026-07-06T14:56:55.372498425Z   ✓ Mongo path returns its rows
+2026-07-06T14:56:55.4942363Z   ✓ slow Postgres → Mongo served
+2026-07-06T14:56:55.494293291Z   ✓ slow Postgres does NOT block (returned within grace, not 5s)
+2026-07-06T14:56:55.53490018Z   ✓ PG within grace window still preferred
+2026-07-06T14:56:55.535308131Z   ✓ both empty → source none
+2026-07-06T14:56:55.535316691Z   ✓ PG duplicates collapse
+2026-07-06T14:56:55.535320351Z   ✓ supabaseCount reflects raw rows (pre-dedup)
+2026-07-06T14:56:55.535323331Z 
+2026-07-06T14:56:55.535326971Z All smoke checks passed.
+2026-07-06T14:57:00.517377442Z 
+2026-07-06T14:57:00.517403413Z > mos-maintenance-mvp@1.8.0 test:job-scoring-aces-tiers
+2026-07-06T14:57:00.517410243Z > tsx tests/job-scoring-aces-tiers.smoke.ts
+2026-07-06T14:57:00.517414933Z 
+2026-07-06T14:57:00.873625294Z ✓ Tier A (exact_aces) returns score 100 with plain-language matchReason
+2026-07-06T14:57:00.875952994Z ✗ Badge label mismatch for {"sameVinFastPath":true}: expected "Verified — this exact vehicle", got "VIN Match"
+2026-07-06T14:57:00.896470904Z ✓ Tier B (engine_match) fires for powertrain donor with same engine_id
+2026-07-06T14:57:00.896505874Z ✓ Tier B correctly skips chassis work — engine_match is powertrain-only
+2026-07-06T14:57:00.896515395Z ✓ Tier C (submodel_match) fires for chassis donor with same submodelKey
+2026-07-06T14:57:00.896518885Z ✓ Missing ACES IDs falls through to legacy heuristic (acesTier=null)
+2026-07-06T14:57:01.003029476Z ==> Build failed 😞
+2026-07-06T14:57:01.003050026Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
