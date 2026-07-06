@@ -115,7 +115,7 @@ function donorJob(over: any = {}): any {
 // -- Advisor-facing badge labels are plain language (no "ACES") ------------
 {
   const cases = [
-    { in: { sameVinFastPath: true }, label: "Verified — this exact vehicle" },
+    { in: { sameVinFastPath: true }, label: "VIN Match" },
     { in: { acesTier: "exact_aces" as const }, label: "Verified match" },
     { in: { acesTier: "engine_match" as const }, label: "Strong match" },
     { in: { acesTier: "submodel_match" as const }, label: "Strong match" },

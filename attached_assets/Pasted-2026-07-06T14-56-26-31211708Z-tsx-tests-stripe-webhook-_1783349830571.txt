@@ -1,0 +1,150 @@
+2026-07-06T14:56:26.31211708Z > tsx tests/stripe-webhook-idempotency.smoke.ts
+2026-07-06T14:56:26.31211927Z 
+2026-07-06T14:56:27.269143628Z stripe-webhook-idempotency smoke
+2026-07-06T14:56:27.275133868Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-07-06T14:56:27.275443455Z [Stripe Webhook] Event evt_dup_processed_001 already processed, skipping
+2026-07-06T14:56:27.276335455Z   ✓ processed-duplicate returns 200
+2026-07-06T14:56:27.276512949Z   ✓ processed-duplicate response has duplicate:true
+2026-07-06T14:56:27.276521619Z   ✓ processed-duplicate causes ZERO write ops
+2026-07-06T14:56:27.277209073Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-07-06T14:56:27.277808366Z   ✓ received-status prior record does NOT short-circuit (handler proceeds and writes)
+2026-07-06T14:56:27.278288667Z No STRIPE_WEBHOOK_SECRET set - accepting unverified webhook
+2026-07-06T14:56:27.278566683Z   ✓ no prior record → dedup row is created (insert-before-process)
+2026-07-06T14:56:27.278572143Z   ✓ dedup row reaches a terminal status (received or processed)
+2026-07-06T14:56:27.278601194Z 
+2026-07-06T14:56:27.278605324Z All smoke checks passed.
+2026-07-06T14:56:27.50376659Z 
+2026-07-06T14:56:27.503795741Z > mos-maintenance-mvp@1.8.0 test:tekmetric-webhook-idempotency
+2026-07-06T14:56:27.503799101Z > tsx tests/tekmetric-webhook-idempotency.smoke.ts
+2026-07-06T14:56:27.503801781Z 
+2026-07-06T14:56:28.639078608Z tekmetric-webhook-idempotency smoke
+2026-07-06T14:56:28.644830963Z [Tekmetric Webhook] Received event: {
+2026-07-06T14:56:28.644851704Z   "event": "RepairOrder.Updated",
+2026-07-06T14:56:28.644856384Z   "data": {
+2026-07-06T14:56:28.644859864Z     "repairOrder": {
+2026-07-06T14:56:28.644863674Z       "id": 9001,
+2026-07-06T14:56:28.644867524Z       "repairOrderNumber": 5555,
+2026-07-06T14:56:28.644870454Z       "shopId": 100,
+2026-07-06T14:56:28.644873494Z       "repairOrderStatus": {
+2026-07-06T14:56:28.644876574Z         "name": "In Progress",
+2026-07-06T14:56:28.644879644Z         "code": "IN_PROGRESS"
+2026-07-06T14:56:28.644881644Z       }
+2026-07-06T14:56:28.644883594Z     }
+2026-07-06T14:56:28.644885544Z   }
+2026-07-06T14:56:28.644887614Z }
+2026-07-06T14:56:28.644890114Z [Tekmetric Webhook] Parsed - eventType: "RepairOrder.Updated", repairOrder found: true, isRepairOrderUpdate: true
+2026-07-06T14:56:28.644903445Z [Tekmetric Webhook] received RO #5555 shop=100 event=RepairOrder.Updated
+2026-07-06T14:56:28.644906055Z [Tekmetric Webhook] RO Update: #5555 (ID: 9001), Status: In Progress (IN_PROGRESS)
+2026-07-06T14:56:28.645454257Z [Tekmetric Webhook] Upserted RO #5555: UPDATE status=In Progress, label=null, odometer=unchanged, customer=unchanged, shop=7
+2026-07-06T14:56:28.645700442Z [Tekmetric Webhook] dashboard-bumped event=RepairOrder.Updated
+2026-07-06T14:56:28.646620792Z   ✓ first delivery returns 200
+2026-07-06T14:56:28.646648103Z   ✓ first delivery creates exactly 1 cache row
+2026-07-06T14:56:28.647639424Z [Tekmetric Webhook NIS] No VIN available for RO 9001; skipping NIS (poll will reconcile)
+2026-07-06T14:56:28.65253718Z [Tekmetric Webhook] Received event: {
+2026-07-06T14:56:28.652549631Z   "event": "RepairOrder.Updated",
+2026-07-06T14:56:28.652553491Z   "data": {
+2026-07-06T14:56:28.652559051Z     "repairOrder": {
+2026-07-06T14:56:28.652563631Z       "id": 9001,
+2026-07-06T14:56:28.652568071Z       "repairOrderNumber": 5555,
+2026-07-06T14:56:28.652570811Z       "shopId": 100,
+2026-07-06T14:56:28.652573361Z       "repairOrderStatus": {
+2026-07-06T14:56:28.652576321Z         "name": "In Progress",
+2026-07-06T14:56:28.652578781Z         "code": "IN_PROGRESS"
+2026-07-06T14:56:28.652580711Z       }
+2026-07-06T14:56:28.652582891Z     }
+2026-07-06T14:56:28.652584781Z   }
+2026-07-06T14:56:28.652586752Z }
+2026-07-06T14:56:28.652593221Z [Tekmetric Webhook] Parsed - eventType: "RepairOrder.Updated", repairOrder found: true, isRepairOrderUpdate: true
+2026-07-06T14:56:28.652595822Z [Tekmetric Webhook] received RO #5555 shop=100 event=RepairOrder.Updated
+2026-07-06T14:56:28.652598332Z [Tekmetric Webhook] RO Update: #5555 (ID: 9001), Status: In Progress (IN_PROGRESS)
+2026-07-06T14:56:28.652810656Z [Tekmetric Webhook] Upserted RO #5555: UPDATE status=In Progress, label=null, odometer=unchanged, customer=unchanged, shop=7
+2026-07-06T14:56:28.652898628Z [Tekmetric Webhook] dashboard-bumped event=RepairOrder.Updated
+2026-07-06T14:56:28.653152744Z   ✓ second delivery (replay) returns 200
+2026-07-06T14:56:28.653199065Z   ✓ replay does NOT duplicate the cache row (still exactly 1)
+2026-07-06T14:56:28.653205315Z   ✓ replay advances updatedAt on the existing row (upsert hit, not no-op)
+2026-07-06T14:56:28.653209565Z   ✓ each delivery is independently logged (2 webhook_logs entries)
+2026-07-06T14:56:28.653305977Z 
+2026-07-06T14:56:28.653316317Z All smoke checks passed.
+2026-07-06T14:56:28.65341455Z [Tekmetric Webhook NIS] No VIN available for RO 9001; skipping NIS (poll will reconcile)
+2026-07-06T14:56:28.791402274Z 
+2026-07-06T14:56:28.791421484Z > mos-maintenance-mvp@1.8.0 test:jobs-search-canonical
+2026-07-06T14:56:28.791425705Z > tsx tests/jobs-search-canonical.smoke.ts
+2026-07-06T14:56:28.791428894Z 
+2026-07-06T14:56:29.397828425Z jobs-search-canonical smoke
+2026-07-06T14:56:29.397928967Z   ✓ canonical export exists (searchSupabaseServiceJobs)
+2026-07-06T14:56:29.398192802Z   ✓ empty searchShopIds returns [] (no-op guard)
+2026-07-06T14:56:29.398200862Z   ✓ empty tokens + no vehicleMake returns [] (full-table-scan guard)
+2026-07-06T14:56:29.398268934Z   ✓ explicit limit=0 still respects empty-shopIds guard
+2026-07-06T14:56:29.398452468Z   ✓ empty tokens + empty-string vehicleMake returns [] (no-op guard)
+2026-07-06T14:56:29.398459348Z 
+2026-07-06T14:56:29.398463378Z All smoke checks passed.
+2026-07-06T14:56:29.542098356Z 
+2026-07-06T14:56:29.542117456Z > mos-maintenance-mvp@1.8.0 test:jobs-search-shape
+2026-07-06T14:56:29.542122166Z > tsx tests/jobs-search-shape.smoke.ts
+2026-07-06T14:56:29.542124816Z 
+2026-07-06T14:56:30.161781944Z jobs-search-shape smoke
+2026-07-06T14:56:30.162010579Z   ✓ _id passes through service job id
+2026-07-06T14:56:30.162032229Z   ✓ shopId is preserved
+2026-07-06T14:56:30.162042359Z   ✓ vin lifted from work order vehicle
+2026-07-06T14:56:30.162044549Z   ✓ workOrderId is preserved
+2026-07-06T14:56:30.16206837Z   ✓ workOrderNumber lifted from join
+2026-07-06T14:56:30.16207146Z   ✓ dataSource pinned to 'supabase' (canonical tag)
+2026-07-06T14:56:30.16207348Z   ✓ sourceSystem read from provenance
+2026-07-06T14:56:30.162093591Z   ✓ vehicle.vin
+2026-07-06T14:56:30.162186633Z   ✓ vehicle.year
+2026-07-06T14:56:30.162191973Z   ✓ vehicle.make
+2026-07-06T14:56:30.162275094Z   ✓ vehicle.model
+2026-07-06T14:56:30.162287675Z   ✓ vehicle.engine prefers engineDescription over engine
+2026-07-06T14:56:30.162290325Z   ✓ job.title
+2026-07-06T14:56:30.162292565Z   ✓ job.description
+2026-07-06T14:56:30.162342316Z   ✓ job.name prefers cannedJobName
+2026-07-06T14:56:30.162408587Z   ✓ job.keywords default empty
+2026-07-06T14:56:30.162414807Z   ✓ totals.laborAmount parses to 175
+2026-07-06T14:56:30.162417327Z   ✓ totals.partsAmount parses to 85.5
+2026-07-06T14:56:30.162419347Z   ✓ totals.totalAmount parses to 260.5
+2026-07-06T14:56:30.162439458Z   ✓ totals.laborHours prefers billed over actual (1.25 not 1.10)
+2026-07-06T14:56:30.162442588Z   ✓ job.totals matches top-level totals (canonical mirror)
+2026-07-06T14:56:30.162444738Z   ✓ lines length matches input
+2026-07-06T14:56:30.162470569Z   ✓ first line is PART
+2026-07-06T14:56:30.162473339Z   ✓ first line description from partDescription
+2026-07-06T14:56:30.162493229Z   ✓ first line partNumber preserved
+2026-07-06T14:56:30.162496089Z   ✓ first line manufacturer preserved
+2026-07-06T14:56:30.162498389Z   ✓ first line numeric coercion: extendedPrice=85.5
+2026-07-06T14:56:30.162500299Z   ✓ first line numeric coercion: cost=42
+2026-07-06T14:56:30.162583041Z   ✓ second line is LABOR
+2026-07-06T14:56:30.162585591Z   ✓ second line hours coerced
+2026-07-06T14:56:30.162851997Z   ✓ performedAt prefers woCompletedDate when present
+2026-07-06T14:56:30.162906078Z   ✓ performedAt falls back to createdAt when no completed/closed dates
+2026-07-06T14:56:30.162908998Z   ✓ empty lines array preserved (not undefined)
+2026-07-06T14:56:30.162959259Z   ✓ missing provenance falls back to sourceSystem='unknown'
+2026-07-06T14:56:30.162961749Z 
+2026-07-06T14:56:30.162964379Z All smoke checks passed.
+2026-07-06T14:56:30.302476637Z 
+2026-07-06T14:56:30.302491557Z > mos-maintenance-mvp@1.8.0 test:jobs-search-concurrency
+2026-07-06T14:56:30.302494827Z > tsx tests/jobs-search-concurrency.smoke.ts
+2026-07-06T14:56:30.302496738Z 
+2026-07-06T14:56:30.876060505Z jobs-search-concurrency smoke
+2026-07-06T14:56:30.876401082Z   ✓ fast non-empty Postgres serves canonical PG
+2026-07-06T14:56:30.876414942Z   ✓ PG path returns its rows
+2026-07-06T14:56:30.876563446Z   ✓ empty Postgres falls back to Mongo
+2026-07-06T14:56:30.876570186Z   ✓ Mongo path returns its rows
+2026-07-06T14:56:30.99746764Z   ✓ slow Postgres → Mongo served
+2026-07-06T14:56:30.99749335Z   ✓ slow Postgres does NOT block (returned within grace, not 5s)
+2026-07-06T14:56:31.037805515Z   ✓ PG within grace window still preferred
+2026-07-06T14:56:31.037817825Z   ✓ both empty → source none
+2026-07-06T14:56:31.037866437Z   ✓ PG duplicates collapse
+2026-07-06T14:56:31.037872157Z   ✓ supabaseCount reflects raw rows (pre-dedup)
+2026-07-06T14:56:31.037888467Z 
+2026-07-06T14:56:31.037902207Z All smoke checks passed.
+2026-07-06T14:56:36.011868424Z 
+2026-07-06T14:56:36.011884864Z > mos-maintenance-mvp@1.8.0 test:job-scoring-aces-tiers
+2026-07-06T14:56:36.011891525Z > tsx tests/job-scoring-aces-tiers.smoke.ts
+2026-07-06T14:56:36.011894755Z 
+2026-07-06T14:56:36.352930146Z ✓ Tier A (exact_aces) returns score 100 with plain-language matchReason
+2026-07-06T14:56:36.354548371Z ✓ Tier B (engine_match) fires for powertrain donor with same engine_id
+2026-07-06T14:56:36.354738165Z ✓ Tier B correctly skips chassis work — engine_match is powertrain-only
+2026-07-06T14:56:36.354832487Z ✓ Tier C (submodel_match) fires for chassis donor with same submodelKey
+2026-07-06T14:56:36.354985421Z ✓ Missing ACES IDs falls through to legacy heuristic (acesTier=null)
+2026-07-06T14:56:36.355152884Z ✗ Badge label mismatch for {"sameVinFastPath":true}: expected "Verified — this exact vehicle", got "VIN Match"
+2026-07-06T14:56:36.426798809Z ==> Build failed 😞
+2026-07-06T14:56:36.426811679Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
