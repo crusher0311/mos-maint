@@ -67,7 +67,64 @@ function collectFormFieldHints() {
   return out;
 }
 
+// ==================== LAST-KNOWN-GOOD IDENTITY GUARD ====================
+// AutoFlow is scrape-only (no API interceptor like Tekmetric), so the SPA can
+// momentarily re-render with an identity field missing when the user switches
+// browser tabs or React re-hydrates. Once we've seen a good value for a
+// vehicle/RO identity field, a later empty/null scrape for the SAME RO/vehicle
+// must NOT clobber it. A genuinely different RO/VIN is a legitimate switch and
+// replaces the cached values.
+const AF_IDENTITY_FIELDS = [
+  "roId", "roNumber", "vin", "mileage", "vehicle", "vehicleDisplay",
+  "vehicleId", "customer", "customerName", "customerId", "customerPhone",
+  "customerEmail"
+];
+
+// Per RO/VIN cache of last-known-good identity fields, plus the key of the most
+// recent good context so a scrape that drops the identity entirely (roId AND vin
+// both missing) can still be re-anchored to the current vehicle.
+const afContextCache = new Map();
+let afLastGoodKey = null;
+
+function afCacheKey(ctx) {
+  const shop = ctx && ctx.shopId != null ? ctx.shopId : "?";
+  if (ctx && ctx.roId) return `${shop}:ro:${ctx.roId}`;
+  if (ctx && ctx.vin) return `${shop}:vin:${ctx.vin}`;
+  return null;
+}
+
+function isEmptyValue(v) {
+  return v == null || v === "";
+}
+
+// Merge a freshly-scraped context with the last-known-good values for the same
+// RO/vehicle. Non-empty scraped values always win (real updates, including a
+// legitimate switch to a different RO/VIN); empty scrapes fall back to cache.
+function applyLastKnownGoodGuard(ctx) {
+  let key = afCacheKey(ctx);
+  // Identity fully dropped by a transient re-render — re-anchor to the last
+  // good RO/VIN so the sidepanel keeps the current vehicle context.
+  if (!key && afLastGoodKey) key = afLastGoodKey;
+  if (!key) return ctx; // nothing captured yet; nothing to protect
+
+  const prior = afContextCache.get(key) || {};
+  const merged = {};
+  for (const field of AF_IDENTITY_FIELDS) {
+    const fresh = ctx[field];
+    merged[field] = isEmptyValue(fresh) ? (prior[field] ?? null) : fresh;
+    ctx[field] = merged[field];
+  }
+  afContextCache.set(key, merged);
+  afLastGoodKey = key;
+  return ctx;
+}
+
 function detectContext() {
+  const ctx = _detectContextRaw();
+  return applyLastKnownGoodGuard(ctx);
+}
+
+function _detectContextRaw() {
   const url = window.location.href;
   const hostname = window.location.hostname;
 
