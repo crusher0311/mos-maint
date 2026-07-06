@@ -297,8 +297,17 @@ async function _GET(request: NextRequest) {
       })));
     }
     
+    // Same-VIN donors (jobs performed on this exact vehicle) always sort to
+    // the very top, ahead of everything else, then by score. sameVinFastPath
+    // scores 100 but so can an exact-ACES match, so we make the VIN match an
+    // explicit primary sort key rather than relying on the score tie.
     const eligible = applyMinimumResults(
-      scoredJobs.sort((a, b) => b.matchScore - a.matchScore),
+      scoredJobs.sort((a, b) => {
+        const aVin = a.sameVinFastPath ? 1 : 0;
+        const bVin = b.sameVinFastPath ? 1 : 0;
+        if (aVin !== bVin) return bVin - aVin;
+        return b.matchScore - a.matchScore;
+      }),
       15,
       3
     );
@@ -406,6 +415,7 @@ async function _GET(request: NextRequest) {
         matchBandLabel: job.matchBandLabel,
         matchReason: job.matchReason,
         acesTier: job.scoreBreakdown?.acesTier ?? null,
+        sameVin: job.sameVinFastPath ?? false,
         lowConfidence: job.lowConfidence || false,
         crossClassPenalized: job.crossClassPenalized || false,
         source: sourceType,

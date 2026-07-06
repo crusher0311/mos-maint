@@ -1,5 +1,13 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.53 — 2026-07-06
+
+### Added
+- **"VIN Match" pill on job search.** When a past job in the results was
+  performed on this exact vehicle (same VIN), it now shows a green **VIN Match**
+  pill and is always sorted to the very top of the list — so the most reliable
+  match, this car's own history, is the first thing you see.
+
 ## 1.27.52 — 2026-07-06
 
 ### Added

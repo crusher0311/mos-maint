@@ -1374,6 +1374,14 @@ body {
   border-color: var(--gray-200);
 }
 
+.vin-match-badge {
+  color: #065f46;
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  font-weight: 600;
+  cursor: help;
+}
+
 .aces-badge {
   cursor: help;
 }

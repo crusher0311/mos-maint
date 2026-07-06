@@ -2350,12 +2350,20 @@ function createJobItemHTML(job, lookupId) {
     ? `<span class="match-badge aces-badge ${acesBadge.className}" title="${escapeHtml(acesBadge.tooltip)}">${escapeHtml(acesBadge.label)}</span>`
     : '';
 
+  // Same-VIN donors (jobs performed on this exact vehicle) get a prominent
+  // "VIN Match" pill and are always sorted to the top by the server. Rendered
+  // first so it reads as the most trustworthy match in the row.
+  const vinBadgeHtml = job.sameVin
+    ? `<span class="match-badge vin-match-badge" title="This job was performed on this exact vehicle (same VIN) — the most reliable match.">VIN Match</span>`
+    : '';
+
   return `
     <li class="job-item" data-job-id="${job._id}" data-lookup-id="${lookupId}">
       <div class="job-header">
         <div class="job-header-left">
           <div class="job-title-row">
             <span class="job-title">${escapeHtml(job.title || job.name)}</span>
+            ${vinBadgeHtml}
             <span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>
             ${acesBadgeHtml}
             <span class="match-score">${matchScore}%</span>

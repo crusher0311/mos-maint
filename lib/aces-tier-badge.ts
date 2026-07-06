@@ -34,7 +34,7 @@ export interface MatchConfidenceInput {
  * Map a scored job to one plain-language confidence label, color, and tooltip.
  *
  * Tiers (highest → lowest confidence):
- *   - same VIN                    → "Verified — this exact vehicle" (green)
+ *   - same VIN                    → "VIN Match"                     (green)
  *   - exact ACES vehicle config   → "Verified match"               (green)
  *   - same engine (powertrain)    → "Strong match"                 (teal)
  *   - same chassis (chassis work) → "Strong match"                 (teal)
@@ -59,7 +59,7 @@ export function getMatchConfidenceBadge(input: MatchConfidenceInput): MatchConfi
   // Top tier — the vehicle's own past work (same VIN).
   if (sameVinFastPath) {
     return {
-      label: "Verified — this exact vehicle",
+      label: "VIN Match",
       tooltip:
         "This job was performed on this exact vehicle (same VIN) — the most reliable match.",
       className: "bg-emerald-100 text-emerald-800 border-emerald-300",
