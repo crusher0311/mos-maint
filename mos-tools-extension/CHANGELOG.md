@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.54 — 2026-07-06
+
+### Changed
+- **"Last performed" now only shows on this exact vehicle.** The "Last performed"
+  note used to appear on every job-search result, including cards from other,
+  similar vehicles shown only for pricing — which read as if a different car had
+  the service. Now that note is reserved for a genuine same-VIN match. When one of
+  the result cards is this car's own history, the note stays on that card (next to
+  the "VIN Match" pill). When the results are only similar-vehicle pricing
+  references, a single **"This vehicle — last performed …"** row appears at the top
+  of the list instead, and the reference cards are left clean. It's still
+  fact-only and shows nothing when there's no record for this vehicle.
+
 ## 1.27.53 — 2026-07-06
 
 ### Added

@@ -2232,17 +2232,75 @@ async function fetchLastPerformedForResults(jobs) {
     }
     if (byName.size === 0) return;
 
+    // "Last performed on this vehicle" is a VIN-authoritative fact, so it must
+    // only appear where it genuinely applies to THIS vehicle — never stamped on
+    // the other-vehicle pricing-reference cards (that read as if a different
+    // car was serviced on this visit). Two cases:
+    //   (a) A same-VIN donor card is present → badge THAT card (it's the real
+    //       VIN match, already pinned to the top with the "VIN Match" pill).
+    //   (b) No same-VIN card (the common case — results are similar vehicles
+    //       used only for pricing) → surface a single "This vehicle" summary
+    //       row at the very top, built from the vehicle's own history, and
+    //       leave every reference card clean.
+    let vinCardBadged = false;
     const rows = elements.lookupResults.querySelectorAll('li.job-item');
     rows.forEach((li) => {
       const lookupId = li.getAttribute('data-lookup-id');
       const job = lookupId ? lookupJobsDataMap.get(lookupId) : null;
-      const nm = String((job && (job.title || job.name)) || '').trim().toLowerCase();
+      if (!job || !job.sameVin) return; // reference cards stay clean
+      const nm = String((job.title || job.name) || '').trim().toLowerCase();
       const lp = nm ? byName.get(nm) : null;
-      if (lp) injectLastPerformedBadge(li, lp);
+      if (lp) { injectLastPerformedBadge(li, lp); vinCardBadged = true; }
     });
+
+    if (!vinCardBadged) {
+      // Prefer the history record tied to the best-ranked result that has one
+      // (jobs are already score-sorted); fall back to the most recent record.
+      let best = null;
+      for (const job of jobs) {
+        const nm = String((job.title || job.name) || '').trim().toLowerCase();
+        const lp = nm ? byName.get(nm) : null;
+        if (lp) { best = lp; break; }
+      }
+      if (!best) {
+        for (const lp of byName.values()) {
+          if (!best) { best = lp; continue; }
+          // Prefer a dated record, and among dated ones the most recent.
+          if (lp.date && (!best.date || lp.date > best.date)) best = lp;
+        }
+      }
+      if (best) renderThisVehicleBanner(best);
+    }
   } catch (err) {
     // Non-blocking enrichment — swallow errors.
   }
+}
+
+/**
+ * Render a single "This vehicle" summary row at the top of the results list.
+ * Used when the searched service has prior history on THIS vehicle but no
+ * same-VIN donor card surfaced — so the VIN-match fact is shown once, clearly,
+ * instead of being (mis)stamped onto other-vehicle reference cards.
+ */
+function renderThisVehicleBanner(lp) {
+  if (!elements.lookupResults || !lp) return;
+  // Clear any prior banner so a re-run never stacks duplicates.
+  const existing = elements.lookupResults.querySelector('.this-vehicle-banner');
+  if (existing) existing.remove();
+
+  const date = lp.displayDate ? ` ${lp.displayDate}` : '';
+  const miles = lp.miles != null
+    ? ` \u00b7 ${lp.milesEstimated ? '~' : ''}${lp.miles.toLocaleString()} mi`
+    : '';
+  const sourceColor = lp.source === 'carfax' ? '#c2410c' : '#15803d';
+
+  const div = document.createElement('div');
+  div.className = 'this-vehicle-banner';
+  div.title = lp.summary || '';
+  div.style.cssText = 'display:flex;align-items:center;gap:7px;font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:8px 10px;margin-bottom:8px;';
+  div.innerHTML = `<span style="font-size:14px;">\u{1F697}</span><span><strong>This vehicle</strong> \u2014 last performed${escapeHtml(date)}${escapeHtml(miles)} \u00b7 <span style="color:${sourceColor};font-weight:600;">${escapeHtml(lp.sourceLabel || '')}</span></span>`;
+
+  elements.lookupResults.insertBefore(div, elements.lookupResults.firstChild);
 }
 
 function injectLastPerformedBadge(li, lp) {
