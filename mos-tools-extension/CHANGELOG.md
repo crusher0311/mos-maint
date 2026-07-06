@@ -1,5 +1,15 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.55 — 2026-07-06
+
+### Fixed
+- **Duplicate "VIN Match" pill on job search.** A same-VIN result was showing the
+  green **VIN Match** pill twice. The extension renders its own prominent VIN pill,
+  and the server also began sending "VIN Match" as the generic match-quality label,
+  so both appeared side by side. The generic label pill is now hidden on same-VIN
+  cards (the dedicated VIN Match pill, with its tooltip, remains), leaving a single
+  pill plus the 100% score.
+
 ## 1.27.54 — 2026-07-06
 
 ### Changed

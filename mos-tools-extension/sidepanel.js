@@ -2422,7 +2422,7 @@ function createJobItemHTML(job, lookupId) {
           <div class="job-title-row">
             <span class="job-title">${escapeHtml(job.title || job.name)}</span>
             ${vinBadgeHtml}
-            <span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>
+            ${job.sameVin ? '' : `<span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>`}
             ${acesBadgeHtml}
             <span class="match-score">${matchScore}%</span>
           </div>
