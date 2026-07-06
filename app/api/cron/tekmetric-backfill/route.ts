@@ -12,6 +12,7 @@ import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForSh
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
 import { syncProtractorRoster } from "@/lib/integrations/protractor/sync-roster";
+import { decideChunkAdvance } from "@/lib/integrations/tekmetric/backfill-chunk-advance";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -111,6 +112,11 @@ const MAX_CONSECUTIVE_CHUNK_ERRORS = 3;
 // succeeds. Rate-limited failures do NOT count toward the FORCE_SKIP threshold.
 const RATE_LIMIT_SHRINK_BACKOFF_MS = 5000;
 const MIN_CHUNK_DAYS_ON_ERROR = 15;
+// Bad-data (window read) failures don't shrink for throughput — they bisect to
+// isolate the corrupt slice, then force-skip only that minimal slice. A much
+// smaller floor keeps any surviving force-skip's blast radius tiny (a couple of
+// days) instead of dropping a whole ~90-day window over one bad record.
+const MIN_CHUNK_DAYS_ON_BAD_DATA = 2;
 // Slot allocation per cron run. Splitting the budget between
 // never-started shops and the longest-stalled shops prevents either
 // bucket from starving the other. With 19 never-started shops and an
@@ -684,7 +690,17 @@ async function backfillShopChunkInner(
   let skippedUnchanged = 0;
   let page = 0;
   let totalPages = 1;
-  let chunkHadError = false;
+  // Split error signals so a single bad RO can't blow away a whole window.
+  //  - chunkHadWindowError: the `/repair-orders` list page itself failed, so we
+  //    genuinely couldn't read the window. Only these NARROW/HOLD/FORCE_SKIP the
+  //    cursor (and any force-skip is scoped to a minimal, isolated slice).
+  //  - chunkHadRecordError: the list read fine and the good ROs were ingested,
+  //    but one or more individual ROs threw. Those are recorded on the
+  //    skipped-RO list and never force-skip the window.
+  // `chunkHadError` stays as the OR of the two for metrics / rate-limit
+  // classification continuity.
+  let chunkHadWindowError = false;
+  let chunkHadRecordError = false;
   let hitPageCap = false;
   let perRoExceptions = 0;
   // Capture the actual RO ids + error messages that threw so on-call can see
@@ -798,7 +814,10 @@ async function backfillShopChunkInner(
 
     if (!rosResult.ok || !rosResult.data) {
       console.error(`[Tekmetric Backfill] Shop ${shopId} page ${page} error:`, rosResult.error);
-      chunkHadError = true;
+      // WINDOW-level failure: we couldn't read the list page, so we can't see
+      // this window's contents. This is what NARROWs/holds/force-skips the
+      // cursor (a single bad RO does NOT reach here).
+      chunkHadWindowError = true;
       break;
     }
 
@@ -976,7 +995,18 @@ async function backfillShopChunkInner(
 
             if (!jobsResult.ok) {
               console.warn(`[Tekmetric Backfill] Failed to fetch jobs for RO ${ro.id}: ${jobsResult.error}`);
-              chunkHadError = true;
+              // Single-RECORD failure: only this RO couldn't be fetched. Record
+              // it on the skipped-RO list and let the rest of the window ingest.
+              // A per-RO failure must NOT hold/force-skip the whole window.
+              perRoExceptions++;
+              chunkHadRecordError = true;
+              if (skippedRoSamples.length < 50) {
+                skippedRoSamples.push({
+                  roId: ro.id,
+                  error: `jobs fetch failed: ${String(jobsResult.error ?? "unknown").slice(0, 260)}`,
+                  at: new Date(),
+                });
+              }
               return { indexed: 0, skipped: 0, roData: null };
             }
 
@@ -1137,10 +1167,12 @@ async function backfillShopChunkInner(
       // unwrapped helper, etc.) propagates out of Promise.all and crashes
       // the whole chunk — which is the exact failure mode that landed
       // shops in the GET handler's "unhandled chunk exception" branch.
-      // Mark chunkHadError so the cursor holds the window for retry, but
-      // let the rest of the page's ROs finish.
+      // Single-RECORD failure: mark chunkHadRecordError (NOT a window error) so
+      // the rest of the page's ROs still finish and the good data ingests. The
+      // bad RO is recorded below on the skipped-RO list; a per-RO throw must
+      // never hold or force-skip the whole window.
       perRoExceptions++;
-      chunkHadError = true;
+      chunkHadRecordError = true;
       const roErrMsg = (roErr?.message || String(roErr)).slice(0, 300);
       // Cap the per-chunk sample so a runaway chunk doesn't blow up the
       // progress doc. The aggregate count (perRoExceptions) is always exact.
@@ -1193,70 +1225,106 @@ async function backfillShopChunkInner(
   const cursorIsSameWindow =
     !!progress?.currentChunkEnd &&
     new Date(progress.currentChunkEnd).getTime() === chunkEnd.getTime();
-  // Raw run-of-errors-on-this-window count. Used both for the force-skip
-  // threshold check and for the human-readable "after N consecutive failures"
-  // message — we want the message to say "3" even when the persisted counter
-  // resets to 0 because we force-skipped past the bad window (see below).
-  // A chunk that failed while paying meaningful 429 backoff is a throttling
-  // failure, not bad data. The 429 accumulator is already live on
-  // `chunkBackoffCounter` by the time we reach the advance decision.
+  // Combined error flag kept for metrics + the return payload; the advance
+  // decision itself distinguishes window-level vs per-record failures.
+  const chunkHadError = chunkHadWindowError || chunkHadRecordError;
+  // The 429 accumulator is already live on `chunkBackoffCounter` by the time we
+  // reach the advance decision; a chunk that failed while paying meaningful
+  // backoff is a throttling failure, not bad data.
   const chunkBackoffSoFarMs = chunkBackoffCounter?.ms || 0;
-  const errorWasRateLimited =
-    chunkHadError && chunkBackoffSoFarMs >= RATE_LIMIT_SHRINK_BACKOFF_MS;
-  // Only NON-rate-limited (bad-data) errors count toward the force-skip
-  // threshold; rate-limited windows shrink-and-retry and are never skipped.
-  const countableError = chunkHadError && !errorWasRateLimited;
-  const incrementedConsecutiveErrors = countableError
-    ? (cursorIsSameWindow ? priorConsecutiveErrors + 1 : 1)
-    : 0;
-  const forceSkipBadWindow =
-    countableError && incrementedConsecutiveErrors >= MAX_CONSECUTIVE_CHUNK_ERRORS;
-  // Reset the persisted counter to 0 once we force-skip past a bad window
-  // (task #449 / diagnosis #443). Without this, every subsequent run on the
-  // new chunk window finds `cursorIsSameWindow === true` (because the cursor
-  // we just wrote IS the new chunkEnd loaded next run) and increments the
-  // counter further, producing the 3-18 values observed in prod across
-  // shops 32/36/37/54/57/73/74/75. Cursor-moved-without-error already
-  // resets to 0 via the `chunkHadError ? ... : 0` branch above.
-  const nextConsecutiveErrors = forceSkipBadWindow ? 0 : incrementedConsecutiveErrors;
-  // Carry the current shrink override forward by default; the branches below
-  // set it (SHRINK), clear it (FULL/FORCE_SKIP), or leave it (HOLD/SPLIT).
-  let nextChunkDaysOverride: number | null = chunkDaysOverride;
+
+  // All the cursor-advance policy (rate-limit SHRINK, bad-data NARROW/HOLD/
+  // FORCE_SKIP, per-RO RECORD_SKIP, page-cap SPLIT, FULL) lives in a pure,
+  // unit-tested helper. The key contract it enforces: a single bad RO
+  // (chunkHadRecordError) can NEVER hold or force-skip the whole window, and a
+  // genuine window read failure (chunkHadWindowError) bisects to isolate the
+  // corrupt slice before force-skipping only that minimal slice.
+  const advance = decideChunkAdvance(
+    {
+      chunkHadWindowError,
+      chunkHadRecordError,
+      chunkBackoffMs: chunkBackoffSoFarMs,
+      hitPageCap,
+      cursorIsSameWindow,
+      priorConsecutiveErrors,
+      effectiveChunkDays,
+      chunkDaysOverride,
+    },
+    {
+      maxConsecutiveChunkErrors: MAX_CONSECUTIVE_CHUNK_ERRORS,
+      rateLimitShrinkBackoffMs: RATE_LIMIT_SHRINK_BACKOFF_MS,
+      minChunkDaysOnRateLimit: MIN_CHUNK_DAYS_ON_ERROR,
+      minChunkDaysOnBadData: MIN_CHUNK_DAYS_ON_BAD_DATA,
+    },
+  );
+
+  const errorWasRateLimited = advance.errorWasRateLimited;
+  const incrementedConsecutiveErrors = advance.incrementedConsecutiveErrors;
+  const forceSkipBadWindow = advance.forceSkipBadWindow;
+  // Persisted counter (reset to 0 on force-skip / narrowing / clean advance).
+  const nextConsecutiveErrors = advance.nextConsecutiveErrors;
+  const nextChunkDaysOverride: number | null = advance.nextChunkDaysOverride;
+
+  // Map the abstract cursorAction onto concrete dates. hold=same window,
+  // full/skip=advance to the (possibly narrowed) chunk start, split=midpoint.
   let nextChunkEnd: Date;
-  let advanceMode: string;
-  if (errorWasRateLimited) {
-    // SHRINK: keep the same chunk end, retry a smaller span next run so it can
-    // finish under the shared rate limit. Halve each failure down to the floor.
-    const shrunk = Math.max(MIN_CHUNK_DAYS_ON_ERROR, Math.floor(effectiveChunkDays / 2));
-    nextChunkDaysOverride = shrunk < effectiveChunkDays ? shrunk : MIN_CHUNK_DAYS_ON_ERROR;
-    nextChunkEnd = chunkEnd;
-    advanceMode = `SHRINK (rate-limited, chunkDays ${effectiveChunkDays}→${nextChunkDaysOverride}, backoff429=${Math.round(chunkBackoffSoFarMs)}ms)`;
-    console.warn(
-      `[Tekmetric Backfill] SHRINK shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} chunkDays ${effectiveChunkDays}->${nextChunkDaysOverride} backoff429=${Math.round(chunkBackoffSoFarMs)}ms`,
-    );
-  } else if (chunkHadError && !forceSkipBadWindow) {
-    nextChunkEnd = chunkEnd;
-    advanceMode = `HOLD (error in chunk, ${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
-  } else if (forceSkipBadWindow) {
-    nextChunkEnd = chunkStart;
-    nextChunkDaysOverride = null;
-    advanceMode = `FORCE_SKIP (chunk errored ${incrementedConsecutiveErrors}x in a row, skipping window ${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]})`;
-    console.warn(
-      `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]} consecutiveErrors=${incrementedConsecutiveErrors}`,
-    );
-  } else if (hitPageCap) {
-    nextChunkEnd = midpoint(chunkStart, chunkEnd);
-    advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split("T")[0]})`;
-  } else {
-    nextChunkEnd = chunkStart;
-    nextChunkDaysOverride = null;
-    advanceMode = "FULL";
+  switch (advance.cursorAction) {
+    case "hold":
+      nextChunkEnd = chunkEnd;
+      break;
+    case "split":
+      nextChunkEnd = midpoint(chunkStart, chunkEnd);
+      break;
+    case "skip":
+    case "full":
+    default:
+      nextChunkEnd = chunkStart;
+      break;
   }
-  // A force-skipped chunk DID move the cursor — count that as forward
-  // progress for the purposes of completion (otherwise a bad final
-  // window would leave the shop perpetually one chunk shy of done).
+
+  const windowStr = `${chunkStart.toISOString().split("T")[0]}..${chunkEnd.toISOString().split("T")[0]}`;
+  let advanceMode: string;
+  switch (advance.kind) {
+    case "SHRINK":
+      advanceMode = `SHRINK (rate-limited, chunkDays ${effectiveChunkDays}→${nextChunkDaysOverride}, backoff429=${Math.round(chunkBackoffSoFarMs)}ms)`;
+      console.warn(
+        `[Tekmetric Backfill] SHRINK shop=${shopId} window=${windowStr} chunkDays ${effectiveChunkDays}->${nextChunkDaysOverride} backoff429=${Math.round(chunkBackoffSoFarMs)}ms`,
+      );
+      break;
+    case "NARROW":
+      advanceMode = `NARROW (window read error, bisecting to isolate bad data, chunkDays ${effectiveChunkDays}→${nextChunkDaysOverride})`;
+      console.warn(
+        `[Tekmetric Backfill] NARROW shop=${shopId} window=${windowStr} chunkDays ${effectiveChunkDays}->${nextChunkDaysOverride} (isolating bad data)`,
+      );
+      break;
+    case "HOLD":
+      advanceMode = `HOLD (window read error at min span, ${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`;
+      break;
+    case "FORCE_SKIP":
+      advanceMode = `FORCE_SKIP (narrowed window errored ${incrementedConsecutiveErrors}x in a row, skipping ${effectiveChunkDays}d slice ${windowStr})`;
+      console.warn(
+        `[Tekmetric Backfill] FORCE_SKIP shop=${shopId} window=${windowStr} spanDays=${effectiveChunkDays} consecutiveErrors=${incrementedConsecutiveErrors}`,
+      );
+      break;
+    case "RECORD_SKIP":
+      advanceMode = `RECORD_SKIP (${perRoExceptions} RO(s) failed, rest of window ingested, advancing normally)`;
+      break;
+    case "SPLIT":
+      advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split("T")[0]})`;
+      break;
+    case "FULL":
+    default:
+      advanceMode = "FULL";
+      break;
+  }
+  // Completion requires the cursor to actually move forward (full advance or a
+  // force-skip of the final narrow slice) all the way to the oldest date. A
+  // held window (SHRINK/NARROW/HOLD) or a page-cap SPLIT is never complete.
+  // Per-RO record errors advance FULL, so a lone bad RO no longer blocks
+  // completion — the good data ingested and the bad RO is recorded.
   let isComplete =
-    (!chunkHadError || forceSkipBadWindow) && !hitPageCap && nextChunkEnd <= oldestDate;
+    (advance.cursorAction === "full" || advance.cursorAction === "skip") &&
+    nextChunkEnd <= oldestDate;
   // Coverage probe: before declaring victory, ask Tekmetric how many ROs
   // it actually has for this shop with no date filter. If we've indexed
   // dramatically fewer than that AND the shop is large enough that low
@@ -1532,15 +1600,21 @@ async function backfillShopChunkInner(
               fullPageQueueReason: `auto-flagged by coverage probe: ${coverageCheck?.totalRosIndexed}/${coverageCheck?.totalElementsAvailable} ROs (${((coverageCheck?.ratio ?? 0) * 100).toFixed(1)}%)`,
             }
           : {}),
-        ...(errorWasRateLimited
+        // lastError is keyed off the advance KIND, not the raw error flag, so a
+        // RECORD_SKIP (single bad RO, rest of window ingested) does NOT flag the
+        // shop red — the bad RO is surfaced via lastRoSkipCount / recentSkippedRos
+        // instead. Only genuine window read failures set lastError.
+        ...(advance.kind === "SHRINK" || advance.kind === "RECORD_SKIP" || advance.kind === "SPLIT" || advance.kind === "FULL"
           ? { lastError: null, lastErrorAt: null }
-          : chunkHadError && !forceSkipBadWindow
-          ? { lastError: `chunk had errors, holding cursor (${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
-          : forceSkipBadWindow
+          : advance.kind === "NARROW"
+          ? { lastError: `window read error, narrowing to isolate bad data (chunkDays ${effectiveChunkDays}→${nextChunkDaysOverride})`, lastErrorAt: now }
+          : advance.kind === "HOLD"
+          ? { lastError: `window read error at min span, holding cursor (${incrementedConsecutiveErrors}/${MAX_CONSECUTIVE_CHUNK_ERRORS})`, lastErrorAt: now }
+          : advance.kind === "FORCE_SKIP"
           ? {
-              lastError: `force-skipped bad window after ${incrementedConsecutiveErrors} consecutive failures`,
+              lastError: `force-skipped narrowed ${effectiveChunkDays}d slice after ${incrementedConsecutiveErrors} consecutive window read failures`,
               lastErrorAt: now,
-              lastForceSkippedWindow: { start: chunkStart, end: chunkEnd, at: now },
+              lastForceSkippedWindow: { start: chunkStart, end: chunkEnd, spanDays: effectiveChunkDays, at: now },
             }
           : { lastError: null, lastErrorAt: null }),
       },
