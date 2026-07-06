@@ -54,22 +54,38 @@ genuine ⇒ demoted (conservative).
 **Confidence ladder — the match % now encodes the SOURCE of certainty (2026-07).**
 Named consts in `job-scoring.ts` (`SCORE_VIN_MATCH=100`, `SCORE_ACES_EXACT=95`,
 `SCORE_HEURISTIC_EXACT_CAP=90`). Non-overlapping bands so the score alone ranks
-correctly:
-- **100 "VIN Match"** — same physical car (its own history). Same-VIN fast path;
-  label is "VIN Match", NOT "Exact Fit" (100 means "this exact car").
-- **95 "Exact Fit (ACES)"** — different car, catalog-confirmed identical spec
-  (Tier A exact_aces). Flat 95, no evidence bonus.
-- **80–90 "Exact Fit"** — genuine heuristic exact (same model+year+engine, not
-  VIN/ACES-confirmed), capped at 90.
-- **≤79 "Great Match"** — ACES Tier B/C SIBLINGS (engine-only / submodel-only,
-  always different vehicle) + all other heuristic likely. **Tier B/C finalAces is
-  clamped to SCORE_THRESHOLD_EXACT-1**; without that clamp evidence bonuses
-  (recent+5, same-shop+5, corroboration+6) pushed a sibling to ~91 → wrongly
-  "exact"/"Exact Fit" AND out-scored a real heuristic exact (blocking bug caught
-  in review).
-**Why:** advisors must be able to trust that 100% = the same car and that a bigger
-number = more certainty about fit. **How to apply:** any new exact-band or ACES
-path must respect the ladder — never emit 100 except same-VIN, never let a
-different-vehicle match reach the exact band. Route sort is matchScore-first then
-qualityRank on ties (keys off sameVinFastPath flag + acesTier, NOT the label
-string), so non-overlapping bands keep ordering correct.
+correctly. Brandon-approved advisor-facing LABEL ladder (both surfaces — extension
+via server `matchBandLabel`, web app via `getMatchConfidenceBadge`):
+- **100 "VIN Match"** — same physical car (its own history). Same-VIN fast path.
+- **95 "Exact Fit"** (tooltip notes ACES/catalog-confirmed) — different car,
+  Tier A exact_aces. Flat 95, no evidence bonus. (Label dropped the "(ACES)"
+  jargon suffix; the code const/tier is still `exact_aces`.)
+- **80–90 "Likely Fit"** — genuine heuristic near-exact (same model+year+engine,
+  NOT VIN/ACES-confirmed), capped at 90. It's a strong-but-unconfirmed guess.
+- **≤79 "Likely Match"** — ACES Tier B/C SIBLINGS + demoted non-genuine exact +
+  all heuristic likely band. **Tier B/C finalAces clamped to
+  SCORE_THRESHOLD_EXACT-1**; without that clamp evidence bonuses pushed a sibling
+  to ~91 → wrongly exact.
+- **35–54 "Good Match"** (possible band), **<35 "Low Confidence"**.
+`getBandLabel` maps band→label: exact="Likely Fit", likely="Likely Match",
+possible="Good Match", low_confidence="Low Confidence". Tier A code label is the
+bare "Exact Fit". Web badge `getMatchConfidenceBadge` (lib/aces-tier-badge.ts) is
+score-aware (takes optional `score`) and mirrors this ladder; still returns
+"Not a match" when gatePass is false.
+
+**Demoted-exact ordering (2026-07 fix).** A non-genuine match that tallies into the
+exact band (≥80) is demoted to the "likely" band, but do NOT flat-clamp its number
+to 79 — that collapses a same-model off-year donor and a different-model sibling to
+the SAME 79 and destroys their order. Instead subtract a fixed offset
+(`SCORE_VIN_MATCH - (SCORE_THRESHOLD_EXACT-1)` = 21, input capped at 100) that
+slides the whole exact band [80..100] down to [59..79]. Pure subtraction ⇒
+STRICTLY order-preserving (no bucketing/rounding ties), so any positive gap earned
+above the threshold survives below it and a same-model donor still outranks a
+sibling while both read below a genuine "Likely Fit". (CHANGED displayed numbers
+for demoted matches from a flat 79 to an ordered 59–79.)
+**Why:** advisors must trust that 100% = the same car, bigger = more certain, and
+that same-model beats a different-model sibling. **How to apply:** any new
+exact-band/ACES path must respect the ladder — never emit 100 except same-VIN,
+never let a different-vehicle match reach the exact band, and preserve relative
+order when demoting. Route sort is matchScore-first then qualityRank on ties (keys
+off sameVinFastPath flag + acesTier, NOT the label string).

@@ -504,6 +504,7 @@ export function AddToROWithHistory({
                                   sameVinFastPath: job.sameVinFastPath,
                                   acesTier: job.scoreBreakdown?.acesTier,
                                   gatePass: job.gatePass,
+                                  score: job.matchScore,
                                 });
                                 return (
                                   <span

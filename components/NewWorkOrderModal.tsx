@@ -1840,6 +1840,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                           sameVinFastPath: job.sameVinFastPath,
                           acesTier: job.scoreBreakdown?.acesTier,
                           gatePass: job.gatePass,
+                          score: job.matchScore,
                         });
                         const isExpanded = expandedHistoryIdx === idx;
                         const lines = job.lines || [];

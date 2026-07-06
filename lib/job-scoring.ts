@@ -20,7 +20,7 @@ export interface VehicleSpecs {
    * ACES `vehicle_id` from the DataOne decode (Task #382). Identifies a
    * specific year/make/model/submodel/engine/transmission combination —
    * when both target and donor decode to the same `vehicle_id` it's an
-   * exact ACES fit and the scorer short-circuits to Exact Fit (ACES).
+   * exact ACES fit and the scorer short-circuits to Exact Fit.
    * Null when DataOne couldn't resolve a unique variant.
    */
   acesVehicleId: number | null;
@@ -338,11 +338,14 @@ export const SCORE_THRESHOLD_EXACT = 80;
 export const SCORE_THRESHOLD_LIKELY = 55;
 export const SCORE_THRESHOLD_POSSIBLE = 35;
 
-// Confidence ladder for the top ("Exact Fit") band. 100 is reserved for a
-// same-VIN match — this exact car's own history ("VIN Match"). An ACES-confirmed
-// identical-spec match on a *different* car scores just below it, and an
-// unconfirmed heuristic "same model + exact year + engine" match is capped lower
-// still, so the number itself communicates how sure we are.
+// Confidence ladder, from most to least certain. The number itself communicates
+// how sure we are, and each rung has a plain-language advisor label:
+//   100   "VIN Match"   — this exact car's own history (same VIN).
+//    95   "Exact Fit"   — an ACES-confirmed identical-spec match on a *different*
+//                         car (catalog-verified year/make/model/trim/engine).
+//   80-90 "Likely Fit"  — an unconfirmed heuristic "same model + exact year +
+//                         engine" match, capped below the confirmed tiers.
+// Below the exact band: "Likely Match" (55-79), "Good Match" (35-54), "Low".
 export const SCORE_VIN_MATCH = 100;
 export const SCORE_ACES_EXACT = 95;
 export const SCORE_HEURISTIC_EXACT_CAP = 90;
@@ -356,8 +359,12 @@ export function getScoreBand(score: number): ScoreBand {
 
 export function getBandLabel(band: ScoreBand): string {
   switch (band) {
-    case "exact": return "Exact Fit";
-    case "likely": return "Great Match";
+    // A same-VIN match (100, "VIN Match") and an ACES-confirmed exact match
+    // (95, "Exact Fit") both short-circuit before this, so the "exact" score
+    // band that reaches here is always an *unconfirmed* heuristic near-exact —
+    // it reads as "Likely Fit".
+    case "exact": return "Likely Fit";
+    case "likely": return "Likely Match";
     case "possible": return "Good Match";
     case "low_confidence": return "Low Confidence";
   }
@@ -614,19 +621,19 @@ export function scoreJob(
   // behaviour is preserved exactly.
   //
   //   Tier A (exact_aces)     → target.vehicle_id === donor.vehicle_id
-  //                              → Exact Fit (ACES), score SCORE_ACES_EXACT (95;
+  //                              → Exact Fit, score SCORE_ACES_EXACT (95;
   //                                just below a same-VIN match). Identifies
   //                                the same year/make/model/submodel/
   //                                engine/transmission build.
   //   Tier B (engine_match)   → same engine_id, different vehicle_id, AND
   //                              the donor job is in the powertrain or
   //                              general system (engine / oil / cooling /
-  //                              fuel work) → Great Match floor.
+  //                              fuel work) → Likely Match floor.
   //   Tier C (submodel_match) → same submodelKey, different engine_id, AND
   //                              the donor job is in body / brakes /
   //                              suspension / steering / wheel-tire (work
   //                              that doesn't depend on the engine) →
-  //                              Great Match floor.
+  //                              Likely Match floor.
   const tAcesVid = targetSpecs?.acesVehicleId ?? null;
   const jAcesVid = jobSpecs?.acesVehicleId ?? null;
   const tAcesEid = targetSpecs?.acesEngineId ?? null;
@@ -649,7 +656,7 @@ export function scoreJob(
       ...job,
       matchScore: SCORE_ACES_EXACT,
       matchBand: "exact" as ScoreBand,
-      matchBandLabel: "Exact Fit (ACES)",
+      matchBandLabel: "Exact Fit",
       matchReason: buildMatchReason(acesPositives, []),
       gatePass: true,
       lowConfidence: false,
@@ -726,7 +733,7 @@ export function scoreJob(
     }
 
     // Same-shop / recency / corroboration evidence bonuses still apply —
-    // mirrors the legacy scorer so an Exact Fit (ACES) sibling with three
+    // mirrors the legacy scorer so an Exact Fit sibling with three
     // corroborating same-shop donors still outranks a one-off donor.
     let acesEvidence = 0;
     if (job.performedAt) {
@@ -751,7 +758,7 @@ export function scoreJob(
 
     // Tier B/C are *siblings*, not the same vehicle: same engine (diff vehicle)
     // or same body/chassis (diff engine). They must never reach the exact band —
-    // evidence bonuses only differentiate siblings within "Great Match", they
+    // evidence bonuses only differentiate siblings within "Likely Match", they
     // don't promote a sibling to "Exact Fit". Cap just below the exact threshold
     // so the confidence ladder holds: VIN(100) > ACES exact(95) >
     // heuristic exact(80–90) > engine/submodel siblings(≤79).
@@ -833,7 +840,7 @@ export function scoreJob(
   // We compute the flag here and use it in two places: as a partial-Model
   // score boost (less than full same-model, more than family), and as a
   // floor guarantee further down (sibling chassis donors with close year
-  // land at least Great Match).
+  // land at least Likely Match).
   let platformCreditApplied = false;
   if (targetModelLower && jobModelLower) {
     if (targetModelLower === jobModelLower) {
@@ -1028,7 +1035,7 @@ export function scoreJob(
 
   // ----- Same-make + same-model + close-year guarantee (Task #182) -----
   // "Same-make + same-model + same-engine within ±1 year should also be
-  // guaranteed at least Great Match even if GVWR / body / displacement
+  // guaranteed at least Likely Match even if GVWR / body / displacement
   // didn't decode." If both engines decoded and disagree, the materialMisses
   // path above will already have mentioned it; the floor still applies as
   // long as the displacement is *not* a material mismatch.
@@ -1050,7 +1057,7 @@ export function scoreJob(
 
   // ----- Platform-sibling close-year floor (Task #365) -----
   // When the donor is a sibling on the same platform doing chassis-shareable
-  // work and the year is close, guarantee at least the Great Match band.
+  // work and the year is close, guarantee at least the Likely Match band.
   // This is the whole point of the task — a Suburban ball-joint job within
   // ±1 model year of a Tahoe target should surface as a strong match, not
   // be demoted to "Possible" just because the model name differs.
@@ -1066,29 +1073,37 @@ export function scoreJob(
 
   let band = getScoreBand(finalScore);
 
-  // "Exact Fit" must mean the same vehicle. A heuristic (non-ACES) match only
-  // earns the exact label when it is genuinely the same vehicle: same model,
-  // exact model year, and an engine that matches (or is irrelevant/undecoded
-  // for this job's category). Same-make but *different-model* donors (e.g. a
-  // Yaris or Camry surfaced for a Corolla) and off-year donors can still tally
-  // into the exact score band, but their parts/labor frequently differ, so
-  // labeling them "Exact Fit" misleads the advisor. (True same-VIN and ACES-id
-  // matches short-circuit earlier and never reach this guard.)
+  // The exact score band (>=80) for a heuristic (non-ACES) match reads as
+  // "Likely Fit" — a very likely, but unconfirmed, exact fit. It only earns that
+  // near-top band when it is genuinely the same vehicle: same model, exact model
+  // year, and an engine that matches (or is irrelevant/undecoded for this job's
+  // category). Same-make but *different-model* donors (e.g. a Yaris or Camry
+  // surfaced for a Corolla) and off-year donors can still tally into the exact
+  // score band, but their parts/labor frequently differ, so they must drop to
+  // "Likely Match". (True same-VIN (100, "VIN Match") and ACES-id (95, "Exact
+  // Fit") matches short-circuit earlier and never reach this guard.)
   const genuineExactVehicle =
     sameModel && yearDiff === 0 && engineMatchOrUnknown;
   if (band === "exact" && !genuineExactVehicle) {
     band = "likely";
-    // ...and pull the *number* down with the label. A different-model, off-year,
-    // or different-engine heuristic match must not read as a flat 100% that ties
-    // a genuine "Exact Fit". Cap just below the exact threshold so a demoted
-    // "Great Match" both ranks below and *reads* below a real exact fit.
-    finalScore = Math.min(finalScore, SCORE_THRESHOLD_EXACT - 1);
+    // ...and pull the *number* down with the label so a demoted "Likely Match"
+    // both ranks below and *reads* below a genuine "Likely Fit". A flat clamp to
+    // (threshold - 1) would collapse *every* demoted match to the same number and
+    // destroy their relative order (e.g. a same-model, off-year donor must still
+    // outrank a different-model sibling). Instead subtract a fixed offset that
+    // slides the whole exact band [80..100] down into the top of the likely band
+    // [59..79]. Because it's a pure subtraction (no bucketing/rounding), it is
+    // STRICTLY order-preserving: any positive gap earned above the threshold
+    // survives below it. The input is capped at 100 (the VIN-match ceiling) so a
+    // runaway evidence tally can't map back above the exact threshold.
+    const DEMOTE_OFFSET = SCORE_VIN_MATCH - (SCORE_THRESHOLD_EXACT - 1); // 100 -> 79
+    finalScore = Math.min(finalScore, SCORE_VIN_MATCH) - DEMOTE_OFFSET;
   } else if (band === "exact") {
-    // A genuine heuristic exact fit (same model + exact year + engine) is still
-    // *unconfirmed* — it wasn't matched by VIN (100, "VIN Match") or by the ACES
-    // catalog (95, "Exact Fit (ACES)"), both of which short-circuit earlier. Cap
-    // it below those so the number itself reflects lower certainty, while keeping
-    // it in the "Exact Fit" band.
+    // A genuine heuristic "Likely Fit" (same model + exact year + engine) is
+    // still *unconfirmed* — it wasn't matched by VIN (100, "VIN Match") or by the
+    // ACES catalog (95, "Exact Fit"), both of which short-circuit earlier. Cap it
+    // below those so the number itself reflects lower certainty, while keeping it
+    // in the top heuristic ("Likely Fit") band.
     finalScore = Math.min(finalScore, SCORE_HEURISTIC_EXACT_CAP);
   }
 

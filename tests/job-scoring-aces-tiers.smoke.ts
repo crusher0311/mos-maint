@@ -63,7 +63,7 @@ function donorJob(over: any = {}): any {
   // for a same-VIN match, so ACES lands just below at SCORE_ACES_EXACT.
   if (r.matchScore !== SCORE_ACES_EXACT) fail(`Tier A expected score ${SCORE_ACES_EXACT}, got ${r.matchScore}`);
   if (r.matchBand !== "exact") fail(`Tier A expected band exact, got ${r.matchBand}`);
-  if (r.matchBandLabel !== "Exact Fit (ACES)") fail(`Tier A expected label "Exact Fit (ACES)", got ${r.matchBandLabel}`);
+  if (r.matchBandLabel !== "Exact Fit") fail(`Tier A expected label "Exact Fit", got ${r.matchBandLabel}`);
   if ((r.scoreBreakdown as any).acesTier !== "exact_aces") fail(`Tier A acesTier mismatch: ${(r.scoreBreakdown as any).acesTier}`);
   if (/ACES/i.test(r.matchReason)) fail(`Tier A matchReason must not contain "ACES": ${r.matchReason}`);
   ok("Tier A (exact_aces) returns score 95 (below VIN match) with plain-language matchReason");
@@ -109,8 +109,8 @@ function donorJob(over: any = {}): any {
     fail(`Tier B sibling under max evidence must stay below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
   }
   if (r.matchBand === "exact") fail(`Tier B sibling must not be band "exact", got ${r.matchBand}`);
-  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
-    fail(`Tier B sibling must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Likely Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Tier B sibling must not be labeled Exact Fit / Likely Fit, got "${r.matchBandLabel}"`);
   }
   ok("Tier B sibling stays below the exact band (≤79) even with max evidence");
 }
@@ -152,10 +152,14 @@ function donorJob(over: any = {}): any {
 {
   const cases = [
     { in: { sameVinFastPath: true }, label: "VIN Match" },
-    { in: { acesTier: "exact_aces" as const }, label: "Verified match" },
-    { in: { acesTier: "engine_match" as const }, label: "Strong match" },
-    { in: { acesTier: "submodel_match" as const }, label: "Strong match" },
-    { in: { acesTier: null }, label: "General match" },
+    { in: { acesTier: "exact_aces" as const }, label: "Exact Fit" },
+    { in: { acesTier: "engine_match" as const }, label: "Likely Match" },
+    { in: { acesTier: "submodel_match" as const }, label: "Likely Match" },
+    { in: { acesTier: null }, label: "Likely Match" },
+    { in: { acesTier: null, score: 85 }, label: "Likely Fit" },
+    { in: { acesTier: null, score: 60 }, label: "Likely Match" },
+    { in: { acesTier: null, score: 40 }, label: "Good Match" },
+    { in: { acesTier: null, score: 10 }, label: "Low Confidence" },
     { in: { gatePass: false }, label: "Not a match" },
   ];
   for (const c of cases) {
@@ -197,13 +201,13 @@ function donorJob(over: any = {}): any {
     fail(`Honest-numbers case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
   }
   if (r.matchBand === "exact") fail(`Off-year heuristic must not be band "exact", got ${r.matchBand}`);
-  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
-    fail(`Off-year heuristic must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Likely Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Off-year heuristic must not be labeled Exact Fit / Likely Fit, got "${r.matchBandLabel}"`);
   }
   if (r.matchScore >= SCORE_THRESHOLD_EXACT) {
     fail(`Off-year heuristic must be capped below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
   }
-  ok("Off-year non-ACES heuristic is capped below exact threshold and labeled Great Match");
+  ok("Off-year non-ACES heuristic is capped below exact threshold and labeled Likely Match");
 }
 
 // -- Honest labels: a same-make + SAME-YEAR but DIFFERENT-MODEL heuristic match
@@ -233,13 +237,13 @@ function donorJob(over: any = {}): any {
     fail(`Diff-model case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
   }
   if (r.matchBand === "exact") fail(`Same-year different-model must not be band "exact", got ${r.matchBand}`);
-  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
-    fail(`Same-year different-model must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Likely Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Same-year different-model must not be labeled Exact Fit / Likely Fit, got "${r.matchBandLabel}"`);
   }
   if (r.matchScore >= SCORE_THRESHOLD_EXACT) {
     fail(`Same-year different-model must be capped below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
   }
-  ok("Same-year different-model heuristic is capped below exact threshold and labeled Great Match");
+  ok("Same-year different-model heuristic is capped below exact threshold and labeled Likely Match");
 }
 
 // -- Positive control: a genuine same-model + exact-year + same-engine heuristic
@@ -265,10 +269,10 @@ function donorJob(over: any = {}): any {
     fail(`Positive-control case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
   }
   if (r.matchBand !== "exact") fail(`Genuine same-vehicle heuristic must be band "exact", got ${r.matchBand}`);
-  if (r.matchBandLabel !== "Exact Fit") {
-    fail(`Genuine same-vehicle heuristic must be labeled "Exact Fit", got "${r.matchBandLabel}"`);
+  if (r.matchBandLabel !== "Likely Fit") {
+    fail(`Genuine same-vehicle heuristic must be labeled "Likely Fit", got "${r.matchBandLabel}"`);
   }
-  ok("Genuine same-model + exact-year + same-engine heuristic still earns Exact Fit");
+  ok("Genuine same-model + exact-year + same-engine heuristic earns Likely Fit (unconfirmed near-exact)");
 }
 
 console.log("\nALL ACES TIER SMOKE TESTS PASSED");

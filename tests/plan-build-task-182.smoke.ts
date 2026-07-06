@@ -531,8 +531,8 @@ const heavyDutySpecs: VehicleSpecs = {
   ok("score 54 -> possible", getScoreBand(54) === "possible");
   ok("score 35 -> possible (boundary)", getScoreBand(35) === "possible");
   ok("score 34 -> low_confidence", getScoreBand(34) === "low_confidence");
-  ok("label exact = 'Exact Fit'", getBandLabel("exact") === "Exact Fit");
-  ok("label likely = 'Great Match'", getBandLabel("likely") === "Great Match");
+  ok("label exact = 'Likely Fit'", getBandLabel("exact") === "Likely Fit");
+  ok("label likely = 'Likely Match'", getBandLabel("likely") === "Likely Match");
   ok("label possible = 'Good Match'", getBandLabel("possible") === "Good Match");
   ok("label low_confidence = 'Low Confidence'", getBandLabel("low_confidence") === "Low Confidence");
 }

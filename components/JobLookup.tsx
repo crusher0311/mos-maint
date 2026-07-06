@@ -322,6 +322,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                           sameVinFastPath: job.sameVinFastPath,
                           acesTier: job.scoreBreakdown?.acesTier,
                           gatePass: job.gatePass,
+                          score: job.matchScore,
                         });
                         return (
                           <span

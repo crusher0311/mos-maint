@@ -313,7 +313,7 @@ async function main() {
 | Band | Count |
 | --- | --- |
 | Exact Fit | ${fmt(byBand.exact)} |
-| Great Match | ${fmt(byBand.likely)} |
+| Likely Match | ${fmt(byBand.likely)} |
 | Good Match | ${fmt(byBand.possible)} |
 | Low Confidence | ${fmt(byBand.low_confidence)} |
 
