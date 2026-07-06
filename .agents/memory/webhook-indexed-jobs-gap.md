@@ -35,16 +35,24 @@ Webhook-health cron watches event *receipt* + latency, and pipeline-stall-alerte
 watches fleet *progress* — neither checks per-RO indexing success. A skipped index
 emits no error (soft `console.log` "skipping"), so there's no alert.
 
-## Fix direction
-1. Code (stop new gaps): in the terminal path of
-   `app/api/webhooks/tekmetric/route.ts`, when `!cached.vin` but `vehicleId` exists,
-   resolve VIN via `getVehicle(vehicleId)`, persist it to the cache row, THEN index.
-   Only skip when VIN is truly unresolvable.
-2. Recovery (existing gaps): re-index posted ROs that have `data.jobs` but aren't in
-   `job_index`. NOTE: `reindexFromStoredData` is INSUFFICIENT — it also requires
-   `wo.vin` (line ~552), so it skips the 42/44 no-VIN rows. Recovery must resolve VIN
-   via `getVehicle` too. This is a **prod Mongo write** (dev==prod) → operator-gated.
-3. Observability: alert when posted ROs don't get indexed within N minutes.
+## Fix (implemented)
+1. Code (stop new gaps): terminal path of `app/api/webhooks/tekmetric/route.ts`
+   now gates on `!cached.jobsIndexed` (not `cached.vin`); when vin missing but
+   `vehicleId` exists it resolves vin via `getVehicle`, persists it, THEN indexes.
+   Leaves `jobsIndexed` unset (retryable) only when vin is truly unresolvable.
+   Needs a prod deploy (push to GitHub main → Render auto-deploy) to take effect.
+2. Recovery (existing gaps): `scripts/reindex-missing-tekmetric-jobs.ts`
+   (`--shop=N --days=D [--apply]`). Detects misses via a **server-side aggregation**
+   over `tekmetric_webhook_logs` posted events (do NOT stream the window client-side
+   — it times out) diffed against `job_index`, then per-RO resolves vin (cache or
+   `getVehicle`) and calls `indexTekmetricWorkOrderJobs({preloadedJobs})`. Idempotent
+   (upsert on shopId+workOrderId+servicePackageId). `reindexFromStoredData` is
+   INSUFFICIENT — it requires `wo.vin` so it skips the dominant no-vin rows.
+   This is a **prod Mongo write** (dev==prod) → operator-gated. Shop 32 recovered
+   (38 ROs / 188 jobs incl Gloria's RO). ~347 misses across 91 other shops remain.
+   Residual "no resolvable VIN" rows are a data-quality exception (vehicle has no vin
+   in Tekmetric), not an indexing failure — report separately, don't retry forever.
+3. Observability (not yet built): alert when posted ROs stay `!jobsIndexed` after N min.
 
 ## Investigation gotchas
 - Display "RO #" = `repairOrderNumber`; cache/job key = internal `repairOrder.id`

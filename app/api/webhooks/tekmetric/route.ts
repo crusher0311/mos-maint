@@ -359,45 +359,98 @@ export async function POST(req: NextRequest) {
           workOrderId: String(roId),
         });
 
-        if (cached && !cached.jobsIndexed && cached.vin) {
+        if (cached && !cached.jobsIndexed) {
           const shop = await db.collection("shops").findOne(
             tekmetricShopIdFilter(tekmetricShopId)
           );
 
           if (shop) {
-            try {
-              // Pass jobs[] directly from the webhook payload when present, so
-              // we never need to call /jobs as a fallback. Falls back to cached
-              // payload if webhook omitted them.
-              const preloadedJobs = Array.isArray(repairOrder?.jobs) && repairOrder.jobs.length > 0
-                ? repairOrder.jobs
-                : (Array.isArray(cached?.data?.jobs) ? cached.data.jobs : undefined);
+            // The terminal webhook payload carries `vehicleId` but NOT `vin`.
+            // VIN normally lands on the cache row via the separate (often
+            // deferred) vehicle enrichment — but that can lag or miss entirely,
+            // and `job_index` is queried by shopId + vin, so indexing without a
+            // vin produces unfindable history. The old gate simply required
+            // `cached.vin` and SILENTLY SKIPPED when it was absent, which is the
+            // root cause of "the shop did the job but the plan shows CARFAX":
+            // measured ~9% of posted ROs fleet-wide (up to ~26% at some shops)
+            // never got indexed because the vin hadn't been filled in yet.
+            //
+            // Fix: when the vin is missing, resolve it inline via getVehicle and
+            // persist it to the cache row BEFORE indexing. Only defer indexing
+            // (via the still-unset `jobsIndexed` flag, so a later webhook/recovery
+            // can retry) when the vin is genuinely unresolvable.
+            let vin: string | undefined = cached.vin;
+            let vehicleYear = cached.vehicleYear;
+            let vehicleMake = cached.vehicleMake;
+            let vehicleModel = cached.vehicleModel;
+            let vehicleEngine = cached.vehicleEngine;
 
-              const jobsIndexed = await indexTekmetricWorkOrderJobs(
-                Number(shop.shopId),
-                tekmetricShopId,
-                roId,
-                roNumber,
-                {
-                  vin: cached.vin,
-                  year: cached.vehicleYear,
-                  make: cached.vehicleMake,
-                  model: cached.vehicleModel,
-                  engine: cached.vehicleEngine
-                },
-                repairOrder?.completedDate || repairOrder?.postedDate || new Date().toISOString(),
-                cached.odometer ?? terminalOdometer ?? null,
-                { indexedVia: "webhook", preloadedJobs }
-              );
+            if (!vin && repairOrder?.vehicleId) {
+              try {
+                const vehicle = await getVehicle(repairOrder.vehicleId);
+                if (vehicle?.vin) {
+                  vin = String(vehicle.vin).toUpperCase();
+                  vehicleYear = vehicle.year ?? vehicleYear;
+                  vehicleMake = vehicle.make ?? vehicleMake;
+                  vehicleModel = vehicle.model ?? vehicleModel;
+                  vehicleEngine = vehicle.engine ?? vehicleEngine;
 
-              console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber} (via=webhook, preloaded=${!!preloadedJobs})`);
+                  const vinPatch: any = { vin, updatedAt: new Date() };
+                  if (vehicle.year != null) vinPatch.vehicleYear = vehicle.year;
+                  if (vehicle.make) vinPatch.vehicleMake = vehicle.make;
+                  if (vehicle.model) vinPatch.vehicleModel = vehicle.model;
+                  if (vehicle.engine) vinPatch.vehicleEngine = vehicle.engine;
+                  await db.collection("tekmetric_work_orders").updateOne(
+                    { tekmetricShopId, workOrderId: String(roId) },
+                    { $set: vinPatch }
+                  );
+                  console.log(`[Tekmetric Webhook] Resolved missing VIN for RO #${roNumber} via getVehicle before indexing`);
+                }
+              } catch (err: any) {
+                console.error(`[Tekmetric Webhook] VIN resolve failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, err?.message || err);
+              }
+            }
 
-              await db.collection("tekmetric_work_orders").updateOne(
-                { tekmetricShopId, workOrderId: String(roId) },
-                { $set: { jobsIndexed: true } }
-              );
-            } catch (err: any) {
-              console.error(`[Tekmetric Webhook] Job indexing failed for RO #${roNumber}:`, err.message);
+            if (!vin) {
+              // No vin available even after a resolve attempt. Leave jobsIndexed
+              // unset so a subsequent webhook (or the reconcile recovery) retries
+              // rather than losing this RO to history permanently.
+              console.warn(`[Tekmetric Webhook] RO #${roNumber} terminal with jobs but no resolvable VIN — indexing deferred for retry`);
+            } else {
+              try {
+                // Pass jobs[] directly from the webhook payload when present, so
+                // we never need to call /jobs as a fallback. Falls back to cached
+                // payload if webhook omitted them.
+                const preloadedJobs = Array.isArray(repairOrder?.jobs) && repairOrder.jobs.length > 0
+                  ? repairOrder.jobs
+                  : (Array.isArray(cached?.data?.jobs) ? cached.data.jobs : undefined);
+
+                const jobsIndexed = await indexTekmetricWorkOrderJobs(
+                  Number(shop.shopId),
+                  tekmetricShopId,
+                  roId,
+                  roNumber,
+                  {
+                    vin,
+                    year: vehicleYear,
+                    make: vehicleMake,
+                    model: vehicleModel,
+                    engine: vehicleEngine
+                  },
+                  repairOrder?.completedDate || repairOrder?.postedDate || new Date().toISOString(),
+                  cached.odometer ?? terminalOdometer ?? null,
+                  { indexedVia: "webhook", preloadedJobs }
+                );
+
+                console.log(`[Tekmetric Webhook] Indexed ${jobsIndexed} jobs for RO #${roNumber} (via=webhook, preloaded=${!!preloadedJobs})`);
+
+                await db.collection("tekmetric_work_orders").updateOne(
+                  { tekmetricShopId, workOrderId: String(roId) },
+                  { $set: { jobsIndexed: true } }
+                );
+              } catch (err: any) {
+                console.error(`[Tekmetric Webhook] Job indexing failed for RO #${roNumber}:`, err.message);
+              }
             }
           }
         }
