@@ -54,14 +54,21 @@ async function _GET(request: NextRequest) {
       }
     }
 
-    if (!mosShopId && userShopIds.length > 0) {
+    if (!mosShopId && userShopIds.length === 1) {
+      // Single-shop user: their only shop is unambiguous, so it's safe to use
+      // even when no shop context was scraped from the page.
       mosShopId = userShopIds[0];
     }
 
     if (!mosShopId) {
-      // Could not resolve a shop for this request — a transient shop-resolution
-      // miss or a degraded auth state. Signal transient instead of emitting an
-      // all-features-off answer that would lock an entitled shop's features.
+      // Could not resolve a shop for this request. This is either:
+      //   * a multi-shop user whose page context (smsShopId) was missing or
+      //     didn't resolve — guessing userShopIds[0] would load the WRONG
+      //     shop's entitlements/integrations/preferences, so fail CLOSED, or
+      //   * a transient shop-resolution miss / degraded auth state.
+      // Signal transient (503) rather than emitting an all-features-off answer:
+      // the extension keeps its last-known-good feature set and retries instead
+      // of switching to a wrong shop or locking an entitled shop's features.
       return transientFeaturesResponse("Could not resolve shop for features");
     }
 
