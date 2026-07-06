@@ -778,6 +778,7 @@ function switchTab(tab) {
     'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
     'create-ro': null,
+    'deferred': null,
     'specs': null
   };
   const featureKey = featureMap[tab];
@@ -880,6 +881,8 @@ function switchTab(tab) {
     loadStickerConfig();
   } else if (tab === 'specs') {
     loadVehicleSpecs();
+  } else if (tab === 'deferred' && currentContext?.roId) {
+    loadTekmetricDeferred();
   } else if (tab === 'create-ro') {
     initCreateRoTab();
   }
@@ -974,6 +977,8 @@ function updateContext(context) {
         loadCannedJobs();
       } else if (currentTab === 'specs') {
         loadVehicleSpecs();
+      } else if (currentTab === 'deferred') {
+        loadTekmetricDeferred();
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
       switchTab(currentTab);
@@ -1153,10 +1158,12 @@ function updateTabAccessibility() {
     'estimate': 'estimate_assist',
     'sticker': 'oil_sticker',
     'create-ro': null,
+    'deferred': null,
     'specs': null
   };
 
   const isShopWare = currentContext?.provider === 'shopware';
+  const isTekmetric = currentContext?.provider === 'tekmetric';
   const effectiveWriteProvider = currentContext?.writeProvider || resolvedWriteProvider || null;
   const hiddenForProvider = isShopWare ? ['jobs'] : [];
   // Create RO is Protractor-write-only — keep it hidden everywhere else.
@@ -1164,6 +1171,15 @@ function updateTabAccessibility() {
   // entry point (server enforces a 403 as a defence in depth).
   if (effectiveWriteProvider !== 'protractor' || !currentUserCanWrite) {
     hiddenForProvider.push('create-ro');
+  }
+  // The Declined/Deferred view is a read-only Tekmetric-only surface (its data
+  // source is our stored Tekmetric job history). Hide it for every other
+  // provider. Toggle the `hidden` class too so the button never flashes before
+  // a provider is known.
+  const deferredBtn = document.querySelector('.tab-btn[data-tab="deferred"]');
+  if (deferredBtn) deferredBtn.classList.toggle('hidden', !isTekmetric);
+  if (!isTekmetric) {
+    hiddenForProvider.push('deferred');
   }
   
   let firstAvailableTab = null;
@@ -6376,6 +6392,116 @@ function renderCroDeferred() {
       });
     });
   });
+}
+
+// ==================== TEKMETRIC DECLINED / DEFERRED (read-only) ====================
+// Surfaces a Tekmetric vehicle's previously declined/deferred jobs from our
+// stored job history. Read-only: no "add to RO" write actions (unlike the
+// Protractor Create-RO deferred pane), since Tekmetric write flows live
+// elsewhere.
+const deferredState = {
+  vin: null,
+  items: [],
+  loading: false,
+};
+
+async function loadTekmetricDeferred() {
+  const listEl = document.getElementById('deferred-list');
+  const emptyEl = document.getElementById('deferred-empty');
+  const loadingEl = document.getElementById('deferred-loading');
+  const errorEl = document.getElementById('deferred-error');
+  if (!listEl) return;
+
+  const shopId = currentContext?.shopId;
+  const vin = currentContext?.vin;
+
+  errorEl?.classList.add('hidden');
+
+  if (!shopId || !vin) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    loadingEl?.classList.add('hidden');
+    if (emptyEl) {
+      emptyEl.querySelector('p').textContent = 'Open a repair order with a vehicle VIN to see previously declined work.';
+      emptyEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  // Serve cached results for the same vehicle without re-fetching.
+  if (deferredState.vin === vin && !deferredState.loading) {
+    renderTekmetricDeferred();
+    return;
+  }
+
+  deferredState.loading = true;
+  loadingEl?.classList.remove('hidden');
+  emptyEl?.classList.add('hidden');
+  listEl.classList.add('hidden');
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/tekmetric/deferred-work?shopId=${encodeURIComponent(shopId)}&vin=${encodeURIComponent(vin)}&provider=tekmetric`,
+    });
+    if (result?.error) throw new Error(result.error);
+    deferredState.vin = vin;
+    deferredState.items = result?.items || [];
+    renderTekmetricDeferred();
+  } catch (err) {
+    console.error('[MOS] Tekmetric deferred work load error:', err);
+    // A transient fetch failure shows a friendly message, never a raw throw.
+    listEl.classList.add('hidden');
+    emptyEl?.classList.add('hidden');
+    if (errorEl) {
+      errorEl.textContent = 'Could not load declined work right now. Try again in a moment.';
+      errorEl.classList.remove('hidden');
+    }
+  } finally {
+    deferredState.loading = false;
+    loadingEl?.classList.add('hidden');
+  }
+}
+
+function renderTekmetricDeferred() {
+  const listEl = document.getElementById('deferred-list');
+  const emptyEl = document.getElementById('deferred-empty');
+  if (!listEl) return;
+  const items = deferredState.items;
+
+  if (!items || items.length === 0) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    if (emptyEl) {
+      emptyEl.querySelector('p').textContent = 'No previously declined or deferred work on file for this vehicle.';
+      emptyEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  emptyEl?.classList.add('hidden');
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = items.map((item) => {
+    const meta = [
+      item.date ? new Date(item.date).toLocaleDateString() : '',
+      item.originalWorkOrderNumber ? `RO #${item.originalWorkOrderNumber}` : '',
+      item.lines && item.lines.length ? `${item.lines.length} line${item.lines.length !== 1 ? 's' : ''}` : '',
+    ].filter(Boolean).join(' · ');
+    const linesHtml = (item.lines && item.lines.length)
+      ? `<ul class="deferred-lines">${item.lines.map(l => `<li>${escapeHtml(l.description || 'Line item')}</li>`).join('')}</ul>`
+      : '';
+    return `
+      <li class="job-item">
+        <div class="job-header" style="cursor: default;">
+          <div>
+            <div class="job-title">${escapeHtml(item.title || 'Declined job')}</div>
+            ${meta ? `<div class="job-meta">${escapeHtml(meta)}</div>` : ''}
+          </div>
+        </div>
+        ${linesHtml}
+      </li>
+    `;
+  }).join('');
 }
 
 // ---- History tab ----

@@ -1249,6 +1249,18 @@ body {
   color: var(--success);
 }
 
+.deferred-lines {
+  list-style: disc;
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.deferred-lines li {
+  font-size: 12px;
+  color: var(--gray-600);
+  line-height: 1.5;
+}
+
 .job-details {
   padding: 0 12px 12px;
   border-top: 1px solid var(--gray-100);
