@@ -170,5 +170,70 @@ function donorJob(over: any = {}): any {
   ok("Off-year non-ACES heuristic is capped below exact threshold and labeled Great Match");
 }
 
+// -- Honest labels: a same-make + SAME-YEAR but DIFFERENT-MODEL heuristic match
+//    (e.g. a Camry surfaced for a Corolla) must NOT be labeled "Exact Fit" just
+//    because it tallied into the exact score band. It's a pricing reference, not
+//    the same vehicle, so it must read as "Great Match" and be capped below the
+//    exact threshold.
+{
+  const t = specs({ acesVehicleId: 10, acesEngineId: 20, submodelKey: "2018|honda|accord|ex-l" });
+  // Same make + same year + same engine, but DIFFERENT model (civic vs accord),
+  // non-matching ACES ids so no tier fires → legacy heuristic path.
+  const j = specs({ model: "civic", submodel: "", acesVehicleId: 11, acesEngineId: 21, submodelKey: "2018|honda|civic" });
+  const r = scoreJob(
+    donorJob({
+      title: "Oil Change",
+      job: { title: "Oil Change" },
+      vehicle: { vin: "2HGCM82633A999999", year: 2018, make: "Honda", model: "Civic", engine: "2.0" },
+      shopId: 100,
+    }),
+    baseTargetVehicle,
+    t,
+    j,
+    "oil change",
+    { currentShopId: 100, corroboratingCount: 3 },
+  );
+  if ((r.scoreBreakdown as any).acesTier !== null) {
+    fail(`Diff-model case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
+  }
+  if (r.matchBand === "exact") fail(`Same-year different-model must not be band "exact", got ${r.matchBand}`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Same-year different-model must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  }
+  if (r.matchScore >= SCORE_THRESHOLD_EXACT) {
+    fail(`Same-year different-model must be capped below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
+  }
+  ok("Same-year different-model heuristic is capped below exact threshold and labeled Great Match");
+}
+
+// -- Positive control: a genuine same-model + exact-year + same-engine heuristic
+//    match (no ACES ids, different VIN) SHOULD still earn "Exact Fit". The label
+//    guard must not over-demote true same-vehicle matches.
+{
+  const t = specs({});
+  const j = specs({}); // identical specs: same make/model/year/engine
+  const r = scoreJob(
+    donorJob({
+      title: "Oil Change",
+      job: { title: "Oil Change" },
+      vehicle: { vin: "2HGCM82633A999999", year: 2018, make: "Honda", model: "Accord", engine: "2.0" },
+      shopId: 100,
+    }),
+    baseTargetVehicle,
+    t,
+    j,
+    "oil change",
+    { currentShopId: 100, corroboratingCount: 3 },
+  );
+  if ((r.scoreBreakdown as any).acesTier !== null) {
+    fail(`Positive-control case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
+  }
+  if (r.matchBand !== "exact") fail(`Genuine same-vehicle heuristic must be band "exact", got ${r.matchBand}`);
+  if (r.matchBandLabel !== "Exact Fit") {
+    fail(`Genuine same-vehicle heuristic must be labeled "Exact Fit", got "${r.matchBandLabel}"`);
+  }
+  ok("Genuine same-model + exact-year + same-engine heuristic still earns Exact Fit");
+}
+
 console.log("\nALL ACES TIER SMOKE TESTS PASSED");
 process.exit(0);

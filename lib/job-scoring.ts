@@ -1047,20 +1047,22 @@ export function scoreJob(
 
   let band = getScoreBand(finalScore);
 
-  // "Exact Fit" must mean the same vehicle. A heuristic (non-ACES) match on a
-  // different model year — even ±1 year — can still score into the exact band,
-  // but it isn't a true exact fit and its labor/parts frequently differ
-  // materially, so labeling it "Exact Fit" misleads the advisor. Cap the label
-  // at "Great Match" unless the donor is the exact same model year. (True
-  // ACES-id matches return earlier via the short-circuit and are unaffected.)
-  if (band === "exact" && yearDiff !== 0) {
+  // "Exact Fit" must mean the same vehicle. A heuristic (non-ACES) match only
+  // earns the exact label when it is genuinely the same vehicle: same model,
+  // exact model year, and an engine that matches (or is irrelevant/undecoded
+  // for this job's category). Same-make but *different-model* donors (e.g. a
+  // Yaris or Camry surfaced for a Corolla) and off-year donors can still tally
+  // into the exact score band, but their parts/labor frequently differ, so
+  // labeling them "Exact Fit" misleads the advisor. (True same-VIN and ACES-id
+  // matches short-circuit earlier and never reach this guard.)
+  const genuineExactVehicle =
+    sameModel && yearDiff === 0 && engineMatchOrUnknown;
+  if (band === "exact" && !genuineExactVehicle) {
     band = "likely";
-    // ...and pull the *number* down with the label. A same-make / different-
-    // model (or off-year) heuristic match must not read as a flat 100% that
-    // ties a genuine "Exact Fit". Only a true same-vehicle match (VIN / ACES
-    // id short-circuit, or same make+model+year) may reach the exact band and
-    // its 100. Cap just below the exact threshold so a "Great Match" both
-    // ranks below and *reads* below a real exact fit.
+    // ...and pull the *number* down with the label. A different-model, off-year,
+    // or different-engine heuristic match must not read as a flat 100% that ties
+    // a genuine "Exact Fit". Cap just below the exact threshold so a demoted
+    // "Great Match" both ranks below and *reads* below a real exact fit.
     finalScore = Math.min(finalScore, SCORE_THRESHOLD_EXACT - 1);
   }
 
