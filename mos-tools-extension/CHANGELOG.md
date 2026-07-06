@@ -1,5 +1,15 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.52 — 2026-07-06
+
+### Added
+- **"Last performed" on job search.** When you search for a job/repair in the
+  Jobs tab, the extension now shows when that same service was last performed on
+  the current vehicle — e.g. "Last performed Mar 5, 2024 · ~48,200 mi · at your
+  shop" (or "via CARFAX"). It's fact-only (no warranty logic), works for
+  arbitrary repairs (not just scheduled maintenance), and shows nothing when
+  there's no record — so it never falsely implies a service was never done.
+
 ## 1.27.51 — 2026-06-30
 
 ### Fixed

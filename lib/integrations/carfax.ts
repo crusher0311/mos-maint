@@ -569,6 +569,27 @@ export type MileageEstimate = {
   reason: string;
 };
 
+/**
+ * Cache-only read of the stored CARFAX service records for a (shopId, vin).
+ *
+ * Returns the persisted `serviceRecords` from the cached snapshot only — it
+ * NEVER triggers a live (paid) CARFAX fetch. Used by the "last performed"
+ * lookup (Task #743) to match a searched job against real CARFAX history.
+ * Returns `[]` when there is no healthy cached report.
+ */
+export async function getCachedCarfaxServiceRecords(
+  shopId: number,
+  vin: string
+): Promise<CarfaxServiceRecord[]> {
+  if (!shopId || !vin) return [];
+  const db = await getDb();
+  const doc = await db
+    .collection("carfax_reports")
+    .findOne({ shopId, vin: vin.toUpperCase() });
+  if (!doc?.ok || !Array.isArray(doc.serviceRecords)) return [];
+  return doc.serviceRecords as CarfaxServiceRecord[];
+}
+
 export async function estimateMileageFromCarfax(
   shopId: number,
   vin: string

@@ -2148,12 +2148,102 @@ async function handleJobSearch() {
     if (result.error) throw new Error(result.error);
     
     renderJobResults(result.jobs || [], { dataOneEnhanced: result.dataOneEnhanced });
+    // Non-blocking: decorate each result that was previously performed on THIS
+    // vehicle with a "Last performed …" badge. Fails soft — never disrupts the
+    // job search flow, and rows with no record get no badge.
+    fetchLastPerformedForResults(result.jobs || []);
   } catch (err) {
     console.error('[MOS] Error searching jobs:', err);
     elements.lookupLoading.classList.add('hidden');
     elements.lookupEmpty.classList.remove('hidden');
     elements.lookupEmpty.querySelector('p').textContent = err.message;
   }
+}
+
+// Task #743: guards against a stale last-performed response landing after a
+// newer search has started. Each search bumps the token; a response whose
+// token no longer matches is discarded so it can never decorate the wrong
+// result set. (Stale badges are also cleared implicitly because every search
+// re-renders the results list HTML from scratch in renderJobResults.)
+let lastPerformedToken = 0;
+
+/**
+ * Batch-resolve "last performed on THIS vehicle" for the visible job results
+ * and inject a per-result badge on each row that has a prior performed record.
+ * Fact-only: rows with no record get no badge (never a false "never done").
+ * Non-blocking — always fails soft so the Jobs flow keeps working.
+ */
+async function fetchLastPerformedForResults(jobs) {
+  const vin = currentContext?.vin;
+  if (!vin || !Array.isArray(jobs) || jobs.length === 0) return;
+  const myToken = ++lastPerformedToken;
+
+  // Unique, non-empty result names (the match is name-based on the server).
+  const names = [];
+  const seen = new Set();
+  for (const job of jobs) {
+    const nm = String(job.title || job.name || '').trim();
+    const key = nm.toLowerCase();
+    if (nm && !seen.has(key)) {
+      seen.add(key);
+      names.push(nm);
+    }
+  }
+  if (names.length === 0) return;
+
+  try {
+    const params = new URLSearchParams();
+    params.set('vin', vin);
+    if (currentContext?.shopId) params.set('shopId', currentContext.shopId);
+    if (currentContext?.roId) params.set('roId', currentContext.roId);
+    params.set('provider', currentContext?.provider || '');
+    const odo = currentContext?.scrapedOdometer || currentContext?.mileage;
+    if (odo) params.set('miles', String(odo));
+    for (const nm of names) params.append('name', nm);
+
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/jobs/last-performed?${params}`
+    });
+
+    // A newer search superseded this one — discard so we never decorate the
+    // current (different) result set with stale facts.
+    if (myToken !== lastPerformedToken) return;
+
+    const byName = new Map();
+    for (const r of (result?.results || [])) {
+      if (r && r.lastPerformed) byName.set(String(r.name || '').trim().toLowerCase(), r.lastPerformed);
+    }
+    if (byName.size === 0) return;
+
+    const rows = elements.lookupResults.querySelectorAll('li.job-item');
+    rows.forEach((li) => {
+      const lookupId = li.getAttribute('data-lookup-id');
+      const job = lookupId ? lookupJobsDataMap.get(lookupId) : null;
+      const nm = String((job && (job.title || job.name)) || '').trim().toLowerCase();
+      const lp = nm ? byName.get(nm) : null;
+      if (lp) injectLastPerformedBadge(li, lp);
+    });
+  } catch (err) {
+    // Non-blocking enrichment — swallow errors.
+  }
+}
+
+function injectLastPerformedBadge(li, lp) {
+  const anchor = li.querySelector('.job-last-performed');
+  if (!anchor) return;
+  // Defensive: clear any prior badge in this row before re-injecting.
+  anchor.innerHTML = '';
+
+  const date = lp.displayDate ? ` ${lp.displayDate}` : '';
+  const miles = lp.miles != null
+    ? ` \u00b7 ${lp.milesEstimated ? '~' : ''}${lp.miles.toLocaleString()} mi`
+    : '';
+  const sourceColor = lp.source === 'carfax' ? '#c2410c' : '#15803d';
+
+  anchor.title = lp.summary || '';
+  anchor.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#374151;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:3px 7px;margin-top:4px;';
+  anchor.innerHTML = `<span>\u{1F552}</span><span><strong>Last performed</strong>${escapeHtml(date)}${escapeHtml(miles)} \u00b7 <span style="color:${sourceColor};font-weight:500;">${escapeHtml(lp.sourceLabel || '')}</span></span>`;
 }
 
 function renderJobResults(jobs, meta) {
@@ -2245,7 +2335,7 @@ function createJobItemHTML(job, lookupId) {
     : '';
 
   return `
-    <li class="job-item" data-job-id="${job._id}">
+    <li class="job-item" data-job-id="${job._id}" data-lookup-id="${lookupId}">
       <div class="job-header">
         <div class="job-header-left">
           <div class="job-title-row">
@@ -2254,6 +2344,7 @@ function createJobItemHTML(job, lookupId) {
             ${acesBadgeHtml}
             <span class="match-score">${matchScore}%</span>
           </div>
+          <div class="job-last-performed" data-lookup-id="${lookupId}"></div>
           <div class="job-vehicle">${vehicle}${engine}</div>
           ${job.location ? `<div class="job-location">📍 ${escapeHtml(job.location)}</div>` : ''}
           ${matchReason ? `<div class="job-match-reason">${escapeHtml(matchReason)}</div>` : ''}

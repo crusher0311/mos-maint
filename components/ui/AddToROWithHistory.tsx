@@ -45,6 +45,15 @@ type CannedJobOption = {
   title: string;
 };
 
+type LastPerformed = {
+  displayDate: string | null;
+  miles: number | null;
+  milesEstimated: boolean;
+  source: "shop" | "carfax";
+  sourceLabel: string;
+  summary: string;
+};
+
 // Normalize service titles to better search terms
 function normalizeServiceTitle(title: string): string {
   const normalized = title.toLowerCase();
@@ -165,6 +174,7 @@ export function AddToROWithHistory({
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [deferredStatus, setDeferredStatus] = useState<"idle" | "adding" | "success" | "error">("idle");
   const [deferredError, setDeferredError] = useState<string | null>(null);
+  const [lastPerformed, setLastPerformed] = useState<LastPerformed | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -185,6 +195,11 @@ export function AddToROWithHistory({
     setErrorMsg(null);
     setShowDropdown(true);
     setLastSearchQuery(query);
+
+    // Non-blocking: fetch "last performed on THIS vehicle" for the repair the
+    // advisor is looking at. Uses the human-readable term (raw service title
+    // for the default lookup, or the custom search term). Fails soft.
+    void fetchLastPerformed(searchQuery ?? serviceTitle);
 
     try {
       const params = new URLSearchParams();
@@ -227,6 +242,25 @@ export function AddToROWithHistory({
     }
   }
   
+  async function fetchLastPerformed(repairName: string) {
+    setLastPerformed(null);
+    if (!vin || !repairName.trim()) return;
+    try {
+      const params = new URLSearchParams();
+      params.set("vin", vin);
+      params.set("name", repairName.trim());
+      const res = await fetch(`/api/jobs/last-performed?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const lp = data?.results?.[0]?.lastPerformed || null;
+      setLastPerformed(lp);
+    } catch {
+      // Non-blocking enrichment — never disrupt the History flow.
+    }
+  }
+
   function handleCustomSearch(e: React.FormEvent) {
     e.preventDefault();
     if (customQuery.trim()) {
@@ -425,6 +459,25 @@ export function AddToROWithHistory({
                 Search
               </button>
             </form>
+            {lastPerformed && (
+              <div
+                className="mt-2 flex items-center gap-1.5 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5"
+                title={lastPerformed.summary}
+              >
+                <Clock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <span>
+                  <span className="font-medium">Last performed</span>
+                  {lastPerformed.displayDate ? ` ${lastPerformed.displayDate}` : ""}
+                  {lastPerformed.miles != null
+                    ? ` · ${lastPerformed.milesEstimated ? "~" : ""}${lastPerformed.miles.toLocaleString()} mi`
+                    : ""}
+                  {" · "}
+                  <span className={lastPerformed.source === "carfax" ? "text-orange-600" : "text-green-700"}>
+                    {lastPerformed.sourceLabel}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="overflow-y-auto max-h-[340px]">
