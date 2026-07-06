@@ -1,55 +1,58 @@
 ---
 name: Webhook received but jobs never indexed
-description: A Tekmetric RO can arrive fully via webhook (vin+odometer+jobs on the cache row) yet job_index stays empty, so plan/last-performed falls back to CARFAX.
+description: Tekmetric ROs arrive via webhook but never reach job_index because the cache row has no VIN; plan/last-performed then falls back to CARFAX. Systemic (~9% fleet, ~26% at some shops).
 ---
 
 # Webhook delivered the RO but jobs never got indexed
 
 ## Symptom
 A vehicle's plan / "last performed" badge shows a service sourced **via CARFAX**
-even though the shop demonstrably did the work (customer has the invoice). Our own
-searchable history (Mongo `job_index`) has **zero** rows for that VIN at that shop,
-while the shop is otherwise syncing fine (recent captures present).
+even though the shop did the work. Our own searchable history (Mongo `job_index`)
+has **zero** rows for that VIN/RO at that shop, while the shop otherwise syncs fine.
 
-## What actually happened (diagnostic signature)
-- `tekmetric_webhook_logs` **does** contain the full lifecycle for the RO
-  (created → completed → posted). So we received it.
-- `tekmetric_work_orders` **has a complete cache row**: `vin`, `odometer`,
-  vehicleYear/Make/Model, `status: Posted`, and `data.jobs` populated — BUT
-  `jobsIndexed` is **absent** (never set to true).
-- `job_index` has **0** rows for that VIN (shop-scoped). Because job_index powers
-  both job-search and `last-performed`, CARFAX is the only remaining source → it
-  wins `matchLastPerformed` (which is purely most-recent-date, no source
-  preference).
+## Confirmed mechanism (measured, not hypothetical)
+- We DO receive the webhooks — `tekmetric_webhook_logs` has the full lifecycle
+  (created → approved → completed → **posted**).
+- The `tekmetric_work_orders` cache row exists and has `data.jobs` populated.
+- **But the cache row has no `vin`.** The Tekmetric webhook payload (the RO lives
+  **flat on `data`**, NOT `data.repairOrder`) carries `vehicleId`, **not `vin`**.
+  VIN only lands via a separate deferred `getVehicle` enrichment, which is
+  unreliable / often hasn't run.
+- The terminal (Posted/Invoiced) indexing block is gated on
+  `cached && !cached.jobsIndexed && cached.vin`. No VIN on the row → indexing is
+  **silently skipped**, `jobsIndexed` never set, `job_index` stays empty.
+- `job_index` is queried by `shopId + vehicle.vin`, so even if we indexed without a
+  VIN it wouldn't be findable — the VIN must be *resolved*, not skipped.
 
-## Root cause (high confidence, code-backed)
-In `app/api/webhooks/tekmetric/route.ts` the terminal (Posted/Invoiced) path only
-indexes jobs when `cached && !cached.jobsIndexed && cached.vin` at the instant the
-terminal webhook is processed. The VIN/vehicle fields are populated by a *deferred*
-enrichment step. For a **brand-new customer/vehicle** whose actionable webhook is
-terminal-first (or whose enrichment hasn't landed yet), `cached.vin` is empty at
-that moment → indexing is skipped → `jobsIndexed` never set. The VIN/jobs land on
-the row later, but **nothing re-triggers indexing**, so the RO stays permanently
-unindexed. The resumable backfill/sweep also did not re-index this
-cached-but-unindexed posted RO.
+## Blast radius (measured 2026-07, last 7 days)
+- Fleet: **~391 of ~4,423 posted ROs (~8.8%)** missing from `job_index`.
+- Worst shop (HEART Evanston, internal 32 / tek 469): **44 of 169 (~26%)**.
+- Of shop 32's 44 missing: 43 had real jobs (1 genuinely empty); **42 of 44 had NO
+  VIN** on the cache row (only 2 had a VIN). So no-VIN is the dominant cause.
 
-## Key ID gotcha when investigating
-The Tekmetric **display "RO #" is `repairOrderNumber`**, but our cache/job keys use
-the **internal `repairOrder.id`** (`tekmetric_work_orders.workOrderId = String(id)`).
-Looking up by the RO number returns null and looks like "never received." Always
-resolve via VIN or via `tekmetric_webhook_logs` (which carry both `id` and
-`repairOrderNumber` under `data.repairOrder`).
+## Why it went unnoticed
+Webhook-health cron watches event *receipt* + latency, and pipeline-stall-alerter
+watches fleet *progress* — neither checks per-RO indexing success. A skipped index
+emits no error (soft `console.log` "skipping"), so there's no alert.
 
-## Query notes
-- `job_index` VIN lookups MUST include `shopId` (compound index `{shopId, vehicle.vin}`);
-  VIN-only queries COLLSCAN and time out.
-- `tekmetric_webhook_logs` (~700k docs) is indexed only on `{receivedAt:-1}`; query a
-  **tight** date window (a few days) and filter nested `data.repairOrder.*` in memory —
-  a multi-week range + nested predicate times out.
+## Fix direction
+1. Code (stop new gaps): in the terminal path of
+   `app/api/webhooks/tekmetric/route.ts`, when `!cached.vin` but `vehicleId` exists,
+   resolve VIN via `getVehicle(vehicleId)`, persist it to the cache row, THEN index.
+   Only skip when VIN is truly unresolvable.
+2. Recovery (existing gaps): re-index posted ROs that have `data.jobs` but aren't in
+   `job_index`. NOTE: `reindexFromStoredData` is INSUFFICIENT — it also requires
+   `wo.vin` (line ~552), so it skips the 42/44 no-VIN rows. Recovery must resolve VIN
+   via `getVehicle` too. This is a **prod Mongo write** (dev==prod) → operator-gated.
+3. Observability: alert when posted ROs don't get indexed within N minutes.
 
-## Fix direction (not yet built)
-- Re-check/re-run indexing once the VIN is present (e.g. on the enrichment that sets
-  vin, or a reconcile that finds cached posted ROs with `data.jobs` present but
-  `jobsIndexed` unset and `job_index` empty for that RO).
-- Consider indexing straight from `data.jobs` on the terminal payload rather than
-  gating on the separately-populated `cached.vin`.
+## Investigation gotchas
+- Display "RO #" = `repairOrderNumber`; cache/job key = internal `repairOrder.id`
+  (`tekmetric_work_orders.workOrderId = String(id)`). Looking up by the number
+  returns null and looks like "never received."
+- In `tekmetric_webhook_logs` the RO is **flat on `data`** (has `repairOrderNumber`,
+  `jobs`, `shopId`), not `data.repairOrder`. Appointment events also live on `data`
+  (distinguish by presence of `repairOrderNumber`).
+- Collection (~700k docs) is indexed only on `{receivedAt:-1}`; use a tight window +
+  in-memory nested filtering, else it times out. Full `tekmetric_work_orders` scans
+  time out because each doc carries a large `data` blob.
