@@ -5,6 +5,13 @@ import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
 import { isMiscServiceKey, formatLastDate } from "@/lib/vhi-text";
+import { getDb } from "@/lib/mongo";
+import {
+  detectRecentlyPerformed,
+  extractPastInspectionFindings,
+  isFindingRemedied,
+  type PastInspectionFinding,
+} from "@/lib/dvi-prefill-history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +42,15 @@ interface TaskUpdate {
   finding: string | null;
   status: string;
   confidence: "high" | "medium" | "low";
+  /**
+   * Task #742: what the pre-fill is based on, so the tech (and any future UI)
+   * can tell a concrete history/inspection signal apart from a generic VHI
+   * interval projection:
+   *   - "recently_performed" — CARFAX/shop history shows it was just done.
+   *   - "inspection_history" — a real, unresolved prior inspection finding.
+   *   - "vhi"                — interval-projected from the VHI buckets (default).
+   */
+  basis: "recently_performed" | "inspection_history" | "vhi";
 }
 
 async function _POST(request: NextRequest) {
@@ -112,6 +128,40 @@ async function _POST(request: NextRequest) {
   const distLabel = getDistanceLabel(shopDistanceUnit);
   const distLabelFull = getDistanceLabelFull(shopDistanceUnit);
 
+  // Task #742: for Tekmetric, pull the vehicle's prior inspection findings so a
+  // real, unresolved past finding can inform the pre-fill instead of a generic
+  // VHI interval guess. No new upstream calls — this reads the already-synced
+  // `tekmetric_work_orders` cache. Other providers (Protractor / Shop-Ware /
+  // AutoFlow) degrade gracefully to VHI-only. Soft-fails so a Mongo hiccup
+  // never breaks the pre-fill.
+  const providerLower = String(provider || "").toLowerCase();
+  const isTekmetric = providerLower
+    ? providerLower === "tekmetric"
+    : !!(guard.shopDoc as any)?.tekmetric?.shopId;
+  let pastFindings = new Map<string, PastInspectionFinding>();
+  if (isTekmetric) {
+    try {
+      const db = await getDb();
+      const workOrders = await db
+        .collection("tekmetric_work_orders")
+        .find(
+          {
+            shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] },
+            vin: vin.toUpperCase(),
+          },
+          {
+            projection: { inspections: 1, completedDate: 1, updatedDate: 1, createdDate: 1 },
+            sort: { completedDate: -1 },
+            limit: 50,
+          },
+        )
+        .toArray();
+      pastFindings = extractPastInspectionFindings(workOrders);
+    } catch (err: any) {
+      console.warn(`[Prefill DVI] past-inspection lookup failed for ${vin}: ${err?.message}`);
+    }
+  }
+
   const updates: TaskUpdate[] = [];
   let skippedCount = 0;
 
@@ -129,7 +179,10 @@ async function _POST(request: NextRequest) {
     }
 
     const vhiItem = vhiByKey[serviceKey];
-    if (!vhiItem) {
+    const pastFinding = pastFindings.get(serviceKey);
+
+    // Nothing to say about this task from either signal — skip it.
+    if (!vhiItem && !pastFinding) {
       skippedCount++;
       continue;
     }
@@ -137,9 +190,12 @@ async function _POST(request: NextRequest) {
     let rating = RATINGS.CHCKD;
     let finding: string | null = null;
     let confidence: "high" | "medium" | "low" = "medium";
+    let status = vhiItem ? vhiItem.status : "ok";
+    let basis: TaskUpdate["basis"] = "vhi";
 
     const displayName = SERVICE_KEY_DISPLAY_NAMES[serviceKey] || serviceKey;
-    const milesUntilDue = vhiItem.item.dueAtMiles
+    const lastAnchor = vhiItem?.item?.last ?? null;
+    const milesUntilDue = vhiItem?.item?.dueAtMiles
       ? vhiItem.item.dueAtMiles - resolvedMileage
       : null;
 
@@ -149,32 +205,71 @@ async function _POST(request: NextRequest) {
     // synthetic.
     const isMisc = isMiscServiceKey(serviceKey);
 
-    if (vhiItem.status === "overdue") {
+    // Helper: append the last-performed anchor to a VHI finding string.
+    const withLastReported = (base: string): string => {
+      let out = base;
+      if (lastAnchor?.date) {
+        out += ` Last Reported: ${formatLastDate(lastAnchor.date)}`;
+        if (lastAnchor.miles) out += ` at ${Number(lastAnchor.miles).toLocaleString()} ${distLabel}`;
+        out += ".";
+      }
+      return out;
+    };
+
+    // (1) Recently performed wins over everything: CARFAX/shop history shows
+    // this service was just done, so it's Checked & Okay regardless of what the
+    // interval math (or an old inspection) says. The anchor is already
+    // inspect-vs-replace guarded by triage.
+    const recent = detectRecentlyPerformed(lastAnchor, resolvedMileage);
+
+    if (recent.performed) {
+      rating = RATINGS.CHCKD;
+      status = "ok";
+      basis = "recently_performed";
+      confidence = "high";
+      let when = "";
+      if (recent.date) when += ` on ${formatLastDate(recent.date)}`;
+      if (recent.miles) when += ` at ${recent.miles.toLocaleString()} ${distLabel}`;
+      finding = `[History] ${displayName} — recently performed${when}. No action needed.`;
+    } else if (pastFinding && !isFindingRemedied(pastFinding, lastAnchor)) {
+      // (2) A real, unresolved prior inspection finding beats a generic VHI
+      // projection — the tech actually saw this on the vehicle.
+      basis = "inspection_history";
+      confidence = "high";
+      const note = (pastFinding.finding || "").trim();
+      const dateSuffix = pastFinding.date ? ` on ${formatLastDate(pastFinding.date)}` : " on file";
+      if (pastFinding.rating === "bad") {
+        rating = RATINGS.RQRSATTN;
+        status = "overdue";
+        finding = `[Inspection] ${displayName} — ${note || "flagged for immediate attention"} (from prior inspection${dateSuffix}).`;
+      } else {
+        rating = RATINGS.MAYRQRATTN;
+        status = "due_soon";
+        finding = `[Inspection] ${displayName} — ${note || "flagged to monitor"} (from prior inspection${dateSuffix}).`;
+      }
+    } else if (vhiItem && vhiItem.status === "overdue") {
+      // (3) Generic VHI interval projection (unchanged behavior).
       rating = RATINGS.RQRSATTN;
       const overBy = !isMisc && milesUntilDue ? Math.abs(milesUntilDue) : null;
-      finding = overBy
-        ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
-        : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`;
-      if (vhiItem.item.lastDate) {
-        finding += ` Last Reported: ${formatLastDate(vhiItem.item.lastDate)}`;
-        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
-        finding += ".";
-      }
+      finding = withLastReported(
+        overBy
+          ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
+          : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`,
+      );
       confidence = "high";
-    } else if (vhiItem.status === "due_soon") {
+    } else if (vhiItem && vhiItem.status === "due_soon") {
       rating = RATINGS.MAYRQRATTN;
       const remaining = !isMisc && milesUntilDue ? milesUntilDue : null;
-      finding = remaining
-        ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
-        : `[VHI] ${displayName} — due soon, recommend scheduling service.`;
-      if (vhiItem.item.lastDate) {
-        finding += ` Last Reported: ${formatLastDate(vhiItem.item.lastDate)}`;
-        if (vhiItem.item.lastMiles) finding += ` at ${Number(vhiItem.item.lastMiles).toLocaleString()} ${distLabel}`;
-        finding += ".";
-      }
+      finding = withLastReported(
+        remaining
+          ? `[VHI] ${displayName} — due soon, ${remaining.toLocaleString()} ${distLabelFull} remaining.`
+          : `[VHI] ${displayName} — due soon, recommend scheduling service.`,
+      );
       confidence = "high";
-    } else if (vhiItem.status === "upcoming" || vhiItem.status === "ok") {
+    } else {
+      // upcoming / ok (or a task with only a remedied past finding).
       rating = RATINGS.CHCKD;
+      status = "ok";
       const remaining = milesUntilDue || null;
       finding = remaining && remaining > 0
         ? `[VHI] ${displayName} — OK. Next service in ${remaining.toLocaleString()} ${distLabelFull}.`
@@ -189,8 +284,9 @@ async function _POST(request: NextRequest) {
       serviceKey,
       rating,
       finding,
-      status: vhiItem.status,
+      status,
       confidence,
+      basis,
     });
   }
 
