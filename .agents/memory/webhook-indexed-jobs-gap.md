@@ -48,10 +48,14 @@ emits no error (soft `console.log` "skipping"), so there's no alert.
    `getVehicle`) and calls `indexTekmetricWorkOrderJobs({preloadedJobs})`. Idempotent
    (upsert on shopId+workOrderId+servicePackageId). `reindexFromStoredData` is
    INSUFFICIENT — it requires `wo.vin` so it skips the dominant no-vin rows.
-   This is a **prod Mongo write** (dev==prod) → operator-gated. Shop 32 recovered
-   (38 ROs / 188 jobs incl Gloria's RO). ~347 misses across 91 other shops remain.
-   Residual "no resolvable VIN" rows are a data-quality exception (vehicle has no vin
-   in Tekmetric), not an indexing failure — report separately, don't retry forever.
+   This is a **prod Mongo write** (dev==prod) → operator-gated. Fleet recovery run
+   (8-day window): 177 ROs / 759 jobs re-filed (shop 32 = 38/188 incl Gloria's RO;
+   rest of fleet = 139/571). ~205 rows were "no resolvable VIN" — a data-quality
+   exception (vehicle has no vin in Tekmetric), NOT an indexing failure; the deployed
+   code fix leaves those `jobsIndexed` unset so they self-heal if a vin later appears.
+   Don't retry no-vin rows forever. Fleet mode: `--detect-all` writes a miss-list
+   file, then `--from-file --offset --limit --apply` in resumable batches (~80/batch
+   fits a 120s window; run sequentially to avoid Tekmetric rate-limit + Mongo load).
 3. Observability (not yet built): alert when posted ROs stay `!jobsIndexed` after N min.
 
 ## Investigation gotchas
