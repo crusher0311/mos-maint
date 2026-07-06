@@ -301,12 +301,28 @@ async function _GET(request: NextRequest) {
     // the very top, ahead of everything else, then by score. sameVinFastPath
     // scores 100 but so can an exact-ACES match, so we make the VIN match an
     // explicit primary sort key rather than relying on the score tie.
+    //
+    // When scores tie (e.g. several jobs at 100), break the tie by match
+    // *quality* so a true Exact Fit / ACES match always ranks above a
+    // heuristic "Great Match". Without this a same-make/different-model
+    // heuristic 100 could sit above a genuine exact-fit 100.
+    const qualityRank = (j: ScoredJob): number => {
+      if (j.sameVinFastPath) return 6;
+      const tier = (j.scoreBreakdown as any)?.acesTier;
+      if (tier === "exact_aces") return 5;
+      if (j.matchBand === "exact") return 4; // heuristic true exact (same make+model+year)
+      if (tier === "engine_match") return 3;
+      if (tier === "submodel_match") return 2;
+      if (j.matchBand === "likely") return 1;
+      return 0;
+    };
     const eligible = applyMinimumResults(
       scoredJobs.sort((a, b) => {
         const aVin = a.sameVinFastPath ? 1 : 0;
         const bVin = b.sameVinFastPath ? 1 : 0;
         if (aVin !== bVin) return bVin - aVin;
-        return b.matchScore - a.matchScore;
+        if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+        return qualityRank(b) - qualityRank(a);
       }),
       15,
       3

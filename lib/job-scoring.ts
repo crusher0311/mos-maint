@@ -1055,6 +1055,13 @@ export function scoreJob(
   // ACES-id matches return earlier via the short-circuit and are unaffected.)
   if (band === "exact" && yearDiff !== 0) {
     band = "likely";
+    // ...and pull the *number* down with the label. A same-make / different-
+    // model (or off-year) heuristic match must not read as a flat 100% that
+    // ties a genuine "Exact Fit". Only a true same-vehicle match (VIN / ACES
+    // id short-circuit, or same make+model+year) may reach the exact band and
+    // its 100. Cap just below the exact threshold so a "Great Match" both
+    // ranks below and *reads* below a real exact fit.
+    finalScore = Math.min(finalScore, SCORE_THRESHOLD_EXACT - 1);
   }
 
   return {

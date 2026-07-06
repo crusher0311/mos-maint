@@ -5,7 +5,7 @@
 // memory and asserts the scorer returns the right tier label, score band,
 // and breakdown.acesTier discriminator. No DB / network access.
 
-import { scoreJob, type VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, SCORE_THRESHOLD_EXACT, type VehicleSpecs } from "@/lib/job-scoring";
 import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
 
 function fail(msg: string): never {
@@ -132,6 +132,42 @@ function donorJob(over: any = {}): any {
     }
   }
   ok("getMatchConfidenceBadge returns plain-language labels with no ACES jargon");
+}
+
+// -- Honest numbers: an off-year, non-ACES heuristic match must not read as a
+//    flat 100 "Exact Fit". Even with a strong same-make/same-model/close-year
+//    signal plus evidence bonuses (same shop, recent, corroboration) it must be
+//    labeled "Great Match" and its score capped below the exact threshold, so a
+//    true exact fit always both ranks above and reads above it.
+{
+  // ACES ids present but non-matching (different vehicle_id AND engine_id) on a
+  // powertrain title → no tier fires → legacy heuristic path.
+  const t = specs({ acesVehicleId: 10, acesEngineId: 20, submodelKey: "2018|honda|accord|ex-l" });
+  const j = specs({ year: 2017, acesVehicleId: 11, acesEngineId: 21, submodelKey: "2017|honda|accord|ex-l" });
+  const r = scoreJob(
+    donorJob({
+      title: "Oil Change",
+      job: { title: "Oil Change" },
+      vehicle: { vin: "2HGCM82633A999999", year: 2017, make: "Honda", model: "Accord" },
+      shopId: 100,
+    }),
+    baseTargetVehicle,
+    t,
+    j,
+    "oil change",
+    { currentShopId: 100, corroboratingCount: 3 },
+  );
+  if ((r.scoreBreakdown as any).acesTier !== null) {
+    fail(`Honest-numbers case expected heuristic path (acesTier=null), got ${(r.scoreBreakdown as any).acesTier}`);
+  }
+  if (r.matchBand === "exact") fail(`Off-year heuristic must not be band "exact", got ${r.matchBand}`);
+  if (r.matchBandLabel === "Exact Fit" || r.matchBandLabel === "Exact Fit (ACES)") {
+    fail(`Off-year heuristic must not be labeled Exact Fit, got "${r.matchBandLabel}"`);
+  }
+  if (r.matchScore >= SCORE_THRESHOLD_EXACT) {
+    fail(`Off-year heuristic must be capped below exact threshold (${SCORE_THRESHOLD_EXACT}), got ${r.matchScore}`);
+  }
+  ok("Off-year non-ACES heuristic is capped below exact threshold and labeled Great Match");
 }
 
 console.log("\nALL ACES TIER SMOKE TESTS PASSED");
