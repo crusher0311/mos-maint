@@ -1,0 +1,50 @@
+2026-07-06T13:22:43.166463589Z 
+2026-07-06T13:22:43.52599049Z queue-feature-flag.smoke.ts: OK
+2026-07-06T13:22:43.662049724Z 
+2026-07-06T13:22:43.662078464Z > mos-maintenance-mvp@1.8.0 test:queue-readiness
+2026-07-06T13:22:43.662081934Z > tsx tests/queue-readiness.smoke.ts
+2026-07-06T13:22:43.662084534Z 
+2026-07-06T13:22:44.057476041Z queue-readiness.smoke.ts: OK
+2026-07-06T13:22:44.191874051Z 
+2026-07-06T13:22:44.191897582Z > mos-maintenance-mvp@1.8.0 test:queue-jobid-opts
+2026-07-06T13:22:44.191901122Z > tsx tests/queue-jobid-and-opts.smoke.ts
+2026-07-06T13:22:44.191903162Z 
+2026-07-06T13:22:44.550630087Z queue-jobid-and-opts.smoke.ts: OK
+2026-07-06T13:22:44.689141209Z 
+2026-07-06T13:22:44.68916155Z > mos-maintenance-mvp@1.8.0 test:carfax-cache-invalidate
+2026-07-06T13:22:44.68916623Z > tsx tests/carfax-cache-invalidate.smoke.ts
+2026-07-06T13:22:44.68916917Z 
+2026-07-06T13:22:45.3023452Z [PlanCache] Invalidated shop 162 plan cache: cached_plans=2 maintenance_analysis_cache=1
+2026-07-06T13:22:45.302437961Z   ✓ empty->set returns cleared counts
+2026-07-06T13:22:45.302459692Z   ✓ empty->set drops all cached_plans (String+Number)
+2026-07-06T13:22:45.302466692Z   ✓ empty->set drops analysis cache
+2026-07-06T13:22:45.302470002Z   ✓ empty->set writes carfax.locationId
+2026-07-06T13:22:45.302476952Z   ✓ empty->set writes flat carfaxLocationId
+2026-07-06T13:22:45.302565764Z   ✓ same-value re-save returns cleared=null
+2026-07-06T13:22:45.302573984Z   ✓ same-value re-save keeps cached_plans
+2026-07-06T13:22:45.302760128Z [PlanCache] Invalidated shop 162 plan cache: cached_plans=1 maintenance_analysis_cache=0
+2026-07-06T13:22:45.302778118Z   ✓ changed value returns cleared counts
+2026-07-06T13:22:45.302780798Z   ✓ changed value drops cached_plans
+2026-07-06T13:22:45.302822709Z   ✓ changed value writes new id
+2026-07-06T13:22:45.302945692Z   ✓ empty save returns cleared=null
+2026-07-06T13:22:45.302965142Z   ✓ empty save leaves cached_plans (removal handled by DELETE route)
+2026-07-06T13:22:45.303103445Z [PlanCache] Invalidated shop 162 plan cache: cached_plans=2 maintenance_analysis_cache=1
+2026-07-06T13:22:45.303126655Z   ✓ invalidate deletes both String+Number rows
+2026-07-06T13:22:45.303236708Z   ✓ invalidate deletes analysis row
+2026-07-06T13:22:45.303240128Z   ✓ invalidate leaves other shops untouched
+2026-07-06T13:22:45.303242097Z 
+2026-07-06T13:22:45.303244497Z All CARFAX cache-invalidate assertions passed.
+2026-07-06T13:22:45.440913073Z 
+2026-07-06T13:22:45.440937074Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-07-06T13:22:45.440940384Z > node scripts/check-direct-db.cjs
+2026-07-06T13:22:45.440942974Z 
+2026-07-06T13:22:45.55606342Z 
+2026-07-06T13:22:45.556091131Z [check-direct-db] 1 file(s) call getDb()/getMongoClient() directly without being on the allowlist:
+2026-07-06T13:22:45.556094251Z 
+2026-07-06T13:22:45.556462238Z   - app/api/extension/prefill-dvi/route.ts
+2026-07-06T13:22:45.556471168Z 
+2026-07-06T13:22:45.556475168Z Add a function in lib/data/repositories/<entity>.ts and call it from these files instead.
+2026-07-06T13:22:45.556477808Z See docs/data-access.md for details.
+2026-07-06T13:22:45.556480128Z 
+2026-07-06T13:22:45.615954625Z ==> Build failed 😞
+2026-07-06T13:22:45.615970935Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

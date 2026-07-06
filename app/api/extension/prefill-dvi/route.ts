@@ -5,7 +5,7 @@ import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { toKeyFromName, SERVICE_KEY_DISPLAY_NAMES } from "@/lib/service-keys";
 import { getDistanceLabel, getDistanceLabelFull, type DistanceUnit } from "@/lib/distance-utils";
 import { isMiscServiceKey, formatLastDate } from "@/lib/vhi-text";
-import { getDb } from "@/lib/mongo";
+import { listRecentTekmetricWorkOrdersForVehicle } from "@/lib/data/repositories/tekmetric-work-orders";
 import {
   detectRecentlyPerformed,
   extractPastInspectionFindings,
@@ -141,21 +141,11 @@ async function _POST(request: NextRequest) {
   let pastFindings = new Map<string, PastInspectionFinding>();
   if (isTekmetric) {
     try {
-      const db = await getDb();
-      const workOrders = await db
-        .collection("tekmetric_work_orders")
-        .find(
-          {
-            shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] },
-            vin: vin.toUpperCase(),
-          },
-          {
-            projection: { inspections: 1, completedDate: 1, updatedDate: 1, createdDate: 1 },
-            sort: { completedDate: -1 },
-            limit: 50,
-          },
-        )
-        .toArray();
+      const workOrders = await listRecentTekmetricWorkOrdersForVehicle(
+        resolvedShopId,
+        vin,
+        50,
+      );
       pastFindings = extractPastInspectionFindings(workOrders);
     } catch (err: any) {
       console.warn(`[Prefill DVI] past-inspection lookup failed for ${vin}: ${err?.message}`);
