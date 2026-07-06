@@ -3,12 +3,16 @@
 ## 1.27.55 — 2026-07-06
 
 ### Fixed
-- **Duplicate "VIN Match" pill on job search.** A same-VIN result was showing the
-  green **VIN Match** pill twice. The extension renders its own prominent VIN pill,
-  and the server also began sending "VIN Match" as the generic match-quality label,
-  so both appeared side by side. The generic label pill is now hidden on same-VIN
-  cards (the dedicated VIN Match pill, with its tooltip, remains), leaving a single
-  pill plus the 100% score.
+- **Duplicate match pills on job search (VIN Match and Exact Fit).** A same-VIN
+  result showed the green **VIN Match** pill twice, and an exact catalog match
+  showed **Exact Fit** twice. In both cases the extension already draws a dedicated
+  pill (VIN Match, or the ACES "Exact Fit" pill with its tooltip), and the server
+  also began sending the same words as the generic match-quality label, so they
+  appeared side by side. The generic label pill is now hidden whenever a dedicated
+  pill already says the same thing, leaving a single pill plus the score. The ACES
+  pill wording was also aligned to "Exact Fit" (was "Exact fit"). Sibling matches
+  (e.g. "Likely Match" + "Same engine") are unchanged — those pills are
+  complementary, not duplicates.
 
 ## 1.27.54 — 2026-07-06
 

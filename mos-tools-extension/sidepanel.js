@@ -2368,7 +2368,7 @@ function getAcesTierBadge(tier) {
   switch (tier) {
     case 'exact_aces':
       return {
-        label: 'Exact fit',
+        label: 'Exact Fit',
         tooltip: 'Exact ACES match \u2014 same year, make, model, submodel, and engine as the target vehicle.',
         className: 'aces-exact',
       };
@@ -2422,7 +2422,7 @@ function createJobItemHTML(job, lookupId) {
           <div class="job-title-row">
             <span class="job-title">${escapeHtml(job.title || job.name)}</span>
             ${vinBadgeHtml}
-            ${job.sameVin ? '' : `<span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>`}
+            ${(job.sameVin || job.acesTier === 'exact_aces') ? '' : `<span class="match-badge ${getBandStyle(matchBand)}">${matchLabel}</span>`}
             ${acesBadgeHtml}
             <span class="match-score">${matchScore}%</span>
           </div>
