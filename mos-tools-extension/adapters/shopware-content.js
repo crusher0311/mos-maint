@@ -87,10 +87,28 @@ function detectContext() {
 
   // ============ EXTRACT VIN ============
   try {
+    // A real VIN always mixes letters and digits (the serial section is
+    // mostly numeric). Stripping punctuation from arbitrary prose can
+    // produce a 17-char all-letter run (e.g. ending "NGREPR") that then
+    // poisons VHI/Specs with a garbage VIN — so reject implausible runs.
+    const isPlausibleVin = (v) => {
+      if (!v || v.length !== 17) return false;
+      const digits = (v.match(/[0-9]/g) || []).length;
+      return digits >= 3 && /[A-HJ-NPR-Z]/.test(v);
+    };
+
     const extractVin17 = (text) => {
-      const stripped = (text || '').replace(/[^A-HJ-NPR-Z0-9]/gi, '');
-      const m = stripped.match(/[A-HJ-NPR-Z0-9]{17}/i);
-      return m ? m[0].toUpperCase() : null;
+      const stripped = (text || '').replace(/[^A-HJ-NPR-Z0-9]/gi, '').toUpperCase();
+      // Slide over the stripped text and return the first plausible
+      // 17-char window (Shop-Ware renders VINs with spaces, e.g.
+      // "1J4GW58N1 2C 286740", so the plain 17-char grab still works,
+      // but junk windows are now skipped).
+      const maxStart = Math.min(stripped.length - 17, 500);
+      for (let i = 0; i <= maxStart; i++) {
+        const cand = stripped.slice(i, i + 17);
+        if (isPlausibleVin(cand)) return cand;
+      }
+      return null;
     };
 
     // Strategy 1: Find any element whose text starts with "VIN" and extract 17 VIN chars
@@ -99,6 +117,11 @@ function detectContext() {
       if (context.vin) break;
       const txt = (el.textContent || '').trim();
       if (!/VIN/i.test(txt)) continue;
+      // Skip large container elements (whole-page wrappers contain "VIN"
+      // somewhere, and text after the first "VIN" occurrence is arbitrary
+      // prose — the source of garbage VINs). Only trust compact elements
+      // like the actual "VIN: ..." row.
+      if (txt.length > 160) continue;
       // Element contains VIN label + value together (e.g. "VIN: 1C4HJWEG7 GL 906678")
       const afterVin = txt.replace(/^.*?VIN:?\s*/i, '');
       const v = extractVin17(afterVin);
@@ -112,18 +135,22 @@ function detectContext() {
         }
       }
     }
-    // Strategy 2: Look for "VIN" in pageText and grab chars after it
+    // Strategy 2: Look for "VIN" in pageText and grab chars after it.
+    // Scan ALL "VIN" occurrences — the first one is often a toolbar
+    // button ("VIN" chip), not the labelled value.
     if (!context.vin) {
-      const vinLabelMatch = pageText.match(/VIN:?\s*(.{17,30})/i);
-      if (vinLabelMatch) {
-        const v = extractVin17(vinLabelMatch[1]);
-        if (v) context.vin = v;
+      const vinLabelMatches = pageText.matchAll(/VIN:?\s*(.{17,30})/gi);
+      for (const m of vinLabelMatches) {
+        const v = extractVin17(m[1]);
+        if (v) { context.vin = v; break; }
       }
     }
     // Strategy 3: Standard 17 consecutive VIN chars anywhere in pageText
     if (!context.vin) {
       const vinMatch = pageText.match(/\b([A-HJ-NPR-Z0-9]{17})\b/i);
-      if (vinMatch) context.vin = vinMatch[1].toUpperCase();
+      if (vinMatch && isPlausibleVin(vinMatch[1].toUpperCase())) {
+        context.vin = vinMatch[1].toUpperCase();
+      }
     }
     // Strategy 4: Look in DOM elements with VIN-related attributes
     if (!context.vin) {

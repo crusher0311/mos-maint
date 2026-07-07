@@ -1,5 +1,20 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.56 — 2026-07-07
+
+### Fixed
+- **Shop-Ware: VHI and Specs picked up a garbage VIN on some work orders.**
+  On certain Shop-Ware pages the extension read the VIN from a whole-page
+  wrapper instead of the "VIN: …" row, producing a 17-character junk string
+  (shown as e.g. "VIN: NGREPR" in the panel). That fake VIN made VHI say
+  "No VHI data available" and made the Specs tab fail, while Oil Stickers
+  (which don't rely on the scraped VIN) kept working. VIN detection now
+  only trusts compact "VIN: …" elements, checks every "VIN" label on the
+  page (not just the first, which can be a toolbar button), and rejects
+  candidates that don't look like a real VIN (real VINs contain digits).
+  When no trustworthy VIN is found on the page, the panel now correctly
+  falls back to asking the MOS server for the vehicle by repair order.
+
 ## 1.27.55 — 2026-07-06
 
 ### Fixed
