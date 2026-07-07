@@ -542,6 +542,8 @@ function updateContext() {
 }
 
 // ==================== MESSAGE HANDLERS ====================
+let jobCreatedReloadTimer = null;
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_PAGE_CONTEXT") {
     const context = detectContext();
@@ -555,10 +557,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Show success toast
     showToast(`Job added: ${message.jobName}`, 'success');
     
-    // Refresh page after short delay
-    setTimeout(() => {
+    // Debounced refresh: the server has already confirmed the job, so a
+    // long fixed delay just makes the add feel slow. Reload quickly, and
+    // if several jobs are added back-to-back, collapse them into ONE
+    // reload after the last add instead of reloading per job.
+    if (jobCreatedReloadTimer) clearTimeout(jobCreatedReloadTimer);
+    jobCreatedReloadTimer = setTimeout(() => {
+      jobCreatedReloadTimer = null;
       window.location.reload();
-    }, 1500);
+    }, 400);
     
     sendResponse({ success: true });
     return false;

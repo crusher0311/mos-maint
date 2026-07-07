@@ -3,6 +3,12 @@
 ## 1.27.56 — 2026-07-07
 
 ### Fixed
+- **Tekmetric: adding a canned job felt slow.** The server call itself is fast
+  (typically under a second), but after every successful add the extension
+  waited a fixed 1.5 seconds and then reloaded the whole Tekmetric page — per
+  job. The wait is now 0.4 seconds, and when several jobs are added
+  back-to-back the reloads collapse into a single refresh after the last add,
+  instead of one full page reload per job.
 - **Shop-Ware: VHI and Specs picked up a garbage VIN on some work orders.**
   On certain Shop-Ware pages the extension read the VIN from a whole-page
   wrapper instead of the "VIN: …" row, producing a 17-character junk string
