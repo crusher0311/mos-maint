@@ -222,17 +222,108 @@ export function extractPastInspectionFindings(
 }
 
 /**
+ * The finding to test for "has it been remedied since it was flagged?".
+ * A finding with no date is never considered remedied (we can't compare).
+ */
+export interface RemedyFinding {
+  /** The inspection's date; a finding with no date is never remedied. */
+  date: Date | null;
+  /** Canonical service key, when resolvable (drives the by-key signal). */
+  serviceKey?: string | null;
+  /** The raw finding / task name, for the substring fallback. */
+  name?: string | null;
+}
+
+/**
+ * The history signals a caller can supply to decide whether a finding was
+ * remedied. All are optional — a caller passes whichever it has:
+ *
+ *   - `anchor`      — a pre-computed last-performed anchor (the VHI/triage
+ *                     anchor used by the DVI pre-fill). Already inspect-vs-
+ *                     replace guarded upstream.
+ *   - `byServiceKey`— service-performed dates indexed by canonical service key
+ *                     (plan-build builds this from shop history + CARFAX via
+ *                     `toKeyFromFreeText`).
+ *   - `nameEntries` — raw shop-history rows for the name-substring fallback
+ *                     (plan-build's last resort when the service key doesn't
+ *                     match but the free-text name does).
+ */
+export interface RemedySignals {
+  anchor?: LastAnchor | null;
+  byServiceKey?: Map<string, { date: Date | null }[]> | null;
+  nameEntries?: Array<{ serviceName?: string | null; date?: Date | null }> | null;
+}
+
+/**
+ * THE single shared decision for "has this inspection finding been remedied
+ * since it was flagged?" — i.e. was the service performed AFTER the inspection
+ * date? Both plan-build's historical-unresolved logic and the extension DVI
+ * pre-fill route this helper so the two surfaces can never disagree.
+ *
+ * A finding is remedied if ANY supplied signal shows a service performed after
+ * the finding's date:
+ *   (1) the last-performed anchor date (VHI / DVI pre-fill),
+ *   (2) a service-key-indexed history record (plan-build: shop history + CARFAX),
+ *   (3) a name-substring match against shop history (plan-build fallback).
+ *
+ * The signals are OR'd, so callers get identical results whether they pass one
+ * signal or several — passing only `anchor` reproduces the DVI pre-fill's old
+ * behavior, and passing only `byServiceKey` + `nameEntries` reproduces
+ * plan-build's old behavior exactly.
+ */
+export function isRemediedSinceInspection(
+  finding: RemedyFinding,
+  signals: RemedySignals,
+): boolean {
+  if (!finding.date) return false;
+  const inspTime = finding.date.getTime();
+
+  // (1) Last-performed anchor (VHI / DVI pre-fill).
+  const anchorDate = parseAnchorDate(signals.anchor?.date);
+  if (anchorDate && anchorDate.getTime() > inspTime) return true;
+
+  // (2) Service-key-indexed history (shop history + CARFAX by canonical key).
+  if (finding.serviceKey && signals.byServiceKey) {
+    const records = signals.byServiceKey.get(finding.serviceKey) || [];
+    if (records.some((r) => r.date && r.date.getTime() > inspTime)) return true;
+  }
+
+  // (3) Name-substring fallback against raw shop history.
+  if (finding.name && signals.nameEntries) {
+    const nameLower = finding.name.toLowerCase().trim();
+    if (
+      nameLower &&
+      signals.nameEntries.some((sh) => {
+        const d =
+          sh.date instanceof Date
+            ? sh.date
+            : sh.date
+            ? new Date(sh.date)
+            : null;
+        if (!d || isNaN(d.getTime()) || d.getTime() <= inspTime) return false;
+        const shName = (sh.serviceName || "").toLowerCase();
+        return shName.includes(nameLower) || nameLower.includes(shName);
+      })
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Whether a past inspection finding has since been remedied — i.e. the service
  * was performed AFTER the inspection flagged it. Uses the last-performed anchor
  * date (already inspect-vs-replace guarded). A remedied finding must NOT be
  * carried forward onto the new DVI.
+ *
+ * Thin wrapper over the shared `isRemediedSinceInspection` for the DVI pre-fill
+ * call site (which only has the VHI anchor to go on).
  */
 export function isFindingRemedied(
   finding: Pick<PastInspectionFinding, "date">,
   lastAnchor: LastAnchor | null | undefined,
 ): boolean {
-  if (!finding.date) return false;
-  const anchorDate = parseAnchorDate(lastAnchor?.date);
-  if (!anchorDate) return false;
-  return anchorDate.getTime() > finding.date.getTime();
+  return isRemediedSinceInspection({ date: finding.date }, { anchor: lastAnchor });
 }

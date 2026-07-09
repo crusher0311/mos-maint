@@ -17,6 +17,7 @@ import {
   detectRecentlyPerformed,
   extractPastInspectionFindings,
   isFindingRemedied,
+  isRemediedSinceInspection,
   RECENT_PERFORMED_MILES,
   RECENT_PERFORMED_DAYS,
 } from "../lib/dvi-prefill-history";
@@ -200,6 +201,89 @@ ok(
 ok(
   "Finding with no date is never remedied",
   !isFindingRemedied({ date: null }, { date: "2026-06-01" }),
+);
+
+// ---- isRemediedSinceInspection (shared plan-build + DVI helper) ----
+
+// Anchor-only (DVI pre-fill): matches isFindingRemedied.
+ok(
+  "Shared: anchor after finding remedies it",
+  isRemediedSinceInspection({ date: inspDate }, { anchor: { date: "2026-06-01" } }),
+);
+ok(
+  "Shared: anchor before finding does NOT remedy it",
+  !isRemediedSinceInspection({ date: inspDate }, { anchor: { date: "2026-04-01" } }),
+);
+ok(
+  "Shared: no signals never remedies",
+  !isRemediedSinceInspection({ date: inspDate }, {}),
+);
+ok(
+  "Shared: no finding date is never remedied",
+  !isRemediedSinceInspection(
+    { date: null },
+    { anchor: { date: "2026-06-01" } },
+  ),
+);
+
+// Service-key-indexed history (plan-build path 2): a later record clears it.
+{
+  const byKey = new Map<string, { date: Date | null }[]>([
+    [
+      "front_brake_pads",
+      [{ date: new Date("2026-03-01") }, { date: new Date("2026-06-01") }],
+    ],
+  ]);
+  ok(
+    "Shared: by-service-key record after finding remedies it",
+    isRemediedSinceInspection(
+      { date: inspDate, serviceKey: "front_brake_pads", name: "Front Brake Pads" },
+      { byServiceKey: byKey },
+    ),
+  );
+}
+{
+  const byKey = new Map<string, { date: Date | null }[]>([
+    ["front_brake_pads", [{ date: new Date("2026-03-01") }]],
+  ]);
+  ok(
+    "Shared: by-service-key records all before finding does NOT remedy it",
+    !isRemediedSinceInspection(
+      { date: inspDate, serviceKey: "front_brake_pads", name: "Front Brake Pads" },
+      { byServiceKey: byKey },
+    ),
+  );
+}
+
+// Name-substring fallback (plan-build path 3): matches when the key doesn't.
+ok(
+  "Shared: name-substring history after finding remedies it",
+  isRemediedSinceInspection(
+    { date: inspDate, serviceKey: null, name: "Wiper Blades" },
+    {
+      nameEntries: [
+        { serviceName: "Replaced Wiper Blades", date: new Date("2026-06-01") },
+      ],
+    },
+  ),
+);
+ok(
+  "Shared: name-substring history before finding does NOT remedy it",
+  !isRemediedSinceInspection(
+    { date: inspDate, serviceKey: null, name: "Wiper Blades" },
+    {
+      nameEntries: [
+        { serviceName: "Replaced Wiper Blades", date: new Date("2026-04-01") },
+      ],
+    },
+  ),
+);
+ok(
+  "Shared: unrelated name history does NOT remedy it",
+  !isRemediedSinceInspection(
+    { date: inspDate, serviceKey: null, name: "Wiper Blades" },
+    { nameEntries: [{ serviceName: "Oil Change", date: new Date("2026-06-01") }] },
+  ),
 );
 
 if (failed === 0) {

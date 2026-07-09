@@ -44,6 +44,7 @@ import {
 import { resolveCustomerName } from "@/lib/plan-build/customer-name";
 import { buildCarfaxMatchDiagnostics } from "@/lib/plan-build/carfax-match-diagnostic";
 import { recordUnmatchedCarfaxDescription } from "@/lib/carfax-match-log";
+import { isRemediedSinceInspection } from "@/lib/dvi-prefill-history";
 import { getCarfaxOverridesMap } from "@/lib/carfax-overrides";
 import {
   detectMileageDiscrepancy,
@@ -762,22 +763,16 @@ export async function POST(req: NextRequest) {
           const dedupKey = serviceKey || nameLower;
           if (seenUnresolved.has(dedupKey)) continue;
 
-          let remedied = false;
-          if (hi.inspectionDate) {
-            if (serviceKey) {
-              const serviceRecords = allHistoryByKey.get(serviceKey) || [];
-              remedied = serviceRecords.some(sr => 
-                sr.date && sr.date.getTime() > hi.inspectionDate!.getTime()
-              );
-            }
-            if (!remedied) {
-              remedied = shopServiceHistory.some(sh => {
-                if (!sh.date || sh.date.getTime() <= hi.inspectionDate!.getTime()) return false;
-                const shName = (sh.serviceName || "").toLowerCase();
-                return shName.includes(nameLower) || nameLower.includes(shName);
-              });
-            }
-          }
+          // Task #746: route the "remedied since inspection" decision through
+          // the one shared helper so plan-build and the DVI pre-fill can never
+          // disagree. Plan-build supplies the service-key-indexed history
+          // (shop history + CARFAX) and the raw shop history for the
+          // name-substring fallback; behavior is identical to the prior inline
+          // logic.
+          const remedied = isRemediedSinceInspection(
+            { date: hi.inspectionDate, serviceKey, name: hi.name },
+            { byServiceKey: allHistoryByKey, nameEntries: shopServiceHistory },
+          );
 
           if (!remedied) {
             seenUnresolved.add(dedupKey);
