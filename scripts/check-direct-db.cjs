@@ -80,6 +80,14 @@ const ALLOWLIST = new Set([
   "app/api/cron/backfill-chunk-speed-health/route.ts",
   "app/api/cron/backfill-load-alerter/route.ts",
   "app/api/cron/backfill-reconcile/route.ts",
+  // Task #757 — dashboard read-model drift backstop, moved off the hot
+  // `/api/dashboard/data-v2` read path into a cron. It resolves the shop list
+  // and passes a Db handle into the shared reconcile lib
+  // (`lib/dashboard/drift-reconcile.ts`, which takes `db` as a param and does
+  // not call getDb itself). Same operational-sweep precedent as the other
+  // reconcile/alerter/health crons above; the shared lib routes ingestion
+  // through the existing NormalizedIngestionService, not raw repositories.
+  "app/api/cron/drift-reconcile/route.ts",
   "app/api/cron/catchup-status/route.ts",
   "app/api/cron/cron-health-alerter/route.ts",
   // Task #568 — whole-pipeline backfill stall alerter. Reads per-shop

@@ -308,16 +308,18 @@ async function run() {
   }
 
   // -------------------------------------------------------------------------
-  // (3) Drift backstop re-normalizes when the protractor snapshot is newer
-  //     than the normalized_work_orders counterpart.
+  // (3) Task #757: the drift backstop no longer runs on the dashboard read
+  //     path. A stale normalized row (older than its protractor snapshot) is
+  //     served AS-IS — no synchronous re-ingestion — so the hottest page stays
+  //     fast. The cron (/api/cron/drift-reconcile) corrects the drift instead;
+  //     that path is covered by tests/drift-reconcile-cron.smoke.ts.
   // -------------------------------------------------------------------------
   {
     const staleUpdatedAt = new Date(Date.now() - 10 * 60 * 1000); // 10 min old
-    const freshFetchedAt = new Date(); // now → drift > 2 min threshold
+    const freshFetchedAt = new Date(); // now → would drift > 2 min threshold
     const driftWo = makeWorkOrder({ id: "WO3003", woNumber: 3003, vin: "1HGCM82633A003003", mileage: 71000 });
 
     const fake = seedWorld({
-      // Shop must have protractor configured for the drift backstop to run.
       shops: [
         {
           shopId: SHOP_ID,
@@ -364,23 +366,23 @@ async function run() {
       const beforeUpdatedAt = beforeRow.updatedAt as Date;
 
       const dashRes = await dashboardRoute.GET(dashboardReq());
-      ok("dashboard returns 200 (drift path)", dashRes.status === 200);
-      ok("drift backstop re-normalized the stale snapshot (ingest called)", dashCalls.count >= 1, `count=${dashCalls.count}`);
+      ok("dashboard returns 200 (drift no longer inline)", dashRes.status === 200);
+      ok(
+        "dashboard read does NOT re-ingest inline (off read path)",
+        dashCalls.count === 0,
+        `count=${dashCalls.count}`,
+      );
 
       const afterRow = fake.collections.normalized_work_orders.find((r: any) => r.sourceId === "WO3003");
       ok(
-        "normalized_work_orders.updatedAt advanced after drift re-normalize",
-        (afterRow.updatedAt as Date).getTime() > beforeUpdatedAt.getTime(),
+        "stale normalized_work_orders.updatedAt is left untouched by the read",
+        (afterRow.updatedAt as Date).getTime() === beforeUpdatedAt.getTime(),
         `before=${beforeUpdatedAt.toISOString()} after=${(afterRow.updatedAt as Date).toISOString()}`,
-      );
-      ok(
-        "no duplicate normalized row created by drift re-normalize",
-        fake.collections.normalized_work_orders.filter((r: any) => r.sourceId === "WO3003").length === 1,
       );
 
       const body = await dashRes.json();
       ok(
-        "re-normalized RO still visible in dashboard rows",
+        "existing (stale) RO still visible in dashboard rows",
         !!body.rows?.find((r: any) => String(r.displayRo) === "WO3003"),
       );
     } finally {
