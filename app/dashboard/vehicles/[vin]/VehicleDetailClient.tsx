@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { 
@@ -255,6 +255,8 @@ export default function VehicleDetailClient({
   const tabParam = searchParams.get("tab") as TabId | null;
   const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam) ? tabParam : "oe");
   const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
+  const specsAttemptedVinRef = useRef<string | null>(null);
+  const [specsRetryNonce, setSpecsRetryNonce] = useState(0);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoDecoded | null>(null);
   const [specsLoading, setSpecsLoading] = useState(false);
   const defaultUnitDisplay: UnitDisplay = distanceUnit === "kilometers" ? "metric" : "imperial";
@@ -295,7 +297,22 @@ export default function VehicleDetailClient({
   }, [tabParam]);
 
   useEffect(() => {
-    if (activeTab === "specs" && !specsData && !specsLoading) {
+    // Clear stale specs when navigating to a different vehicle within the
+    // same mounted component instance, so the fetch effect runs for the new VIN.
+    if (specsAttemptedVinRef.current !== null && specsAttemptedVinRef.current !== vehicle.vin) {
+      specsAttemptedVinRef.current = null;
+      setSpecsData(null);
+      setVehicleInfo(null);
+    }
+  }, [vehicle.vin]);
+
+  useEffect(() => {
+    // specsAttemptedVinRef guards against an infinite refetch loop: if the API
+    // returns ok:false (e.g. VIN not decodable), specsData stays null and the
+    // effect would otherwise refire forever. Keyed by VIN so a new vehicle
+    // always fetches; a manual Retry button clears it for transient failures.
+    if (activeTab === "specs" && !specsData && !specsLoading && specsAttemptedVinRef.current !== vehicle.vin) {
+      specsAttemptedVinRef.current = vehicle.vin;
       setSpecsLoading(true);
       fetch(`/api/vehicles/${vehicle.vin}/specs`)
         .then(res => res.json())
@@ -310,7 +327,7 @@ export default function VehicleDetailClient({
         .catch(console.error)
         .finally(() => setSpecsLoading(false));
     }
-  }, [activeTab, vehicle.vin, specsData, specsLoading]);
+  }, [activeTab, vehicle.vin, specsData, specsLoading, specsRetryNonce]);
   const handleShareReport = async () => {
     setShareLoading(true);
     setShareCopied(false);
@@ -1400,9 +1417,16 @@ export default function VehicleDetailClient({
                     <FileText className="w-6 h-6 text-gray-400" />
                   </div>
                   <h3 className="font-medium text-gray-900 mb-2">No Specifications Available</h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 mb-4">
                     Vehicle specifications are not available for this VIN.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => { specsAttemptedVinRef.current = null; setSpecsData(null); setSpecsRetryNonce((n) => n + 1); }}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                  >
+                    Retry
+                  </button>
                 </div>
               )}
             </div>

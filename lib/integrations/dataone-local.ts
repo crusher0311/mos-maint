@@ -379,6 +379,10 @@ export interface DecodeResult {
   ambiguous?: boolean;
   ambiguousFields?: string[];
   candidateCount?: number;
+  /** When the squish stayed ambiguous and vehicle_id was blanked, the distinct
+   * vehicle_ids of the remaining candidates — lets specs/recalls callers fetch
+   * data for ALL variants and serve the fields they agree on. */
+  candidateVehicleIds?: number[];
   error?: string;
   source: "local";
 }
@@ -422,6 +426,7 @@ export async function decodeVinLocal(vin: string, hint?: DecodeHint): Promise<De
       ambiguous: ambiguousFields.length > 0,
       ambiguousFields,
       candidateCount: rows.length,
+      candidateVehicleIds: [...new Set(pool.map((r) => r.vehicle_id).filter((id): id is number => id != null))],
       source: "local",
     };
   } catch (error) {
@@ -865,30 +870,66 @@ export async function getVehicleSpecsLocal(vin: string, hint?: DecodeHint): Prom
     }
 
     // If vehicle_id was blanked because the squish matches multiple variants
-    // and the hint (if any) couldn't pick one, refuse rather than serving
-    // specs for an arbitrary trim (different wheel sizes / GVWR / etc.).
+    // and the hint (if any) couldn't pick one, fetch specs for ALL candidate
+    // variants and serve only the values they agree on. Specs that genuinely
+    // differ between variants (e.g. wheel size on a base vs Touring trim) are
+    // dropped rather than confidently lying — but the shared majority (fuel
+    // tank, dimensions, brakes, ...) still loads instead of failing outright.
+    let specs: VehicleSpecification[];
+    let ambiguous = false;
     if (decoded.decoded.vehicle_id == null) {
-      return {
-        ok: false,
-        vin,
-        specs: [],
-        grouped: emptyGrouped,
-        ambiguous: true,
-        error: "VIN matches multiple vehicle variants — pass trim or transmission to disambiguate",
-        source: "local",
-      };
+      const candidateIds = decoded.candidateVehicleIds ?? [];
+      if (candidateIds.length === 0) {
+        return {
+          ok: false,
+          vin,
+          specs: [],
+          grouped: emptyGrouped,
+          ambiguous: true,
+          error: "VIN matches multiple vehicle variants — pass trim or transmission to disambiguate",
+          source: "local",
+        };
+      }
+      ambiguous = true;
+      const rows = await withRetry((db) => db<(VehicleSpecification & { vehicle_id: number })[]>`
+        SELECT DISTINCT vs.vehicle_id, s.specification_id, s.specification_category,
+               s.specification_name, s.specification_value
+        FROM dataone_def_specification s
+        JOIN dataone_lkp_veh_standard_specification vs ON s.specification_id = vs.specification_id
+        WHERE vs.vehicle_id = ANY(${candidateIds})
+        ORDER BY s.specification_category, s.specification_name
+      `);
+      // Keep a spec only when every candidate has it with the same value.
+      const byName = new Map<string, { spec: VehicleSpecification; values: Set<string>; ids: Set<number> }>();
+      for (const row of rows) {
+        const key = `${row.specification_category}||${row.specification_name}`;
+        let entry = byName.get(key);
+        if (!entry) {
+          entry = { spec: row, values: new Set(), ids: new Set() };
+          byName.set(key, entry);
+        }
+        entry.values.add(String(row.specification_value ?? "").trim().toLowerCase());
+        entry.ids.add(row.vehicle_id);
+      }
+      specs = [...byName.values()]
+        .filter((e) => e.values.size === 1 && e.ids.size === candidateIds.length)
+        .map((e) => ({
+          specification_id: e.spec.specification_id,
+          specification_category: e.spec.specification_category,
+          specification_name: e.spec.specification_name,
+          specification_value: e.spec.specification_value,
+        }));
+    } else {
+      const vehicleId = decoded.decoded.vehicle_id;
+      specs = await withRetry((db) => db<VehicleSpecification[]>`
+        SELECT DISTINCT s.specification_id, s.specification_category, 
+               s.specification_name, s.specification_value
+        FROM dataone_def_specification s
+        JOIN dataone_lkp_veh_standard_specification vs ON s.specification_id = vs.specification_id
+        WHERE vs.vehicle_id = ${vehicleId}
+        ORDER BY s.specification_category, s.specification_name
+      `);
     }
-    
-    const vehicleId = decoded.decoded.vehicle_id;
-    
-    const specs = await withRetry((db) => db<VehicleSpecification[]>`
-      SELECT DISTINCT s.specification_id, s.specification_category, 
-             s.specification_name, s.specification_value
-      FROM dataone_def_specification s
-      JOIN dataone_lkp_veh_standard_specification vs ON s.specification_id = vs.specification_id
-      WHERE vs.vehicle_id = ${vehicleId}
-      ORDER BY s.specification_category, s.specification_name
-    `);
     
     // Group specs into structured object
     const grouped: VehicleSpecsGrouped = {
@@ -949,7 +990,7 @@ export async function getVehicleSpecsLocal(vin: string, hint?: DecodeHint): Prom
       else if (name === "Passenger Volume") grouped.interior.passengerVolume = value;
     }
     
-    return { ok: true, vin, specs, grouped, source: "local" };
+    return { ok: true, vin, specs, grouped, ambiguous, source: "local" };
   } catch (error) {
     console.error("DataOne specs error:", error);
     return { ok: false, vin, specs: [], grouped: emptyGrouped, error: String(error), source: "local" };
