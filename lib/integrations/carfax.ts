@@ -139,15 +139,40 @@ export async function fetchCarfaxLive(
   const payload = { vin, productDataId: cfg.productDataId, locationId: cfg.locationId };
   const startTime = Date.now();
 
-  const res = await doFetch(cfg.base, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      accept: "application/json",
-    },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
+  // Hard timeout so a stalled CARFAX upstream can't hang the caller (e.g. the
+  // dashboard load path fires these via Promise.all and a single hang would
+  // otherwise pin a request until the socket eventually gives up). Overridable
+  // via CARFAX_TIMEOUT_MS; defaults to 10s.
+  const timeoutMs = Number(process.env.CARFAX_TIMEOUT_MS) || 10_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Awaited<ReturnType<Fetcher>>;
+  try {
+    res = await doFetch(cfg.base, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    const aborted = err?.name === "AbortError" || controller.signal.aborted;
+    // status 0 marks a transport-level failure (timeout/network) in usage stats.
+    trackApiRequest('carfax', '/data', 'POST', 0, latencyMs, shopId).catch(() => {});
+    return {
+      ok: false,
+      error: aborted
+        ? `CARFAX request timed out after ${timeoutMs}ms`
+        : `CARFAX request failed: ${err?.message || String(err)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 
   const latencyMs = Date.now() - startTime;
   trackApiRequest('carfax', '/data', 'POST', res.status, latencyMs, shopId).catch(() => {});
@@ -666,6 +691,19 @@ export async function estimateMileageFromCarfax(
   };
 }
 
+/**
+ * Short-TTL negative cache: after a failed/timed-out live CARFAX lookup we
+ * suppress re-fetching for this window so a persistently-failing upstream
+ * isn't hammered on every dashboard load (which fires these in parallel).
+ * Kept intentionally short so a transient outage self-heals quickly; this is
+ * a re-fetch throttle, NOT a data TTL (the 7-day snapshot freshness and the
+ * "never warm CARFAX / never wipe good data" rules are untouched).
+ * Overridable via CARFAX_NEGATIVE_CACHE_MS; defaults to 15 minutes.
+ */
+function carfaxNegativeCacheMs(): number {
+  return Number(process.env.CARFAX_NEGATIVE_CACHE_MS) || 15 * 60 * 1000;
+}
+
 /** Cached fetch; defaults to 7 days freshness */
 export async function fetchCarfaxWithCache(
   shopId: number,
@@ -678,9 +716,24 @@ export async function fetchCarfaxWithCache(
   const doc = await db.collection("carfax_reports").findOne(key);
 
   const now = Date.now();
-  const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;
+  // Only a *healthy* snapshot counts as "fresh". A failed first-ever fetch is
+  // persisted with ok:false and fetchedAt=now (see upsertCarfaxSnapshot case 1),
+  // so gating on doc.ok prevents that failure from masquerading as fresh for the
+  // full 7-day TTL — failures are governed by the short negative cache below.
+  const fresh = doc?.ok && doc?.fetchedAt
+    ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs
+    : false;
 
   if (fresh) return snapshotToResult(doc);
+
+  // Negative cache: if the most recent live attempt failed within the negative
+  // window, don't re-fire. Serve whatever snapshot we have — which, thanks to
+  // upsertCarfaxSnapshot's preservation guard, is previously-good data when it
+  // existed (ok:true) or the recorded failure (ok:false) otherwise.
+  const lastErrorAt = doc?.lastErrorAt ? new Date(doc.lastErrorAt).getTime() : 0;
+  if (lastErrorAt && now - lastErrorAt <= carfaxNegativeCacheMs()) {
+    return snapshotToResult(doc);
+  }
 
   const live = await fetchCarfaxLive(shopId, vin, doFetch);
   await upsertCarfaxSnapshot(shopId, vin, live);
