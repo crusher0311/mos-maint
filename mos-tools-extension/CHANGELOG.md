@@ -1,6 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
-## 1.27.56 — 2026-07-07
+## 1.27.57 — 2026-07-07
+
+### Added
+- **DVI pre-fill now shows *why* each item was auto-filled.** After running the
+  DVI pre-fill, a summary panel lists every item that was written back with a
+  small colored badge explaining the basis: **History** (green — shop/CARFAX
+  history shows it was recently performed), **Inspection** (amber — a real,
+  unresolved finding from a prior inspection), or **VHI** (blue — projected from
+  the maintenance interval, not a confirmed history signal). Each row also shows
+  its status (Overdue / Due Soon / OK) and the finding text, so a tech can tell
+  at a glance whether a green mark is a confirmed history signal or a generic
+  interval guess before finalizing the inspection. The pre-fill logic itself is
+  unchanged. Clicking **Done** (or outside the panel) reloads the RO as before.
 
 ### Fixed
 - **Tekmetric: adding a canned job felt slow.** The server call itself is fast

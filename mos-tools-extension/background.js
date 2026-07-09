@@ -2919,6 +2919,7 @@ async function prefillDviInspection(context, inspId, tabId) {
 
       if (res.ok) {
         applied++;
+        update._applied = true;
       } else {
         console.warn(`[Prefill DVI] Failed to update task ${task.name}: ${res.status}`);
         failed++;
@@ -2942,6 +2943,19 @@ async function prefillDviInspection(context, inspId, tabId) {
     summary: prefillData.summary,
     vehicle: prefillData.vehicle,
     score: prefillData.score,
+    // Task #744: pass the per-task `basis` through so the content script can
+    // show the tech WHY each item was auto-filled (recent history vs. a real
+    // prior inspection finding vs. a generic VHI interval projection). Only
+    // the tasks we actually wrote back are surfaced.
+    updates: prefillData.updates
+      .filter((u) => u._applied)
+      .map((u) => ({
+        taskName: u.taskName,
+        inspectionGroup: u.inspectionGroup,
+        status: u.status,
+        basis: u.basis,
+        finding: u.finding,
+      })),
   };
 }
 

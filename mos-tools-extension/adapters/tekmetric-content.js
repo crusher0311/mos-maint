@@ -574,9 +574,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "PREFILL_DVI_COMPLETE") {
     console.log("[MOS Tools] DVI pre-fill complete:", message.result);
     resetPrefillButton();
-    setTimeout(() => {
-      window.location.reload();
-    }, 2000);
+    // Task #744: show techs WHY each item was auto-filled (history vs. prior
+    // inspection vs. VHI interval projection) via a basis-badged summary before
+    // reloading. Falls back to the old silent reload if we got no per-task data.
+    const updates = message.result?.updates;
+    if (Array.isArray(updates) && updates.length > 0) {
+      showPrefillSummaryModal(message.result);
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    }
     sendResponse({ success: true });
     return false;
   }
@@ -1633,6 +1641,186 @@ function resetPrefillButton() {
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
   }
+}
+
+// Task #744: how each pre-filled DVI item was decided. Mirrors the `basis`
+// values returned by app/api/extension/prefill-dvi/route.ts so techs can tell a
+// concrete history/inspection signal apart from a generic interval projection.
+const PREFILL_BASIS_META = {
+  recently_performed: {
+    label: 'History',
+    color: '#16a34a',
+    bg: '#dcfce7',
+    title: 'Marked OK because shop/CARFAX history shows this was recently performed.',
+  },
+  inspection_history: {
+    label: 'Inspection',
+    color: '#b45309',
+    bg: '#fef3c7',
+    title: 'Based on a real, unresolved finding from a prior inspection.',
+  },
+  vhi: {
+    label: 'VHI',
+    color: '#2563eb',
+    bg: '#dbeafe',
+    title: 'Projected from the maintenance interval (VHI) — not a confirmed history signal.',
+  },
+};
+
+const PREFILL_STATUS_META = {
+  overdue: { label: 'Overdue', color: '#ef4444' },
+  due_soon: { label: 'Due Soon', color: '#f59e0b' },
+  upcoming: { label: 'OK', color: '#22c55e' },
+  ok: { label: 'OK', color: '#22c55e' },
+};
+
+// Task #744: after a DVI pre-fill runs, show a read-only summary that explains
+// WHY each item was auto-filled (basis badge) before reloading the RO. The
+// ratings/findings themselves are already written to Tekmetric at this point —
+// this panel is purely explanatory.
+function showPrefillSummaryModal(result) {
+  const updates = Array.isArray(result?.updates) ? result.updates : [];
+  if (updates.length === 0) {
+    setTimeout(() => window.location.reload(), 1500);
+    return;
+  }
+
+  const existing = document.getElementById('mos-prefill-summary-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-prefill-summary-modal';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: '999999',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, {
+    backgroundColor: '#fff', borderRadius: '12px', width: '640px', maxWidth: '90vw',
+    maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  });
+  const veh = result?.vehicle
+    ? [result.vehicle.year, result.vehicle.make, result.vehicle.model].filter(Boolean).join(' ')
+    : '';
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">DVI Pre-fill Applied <span style="color:#6b7280;font-weight:400;font-size:13px">(${updates.length} item${updates.length === 1 ? '' : 's'}${veh ? ' · ' + escapeHtml(veh) : ''})</span></div>`;
+  modal.appendChild(header);
+
+  // Legend so techs learn what each badge means.
+  const legend = document.createElement('div');
+  Object.assign(legend.style, {
+    padding: '10px 20px', borderBottom: '1px solid #f3f4f6',
+    display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '11px', color: '#6b7280',
+  });
+  ['recently_performed', 'inspection_history', 'vhi'].forEach((key) => {
+    const meta = PREFILL_BASIS_META[key];
+    const chip = document.createElement('span');
+    chip.title = meta.title;
+    Object.assign(chip.style, { display: 'inline-flex', alignItems: 'center', gap: '5px' });
+    chip.innerHTML = `<span style="display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${meta.bg};color:${meta.color}">${meta.label}</span>`;
+    const desc = document.createElement('span');
+    desc.textContent = key === 'recently_performed'
+      ? 'recently done'
+      : key === 'inspection_history'
+        ? 'prior finding'
+        : 'interval guess';
+    chip.appendChild(desc);
+    legend.appendChild(chip);
+  });
+  modal.appendChild(legend);
+
+  const body = document.createElement('div');
+  Object.assign(body.style, { overflowY: 'auto', padding: '12px 20px', flex: '1' });
+
+  updates.forEach((u) => {
+    const meta = PREFILL_BASIS_META[u.basis] || PREFILL_BASIS_META.vhi;
+    const statusMeta = PREFILL_STATUS_META[u.status];
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      border: '1px solid #e5e7eb', borderLeft: `3px solid ${meta.color}`,
+      borderRadius: '8px', padding: '10px 12px', marginBottom: '8px',
+      backgroundColor: '#fafafa',
+    });
+
+    const topRow = document.createElement('div');
+    Object.assign(topRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: u.finding ? '6px' : '0' });
+
+    const taskLabel = document.createElement('span');
+    Object.assign(taskLabel.style, { fontWeight: '600', fontSize: '13px', color: '#111', flex: '1', minWidth: '0' });
+    taskLabel.textContent = u.taskName || 'Inspection item';
+    topRow.appendChild(taskLabel);
+
+    if (statusMeta) {
+      const statusBadge = document.createElement('span');
+      Object.assign(statusBadge.style, {
+        fontSize: '10px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px',
+        backgroundColor: statusMeta.color + '22', color: statusMeta.color, whiteSpace: 'nowrap',
+      });
+      statusBadge.textContent = statusMeta.label;
+      topRow.appendChild(statusBadge);
+    }
+
+    const basisBadge = document.createElement('span');
+    basisBadge.title = meta.title;
+    Object.assign(basisBadge.style, {
+      fontSize: '10px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px',
+      backgroundColor: meta.bg, color: meta.color, whiteSpace: 'nowrap', cursor: 'help',
+    });
+    basisBadge.textContent = meta.label;
+    topRow.appendChild(basisBadge);
+
+    card.appendChild(topRow);
+
+    if (u.finding) {
+      const finding = document.createElement('div');
+      Object.assign(finding.style, { fontSize: '12px', color: '#4b5563', lineHeight: '1.4' });
+      finding.textContent = u.finding;
+      card.appendChild(finding);
+    }
+
+    body.appendChild(card);
+  });
+
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, {
+    padding: '12px 20px', borderTop: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'flex-end',
+  });
+  const doneBtn = document.createElement('button');
+  doneBtn.textContent = 'Done';
+  Object.assign(doneBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: 'none',
+    backgroundColor: '#8B5CF6', color: '#fff', cursor: 'pointer',
+    fontSize: '13px', fontWeight: '600',
+  });
+  doneBtn.addEventListener('click', () => {
+    overlay.remove();
+    window.location.reload();
+  });
+  footer.appendChild(doneBtn);
+  modal.appendChild(footer);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      window.location.reload();
+    }
+  });
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 // ==================== BUILD RO FROM VHI ====================
