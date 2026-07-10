@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     const candidates = await db
       .collection("users")
       .find(query.shopId ? query : { email: query.email })
-      .project({ _id: 1, email: 1, role: 1, passwordHash: 1, password: 1, shopId: 1, mustChangePassword: 1 })
+      .project({ _id: 1, email: 1, role: 1, passwordHash: 1, password: 1, shopId: 1, mustChangePassword: 1, status: 1 })
       .toArray();
 
     if (candidates.length === 0) {
@@ -95,6 +95,19 @@ export async function POST(req: Request) {
 
     if (!passOk) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // Enrollment-code signups in approval mode can't log in until a shop
+    // admin approves them (see /api/join/[code] + the approval route).
+    if (user.status === "pending") {
+      return NextResponse.json(
+        {
+          error:
+            "Your account is waiting for approval from a shop admin. You'll get an email once you're approved.",
+          pendingApproval: true,
+        },
+        { status: 403 }
+      );
     }
 
     // Create session

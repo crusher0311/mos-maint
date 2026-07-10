@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building } from "lucide-react";
+import { Users, Plus, Mail, Shield, Trash2, Loader2, UserPlus, X, MapPin, Building, Clock, Check } from "lucide-react";
 import Link from "next/link";
+import EnrollmentSection from "./EnrollmentSection";
 
 interface ShopUser {
   _id: string;
@@ -12,6 +13,8 @@ interface ShopUser {
   shopIds?: string[];
   createdAt: string;
   lastLogin?: string;
+  status?: string;
+  name?: string;
 }
 
 interface PendingInvite {
@@ -163,6 +166,32 @@ export default function UsersSettingsPage() {
 
   const canManageUsers = currentUserRole === "owner" || currentUserRole === "admin";
 
+  const pendingUsers = users.filter((u) => u.status === "pending");
+  const activeUsers = users.filter((u) => u.status !== "pending");
+  const [approvalBusy, setApprovalBusy] = useState<string | null>(null);
+
+  async function handleApproval(userId: string, action: "approve" | "reject") {
+    if (action === "reject" && !confirm("Reject this signup request? Their account will be removed.")) return;
+    setApprovalBusy(userId);
+    try {
+      const res = await fetch(`/api/settings/users/${userId}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        await fetchUsers();
+      } else {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Failed to update approval");
+      }
+    } catch {
+      alert("Failed to update approval");
+    } finally {
+      setApprovalBusy(null);
+    }
+  }
+
   const roleColors: Record<string, string> = {
     owner: "bg-purple-100 text-purple-800",
     admin: "bg-red-100 text-red-800",
@@ -205,6 +234,58 @@ export default function UsersSettingsPage() {
           )}
         </div>
 
+        {canManageUsers && <EnrollmentSection />}
+
+        {canManageUsers && pendingUsers.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-amber-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Waiting for Approval</h2>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {pendingUsers.map((user) => (
+                <div key={user._id} className="px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                      <span className="text-amber-700 font-medium">
+                        {(user.name || user.email)?.charAt(0)?.toUpperCase() || "U"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">{user.name || user.email}</p>
+                      <p className="text-sm text-gray-500">
+                        {user.email} • requested {new Date(user.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApproval(user._id, "approve")}
+                      disabled={approvalBusy === user._id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {approvalBusy === user._id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleApproval(user._id, "reject")}
+                      disabled={approvalBusy === user._id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
@@ -213,12 +294,12 @@ export default function UsersSettingsPage() {
             )}
           </div>
           <div className="divide-y divide-gray-200">
-            {users.length === 0 ? (
+            {activeUsers.length === 0 ? (
               <div className="px-6 py-8 text-center text-gray-500">
                 No team members yet
               </div>
             ) : (
-              users.map((user) => (
+              activeUsers.map((user) => (
                 <div 
                   key={user._id} 
                   className={`px-6 py-4 flex items-center justify-between ${canManageUsers ? "cursor-pointer hover:bg-gray-50" : ""}`}

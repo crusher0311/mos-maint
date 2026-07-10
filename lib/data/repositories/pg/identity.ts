@@ -701,6 +701,9 @@ const USER_TOP_LEVEL = new Set([
   "isPlatformAdmin",
   "mustChangePassword",
   "extensionToken",
+  // Whole-column jsonb replace (used by e.g. the enrollment approval
+  // route to rewrite the profile blob after clearing pending status).
+  "profile",
 ]);
 
 /**

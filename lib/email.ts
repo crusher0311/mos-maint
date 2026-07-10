@@ -159,6 +159,20 @@ export function makeInviteEmail(inviteUrl: string, shopName: string, locationIde
   return { subject, html, text };
 }
 
+export function makeEnrollmentApprovedEmail(shopName: string, loginUrl: string) {
+  const subject = `You're approved — welcome to ${shopName} on MOS Tools`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5">
+      <h2>You're in</h2>
+      <p>Your request to join <b>${shopName}</b> has been approved. You can now log in with the email and password you signed up with.</p>
+      <p><a href="${loginUrl}" style="background:#111;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none;display:inline-block">Log In</a></p>
+      <p>or copy/paste this URL:</p>
+      <p><a href="${loginUrl}">${loginUrl}</a></p>
+    </div>`;
+  const text = `Your request to join ${shopName} has been approved. Log in: ${loginUrl}`;
+  return { subject, html, text };
+}
+
 export function makeProtractorApiRequestEmail(shopName: string, shopLocation: string, ownerEmail: string) {
   const subject = `${shopName} - API Access Request`;
   const html = `

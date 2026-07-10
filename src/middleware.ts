@@ -82,6 +82,11 @@ function isPublicPath(pathname: string) {
   // requires a valid token; missing/invalid/expired tokens return 403 from
   // the route, not from middleware.
   if (pathname.startsWith("/api/report/")) return true;
+  // Public enrollment self-signup: /join/<code> page and its API. The
+  // route handler validates the code itself (exact match + enabled) and
+  // rate-limits per IP, so no session is required here by design.
+  if (pathname.startsWith("/join/")) return true;
+  if (pathname.startsWith("/api/join/")) return true;
   if (pathname.startsWith("/_next/")) return true;
   if (
     pathname === "/favicon.ico" ||
