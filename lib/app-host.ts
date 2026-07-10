@@ -12,6 +12,13 @@ export function resolveAppHost(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   }
+  // Canonical per-environment public URL (prod `https://mos.tools`, qa
+  // `https://qa.mos.tools`). Preferred over the Render-provided host below so we
+  // never hand out the raw `*.onrender.com` address. Must be set correctly per
+  // service — a stale value pointing at another environment leaks the wrong host.
+  if (process.env.PRODUCTION_URL) {
+    return process.env.PRODUCTION_URL.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  }
   const renderUrl = process.env.RENDER_EXTERNAL_URL || "";
   if (renderUrl.includes("mos-tools-qa")) return "qa.mos.tools";
   if (renderUrl.includes("mos-tools") && !renderUrl.includes("-qa")) return "mos.tools";

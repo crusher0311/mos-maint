@@ -8,9 +8,21 @@ description: Any absolute URL handed to partners (reportUrl, serviceIconUrl, fut
 All absolute URLs we hand to external/partner consumers must derive their host
 from the single shared resolver in `lib/app-host.ts` (`resolveAppHost()` /
 `getAppBaseUrl()`), which encodes the prod/qa/dev precedence
-(NEXT_PUBLIC_APP_URL → RENDER_EXTERNAL_URL `mos-tools`→`mos.tools` /
+(NEXT_PUBLIC_APP_URL → PRODUCTION_URL → RENDER_EXTERNAL_URL `mos-tools`→`mos.tools` /
 `mos-tools-qa`→`qa.mos.tools` → NEXT_PUBLIC_BASE_URL → REPLIT_DEV_DOMAIN →
 localhost).
+
+**The RENDER_EXTERNAL_URL string-match is a trap, not the primary path.** The
+prod web service's Render slug is `mos-maintenance-mvp-main` (NOT `mos-tools` —
+that's just the service *display name*), so `renderUrl.includes("mos-tools")`
+never matches on prod and it used to fall through to the raw
+`mos-maintenance-mvp-main.onrender.com` host for EVERY generated absolute URL
+(enrollment QR join link, VHR report links, service icons). The canonical
+per-service `PRODUCTION_URL` env var is now the real lever and sits above the
+Render heuristic. It must be set correctly per service — it was mis-set to the
+prod onrender URL on BOTH prod and QA; corrected to `https://mos.tools` (prod)
+and `https://qa.mos.tools` (QA). A stale/cross-env PRODUCTION_URL leaks the wrong
+host. mos.tools + qa.mos.tools are verified Render custom domains.
 
 **Why:** the partner VHI `reportUrl` already uses this precedence. A second URL
 built from a different env var (e.g. `NEXT_PUBLIC_BASE_URL` alone) can silently
