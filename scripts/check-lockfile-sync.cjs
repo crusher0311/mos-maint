@@ -14,6 +14,35 @@
  * Render.
  */
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Guard #2: Replit-internal registry URLs. Installing a package inside the
+// Replit workspace can write resolved/tarball URLs pointing at
+// `package-firewall.replit.local`, which does not resolve on Render —
+// `npm ci` there dies with getaddrinfo ENOTFOUND before the build starts
+// (hit 2026-07-11 with unpdf). Fail fast locally with a fix hint.
+// Fix: replace the URL host with `https://registry.npmjs.org` (the integrity
+// hash is the same — the proxy serves the identical tarball), or run
+// `npm install --package-lock-only` outside Replit.
+const lockPath = path.join(__dirname, '..', 'package-lock.json');
+try {
+  const lockRaw = fs.readFileSync(lockPath, 'utf8');
+  if (lockRaw.includes('package-firewall.replit.local') || lockRaw.includes('.replit.local/')) {
+    const offenders = lockRaw
+      .split('\n')
+      .filter((line) => line.includes('.replit.local'))
+      .slice(0, 10);
+    console.error('[lockfile-sync] FAIL — package-lock.json contains Replit-internal registry URLs.');
+    console.error('[lockfile-sync] These hosts do not resolve on Render; `npm ci` will fail with ENOTFOUND.');
+    console.error('[lockfile-sync] Fix: rewrite the URL(s) to https://registry.npmjs.org/... (same tarball, same integrity hash).');
+    console.error('[lockfile-sync] --- offending lines ---');
+    console.error(offenders.join('\n'));
+    process.exit(1);
+  }
+} catch (err) {
+  console.error(`[lockfile-sync] SKIP proxy-URL check — could not read package-lock.json: ${err.message}`);
+}
 
 const result = spawnSync('npm', ['ci', '--dry-run'], {
   encoding: 'utf8',
