@@ -2260,6 +2260,26 @@ async function createTekmetricJob(shopId, roId, jobData) {
     }
 
     const roData = await roRes.json();
+
+    // Tekmetric only accepts new jobs on OPEN repair orders — a posted
+    // (closed) RO rejects every POST /job with a 400 ("Jobs can only be
+    // added to open repair orders"). Catch it here, before building and
+    // sending the payload, so the user gets one clear message instead of a
+    // cryptic per-job "Failed to create job: 400" for every add.
+    // Trust the status when present — `postedDate` can linger after a shop
+    // reopens a posted RO, so it's only used as a fallback signal when the
+    // status field is missing entirely.
+    const roStatusName = roData.repairOrderStatus?.name || '';
+    const roIsPosted = roStatusName
+      ? roStatusName.toLowerCase() === 'posted'
+      : Boolean(roData.postedDate);
+    if (roIsPosted) {
+      return {
+        success: false,
+        error: `RO #${roData.repairOrderNumber ?? roId} is posted (closed) — Tekmetric only allows adding jobs to open repair orders. Open or create an active RO for this vehicle first.`
+      };
+    }
+
     const laborRate = roData.laborRate || 15000; // Default $150/hr in cents
 
     // Build labor items
@@ -2384,7 +2404,26 @@ async function createTekmetricJob(shopId, roId, jobData) {
 
     if (!createRes.ok) {
       const errorText = await createRes.text();
-      return { success: false, error: `Failed to create job: ${createRes.status} - ${errorText}` };
+      // Tekmetric's error envelope is {type, message, details: {field: reason}}.
+      // Surface the human-readable reason(s) when present instead of dumping
+      // the raw JSON at the user (e.g. a posted-RO rejection reads "Jobs can
+      // only be added to open repair orders...").
+      let friendly = '';
+      try {
+        const parsed = JSON.parse(errorText);
+        const detailMsgs = parsed?.details && typeof parsed.details === 'object'
+          ? Object.values(parsed.details).filter(v => typeof v === 'string')
+          : [];
+        friendly = detailMsgs.length > 0
+          ? detailMsgs.join(' ')
+          : (typeof parsed?.message === 'string' ? parsed.message : '');
+      } catch { /* not JSON — fall through to raw text */ }
+      return {
+        success: false,
+        error: friendly
+          ? `Tekmetric rejected the job: ${friendly}`
+          : `Failed to create job: ${createRes.status} - ${errorText}`
+      };
     }
 
     const createdJob = await createRes.json();

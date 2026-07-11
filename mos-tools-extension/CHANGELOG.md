@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.64 — 2026-07-11
+
+### Fixed
+- **Clear message when adding jobs to a posted (closed) RO.** Tekmetric only
+  accepts new jobs on open repair orders; on a posted RO every add (Send to
+  RO, "+ Add" related jobs, Add all, Add All Declined) failed with a cryptic
+  `Failed to create job: 400 - {...}` toast per job. The add flow now checks
+  the RO's status up front and explains the situation in one plain sentence
+  ("RO #26398 is posted (closed) — Tekmetric only allows adding jobs to open
+  repair orders...") without firing doomed requests. For any other rejection,
+  the toast now shows Tekmetric's own human-readable reason instead of raw
+  JSON.
+
 ## 1.27.63 — 2026-07-11
 
 ### Added
