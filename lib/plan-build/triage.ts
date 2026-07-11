@@ -1348,6 +1348,39 @@ export function triage({
       }
 
       if (!matchedAny) {
+        // Performed-after-decline guard for standalone entries too: even
+        // when no triaged OEM item carries this service key (e.g. control
+        // arms — a repair, not a scheduled interval), shop history and
+        // CARFAX can still show the work was done after the decline
+        // ("Lower control arm(s) replaced" is a common CARFAX line). In
+        // that case the decline is resolved — don't flag it. Anchoring is
+        // verb-guarded via toAnchorKeysFromHistory, so an inspect-only
+        // phrase ("Control arm checked") never clears the flag.
+        if (declinedDate && !isNaN(declinedDate.getTime()) && keys.length > 0) {
+          let resolvedAfterDecline = false;
+          for (const k of keys) {
+            if (
+              (shopHistoryByKey.get(k) || []).some(
+                (r) => r.date && r.date > declinedDate
+              )
+            ) {
+              resolvedAfterDecline = true;
+              break;
+            }
+          }
+          if (!resolvedAfterDecline) {
+            for (const rec of carfaxRecords || []) {
+              const recDate = parseCarfaxDate(rec.date ?? null);
+              if (!recDate || recDate <= declinedDate) continue;
+              const anchorKeys = toAnchorKeysFromHistory(rec.description || "");
+              if (keys.some((k) => anchorKeys.includes(k))) {
+                resolvedAfterDecline = true;
+                break;
+              }
+            }
+          }
+          if (resolvedAfterDecline) continue;
+        }
         triaged.push({
           key: `declined_${dj.id}`,
           serviceKey: entry.serviceKey,

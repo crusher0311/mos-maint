@@ -32,3 +32,15 @@ spark-plug anchor and hid an overdue service.
   up the flag on re-index (content-hash includes `authorized`; or
   `reindexFromStoredData(shopId)`). Re-indexing prod is an operator action —
   dev Mongo IS prod Mongo here.
+
+**Resolution direction (the flip side):** a declined flag must CLEAR when the
+work was later performed elsewhere. CARFAX itemizes repair work far more than
+assumed — corpus check found "control arm(s) replaced" phrasings ×458 across
+3,000 cached reports — so before concluding "CARFAX can't see X", grep the
+cached `carfax_reports` corpus. The performed-after-decline guard must cover
+BOTH matched-rec entries AND standalone (unmatched) entries, in BOTH build
+paths (dashboard triage + extension on-demand), verb-guarded so inspect-only
+phrases never clear a flag. Repair items shops decline-track (control arms,
+etc.) may deserve their own service key even without an OEM interval — the key
+is what lets history line up. Regression lock:
+`tests/plan-build-declined-standalone.smoke.ts` (in the prebuild chain).

@@ -61,7 +61,10 @@ export const __deps = {
 // Bumped 3 → 4: Tekmetric declined jobs are now folded into the on-demand
 // analysis (matched items carry `declined`, unmatched become standalone
 // overdue entries) — old cached analyses lack them and must rebuild.
-const ANALYSIS_CACHE_SCHEMA_VERSION = 4;
+// Bumped 4 → 5: new `control_arm` service key + standalone declined entries
+// now honor the performed-after-decline guard (shop + CARFAX history), so
+// previously-cached analyses may carry flags that should have been resolved.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 5;
 
 // Task #336: OEM data from DataOne is always in real miles. Convert to
 // shop unit (km for Canadian shops) at intake so the on-demand analyzer
@@ -168,6 +171,7 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   rear_brake_rotors: [/rear brake rotor/i, /rear rotor/i],
   front_shocks: [/front shock/i, /front strut/i],
   rear_shocks: [/rear shock/i, /rear strut/i],
+  control_arm: [/control arm/i],
   wheel_alignment: [/wheel alignment/i, /alignment/i, /front end align/i, /4 wheel align/i],
   battery: [/battery replace/i, /battery service/i, /\bbattery\b/i],
   wiper_blades: [/wiper blade/i, /windshield wiper/i, /wiper replace/i, /wiper insert/i],
@@ -1206,6 +1210,7 @@ export async function runOnDemandAnalysis(
   try {
     const declinedRows = await listTekmetricDeferredWorkByVin(shopId, vin.toUpperCase(), 50, db);
     if (declinedRows.length > 0) {
+      const declinedAdminMappings = await getServiceMappings(db);
       const recsByServiceKey = new Map<string, any[]>();
       for (const rec of recommendations) {
         if (!rec.serviceKey) continue;
@@ -1261,6 +1266,22 @@ export async function runOnDemandAnalysis(
         }
 
         if (!matchedAny) {
+          // Performed-after-decline guard for standalone entries too: even
+          // when no OEM recommendation carries this service key (e.g. control
+          // arms — a repair, not a scheduled interval), shop history and
+          // CARFAX can still show the work was done after the decline
+          // ("Lower control arm(s) replaced" is a common CARFAX line). In
+          // that case the decline is resolved — don't flag it.
+          const lastInfo = getLastPerformedInfo(title, shopWorkOrders, carfaxRecords, declinedAdminMappings);
+          if (
+            declinedDate &&
+            !isNaN(declinedDate.getTime()) &&
+            lastInfo.date &&
+            lastInfo.date > declinedDate
+          ) {
+            console.log(`[Extension] Declined job "${title}" resolved by ${lastInfo.source} history on ${lastInfo.date.toISOString().slice(0, 10)} (declined ${declinedDate.toISOString().slice(0, 10)}) — dropping flag`);
+            continue;
+          }
           recommendations.push({
             service: title,
             serviceKey: entry.serviceKey,

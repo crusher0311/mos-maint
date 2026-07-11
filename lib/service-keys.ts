@@ -174,6 +174,18 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "rear shock absorber", "rear strut assembly", "rear suspension strut",
     "r&r rear strut", "r/r rear strut", "replace rear strut"
   ],
+  // Control arms — a repair item, not an OEM interval, but shops decline-track
+  // it and CARFAX itemizes it heavily (corpus check across 3,000 cached
+  // reports: "Lower control arm(s) replaced" ×346, "Control arm(s) replaced"
+  // ×178, "Upper control arm(s) replaced" ×61, bushings ×32). A key lets a
+  // declined control-arm job be matched against shop/CARFAX history so the
+  // flag clears when the work was done elsewhere. The bare "control arm"
+  // substring also catches bushing lines — acceptable: bushing replacement is
+  // control-arm service. Inspect-only phrases ("Control arm checked") are
+  // blocked from anchoring by isInspectOnlyHistoryPhrase as usual.
+  control_arm: [
+    "control arm", "control arms"
+  ],
   wheel_alignment: [
     "wheel alignment", "alignment", "all wheel alignment",
     "front alignment", "rear alignment", "4 wheel alignment",
@@ -305,6 +317,7 @@ export const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
   rear_brake_rotors: "Rear Brake Rotors",
   front_shocks: "Front Shocks / Struts",
   rear_shocks: "Rear Shocks / Struts",
+  control_arm: "Control Arm",
   wheel_alignment: "Wheel Alignment",
   battery: "Battery",
   wiper_blades: "Wiper Blades",
