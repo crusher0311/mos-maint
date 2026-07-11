@@ -344,10 +344,12 @@ export async function POST(req: NextRequest) {
           {
             role: "system",
             content: `You are an expert automotive estimate auditor. Review the estimate line items and identify issues. Focus on:
-1. Pricing anomalies (unusually high or low for the service)
-2. Missing commonly-associated services not already flagged
-3. Description improvements for customer communication
-4. Safety concerns
+1. Missing commonly-associated services not already flagged
+2. Description improvements for customer communication
+3. Safety concerns
+4. Internal inconsistencies (e.g. a parts-replacement job with $0 parts, labor listed with no hours)
+
+NEVER judge whether a price is high or low, and NEVER reference "industry standards", "market rates", or "typical pricing" — you have no pricing data, and shop pricing varies legitimately by region, vehicle, and business model. Do not produce pricing/cost findings of any kind.
 
 Return JSON array of findings:
 [{
@@ -389,8 +391,17 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
       }
 
       const aiItems = Array.isArray(parsed) ? parsed : (parsed.findings || parsed.items || []);
+      // Belt-and-suspenders: drop any pricing-opinion findings the model
+      // produces despite the prompt ban. There is no pricing dataset behind
+      // the AI, so "unusually high/low vs industry standards" claims are
+      // fabricated and misleading (Brandon, 2026-07-11).
+      const isPricingOpinion = (f: any) =>
+        /pric/i.test(String(f?.category || "")) ||
+        /industry standard|market rate|typical pricing|(higher|lower) side compared/i.test(
+          `${f?.title || ""} ${f?.description || ""} ${f?.suggestedAction || ""}`,
+        );
       aiFindings = aiItems
-        .filter((f: any) => f && f.title && f.description)
+        .filter((f: any) => f && f.title && f.description && !isPricingOpinion(f))
         .map((f: any) => ({
           id: `f-${++findingId}`,
           severity: f.severity || "info",
