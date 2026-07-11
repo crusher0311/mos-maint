@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.62 — 2026-07-11
+
+### Changed
+- **Real part cost now flows through to Tekmetric too.** Adding a job to a
+  Tekmetric RO (single add or "Add All Declined") no longer writes retail as
+  the part's cost. Parts with a known real cost (from shop history) write it
+  through unchanged; everything else is estimated from retail using the
+  shop's configurable cost ratio — resolved server-side with the same
+  `[PartCost]` logging the Protractor paths use, with a local 60%-of-retail
+  fallback if the lookup fails so job adds are never blocked. Requires the
+  matching server release for the shop-configured ratio; older servers fall
+  back to the 60% default.
+
 ## 1.27.61 — 2026-07-11
 
 ### Changed

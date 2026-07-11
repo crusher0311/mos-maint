@@ -1655,7 +1655,11 @@ async function handleAddAllDeclinedWork() {
           brand: part.manufacturer || '',
           quantity: part.quantity || 1,
           cost: part.unitPrice || 0,
-          retail: part.unitPrice || 0
+          retail: part.unitPrice || 0,
+          // Task #809 — declined-work lines carry the real part cost when the
+          // original Tekmetric job knew it; send it as `unitCost` so the
+          // background writes it through instead of estimating from retail.
+          ...(Number(part.cost) > 0 ? { unitCost: Number(part.cost) } : {})
         })),
         note: job.description || ''
       };
@@ -2894,14 +2898,26 @@ async function handleAddJob(job) {
       name: item.name || item.description,
       hours: item.hours || item.quantity || 1
     })),
-    parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => ({
-      name: part.name || part.description,
-      partNumber: part.partNumber || '',
-      brand: part.brand || part.manufacturer || '',
-      quantity: part.quantity || 1,
-      cost: part.cost || part.unitPrice || 0,
-      retail: part.retail || part.price || part.extendedPrice || 0
-    })),
+    parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => {
+      // Task #809 — same rule as the Protractor path above: only a real cost
+      // is sent as `unitCost` (an explicit `unitCost` — set server-side on
+      // search results — or a history line's captured `cost`). The legacy
+      // `cost` field below can carry retail as a fallback and is never used
+      // as a cost source by the background.
+      const realUnitCost =
+        (Number(part.unitCost) > 0 && Number(part.unitCost)) ||
+        (part.lineType === 'part' && Number(part.cost) > 0 && Number(part.cost)) ||
+        0;
+      return {
+        name: part.name || part.description,
+        partNumber: part.partNumber || '',
+        brand: part.brand || part.manufacturer || '',
+        quantity: part.quantity || 1,
+        cost: part.cost || part.unitPrice || 0,
+        retail: part.retail || part.price || part.extendedPrice || 0,
+        ...(realUnitCost > 0 ? { unitCost: realUnitCost } : {})
+      };
+    }),
     note: job.note || job.description || ''
   };
   

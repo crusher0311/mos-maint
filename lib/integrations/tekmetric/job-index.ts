@@ -78,6 +78,13 @@ export type TekmetricJobIndexEntry = {
     unitPrice: number;
     extendedPrice: number;
     hours?: number;
+    /**
+     * Task #809 — real per-unit part cost (dollars) from Tekmetric's
+     * `part.cost` (cents on the raw job). Only set when positive; readers
+     * fall back to the shop's cost-estimate ratio when absent.
+     */
+    cost?: number;
+    extendedCost?: number;
     /** Task #382 — PCDB / PartsTech IDs (parts only, when present on raw). */
     pcdbPartTypeId?: number;
     pcdbPartTypeName?: string;
@@ -267,6 +274,10 @@ export async function indexTekmetricWorkOrderJobs(
           if (retailDollars === 0 && allPartsZero && partsAmountDollars > 0 && totalPartsQty > 0) {
             retailDollars = Math.round((partsAmountDollars / totalPartsQty) * 100) / 100;
           }
+          // Task #809 — capture the shop's real part cost (cents → dollars)
+          // so pushes back to an RO can write it through instead of
+          // estimating from retail.
+          const costDollars = (part.cost || 0) / 100;
           lines.push({
             lineType: "part",
             description: part.name || part.description || "",
@@ -275,6 +286,7 @@ export async function indexTekmetricWorkOrderJobs(
             quantity: qty,
             unitPrice: retailDollars,
             extendedPrice: qty * retailDollars,
+            ...(costDollars > 0 ? { cost: costDollars, extendedCost: qty * costDollars } : {}),
             // Task #382 — PCDB / PartsTech IDs (when present on the raw part).
             ...extractTekmetricPcdb(part),
           });
@@ -631,6 +643,9 @@ export async function reindexFromStoredData(
           if (retailDollars === 0 && allPartsZero && partsAmountDollars > 0 && totalPartsQty > 0) {
             retailDollars = Math.round((partsAmountDollars / totalPartsQty) * 100) / 100;
           }
+          // Task #809 — capture the shop's real part cost (cents → dollars),
+          // same as indexTekmetricWorkOrderJobs above.
+          const costDollars = (part.cost || 0) / 100;
           lines.push({
             lineType: "part",
             description: part.name || part.description || "",
@@ -639,6 +654,7 @@ export async function reindexFromStoredData(
             quantity: qty,
             unitPrice: retailDollars,
             extendedPrice: qty * retailDollars,
+            ...(costDollars > 0 ? { cost: costDollars, extendedCost: qty * costDollars } : {}),
             // Task #382 — PCDB / PartsTech IDs (when present on the raw part).
             ...extractTekmetricPcdb(part),
           });

@@ -20,6 +20,9 @@ interface JobIndexLine {
   quantity?: number;
   unitPrice?: number;
   hours?: number;
+  // Task #809 — real per-unit part cost (dollars) captured at index time.
+  cost?: number;
+  extendedCost?: number;
 }
 
 interface TekmetricJobIndexRow extends Document {
@@ -49,6 +52,9 @@ export interface TekmetricDeferredWorkItem {
     unitPrice: number;
     partNumber: string;
     manufacturer: string;
+    /** Task #809 — real per-unit part cost (dollars), when the source knows it. */
+    cost?: number;
+    extendedCost?: number;
   }>;
 }
 
@@ -103,6 +109,12 @@ export async function listTekmetricDeferredWorkByVin(
         unitPrice: l.unitPrice ?? 0,
         partNumber: l.partNumber || "",
         manufacturer: l.manufacturer || "",
+        // Task #809 — surface the real part cost so the extension can push
+        // it back to the RO instead of estimating from retail.
+        ...(typeof l.cost === "number" && l.cost > 0 ? { cost: l.cost } : {}),
+        ...(typeof l.extendedCost === "number" && l.extendedCost > 0
+          ? { extendedCost: l.extendedCost }
+          : {}),
       })),
     };
   });

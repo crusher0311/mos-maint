@@ -2157,20 +2157,69 @@ async function createTekmetricJob(shopId, roId, jobData) {
       technician: roData.defaultTechnician || null
     }));
 
-    // Build parts items
-    const partsItems = (jobData.parts || []).map(part => ({
-      tempId: Math.random(),
-      jobId: null,
+    // Build parts items.
+    // Task #809 — real part cost for Tekmetric pushes. Parts carrying a
+    // known-real `unitCost` (from shop history) write it through; everything
+    // else is estimated server-side from retail via the shop's configurable
+    // cost ratio (same resolver + [PartCost] logging as the Protractor write
+    // paths). The legacy `cost` field is deliberately NOT used as a cost
+    // source — sidepanel builds fill it with retail as a fallback, which
+    // would write a 0%-GP cost into Tekmetric.
+    const rawParts = (jobData.parts || []).map(part => ({
       name: part.name || part.description || "Part",
       partNumber: part.partNumber || "",
-      oemPartNumber: "",
       brand: part.brand || "",
-      cost: Math.round((parseFloat(part.cost) || 0) * 100),
       quantity: parseInt(part.quantity) || 1,
-      retail: Math.round((parseFloat(part.retail) || parseFloat(part.price) || 0) * 100),
-      position: "",
-      partType: { id: 1, code: "PART" }
+      retail: parseFloat(part.retail) || parseFloat(part.price) || 0,
+      unitCost: parseFloat(part.unitCost) > 0 ? parseFloat(part.unitCost) : 0
     }));
+
+    let resolvedPartCosts = null;
+    if (rawParts.length > 0) {
+      try {
+        const costRes = await handleMosApiRequest('/api/extension/tekmetric/resolve-part-costs', {
+          method: 'POST',
+          body: JSON.stringify({
+            shopId: effectiveShopId,
+            jobTitle: jobData.name || jobData.jobName || 'New Job',
+            parts: rawParts.map(p => ({
+              name: p.name,
+              quantity: p.quantity,
+              retail: p.retail,
+              ...(p.unitCost > 0 ? { unitCost: p.unitCost } : {})
+            }))
+          })
+        });
+        if (costRes && costRes.ok && Array.isArray(costRes.parts) && costRes.parts.length === rawParts.length) {
+          resolvedPartCosts = costRes.parts;
+        }
+      } catch (err) {
+        // Best-effort: a cost lookup must never block adding a job to an RO.
+        console.warn('[Tekmetric] Part-cost resolve failed, using local estimate:', err.message);
+      }
+    }
+
+    const partsItems = rawParts.map((part, i) => {
+      const resolved = resolvedPartCosts && resolvedPartCosts[i];
+      // Local fallback mirrors the server default: real cost when known,
+      // otherwise the historical 60%-of-retail estimate.
+      const costDollars = resolved
+        ? (parseFloat(resolved.unitCost) || 0)
+        : (part.unitCost > 0 ? part.unitCost : part.retail * 0.6);
+      return {
+        tempId: Math.random(),
+        jobId: null,
+        name: part.name,
+        partNumber: part.partNumber,
+        oemPartNumber: "",
+        brand: part.brand,
+        cost: Math.round((costDollars || 0) * 100),
+        quantity: part.quantity,
+        retail: Math.round(part.retail * 100),
+        position: "",
+        partType: { id: 1, code: "PART" }
+      };
+    });
 
     const vehicleDesc = roData.vehicle 
       ? `${roData.vehicle.year} ${roData.vehicle.make} ${roData.vehicle.model}`.trim()

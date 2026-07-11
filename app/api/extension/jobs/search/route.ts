@@ -417,7 +417,13 @@ async function _GET(request: NextRequest) {
             brand: l.manufacturer,
             quantity: l.quantity || 1,
             cost: l.cost || 0,
-            retail
+            retail,
+            // Task #809 — `l.cost` on an indexed line is only ever a REAL
+            // captured cost (Protractor flat Cost, Tekmetric part.cost) —
+            // never a retail fallback. Surface it as `unitCost` so the
+            // extension's push paths (Protractor and Tekmetric) write it
+            // through instead of estimating from retail.
+            ...(l.cost > 0 ? { unitCost: l.cost } : {}),
           };
         }),
         totals: {
