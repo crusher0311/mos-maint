@@ -95,3 +95,4 @@
 - [Service-key synonym false positives](service-key-synonym-false-positives.md) — substring synonyms cross-match ("coil"→oil, cabin→engine_air, fob battery); corpus-check new synonyms via scripts/probe-carfax-phrase-corpus.ts.
 - [Testing feature gates in dev](feature-gate-dev-testing.md) — flip DEV_SHOP_ID to a detect_dog_founder shop (founder = all-features wildcard) to see unlocked entitlement states; no prod flag flips needed.
 - [vehicles collection VIN-keyed](vehicles-collection-vin-keyed.md) — Mongo `vehicles` docs have NO shopId field; any {shopId, vin} filter silently matches nothing — look up by exact upper VIN only.
+- [job_index cost backfill](job-index-cost-backfill.md) — in-place line patches must recompute contentHash + match lines by identity not price; sweep script ready, live run operator-gated.
