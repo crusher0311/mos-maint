@@ -49,7 +49,11 @@ const nextConfig = {
       allowedOrigins: ['*'],
     },
     instrumentationHook: true,
-    serverComponentsExternalPackages: ['mongodb', 'node-cron'],
+    // `unzipper` is externalized because its Open API has an optional S3
+    // code path that requires `@aws-sdk/client-s3`; webpack tries to resolve
+    // it at build time and fails, while Node's runtime resolver never hits
+    // that branch (we only use Open.buffer for .docx extraction).
+    serverComponentsExternalPackages: ['mongodb', 'node-cron', 'unzipper'],
     // The cron scheduler is loaded at runtime via eval("require") from
     // src/instrumentation.ts so that webpack doesn't statically analyze it
     // (which would emit noisy "Critical dependency" warnings on every Fast
