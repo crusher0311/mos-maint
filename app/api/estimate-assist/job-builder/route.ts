@@ -20,6 +20,11 @@ import {
   getAuthErrorStatus,
   buildAuthErrorBody,
 } from "@/lib/extension-auth";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+
+// Budget for the optional AI-description pass. When the job is already in the
+// knowledge base we return KB data on timeout instead of hanging the request.
+const AI_TIMEOUT_MS = 20_000;
 
 export const dynamic = "force-dynamic";
 
@@ -226,7 +231,8 @@ export async function POST(req: NextRequest) {
         const startTime = Date.now();
         const vehicleStr = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(" ");
 
-        const completion = await openai.chat.completions.create({
+        const completion = await withUpstreamTimeout(
+          openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
             {
@@ -241,11 +247,17 @@ export async function POST(req: NextRequest) {
           temperature: 0.3,
           max_tokens: 500,
           response_format: { type: "json_object" },
-        });
+          }),
+          AI_TIMEOUT_MS,
+          "estimate-job-builder-ai",
+          null,
+        );
 
-        trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
+        if (completion) {
+          trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
+        }
 
-        const aiContent = completion.choices[0]?.message?.content;
+        const aiContent = completion?.choices[0]?.message?.content;
         if (aiContent) {
           try {
             const parsed = JSON.parse(aiContent);
@@ -263,6 +275,16 @@ export async function POST(req: NextRequest) {
       } catch (aiErr) {
         console.warn("[Estimate Job Builder] AI enhancement failed:", aiErr);
       }
+    }
+
+    // No KB match AND the AI fallback failed/timed out — an empty shell with
+    // zero hours and no description would look like a silent success, so fail
+    // loudly instead.
+    if (!knowledgeBaseJob && !aiResult) {
+      return NextResponse.json({
+        ok: false,
+        error: `Couldn't build an estimate for "${jobNameOrId}" right now — the AI description service took too long. Please try again.`,
+      }, { status: 504, headers: corsHeaders });
     }
 
     const baseHoursMin = knowledgeBaseJob?.laborHoursMin || aiResult?.estimatedLaborHours || 0;

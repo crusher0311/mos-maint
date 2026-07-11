@@ -93,3 +93,4 @@
 - [Interval-import PDF paths](interval-import-pdf-paths.md) — gpt-4o PDF file-part OCR is lossier than a photo; digital PDFs must go through the unpdf text-layer path; dev `DEV_AUTO_LOGIN=true` lets unauthenticated curls hit protected routes.
 - [Declined work in VHI](declined-work-in-vhi.md) — Tekmetric declined jobs merge into plan-build (forced overdue, `declined` provenance); add-all WRITES happen extension-side via page session, server only lists/resolves/dedups.
 - [Service-key synonym false positives](service-key-synonym-false-positives.md) — substring synonyms cross-match ("coil"→oil, cabin→engine_air, fob battery); corpus-check new synonyms via scripts/probe-carfax-phrase-corpus.ts.
+- [Testing feature gates in dev](feature-gate-dev-testing.md) — flip DEV_SHOP_ID to a detect_dog_founder shop (founder = all-features wildcard) to see unlocked entitlement states; no prod flag flips needed.

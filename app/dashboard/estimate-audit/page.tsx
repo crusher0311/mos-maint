@@ -68,6 +68,28 @@ export default function EstimateAuditPage() {
   const [activeTab, setActiveTab] = useState<"audit" | "builder" | "history">("audit");
   const [builtEstimates, setBuiltEstimates] = useState<Record<string, Record<string, unknown>>>({});
   const [buildingFindingId, setBuildingFindingId] = useState<string | null>(null);
+  const [jobBuilderError, setJobBuilderError] = useState("");
+  // null = still checking; fail open on transient errors so a hiccup in the
+  // features API never locks a paying shop out of the page.
+  const [featureAllowed, setFeatureAllowed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/shop/features")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled) return;
+        if (data && Array.isArray(data.enabledFeatureIds)) {
+          setFeatureAllowed(data.enabledFeatureIds.includes("estimate_assist"));
+        } else {
+          setFeatureAllowed(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFeatureAllowed(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -128,6 +150,7 @@ export default function EstimateAuditPage() {
     if (!query) return;
     setJobBuilderLoading(true);
     setJobBuilderResult(null);
+    setJobBuilderError("");
     try {
       const response = await fetch("/api/estimate-assist/job-builder", {
         method: "POST",
@@ -141,9 +164,12 @@ export default function EstimateAuditPage() {
       const data = await response.json();
       if (data.ok) {
         setJobBuilderResult(data.estimate);
+      } else {
+        setJobBuilderError(data.error || "Failed to build the estimate. Please try again.");
       }
     } catch (err) {
       console.error("Job builder failed:", err);
+      setJobBuilderError("Failed to build the estimate. Please check your connection and try again.");
     }
     setJobBuilderLoading(false);
   };
@@ -151,6 +177,7 @@ export default function EstimateAuditPage() {
   const addToEstimate = async (finding: AuditFinding) => {
     if (!finding.suggestedJobTitle) return;
     setBuildingFindingId(finding.id);
+    setError("");
     try {
       const response = await fetch("/api/estimate-assist/job-builder", {
         method: "POST",
@@ -163,9 +190,12 @@ export default function EstimateAuditPage() {
       const data = await response.json();
       if (data.ok && data.estimate) {
         setBuiltEstimates(prev => ({ ...prev, [finding.id]: data.estimate }));
+      } else {
+        setError(data.error || `Couldn't build "${finding.suggestedJobTitle}". Please try again.`);
       }
     } catch (err) {
       console.error("Add to estimate failed:", err);
+      setError(`Couldn't build "${finding.suggestedJobTitle}". Please check your connection and try again.`);
     }
     setBuildingFindingId(null);
   };
@@ -187,6 +217,43 @@ export default function EstimateAuditPage() {
   };
 
   const est = jobBuilderResult as Record<string, unknown> | null;
+
+  if (featureAllowed === null) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
+  if (featureAllowed === false) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="max-w-lg mx-auto mt-16 bg-white rounded-lg border border-gray-200 p-10 text-center">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Estimate Assist</h1>
+          <p className="text-gray-600 mt-2">
+            This feature is not included in your current subscription.
+          </p>
+          <p className="text-gray-500 text-sm mt-1">
+            Upgrade your plan to build smart estimates and audit work orders for completeness.
+          </p>
+          <a
+            href="/dashboard/settings/billing"
+            className="inline-block mt-6 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+          >
+            View Plans &amp; Billing
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -420,6 +487,7 @@ export default function EstimateAuditPage() {
                 </button>
               </div>
             </div>
+            {jobBuilderError && <p className="text-red-600 text-sm mt-3">{jobBuilderError}</p>}
           </div>
 
           {est && (

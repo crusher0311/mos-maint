@@ -16,6 +16,11 @@ import {
   getAuthErrorStatus,
   buildAuthErrorBody,
 } from "@/lib/extension-auth";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+
+// Budget for the optional AI-findings pass. The static rule findings are
+// already computed by then, so on timeout we return those instead of hanging.
+const AI_TIMEOUT_MS = 20_000;
 
 export const dynamic = "force-dynamic";
 
@@ -125,87 +130,79 @@ export async function POST(req: NextRequest) {
 
     if (workOrderId && lineItems.length === 0) {
       const db = await getDb();
-      const wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+
+      // 1. Try the normalized _id directly (dashboard "Build Estimate" links).
+      let wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
         _id: workOrderId,
         shopId,
-      });
+      } as any);
+
+      // 2. Try the human-facing RO number (what users type into the dashboard).
+      if (!wo) {
+        wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+          shopId,
+          workOrderNumber: String(workOrderId),
+        });
+      }
+
+      // 3. Try the SMS-internal id via provenance. The extension sends the
+      // provider's internal RO id (e.g. Tekmetric's numeric id), which is
+      // neither our normalized _id nor the display RO number. sourceSystem is
+      // constrained so the (sourceSystem, sourceIds.idValue) index is used
+      // instead of a collection scan.
+      if (!wo) {
+        wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+          shopId,
+          'provenance.sourceSystem': { $in: ['tekmetric', 'protractor', 'shopware', 'autoflow'] },
+          'provenance.sourceIds.idValue': String(workOrderId),
+        });
+      }
 
       if (!wo) {
-        const woByNumber = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+        return NextResponse.json({
+          ok: false,
+          code: "RO_NOT_SYNCED",
+          error: `We don't have repair order "${workOrderId}" synced yet. It may still be importing from your shop management system — try again in a few minutes, or check the RO number.`,
+        }, { status: 404, headers: corsHeaders });
+      }
+
+      workOrderId = String(wo._id);
+      workOrderNumber = wo.workOrderNumber;
+
+      if (wo.vehicle) {
+        vehicleInfo = {
+          year: wo.vehicle.year,
+          make: wo.vehicle.make,
+          model: wo.vehicle.model,
+          mileage: wo.odometerIn,
+        };
+      }
+
+      let serviceJobs: any[] = Array.isArray(wo.serviceJobs) ? wo.serviceJobs : [];
+      if (serviceJobs.length === 0) {
+        serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({
+          workOrderId: wo._id,
           shopId,
-          workOrderNumber: workOrderId,
-        });
-        if (woByNumber) {
-          workOrderId = woByNumber._id as string;
-          workOrderNumber = woByNumber.workOrderNumber;
+          'softDelete.isDeleted': { $ne: true },
+        }).toArray();
+      }
 
-          if (woByNumber.vehicle) {
-            vehicleInfo = {
-              year: woByNumber.vehicle.year,
-              make: woByNumber.vehicle.make,
-              model: woByNumber.vehicle.model,
-              mileage: woByNumber.odometerIn,
-            };
-          }
+      lineItems = serviceJobs.map((sj: any) => ({
+        title: sj.title,
+        description: sj.description,
+        type: sj.jobType,
+        laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
+        laborTotal: sj.laborTotal,
+        partsTotal: sj.partsTotal,
+        total: sj.total,
+      }));
 
-          const serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({
-            workOrderId: workOrderId,
-            shopId,
-            'softDelete.isDeleted': { $ne: true },
-          }).toArray();
-
-          lineItems = serviceJobs.map((sj: any) => ({
-            title: sj.title,
-            description: sj.description,
-            type: sj.jobType,
-            laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
-            laborTotal: sj.laborTotal,
-            partsTotal: sj.partsTotal,
-            total: sj.total,
-          }));
-        }
-      } else {
-        workOrderNumber = wo.workOrderNumber;
-
-        if (wo.vehicle) {
-          vehicleInfo = {
-            year: wo.vehicle.year,
-            make: wo.vehicle.make,
-            model: wo.vehicle.model,
-            mileage: wo.odometerIn,
-          };
-        }
-
-        const serviceJobs = wo.serviceJobs || [];
-        if (serviceJobs.length > 0) {
-          lineItems = serviceJobs.map((sj: any) => ({
-            title: sj.title,
-            description: sj.description,
-            type: sj.jobType,
-            laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
-            laborTotal: sj.laborTotal,
-            partsTotal: sj.partsTotal,
-            total: sj.total,
-          }));
-        }
-
-        if (lineItems.length === 0) {
-          const serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({
-            workOrderId: wo._id,
-            shopId,
-            'softDelete.isDeleted': { $ne: true },
-          }).toArray();
-
-          lineItems = serviceJobs.map((sj: any) => ({
-            title: sj.title,
-            description: sj.description,
-            type: sj.jobType,
-            laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
-            laborTotal: sj.laborTotal,
-            partsTotal: sj.partsTotal,
-            total: sj.total,
-          }));
-        }
+      if (lineItems.length === 0) {
+        return NextResponse.json({
+          ok: false,
+          code: "RO_NO_LINE_ITEMS",
+          error: `Repair order ${workOrderNumber || workOrderId} is synced, but it has no jobs/line items yet. Add jobs to the estimate first, then run the audit.`,
+        }, { status: 400, headers: corsHeaders });
       }
     }
 
@@ -379,7 +376,8 @@ export async function POST(req: NextRequest) {
         ? `${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''} (${vehicleInfo.mileage || 'N/A'} miles)`.trim()
         : "Unknown vehicle";
 
-      const completion = await openai.chat.completions.create({
+      const completion = await withUpstreamTimeout(
+        openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
@@ -411,11 +409,17 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
         temperature: 0.3,
         max_tokens: 800,
         response_format: { type: "json_object" },
-      });
+        }),
+        AI_TIMEOUT_MS,
+        "estimate-audit-ai",
+        null,
+      );
 
-      trackOpenAiCall(shopId, "/api/estimate-assist/audit", completion, Date.now() - startTime);
+      if (completion) {
+        trackOpenAiCall(shopId, "/api/estimate-assist/audit", completion, Date.now() - startTime);
+      }
 
-      const aiContent = completion.choices[0]?.message?.content || "{}";
+      const aiContent = completion?.choices[0]?.message?.content || "{}";
       let parsed: any;
       try {
         parsed = JSON.parse(aiContent);

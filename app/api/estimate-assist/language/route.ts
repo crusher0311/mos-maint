@@ -4,6 +4,11 @@ import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+
+// The AI rewrite IS this route's product — on timeout we fail loudly with a
+// clear error rather than hanging the caller or returning empty strings.
+const AI_TIMEOUT_MS = 25_000;
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +90,8 @@ export async function POST(req: NextRequest) {
       ? lineItems.map((item, i) => `${i + 1}. ${item.description} (${item.type || 'unknown type'}, labor: ${item.laborHours || 'N/A'}h, parts: $${item.partsTotal || 'N/A'})`).join("\n")
       : text;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await withUpstreamTimeout(
+      openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -119,7 +125,19 @@ If there are multiple line items, include each in the lineItems array. If just f
       temperature: 0.3,
       max_tokens: 1500,
       response_format: { type: "json_object" },
-    });
+      }),
+      AI_TIMEOUT_MS,
+      "estimate-language-ai",
+      null,
+    );
+
+    if (!completion) {
+      return NextResponse.json({
+        ok: false,
+        error: "The AI language service took too long to respond. Please try again.",
+        completionIssues,
+      }, { status: 504 });
+    }
 
     const elapsed = Date.now() - startTime;
     trackOpenAiCall(Number(session.shopId), "/api/estimate-assist/language", completion, elapsed);
