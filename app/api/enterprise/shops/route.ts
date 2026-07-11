@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
+import { grantShopAccess } from "@/lib/enterprise-access";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
-import { insertShop, insertUser, updateShopFields } from "@/lib/data/repositories/pg/identity";
+import { insertShop, updateShopFields } from "@/lib/data/repositories/pg/identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,60 +152,41 @@ export async function POST(req: NextRequest) {
     
     await addShopToEnterprise(enterpriseId, shopId);
 
-    let usersToClone: any[] = [];
-    
+    // Grant access to the selected users via the canonical Model B path
+    // (shopIds array), the same helper the manual grant button uses. The old
+    // clone-a-doc-per-shop approach only matched users whose PRIMARY shopId
+    // was inside the enterprise, silently skipping users whose enterprise
+    // access lives in their shopIds array (primary shop elsewhere).
+    let grantEmails: string[] = [];
+
     if (assignUserIds && assignUserIds.length > 0) {
-      usersToClone = await db.collection("users")
-        .find({ _id: { $in: assignUserIds.map((id: string) => new ObjectId(id)) } })
+      const validIds = assignUserIds.filter((id: unknown) => typeof id === "string" && ObjectId.isValid(id));
+      const docs = await db.collection("users")
+        .find({ _id: { $in: validIds.map((id: string) => new ObjectId(id)) } })
+        .project({ email: 1 })
         .toArray();
+      grantEmails = docs.map(d => d.email).filter(Boolean);
     } else if (assignUserEmails && assignUserEmails.length > 0) {
-      usersToClone = await db.collection("users")
-        .find({ 
-          email: { $in: assignUserEmails },
-          shopId: { $in: enterprise.shopIds }
-        })
-        .toArray();
-      
-      const uniqueEmails = new Map();
-      usersToClone.forEach(u => {
-        if (!uniqueEmails.has(u.email)) {
-          uniqueEmails.set(u.email, u);
-        }
-      });
-      usersToClone = Array.from(uniqueEmails.values());
+      grantEmails = assignUserEmails.filter((e: unknown) => typeof e === "string" && e);
     }
-    
-    for (const user of usersToClone) {
-      const existingUser = await db.collection("users").findOne({
-        email: user.email,
-        shopId
+    grantEmails = [...new Set(grantEmails.map(e => e.toLowerCase()))];
+
+    // Include the just-created shop so grantShopAccess can target it.
+    const enterpriseShopIds = [
+      ...new Set([...enterprise.shopIds.map(Number).filter(Number.isFinite), Number(shopId)]),
+    ];
+
+    const grantFailures: Array<{ email: string; error: string }> = [];
+    for (const email of grantEmails) {
+      const grant = await grantShopAccess(db, {
+        enterpriseShopIds,
+        email,
+        shopId: Number(shopId),
+        grantedBy: session.email || String(session.userId || ""),
       });
-      
-      if (!existingUser) {
-        const newUserDoc = {
-          email: user.email,
-          name: user.name,
-          passwordHash: user.passwordHash,
-          role: user.role,
-          shopId,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-        assertNoLegacyPasswordField(newUserDoc);
-        const newUserResult = await db.collection("users").insertOne(newUserDoc);
-        await dualWritePgIdentity(`users.insert(${newUserDoc.email})`, () =>
-          insertUser({
-            id: String(newUserResult.insertedId),
-            email: newUserDoc.email,
-            emailLower: newUserDoc.email.toLowerCase(),
-            passwordHash: newUserDoc.passwordHash,
-            role: newUserDoc.role,
-            shopId: newUserDoc.shopId,
-            profile: newUserDoc.name ? { name: newUserDoc.name } : undefined,
-            createdAt: newUserDoc.createdAt,
-            updatedAt: newUserDoc.updatedAt,
-          })
-        );
+      if (!grant.ok && grant.error !== "User already has access to this shop") {
+        console.error(`Enterprise shop create: failed to grant ${email} access to shop ${shopId}:`, grant.error);
+        grantFailures.push({ email, error: grant.error || "Unknown error" });
       }
     }
 
@@ -213,7 +194,8 @@ export async function POST(req: NextRequest) {
       shop: {
         _id: result.insertedId,
         ...shopDoc
-      }
+      },
+      ...(grantFailures.length > 0 ? { grantFailures } : {})
     }, { status: 201 });
   } catch (err: any) {
     console.error("Enterprise shops POST error:", err);

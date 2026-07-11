@@ -141,6 +141,7 @@ export default function EnterpriseUserAccessPage() {
       });
       
       if (res.ok) {
+        const data = await res.json();
         setShowCreateModal(false);
         setNewShop({
           name: "",
@@ -150,6 +151,13 @@ export default function EnterpriseUserAccessPage() {
           assignUserEmails: []
         });
         await loadData();
+        if (data.grantFailures?.length) {
+          alert(
+            "Location created, but access could not be granted to: " +
+            data.grantFailures.map((f: { email: string }) => f.email).join(", ") +
+            ". You can grant access manually below."
+          );
+        }
       } else {
         const data = await res.json();
         alert(data.error || "Failed to create location");
