@@ -88,3 +88,4 @@
 - [server-only blocks tsx tests](server-only-untestable-under-tsx.md) — a module importing "server-only" throws under tsx; extract pure logic into a no-server-only sibling to unit-test it.
 - [Dashboard/KB search index-friendly](dashboard-search-index-friendly.md) — dashboard Mongo search anchored to prefix (VIN upper/case-sensitive) via lib/dashboard-search.ts; KB ILIKE relies on pg_trgm; indexes operator-gated (ensure-indexes.ts + drizzle/0021).
 - [Recovery vs stale plan cache](recovery-vs-plan-cache-staleness.md) — "still shows CARFAX" after a history re-file = stale 4h cached_plans (deploy does NOT clear it); recovered job_index rows use performedAt only, but readers DO include it so shop IS credited on rebuild.
+- [Interval-import PDF paths](interval-import-pdf-paths.md) — gpt-4o PDF file-part OCR is lossier than a photo; digital PDFs must go through the unpdf text-layer path; dev `DEV_AUTO_LOGIN=true` lets unauthenticated curls hit protected routes.

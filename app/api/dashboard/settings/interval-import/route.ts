@@ -62,6 +62,23 @@ async function extractDocxText(buf: Buffer): Promise<string | null> {
   }
 }
 
+// Digital PDFs (e.g. exported from Word) carry a text layer; extracting it and
+// using the plain-text path is exactly as reliable as the .docx path. Scanned /
+// image-only PDFs return no text and fall back to sending the file to the model.
+async function extractPdfText(buf: Buffer): Promise<string | null> {
+  try {
+    const { extractText } = await import("unpdf");
+    const { text } = await extractText(new Uint8Array(buf), { mergePages: true });
+    const cleaned = (text || "").replace(/\n{3,}/g, "\n\n").trim();
+    // Require enough text to plausibly be the document body — tiny fragments
+    // (e.g. a watermark on a scanned page) should still go through the model.
+    return cleaned.length >= 200 ? cleaned : null;
+  } catch (err) {
+    console.error("[interval-import] pdf text extraction failed (falling back to model file input):", err);
+    return null;
+  }
+}
+
 type FileKind = "docx" | "pdf" | "image" | "text" | "unsupported";
 
 function classifyFile(file: File): FileKind {
@@ -108,8 +125,13 @@ export async function POST(req: NextRequest) {
 
     // Build the user-message content for the extraction call.
     let userContent: any;
-    if (kind === "docx" || kind === "text") {
-      const text = kind === "docx" ? await extractDocxText(buf) : buf.toString("utf8").trim() || null;
+    // For PDFs, prefer the embedded text layer (digital PDFs) — the plain-text
+    // path is more accurate than the model's PDF page OCR. Scanned/image-only
+    // PDFs yield no text and fall through to the model file-input branch.
+    const pdfText = kind === "pdf" ? await extractPdfText(buf) : null;
+    if (kind === "docx" || kind === "text" || pdfText) {
+      const text =
+        pdfText ?? (kind === "docx" ? await extractDocxText(buf) : buf.toString("utf8").trim() || null);
       if (!text) {
         return NextResponse.json(
           { error: "Couldn't read any text from that document. Try re-saving it or uploading a PDF/photo instead." },
