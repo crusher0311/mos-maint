@@ -67,6 +67,38 @@ export async function findLatestOpenTekmetricWorkOrderByVin(
   );
 }
 
+/**
+ * Fetches cached work orders by their human RO numbers (the number printed on
+ * the RO, stored as `workOrderNumber` — string or number across docs). Used to
+ * re-hydrate declined-job line items from the raw RO cache when a `job_index`
+ * row's lines are thin (indexed by a pre-May-2026 indexer that dropped
+ * labor/part detail). Projects only the jobs payload.
+ */
+export async function findTekmetricWorkOrdersByNumbers(
+  shopId: string | number,
+  workOrderNumbers: Array<string | number>,
+): Promise<Document[]> {
+  const wanted = Array.from(
+    new Set(
+      workOrderNumbers
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n)),
+    ),
+  );
+  if (wanted.length === 0) return [];
+  const col = await collection();
+  return col
+    .find(
+      {
+        shopId: { $in: [String(shopId), Number(shopId)] },
+        workOrderNumber: { $in: [...wanted, ...wanted.map(String)] },
+      },
+      { projection: { workOrderNumber: 1, "data.jobs": 1 } },
+    )
+    .limit(wanted.length * 2)
+    .toArray();
+}
+
 export async function listRecentTekmetricWorkOrdersForVehicle(
   shopId: string | number,
   vin: string,

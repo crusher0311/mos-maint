@@ -52,6 +52,8 @@ export interface TekmetricDeferredWorkItem {
     unitPrice: number;
     partNumber: string;
     manufacturer: string;
+    /** Labor hours (labor lines only) — the sidepanel sends this to Tekmetric. */
+    hours?: number;
     /** Task #809 — real per-unit part cost (dollars), when the source knows it. */
     cost?: number;
     extendedCost?: number;
@@ -115,6 +117,10 @@ export async function listTekmetricDeferredWorkByVin(
         unitPrice: l.unitPrice ?? 0,
         partNumber: l.partNumber || "",
         manufacturer: l.manufacturer || "",
+        // Labor hours must survive this mapping — the extension reads
+        // `item.hours` when building the Tekmetric labor payload; dropping it
+        // silently turned every declined labor line into a 1-hour default.
+        ...(typeof l.hours === "number" && l.hours > 0 ? { hours: l.hours } : {}),
         // Task #809 — surface the real part cost so the extension can push
         // it back to the RO instead of estimating from retail.
         ...(typeof l.cost === "number" && l.cost > 0 ? { cost: l.cost } : {}),

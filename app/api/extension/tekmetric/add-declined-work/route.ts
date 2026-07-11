@@ -15,11 +15,16 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
-import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
+import {
+  listTekmetricDeferredWorkByVin,
+  type TekmetricDeferredWorkItem,
+} from "@/lib/data/repositories/tekmetric-deferred-work";
 import {
   findTekmetricWorkOrderByRoId,
   findLatestOpenTekmetricWorkOrderByVin,
+  findTekmetricWorkOrdersByNumbers,
 } from "@/lib/data/repositories/tekmetric-work-orders";
+import { linesAreThin, buildLinesFromRawJob } from "@/lib/declined-work-lines";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +42,52 @@ export async function OPTIONS() {
 
 function normalizeTitle(s: string): string {
   return (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Re-hydrates thin declined-job lines from the raw `tekmetric_work_orders`
+ * cache (kept fresh by webhooks), matching each job_index row to its raw job
+ * by Tekmetric service-package id. Soft-fails to the original lines — a cache
+ * miss must never block the add flow.
+ */
+async function enrichThinLinesFromCache(
+  mosShopId: number,
+  candidates: TekmetricDeferredWorkItem[],
+): Promise<TekmetricDeferredWorkItem[]> {
+  const thin = candidates.filter((c) => linesAreThin(c.lines));
+  if (thin.length === 0) return candidates;
+  const woNumbers = thin
+    .map((c) => c.originalWorkOrderNumber)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  if (woNumbers.length === 0) return candidates;
+
+  let cacheRows: any[] = [];
+  try {
+    cacheRows = await findTekmetricWorkOrdersByNumbers(mosShopId, woNumbers);
+  } catch (err: any) {
+    console.warn("[Extension Add Declined Work] line enrichment cache read failed:", err?.message);
+    return candidates;
+  }
+
+  // Key by (workOrderNumber, jobId) — Tekmetric job ids should be globally
+  // unique, but the composite key rules out any cross-RO collision.
+  const rawJobsByKey = new Map<string, any>();
+  for (const row of cacheRows) {
+    const woNumber = Number(row?.workOrderNumber);
+    for (const rawJob of Array.isArray(row?.data?.jobs) ? row.data.jobs : []) {
+      if (rawJob?.id != null) rawJobsByKey.set(`${woNumber}:${rawJob.id}`, rawJob);
+    }
+  }
+  if (rawJobsByKey.size === 0) return candidates;
+
+  return candidates.map((c) => {
+    if (!linesAreThin(c.lines)) return c;
+    const raw = rawJobsByKey.get(`${Number(c.originalWorkOrderNumber)}:${c.id}`);
+    if (!raw) return c;
+    const rebuilt = buildLinesFromRawJob(raw);
+    if (rebuilt.length === 0 || linesAreThin(rebuilt)) return c;
+    return { ...c, lines: rebuilt };
+  });
 }
 
 async function _POST(req: NextRequest) {
@@ -73,7 +124,11 @@ async function _POST(req: NextRequest) {
     // Optional subset: the panel can pass the exact jobs the user saw so a
     // freshly-synced decline that arrived after render is never added blind.
     const wantedIds = Array.isArray(jobIds) && jobIds.length > 0 ? new Set(jobIds.map(String)) : null;
-    const candidates = wantedIds ? declined.filter((j) => wantedIds.has(String(j.id))) : declined;
+    let candidates = wantedIds ? declined.filter((j) => wantedIds.has(String(j.id))) : declined;
+    // Rows indexed before the May-2026 job-detail fix carry degraded lines
+    // ($0 parts, missing labor). Rebuild those from the raw RO cache so the
+    // extension pushes real labor hours and part prices, not zeros.
+    candidates = await enrichThinLinesFromCache(guard.mosShopId, candidates);
 
     if (candidates.length === 0) {
       return NextResponse.json(
