@@ -1,7 +1,11 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getCachedPlan, setCachedPlan, type CachedPlanData } from "@/lib/plan-cache";
+import { getCachedPlan, setCachedPlan, type CachedPlanData, type CachedPlanVariant } from "@/lib/plan-cache";
+import {
+  getEnabledChemicalProviders,
+  providerIntervalsToOverrides,
+} from "@/lib/plan-build/chemical-providers";
 import { toKeyFromFreeText, toKeyFromName } from "@/lib/service-keys";
 import { isDeclinedJobIndexRow } from "@/lib/job-index";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
@@ -189,6 +193,12 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+    // Task #803: enabled chemical-provider schedules (e.g. BG) become extra
+    // plan variants/tabs. Empty for most shops — the multi-plan path is
+    // only taken when at least one enabled provider defines intervals.
+    const chemicalProviders = getEnabledChemicalProviders(
+      shopDoc?.maintenance?.chemicalProviders
+    );
 
     const vinUpper = vin.toUpperCase();
     const vinRegex = new RegExp(`^${vinUpper}$`, 'i');
@@ -978,7 +988,11 @@ export async function POST(req: NextRequest) {
       customerName = resolveCustomerName({ vehicleDoc: vehicleDocForName });
     }
 
-    const buckets = triage({
+    // Task #803: all expensive fetch/anchor inputs are assembled once above;
+    // triage() itself is pure and in-memory, so multi-plan variants (OE /
+    // Shop / provider tabs) just re-run the projection with different
+    // interval overrides on this same shared input.
+    const triageInput = {
       oemItems,
       carfaxRecords,
       carfaxCategories,
@@ -1004,7 +1018,9 @@ export async function POST(req: NextRequest) {
       // Task #655 (manual edit): apply operator CARFAX-description overrides
       // live so manual fixes anchor VHI services without a code deploy.
       carfaxKeyOverrides,
-    });
+    };
+
+    const buckets = triage(triageInput);
 
     const isInspectItem = (item: TriagedItem) => {
       // Task #198: keep inspect-only fluid rows (e.g. Mopar's "Inspect
@@ -1026,6 +1042,55 @@ export async function POST(req: NextRequest) {
       upcoming: buckets.upcoming.filter(i => !isInspectItem(i)),
     };
 
+    // Task #803: multi-plan variants (OE / Shop / one per enabled chemical
+    // provider). Only computed when the shop actually has enabled providers —
+    // zero extra work (and no `plans` field) for everyone else. Each variant
+    // re-runs the pure in-memory triage projection with different interval
+    // overrides; the inspect-item filter is applied per variant so
+    // lifetime-fluid / inspect-only parity holds on every tab.
+    let planVariants: CachedPlanVariant[] | undefined;
+    if (chemicalProviders.length > 0) {
+      const applyInspectFilter = (b: ReturnType<typeof triage>) =>
+        showInspectItems ? b : {
+          overdue: b.overdue.filter(i => !isInspectItem(i)),
+          dueSoon: b.dueSoon.filter(i => !isInspectItem(i)),
+          upcoming: b.upcoming.filter(i => !isInspectItem(i)),
+        };
+      const toCacheBuckets = (b: ReturnType<typeof triage>) => ({
+        overdue: b.overdue.map(convertToCache),
+        dueSoon: b.dueSoon.map(convertToCache),
+        upcoming: b.upcoming.map(convertToCache),
+      });
+
+      // OE tab: factory schedule only — no shop interval overrides.
+      const oeBuckets = applyInspectFilter(
+        triage({ ...triageInput, shopIntervals: {} })
+      );
+
+      planVariants = [
+        { id: "oe", kind: "oe", label: "OE Plan", buckets: toCacheBuckets(oeBuckets) },
+        // Shop tab mirrors the primary buckets (already filtered).
+        { id: "shop", kind: "shop", label: "Shop Plan", buckets: toCacheBuckets(filteredBuckets) },
+        ...chemicalProviders.map((p): CachedPlanVariant => {
+          const providerBuckets = applyInspectFilter(
+            triage({
+              ...triageInput,
+              shopIntervals: providerIntervalsToOverrides(p),
+              // Provider schedules always apply — they ARE the plan, not a
+              // conditional per-service override.
+              intervalApplyMode: "always",
+            })
+          );
+          return {
+            id: `provider:${p.id}`,
+            kind: "provider",
+            label: p.name,
+            buckets: toCacheBuckets(providerBuckets),
+          };
+        }),
+      ];
+    }
+
     const planData: CachedPlanData = {
       buckets: {
         overdue: filteredBuckets.overdue.map(convertToCache),
@@ -1042,6 +1107,9 @@ export async function POST(req: NextRequest) {
         engineInduction: (oemData.vehicle as any)?.engine_induction ?? null,
         engineAspiration: (oemData.vehicle as any)?.engine_aspiration ?? null,
       },
+      // Task #803: multi-plan variants; undefined (field omitted) unless the
+      // shop has enabled chemical providers.
+      ...(planVariants ? { plans: planVariants } : {}),
       currentMiles: mileage,
       mpdBlended,
       customerName,

@@ -43,7 +43,13 @@ import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
-import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache } from "@/lib/plan-cache";
+import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache, type CachedPlanVariant } from "@/lib/plan-cache";
+import {
+  getEnabledChemicalProviders,
+  providerIntervalsToOverrides,
+} from "@/lib/plan-build/chemical-providers";
+import { evaluateBgLppEligibility } from "@/lib/plan-build/provider-templates";
+import PlanTabs from "@/components/plan/PlanTabs";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
@@ -2283,6 +2289,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
   // Use cached buckets if available, otherwise build from triage
   let buckets: Buckets;
+
+  // Task #803: multi-plan variants (OE / Shop / one per enabled chemical
+  // provider). Stays null when the shop has no enabled providers — the page
+  // then renders the single Shop plan exactly as before (no tabs).
+  type PlanVariantView = {
+    id: string;
+    kind: "oe" | "shop" | "provider";
+    label: string;
+    buckets: Buckets;
+  };
+  let planVariants: PlanVariantView[] | null = null;
+  const chemicalProviders = getEnabledChemicalProviders(
+    shop?.maintenance?.chemicalProviders
+  );
   
   // Check if cached buckets are missing deferred work that should be included
   const cachedDeferredCount = cachedPlan?.plan?.buckets 
@@ -2354,8 +2374,26 @@ async function PlanContent({ params, searchParams }: PageProps) {
         existingKeys.add(serviceKey);
       }
     }
+
+    // Task #803: rehydrate cached multi-plan variants. The shop variant
+    // reuses the primary `buckets` reference so the deferred-mismatch
+    // additions above stay consistent across the primary panel and the
+    // Shop tab. Cached rows built before providers were enabled have no
+    // `plans` — the page then falls back to the single-plan render.
+    if (chemicalProviders.length > 0 && Array.isArray(cached.plans) && cached.plans.length > 0) {
+      planVariants = cached.plans.map((v) => ({
+        id: v.id,
+        kind: v.kind,
+        label: v.label,
+        buckets: v.kind === "shop" ? buckets : {
+          overdue: v.buckets.overdue.map(convertCacheItem),
+          dueSoon: v.buckets.dueSoon.map(convertCacheItem),
+          upcoming: v.buckets.upcoming.map(convertCacheItem),
+        },
+      }));
+    }
   } else {
-    const rawBuckets = triage({
+    const triageInput = {
       oemItems,
       carfaxRecords,
       shopServiceHistory,
@@ -2372,13 +2410,34 @@ async function PlanContent({ params, searchParams }: PageProps) {
       engineRisk,
       oilDutyPreference,
       distanceUnit,
-    });
-
-    buckets = showInspectItems ? rawBuckets : {
-      overdue: rawBuckets.overdue.filter(i => !isInspectItemFilter(i)),
-      dueSoon: rawBuckets.dueSoon.filter(i => !isInspectItemFilter(i)),
-      upcoming: rawBuckets.upcoming.filter(i => !isInspectItemFilter(i)),
     };
+    const rawBuckets = triage(triageInput);
+
+    const applyInspectFilter = (raw: Buckets): Buckets => showInspectItems ? raw : {
+      overdue: raw.overdue.filter(i => !isInspectItemFilter(i)),
+      dueSoon: raw.dueSoon.filter(i => !isInspectItemFilter(i)),
+      upcoming: raw.upcoming.filter(i => !isInspectItemFilter(i)),
+    };
+
+    buckets = applyInspectFilter(rawBuckets);
+
+    // Task #803: build the OE + provider variants with the SAME triage
+    // inputs, only the interval overrides differ. Expensive upstream work
+    // (CARFAX/DVI/OEM/deferred fetches) already happened once above.
+    if (chemicalProviders.length > 0) {
+      const buildVariant = (intervals: Record<string, ShopIntervalOverride>): Buckets =>
+        applyInspectFilter(triage({ ...triageInput, shopIntervals: intervals }));
+      planVariants = [
+        { id: "oe", kind: "oe", label: "OE Plan", buckets: buildVariant({}) },
+        { id: "shop", kind: "shop", label: "Shop Plan", buckets },
+        ...chemicalProviders.map((p) => ({
+          id: `provider:${p.id}`,
+          kind: "provider" as const,
+          label: p.name,
+          buckets: buildVariant(providerIntervalsToOverrides(p) as Record<string, ShopIntervalOverride>),
+        })),
+      ];
+    }
 
     console.log(`[Plan Debug] Thresholds: soonMiles=${soonMiles}, soonDays=${soonDays}`);
     console.log(`[Plan Debug] Buckets: overdue=${rawBuckets.overdue.length}, dueSoon=${rawBuckets.dueSoon.length}, upcoming=${rawBuckets.upcoming.length}${!showInspectItems ? ` (filtered: overdue=${buckets.overdue.length}, dueSoon=${buckets.dueSoon.length}, upcoming=${buckets.upcoming.length})` : ''}`);
@@ -2396,6 +2455,15 @@ async function PlanContent({ params, searchParams }: PageProps) {
     buckets.overdue.forEach(applyBlurb);
     buckets.dueSoon.forEach(applyBlurb);
     buckets.upcoming.forEach(applyBlurb);
+    // Task #803: variant tabs get the same blurbs (idempotent — the shop
+    // variant shares the primary buckets reference).
+    if (planVariants) {
+      for (const v of planVariants) {
+        v.buckets.overdue.forEach(applyBlurb);
+        v.buckets.dueSoon.forEach(applyBlurb);
+        v.buckets.upcoming.forEach(applyBlurb);
+      }
+    }
   }
 
   const COMPLIMENTARY_KEYS = new Set([
@@ -2535,6 +2603,22 @@ async function PlanContent({ params, searchParams }: PageProps) {
       oemMissing: useCachedData
         ? (cachedPlan?.plan?.oemMissing === true ? true : undefined)
         : (oemLookupFailed ? true : undefined),
+      // Task #803: persist the multi-plan variants so cache hits render the
+      // OE/Shop/provider tabs without re-running triage.
+      ...(planVariants
+        ? {
+            plans: planVariants.map((v): CachedPlanVariant => ({
+              id: v.id,
+              kind: v.kind,
+              label: v.label,
+              buckets: {
+                overdue: v.buckets.overdue.map(cacheItem),
+                dueSoon: v.buckets.dueSoon.map(cacheItem),
+                upcoming: v.buckets.upcoming.map(cacheItem),
+              },
+            })),
+          }
+        : {}),
     };
     
     setCachedPlan(db, vin, shopId, currentMiles, planData).catch(err => {
@@ -2856,8 +2940,31 @@ async function PlanContent({ params, searchParams }: PageProps) {
           </section>
         )}
 
+        {/* Task #803: all plan sections render through this closure so the
+            OE/Shop/provider tabs can re-render them from a different bucket
+            set. The primary (Shop) panel keeps the unsuffixed section ids the
+            header count pills anchor to; other tabs suffix their ids so the
+            DOM stays unique while hidden. */}
+        {(() => {
+          const renderPlanSections = (sectionBuckets: Buckets, idSuffix: string = "") => {
+            const buckets = sectionBuckets;
+            const complimentaryOverdue = buckets.overdue.filter(t => isComplimentary(t) && t.source !== "protractor");
+            const complimentaryDueSoon = buckets.dueSoon.filter(isComplimentary);
+            const allComplimentary = [...complimentaryOverdue, ...complimentaryDueSoon];
+            const overdueNonDeferred = buckets.overdue.filter(t => t.source !== "protractor" && !isComplimentary(t));
+            const overdueDeferred = buckets.overdue.filter(t => t.source === "protractor");
+            const dueSoonFiltered = buckets.dueSoon.filter(t => !isComplimentary(t));
+            const counts = {
+              overdue: overdueNonDeferred.length,
+              deferred: overdueDeferred.length,
+              soon: dueSoonFiltered.length,
+              upcoming: buckets.upcoming.length,
+              complimentary: allComplimentary.length,
+            };
+            return (
+              <>
         {/* Overdue (non-deferred) */}
-        <section id="overdue" className="space-y-3">
+        <section id={`overdue${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" /> Overdue ({counts.overdue})
           </h2>
@@ -3125,7 +3232,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
         {/* Deferred (from Protractor) */}
         {overdueDeferred.length > 0 && (
-          <section id="deferred" className="space-y-3">
+          <section id={`deferred${idSuffix}`} className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-blue-700 flex items-center gap-2">
                 <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-5 h-5 rounded-full object-cover" />
@@ -3225,7 +3332,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         )}
 
         {/* Due Soon */}
-        <section id="soon" className="space-y-3">
+        <section id={`soon${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-amber-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" /> Due Soon ({counts.soon})
           </h2>
@@ -3454,7 +3561,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
         {/* Additional Services */}
         {allComplimentary.length > 0 && (
-          <section id="complimentary" className="space-y-3">
+          <section id={`complimentary${idSuffix}`} className="space-y-3">
             <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Additional Services ({counts.complimentary})
             </h2>
@@ -3534,7 +3641,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         )}
 
         {/* Upcoming */}
-        <section id="upcoming" className="space-y-3">
+        <section id={`upcoming${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-emerald-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" /> Upcoming ({counts.upcoming})
           </h2>
@@ -3684,6 +3791,59 @@ async function PlanContent({ params, searchParams }: PageProps) {
             </ul>
           )}
         </section>
+              </>
+            );
+          };
+
+          if (!planVariants || planVariants.length === 0) {
+            return renderPlanSections(buckets, "");
+          }
+          const suffixFor = (v: { id: string; kind: string }) =>
+            v.kind === "shop" ? "" : `-${v.id.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+          // BG LPP eligibility banner: provider tabs created from the
+          // "bg-lpp" template show whether THIS vehicle can enter the
+          // plan (entry mileage band + max vehicle age). Resolved from
+          // the live shop provider config, so cached plan rows need no
+          // shape change.
+          const bannerFor = (v: { id: string; kind: string }) => {
+            if (v.kind !== "provider") return null;
+            const provider = chemicalProviders.find((p) => `provider:${p.id}` === v.id);
+            if (provider?.templateId !== "bg-lpp") return null;
+            const elig = evaluateBgLppEligibility(vehicle?.year ?? null, currentMiles);
+            const styles =
+              elig.status === "eligible"
+                ? "bg-green-50 border-green-200 text-green-800"
+                : elig.status === "ineligible"
+                  ? "bg-red-50 border-red-200 text-red-800"
+                  : "bg-gray-50 border-gray-200 text-gray-700";
+            const badge =
+              elig.status === "eligible"
+                ? `Eligible — ${elig.planLabel}`
+                : elig.status === "ineligible"
+                  ? "Not eligible"
+                  : "Eligibility unknown";
+            return (
+              <div className={`mb-4 px-4 py-3 border rounded-xl ${styles}`}>
+                <p className="text-sm font-semibold">
+                  BG Lifetime Protection Plan: {badge}
+                </p>
+                <p className="text-xs mt-0.5">{elig.detail}</p>
+              </div>
+            );
+          };
+          return (
+            <PlanTabs
+              tabs={planVariants.map(v => ({ id: v.id, label: v.label }))}
+              defaultTabId="shop"
+              panels={planVariants.map(v => (
+                <>
+                  {bannerFor(v)}
+                  {renderPlanSections(v.buckets, suffixFor(v))}
+                </>
+              ))}
+            />
+          );
+        })()}
 
         {/* Debug */}
         <details className="mt-6">

@@ -40,15 +40,22 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  * implied parent display fields on `last`. Bumping forces a one-time
  * rebuild so cached rows surface the new "Anchored to <parent> on <date>"
  * label instead of falling back to the legacy "Last done at … " chrome.
- */
-/**
+ *
  * v8 (Jul 2026, task #808) — Tekmetric declined/unauthorized jobs are now
  * folded into triage: matched items carry `declined.origin === "tekmetric"`
  * (+ `roNumber`) and are forced into the overdue bucket; unmatched declined
  * jobs become their own `source: "declined"` overdue entries. Bumping forces
  * a rebuild so Tekmetric vehicles pick up the declined grouping.
+ *
+ * v9 (Jul 2026, task #803) — adds optional `plans` (multi-plan variants:
+ * OE / Shop / one per enabled chemical provider) so the dashboard tab
+ * switcher reads every variant from one cached row. Primary `buckets`
+ * stays the Shop-resolved plan (extension/partner consumers unchanged).
+ * Originally shipped as v8, renumbered to v9 on rebase because task #808
+ * had already used v8 in production — bumping forces a rebuild so rows
+ * cached under #808's v8 (which lack `plans`) pick up the tab variants.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 8;
+export const PLAN_CACHE_SCHEMA_VERSION = 9;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -142,6 +149,24 @@ export interface TriagedItemCache {
   byTime?: "overdue" | "soon" | "ok" | null;
 }
 
+/**
+ * Task #803: one plan variant (tab) in a multi-plan cached row.
+ * - `oe`: pure factory schedule (no shop interval overrides applied)
+ * - `shop`: shop-resolved plan — always identical to the row's primary
+ *   `buckets` (duplicated here so tab readers don't special-case it)
+ * - `provider`: one per enabled chemical provider (id = provider id)
+ */
+export interface CachedPlanVariant {
+  id: string;
+  kind: "oe" | "shop" | "provider";
+  label: string;
+  buckets: {
+    overdue: TriagedItemCache[];
+    dueSoon: TriagedItemCache[];
+    upcoming: TriagedItemCache[];
+  };
+}
+
 export interface CachedDeferredWork {
   ID?: string;
   ServiceItemID?: string;
@@ -166,6 +191,14 @@ export interface CachedPlanData {
     engineInduction?: string | null;
     engineAspiration?: string | null;
   };
+  /**
+   * Task #803: multi-plan variants (OE / Shop / one per enabled chemical
+   * provider) for the dashboard tab switcher. Present ONLY when the shop
+   * has at least one enabled provider with intervals — otherwise the field
+   * is omitted entirely and readers fall back to single-plan rendering.
+   * The `shop` variant always mirrors the primary `buckets`.
+   */
+  plans?: CachedPlanVariant[];
   currentMiles: number | null;
   mpdBlended: number | null;
   customerName: string | null;
