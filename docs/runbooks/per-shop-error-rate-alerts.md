@@ -101,10 +101,14 @@ would silence the data feeding the alert and is a footgun.
 Symptom: One shop's `json.shopId` accounts for ≥ 20 401s in 10 min.
 1. Pull the `json.code` distribution from the matching window. The
    #502 codes tell you whether it's a real session death
-   (`TOKEN_INVALID`) or a soft expiry (`TOKEN_EXPIRED`, `TOKEN_MISSING`,
+   (`TOKEN_INVALID`, `TOKEN_EXPIRED` — both terminal on the extension
+   side since #760) or a soft failure (`TOKEN_MISSING`,
    `SHOP_FORBIDDEN`, `AUTH_LOOKUP_FAILED`).
 2. If `TOKEN_INVALID` dominates: confirm the user(s) and check
    `users.extensionTokens[]` — they may have hit the multi-device cap.
+   If `TOKEN_EXPIRED` dominates: the extension now clears the dead
+   token and prompts re-login, so a sustained storm means users on a
+   pre-#760 extension build or a token-age/clock issue server-side.
 3. If `AUTH_LOOKUP_FAILED` dominates: this is the W4 PG-identity drift
    net; check Mongo↔PG identity replication, NOT a per-user issue.
 4. If mixed: usually a deploy regression. Check the most recent

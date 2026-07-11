@@ -1585,15 +1585,20 @@ function reportTelemetry(name, payload) {
 // 503 / AUTH_LOOKUP_FAILED never clears the token under any
 // circumstance.
 const MOS_AUTH_RETRY_DELAYS_MS = [500, 1500, 4000];
-// Only TOKEN_INVALID is treated as a real "your credentials are dead,
-// log out now" signal after the retry budget + silent re-auth both
-// fail. Everything else (TOKEN_EXPIRED, TOKEN_MISSING, SHOP_FORBIDDEN,
-// AUTH_LOOKUP_FAILED, unknown codes) is soft — we surface a session-
-// may-have-expired error but leave the token in place so the user
-// chooses to re-login rather than being silently bounced. Per task
-// #502: SHOP_FORBIDDEN is a route-scope mismatch (re-auth won't fix
-// it), TOKEN_EXPIRED is recoverable via the popup login flow.
-const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID']);
+// TOKEN_INVALID and TOKEN_EXPIRED are treated as real "your
+// credentials are dead, log out now" signals after the retry budget +
+// silent re-auth both fail. A sustained TOKEN_EXPIRED means the server
+// has hard-expired this token by age — keeping it just leaves the
+// extension in a false-authed limbo where every call 401s while the UI
+// still looks logged in (common on long shifts). Everything else
+// (TOKEN_MISSING, SHOP_FORBIDDEN, AUTH_LOOKUP_FAILED, unknown codes)
+// is soft — we surface a session-may-have-expired error but leave the
+// token in place so the user chooses to re-login rather than being
+// silently bounced. SHOP_FORBIDDEN is a route-scope mismatch (re-auth
+// won't fix it, and the token still works for other shops). Transient
+// blips never reach this decision: the retry budget + silent re-auth
+// above must all fail with the same terminal code first.
+const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED']);
 
 function _jitter(ms) { return ms + Math.floor(Math.random() * (ms / 3)); }
 

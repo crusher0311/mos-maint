@@ -1,6 +1,6 @@
 # Detect Dog by MOS Tools — Changelog
 
-## 1.27.57 — 2026-07-07
+## 1.27.57 — 2026-07-09
 
 ### Added
 - **DVI pre-fill now shows *why* each item was auto-filled.** After running the
@@ -13,6 +13,18 @@
   at a glance whether a green mark is a confirmed history signal or a generic
   interval guess before finalizing the inspection. The pre-fill logic itself is
   unchanged. Clicking **Done** (or outside the panel) reloads the RO as before.
+
+### Fixed
+- **Stuck "logged in but nothing works" after a long shift.** When a login
+  token hit its server-side age limit (`TOKEN_EXPIRED`), the extension kept
+  the dead token and still looked signed in, while every request quietly
+  failed. A genuinely expired token is now treated like an invalid one: after
+  the usual retries and a silent re-login attempt all fail, the dead token is
+  cleared and the extension clearly prompts for a fresh login. One-off
+  hiccups are unchanged — a single transient 401 still never logs anyone out
+  mid-shift.
+
+## 1.27.56 — 2026-07-07
 
 ### Fixed
 - **Tekmetric: adding a canned job felt slow.** The server call itself is fast
