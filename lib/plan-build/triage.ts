@@ -15,6 +15,7 @@
 import {
   SERVICE_KEY_DISPLAY_NAMES,
   toKeyFromName,
+  toKeyFromFreeText,
   parseServiceAction,
   isLifetimeFluidItem,
   isInspectOnlyFluidItem,
@@ -249,6 +250,29 @@ export type DeclinedServiceEntry = {
   mileage?: number | null;
   reason?: string | null;
   declinedAt: string;
+  /**
+   * Task #808: where this decline signal came from. `"shop"` (or missing,
+   * on entries cached before this field existed) = the manual per-vehicle
+   * declinedServices list; `"tekmetric"` = a declined/unauthorized job
+   * pulled from Tekmetric history. Tekmetric-declined matches are forced
+   * into the overdue bucket; manual ones keep their computed bucket.
+   */
+  origin?: "shop" | "tekmetric";
+  /** Task #808: RO number the job was declined on (Tekmetric only). */
+  roNumber?: number | null;
+};
+
+/**
+ * Task #808: a declined/unauthorized job from Tekmetric history
+ * (`listTekmetricDeferredWorkByVin`), fed into triage so it can be matched
+ * against VHI items by service key or surfaced as its own overdue entry.
+ */
+export type TekmetricDeclinedJob = {
+  id: string;
+  title: string;
+  /** ISO date string of the RO the job was declined on (may be null). */
+  date?: string | null;
+  originalWorkOrderNumber?: number | null;
 };
 
 export type ShopIntervalOverride = {
@@ -287,7 +311,7 @@ export interface TriagedItem {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
-  source?: "oem" | "dvi" | "protractor" | "common";
+  source?: "oem" | "dvi" | "protractor" | "common" | "declined";
   dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
@@ -346,6 +370,7 @@ export function triage({
   dviFindings,
   protractorDeferredWork = [],
   declinedServices = [],
+  tekmetricDeclinedJobs = [],
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
@@ -383,6 +408,13 @@ export function triage({
   dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
   declinedServices?: DeclinedServiceEntry[];
+  /**
+   * Task #808: declined/unauthorized jobs from Tekmetric history. Matched
+   * against triaged items via free-text service-key matching; matches get
+   * the `declined` flag (origin "tekmetric") and are forced into overdue,
+   * unmatched jobs become their own labeled overdue entries.
+   */
+  tekmetricDeclinedJobs?: TekmetricDeclinedJob[];
   soonMiles?: number;
   soonDays?: number;
   milesPerDay?: number | null;
@@ -1262,6 +1294,81 @@ export function triage({
     });
   }
 
+  // Task #808: fold Tekmetric declined/unauthorized jobs into the plan.
+  // Each job is matched against already-triaged items via the free-text
+  // service-key path; matched items carry the declined flag (and are later
+  // forced into the overdue bucket), unmatched jobs become their own
+  // labeled overdue entries. A job whose service was performed AFTER the
+  // decline date is treated as resolved (clock reset) and dropped.
+  if ((tekmetricDeclinedJobs || []).length > 0) {
+    const itemsByServiceKey = new Map<string, TriagedItem[]>();
+    for (const t of triaged) {
+      if (!t.serviceKey) continue;
+      const arr = itemsByServiceKey.get(t.serviceKey);
+      if (arr) arr.push(t);
+      else itemsByServiceKey.set(t.serviceKey, [t]);
+    }
+
+    const seenDeclinedTitles = new Set<string>();
+    for (const dj of tekmetricDeclinedJobs || []) {
+      const title = (dj.title || "").trim() || "Declined Service";
+      const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ");
+      if (seenDeclinedTitles.has(normalizedTitle)) continue;
+      seenDeclinedTitles.add(normalizedTitle);
+
+      const keys = toKeyFromFreeText(title) || [];
+      const declinedDate = dj.date ? new Date(dj.date) : null;
+      const entry: DeclinedServiceEntry = {
+        serviceKey: keys[0] || `tek_declined_${dj.id}`,
+        serviceName: title,
+        mileage: null,
+        reason: null,
+        declinedAt: dj.date || "",
+        origin: "tekmetric",
+        roNumber: dj.originalWorkOrderNumber ?? null,
+      };
+
+      let matchedAny = false;
+      for (const k of keys) {
+        for (const t of itemsByServiceKey.get(k) || []) {
+          matchedAny = true;
+          // Performed-after-decline guard: if this service has a direct
+          // history anchor newer than the decline, the customer already
+          // resolved it — don't re-flag the item.
+          if (
+            declinedDate &&
+            !isNaN(declinedDate.getTime()) &&
+            t.last?.date &&
+            t.last.date > declinedDate
+          ) {
+            continue;
+          }
+          if (!t.declined) t.declined = entry;
+        }
+      }
+
+      if (!matchedAny) {
+        triaged.push({
+          key: `declined_${dj.id}`,
+          serviceKey: entry.serviceKey,
+          title,
+          category: "Customer Declined",
+          intervalMiles: null,
+          intervalMonths: null,
+          last: undefined,
+          dueAtMiles: null,
+          dueAtDate: null,
+          milesToGo: null,
+          daysToGo: null,
+          bump: "red",
+          source: "declined",
+          reason: undefined,
+          declined: entry,
+        });
+      }
+    }
+  }
+
   const overdue: TriagedItem[] = [];
   const dueSoon: TriagedItem[] = [];
   const upcoming: TriagedItem[] = [];
@@ -1297,6 +1404,11 @@ export function triage({
     const dSoon = t.daysToGo != null && t.daysToGo > 0 && t.daysToGo <= soonDays;
 
     if (t.bump === "red") { overdue.push(t); continue; }
+    // Task #808: Tekmetric-declined matches are grouped in the overdue
+    // section regardless of computed due state — the shop recommended the
+    // work and the customer declined it, so it stays front-and-center.
+    // Manual shop declines (origin "shop"/missing) keep legacy behavior.
+    if (t.declined?.origin === "tekmetric") { overdue.push(t); continue; }
     if (t.bump === "yellow") {
       if (!(mOver || dOver)) dueSoon.push(t);
       else overdue.push(t);

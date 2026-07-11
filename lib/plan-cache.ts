@@ -41,7 +41,14 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  * rebuild so cached rows surface the new "Anchored to <parent> on <date>"
  * label instead of falling back to the legacy "Last done at … " chrome.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 7;
+/**
+ * v8 (Jul 2026, task #808) — Tekmetric declined/unauthorized jobs are now
+ * folded into triage: matched items carry `declined.origin === "tekmetric"`
+ * (+ `roNumber`) and are forced into the overdue bucket; unmatched declined
+ * jobs become their own `source: "declined"` overdue entries. Bumping forces
+ * a rebuild so Tekmetric vehicles pick up the declined grouping.
+ */
+export const PLAN_CACHE_SCHEMA_VERSION = 8;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -49,6 +56,10 @@ export interface DeclinedServiceCache {
   mileage?: number | null;
   reason?: string | null;
   declinedAt: string;
+  /** Task #808: "tekmetric" = declined job from Tekmetric history; "shop"/missing = manual list. */
+  origin?: "shop" | "tekmetric";
+  /** Task #808: RO number the job was declined on (Tekmetric only). */
+  roNumber?: number | null;
 }
 
 export interface TriagedItemCache {
@@ -80,7 +91,7 @@ export interface TriagedItemCache {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
-  source?: "oem" | "dvi" | "protractor" | "common";
+  source?: "oem" | "dvi" | "protractor" | "common" | "declined";
   dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   usingShopInterval?: boolean;

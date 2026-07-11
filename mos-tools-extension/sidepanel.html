@@ -161,13 +161,6 @@
           </svg>
           <span>Create RO</span>
         </button>
-        <button class="tab-btn hidden" data-tab="deferred" data-provider="tekmetric" title="Previously Declined / Deferred Work">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 8v4l3 3"/>
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-          <span>Declined</span>
-        </button>
         <button class="tab-btn" data-tab="specs" title="Vehicle Specs">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
@@ -191,7 +184,10 @@
           </div>
           <div id="plan-content" class="hidden">
             <section id="overdue-section" class="plan-section hidden">
-              <h3 class="section-title section-overdue">⚠️ Overdue</h3>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <h3 class="section-title section-overdue">⚠️ Overdue</h3>
+                <button id="add-all-declined-btn" class="btn-add hidden" title="Add every previously declined job to the current repair order" style="flex-shrink:0;">+ Add All Declined</button>
+              </div>
               <ul id="overdue-list" class="service-list"></ul>
             </section>
             <section id="due-soon-section" class="plan-section hidden">
@@ -674,19 +670,6 @@
               <p>Navigate to a repair order to use Estimate Assist.</p>
             </div>
           </div>
-        </div>
-
-        <!-- Declined / Deferred work tab (Tekmetric, read-only) -->
-        <div id="tab-deferred" class="tab-panel hidden">
-          <div id="deferred-loading" class="panel-loading hidden">
-            <div class="spinner-small"></div>
-            <span>Loading declined work...</span>
-          </div>
-          <div id="deferred-empty" class="panel-empty hidden">
-            <p>No previously declined or deferred work on file for this vehicle.</p>
-          </div>
-          <p id="deferred-error" class="error-text hidden" style="padding: 0 16px;"></p>
-          <ul id="deferred-list" class="job-list hidden"></ul>
         </div>
 
         <div id="tab-specs" class="tab-panel hidden">

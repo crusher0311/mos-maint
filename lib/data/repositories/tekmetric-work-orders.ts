@@ -24,6 +24,49 @@ async function collection(): Promise<Collection<Document>> {
  * `shopId` is stored as either a string or number across docs, so both are
  * matched. `vin` is upper-cased here to match how VINs are persisted.
  */
+// Task #808: statuses that mean an RO can no longer accept new jobs. Mirrors
+// the open-RO lookup in /api/tekmetric/apply-canned-job.
+const TERMINAL_RO_STATUSES = ["Invoiced", "Void", "Archived"];
+
+/**
+ * Finds a cached Tekmetric work order by its Tekmetric RO id (stored as
+ * `workOrderId` — string or number across docs — or nested `data.id`).
+ */
+export async function findTekmetricWorkOrderByRoId(
+  shopId: string | number,
+  roId: number,
+): Promise<Document | null> {
+  const col = await collection();
+  return col.findOne({
+    shopId: { $in: [String(shopId), Number(shopId)] },
+    $or: [
+      { workOrderId: { $in: [String(roId), Number(roId)] } },
+      { "data.id": Number(roId) },
+    ],
+  });
+}
+
+/**
+ * Finds the newest cached non-terminal (open) Tekmetric work order for a
+ * VIN — the RO new jobs should land on when the caller has no explicit RO id.
+ */
+export async function findLatestOpenTekmetricWorkOrderByVin(
+  shopId: string | number,
+  vin: string,
+): Promise<Document | null> {
+  const vinUpper = String(vin || "").toUpperCase();
+  if (!vinUpper) return null;
+  const col = await collection();
+  return col.findOne(
+    {
+      shopId: { $in: [String(shopId), Number(shopId)] },
+      vin: vinUpper,
+      status: { $nin: TERMINAL_RO_STATUSES },
+    },
+    { sort: { fetchedAt: -1, updatedDate: -1 } },
+  );
+}
+
 export async function listRecentTekmetricWorkOrdersForVehicle(
   shopId: string | number,
   vin: string,

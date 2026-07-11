@@ -58,6 +58,7 @@ import {
   INSPECTION_SERVICE_KEYS,
   type ServiceAction,
 } from "@/lib/service-keys";
+import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
 import { getShopDviBestPracticeMap } from "@/lib/dvi-best-practices";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
@@ -598,6 +599,18 @@ type DeclinedServiceEntry = {
   mileage?: number | null;
   reason?: string | null;
   declinedAt: string;
+  /** Task #808: "tekmetric" = declined job from Tekmetric history; "shop"/missing = manual list. */
+  origin?: "shop" | "tekmetric";
+  /** Task #808: RO number the job was declined on (Tekmetric only). */
+  roNumber?: number | null;
+};
+
+/** Task #808: declined/unauthorized job pulled from Tekmetric history. */
+type TekmetricDeclinedJob = {
+  id: string;
+  title: string;
+  date?: string | null;
+  originalWorkOrderNumber?: number | null;
 };
 
 type MatchedDeferred = {
@@ -626,7 +639,7 @@ type TriagedItem = {
   milesToGo?: number | null;
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
-  source?: "oem" | "dvi" | "protractor" | "common";
+  source?: "oem" | "dvi" | "protractor" | "common" | "declined";
   dviSource?: "autoflow" | "autovitals" | "tekmetric";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
@@ -700,6 +713,7 @@ function triage({
   dviFindings,
   protractorDeferredWork = [],
   declinedServices = [],
+  tekmetricDeclinedJobs = [],
   soonMiles = DEFAULT_SOON_MILES,
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
@@ -717,6 +731,8 @@ function triage({
   dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }>;
   protractorDeferredWork?: ProtractorDeferredWork[];
   declinedServices?: DeclinedServiceEntry[];
+  /** Task #808: Tekmetric declined jobs, matched by free-text service key (mirrors lib/plan-build/triage). */
+  tekmetricDeclinedJobs?: TekmetricDeclinedJob[];
   soonMiles?: number;
   soonDays?: number;
   milesPerDay?: number | null;
@@ -1262,6 +1278,77 @@ function triage({
     });
   }
 
+  // Task #808: fold Tekmetric declined/unauthorized jobs into the plan
+  // (mirrors lib/plan-build/triage.ts). Matched items carry the declined
+  // flag (origin "tekmetric") and are forced into overdue below; unmatched
+  // jobs become their own labeled overdue entries. Jobs performed after
+  // the decline date are treated as resolved and dropped.
+  if ((tekmetricDeclinedJobs || []).length > 0) {
+    const itemsByServiceKey = new Map<string, TriagedItem[]>();
+    for (const t of triaged) {
+      if (!t.serviceKey) continue;
+      const arr = itemsByServiceKey.get(t.serviceKey);
+      if (arr) arr.push(t);
+      else itemsByServiceKey.set(t.serviceKey, [t]);
+    }
+
+    const seenDeclinedTitles = new Set<string>();
+    for (const dj of tekmetricDeclinedJobs || []) {
+      const title = (dj.title || "").trim() || "Declined Service";
+      const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ");
+      if (seenDeclinedTitles.has(normalizedTitle)) continue;
+      seenDeclinedTitles.add(normalizedTitle);
+
+      const keys = toKeyFromFreeText(title) || [];
+      const declinedDate = dj.date ? new Date(dj.date) : null;
+      const entry: DeclinedServiceEntry = {
+        serviceKey: keys[0] || `tek_declined_${dj.id}`,
+        serviceName: title,
+        mileage: null,
+        reason: null,
+        declinedAt: dj.date || "",
+        origin: "tekmetric",
+        roNumber: dj.originalWorkOrderNumber ?? null,
+      };
+
+      let matchedAny = false;
+      for (const k of keys) {
+        for (const t of itemsByServiceKey.get(k) || []) {
+          matchedAny = true;
+          if (
+            declinedDate &&
+            !isNaN(declinedDate.getTime()) &&
+            t.last?.date &&
+            t.last.date > declinedDate
+          ) {
+            continue;
+          }
+          if (!t.declined) t.declined = entry;
+        }
+      }
+
+      if (!matchedAny) {
+        triaged.push({
+          key: `declined_${dj.id}`,
+          serviceKey: entry.serviceKey,
+          title,
+          category: "Customer Declined",
+          intervalMiles: null,
+          intervalMonths: null,
+          last: undefined,
+          dueAtMiles: null,
+          dueAtDate: null,
+          milesToGo: null,
+          daysToGo: null,
+          bump: "red",
+          source: "declined",
+          reason: undefined,
+          declined: entry,
+        });
+      }
+    }
+  }
+
   const overdue: TriagedItem[] = [];
   const dueSoon: TriagedItem[] = [];
   const upcoming: TriagedItem[] = [];
@@ -1274,6 +1361,12 @@ function triage({
 
     // DVI bump forces severity
     if (t.bump === "red") {
+      overdue.push(t);
+      continue;
+    }
+    // Task #808: Tekmetric-declined matches are grouped in overdue
+    // regardless of computed due state (mirrors lib/plan-build/triage).
+    if (t.declined?.origin === "tekmetric") {
       overdue.push(t);
       continue;
     }
@@ -2106,6 +2199,23 @@ async function PlanContent({ params, searchParams }: PageProps) {
     declinedAt: d.declinedAt,
   }));
 
+  // Task #808: fold Tekmetric declined/unauthorized jobs into the local
+  // triage (mirrors app/api/plan-build/route.ts). The repository query is
+  // scoped to Tekmetric job_index rows, so non-Tekmetric shops simply get
+  // an empty list. Fail-open — a slow read never blocks the page.
+  let tekmetricDeclinedJobs: TekmetricDeclinedJob[] = [];
+  try {
+    const declinedRows = await listTekmetricDeferredWorkByVin(Number(shopId), vin, 50);
+    tekmetricDeclinedJobs = declinedRows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      date: r.date,
+      originalWorkOrderNumber: r.originalWorkOrderNumber,
+    }));
+  } catch (err) {
+    console.warn(`[Plan] Tekmetric declined-work lookup failed for ${vin}:`, err);
+  }
+
   // Filter out "Inspect" or "Check" items if preference is off
   const isInspectItemFilter = (item: TriagedItem) => {
     // Task #198: keep inspect-only fluid rows visible regardless of the
@@ -2235,6 +2345,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       dviFindings,
       protractorDeferredWork,
       declinedServices,
+      tekmetricDeclinedJobs,
       soonMiles,
       soonDays,
       milesPerDay: mpdBlended,
@@ -2879,7 +2990,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
-                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      Customer declined{(() => {
+                        const d = t.declined?.declinedAt ? new Date(t.declined.declinedAt) : null;
+                        return d && !isNaN(d.getTime()) ? ` on ${d.toLocaleDateString()}` : "";
+                      })()}
+                      {t.declined.roNumber ? ` (RO #${t.declined.roNumber})` : ""}
                       {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
@@ -3215,7 +3330,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
-                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      Customer declined{(() => {
+                        const d = t.declined?.declinedAt ? new Date(t.declined.declinedAt) : null;
+                        return d && !isNaN(d.getTime()) ? ` on ${d.toLocaleDateString()}` : "";
+                      })()}
+                      {t.declined.roNumber ? ` (RO #${t.declined.roNumber})` : ""}
                       {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>
@@ -3459,7 +3578,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
 
                   {t.declined && (
                     <div className="text-xs text-orange-700 mt-1 bg-orange-50 rounded px-2 py-1">
-                      Declined on {new Date(t.declined.declinedAt).toLocaleDateString()}
+                      Customer declined{(() => {
+                        const d = t.declined?.declinedAt ? new Date(t.declined.declinedAt) : null;
+                        return d && !isNaN(d.getTime()) ? ` on ${d.toLocaleDateString()}` : "";
+                      })()}
+                      {t.declined.roNumber ? ` (RO #${t.declined.roNumber})` : ""}
                       {t.declined.mileage && ` at ${fmtDistance(t.declined.mileage, distanceUnit)} ${distLabel}`}
                       {t.declined.reason && ` - ${t.declined.reason}`}
                     </div>

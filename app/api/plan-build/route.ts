@@ -38,9 +38,11 @@ import {
   type OEMItem,
   type TriagedItem,
   type DeclinedServiceEntry,
+  type TekmetricDeclinedJob,
   type ShopIntervalOverride,
   type ShopServiceHistory,
 } from "@/lib/plan-build/triage";
+import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
 import { resolveCustomerName } from "@/lib/plan-build/customer-name";
 import { buildCarfaxMatchDiagnostics } from "@/lib/plan-build/carfax-match-diagnostic";
 import { recordUnmatchedCarfaxDescription } from "@/lib/carfax-match-log";
@@ -879,6 +881,25 @@ export async function POST(req: NextRequest) {
       declinedAt: d.declinedAt,
     }));
 
+    // Task #808: fold Tekmetric declined/unauthorized jobs (job_index rows
+    // with authorized === false, same source as the #741 extension list)
+    // into the plan build. Tekmetric-connected shops only; fail-open so a
+    // slow/failed Mongo read never blocks the build.
+    let tekmetricDeclinedJobs: TekmetricDeclinedJob[] = [];
+    if (shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId || shopDoc?.integrationProvider === "tekmetric") {
+      try {
+        const declinedRows = await listTekmetricDeferredWorkByVin(shopId, vinUpper, 50);
+        tekmetricDeclinedJobs = declinedRows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          date: r.date,
+          originalWorkOrderNumber: r.originalWorkOrderNumber,
+        }));
+      } catch (err) {
+        console.log(`[PlanBuild] Tekmetric declined-work lookup error for ${vin}:`, err);
+      }
+    }
+
     // Customer-name fallback chain — see `lib/plan-build/customer-name.ts`
     // for the priority rules (Tekmetric → Protractor → Shop-Ware → vehicles).
     // We fetch each source lazily (only when prior sources resolved nothing)
@@ -966,6 +987,7 @@ export async function POST(req: NextRequest) {
       dviFindings,
       protractorDeferredWork,
       declinedServices,
+      tekmetricDeclinedJobs,
       soonMiles,
       soonDays,
       milesPerDay: mpdBlended,

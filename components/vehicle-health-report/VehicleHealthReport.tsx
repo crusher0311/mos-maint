@@ -36,6 +36,11 @@ interface PlanItem {
   reason: string | null;
   usingShopInterval: boolean;
   declined: boolean;
+  /** Task #808: declined-work provenance (null on plans cached before schema v8). */
+  declinedAt?: string | null;
+  declinedReason?: string | null;
+  declinedRoNumber?: number | null;
+  declinedOrigin?: "shop" | "tekmetric" | null;
   matchedDeferred: any;
   protractorDeferredId: string | null;
   action?: string | null;
@@ -553,8 +558,25 @@ export default function VehicleHealthReport({
                                   </span>
                                 )}
                                 {item.declined && (
-                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                                  <span
+                                    className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-medium"
+                                    title={(() => {
+                                      // Task #808: show the decline date / RO when known
+                                      // (Tekmetric-declined work carries both; older
+                                      // cached plans have neither).
+                                      const d = item.declinedAt ? new Date(item.declinedAt) : null;
+                                      const parts: string[] = [];
+                                      if (d && !isNaN(d.getTime())) parts.push(`Declined on ${d.toLocaleDateString()}`);
+                                      if (item.declinedRoNumber) parts.push(`RO #${item.declinedRoNumber}`);
+                                      if (item.declinedReason) parts.push(item.declinedReason);
+                                      return parts.join(" · ") || "Previously declined";
+                                    })()}
+                                  >
                                     Previously Declined
+                                    {(() => {
+                                      const d = item.declinedAt ? new Date(item.declinedAt) : null;
+                                      return d && !isNaN(d.getTime()) ? ` · ${d.toLocaleDateString()}` : "";
+                                    })()}
                                   </span>
                                 )}
                               </div>

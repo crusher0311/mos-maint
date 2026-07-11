@@ -1,5 +1,26 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.59 — 2026-07-11
+
+### Added
+- **Declined work is now part of the VHI (Tekmetric).** Previously declined
+  jobs from a vehicle's Tekmetric history now show up directly on the VHI plan
+  tab as overdue items, each with an orange **DECLINED** badge showing the
+  decline date (hover for the original RO number and reason). Declined jobs
+  that match a maintenance item flag that item; ones that don't match appear
+  as their own "Customer Declined" entries.
+- **One-click "Add All Declined" to the current RO.** When a vehicle has
+  declined Tekmetric work, an **+ Add All Declined (N)** button appears in the
+  VHI Overdue section. It adds every declined job to the open repair order in
+  one pass — jobs already on the RO are skipped automatically, and a summary
+  reports how many were added, skipped, or failed.
+
+### Removed
+- **Standalone "Declined" tab (Tekmetric).** The read-only Declined/Deferred
+  tab added in 1.27.4x is gone — its contents now live inline on the VHI plan
+  tab with the badge and add-all flow above. The Protractor Create-RO
+  "Deferred" pane is unchanged.
+
 ## 1.27.58 — 2026-07-11
 
 ### Added

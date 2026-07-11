@@ -311,6 +311,18 @@ export function formatVhiItem(item: TriagedItemCache, opts: FormatVhiItemOptions
     source: item.source ?? null,
     dviSource: item.dviSource ?? null,
     declined: !!item.declined,
+    /**
+     * Task #808: declined-work provenance. `declinedOrigin` is "tekmetric"
+     * when the decline came from Tekmetric job history (these items are
+     * forced into the overdue bucket at plan build), "shop" for the manual
+     * per-vehicle declined list. All fields are null when the item was never
+     * declined — and null on plans cached before schema v8, which consumers
+     * must tolerate.
+     */
+    declinedAt: item.declined?.declinedAt || null,
+    declinedReason: item.declined?.reason ?? null,
+    declinedRoNumber: item.declined?.roNumber ?? null,
+    declinedOrigin: item.declined ? (item.declined.origin ?? "shop") : null,
     action: item.action ?? null,
     notes: item.notes ?? null,
     recommendedDefault: !!item.recommendedDefault,
