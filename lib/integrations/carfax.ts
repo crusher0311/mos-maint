@@ -4,6 +4,12 @@ import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { invalidateShopPlanCache } from "@/lib/plan-cache";
+import {
+  parseCarfaxRecallRecords,
+  type CarfaxRecallRecord,
+} from "@/lib/carfax-recalls";
+
+export type { CarfaxRecallRecord } from "@/lib/carfax-recalls";
 
 type Fetcher = typeof fetch;
 
@@ -25,6 +31,10 @@ export type CarfaxResult = {
   ok: boolean;
   vin?: string | null;
   reportDate?: string | null;
+  // VHR-only fields (numberOfOwners/accidents/damageReports/titleIssues/
+  // recalls) belong to CARFAX's full Vehicle History Report product and never
+  // appear in the Service History Check payloads we receive — they are always
+  // null here. Kept nullable for compatibility with old snapshots/consumers.
   numberOfOwners?: number | null;
   accidents?: number | null;
   damageReports?: number | null;
@@ -32,7 +42,13 @@ export type CarfaxResult = {
   serviceRecords?: CarfaxServiceRecord[] | null;
   serviceCategories?: CarfaxServiceCategory[] | null;
   titleIssues?: string[] | null;
+  /** Legacy VHR-only field — always null (see note above). Recall data from
+   * Service History Check payloads lives in `recallRecords` instead. */
   recalls?: string[] | null;
+  /** Structured recall records parsed from serviceHistory.displayRecords. */
+  recallRecords?: CarfaxRecallRecord[] | null;
+  /** CARFAX's own recall count (serviceHistory.numberOfRecallRecords). */
+  numberOfRecallRecords?: number | null;
   raw?: any;
   error?: string;
 };
@@ -230,20 +246,16 @@ export async function fetchCarfaxLive(
     nonEmpty(root?.createdAt) ||
     null;
 
-  const owners =
-    toInt(root?.numberOfOwners) ??
-    toInt(root?.ownersCount) ??
-    (Array.isArray(root?.ownershipHistory) ? root.ownershipHistory.length : null);
-
-  const accidents =
-    toInt(root?.accidentCount) ??
-    (Array.isArray(root?.accidents) ? root.accidents.length : null) ??
-    null;
-
-  const damageReports =
-    toInt(root?.damageCount) ??
-    (Array.isArray(root?.damage) ? root.damage.length : null) ??
-    null;
+  // VHR-only fields: numberOfOwners / accidents / damageReports (and, further
+  // down, titleIssues / a root-level `recalls` array) belong to CARFAX's full
+  // Vehicle History Report product. The Service History Check payloads this
+  // integration receives NEVER contain them (verified across 51k+ cached
+  // reports), so we no longer pretend to parse them. They remain in
+  // CarfaxResult as nullable for compatibility with old snapshots and
+  // downstream consumers.
+  const owners: number | null = null;
+  const accidents: number | null = null;
+  const damageReports: number | null = null;
 
   // ---- Build service records from a few possible shapes ----
   let serviceRecords: CarfaxServiceRecord[] | null = null;
@@ -329,15 +341,14 @@ export async function fetchCarfaxLive(
         .filter((c): c is CarfaxServiceCategory => c !== null)
     : null;
 
-  const titleIssues: string[] | null =
-    Array.isArray(root?.titleIssues)
-      ? root.titleIssues.map((x: any) => String(x)).filter(Boolean)
-      : null;
+  // VHR-only (see note above): titleIssues and a root-level `recalls` array
+  // never exist in Service History Check payloads. Real recall data arrives
+  // as `type: "recall"` entries inside serviceHistory.displayRecords and is
+  // parsed into `recallRecords` below.
+  const titleIssues: string[] | null = null;
+  const recalls: string[] | null = null;
 
-  const recalls: string[] | null =
-    Array.isArray(root?.recalls)
-      ? root.recalls.map((r: any) => nonEmpty(r?.title || r?.name)).filter(Boolean) as string[]
-      : null;
+  const { recallRecords, numberOfRecallRecords } = parseCarfaxRecallRecords(root);
 
   return {
     ok: true,
@@ -351,6 +362,8 @@ export async function fetchCarfaxLive(
     serviceCategories: serviceCategories ?? null,
     titleIssues: titleIssues ?? null,
     recalls: recalls ?? null,
+    recallRecords: recallRecords ?? null,
+    numberOfRecallRecords: numberOfRecallRecords ?? null,
     raw: json,
   };
 }
@@ -465,6 +478,8 @@ export async function upsertCarfaxSnapshot(
           serviceRecords: 1,
           serviceCategories: 1,
           lastReportedMileage: 1,
+          recallRecords: 1,
+          numberOfRecallRecords: 1,
           ok: 1,
         },
       }
@@ -476,6 +491,18 @@ export async function upsertCarfaxSnapshot(
     existing.ok &&
     Array.isArray(existing.serviceRecords) &&
     existing.serviceRecords.length > 0;
+
+  // Recall data is preserved independently of service history: a snapshot can
+  // legitimately have recall records but zero service records (e.g. a vehicle
+  // with an open recall and no reported service). A failed or empty refetch
+  // must never wipe stored recall data either.
+  const existingHasRecallContent =
+    existing &&
+    existing.ok &&
+    Array.isArray(existing.recallRecords) &&
+    existing.recallRecords.length > 0;
+
+  const existingHasAnyContent = existingHasContent || existingHasRecallContent;
 
   // Common lifecycle fields that always update on a fetch attempt.
   const lifecycle: Record<string, any> = {
@@ -493,7 +520,7 @@ export async function upsertCarfaxSnapshot(
       lastErrorMessage: report.error ?? null,
       rawError: report.raw ?? null,
     };
-    if (!existingHasContent) {
+    if (!existingHasAnyContent) {
       // Nothing to preserve — write the failure as the canonical state.
       setFields.fetchedAt = now;
       setFields.ok = false;
@@ -508,8 +535,12 @@ export async function upsertCarfaxSnapshot(
       setFields.damageReports = null;
       setFields.titleIssues = null;
       setFields.recalls = null;
+      setFields.recallRecords = null;
+      setFields.numberOfRecallRecords = null;
     }
-    // else: leave ok / serviceRecords / etc. as the previously-good values.
+    // else: leave ok / serviceRecords / recallRecords / etc. as the
+    // previously-good values (service history OR recall data alone is
+    // enough to protect the snapshot).
     await coll.updateOne(
       { shopId, vin },
       { $set: setFields, $setOnInsert: { createdAt: now } },
@@ -518,15 +549,25 @@ export async function upsertCarfaxSnapshot(
     return;
   }
 
-  if (!newHasContent && existingHasContent) {
-    // Case 2: ok:true but empty, and we have good prior data — preserve it.
+  if (!newHasContent && existingHasAnyContent) {
+    // Case 2: ok:true but empty, and we have good prior data (service
+    // history and/or recall records) — preserve it.
+    // Recall data follows the same never-overwrite-good-with-empty rule:
+    // we only write recallRecords here when the new fetch actually carries
+    // some (fresh recall info is safe to take even when service records
+    // came back empty); an empty/missing recall list never wipes a stored one.
+    const setFields: Record<string, any> = {
+      ...lifecycle,
+      lastEmptyFetchAt: now,
+    };
+    if (Array.isArray(report.recallRecords) && report.recallRecords.length > 0) {
+      setFields.recallRecords = report.recallRecords;
+      setFields.numberOfRecallRecords = report.numberOfRecallRecords ?? report.recallRecords.length;
+    }
     await coll.updateOne(
       { shopId, vin },
       {
-        $set: {
-          ...lifecycle,
-          lastEmptyFetchAt: now,
-        },
+        $set: setFields,
         $setOnInsert: { createdAt: now },
       },
       { upsert: true }
@@ -550,6 +591,8 @@ export async function upsertCarfaxSnapshot(
         serviceCategories: report.serviceCategories ?? null,
         titleIssues: report.titleIssues ?? null,
         recalls: report.recalls ?? null,
+        recallRecords: report.recallRecords ?? null,
+        numberOfRecallRecords: report.numberOfRecallRecords ?? null,
         ok: report.ok,
         error: report.error ?? null,
         raw: report.raw ?? null,
@@ -560,8 +603,33 @@ export async function upsertCarfaxSnapshot(
   );
 }
 
+/**
+ * Extract recall records from a stored snapshot doc. Snapshots written before
+ * recall parsing existed don't have `recallRecords`, but they DO store the raw
+ * payload — so we re-parse from `raw` on read. This makes recall data work on
+ * all 51k+ already-cached reports with no refetch.
+ */
+function recallsFromSnapshotDoc(doc: any): {
+  recallRecords: CarfaxRecallRecord[] | null;
+  numberOfRecallRecords: number | null;
+} {
+  if (Array.isArray(doc?.recallRecords)) {
+    return {
+      recallRecords: doc.recallRecords as CarfaxRecallRecord[],
+      numberOfRecallRecords: doc.numberOfRecallRecords ?? doc.recallRecords.length,
+    };
+  }
+  const raw = doc?.raw;
+  if (raw && typeof raw === "object") {
+    const root = raw.report || raw.data || raw;
+    return parseCarfaxRecallRecords(root);
+  }
+  return { recallRecords: null, numberOfRecallRecords: doc?.numberOfRecallRecords ?? null };
+}
+
 function snapshotToResult(doc: any): CarfaxResult {
   if (!doc) return { ok: false, error: "No snapshot" };
+  const { recallRecords, numberOfRecallRecords } = recallsFromSnapshotDoc(doc);
   return {
     ok: !!doc.ok,
     vin: doc.vin ?? null,
@@ -574,6 +642,8 @@ function snapshotToResult(doc: any): CarfaxResult {
     serviceCategories: doc.serviceCategories ?? null,
     titleIssues: doc.titleIssues ?? null,
     recalls: doc.recalls ?? null,
+    recallRecords,
+    numberOfRecallRecords,
     raw: doc.raw ?? null,
     error: doc.error ?? null,
   };
@@ -613,6 +683,29 @@ export async function getCachedCarfaxServiceRecords(
     .findOne({ shopId, vin: vin.toUpperCase() });
   if (!doc?.ok || !Array.isArray(doc.serviceRecords)) return [];
   return doc.serviceRecords as CarfaxServiceRecord[];
+}
+
+/**
+ * Cache-only read of the stored CARFAX recall records for a (shopId, vin).
+ *
+ * NEVER triggers a live (paid) CARFAX fetch. For snapshots written before
+ * recall parsing existed, the records are re-parsed from the stored raw
+ * payload (see `recallsFromSnapshotDoc`). Returns `null` when there is no
+ * healthy cached report or the report carries no recall data.
+ */
+export async function getCachedCarfaxRecalls(
+  shopId: number,
+  vin: string
+): Promise<CarfaxRecallRecord[] | null> {
+  if (!shopId || !vin) return null;
+  const db = await getDb();
+  const doc = await db.collection("carfax_reports").findOne(
+    { shopId, vin: vin.toUpperCase() },
+    { projection: { ok: 1, recallRecords: 1, numberOfRecallRecords: 1, raw: 1 } }
+  );
+  if (!doc?.ok) return null;
+  const { recallRecords } = recallsFromSnapshotDoc(doc);
+  return recallRecords;
 }
 
 export async function estimateMileageFromCarfax(

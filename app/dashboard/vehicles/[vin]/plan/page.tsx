@@ -10,8 +10,10 @@ import {
 import { 
   resolveCarfaxConfig, 
   fetchCarfaxWithCache,
-  estimateMileageFromCarfax
+  estimateMileageFromCarfax,
+  getCachedCarfaxRecalls
 } from "@/lib/integrations/carfax";
+import { mergeRecallsWithCarfax, type CarfaxRecallRecord } from "@/lib/carfax-recalls";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import {
   type EngineProfile,
@@ -1762,9 +1764,25 @@ async function PlanContent({ params, searchParams }: PageProps) {
   let autoVitalsCfg: any = { configured: false };
   
   // Fetch NHTSA recalls from local PostgreSQL (always fast, no caching needed)
-  const recallsResult = await getVehicleRecallsLocal(vin);
-  const recalls: VehicleRecall[] = recallsResult.ok ? recallsResult.recalls : [];
-  const recallCount = recallsResult.ok ? recallsResult.count : 0;
+  // plus any recall records from the cached CARFAX snapshot (cache-only Mongo
+  // read — NEVER triggers a live/paid CARFAX fetch). CARFAX recall records
+  // carry remedy status ("Remedy Available" / "Remedy Not Yet Available"),
+  // which the DataOne NHTSA feed does not provide.
+  const [recallsResult, carfaxRecallRecords] = await Promise.all([
+    getVehicleRecallsLocal(vin),
+    getCachedCarfaxRecalls(shopId, vin).catch((err) => {
+      console.warn(`[Plan] Cached CARFAX recall read failed for ${vin}: ${err?.message}`);
+      return null;
+    }),
+  ]);
+  const nhtsaRecalls: VehicleRecall[] = recallsResult.ok ? recallsResult.recalls : [];
+  // Enrich NHTSA entries with CARFAX remedy status (matched by campaign
+  // number) and collect CARFAX-only recalls not in the local DataOne set.
+  const { enriched: recalls, carfaxOnly: carfaxOnlyRecalls } = mergeRecallsWithCarfax(
+    nhtsaRecalls,
+    carfaxRecallRecords
+  );
+  const recallCount = recalls.length + carfaxOnlyRecalls.length;
   const safetyCriticalCount = recallsResult.ok ? recallsResult.safetyCriticalCount : 0;
 
   // CACHE HIT: Only fetch cheap local data needed for UI (shop branding, config status).
@@ -2709,7 +2727,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </summary>
-              <div className="mt-3">
+              <div className="mt-3 space-y-3">
                 {recallCount === 0 ? (
                   <div className="rounded-xl border border-green-200 bg-green-50 p-4">
                     <div className="flex items-center gap-2 text-green-700">
@@ -2744,6 +2762,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
                                 {recall.nhtsa_campaign_number}
                               </code>
                               <span className="text-sm text-neutral-600">{recall.component_description}</span>
+                              {recall.carfaxRemedyStatus && (
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                                    /not\s+yet/i.test(recall.carfaxRemedyStatus)
+                                      ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                      : 'bg-green-100 text-green-800 border-green-300'
+                                  }`}
+                                  title={`Per CARFAX${recall.carfaxManufacturerRecallNumber ? ` — Mfr recall #${recall.carfaxManufacturerRecallNumber}` : ''}`}
+                                >
+                                  {recall.carfaxRemedyStatus} · CARFAX
+                                </span>
+                              )}
                             </div>
                             
                             {recall.consequence_summary && (
@@ -2771,6 +2801,50 @@ async function PlanContent({ params, searchParams }: PageProps) {
                                 {recall.record_creation_date && ` • Issued ${new Date(recall.record_creation_date).toLocaleDateString()}`}
                               </div>
                             )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {carfaxOnlyRecalls.length > 0 && (
+                  <ul className="space-y-3">
+                    {carfaxOnlyRecalls.map((cfx: CarfaxRecallRecord, idx: number) => (
+                      <li
+                        key={cfx.nhtsaCampaignNumber || cfx.manufacturerRecallNumber || `carfax-recall-${idx}`}
+                        className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold px-2 py-0.5 rounded bg-amber-500 text-white">
+                                {cfx.recallType && /emission/i.test(cfx.recallType) ? 'EMISSIONS RECALL' : 'RECALL'}
+                              </span>
+                              {cfx.nhtsaCampaignNumber && (
+                                <code className="text-sm font-mono bg-white/50 px-2 py-0.5 rounded">
+                                  {cfx.nhtsaCampaignNumber}
+                                </code>
+                              )}
+                              <span className="text-sm text-neutral-600">
+                                {cfx.description || cfx.text.join(' — ')}
+                              </span>
+                              {cfx.remedyStatus && (
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                                    /not\s+yet/i.test(cfx.remedyStatus)
+                                      ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                      : 'bg-green-100 text-green-800 border-green-300'
+                                  }`}
+                                >
+                                  {cfx.remedyStatus} · CARFAX
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2 text-xs text-neutral-500">
+                              Reported by CARFAX
+                              {cfx.manufacturerRecallNumber && ` • Mfr recall #${cfx.manufacturerRecallNumber}`}
+                              {cfx.date && ` • Issued ${cfx.date}`}
+                            </div>
                           </div>
                         </div>
                       </li>
