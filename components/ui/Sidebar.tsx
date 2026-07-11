@@ -287,6 +287,11 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       featureId: "part_xref",
     },
     {
+      name: "Protection Plans",
+      href: "/dashboard/protection-plans",
+      icon: <Shield className="w-5 h-5" />
+    },
+    {
       name: "Settings",
       href: "/dashboard/settings",
       icon: <Settings className="w-5 h-5" />,

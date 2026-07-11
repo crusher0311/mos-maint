@@ -49,7 +49,16 @@ import {
   providerIntervalsToOverrides,
 } from "@/lib/plan-build/chemical-providers";
 import { evaluateBgLppEligibility } from "@/lib/plan-build/provider-templates";
-import PlanTabs from "@/components/plan/PlanTabs";
+import PlanTabs, { type TabBadge } from "@/components/plan/PlanTabs";
+import ProtectionPlanControls from "@/components/plan/ProtectionPlanControls";
+import {
+  computeLapseRisk,
+  detectProviderEligibility,
+  resolveProtectionPlanStatus,
+  type ProtectionPlanStatus,
+} from "@/lib/plan-build/protection-plan";
+import { listEnrollmentsForVehicle } from "@/lib/data/repositories/protection-plan-enrollments";
+import { listJobNamesForVehicle } from "@/lib/data/repositories/job-index";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
@@ -2466,6 +2475,70 @@ async function PlanContent({ params, searchParams }: PageProps) {
     }
   }
 
+  // Task #804: protection-plan enrollment status per provider. Enrollment
+  // is metadata only — it never feeds triage/plan math. Reads are cheap
+  // (one enrollments find + one bounded job_index find) and run on BOTH
+  // the cached and fresh plan paths so badges survive cache hits.
+  type ProtectionPlanInfo = {
+    providerId: string;
+    providerName: string;
+    status: ProtectionPlanStatus;
+    enrolledAt: Date | null;
+    enrolledBy: string | null;
+    overdueRequired: { serviceKey: string; title: string }[];
+    eligibilityMatches: string[];
+  };
+  const protectionPlanByVariantId = new Map<string, ProtectionPlanInfo>();
+  if (chemicalProviders.length > 0 && planVariants && planVariants.length > 0) {
+    const [enrollments, historyJobNames] = await Promise.all([
+      budgeted(
+        listEnrollmentsForVehicle(shopId, vin),
+        3000,
+        `protection-plan enrollments ${vin}`,
+        [] as Awaited<ReturnType<typeof listEnrollmentsForVehicle>>,
+      ),
+      budgeted(
+        listJobNamesForVehicle(shopId, vin),
+        3000,
+        `protection-plan history ${vin}`,
+        [] as string[],
+      ),
+    ]);
+    // Fresh builds also carry shopServiceHistory names — fold them in so
+    // eligibility works even before job_index catches up.
+    const allHistoryNames = [
+      ...historyJobNames,
+      ...shopServiceHistory.map((h) => h.serviceName),
+    ];
+    for (const provider of chemicalProviders) {
+      const variantId = `provider:${provider.id}`;
+      const variant = planVariants.find((v) => v.id === variantId);
+      if (!variant) continue;
+      const enrollment = enrollments.find((e) => e.providerId === provider.id) ?? null;
+      const lapse = computeLapseRisk(provider, variant.buckets.overdue);
+      const eligibility = detectProviderEligibility(provider, allHistoryNames);
+      protectionPlanByVariantId.set(variantId, {
+        providerId: provider.id,
+        providerName: provider.name,
+        status: resolveProtectionPlanStatus({
+          enrolled: !!enrollment,
+          atRisk: lapse.atRisk,
+          eligible: eligibility.eligible,
+        }),
+        enrolledAt: enrollment?.enrolledAt ?? null,
+        enrolledBy: enrollment?.enrolledBy ?? null,
+        overdueRequired: lapse.overdueRequired,
+        eligibilityMatches: eligibility.matches,
+      });
+    }
+  }
+  // Enrolled vehicles land on their provider's tab by default. First
+  // enrolled provider wins if a vehicle is somehow enrolled in several.
+  const enrolledVariantId =
+    Array.from(protectionPlanByVariantId.entries()).find(
+      ([, info]) => info.status === "enrolled" || info.status === "at_risk",
+    )?.[0] ?? null;
+
   const COMPLIMENTARY_KEYS = new Set([
     "oil_reminder", "oil_replacement_reminder", "reset_oil_replacement_reminder",
     "chassis_body", "tighten_nuts_bolts",
@@ -3831,12 +3904,97 @@ async function PlanContent({ params, searchParams }: PageProps) {
               </div>
             );
           };
+          // Task #804: protection-plan enrollment banner (status +
+          // enroll/un-enroll control) on every provider tab.
+          const enrollmentBannerFor = (v: { id: string; kind: string }) => {
+            if (v.kind !== "provider") return null;
+            const info = protectionPlanByVariantId.get(v.id);
+            if (!info) return null;
+            const enrolled = info.status === "enrolled" || info.status === "at_risk";
+            const styles =
+              info.status === "at_risk"
+                ? "bg-red-50 border-red-200"
+                : info.status === "enrolled"
+                  ? "bg-green-50 border-green-200"
+                  : info.status === "eligible"
+                    ? "bg-blue-50 border-blue-200"
+                    : "bg-neutral-50 border-neutral-200";
+            return (
+              <div className={`mb-4 px-4 py-3 border rounded-xl ${styles}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-neutral-800">
+                      {info.status === "at_risk" && (
+                        <span className="text-red-700">
+                          ⚠ Protection plan at risk of lapsing
+                        </span>
+                      )}
+                      {info.status === "enrolled" && (
+                        <span className="text-green-800">
+                          Enrolled in {info.providerName} protection plan
+                        </span>
+                      )}
+                      {info.status === "eligible" && (
+                        <span className="text-blue-800">
+                          Eligible for {info.providerName} protection plan
+                        </span>
+                      )}
+                      {info.status === "none" && (
+                        <span className="text-neutral-700">
+                          Not enrolled in {info.providerName} protection plan
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs mt-0.5 text-neutral-600">
+                      {info.status === "at_risk" && (
+                        <>
+                          Enrolled{info.enrolledAt ? ` ${info.enrolledAt.toLocaleDateString()}` : ""} — required service{info.overdueRequired.length === 1 ? "" : "s"} overdue:{" "}
+                          {info.overdueRequired.map((s) => s.title).join(", ")}. Staying on schedule keeps the plan active.
+                        </>
+                      )}
+                      {info.status === "enrolled" && (
+                        <>
+                          Enrolled{info.enrolledAt ? ` on ${info.enrolledAt.toLocaleDateString()}` : ""}
+                          {info.enrolledBy ? ` by ${info.enrolledBy}` : ""} — all required services on schedule.
+                        </>
+                      )}
+                      {info.status === "eligible" && (
+                        <>
+                          {info.providerName}-branded service{info.eligibilityMatches.length === 1 ? "" : "s"} found in history:{" "}
+                          {info.eligibilityMatches.slice(0, 3).join(", ")}
+                          {info.eligibilityMatches.length > 3 ? ", …" : ""}. Consider enrolling this vehicle.
+                        </>
+                      )}
+                      {info.status === "none" && (
+                        <>No qualifying {info.providerName} services found in this vehicle&apos;s history yet.</>
+                      )}
+                    </p>
+                  </div>
+                  <ProtectionPlanControls
+                    vin={vin}
+                    providerId={info.providerId}
+                    providerName={info.providerName}
+                    enrolled={enrolled}
+                  />
+                </div>
+              </div>
+            );
+          };
+          const tabBadgeFor = (v: { id: string; kind: string }): TabBadge | null => {
+            const info = protectionPlanByVariantId.get(v.id);
+            if (!info) return null;
+            if (info.status === "at_risk") return { text: "At risk", tone: "red" };
+            if (info.status === "enrolled") return { text: "Enrolled", tone: "green" };
+            if (info.status === "eligible") return { text: "Eligible", tone: "blue" };
+            return null;
+          };
           return (
             <PlanTabs
-              tabs={planVariants.map(v => ({ id: v.id, label: v.label }))}
-              defaultTabId="shop"
+              tabs={planVariants.map(v => ({ id: v.id, label: v.label, badge: tabBadgeFor(v) }))}
+              defaultTabId={enrolledVariantId ?? "shop"}
               panels={planVariants.map(v => (
                 <>
+                  {enrollmentBannerFor(v)}
                   {bannerFor(v)}
                   {renderPlanSections(v.buckets, suffixFor(v))}
                 </>

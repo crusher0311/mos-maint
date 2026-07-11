@@ -2,7 +2,20 @@
 
 import { useState, type ReactNode } from "react";
 
-type TabDef = { id: string; label: string };
+/**
+ * Task #804: optional status badge rendered inside the tab button
+ * (protection-plan Enrolled / At risk / Eligible pills).
+ */
+export type TabBadge = { text: string; tone: "green" | "amber" | "red" | "blue" };
+
+type TabDef = { id: string; label: string; badge?: TabBadge | null };
+
+const BADGE_TONE_CLASSES: Record<TabBadge["tone"], string> = {
+  green: "bg-green-100 text-green-800",
+  amber: "bg-amber-100 text-amber-800",
+  red: "bg-red-100 text-red-800",
+  blue: "bg-blue-100 text-blue-800",
+};
 
 /**
  * Task #803: client-side tab switcher for the multi-plan (OE / Shop /
@@ -48,7 +61,16 @@ export default function PlanTabs({
                   : "border-transparent text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50"
               }`}
             >
-              {t.label}
+              <span className="inline-flex items-center gap-1.5">
+                {t.label}
+                {t.badge && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold leading-none ${BADGE_TONE_CLASSES[t.badge.tone]}`}
+                  >
+                    {t.badge.text}
+                  </span>
+                )}
+              </span>
             </button>
           );
         })}
