@@ -37,13 +37,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Shop is locked. Unlock it first to access." }, { status: 403 });
     }
 
+    // Match users by primary shopId OR by Model-B multi-shop access
+    // (shopIds array) — enterprise users often have their primary shop
+    // elsewhere and only appear in shopIds for this location. Both fields
+    // exist with number AND string typing in live data (grantShopAccess
+    // stores shopIds as strings), so match both forms.
+    const idForms = [shopId, String(shopId)];
+    const shopMatch = {
+      $or: [{ shopId: { $in: idForms } }, { shopIds: { $in: idForms } }],
+    };
+
     let targetUser = await db.collection("users").findOne({
-      shopId,
+      ...shopMatch,
       role: "owner",
     });
 
     if (!targetUser) {
-      targetUser = await db.collection("users").findOne({ shopId });
+      targetUser = await db.collection("users").findOne(shopMatch);
     }
 
     if (!targetUser) {
