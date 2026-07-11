@@ -5618,20 +5618,60 @@ async function runEstimateAudit() {
   resultEl.innerHTML = '';
 
   try {
+    // Prefer the jobs currently on screen: fetch them live from the
+    // Tekmetric page session (same path the labor-rate flow uses). This
+    // makes the audit work even when the RO hasn't synced to the MOS DB
+    // yet (open/in-progress ROs, freshly added estimate lines). If the
+    // live fetch fails or yields nothing, fall back to the server-side
+    // lookup by RO id — exactly the old behavior.
+    const auditBody = { workOrderId: String(currentContext.roId) };
+    if (currentContext.provider === 'tekmetric') {
+      try {
+        const liveJobs = await sendMessage({
+          action: 'GET_RO_AUDIT_LINE_ITEMS',
+          shopId: currentContext.shopId,
+          roId: currentContext.roId
+        });
+        if (liveJobs?.success && Array.isArray(liveJobs.lineItems) && liveJobs.lineItems.length > 0) {
+          auditBody.lineItems = liveJobs.lineItems;
+        } else if (liveJobs?.error) {
+          console.warn('[MOS] Audit live-jobs fetch unavailable, using server lookup:', liveJobs.error);
+        }
+      } catch (liveErr) {
+        console.warn('[MOS] Audit live-jobs fetch failed, using server lookup:', liveErr?.message || liveErr);
+      }
+    }
+    if (currentContext.vehicle && (currentContext.vehicle.year || currentContext.vehicle.make)) {
+      auditBody.vehicleInfo = {
+        year: currentContext.vehicle.year,
+        make: currentContext.vehicle.make,
+        model: currentContext.vehicle.model,
+        mileage: currentContext.scrapedOdometer || currentContext.mileage || undefined
+      };
+    }
+
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/estimate-assist/audit',
       options: {
         method: 'POST',
-        body: JSON.stringify({
-          workOrderId: String(currentContext.roId)
-        })
+        body: JSON.stringify(auditBody)
       }
     });
 
     loadingEl.classList.add('hidden');
 
-    if (result.error) throw new Error(result.error);
+    if (result.error) {
+      // Surface the server's specific error codes as friendly messages
+      // instead of the generic "no line items" string.
+      if (result.code === 'RO_NOT_SYNCED') {
+        throw new Error("This repair order hasn't synced to MOS yet and we couldn't read the estimate from the page. Try again in a few minutes.");
+      }
+      if (result.code === 'RO_NO_LINE_ITEMS') {
+        throw new Error('No jobs found on this estimate yet. Add jobs to the estimate first, then run the audit.');
+      }
+      throw new Error(result.error);
+    }
     if (!result.ok || !result.report) throw new Error('No audit report returned');
 
     const report = result.report;

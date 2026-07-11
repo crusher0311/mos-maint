@@ -174,6 +174,191 @@ async function run() {
     ok("budget-blocked → blocker response passed through (429)", res.status === 429);
   }
 
+  console.log("\nPOST /api/estimate-assist/audit — lineItems + workOrderId together:");
+  {
+    // Extension now sends live on-screen lineItems alongside the Tekmetric
+    // internal RO id. A missing/empty DB copy must NEVER fail the request.
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({});
+    auditDeps.getDb = (async () => fake.db) as any;
+    const aiCalls = { n: 0 };
+    auditDeps.getOpenAI = () => fakeOpenAI(null, aiCalls); // AI timeout → static findings only
+    const res = await auditPOST(
+      jsonReq("/api/estimate-assist/audit", {
+        workOrderId: "555001",
+        lineItems: [{ title: "Front Brake Pad Replacement", description: "long enough description here", partsTotal: 89 }],
+        vehicleInfo: { year: 2020, make: "Honda", model: "Civic" },
+      }),
+    );
+    ok("unsynced RO + provided lineItems → 200 (DB miss never fails)", res.status === 200, String(res.status));
+    const body = await res.json();
+    ok("  → report built from provided lineItems", body.ok === true && body.report.findings.length >= 1);
+  }
+  {
+    // When both are sent and the webhook cache knows the RO, the report is
+    // enriched with the display RO number (internal id ≠ display number).
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({
+      tekmetric_work_orders: [
+        {
+          _id: "twoc-1",
+          shopId: "42", // string in this cache
+          workOrderId: "555001", // Tekmetric internal id
+          workOrderNumber: 26352, // display RO number
+          vehicleYear: 2019,
+          vehicleMake: "Toyota",
+          vehicleModel: "Camry",
+          odometer: 88000,
+        },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    const aiCalls = { n: 0 };
+    auditDeps.getOpenAI = () => fakeOpenAI(null, aiCalls);
+    const res = await auditPOST(
+      jsonReq("/api/estimate-assist/audit", {
+        workOrderId: "555001",
+        lineItems: [{ title: "Front Brake Pad Replacement", description: "long enough description here", partsTotal: 89 }],
+      }),
+    );
+    ok("both sent + cache hit → 200", res.status === 200);
+    const body = await res.json();
+    ok("  → display RO number enriched from webhook cache", body.report.workOrderNumber === "26352", body.report.workOrderNumber);
+    ok("  → vehicle enriched from webhook cache", body.report.vehicleDisplay === "2019 Toyota Camry", body.report.vehicleDisplay);
+  }
+
+  console.log("\nPOST /api/estimate-assist/audit — webhook-cache fallback (workOrderId only):");
+  {
+    // RO not normalized yet, but the Tekmetric webhook cache has data.jobs
+    // (cents). The DB path must use them instead of returning RO_NOT_SYNCED.
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({
+      tekmetric_work_orders: [
+        {
+          _id: "twoc-2",
+          shopId: "42",
+          workOrderId: "555002",
+          workOrderNumber: 26353,
+          vehicleYear: 2021,
+          vehicleMake: "Ford",
+          vehicleModel: "F-150",
+          odometer: 42000,
+          data: {
+            jobs: [
+              {
+                name: "Front Brake Pad Replacement",
+                note: "long enough description here",
+                laborTotal: 15000, // cents
+                partsTotal: 8900, // cents
+                subtotal: 23900, // cents
+                labor: [{ name: "R&R pads", hours: 1.5, rate: 10000 }],
+              },
+              { name: null }, // nameless job must be skipped, not crash
+            ],
+          },
+        },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    const aiCalls = { n: 0 };
+    auditDeps.getOpenAI = () => fakeOpenAI(null, aiCalls);
+    const res = await auditPOST(jsonReq("/api/estimate-assist/audit", { workOrderId: "555002" }));
+    ok("normalized miss + webhook cache jobs → 200", res.status === 200, String(res.status));
+    const body = await res.json();
+    ok("  → report produced from cached jobs", body.ok === true && !!body.report);
+    ok("  → display RO number from cache", body.report.workOrderNumber === "26353", body.report.workOrderNumber);
+    ok("  → vehicle from cache", body.report.vehicleDisplay === "2021 Ford F-150", body.report.vehicleDisplay);
+    // Cents→dollars conversion: a $150-labor/$89-parts line should NOT
+    // trip absurd-value rules; check via the saved history row's line count.
+    const saved = fake.collections[ESTIMATE_COLLECTIONS.estimateAudits] || [];
+    ok("  → nameless cached job skipped (1 line item audited)", saved[0]?.lineItemCount === 1, String(saved[0]?.lineItemCount));
+  }
+  {
+    // Display-RO-number lookup: dashboard users type the RO number, which
+    // matches the cache's workOrderNumber (stored as a number), not workOrderId.
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({
+      tekmetric_work_orders: [
+        {
+          _id: "twoc-3",
+          shopId: "42",
+          workOrderId: "555003",
+          workOrderNumber: 26354,
+          data: { jobs: [{ name: "Oil Change", note: "long enough description here", laborTotal: 3000, partsTotal: 4500, subtotal: 7500 }] },
+        },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    const aiCalls = { n: 0 };
+    auditDeps.getOpenAI = () => fakeOpenAI(null, aiCalls);
+    const res = await auditPOST(jsonReq("/api/estimate-assist/audit", { workOrderId: "26354" }));
+    ok("lookup by display RO number hits webhook cache → 200", res.status === 200, String(res.status));
+  }
+  {
+    // Normalized WO matches (via provenance, by Tekmetric internal id) but
+    // has ZERO jobs; the webhook cache row is keyed by the DISPLAY RO
+    // number. The fallback must query the cache with the caller's original
+    // id / the WO's display number — NOT the rewritten normalized _id.
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({
+      [NORMALIZED_COLLECTIONS.workOrders]: [
+        {
+          _id: "nwo-2", // normalized _id — NOT a cache key
+          shopId: 42,
+          workOrderNumber: "26356",
+          serviceJobs: [],
+          provenance: { sourceSystem: "tekmetric", sourceIds: [{ idValue: "555004" }] },
+        },
+      ],
+      tekmetric_work_orders: [
+        {
+          _id: "twoc-4",
+          shopId: "42",
+          workOrderId: "999999", // different internal id on the cache row
+          workOrderNumber: 26356, // matches via the WO's display number
+          data: { jobs: [{ name: "Coolant Flush", note: "long enough description here", laborTotal: 9000, partsTotal: 3500, subtotal: 12500 }] },
+        },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    const aiCalls = { n: 0 };
+    auditDeps.getOpenAI = () => fakeOpenAI(null, aiCalls);
+    const res = await auditPOST(jsonReq("/api/estimate-assist/audit", { workOrderId: "555004" }));
+    ok("normalized WO w/ no jobs + cache keyed by RO number → 200", res.status === 200, String(res.status));
+    const body = await res.json();
+    ok("  → report built from cached jobs (not RO_NO_LINE_ITEMS)", body.ok === true && !!body.report, JSON.stringify(body.code || body.error || ""));
+    ok(
+      "  → cache never queried with the normalized _id",
+      !fake.ops.some(
+        (o) =>
+          o.op === "findOne" &&
+          o.collection === "tekmetric_work_orders" &&
+          JSON.stringify(o.filter).includes("nwo-2"),
+      ),
+    );
+  }
+  {
+    // Normalized WO exists but has no jobs, webhook cache empty too →
+    // RO_NO_LINE_ITEMS (not RO_NOT_SYNCED, and not the generic message).
+    restoreAll();
+    stubCommon(auditDeps);
+    const fake = makeFakeDb({
+      [NORMALIZED_COLLECTIONS.workOrders]: [
+        { _id: "nwo-1", shopId: 42, workOrderNumber: "26355", serviceJobs: [] },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    const res = await auditPOST(jsonReq("/api/estimate-assist/audit", { workOrderId: "26355" }));
+    ok("synced WO with no jobs anywhere → 400", res.status === 400, String(res.status));
+    const body = await res.json();
+    ok("  → code RO_NO_LINE_ITEMS", body.code === "RO_NO_LINE_ITEMS", body.code);
+  }
+
   console.log("\nPOST /api/estimate-assist/audit — report generation (AI stubbed):");
   {
     restoreAll();

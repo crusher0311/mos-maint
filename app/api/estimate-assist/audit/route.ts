@@ -67,6 +67,84 @@ interface AuditRequest {
   };
 }
 
+/**
+ * Resolve a work order from the normalized Mongo collection by any of the
+ * three identifiers callers send: the normalized _id (dashboard links), the
+ * human-facing RO number (typed into the dashboard), or the SMS-internal id
+ * via provenance (what the extension sends). Returns null when unsynced.
+ */
+async function findNormalizedWorkOrder(db: any, shopId: number, workOrderId: string) {
+  // 1. Try the normalized _id directly (dashboard "Build Estimate" links).
+  let wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+    _id: workOrderId,
+    shopId,
+  } as any);
+
+  // 2. Try the human-facing RO number (what users type into the dashboard).
+  if (!wo) {
+    wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+      shopId,
+      workOrderNumber: String(workOrderId),
+    });
+  }
+
+  // 3. Try the SMS-internal id via provenance. The extension sends the
+  // provider's internal RO id (e.g. Tekmetric's numeric id), which is
+  // neither our normalized _id nor the display RO number. sourceSystem is
+  // constrained so the (sourceSystem, sourceIds.idValue) index is used
+  // instead of a collection scan.
+  if (!wo) {
+    wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
+      shopId,
+      'provenance.sourceSystem': { $in: ['tekmetric', 'protractor', 'shopware', 'autoflow'] },
+      'provenance.sourceIds.idValue': String(workOrderId),
+    });
+  }
+
+  return wo;
+}
+
+/**
+ * Fallback for ROs that haven't been fully indexed yet: the Tekmetric
+ * webhook cache (`tekmetric_work_orders`) often already carries the RO's
+ * jobs under `data.jobs`. In that cache `shopId` may be stored as a string
+ * and the display RO number (`workOrderNumber`) differs from the internal
+ * Tekmetric id (`workOrderId`), so we match on either identifier.
+ * Amounts in the raw Tekmetric payload are in CENTS.
+ */
+async function findWebhookCachedWorkOrder(db: any, shopId: number, workOrderId: string) {
+  const idStr = String(workOrderId);
+  const idNum = Number(workOrderId);
+  return db.collection("tekmetric_work_orders").findOne({
+    shopId: { $in: [String(shopId), shopId] },
+    $or: [
+      { workOrderId: idStr },
+      { workOrderNumber: { $in: Number.isFinite(idNum) ? [idStr, idNum] : [idStr] } },
+    ],
+  });
+}
+
+/** Map raw Tekmetric webhook-cache jobs (cents) to audit line items (dollars). */
+function mapCachedTekmetricJobs(jobs: any[]): AuditLineItem[] {
+  return (jobs || [])
+    .filter((job: any) => job && job.name)
+    .map((job: any) => {
+      let laborHours = job.laborHours || 0;
+      if (!laborHours && Array.isArray(job.labor) && job.labor.length > 0) {
+        laborHours = job.labor.reduce((sum: number, l: any) => sum + (l.hours || 0), 0);
+      }
+      return {
+        title: job.name,
+        description: job.note || job.customerConcern || undefined,
+        type: job.categoryName || job.category?.name || undefined,
+        laborHours: laborHours || undefined,
+        laborTotal: (job.laborTotal || job.laborAmount || 0) / 100,
+        partsTotal: (job.partsTotal || job.partsAmount || 0) / 100,
+        total: (job.subtotal || job.totalAmount || 0) / 100,
+      };
+    });
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Dual auth: extension Bearer ext_ token OR dashboard session cookie.
@@ -112,81 +190,127 @@ export async function POST(req: NextRequest) {
     let workOrderNumber: string | undefined;
     let workOrderId = body.workOrderId;
 
+    if (workOrderId && lineItems.length > 0) {
+      // The extension now sends live on-screen line items alongside the RO
+      // id. The provided lineItems are authoritative; the DB copy is only
+      // used (best-effort) to enrich the report with the display RO number
+      // and vehicle info. A missing/empty DB copy must never fail the audit.
+      try {
+        const db = await __deps.getDb();
+        const wo = await findNormalizedWorkOrder(db, shopId, String(workOrderId));
+        if (wo) {
+          workOrderNumber = wo.workOrderNumber;
+          if (!vehicleInfo && wo.vehicle) {
+            vehicleInfo = {
+              year: wo.vehicle.year,
+              make: wo.vehicle.make,
+              model: wo.vehicle.model,
+              mileage: wo.odometerIn,
+            };
+          }
+        } else {
+          const cached = await findWebhookCachedWorkOrder(db, shopId, String(workOrderId));
+          if (cached?.workOrderNumber != null) workOrderNumber = String(cached.workOrderNumber);
+          if (!vehicleInfo && cached && (cached.vehicleYear || cached.vehicleMake)) {
+            vehicleInfo = {
+              year: cached.vehicleYear,
+              make: cached.vehicleMake,
+              model: cached.vehicleModel,
+              mileage: cached.odometer,
+            };
+          }
+        }
+      } catch (enrichErr: any) {
+        console.warn(`[Estimate Audit] WO enrichment lookup failed (non-fatal): ${enrichErr?.message || enrichErr}`);
+      }
+    }
+
     if (workOrderId && lineItems.length === 0) {
       const db = await __deps.getDb();
 
-      // 1. Try the normalized _id directly (dashboard "Build Estimate" links).
-      let wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
-        _id: workOrderId,
-        shopId,
-      } as any);
+      // Keep the caller's original identifier: the webhook cache is keyed
+      // by the Tekmetric internal id / display RO number, NOT by our
+      // normalized _id (which workOrderId gets rewritten to below).
+      const requestedId = String(workOrderId);
+      const wo = await findNormalizedWorkOrder(db, shopId, requestedId);
 
-      // 2. Try the human-facing RO number (what users type into the dashboard).
-      if (!wo) {
-        wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
-          shopId,
-          workOrderNumber: String(workOrderId),
-        });
+      if (wo) {
+        workOrderId = String(wo._id);
+        workOrderNumber = wo.workOrderNumber;
+
+        if (wo.vehicle) {
+          vehicleInfo = {
+            year: wo.vehicle.year,
+            make: wo.vehicle.make,
+            model: wo.vehicle.model,
+            mileage: wo.odometerIn,
+          };
+        }
+
+        let serviceJobs: any[] = Array.isArray(wo.serviceJobs) ? wo.serviceJobs : [];
+        if (serviceJobs.length === 0) {
+          serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({
+            workOrderId: wo._id,
+            shopId,
+            'softDelete.isDeleted': { $ne: true },
+          }).toArray();
+        }
+
+        lineItems = serviceJobs.map((sj: any) => ({
+          title: sj.title,
+          description: sj.description,
+          type: sj.jobType,
+          laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
+          laborTotal: sj.laborTotal,
+          partsTotal: sj.partsTotal,
+          total: sj.total,
+        }));
       }
 
-      // 3. Try the SMS-internal id via provenance. The extension sends the
-      // provider's internal RO id (e.g. Tekmetric's numeric id), which is
-      // neither our normalized _id nor the display RO number. sourceSystem is
-      // constrained so the (sourceSystem, sourceIds.idValue) index is used
-      // instead of a collection scan.
-      if (!wo) {
-        wo = await db.collection(NORMALIZED_COLLECTIONS.workOrders).findOne({
-          shopId,
-          'provenance.sourceSystem': { $in: ['tekmetric', 'protractor', 'shopware', 'autoflow'] },
-          'provenance.sourceIds.idValue': String(workOrderId),
-        });
-      }
-
-      if (!wo) {
-        return NextResponse.json({
-          ok: false,
-          code: "RO_NOT_SYNCED",
-          error: `We don't have repair order "${workOrderId}" synced yet. It may still be importing from your shop management system — try again in a few minutes, or check the RO number.`,
-        }, { status: 404, headers: corsHeaders });
-      }
-
-      workOrderId = String(wo._id);
-      workOrderNumber = wo.workOrderNumber;
-
-      if (wo.vehicle) {
-        vehicleInfo = {
-          year: wo.vehicle.year,
-          make: wo.vehicle.make,
-          model: wo.vehicle.model,
-          mileage: wo.odometerIn,
-        };
-      }
-
-      let serviceJobs: any[] = Array.isArray(wo.serviceJobs) ? wo.serviceJobs : [];
-      if (serviceJobs.length === 0) {
-        serviceJobs = await db.collection(NORMALIZED_COLLECTIONS.serviceJobs).find({
-          workOrderId: wo._id,
-          shopId,
-          'softDelete.isDeleted': { $ne: true },
-        }).toArray();
-      }
-
-      lineItems = serviceJobs.map((sj: any) => ({
-        title: sj.title,
-        description: sj.description,
-        type: sj.jobType,
-        laborHours: sj.laborHoursBilled || sj.laborHoursActual || sj.laborHoursEstimated,
-        laborTotal: sj.laborTotal,
-        partsTotal: sj.partsTotal,
-        total: sj.total,
-      }));
-
+      // Webhook-cache fallback: open/in-progress ROs often reach the
+      // Tekmetric webhook cache (with data.jobs) well before they're fully
+      // normalized/indexed, so check it before giving up — both when the
+      // normalized lookup missed entirely and when it matched a WO that has
+      // no jobs yet.
       if (lineItems.length === 0) {
-        return NextResponse.json({
-          ok: false,
-          code: "RO_NO_LINE_ITEMS",
-          error: `Repair order ${workOrderNumber || workOrderId} is synced, but it has no jobs/line items yet. Add jobs to the estimate first, then run the audit.`,
-        }, { status: 400, headers: corsHeaders });
+        // Look up by the caller's original id first; if the normalized WO
+        // matched, also try its display RO number (the cache row may be
+        // keyed by either identifier).
+        let cached = await findWebhookCachedWorkOrder(db, shopId, requestedId);
+        if (!cached?.data?.jobs?.length && wo?.workOrderNumber && String(wo.workOrderNumber) !== requestedId) {
+          cached = await findWebhookCachedWorkOrder(db, shopId, String(wo.workOrderNumber));
+        }
+        if (cached?.data?.jobs?.length > 0) {
+          const cachedItems = mapCachedTekmetricJobs(cached.data.jobs);
+          if (cachedItems.length > 0) {
+            lineItems = cachedItems;
+            if (cached.workOrderNumber != null) workOrderNumber = String(cached.workOrderNumber);
+            if (!vehicleInfo && (cached.vehicleYear || cached.vehicleMake)) {
+              vehicleInfo = {
+                year: cached.vehicleYear,
+                make: cached.vehicleMake,
+                model: cached.vehicleModel,
+                mileage: cached.odometer,
+              };
+            }
+            console.log(`[Estimate Audit] Resolved ${cachedItems.length} line items from webhook cache for RO ${workOrderNumber || workOrderId} (not yet normalized)`);
+          }
+        }
+
+        if (lineItems.length === 0) {
+          if (!wo && !cached) {
+            return NextResponse.json({
+              ok: false,
+              code: "RO_NOT_SYNCED",
+              error: `We don't have repair order "${workOrderId}" synced yet. It may still be importing from your shop management system — try again in a few minutes, or check the RO number.`,
+            }, { status: 404, headers: corsHeaders });
+          }
+          return NextResponse.json({
+            ok: false,
+            code: "RO_NO_LINE_ITEMS",
+            error: `Repair order ${workOrderNumber || workOrderId} is synced, but it has no jobs/line items yet. Add jobs to the estimate first, then run the audit.`,
+          }, { status: 400, headers: corsHeaders });
+        }
       }
     }
 

@@ -1,6 +1,20 @@
 # Detect Dog by MOS Tools — Changelog
 
-## 1.27.62 — 2026-07-11
+## 1.27.63 — 2026-07-11
+
+### Fixed
+- **Audit Current RO now reads the jobs on screen (Tekmetric).** The
+  Estimate tab's "Audit RO" button previously only asked the server to look
+  up the RO in the MOS database, so open/in-progress ROs (or freshly added
+  estimate lines) that hadn't synced yet failed with "No line items to
+  audit." Now the extension fetches the RO's current jobs live from the
+  Tekmetric page session (same estimate → jobs-list fallback chain the
+  labor-rate flow uses) and audits exactly what's on screen. The
+  server-side lookup by RO id remains as a fallback when the live fetch
+  isn't available, and error messages now say what actually went wrong
+  (e.g. "hasn't synced yet") instead of the generic "no line items"
+  string. Requires the matching server release for the improved fallback;
+  older servers still work with the live line items.
 
 ### Changed
 - **Real part cost now flows through to Tekmetric too.** Adding a job to a

@@ -811,9 +811,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const result = await handleMosApiRequest(message.endpoint, message.options);
         sendResponse(result);
       } catch (err) {
-        sendResponse({ success: false, error: err.message });
+        sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
       }
     })();
+    return true;
+  }
+
+  // -------------------- Estimate Audit: live RO jobs --------------------
+  // Fetches the jobs currently on the Tekmetric estimate via the page
+  // session (same estimate → jobs-list fallback chain the labor-rate flow
+  // uses) and maps them into the audit API's lineItems shape. Lets "Audit
+  // Current RO" audit what's actually on screen even when the RO hasn't
+  // synced to the MOS DB yet.
+  if (message.action === "GET_RO_AUDIT_LINE_ITEMS") {
+    fetchRoAuditLineItems(message.shopId, message.roId)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
@@ -1770,7 +1783,12 @@ async function handleMosApiRequest(endpoint, options = {}) {
         reason: errorData?.error || null,
       });
     }
-    throw new Error(errorData.error || `API error: ${response.status}`);
+    const apiErr = new Error(errorData.error || `API error: ${response.status}`);
+    // Preserve the server's stable error code (e.g. RO_NOT_SYNCED /
+    // RO_NO_LINE_ITEMS) so callers can show a specific friendly message
+    // instead of a generic one.
+    apiErr.serverCode = errorData?.code || null;
+    throw apiErr;
   }
 
   return response.json();
@@ -2119,6 +2137,103 @@ async function handleTekmetricApiRequest(endpoint, options = {}) {
   }
 
   return response.json();
+}
+
+/**
+ * Fetch the live jobs on a Tekmetric RO (via the page session) and map them
+ * to the estimate-audit API's `lineItems` shape. Mirrors the labor-rate
+ * flow's fetch chain: estimate endpoint first (jobs with labor detail),
+ * jobs-list fallback on 404/5xx AND on a 200-with-empty-jobs response.
+ * Tekmetric amounts are in cents; the audit API expects dollars.
+ */
+async function fetchRoAuditLineItems(shopId, roId) {
+  await _stateReady;
+  if (!smsTokens.tekmetric) {
+    return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
+  }
+  const effectiveShopId = shopId || tekmetricShopId;
+  if (!effectiveShopId || !roId) {
+    return { success: false, error: "Missing shop ID or repair order ID" };
+  }
+
+  let jobsArr = [];
+  try {
+    const estRes = await tekmetricFetch(
+      `/api/repair-order/${roId}/estimate`,
+      {},
+      {
+        shopId: effectiveShopId,
+        label: 'estimate-audit.get-estimate',
+        fallbackOnStatuses: [404, 500, 502, 503, 504],
+        fallbacks: [{
+          endpoint: `/api/shop/${effectiveShopId}/jobs?repairOrderId=${roId}`,
+          label: 'estimate-audit.get-jobs.fallback',
+        }],
+      }
+    );
+    if (estRes.ok) {
+      const estimateData = await estRes.json();
+      const estPayload = estimateData.data || estimateData;
+      // Estimate endpoint returns `{ data: { jobs: [...] } }`; the jobs-list
+      // fallback returns an array or `{ content/data: [...] }`.
+      let arr = estPayload.jobs;
+      if (!Array.isArray(arr)) {
+        if (Array.isArray(estimateData)) {
+          arr = estimateData;
+        } else {
+          arr = estimateData.content || estimateData.data || [];
+        }
+      }
+      if (Array.isArray(arr)) jobsArr = arr;
+    } else {
+      console.log(`[EstimateAudit] Estimate (and fallback) returned ${estRes.status}`);
+    }
+  } catch (err) {
+    console.warn("[EstimateAudit] Error fetching estimate:", err.message);
+  }
+
+  // Empty-result fallback (200 with no jobs — some shops gate labor
+  // visibility): explicitly try the jobs-list endpoint.
+  if (jobsArr.length === 0) {
+    try {
+      const jobsRes = await tekmetricFetch(
+        `/api/shop/${effectiveShopId}/jobs?repairOrderId=${roId}`,
+        {},
+        { shopId: effectiveShopId, label: 'estimate-audit.get-jobs.empty-estimate' }
+      );
+      if (jobsRes.ok) {
+        const jobsBody = await jobsRes.json();
+        const arr = Array.isArray(jobsBody)
+          ? jobsBody
+          : (jobsBody.content || jobsBody.data || []);
+        if (Array.isArray(arr)) jobsArr = arr;
+      }
+    } catch (err) {
+      console.warn("[EstimateAudit] Jobs-list fallback failed:", err.message);
+    }
+  }
+
+  const lineItems = jobsArr
+    .filter(job => job && job.name)
+    .map(job => {
+      let laborHours = job.laborHours || 0;
+      if (!laborHours && Array.isArray(job.labor) && job.labor.length > 0) {
+        laborHours = job.labor.reduce((sum, l) => sum + (l.hours || 0), 0);
+      }
+      const item = {
+        title: job.name,
+        laborTotal: (job.laborTotal || job.laborAmount || 0) / 100,
+        partsTotal: (job.partsTotal || job.partsAmount || 0) / 100,
+        total: (job.subtotal || job.totalAmount || 0) / 100,
+      };
+      if (job.note || job.customerConcern) item.description = job.note || job.customerConcern;
+      if (job.categoryName || job.category?.name) item.type = job.categoryName || job.category?.name;
+      if (laborHours) item.laborHours = laborHours;
+      return item;
+    });
+
+  console.log(`[EstimateAudit] Live fetch resolved ${lineItems.length} line items for RO ${roId}`);
+  return { success: true, lineItems };
 }
 
 async function createTekmetricJob(shopId, roId, jobData) {
