@@ -16,6 +16,7 @@ import type {
   ProtractorCannedJob,
   ProtractorDeferredWork,
 } from './client';
+import { extractProtractorLineCost } from './part-cost';
 
 export interface ProtractorTransformOptions {
   /**
@@ -80,15 +81,23 @@ function normalizeLineType(type?: string): NormalizedLineItem['lineType'] {
 }
 
 export function transformLineItem(raw: ProtractorServicePackageLine): NormalizedLineItem {
+  const lineType = normalizeLineType(raw.LineType);
+  // Task #681 — carry the real part cost through when Protractor provides it.
+  // Labor lines are excluded: Protractor's labor TotalCost is the labor total,
+  // not a parts cost.
+  const { cost, extendedCost } =
+    lineType === 'labor' ? { cost: undefined, extendedCost: undefined } : extractProtractorLineCost(raw);
   return {
     id: raw.ID,
-    lineType: normalizeLineType(raw.LineType),
+    lineType,
     description: raw.Description || '',
     partNumber: raw.PartNumber,
     manufacturer: raw.Manufacturer,
     quantity: raw.Quantity || 1,
     unitPrice: raw.UnitPrice || 0,
     extendedPrice: raw.ExtendedPrice || 0,
+    ...(cost !== undefined ? { cost } : {}),
+    ...(extendedCost !== undefined ? { extendedCost } : {}),
   };
 }
 

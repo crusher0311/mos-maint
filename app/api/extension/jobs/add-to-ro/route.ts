@@ -9,6 +9,11 @@ import {
   buildMinimalPayloadForPost,
   soapAddServicePackage,
 } from "@/lib/integrations/protractor";
+import {
+  getShopPartCostRatio,
+  resolvePartLineCost,
+  logPartCostResolution,
+} from "@/lib/integrations/protractor/part-cost";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const runtime = "nodejs";
@@ -54,6 +59,9 @@ async function _POST(req: NextRequest) {
           quantity: number;
           unitPrice: number;
           extendedPrice: number;
+          // Task #681 — real per-unit part cost from the source system.
+          cost?: number;
+          extendedCost?: number;
         }>;
         laborItems?: Array<{ name: string; hours: number }>;
         parts?: Array<{
@@ -63,6 +71,10 @@ async function _POST(req: NextRequest) {
           quantity: number;
           cost: number;
           retail: number;
+          // Task #681 — real cost. The legacy `cost` field above is NOT
+          // trusted for cost writing: old extension builds fill it with
+          // retail as a fallback, which would write a 0%-GP cost.
+          unitCost?: number;
         }>;
       };
     };
@@ -227,6 +239,9 @@ async function _POST(req: NextRequest) {
 
     const jobLines = normalizeJobLines(job, shopLaborRate);
 
+    // Task #681 — per-shop cost-estimate ratio for part lines without a real cost.
+    const partCostRatio = await getShopPartCostRatio(shopId);
+
     const { randomUUID } = await import("crypto");
 
     const servicePackageLines = jobLines.map((line, idx) => {
@@ -249,6 +264,18 @@ async function _POST(req: NextRequest) {
           Completed: false,
         };
       }
+      // Task #681 — write the real part cost when the pushed line carries
+      // one; otherwise estimate from retail via the shop's cost ratio.
+      const resolvedCost = resolvePartLineCost(line, partCostRatio);
+      logPartCostResolution({
+        tag: `[Ext Add-to-RO:${requestId}]`,
+        shopId,
+        jobTitle: job.title,
+        description: line.description,
+        resolved: resolvedCost,
+        ratio: partCostRatio,
+        unitPrice: line.unitPrice,
+      });
       return {
         ID: randomUUID(),
         Rank: idx + 1,
@@ -257,10 +284,10 @@ async function _POST(req: NextRequest) {
         Quantity: String(line.quantity),
         Unit: "Each",
         Price: String(line.unitPrice.toFixed(2)),
-        Cost: String((line.unitPrice * 0.6).toFixed(2)),
+        Cost: String(resolvedCost.unitCost.toFixed(2)),
         Total: String(line.extendedPrice.toFixed(2)),
         ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-        TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
+        TotalCost: String(resolvedCost.totalCost.toFixed(2)),
         PartNumber: line.partNumber || "",
         Manufacturer: line.manufacturer || "",
         MinimumCharge: 0,
@@ -354,6 +381,9 @@ type NormalizedLine = {
   quantity: number;
   unitPrice: number;
   extendedPrice: number;
+  // Task #681 — real per-unit part cost, only set when known-real.
+  cost?: number;
+  extendedCost?: number;
 };
 
 function normalizeJobLines(
@@ -368,6 +398,7 @@ function normalizeJobLines(
       quantity: number;
       cost: number;
       retail: number;
+      unitCost?: number;
     }>;
   },
   laborRate: number
@@ -395,6 +426,10 @@ function normalizeJobLines(
     for (const part of job.parts) {
       const qty = parseInt(String(part.quantity)) || 1;
       const price = parseFloat(String(part.retail)) || parseFloat(String(part.cost)) || 0;
+      // Task #681 — only `unitCost` is trusted as a real cost. The legacy
+      // `cost` field is retail-contaminated on old extension builds (they
+      // send `part.cost || part.unitPrice`), so it must never seed Cost.
+      const unitCost = parseFloat(String(part.unitCost)) || 0;
       lines.push({
         lineType: "part",
         description: part.name,
@@ -403,6 +438,7 @@ function normalizeJobLines(
         quantity: qty,
         unitPrice: price,
         extendedPrice: qty * price,
+        ...(unitCost > 0 ? { cost: unitCost, extendedCost: qty * unitCost } : {}),
       });
     }
   }

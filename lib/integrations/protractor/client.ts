@@ -5,6 +5,12 @@ import https from "node:https";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
+import {
+  extractProtractorLineCost,
+  getShopPartCostRatio,
+  resolvePartLineCost,
+  logPartCostResolution,
+} from "./part-cost";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
 const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0";
@@ -200,6 +206,10 @@ export type ProtractorServicePackageLine = {
   Quantity?: number;
   UnitPrice?: number;
   ExtendedPrice?: number;
+  // Task #681 — Protractor's real part cost. List/detail invoice lines carry
+  // these as flat fields (per the list-vs-detail probe 2026-06-05).
+  Cost?: number | string;
+  TotalCost?: number | string;
   Status?: string;
   PartNumber?: string;
   Manufacturer?: string;
@@ -1271,6 +1281,10 @@ export async function createProtractorWorkOrder(
       shopLaborRate = shop.cachedLaborRate;
     }
 
+    // Task #681 — per-shop cost-estimate ratio for part lines that don't
+    // carry a real cost from the source system.
+    const partCostRatio = await getShopPartCostRatio(shopId);
+
     for (const pkg of params.servicePackages) {
       try {
         let resolvedLines = pkg.lines || [];
@@ -1426,6 +1440,21 @@ export async function createProtractorWorkOrder(
             };
           } else {
             const extPrice = qty * price;
+            // Task #681 — use the line's real part cost when the source
+            // carried one; otherwise estimate from retail via the shop ratio.
+            const resolvedCost = resolvePartLineCost(
+              { quantity: qty, unitPrice: price, extendedPrice: extPrice, cost: l.cost, extendedCost: l.extendedCost },
+              partCostRatio,
+            );
+            logPartCostResolution({
+              tag: "[Create WO]",
+              shopId,
+              jobTitle: pkg.title,
+              description: l.description || "",
+              resolved: resolvedCost,
+              ratio: partCostRatio,
+              unitPrice: price,
+            });
             return {
               ID: crypto.randomUUID(),
               Rank: idx + 1,
@@ -1438,8 +1467,8 @@ export async function createProtractorWorkOrder(
               ExtendedTotal: String(extPrice.toFixed(2)),
               MinimumCharge: 0,
               Discount: 0,
-              Cost: String((price * 0.6).toFixed(2)),
-              TotalCost: String((extPrice * 0.6).toFixed(2)),
+              Cost: String(resolvedCost.unitCost.toFixed(2)),
+              TotalCost: String(resolvedCost.totalCost.toFixed(2)),
               PartNumber: l.partNumber || "",
               Manufacturer: l.manufacturer || "",
               Completed: false,
@@ -2738,6 +2767,10 @@ export function normalizeProtractorPackageLine(l: any): {
   partNumber: string;
   manufacturer: string;
   rank?: number;
+  // Task #681 — real per-unit part cost when the source line carries it
+  // (flat `Cost`/`TotalCost`). Absent on labor lines and cost-less lines.
+  cost?: number;
+  extendedCost?: number;
 } {
   const lineType = l.Type || l.LineType || l.lineType || "Labor";
   const isLabor = String(lineType).toLowerCase().includes("labor");
@@ -2796,6 +2829,18 @@ export function normalizeProtractorPackageLine(l: any): {
   }
   if (!Number.isFinite(unitPrice)) unitPrice = 0;
 
+  // Task #681 — carry the real part cost through for non-labor lines. Labor
+  // lines are excluded because Protractor's labor `TotalCost` is the labor
+  // total, not a parts cost. Idempotent: an already-normalized line's `cost`/
+  // `extendedCost` round-trip unchanged via extractProtractorLineCost.
+  let cost: number | undefined;
+  let extendedCost: number | undefined;
+  if (!isLabor) {
+    const extracted = extractProtractorLineCost(l);
+    cost = extracted.cost;
+    extendedCost = extracted.extendedCost;
+  }
+
   return {
     description: l.Description || l.description || "",
     lineType,
@@ -2804,6 +2849,8 @@ export function normalizeProtractorPackageLine(l: any): {
     partNumber: l.PartNumber || l.partNumber || "",
     manufacturer: l.Manufacturer || l.manufacturer || "",
     rank: l.Rank ?? l.rank ?? undefined,
+    ...(cost !== undefined ? { cost } : {}),
+    ...(extendedCost !== undefined ? { extendedCost } : {}),
   };
 }
 

@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.61 — 2026-07-11
+
+### Changed
+- **Real part cost now flows through to Protractor.** When adding a job to a
+  Protractor RO from the side panel, part lines that carry a real cost (from
+  shop history) now send it as a new `unitCost` field, so the server writes
+  the actual part cost into Protractor instead of estimating cost as 60% of
+  retail. Parts without a known real cost (AI/knowledge-base suggestions) are
+  unchanged — the server still estimates from retail using the shop's
+  configurable cost ratio. The legacy `cost` field is untouched (it can carry
+  retail as a fallback and is deliberately never used as a cost source).
+
 ## 1.27.60 — 2026-07-11
 
 ### Fixed

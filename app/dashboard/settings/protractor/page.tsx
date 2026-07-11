@@ -31,7 +31,11 @@ export default function ProtractorSettingsPage() {
     updateWorkOrderPackage?: boolean;
     updateWorkOrderLine?: boolean;
     webhookToken?: string;
+    partCostEstimateRatio?: number | null;
+    partCostEstimateRatioDefault?: number;
   } | null>(null);
+  const [ratioInput, setRatioInput] = useState("");
+  const [savingRatio, setSavingRatio] = useState(false);
   const [syncStats, setSyncStats] = useState<{
     vehicles: number;
     workOrders: number;
@@ -61,7 +65,12 @@ export default function ProtractorSettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
-        
+        setRatioInput(
+          data.partCostEstimateRatio != null
+            ? String(Math.round(data.partCostEstimateRatio * 100))
+            : ""
+        );
+
         if (data.configured) {
           fetchSyncStats();
         }
@@ -237,6 +246,44 @@ export default function ProtractorSettingsPage() {
       setMessage({ type: "error", text: err.message || "Disconnect failed" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveRatio() {
+    setSavingRatio(true);
+    setMessage(null);
+
+    try {
+      const trimmed = ratioInput.trim();
+      const ratio = trimmed === "" ? null : Number(trimmed) / 100;
+
+      const res = await fetch("/api/settings/protractor", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ partCostEstimateRatio: ratio }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.ok) {
+        setStatus((prev) =>
+          prev ? { ...prev, partCostEstimateRatio: data.partCostEstimateRatio } : null
+        );
+        setMessage({
+          type: "success",
+          text:
+            data.partCostEstimateRatio != null
+              ? `Estimated part cost set to ${Math.round(data.partCostEstimateRatio * 100)}% of retail`
+              : "Estimated part cost reset to the default (60% of retail)",
+        });
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to save cost setting" });
+      }
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || "Failed to save cost setting" });
+    } finally {
+      setSavingRatio(false);
     }
   }
 
@@ -437,6 +484,46 @@ export default function ProtractorSettingsPage() {
                   <strong>Warning:</strong> Both parameters must be enabled to add service packages via API.
                 </div>
               )}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-medium text-gray-900 mb-1">Estimated Part Cost</h3>
+              <p className="text-sm text-gray-500 mb-3">
+                When a part added to a work order carries its real cost (from your job
+                history), that cost is written to Protractor as-is. When no real cost is
+                known (for example AI-suggested parts), the cost is estimated as a
+                percentage of the retail price. Leave blank to use the default (60%).
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={5}
+                    max={150}
+                    step={1}
+                    value={ratioInput}
+                    onChange={(e) => setRatioInput(e.target.value)}
+                    placeholder="60"
+                    className="w-28 px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
+                </div>
+                <span className="text-sm text-gray-600">of retail price</span>
+                <button
+                  onClick={handleSaveRatio}
+                  disabled={savingRatio}
+                  className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingRatio ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4">

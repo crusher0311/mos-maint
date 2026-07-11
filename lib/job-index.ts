@@ -4,6 +4,7 @@
 import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
 import { enrichVinsWithAces } from "@/lib/job-index-aces";
+import { extractProtractorLineCost } from "@/lib/integrations/protractor/part-cost";
 
 // Round a money value to cents so float-representation blips
 // (e.g. 267.29999999999995 vs 267.3) don't flip the content hash.
@@ -18,11 +19,16 @@ function roundMoneyForHash(n: number): number {
 // bad upstream payload can't throw here.
 function canonicalizeLineForHash(line: any) {
   if (line === null || typeof line !== "object") return line;
-  return {
+  const canonical: any = {
     ...line,
     unitPrice: roundMoneyForHash(line.unitPrice),
     extendedPrice: roundMoneyForHash(line.extendedPrice),
   };
+  // Task #681 — cost fields are optional; round when present so list-vs-detail
+  // float noise doesn't flip the hash.
+  if (typeof line.cost === "number") canonical.cost = roundMoneyForHash(line.cost);
+  if (typeof line.extendedCost === "number") canonical.extendedCost = roundMoneyForHash(line.extendedCost);
+  return canonical;
 }
 
 // Compute a deterministic hash of job entry content for change detection.
@@ -164,6 +170,12 @@ export type JobLineItem = {
   quantity: number;
   unitPrice: number;
   extendedPrice: number;
+  // Task #681 — real per-unit part cost captured from the source system
+  // (Protractor flat `Cost`/`TotalCost` on invoice/canned-job lines). Only
+  // set on non-labor lines; Protractor labor `TotalCost` is the labor total,
+  // not a parts cost. Absent means "unknown — estimate at push time".
+  cost?: number;
+  extendedCost?: number;
   // Task #382 — PCDB / PartsTech IDs on part lines. Tekmetric and Shop-Ware
   // populate these on-write when the source payload carries them. Protractor
   // intentionally leaves these absent — Protractor does not surface PCDB.
@@ -309,6 +321,10 @@ export function extractJobIndexFromWorkOrder(
           "0"
         ) || (quantity * unitPrice);
         
+        // Task #681 — capture the real part cost from Protractor's flat
+        // Cost/TotalCost fields (non-labor only; labor TotalCost is the labor
+        // total, not a parts cost).
+        const lineCost = lineType === "labor" ? {} : extractProtractorLineCost(line);
         lines.push({
           lineType,
           description: line.Description || line.description || "",
@@ -317,6 +333,8 @@ export function extractJobIndexFromWorkOrder(
           quantity,
           unitPrice,
           extendedPrice,
+          ...(lineCost.cost !== undefined ? { cost: lineCost.cost } : {}),
+          ...(lineCost.extendedCost !== undefined ? { extendedCost: lineCost.extendedCost } : {}),
         });
         
         if (lineType === "labor") {
@@ -453,6 +471,10 @@ export function extractJobIndexFromCachedWorkOrder(
           "0"
         ) || (quantity * unitPrice);
         
+        // Task #681 — capture the real part cost from Protractor's flat
+        // Cost/TotalCost fields (non-labor only; labor TotalCost is the labor
+        // total, not a parts cost).
+        const lineCost = lineType === "labor" ? {} : extractProtractorLineCost(line);
         lines.push({
           lineType,
           description: line.Description || line.description || "",
@@ -461,6 +483,8 @@ export function extractJobIndexFromCachedWorkOrder(
           quantity,
           unitPrice,
           extendedPrice,
+          ...(lineCost.cost !== undefined ? { cost: lineCost.cost } : {}),
+          ...(lineCost.extendedCost !== undefined ? { extendedCost: lineCost.extendedCost } : {}),
         });
         
         if (lineType === "labor") {

@@ -88,6 +88,10 @@ export interface NormalizedLineItem {
   quantity: number;
   unitPrice: number;
   extendedPrice: number;
+  // Task #681 — real per-unit part cost from the source system, when known.
+  // Only set on non-labor lines; absent means "estimate at push time".
+  cost?: number;
+  extendedCost?: number;
 }
 
 export interface CannedJob {

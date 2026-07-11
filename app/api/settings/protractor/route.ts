@@ -5,6 +5,12 @@ import { testConnection, resolveProtractorConfig } from "@/lib/integrations/prot
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 import { ensureProtractorWebhookSubscription } from "@/lib/integrations/protractor/webhook-subscribe";
+import {
+  DEFAULT_PART_COST_RATIO,
+  MIN_PART_COST_RATIO,
+  MAX_PART_COST_RATIO,
+  isValidPartCostRatio,
+} from "@/lib/integrations/protractor/part-cost";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
@@ -23,7 +29,7 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { protractor: 1, protractorWebhookToken: 1 } }
+      { projection: { protractor: 1, protractorWebhookToken: 1, partCostEstimateRatio: 1 } }
     );
 
     let webhookToken = shop?.protractorWebhookToken;
@@ -69,6 +75,12 @@ export async function GET(req: NextRequest) {
       initialSyncState,
       initialSyncVehicles: shop?.protractor?.initialSyncVehicles ?? null,
       initialSyncError,
+      // Task #681 — per-shop cost-estimate ratio for part lines pushed
+      // without a real cost. null = unset (default 0.6 applies).
+      partCostEstimateRatio: isValidPartCostRatio(shop?.partCostEstimateRatio)
+        ? shop.partCostEstimateRatio
+        : null,
+      partCostEstimateRatioDefault: DEFAULT_PART_COST_RATIO,
     });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
@@ -284,6 +296,64 @@ export async function POST(req: NextRequest) {
       locations: testResult.locations,
       jobHistoryBackfill: "started"
     });
+  } catch (err: any) {
+    console.error("[Protractor Settings] Error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// Task #681 — set/clear the per-shop part-cost estimate ratio used when a
+// pushed part line has no real cost from the source system. Kept separate
+// from POST, which is the connect flow (requires connectionId/apiKey).
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const role = (session as any).role;
+    if (role !== "admin" && role !== "owner" && role !== "platform_admin") {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
+
+    const shopId = Number(session.shopId);
+    const body = await req.json();
+
+    if (!("partCostEstimateRatio" in body)) {
+      return NextResponse.json(
+        { error: "partCostEstimateRatio is required" },
+        { status: 400 }
+      );
+    }
+
+    const raw = body.partCostEstimateRatio;
+    const db = await getDb();
+
+    if (raw === null || raw === "" || raw === undefined) {
+      await db.collection("shops").updateOne(
+        { shopId },
+        { $unset: { partCostEstimateRatio: "" }, $set: { updatedAt: new Date() } }
+      );
+      console.log(`[Protractor Settings] Shop ${shopId} cleared partCostEstimateRatio (default ${DEFAULT_PART_COST_RATIO} applies)`);
+      return NextResponse.json({ ok: true, partCostEstimateRatio: null });
+    }
+
+    const ratio = Number(raw);
+    if (!isValidPartCostRatio(ratio)) {
+      return NextResponse.json(
+        {
+          error: `Cost ratio must be a number between ${MIN_PART_COST_RATIO} and ${MAX_PART_COST_RATIO} (e.g. 0.6 = cost is 60% of retail)`,
+        },
+        { status: 400 }
+      );
+    }
+
+    await db.collection("shops").updateOne(
+      { shopId },
+      { $set: { partCostEstimateRatio: ratio, updatedAt: new Date() } }
+    );
+    console.log(`[Protractor Settings] Shop ${shopId} set partCostEstimateRatio=${ratio}`);
+    return NextResponse.json({ ok: true, partCostEstimateRatio: ratio });
   } catch (err: any) {
     console.error("[Protractor Settings] Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -2818,14 +2818,27 @@ async function handleAddJob(job) {
         name: item.name || item.description,
         hours: item.hours || item.quantity || 1
       })),
-      parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => ({
-        name: part.name || part.description,
-        partNumber: part.partNumber || '',
-        brand: part.brand || part.manufacturer || '',
-        quantity: part.quantity || 1,
-        cost: part.cost || part.unitPrice || 0,
-        retail: part.retail || part.price || part.extendedPrice || 0
-      }))
+      parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => {
+        // Task #681 — send the REAL part cost as `unitCost`, separate from the
+        // legacy `cost` field (which falls back to retail below and must never
+        // be written as Protractor's Cost — that would report 0% parts GP).
+        // Real cost exists on: (a) an explicit `unitCost`, or (b) a history
+        // line (`lineType === 'part'`) whose `cost` was captured server-side
+        // from Protractor's flat Cost field. KB/AI parts have no real cost.
+        const realUnitCost =
+          (Number(part.unitCost) > 0 && Number(part.unitCost)) ||
+          (part.lineType === 'part' && Number(part.cost) > 0 && Number(part.cost)) ||
+          0;
+        return {
+          name: part.name || part.description,
+          partNumber: part.partNumber || '',
+          brand: part.brand || part.manufacturer || '',
+          quantity: part.quantity || 1,
+          cost: part.cost || part.unitPrice || 0,
+          retail: part.retail || part.price || part.extendedPrice || 0,
+          ...(realUnitCost > 0 ? { unitCost: realUnitCost } : {})
+        };
+      })
     };
 
     const mosShopId = currentContext.mosShopId || resolvedMosShopId || currentContext.shopId;

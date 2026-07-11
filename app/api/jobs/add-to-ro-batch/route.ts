@@ -6,6 +6,11 @@ import {
   protractorFetch 
 } from "@/lib/integrations/protractor";
 import { getDb } from "@/lib/mongo";
+import {
+  getShopPartCostRatio,
+  resolvePartLineCost,
+  logPartCostResolution,
+} from "@/lib/integrations/protractor/part-cost";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +23,9 @@ type JobLine = {
   quantity: number;
   unitPrice: number;
   extendedPrice: number;
+  // Task #681 — real per-unit part cost from the source system, when known.
+  cost?: number;
+  extendedCost?: number;
 };
 
 type JobPayload = {
@@ -148,6 +156,9 @@ export async function POST(req: NextRequest) {
     console.log(`[Jobs Batch] Using labor rate: $${shopLaborRate}/hr`);
   }
 
+  // Task #681 — per-shop cost-estimate ratio for part lines without a real cost.
+  const partCostRatio = await getShopPartCostRatio(shopId);
+
   const newServicePackages = jobs.map((jobReq, jobIndex) => {
     const job = jobReq.job;
     
@@ -171,6 +182,18 @@ export async function POST(req: NextRequest) {
           Completed: false,
         };
       } else {
+        // Task #681 — write the real part cost when the pushed line carries
+        // one; otherwise estimate from retail via the shop's cost ratio.
+        const resolvedCost = resolvePartLineCost(line, partCostRatio);
+        logPartCostResolution({
+          tag: "[Jobs Batch]",
+          shopId,
+          jobTitle: job.title,
+          description: line.description,
+          resolved: resolvedCost,
+          ratio: partCostRatio,
+          unitPrice: line.unitPrice,
+        });
         return {
           ID: ZERO_GUID,
           Rank: idx + 1,
@@ -179,10 +202,10 @@ export async function POST(req: NextRequest) {
           Quantity: String(line.quantity),
           Unit: "Each",
           Price: String(line.unitPrice.toFixed(2)),
-          Cost: String((line.unitPrice * 0.6).toFixed(2)),
+          Cost: String(resolvedCost.unitCost.toFixed(2)),
           Total: String(line.extendedPrice.toFixed(2)),
           ExtendedTotal: String(line.extendedPrice.toFixed(2)),
-          TotalCost: String((line.extendedPrice * 0.6).toFixed(2)),
+          TotalCost: String(resolvedCost.totalCost.toFixed(2)),
           MinimumCharge: 0,
           Discount: 0,
           PartNumber: line.partNumber || "",

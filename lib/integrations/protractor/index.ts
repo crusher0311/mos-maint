@@ -1,5 +1,6 @@
 export * from './client';
 export * from './transform';
+export * from './part-cost';
 export * from './sync';
 export * from './jobs-prewarm';
 export { ProtractorAdapter, protractorAdapter } from './adapter';
