@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Wrench, Save, Check } from "lucide-react";
 import type { ShopInterval } from "./page";
 
@@ -185,6 +185,24 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
     ? convertMilesToKm(interval.defaultMiles)
     : interval.defaultMiles;
 
+  const [distance, setDistance] = useState<string>(displayDistance != null ? String(displayDistance) : "");
+  const [months, setMonths] = useState<string>(interval.months != null ? String(interval.months) : "");
+
+  // Re-sync row state when fresh data arrives from the server (e.g. after the
+  // "Import from document" flow applies intervals and refreshes the page data).
+  // Without this, rows keep their initial mount state and the imported
+  // "Use Shop" checkboxes / values appear not to have been applied.
+  useEffect(() => {
+    setUseShop(interval.useShop);
+    setExcluded(interval.excluded);
+  }, [interval.useShop, interval.excluded]);
+  useEffect(() => {
+    setDistance(displayDistance != null ? String(displayDistance) : "");
+  }, [displayDistance]);
+  useEffect(() => {
+    setMonths(interval.months != null ? String(interval.months) : "");
+  }, [interval.months]);
+
   const isDisabled = excluded || !useShop;
   const rowClass = excluded ? "bg-red-50" : useShop ? "bg-green-50" : "";
 
@@ -221,7 +239,8 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
         <input
           type="number"
           name={`${interval.key}_distance`}
-          defaultValue={displayDistance ?? ""}
+          value={distance}
+          onChange={(e) => setDistance(e.target.value)}
           placeholder={displayDefaultDistance?.toLocaleString() ?? "—"}
           disabled={isDisabled}
           min={0}
@@ -237,7 +256,8 @@ function IntervalRow({ interval, distanceUnit, distanceAbbr }: { interval: ShopI
         <input
           type="number"
           name={`${interval.key}_months`}
-          defaultValue={interval.months ?? ""}
+          value={months}
+          onChange={(e) => setMonths(e.target.value)}
           placeholder={interval.defaultMonths?.toString() ?? "—"}
           disabled={isDisabled}
           min={0}
