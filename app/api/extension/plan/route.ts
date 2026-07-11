@@ -64,7 +64,11 @@ export const __deps = {
 // Bumped 4 → 5: new `control_arm` service key + standalone declined entries
 // now honor the performed-after-decline guard (shop + CARFAX history), so
 // previously-cached analyses may carry flags that should have been resolved.
-const ANALYSIS_CACHE_SCHEMA_VERSION = 5;
+// Bumped 5 → 6: standalone DVI Finding cards now carry `serviceKey`, so a
+// declined job for the same service merges into the DVI card instead of
+// showing as a duplicate — cached analyses built without the key still
+// hold both cards and must rebuild.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 6;
 
 // Task #336: OEM data from DataOne is always in real miles. Convert to
 // shop unit (km for Canadian shops) at intake so the on-demand analyzer
@@ -1094,6 +1098,12 @@ export async function runOnDemandAnalysis(
       if (usedDviKeys.has(dviKey)) continue;
       recommendations.push({
         service: dvi.name,
+        // Carry the canonical key so the later declined-jobs merge can
+        // attach a matching declined job to this card instead of creating
+        // a duplicate standalone "Customer Declined" entry (e.g. DVI
+        // "Control Arms" + declined "Remove & Replace Suspension Control
+        // Arm" both map to control_arm and should be ONE card).
+        serviceKey: dviKey,
         category: "DVI Finding",
         dueMileage: 0,
         interval: 0,
