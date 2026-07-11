@@ -596,6 +596,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "PREFILL_DVI_CHOOSE_INSPECTION") {
+    console.log("[MOS Tools] Multiple inspections on RO — showing chooser:", message.inspections?.length);
+    showPrefillInspectionChooser(message.inspections || []);
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "ENHANCE_FINDINGS_PREVIEW") {
     console.log("[MOS Tools] Showing enhance review modal:", message.enhanced?.length, "items");
     showEnhanceReviewModal(message.enhanced, message.inspectionId, message.context);
@@ -1676,6 +1683,102 @@ function resetPrefillButton() {
     btn.style.opacity = '1';
     btn.style.cursor = 'pointer';
   }
+}
+
+// When an RO carries more than one candidate inspection (e.g. MPI + an
+// internal inspection), the background asks the tech which one to fill
+// instead of silently targeting whichever renders last on the page.
+function showPrefillInspectionChooser(inspections) {
+  const existing = document.getElementById('mos-prefill-choose-modal');
+  if (existing) existing.remove();
+
+  if (!Array.isArray(inspections) || inspections.length === 0) {
+    resetPrefillButton();
+    showToast('No inspections available to pre-fill', 'error');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-prefill-choose-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2147483646;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:12px;max-width:420px;width:92%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.25);';
+
+  const title = document.createElement('div');
+  title.textContent = 'Which inspection should be pre-filled?';
+  title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;margin-bottom:4px;';
+  card.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.textContent = 'This repair order has more than one inspection.';
+  sub.style.cssText = 'font-size:12px;color:#6b7280;margin-bottom:14px;';
+  card.appendChild(sub);
+
+  const finishChoice = (inspId) => {
+    overlay.remove();
+    const context = detectContext();
+    if (!context.roId || !context.shopId || !context.vin || !context.mileage) {
+      resetPrefillButton();
+      showToast('Lost repair order context — please try again', 'error');
+      return;
+    }
+    safeSendMessage({
+      action: 'PREFILL_DVI',
+      inspectionId: inspId,
+      context: {
+        shopId: context.shopId,
+        roId: context.roId,
+        vin: context.vin,
+        mileage: context.mileage,
+        provider: 'tekmetric',
+      }
+    }, (response) => {});
+  };
+
+  for (const insp of inspections) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const statusLabel = insp.status ? String(insp.status).replace(/_/g, ' ').toLowerCase() : '';
+    const metaBits = [];
+    if (insp.taskCount) metaBits.push(`${insp.taskCount} task${insp.taskCount === 1 ? '' : 's'}`);
+    if (statusLabel) metaBits.push(statusLabel);
+    btn.innerHTML = '';
+    const nameEl = document.createElement('div');
+    nameEl.textContent = insp.name || `Inspection #${insp.id}`;
+    nameEl.style.cssText = 'font-size:14px;font-weight:600;color:#111827;';
+    const metaEl = document.createElement('div');
+    metaEl.textContent = metaBits.join(' · ');
+    metaEl.style.cssText = 'font-size:12px;color:#6b7280;margin-top:2px;';
+    btn.appendChild(nameEl);
+    if (metaBits.length) btn.appendChild(metaEl);
+    btn.style.cssText = 'display:block;width:100%;text-align:left;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;';
+    btn.addEventListener('mouseenter', () => { btn.style.background = '#eef2ff'; btn.style.borderColor = '#6366f1'; });
+    btn.addEventListener('mouseleave', () => { btn.style.background = '#f9fafb'; btn.style.borderColor = '#e5e7eb'; });
+    btn.addEventListener('click', () => finishChoice(insp.id));
+    card.appendChild(btn);
+  }
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  cancel.style.cssText = 'display:block;width:100%;background:none;border:none;color:#6b7280;font-size:13px;padding:8px 0 0;cursor:pointer;';
+  cancel.addEventListener('click', () => {
+    overlay.remove();
+    resetPrefillButton();
+  });
+  card.appendChild(cancel);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      resetPrefillButton();
+    }
+  });
+
+  card.addEventListener('click', (e) => e.stopPropagation());
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
 }
 
 // Task #744: how each pre-filled DVI item was decided. Mirrors the `basis`

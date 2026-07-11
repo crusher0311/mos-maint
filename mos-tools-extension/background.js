@@ -497,6 +497,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     prefillDviInspection(ctx, message.inspectionId || null, tabId).then(result => {
       if (tabId) {
+        if (result.success && result.choosing) {
+          // Multiple candidate inspections — the content script is showing a
+          // chooser; it will re-send PREFILL_DVI with an explicit inspectionId.
+          return;
+        }
         if (result.success && result.applied > 0) {
           const msg = `DVI pre-filled: ${result.applied} tasks updated (${result.summary?.overdue || 0} red, ${result.summary?.dueSoon || 0} yellow, ${result.summary?.ok || 0} green)`;
           chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: msg, type: "success" }).catch(() => {});
@@ -2833,7 +2838,35 @@ async function prefillDviInspection(context, inspId, tabId) {
       const completed = i.completed === true || status === "COMPLETED" || status === "COMPLETE";
       return !completed;
     });
-    inspection = incomplete.length > 0 ? incomplete[incomplete.length - 1] : inspArr[inspArr.length - 1];
+    // Prefer incomplete inspections; only fall back to completed ones when
+    // nothing is incomplete. When more than one candidate remains, do NOT
+    // guess (the old behavior silently filled whichever rendered last /
+    // bottom of the page) — ask the tech which inspection to fill.
+    const candidates = incomplete.length > 0 ? incomplete : inspArr;
+    if (candidates.length > 1) {
+      console.log(`[Prefill DVI] ${inspArr.length} inspections found, ${incomplete.length} incomplete — asking user to choose`);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, {
+          action: "PREFILL_DVI_CHOOSE_INSPECTION",
+          inspections: candidates.map(i => {
+            const groups = i.inspectionTasks || i.groups || [];
+            let taskCount = 0;
+            for (const g of groups) taskCount += (g.tasks || []).length;
+            return {
+              id: i.id,
+              name: i.name || i.title || i.inspectionName || `Inspection #${i.id}`,
+              status: i.inspectionStatus?.code || i.status || "",
+              taskCount,
+            };
+          }),
+        }).catch(() => {});
+        return { success: true, choosing: true };
+      }
+      // No tab to ask on — fall back to the first (top-most) candidate.
+      inspection = candidates[0];
+    } else {
+      inspection = candidates[0];
+    }
     console.log(`[Prefill DVI] ${inspArr.length} inspections found, ${incomplete.length} incomplete, using inspection ${inspection.id} (status: ${inspection.inspectionStatus?.code || inspection.status || 'unknown'})`);
   }
   if (!inspection) return { success: false, error: "Inspection not found" };

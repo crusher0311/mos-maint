@@ -1,0 +1,36 @@
+When multiple inspections are attached to a Tekmetric repair order, Detect Dog only autofills the inspection positioned at the bottom of the inspections page.
+
+I tested this several ways:
+
+1. When the MPI was the only inspection on the RO, Detect Dog autofilled it correctly.
+2. When both the MPI and internal inspection were attached and the MPI was positioned at the bottom, Detect Dog autofilled only the MPI.
+3. When I changed the order and placed the internal inspection at the bottom, Detect Dog autofilled only the internal inspection.
+
+This appears to show that Detect Dog is targeting the last inspection displayed on the page rather than a specific inspection template.
+
+Expected behavior:
+Detect Dog should either autofill the selected inspection, autofill the MPI specifically, or provide an option to choose which inspection receives the information.
+
+Current workaround:
+I must keep the MPI positioned at the bottom of the inspection page before using autofill.
+
+Conversation
+T
+thecarguy38th
+Fri, Jul 10, 2026, 4:07 PM
+When multiple inspections are attached to a Tekmetric repair order, Detect Dog only autofills the inspection positioned at the bottom of the inspections page.
+
+I tested this several ways:
+
+1. When the MPI was the only inspection on the RO, Detect Dog autofilled it correctly.
+2. When both the MPI and internal inspection were attached and the MPI was positioned at the bottom, Detect Dog autofilled only the MPI.
+3. When I changed the order and placed the internal inspection at the bottom, Detect Dog autofilled only the internal inspection.
+
+This appears to show that Detect Dog is targeting the last inspection displayed on the page rather than a specific inspection template.
+
+Expected behavior:
+Detect Dog should either autofill the selected inspection, autofill the MPI specifically, or provide an option to choose which inspection receives the information.
+
+Current workaround:
+I must keep the MPI positioned at the bottom of the inspection page before using autofill.
+

@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.60 — 2026-07-11
+
+### Fixed
+- **DVI Pre-fill no longer guesses when an RO has multiple inspections
+  (Tekmetric).** Previously, Pre-fill DVI silently targeted whichever
+  inspection rendered last (bottom of the inspections page), so with an MPI
+  plus an internal inspection attached, the wrong one could get filled unless
+  the MPI was manually kept at the bottom. Now: completed inspections are
+  skipped when an incomplete one exists, and if more than one candidate
+  remains, a chooser pops up asking which inspection to pre-fill. Single-
+  inspection ROs behave exactly as before — no extra clicks.
+
 ## 1.27.59 — 2026-07-11
 
 ### Added
