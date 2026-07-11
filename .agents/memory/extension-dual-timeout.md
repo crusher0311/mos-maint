@@ -19,7 +19,11 @@ runs several slow upstream Protractor calls server-side (open-WO lookup,
 vehicle-by-VIN, line resolution from job_index, then the write) and tripped the
 30s sidepanel cap even after `options.timeoutMs` was raised.
 
-**How to apply:** For any slow extension write, set `options.timeoutMs` (proxy)
-AND pass a larger second arg to `sendMessage(payload, N)`. Keep the client arg
-slightly ABOVE the proxy cap (e.g. proxy 120s, client 125s) so the friendly
-proxy timeout message wins instead of the generic sidepanel one.
+**How to apply:** The sidepanel `sendMessage` now self-derives its cap: default
+60s (> 45s proxy default), and if the message carries `options.timeoutMs` it
+waits that value + 10s buffer automatically — so plain call sites are safe by
+default. Only pass an explicit second arg when the background can run LONGER
+than its fetch cap (e.g. widened `authRetryDelaysMs` 401 retry schedules add
+~26s of delays on top of the fetch cap → those write sites pass 90s). The
+client cap must always end up above the effective background time so the
+proxy's accurate timeout message wins instead of the generic sidepanel one.

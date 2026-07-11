@@ -2738,7 +2738,11 @@ async function handleAddJob(job) {
             job: jobData
           })
         }
-      });
+        // The widened 401 retry schedule above adds up to ~26s of delays on
+        // top of the background's 45s fetch cap, so the panel must wait
+        // longer than the 60s default or a retried-but-successful add shows a
+        // false timeout while the background still completes it.
+      }, 90000);
 
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
@@ -2890,7 +2894,11 @@ async function handleAddCannedJob(job) {
               cannedJobTitle
             })
           }
-        }, 60000);
+          // The widened 401 retry schedule above adds up to ~26s of delays on
+          // top of the background's 45s fetch cap, so the panel must wait
+          // longer than 60s or a retried-but-successful add shows a false
+          // timeout while the background still completes it.
+        }, 90000);
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
@@ -2944,7 +2952,11 @@ async function handleAddCannedJob(job) {
             cannedJobTitle: job.name
           })
         }
-      }, 60000);
+        // The widened 401 retry schedule above adds up to ~26s of delays on
+        // top of the background's 45s fetch cap, so the panel must wait
+        // longer than 60s or a retried-but-successful add shows a false
+        // timeout while the background still completes it.
+      }, 90000);
       
       console.log('[MOS] Tekmetric canned job add result:', result);
       
@@ -3953,11 +3965,28 @@ function printStickerViaWindow(sticker) {
 }
 
 // ==================== UTILITIES ====================
-function sendMessage(message, timeoutMs = 30000) {
+// The background worker caps MOS API fetches at MOS_FETCH_TIMEOUT_MS (45s)
+// unless a request passes its own options.timeoutMs. The sidepanel-side wait
+// must ALWAYS exceed the background's cap, or slow-but-successful writes time
+// out here while the background still completes them ("ghost" successes).
+// Default: 60s (> 45s background default). If the message carries an explicit
+// options.timeoutMs for the background fetch, wait that long plus a buffer.
+const SENDMESSAGE_DEFAULT_TIMEOUT_MS = 60000;
+const SENDMESSAGE_TIMEOUT_BUFFER_MS = 10000;
+function sendMessage(message, timeoutMs) {
+  let limitMs = (typeof timeoutMs === 'number' && timeoutMs > 0)
+    ? timeoutMs
+    : SENDMESSAGE_DEFAULT_TIMEOUT_MS;
+  const fetchTimeoutMs = message?.options?.timeoutMs;
+  if (typeof fetchTimeoutMs === 'number' && fetchTimeoutMs > 0) {
+    // Always outlast the background's own fetch timeout so the background is
+    // the one to report a timeout (a real one), not us guessing prematurely.
+    limitMs = Math.max(limitMs, fetchTimeoutMs + SENDMESSAGE_TIMEOUT_BUFFER_MS);
+  }
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       resolve({ error: 'Request timed out. Please try again.' });
-    }, timeoutMs);
+    }, limitMs);
     
     chrome.runtime.sendMessage(message, (response) => {
       clearTimeout(timeout);

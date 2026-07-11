@@ -23,6 +23,16 @@
   cleared and the extension clearly prompts for a fresh login. One-off
   hiccups are unchanged — a single transient 401 still never logs anyone out
   mid-shift.
+- **Slow writes showed a false timeout error while still completing ("ghost"
+  success).** The side panel gave every background request only 30 seconds,
+  but the background worker waits up to 45 seconds for the MOS server (and
+  120 seconds for creating a Protractor RO). A legitimately slow write —
+  e.g. Enhance Findings or Create RO — could show "Request timed out" in the
+  panel while the background finished the write moments later. The panel now
+  always waits longer than the background does: 60 seconds by default, and
+  when a request carries its own wider background timeout, that value plus a
+  10-second buffer. Real timeouts are now reported by the background (with an
+  accurate error), never guessed prematurely by the panel.
 
 ## 1.27.56 — 2026-07-07
 
