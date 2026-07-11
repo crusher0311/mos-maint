@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { Db } from "mongodb";
+import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 
 /**
  * Test seam (Task #520): tests override these to drive the dashboard read
@@ -128,11 +129,14 @@ export async function GET(request: NextRequest) {
       };
 
       if (search) {
+        // Anchored (prefix) matches so each $or branch is index-eligible
+        // instead of a leading-wildcard COLLSCAN. See lib/dashboard-search.ts
+        // and the companion indexes in scripts/ensure-indexes.ts.
         archivedQuery.$or = [
-          { vin: { $regex: search, $options: 'i' } },
-          { "vehicle.make": { $regex: search, $options: 'i' } },
-          { "vehicle.model": { $regex: search, $options: 'i' } },
-          { "customer.name": { $regex: search, $options: 'i' } },
+          { vin: vinPrefix(search) },
+          { "vehicle.make": prefixRegex(search) },
+          { "vehicle.model": prefixRegex(search) },
+          { "customer.name": prefixRegex(search) },
         ];
       }
 

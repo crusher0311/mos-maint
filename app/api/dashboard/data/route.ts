@@ -7,6 +7,7 @@ import { getBatchQuickSpecs } from "@/lib/integrations/dataone-local";
 import { fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { Db } from "mongodb";
 import { mergeAutoflowIntoPrimary } from "@/lib/dashboard/autoflow-merge";
+import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 
 async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
   const noMileageVins = rows
@@ -128,13 +129,16 @@ export async function GET(request: NextRequest) {
       };
 
       if (search) {
+        // Anchored (prefix) matches so each $or branch is index-eligible
+        // instead of a leading-wildcard COLLSCAN. See lib/dashboard-search.ts
+        // and the companion indexes in scripts/ensure-indexes.ts.
         archivedQuery.$or = [
-          { vin: { $regex: search, $options: 'i' } },
-          { make: { $regex: search, $options: 'i' } },
-          { model: { $regex: search, $options: 'i' } },
-          { "customer.name": { $regex: search, $options: 'i' } },
-          { "customer.firstName": { $regex: search, $options: 'i' } },
-          { "customer.lastName": { $regex: search, $options: 'i' } },
+          { vin: vinPrefix(search) },
+          { make: prefixRegex(search) },
+          { model: prefixRegex(search) },
+          { "customer.name": prefixRegex(search) },
+          { "customer.firstName": prefixRegex(search) },
+          { "customer.lastName": prefixRegex(search) },
         ];
       }
 

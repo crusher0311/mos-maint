@@ -500,6 +500,20 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "nemp_shop_updated_at_idx" ON "normalized_employees" ("shop_id", "updated_at")`,
     `CREATE INDEX IF NOT EXISTS "nemp_created_at_idx" ON "normalized_employees" ("created_at")`,
     `CREATE INDEX IF NOT EXISTS "nemp_updated_at_idx" ON "normalized_employees" ("updated_at")`,
+
+    // Task #758 — knowledge-base search trigram GIN indexes. KB search filters
+    // with leading-wildcard `ILIKE '%term%'` across knowledge_articles
+    // title/problem/solution/category (lib/db/repositories/wave1.ts). A plain
+    // b-tree can't serve a leading-wildcard ILIKE, so those predicates
+    // seq-scan the table; these `gin_trgm_ops` indexes let them use a Bitmap
+    // Index Scan instead. Requires the pg_trgm extension created above. On prod
+    // build with CREATE INDEX CONCURRENTLY to avoid a write lock; these are
+    // plain idempotent CREATEs for fresh environments. See
+    // drizzle/0021_task758_kb_search_trgm.sql.
+    `CREATE INDEX IF NOT EXISTS "knowledge_articles_title_trgm_idx" ON "knowledge_articles" USING gin ("title" gin_trgm_ops)`,
+    `CREATE INDEX IF NOT EXISTS "knowledge_articles_problem_trgm_idx" ON "knowledge_articles" USING gin ("problem" gin_trgm_ops)`,
+    `CREATE INDEX IF NOT EXISTS "knowledge_articles_solution_trgm_idx" ON "knowledge_articles" USING gin ("solution" gin_trgm_ops)`,
+    `CREATE INDEX IF NOT EXISTS "knowledge_articles_category_trgm_idx" ON "knowledge_articles" USING gin ("category" gin_trgm_ops)`,
   ];
 
   console.log("Creating extensions...");

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import { prefixRegex } from "@/lib/dashboard-search";
 
 function normalizeLine(l: any) {
   return {
@@ -47,8 +48,8 @@ export async function GET(req: NextRequest) {
       shopId,
       'vehicle.vin': vin.toUpperCase(),
       ...(q ? { $or: [
-        { 'job.title': { $regex: q, $options: 'i' } },
-        { 'job.code': { $regex: q, $options: 'i' } },
+        { 'job.title': prefixRegex(q) },
+        { 'job.code': prefixRegex(q) },
       ]} : {}),
     }).sort({ performedAt: -1 }).limit(30).toArray();
 
@@ -68,8 +69,8 @@ export async function GET(req: NextRequest) {
       }
       if (q) {
         similarQuery.$or = [
-          { 'job.title': { $regex: q, $options: 'i' } },
-          { 'job.code': { $regex: q, $options: 'i' } },
+          { 'job.title': prefixRegex(q) },
+          { 'job.code': prefixRegex(q) },
         ];
       }
       similarResults = await db.collection("job_index").find(similarQuery)

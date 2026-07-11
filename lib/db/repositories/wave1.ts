@@ -630,8 +630,14 @@ export async function pgSearchArticleCandidates(
   limit: number,
 ): Promise<KnowledgeArticleRow[]> {
   if (searchTerms.length === 0) return [];
-  // Naive ILIKE-OR across title/problem/solution + tag inclusion.
-  // Mirrors the Mongo $regex / $in semantics in the repo.
+  // ILIKE-OR across title/problem/solution/category + tag inclusion, mirroring
+  // the Mongo $regex / $in semantics. The leading-wildcard `ILIKE '%term%'`
+  // predicate cannot use a b-tree index, so on its own it seq-scans
+  // knowledge_articles. The pg_trgm `gin_trgm_ops` indexes shipped in
+  // drizzle/0021_task758_kb_search_trgm.sql (and mirrored in
+  // scripts/apply-normalized-migration.ts) let the planner serve these ILIKEs
+  // with a Bitmap Index Scan instead — the same fix applied to job-search.
+  // Terms shorter than 3 chars fall back to a scan (no trigram), which is fine.
   const escaped = searchTerms.map((t) => t.replace(/[%_]/g, (c) => `\\${c}`));
   const likeClauses = escaped
     .map((t) => sql`(${knowledgeArticles.title} ILIKE ${"%" + t + "%"}

@@ -45,6 +45,10 @@ async function ensureIndexes() {
       { collection: "job_index", index: { shopId: 1, closedAt: -1 } },
       { collection: "job_index", index: { shopId: 1, workOrderId: 1 } },
       { collection: "job_index", index: { jobTitle: -1, performedAC: -1, shopId: 1 } },
+      // Job-history search (task #758). The `job.title` prefix branch is backed
+      // by shopId_title (scripts/create-job-index-indexes.ts); add the matching
+      // `job.code` branch so the anchored-regex $or is fully index-eligible.
+      { collection: "job_index", index: { shopId: 1, "job.code": 1 }, options: { name: "shopId_job_code" } },
 
       // job_history - Protractor job search
       { collection: "job_history", index: { shopId: 1 } },
@@ -55,6 +59,14 @@ async function ensureIndexes() {
       { collection: "vehicles", index: { shopId: 1, vin: 1 }, options: { unique: true } },
       { collection: "vehicles", index: { shopId: 1, updatedAt: -1 } },
       { collection: "vehicles", index: { vin: 1 } },
+      // Dashboard archived-vehicle search (task #758). The search $or now uses
+      // anchored (prefix) regexes so each branch is index-eligible instead of a
+      // COLLSCAN; these per-field compound indexes back those branches.
+      { collection: "vehicles", index: { shopId: 1, make: 1 }, options: { name: "shopId_make" } },
+      { collection: "vehicles", index: { shopId: 1, model: 1 }, options: { name: "shopId_model" } },
+      { collection: "vehicles", index: { shopId: 1, "customer.name": 1 }, options: { name: "shopId_customer_name" } },
+      { collection: "vehicles", index: { shopId: 1, "customer.firstName": 1 }, options: { name: "shopId_customer_firstName" } },
+      { collection: "vehicles", index: { shopId: 1, "customer.lastName": 1 }, options: { name: "shopId_customer_lastName" } },
 
       // viewed_vins - trial tracking
       { collection: "viewed_vins", index: { shopId: 1 } },
@@ -134,6 +146,13 @@ async function ensureIndexes() {
       { collection: "normalized_work_orders", index: { shopId: 1 } },
       { collection: "normalized_work_orders", index: { shopId: 1, status: 1 } },
       { collection: "normalized_work_orders", index: { vin: 1 } },
+      // Dashboard archived-WO search (task #758). The search $or now uses
+      // anchored (prefix) regexes so each branch is index-eligible instead of a
+      // COLLSCAN; these per-field compound indexes back those branches.
+      { collection: "normalized_work_orders", index: { shopId: 1, vin: 1 }, options: { name: "shopId_vin" } },
+      { collection: "normalized_work_orders", index: { shopId: 1, "vehicle.make": 1 }, options: { name: "shopId_vehicle_make" } },
+      { collection: "normalized_work_orders", index: { shopId: 1, "vehicle.model": 1 }, options: { name: "shopId_vehicle_model" } },
+      { collection: "normalized_work_orders", index: { shopId: 1, "customer.name": 1 }, options: { name: "shopId_customer_name" } },
       { collection: "normalized_vehicles", index: { shopId: 1 } },
       { collection: "normalized_vehicles", index: { vin: 1 } },
       { collection: "normalized_customers", index: { shopId: 1 } },
