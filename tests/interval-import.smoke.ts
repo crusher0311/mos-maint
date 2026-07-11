@@ -66,6 +66,70 @@ console.log("mapImportServiceNameToKey (gear-oil pre-pass)");
 }
 
 // ---------------------------------------------------------------------------
+// Task #807: synonym expansion grounded in production unmatched-name logs.
+console.log("mapImportServiceNameToKey (Task #807 synonym expansion)");
+{
+  check(
+    "BG Brake System Service → brake_fluid",
+    mapImportServiceNameToKey("BG Brake System Service") === "brake_fluid",
+  );
+  check(
+    "Brake System Fluid Flush → brake_fluid",
+    mapImportServiceNameToKey("Brake System Fluid Flush") === "brake_fluid",
+  );
+  check("Align 4W → wheel_alignment", mapImportServiceNameToKey("Align 4W") === "wheel_alignment");
+  check(
+    "4-Wheel Alignment → wheel_alignment",
+    mapImportServiceNameToKey("4-Wheel Alignment") === "wheel_alignment",
+  );
+  check(
+    "Throttle Body Service → fuel_system",
+    mapImportServiceNameToKey("Throttle Body Service") === "fuel_system",
+  );
+  check(
+    "Fuel Injection Flush Cleaning Service → fuel_system",
+    mapImportServiceNameToKey("Fuel Injection Flush Cleaning Service") === "fuel_system",
+  );
+  check(
+    "BG Air Induction Service → fuel_system",
+    mapImportServiceNameToKey("BG Air Induction Service") === "fuel_system",
+  );
+  check(
+    "Transmission Drain and Fill → trans_auto",
+    mapImportServiceNameToKey("Transmission Drain and Fill") === "trans_auto",
+  );
+  check(
+    "Manual Trans Service still → trans_manual",
+    mapImportServiceNameToKey("Manual Trans Service") === "trans_manual",
+  );
+  check("bare Battery → battery (exact match)", mapImportServiceNameToKey("Battery") === "battery");
+  check(
+    "Interstate Battery → battery",
+    mapImportServiceNameToKey("Interstate Battery") === "battery",
+  );
+  check("Check Battery still → unmatched", mapImportServiceNameToKey("Check Battery") === null);
+  check(
+    "Clean Battery Terminals Service still → unmatched",
+    mapImportServiceNameToKey("Clean Battery Terminals Service") === null,
+  );
+  check("bare Coolant → coolant (exact match)", mapImportServiceNameToKey("Coolant") === "coolant");
+  check("Coolant Leak still → unmatched", mapImportServiceNameToKey("Coolant Leak") === null);
+  check(
+    "Road Force Wheel Balance & Rotation → tire_rotation",
+    mapImportServiceNameToKey("Road Force Wheel Balance & Rotation") === "tire_rotation",
+  );
+  check(
+    "Wiper - Latitude → wiper_blades",
+    mapImportServiceNameToKey("Wiper - Latitude") === "wiper_blades",
+  );
+  check("Wiper Motor still → unmatched", mapImportServiceNameToKey("Wiper Motor") === null);
+  check(
+    "Evacuate and Recharge R134 A/C System → ac_refrigerant",
+    mapImportServiceNameToKey("Evacuate and Recharge R134 A/C System") === "ac_refrigerant",
+  );
+}
+
+// ---------------------------------------------------------------------------
 console.log("inferRecurrenceMiles");
 {
   const all = [15000, 30000, 50000, 60000, 90000, 100000, 120000];

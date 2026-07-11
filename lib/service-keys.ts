@@ -11,7 +11,10 @@ export const SERVICE_KEYS: Record<string, string[]> = {
   tire_rotation: [
     "rotate tires", "tire rotation", "rotate tyre", "tires rotated", "rotate wheels",
     "tire rotate", "rotation service", "wheel rotation", "rotate & balance",
-    "rotate and balance", "tire service rotation", "4 tire rotation", "wheels rotated"
+    "rotate and balance", "tire service rotation", "4 tire rotation", "wheels rotated",
+    // Task #807: real shop phrasing puts balance first ("Road Force Wheel
+    // Balance & Rotation") — the existing rotate-first synonyms miss it.
+    "balance & rotation", "balance and rotation"
   ],
   cabin_air: [
     "cabin air filter", "cabin filter", "pollen filter", "hvac filter",
@@ -37,7 +40,11 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "brake fluid", "dot4", "dot 4", "dot3", "dot 3", "brake flush",
     "brake fluid service", "brake fluid change", "brake fluid flush",
     "brake fluid exchange", "brake fluid replacement", "bg brake fluid",
-    "hydraulic brake fluid", "bleed brakes", "brake bleed"
+    "hydraulic brake fluid", "bleed brakes", "brake bleed",
+    // Task #807: production unmatched-name data — "BG Brake System
+    // Service" (BG's brake service IS a fluid exchange) and "Brake System
+    // Fluid Flush" phrasings never say "brake fluid" contiguously.
+    "bg brake system", "brake system fluid", "brake system flush"
   ],
   trans_auto: [
     "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
@@ -46,7 +53,12 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "trans fluid", "trans flush", "transmission fluid change",
     "transmission fluid exchange", "bg transmission", "cvt fluid", "cvt service",
     "automatic trans service", "auto transmission service",
-    "automatic transaxle fluid", "auto transaxle fluid"
+    "automatic transaxle fluid", "auto transaxle fluid",
+    // Task #807: production unmatched-name data — "Transmission Drain and
+    // Fill", "Replace Transmission Filter" (a filter service includes new
+    // fluid), and "Transmission System Fluid Flush w/ electronic level
+    // check" all miss the contiguous "transmission fluid" substring.
+    "transmission drain", "transmission filter", "transmission system fluid"
   ],
   trans_manual: [
     "manual transmission fluid", "manual trans fluid", "mtf fluid",
@@ -101,7 +113,13 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "bg fuel", "bg platinum fuel", "induction cleaning", "throttle body cleaning",
     "fuel injection service", "fuel injector service", "injector cleaning",
     "carbon cleaning", "intake cleaning", "bg fuel system", "fuel rail cleaning",
-    "fuel system flush", "gdi cleaning", "direct injection cleaning"
+    "fuel system flush", "gdi cleaning", "direct injection cleaning",
+    // Task #807: production unmatched-name data — "Fuel Injection Flush
+    // Cleaning Service (BG GDI)", "BG Air Induction Service", "Throttle
+    // Body Service" (existing synonym only covered "cleaning"), and "BG
+    // Engine Performance Service (BG MOA/EPR/44K)".
+    "fuel injection flush", "fuel injection cleaning", "air induction",
+    "throttle body service", "bg engine performance"
   ],
   front_brake_pads: [
     "front brake pads", "front brake lining", "front brakes replaced",
@@ -140,17 +158,32 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "wheel alignment", "alignment", "all wheel alignment",
     "front alignment", "rear alignment", "4 wheel alignment",
     "four wheel alignment", "thrust alignment", "alignment check",
-    "alignment service", "align wheels", "toe adjustment", "wheels aligned"
+    "alignment service", "align wheels", "toe adjustment", "wheels aligned",
+    // Task #807: "Align 4W" is the single most common unmatched alignment
+    // job name in production (Tekmetric canned-job shorthand).
+    "align 4w"
   ],
   battery: [
     "battery replaced", "battery replacement", "battery/charging", "replace battery",
     "new battery", "install battery", "r&r battery", "r/r battery",
-    "battery service", "battery install", "car battery", "vehicle battery"
+    "battery service", "battery install", "car battery", "vehicle battery",
+    // Task #807: "Interstate Battery" — brand-named battery install lines
+    // are common in production job names. Deliberately NOT adding a bare
+    // "battery" substring (would falsely catch "Key Fob Battery", battery
+    // tests, terminal cleaning); the exact-equality fallback in
+    // toKeyFromName / toKeyFromFreeText handles a standalone "Battery" line.
+    "interstate battery"
   ],
   wiper_blades: [
     "wiper blade", "windshield wiper", "wiper replace", "wiper insert",
     "replace wiper", "wiper blades", "wiper arm", "rear wiper",
-    "front wiper", "r&r wiper", "r/r wiper", "beam blade", "wiper refill"
+    "front wiper", "r&r wiper", "r/r wiper", "beam blade", "wiper refill",
+    // Task #807: CARFAX phrases wipers as "Wiper(s) replaced" (parenthesized
+    // plural), and shops sell product-line names like "Wiper - Latitude",
+    // "Wiper - Bosch Clear Advantage", "WIPERLAT - Latitude", "WIPERR -
+    // Rear". "wiper -" deliberately keeps the dash so "wiper motor" (a
+    // repair, not a maintenance interval) stays unmatched.
+    "wiper(s)", "wiper -", "wiperlat", "wiperr"
   ],
   ac_refrigerant: [
     "a/c refrigerant", "ac refrigerant", "air conditioning refill",
@@ -158,7 +191,10 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "a/c service", "ac service", "air conditioning service",
     "a/c evacuation", "ac evacuation", "a/c charge", "ac charge",
     "r-1234yf", "r1234yf", "a/c performance", "ac performance",
-    "air conditioning repair", "a/c system service"
+    "air conditioning repair", "a/c system service",
+    // Task #807: production job names phrase recharges as "Evacuation and
+    // Recharge R134" / "Evacuate and Recharge R134 A/C System".
+    "evacuate and recharge", "evacuation and recharge"
   ],
   emissions: [
     "emissions test", "emissions inspection", "smog test", "smog check",
@@ -555,6 +591,15 @@ export function toKeyFromName(name: string): string | null {
   if (n === "front brakes" || n === "front brake") return "front_brake_pads";
   if (n === "rear brakes" || n === "rear brake") return "rear_brake_pads";
   if (n.includes("windshield wiper") || n === "windshield wipers" || n === "wipers") return "wiper_blades";
+  // Task #807: exact-equality fallbacks for bare one-word job/document lines
+  // seen in production unmatched-name logs ("Battery" ×345, "Coolant",
+  // "Rotation", "Rotate"). Exact match on purpose — a bare-substring
+  // "battery" synonym would falsely catch "Key Fob Battery" / "Check
+  // Battery", and a bare "coolant" substring would catch "Coolant Leak".
+  const trimmed = n.trim();
+  if (trimmed === "battery") return "battery";
+  if (trimmed === "coolant") return "coolant";
+  if (trimmed === "rotation" || trimmed === "rotate") return "tire_rotation";
   return null;
 }
 
@@ -763,6 +808,16 @@ export function toKeyFromFreeText(desc: string): string[] {
   }
   if ((d.includes("windshield wiper") || d.includes("wipers")) && !hits.includes("wiper_blades")) {
     hits.push("wiper_blades");
+  }
+  // Task #807: mirror the exact-equality fallbacks at the end of
+  // `toKeyFromName` so a bare one-word history line resolves to the same
+  // key. Exact match on purpose — see the comment there for why a bare
+  // "battery"/"coolant" substring would over-match.
+  if (hits.length === 0) {
+    const t = d.trim();
+    if (t === "battery") hits.push("battery");
+    else if (t === "coolant") hits.push("coolant");
+    else if (t === "rotation" || t === "rotate") hits.push("tire_rotation");
   }
   return Array.from(new Set(hits));
 }
