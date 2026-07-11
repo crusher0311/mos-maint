@@ -29,6 +29,15 @@ interface Enterprise {
   name: string;
 }
 
+interface NewLocationDefaults {
+  sourceShopId: number;
+  sourceShopName: string;
+  plan: string | null;
+  status: string | null;
+  enabledFeatures: Record<string, boolean>;
+  availableUpgrades: Array<{ key: string; name: string; description: string }>;
+}
+
 export default function EnterpriseUserAccessPage() {
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);
@@ -41,12 +50,14 @@ export default function EnterpriseUserAccessPage() {
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [newLocationDefaults, setNewLocationDefaults] = useState<NewLocationDefaults | null>(null);
   const [newShop, setNewShop] = useState({
     name: "",
     smsProvider: "tekmetric" as "tekmetric" | "protractor" | "none",
     tekmetricShopId: "",
     protractorShopId: "",
-    assignUserEmails: [] as string[]
+    assignUserEmails: [] as string[],
+    additionalFeatures: [] as string[]
   });
 
   useEffect(() => {
@@ -68,6 +79,7 @@ export default function EnterpriseUserAccessPage() {
       setEnterprise(data.enterprise);
       setShops(data.shops || []);
       setUsers(data.users || []);
+      setNewLocationDefaults(data.newLocationDefaults || null);
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load enterprise data");
@@ -136,7 +148,8 @@ export default function EnterpriseUserAccessPage() {
           smsProvider: newShop.smsProvider,
           tekmetricShopId: newShop.tekmetricShopId || undefined,
           protractorShopId: newShop.protractorShopId || undefined,
-          assignUserEmails: newShop.assignUserEmails
+          assignUserEmails: newShop.assignUserEmails,
+          additionalFeatures: newShop.additionalFeatures
         })
       });
       
@@ -148,7 +161,8 @@ export default function EnterpriseUserAccessPage() {
           smsProvider: "tekmetric",
           tekmetricShopId: "",
           protractorShopId: "",
-          assignUserEmails: []
+          assignUserEmails: [],
+          additionalFeatures: []
         });
         await loadData();
         if (data.grantFailures?.length) {
@@ -526,6 +540,57 @@ export default function EnterpriseUserAccessPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <p className="mt-1 text-xs text-gray-500">Can be configured later if not known</p>
+                </div>
+              )}
+
+              {newLocationDefaults?.plan && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-900 font-medium">
+                    Plan &amp; features inherited from {newLocationDefaults.sourceShopName}
+                  </p>
+                  <p className="text-xs text-blue-800 mt-1">
+                    This location will start on the <span className="font-semibold">{newLocationDefaults.plan}</span> plan
+                    ({newLocationDefaults.status || "active"}) with the same features as your first location.
+                  </p>
+                </div>
+              )}
+
+              {newLocationDefaults && newLocationDefaults.availableUpgrades.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Add Extra Features (optional)
+                  </label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                    {newLocationDefaults.availableUpgrades.map((f) => (
+                      <label key={f.key} className="flex items-start gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newShop.additionalFeatures.includes(f.key)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewShop(prev => ({
+                                ...prev,
+                                additionalFeatures: [...prev.additionalFeatures, f.key]
+                              }));
+                            } else {
+                              setNewShop(prev => ({
+                                ...prev,
+                                additionalFeatures: prev.additionalFeatures.filter(k => k !== f.key)
+                              }));
+                            }
+                          }}
+                          className="w-4 h-4 mt-0.5 text-blue-600 rounded"
+                        />
+                        <span className="flex-1">
+                          <span className="text-sm text-gray-900 block">{f.name}</span>
+                          {f.description && <span className="text-xs text-gray-500 block">{f.description}</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    These are not enabled on your other locations — check any you&apos;d like to turn on for this new location
+                  </p>
                 </div>
               )}
 

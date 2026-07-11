@@ -7,6 +7,8 @@ import {
   revokeShopAccess,
   type ShopInfo,
 } from "@/lib/enterprise-access";
+import { FEATURE_METADATA } from "@/lib/featureResolver";
+import { FEATURE_KEYS, isFounderPlan } from "@/lib/plan-feature-tiers";
 
 export const runtime = "nodejs";
 
@@ -52,6 +54,50 @@ export async function GET() {
 
     const userList = await loadEnterpriseUsers(db, enterpriseShopIds, shopMap);
 
+    // What a NEW location would inherit: the plan/status/features of the
+    // enterprise's INITIAL shop (first in shopIds), plus which features are
+    // NOT already on and could be added during creation.
+    let newLocationDefaults: {
+      sourceShopId: number;
+      sourceShopName: string;
+      plan: string | null;
+      status: string | null;
+      enabledFeatures: Record<string, boolean>;
+      availableUpgrades: Array<{ key: string; name: string; description: string }>;
+    } | null = null;
+
+    const initialShopId = Number((enterprise.shopIds || [])[0]);
+    if (Number.isFinite(initialShopId)) {
+      const sourceShop = await db.collection("shops").findOne(
+        { shopId: initialShopId },
+        { projection: { name: 1, locationIdentifier: 1, "billing.plan": 1, "billing.status": 1, enabledFeatures: 1 } }
+      );
+      if (sourceShop) {
+        const plan = sourceShop.billing?.plan || null;
+        const enabled: Record<string, boolean> = sourceShop.enabledFeatures || {};
+        const founder = isFounderPlan(plan);
+        const availableUpgrades = founder
+          ? []
+          : FEATURE_KEYS
+              .filter((k) => enabled[k] !== true)
+              .map((k) => ({
+                key: k,
+                name: FEATURE_METADATA[k]?.name || k,
+                description: FEATURE_METADATA[k]?.description || "",
+              }));
+        newLocationDefaults = {
+          sourceShopId: initialShopId,
+          sourceShopName: sourceShop.locationIdentifier
+            ? `${sourceShop.name || "Shop"} (${sourceShop.locationIdentifier})`
+            : sourceShop.name || `Shop ${initialShopId}`,
+          plan,
+          status: sourceShop.billing?.status || null,
+          enabledFeatures: enabled,
+          availableUpgrades,
+        };
+      }
+    }
+
     return NextResponse.json({
       enterprise: {
         id: enterprise._id.toString(),
@@ -63,6 +109,7 @@ export async function GET() {
         locationIdentifier: s.locationIdentifier || null,
       })),
       users: userList,
+      newLocationDefaults,
     });
   } catch (err) {
     console.error("Error fetching enterprise users:", err);

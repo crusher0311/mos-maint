@@ -3,6 +3,8 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseById, addShopToEnterprise, removeShopFromEnterprise } from "@/lib/enterprise";
 import { grantShopAccess } from "@/lib/enterprise-access";
+import { pickValidFeatures } from "@/lib/featureResolver";
+import { FEATURE_KEYS, isFounderPlan } from "@/lib/plan-feature-tiers";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserIds, assignUserEmails } = body;
+    const { enterpriseId, name, smsProvider, tekmetricShopId, protractorShopId, assignUserIds, assignUserEmails, additionalFeatures } = body;
     
     if (!enterpriseId) {
       return NextResponse.json({ error: "Enterprise ID is required" }, { status: 400 });
@@ -142,6 +144,68 @@ export async function POST(req: NextRequest) {
       shopDoc.smsProvider = "protractor";
       if (protractorShopId) {
         shopDoc.protractor = { shopId: protractorShopId };
+      }
+    }
+
+    // Inherit billing plan/status and feature toggles from the enterprise's
+    // INITIAL shop (first in shopIds), so new locations come up matching the
+    // rest of the enterprise instead of defaulting to a fresh trial.
+    let inherited: { fromShopId: number; plan: string; status: string } | null = null;
+    let sourcePlan: string | null = null;
+    const initialShopId = Number(enterprise.shopIds?.[0]);
+    if (Number.isFinite(initialShopId)) {
+      const sourceShop = await db.collection("shops").findOne(
+        { shopId: initialShopId },
+        { projection: { "billing.plan": 1, "billing.status": 1, enabledFeatures: 1 } }
+      );
+      if (sourceShop?.billing?.plan) {
+        sourcePlan = sourceShop.billing.plan;
+        shopDoc.billing = {
+          plan: sourceShop.billing.plan,
+          status: sourceShop.billing.status || "active",
+        };
+        inherited = {
+          fromShopId: initialShopId,
+          plan: shopDoc.billing.plan,
+          status: shopDoc.billing.status,
+        };
+      }
+      if (sourceShop?.enabledFeatures && typeof sourceShop.enabledFeatures === "object") {
+        shopDoc.enabledFeatures = { ...sourceShop.enabledFeatures };
+      }
+    }
+
+    // Optional add-on features the admin opted into during creation.
+    // Server-side enforcement mirrors the GET's availableUpgrades: only
+    // valid feature keys NOT already inherited as true are accepted, and
+    // founder-plan sources offer no upgrades (wildcard already covers all).
+    if (Array.isArray(additionalFeatures) && additionalFeatures.length > 0) {
+      const inheritedFeatures: Record<string, unknown> = shopDoc.enabledFeatures || {};
+      const allowedKeys = isFounderPlan(sourcePlan)
+        ? new Set<string>()
+        : new Set<string>(FEATURE_KEYS.filter((k) => inheritedFeatures[k] !== true));
+      const requested = additionalFeatures.map((k: unknown) => String(k));
+      const disallowed = requested.filter((k) => !allowedKeys.has(k));
+      if (disallowed.length > 0) {
+        return NextResponse.json(
+          { error: `These features can't be added here: ${disallowed.join(", ")}` },
+          { status: 400 }
+        );
+      }
+      const extras = pickValidFeatures(
+        Object.fromEntries(requested.map((k) => [k, true]))
+      );
+      if (Object.keys(extras).length > 0) {
+        shopDoc.enabledFeatures = { ...(shopDoc.enabledFeatures || {}), ...extras };
+        await db.collection("audit_logs").insertOne({
+          type: "shop_features_updated",
+          shopId,
+          shopName: shopDoc.name,
+          changes: extras,
+          reason: "create_location_addons",
+          adminEmail: session.email,
+          createdAt: new Date(),
+        });
       }
     }
 
@@ -195,6 +259,7 @@ export async function POST(req: NextRequest) {
         _id: result.insertedId,
         ...shopDoc
       },
+      ...(inherited ? { inherited } : {}),
       ...(grantFailures.length > 0 ? { grantFailures } : {})
     }, { status: 201 });
   } catch (err: any) {
