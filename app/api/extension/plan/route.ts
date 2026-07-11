@@ -22,7 +22,9 @@ import {
   splitServicePhrases,
   isInspectOnlyHistoryPhrase,
   INSPECTION_SERVICE_KEYS,
+  toKeyFromFreeText,
 } from "@/lib/service-keys";
+import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
 import {
   classifyEngineRisk,
   loadEngineRiskOverrides,
@@ -56,7 +58,10 @@ export const __deps = {
 // Task #336: bumped from 2 → 3 so existing Canadian-shop installs whose
 // recommendations were computed in raw miles are treated as stale and
 // rebuilt under shop unit (km) on next view.
-const ANALYSIS_CACHE_SCHEMA_VERSION = 3;
+// Bumped 3 → 4: Tekmetric declined jobs are now folded into the on-demand
+// analysis (matched items carry `declined`, unmatched become standalone
+// overdue entries) — old cached analyses lack them and must rebuild.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 4;
 
 // Task #336: OEM data from DataOne is always in real miles. Convert to
 // shop unit (km for Canadian shops) at intake so the on-demand analyzer
@@ -1187,6 +1192,103 @@ export async function runOnDemandAnalysis(
       onCurrentRO: false,
     });
     console.log(`[Extension] Auto-inserted "${SAFETY_CHECK_OIL_LEVEL_TITLE}" for VIN ${vin} (anchor=${anchorMiles}, dueAt=${safetyDueMileage}, status=${safetyStatus})`);
+  }
+
+  // Task #808 follow-up: fold Tekmetric declined/unauthorized jobs into the
+  // on-demand analysis, mirroring lib/plan-build/triage.ts. The dashboard
+  // cached-plan path already carries `declined`, but this on-demand path
+  // (used when there's no dashboard-built plan cache) was missed, so
+  // extension-only shops never saw declined badges. Matched items carry the
+  // declined flag and are forced overdue; unmatched jobs become their own
+  // "Customer Declined" overdue entries. Fail-open: a slow/failed Mongo read
+  // never blocks the analysis. Non-Tekmetric shops simply match zero rows
+  // (the query filters on metadata.sourceType === "tekmetric").
+  try {
+    const declinedRows = await listTekmetricDeferredWorkByVin(shopId, vin.toUpperCase(), 50, db);
+    if (declinedRows.length > 0) {
+      const recsByServiceKey = new Map<string, any[]>();
+      for (const rec of recommendations) {
+        if (!rec.serviceKey) continue;
+        const arr = recsByServiceKey.get(rec.serviceKey);
+        if (arr) arr.push(rec);
+        else recsByServiceKey.set(rec.serviceKey, [rec]);
+      }
+
+      const seenDeclinedTitles = new Set<string>();
+      let matchedCount = 0;
+      let standaloneCount = 0;
+      for (const dj of declinedRows) {
+        const title = (dj.title || "").trim() || "Declined Service";
+        const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ");
+        if (seenDeclinedTitles.has(normalizedTitle)) continue;
+        seenDeclinedTitles.add(normalizedTitle);
+
+        const keys = toKeyFromFreeText(title) || [];
+        const declinedDate = dj.date ? new Date(dj.date) : null;
+        const entry = {
+          serviceKey: keys[0] || `tek_declined_${dj.id}`,
+          serviceName: title,
+          mileage: null as number | null,
+          reason: null as string | null,
+          declinedAt: dj.date || "",
+          origin: "tekmetric" as const,
+          roNumber: dj.originalWorkOrderNumber ?? null,
+        };
+
+        let matchedAny = false;
+        for (const k of keys) {
+          for (const rec of recsByServiceKey.get(k) || []) {
+            matchedAny = true;
+            // Performed-after-decline guard: if this service has a history
+            // anchor newer than the decline, the customer already resolved
+            // it — don't re-flag the item.
+            const lastDate = rec.last?.date ? new Date(rec.last.date) : null;
+            if (
+              declinedDate &&
+              !isNaN(declinedDate.getTime()) &&
+              lastDate &&
+              !isNaN(lastDate.getTime()) &&
+              lastDate > declinedDate
+            ) {
+              continue;
+            }
+            if (!rec.declined) {
+              rec.declined = entry;
+              rec.status = "overdue";
+              matchedCount++;
+            }
+          }
+        }
+
+        if (!matchedAny) {
+          recommendations.push({
+            service: title,
+            serviceKey: entry.serviceKey,
+            category: "Customer Declined",
+            dueMileage: null,
+            interval: null,
+            intervalMonths: null,
+            intervalText: "",
+            intervalSource: "declined",
+            lastPerformedBy: null,
+            lastPerformedMileage: null,
+            last: null,
+            milesToGo: null,
+            daysToGo: null,
+            estimatedDueDate: null,
+            source: "declined",
+            status: "overdue",
+            declined: entry,
+            approvedThisVisit: isApprovedThisVisit(title, currentRoAuthorizedJobs, entry.serviceKey),
+            onCurrentRO: isOnCurrentRO(title, currentRoAllJobs, entry.serviceKey),
+          });
+          standaloneCount++;
+        }
+      }
+      console.log(`[Extension] Declined jobs folded for VIN ${vin}: ${declinedRows.length} rows → ${matchedCount} matched, ${standaloneCount} standalone`);
+    }
+  } catch (e) {
+    console.warn('[Extension] Declined-work lookup failed (non-blocking):', e);
   }
 
   // Deduplicate recommendations by service name
@@ -2397,6 +2499,10 @@ async function _GET(request: NextRequest) {
           recommendedReason: rec.recommendedReason ?? null,
           approvedThisVisit: isApprovedThisVisit(rec.service || rec.name, currentRoAuthorizedJobs, rec.serviceKey || undefined),
           onCurrentRO: isOnCurrentRO(rec.service || rec.name, currentRoAllJobs, rec.serviceKey || undefined),
+          // Declined-job flag (same shape as the cached-plan path's
+          // `item.declined`) so the side panel shows the Declined badge on
+          // on-demand-analysis plans too.
+          declined: rec.declined || null,
           progress: recProgress,
           // Bucket-driven (matches partner API semantics): an item triaged
           // into "overdue" always shows the overdue icon even if it had no

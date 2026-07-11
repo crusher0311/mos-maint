@@ -7,7 +7,7 @@
 // lib/integrations/tekmetric/job-index.ts). This repository reads those rows
 // by VIN and shapes them to match the per-item contract the extension's
 // deferred renderer already understands (title, date, lines).
-import type { Collection, Document, Filter } from "mongodb";
+import type { Collection, Db, Document, Filter } from "mongodb";
 import { getDb } from "@/lib/data/db";
 
 const COLLECTION = "job_index";
@@ -76,11 +76,17 @@ export async function listTekmetricDeferredWorkByVin(
   shopId: number,
   vin: string,
   limit = 50,
+  // Optional caller-supplied Db so routes with a test seam (e.g. the
+  // extension plan route's `__deps.getDb`) don't open a second real Mongo
+  // connection that keeps smoke-test processes alive.
+  dbOverride?: Db,
 ): Promise<TekmetricDeferredWorkItem[]> {
   const normVin = vin.toUpperCase();
   const vinValues = normVin === vin ? [normVin] : [normVin, vin];
 
-  const col = await collection();
+  const col = dbOverride
+    ? dbOverride.collection<TekmetricJobIndexRow>(COLLECTION)
+    : await collection();
   const rows = await col
     .find({
       shopId,
