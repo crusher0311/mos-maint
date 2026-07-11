@@ -153,6 +153,14 @@ async function ensureIndexes() {
       { collection: "normalized_work_orders", index: { shopId: 1, "vehicle.make": 1 }, options: { name: "shopId_vehicle_make" } },
       { collection: "normalized_work_orders", index: { shopId: 1, "vehicle.model": 1 }, options: { name: "shopId_vehicle_model" } },
       { collection: "normalized_work_orders", index: { shopId: 1, "customer.name": 1 }, options: { name: "shopId_customer_name" } },
+      // Estimate Audit work-order picker (task #833). Prefix search on the
+      // human-facing RO number (the unique {shopId, workOrderNumber} index is
+      // created by the normalization pipeline, but keep an explicit
+      // non-unique companion here so the picker branch stays index-eligible
+      // even where that pipeline index is absent), and a recent-first
+      // (shopId, updatedAt) index for the no-search "browse recent" listing.
+      { collection: "normalized_work_orders", index: { shopId: 1, workOrderNumber: 1 }, options: { name: "shopId_workOrderNumber" } },
+      { collection: "normalized_work_orders", index: { shopId: 1, updatedAt: -1 }, options: { name: "shopId_updatedAt" } },
       { collection: "normalized_vehicles", index: { shopId: 1 } },
       { collection: "normalized_vehicles", index: { vin: 1 } },
       { collection: "normalized_customers", index: { shopId: 1 } },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface AuditFinding {
   id: string;
@@ -30,6 +30,17 @@ interface AuditReport {
   };
 }
 
+interface WorkOrderPickerItem {
+  id: string;
+  workOrderNumber: string;
+  status: string | null;
+  vin: string | null;
+  vehicle: { year: number | null; make: string | null; model: string | null };
+  customerName: string | null;
+  updatedAt: string | null;
+  closedAt: string | null;
+}
+
 interface AuditHistoryItem {
   _id: string;
   workOrderId?: string;
@@ -55,6 +66,7 @@ export default function EstimateAuditPage() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [history, setHistory] = useState<AuditHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyStartDate, setHistoryStartDate] = useState("");
   const [historyEndDate, setHistoryEndDate] = useState("");
@@ -72,6 +84,73 @@ export default function EstimateAuditPage() {
   // null = still checking; fail open on transient errors so a hiccup in the
   // features API never locks a paying shop out of the page.
   const [featureAllowed, setFeatureAllowed] = useState<boolean | null>(null);
+  // Work order picker (Task #833): search/browse synced ROs instead of
+  // typing an id blind. Results come from /api/estimate-assist/work-orders,
+  // which reads the same collection the audit resolves against.
+  const [pickerResults, setPickerResults] = useState<WorkOrderPickerItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const pickerFetchSeq = useRef(0);
+  const pickerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pickerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchPickerResults = useCallback((query: string) => {
+    const seq = ++pickerFetchSeq.current;
+    setPickerLoading(true);
+    const params = new URLSearchParams({ limit: "15" });
+    if (query.trim()) params.set("q", query.trim());
+    fetch(`/api/estimate-assist/work-orders?${params}`)
+      .then(res => res.json())
+      .then(data => {
+        if (seq !== pickerFetchSeq.current) return; // stale response
+        if (data.ok && Array.isArray(data.workOrders)) {
+          setPickerResults(data.workOrders);
+        }
+      })
+      .catch(() => { /* picker is best-effort; manual entry still works */ })
+      .finally(() => {
+        if (seq === pickerFetchSeq.current) setPickerLoading(false);
+      });
+  }, []);
+
+  // Debounced search as the user types (only while the dropdown is open).
+  useEffect(() => {
+    if (!pickerOpen) return;
+    if (pickerDebounce.current) clearTimeout(pickerDebounce.current);
+    pickerDebounce.current = setTimeout(() => fetchPickerResults(workOrderId), 250);
+    return () => {
+      if (pickerDebounce.current) clearTimeout(pickerDebounce.current);
+    };
+  }, [workOrderId, pickerOpen, fetchPickerResults]);
+
+  // Close the dropdown on any click outside the picker.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (pickerContainerRef.current && !pickerContainerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [pickerOpen]);
+
+  // Deep-link support (Task #833): other webapp pages can link here with
+  // ?workOrderId=<normalized id or RO number> to open the audit tab with
+  // that RO preselected and the audit already running. Read via
+  // window.location instead of useSearchParams() to avoid the Suspense
+  // boundary requirement for client components.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wo = (params.get("workOrderId") || params.get("wo") || "").trim();
+    if (wo) {
+      setActiveTab("audit");
+      setWorkOrderId(wo);
+      runAudit(wo);
+    }
+    // Run once on mount only — deliberately not reactive to state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,10 +170,12 @@ export default function EstimateAuditPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true);
+  // offset > 0 appends (load more); offset 0 replaces (initial load / filter).
+  const loadHistory = useCallback(async (offset = 0) => {
+    if (offset === 0) setHistoryLoading(true);
+    else setHistoryLoadingMore(true);
     try {
-      const params = new URLSearchParams({ limit: "20", offset: "0" });
+      const params = new URLSearchParams({ limit: "20", offset: String(offset) });
       if (historyStartDate) params.set("startDate", historyStartDate);
       if (historyEndDate) params.set("endDate", historyEndDate);
       if (historySeverityFilter !== "all") params.set("severity", historySeverityFilter);
@@ -102,13 +183,23 @@ export default function EstimateAuditPage() {
       const response = await fetch(`/api/estimate-assist/audit/history?${params}`);
       const data = await response.json();
       if (data.ok) {
-        setHistory(data.audits || []);
+        const audits: AuditHistoryItem[] = data.audits || [];
+        if (offset === 0) {
+          setHistory(audits);
+        } else {
+          // Dedupe on _id in case a new audit shifted the pages between requests.
+          setHistory(prev => {
+            const seen = new Set(prev.map(a => a._id));
+            return [...prev, ...audits.filter(a => !seen.has(a._id))];
+          });
+        }
         setHistoryTotal(data.totalCount || 0);
       }
     } catch (err) {
       console.error("Failed to load audit history:", err);
     } finally {
-      setHistoryLoading(false);
+      if (offset === 0) setHistoryLoading(false);
+      else setHistoryLoadingMore(false);
     }
   }, [historyStartDate, historyEndDate, historySeverityFilter]);
 
@@ -118,11 +209,15 @@ export default function EstimateAuditPage() {
     }
   }, [activeTab, loadHistory]);
 
-  const runAudit = async () => {
-    if (!workOrderId.trim()) {
+  // idOverride lets the picker audit by the normalized _id (exact match)
+  // while the input keeps showing the human-facing RO number.
+  const runAudit = async (idOverride?: string) => {
+    const auditId = (idOverride || workOrderId).trim();
+    if (!auditId) {
       setError("Please enter a work order number or ID");
       return;
     }
+    setPickerOpen(false);
     setLoading(true);
     setError("");
     setReport(null);
@@ -130,7 +225,7 @@ export default function EstimateAuditPage() {
       const response = await fetch("/api/estimate-assist/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workOrderId: workOrderId.trim() }),
+        body: JSON.stringify({ workOrderId: auditId }),
       });
       const data = await response.json();
       if (!response.ok || !data.ok) {
@@ -282,16 +377,75 @@ export default function EstimateAuditPage() {
         <div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
             <div className="flex gap-3">
-              <input
-                type="text"
-                value={workOrderId}
-                onChange={(e) => setWorkOrderId(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runAudit()}
-                placeholder="Enter work order number or ID..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+              <div className="flex-1 relative" ref={pickerContainerRef}>
+                <input
+                  type="text"
+                  value={workOrderId}
+                  onChange={(e) => {
+                    setWorkOrderId(e.target.value);
+                    setPickerOpen(true);
+                  }}
+                  onFocus={() => setPickerOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") runAudit();
+                    if (e.key === "Escape") setPickerOpen(false);
+                  }}
+                  placeholder="Search by RO number, customer, or vehicle — or type an RO number..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {pickerOpen && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                    <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-100 flex items-center justify-between">
+                      <span>{workOrderId.trim() ? "Matching work orders" : "Recent work orders"}</span>
+                      {pickerLoading && <span>Searching…</span>}
+                    </div>
+                    {pickerResults.length === 0 && !pickerLoading ? (
+                      <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                        {workOrderId.trim()
+                          ? "No synced work orders match. You can still press Enter to try the exact RO number."
+                          : "No synced work orders yet."}
+                      </div>
+                    ) : (
+                      pickerResults.map(wo => {
+                        const vehicle = [wo.vehicle.year, wo.vehicle.make, wo.vehicle.model].filter(Boolean).join(" ");
+                        const when = wo.closedAt || wo.updatedAt;
+                        return (
+                          <button
+                            key={wo.id}
+                            onClick={() => {
+                              setWorkOrderId(wo.workOrderNumber || wo.id);
+                              setPickerOpen(false);
+                              runAudit(wo.id);
+                            }}
+                            className="w-full px-3 py-2.5 flex items-center justify-between gap-3 text-left hover:bg-blue-50 border-b border-gray-50 last:border-b-0"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-gray-900">
+                                {wo.workOrderNumber ? `RO #${wo.workOrderNumber}` : "RO (no number)"}
+                                {wo.customerName && <span className="font-normal text-gray-600"> &middot; {wo.customerName}</span>}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate">
+                                {vehicle || "Unknown vehicle"}
+                                {wo.vin && <span className="text-gray-400"> &middot; {wo.vin}</span>}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0">
+                              {wo.status && (
+                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{wo.status}</span>
+                              )}
+                              {when && (
+                                <span className="text-xs text-gray-400 mt-0.5">{new Date(when).toLocaleDateString()}</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
               <button
-                onClick={runAudit}
+                onClick={() => runAudit()}
                 disabled={loading}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
@@ -449,7 +603,7 @@ export default function EstimateAuditPage() {
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <button
-                onClick={runJobBuilder}
+                onClick={() => runJobBuilder()}
                 disabled={jobBuilderLoading}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
               >
@@ -688,7 +842,7 @@ export default function EstimateAuditPage() {
                 </select>
               </div>
               <button
-                onClick={loadHistory}
+                onClick={() => loadHistory(0)}
                 disabled={historyLoading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
               >
@@ -768,6 +922,19 @@ export default function EstimateAuditPage() {
                   )}
                 </div>
               ))}
+              {history.length < historyTotal && (
+                <div className="text-center pt-2">
+                  <button
+                    onClick={() => loadHistory(history.length)}
+                    disabled={historyLoadingMore}
+                    className="px-5 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {historyLoadingMore
+                      ? "Loading..."
+                      : `Load more (showing ${history.length} of ${historyTotal})`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
