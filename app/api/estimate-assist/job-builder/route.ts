@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
-import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import {
-  searchJobs,
   getJobById,
   getCompanionJobs,
   getUpsellJobs,
@@ -21,12 +19,56 @@ import {
   buildAuthErrorBody,
 } from "@/lib/extension-auth";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import {
+  resolveKnowledgeBaseJob,
+  applyVinAttributeAdjustments,
+  shouldUseAiFallback,
+} from "@/lib/estimate-assist/job-builder-logic";
 
 // Budget for the optional AI-description pass. When the job is already in the
 // knowledge base we return KB data on timeout instead of hanging the request.
 const AI_TIMEOUT_MS = 20_000;
 
 export const dynamic = "force-dynamic";
+
+// Test seam: route-level smoke tests swap these to run the handler without
+// a live session store, Postgres, or OpenAI (same pattern as cron routes).
+export const __deps = {
+  getSession,
+  validateExtensionToken,
+  enforceAiBudget,
+  isPlatformAdmin: isPlatformAdminEmail,
+  getOpenAI,
+  trackOpenAiCall,
+  getShopHistoricalAverage,
+  lookupVehicleByVin,
+};
+
+/** VIN → normalized-vehicle attributes lookup (PG). Extracted so tests can stub it. */
+async function lookupVehicleByVin(vin: string, shopId: number) {
+  const db = getDb();
+  const rows = await db
+    .select({
+      year: normalizedVehicles.year,
+      make: normalizedVehicles.make,
+      model: normalizedVehicles.model,
+      submodel: normalizedVehicles.submodel,
+      drivetrain: normalizedVehicles.drivetrain,
+      engineCylinders: normalizedVehicles.engineCylinders,
+      engineDescription: normalizedVehicles.engineDescription,
+      fuelType: normalizedVehicles.fuelType,
+      transmission: normalizedVehicles.transmission,
+    })
+    .from(normalizedVehicles)
+    .where(
+      and(
+        eq(normalizedVehicles.vin, vin.toUpperCase()),
+        eq(normalizedVehicles.shopId, shopId),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     const authHeader = req.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ext_")) {
-      const extAuth = await validateExtensionToken(req);
+      const extAuth = await __deps.validateExtensionToken(req);
       if (!extAuth.authorized || !extAuth.user) {
         return NextResponse.json(
           buildAuthErrorBody(extAuth, { ok: false }),
@@ -79,7 +121,7 @@ export async function POST(req: NextRequest) {
       sessionEmail = extAuth.user.email ?? null;
       shopId = Number(extAuth.user.shopId);
     } else {
-      const session = await getSession();
+      const session = await __deps.getSession();
       if (!session) {
         return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401, headers: corsHeaders });
       }
@@ -90,9 +132,9 @@ export async function POST(req: NextRequest) {
     const body: JobBuilderRequest = await req.json();
     const { jobNameOrId, vin, year, make, model, submodel, drivetrain, engineCylinders, engineDescription, languageMode } = body;
 
-    const isAdmin = await isPlatformAdminEmail(sessionEmail || "");
+    const isAdmin = await __deps.isPlatformAdmin(sessionEmail || "");
     {
-      const blocked = await enforceAiBudget({
+      const blocked = await __deps.enforceAiBudget({
         shopId,
         route: "/api/estimate-assist/job-builder",
         isPlatformAdmin: isAdmin,
@@ -104,37 +146,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "jobNameOrId is required" }, { status: 400, headers: corsHeaders });
     }
 
-    let knowledgeBaseJob = getJobById(jobNameOrId);
-    if (!knowledgeBaseJob) {
-      const results = searchJobs(jobNameOrId, 1);
-      knowledgeBaseJob = results[0] || null;
-    }
+    const knowledgeBaseJob = resolveKnowledgeBaseJob(jobNameOrId);
 
     let vehicleInfo: { year?: number; make?: string; model?: string; submodel?: string; drivetrain?: string; engineCylinders?: number; engineDescription?: string; fuelType?: string; transmission?: string } | null = null;
     if (vin) {
       try {
-        const db = getDb();
-        const rows = await db
-          .select({
-            year: normalizedVehicles.year,
-            make: normalizedVehicles.make,
-            model: normalizedVehicles.model,
-            submodel: normalizedVehicles.submodel,
-            drivetrain: normalizedVehicles.drivetrain,
-            engineCylinders: normalizedVehicles.engineCylinders,
-            engineDescription: normalizedVehicles.engineDescription,
-            fuelType: normalizedVehicles.fuelType,
-            transmission: normalizedVehicles.transmission,
-          })
-          .from(normalizedVehicles)
-          .where(
-            and(
-              eq(normalizedVehicles.vin, vin.toUpperCase()),
-              eq(normalizedVehicles.shopId, shopId),
-            ),
-          )
-          .limit(1);
-        const r = rows[0];
+        const r = await __deps.lookupVehicleByVin(vin, shopId);
         vehicleInfo = r
           ? {
               year: r.year ?? undefined,
@@ -165,48 +182,14 @@ export async function POST(req: NextRequest) {
       transmission: vehicleInfo?.transmission,
     };
 
-    const shopHistory = await getShopHistoricalAverage(shopId, knowledgeBaseJob?.title || jobNameOrId, {
+    const shopHistory = await __deps.getShopHistoricalAverage(shopId, knowledgeBaseJob?.title || jobNameOrId, {
       make: vehicleContext.make,
       model: vehicleContext.model,
       year: vehicleContext.year,
     });
 
-    let laborHoursAdjust = 0;
-    const additionalParts: string[] = [];
-    const additionalCompanions: string[] = [];
-
-    if (knowledgeBaseJob?.vinAttributes) {
-      for (const attr of knowledgeBaseJob.vinAttributes) {
-        const condLower = attr.condition.toLowerCase();
-        const drivetrainLower = (vehicleContext.drivetrain || "").toLowerCase();
-        const cylinders = vehicleContext.engineCylinders;
-
-        if (condLower === "awd" && drivetrainLower.includes("awd")) {
-          laborHoursAdjust += attr.laborHoursAdjust || 0;
-          additionalParts.push(...(attr.additionalParts || []));
-          additionalCompanions.push(...(attr.additionalCompanions || []));
-        }
-        if (condLower === "4wd" && (drivetrainLower.includes("4wd") || drivetrainLower.includes("4x4"))) {
-          laborHoursAdjust += attr.laborHoursAdjust || 0;
-          additionalParts.push(...(attr.additionalParts || []));
-          additionalCompanions.push(...(attr.additionalCompanions || []));
-        }
-        if (condLower === "v6_engine" && cylinders === 6) {
-          laborHoursAdjust += attr.laborHoursAdjust || 0;
-          additionalParts.push(...(attr.additionalParts || []));
-        }
-        if (condLower === "v8_engine" && cylinders === 8) {
-          laborHoursAdjust += attr.laborHoursAdjust || 0;
-          additionalParts.push(...(attr.additionalParts || []));
-        }
-        if (condLower === "electronic_parking_brake" && (vehicleContext.year || 0) >= 2016) {
-          laborHoursAdjust += attr.laborHoursAdjust || 0;
-        }
-        if (condLower === "cvt_transmission" && (vehicleContext.transmission || "").toLowerCase().includes("cvt")) {
-          additionalParts.push(...(attr.additionalParts || []));
-        }
-      }
-    }
+    const { laborHoursAdjust, additionalParts, additionalCompanions } =
+      applyVinAttributeAdjustments(knowledgeBaseJob, vehicleContext);
 
     let companionJobs: JobKnowledgeEntry[] = [];
     let upsellJobs: JobKnowledgeEntry[] = [];
@@ -225,9 +208,9 @@ export async function POST(req: NextRequest) {
     }
 
     let aiResult: AIEnhancedJobResult | null = null;
-    if (!knowledgeBaseJob || knowledgeBaseJob.technicalDescription.length < 50) {
+    if (shouldUseAiFallback(knowledgeBaseJob)) {
       try {
-        const openai = getOpenAI();
+        const openai = __deps.getOpenAI();
         const startTime = Date.now();
         const vehicleStr = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(" ");
 
@@ -254,7 +237,7 @@ export async function POST(req: NextRequest) {
         );
 
         if (completion) {
-          trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
+          __deps.trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
         }
 
         const aiContent = completion?.choices[0]?.message?.content;

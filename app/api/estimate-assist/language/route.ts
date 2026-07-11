@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
-import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
@@ -11,6 +10,16 @@ import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 const AI_TIMEOUT_MS = 25_000;
 
 export const dynamic = "force-dynamic";
+
+// Test seam: route-level smoke tests swap these to run the handler without
+// a live session store or OpenAI (same pattern as the cron routes).
+export const __deps = {
+  getSession,
+  enforceAiBudget,
+  isPlatformAdmin: isPlatformAdminEmail,
+  getOpenAI,
+  trackOpenAiCall,
+};
 
 interface LanguageRequest {
   text: string;
@@ -33,7 +42,7 @@ interface CompletionIssue {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await __deps.getSession();
     if (!session) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -45,8 +54,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "text or lineItems is required" }, { status: 400 });
     }
 
-    const isAdmin = await isPlatformAdminEmail(session.email);
-    const blocked = await enforceAiBudget({
+    const isAdmin = await __deps.isPlatformAdmin(session.email);
+    const blocked = await __deps.enforceAiBudget({
       shopId: Number(session.shopId),
       route: "/api/estimate-assist/language",
       isPlatformAdmin: isAdmin,
@@ -83,7 +92,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const openai = getOpenAI();
+    const openai = __deps.getOpenAI();
     const startTime = Date.now();
 
     const inputText = lineItems
@@ -140,7 +149,7 @@ If there are multiple line items, include each in the lineItems array. If just f
     }
 
     const elapsed = Date.now() - startTime;
-    trackOpenAiCall(Number(session.shopId), "/api/estimate-assist/language", completion, elapsed);
+    __deps.trackOpenAiCall(Number(session.shopId), "/api/estimate-assist/language", completion, elapsed);
 
     const aiContent = completion.choices[0]?.message?.content || "{}";
     let parsed: any = {};

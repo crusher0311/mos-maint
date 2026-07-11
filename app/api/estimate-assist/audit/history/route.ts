@@ -5,9 +5,16 @@ import { ESTIMATE_COLLECTIONS } from "@/lib/estimate-assist/job-knowledge-base";
 
 export const dynamic = "force-dynamic";
 
+// Test seam: route-level smoke tests swap these to run the handler without
+// a live session store or Mongo (same pattern as the cron routes).
+export const __deps = {
+  getSession,
+  getDb,
+};
+
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await __deps.getSession();
     if (!session) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -37,7 +44,7 @@ export async function GET(req: NextRequest) {
       filter[`report.findings.severity`] = severityFilter;
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     const collection = db.collection(ESTIMATE_COLLECTIONS.estimateAudits);
 
     const [audits, totalCount] = await Promise.all([

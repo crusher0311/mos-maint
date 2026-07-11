@@ -27,11 +27,30 @@ export type Op =
   | { op: "bulkWrite"; collection: string; ops: any[] }
   | { op: "aggregate"; collection: string; pipeline: any[] };
 
-/** Resolve a (possibly nested) dot-path on a document. */
+/**
+ * Resolve a (possibly nested) dot-path on a document. Mirrors Mongo's
+ * array-traversal semantics: when an intermediate value is an array, the
+ * remaining path is resolved against each element and the results are
+ * flattened (so `report.findings.severity` over an array of findings yields
+ * an array of severities, which equality matching treats as "any element").
+ */
 function getPath(doc: any, path: string): any {
   if (doc == null) return undefined;
   if (!path.includes(".")) return doc[path];
-  return path.split(".").reduce<any>((o, k) => (o == null ? o : o[k]), doc);
+  const keys = path.split(".");
+  let current: any = doc;
+  for (let i = 0; i < keys.length; i++) {
+    if (current == null) return undefined;
+    if (Array.isArray(current)) {
+      const rest = keys.slice(i).join(".");
+      return current.flatMap((el) => {
+        const v = getPath(el, rest);
+        return v === undefined ? [] : [v];
+      });
+    }
+    current = current[keys[i]];
+  }
+  return current;
 }
 
 export function matchesFilter(doc: Doc, filter: any): boolean {
@@ -76,6 +95,12 @@ export function matchesFilter(doc: Doc, filter: any): boolean {
         }
         continue;
       }
+    }
+    // Mongo equality against an array field matches if any element equals
+    // the queried value (e.g. `report.findings.severity: "critical"`).
+    if (Array.isArray(fieldVal)) {
+      if (!fieldVal.includes(v)) return false;
+      continue;
     }
     if (fieldVal !== v) return false;
   }
@@ -163,6 +188,7 @@ export type FakeDb = {
     collection(name: string): {
       find(filter?: any, opts?: any): { toArray: () => Promise<Doc[]> };
       findOne(filter?: any, opts?: any): Promise<Doc | null>;
+      countDocuments(filter?: any): Promise<number>;
       createIndex(spec: any, opts?: any): Promise<string>;
       updateOne(
         filter: any,
@@ -242,6 +268,9 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
             ops.push({ op: "findOne", collection: name, filter, opts });
             const found = data.find((d) => matchesFilter(d, filter));
             return found ? { ...found } : null;
+          },
+          async countDocuments(filter: any = {}) {
+            return data.filter((d) => matchesFilter(d, filter)).length;
           },
           async createIndex(spec: any, opts?: any) {
             ops.push({ op: "createIndex", collection: name, spec, opts });
