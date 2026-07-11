@@ -7,7 +7,7 @@ The hourly `backfill-reconcile` cron spot-checks only already-completed shops: i
 
 **1. Date-field semantics must match the upstream filter.** Each provider stores its `job_index` date differently, and the reconcile count MUST query the same field/type the upstream count filters on:
 - Protractor: our `performedAt` = `workOrder.Header.LastModifiedTime` (a Date). Upstream `/Invoice?startDate&endDate` filters by **invoice date** (different field). There is NO `closedAt` on Protractor rows.
-- Tekmetric: `closedAt`, stored as an ISO **string** (string-range compare).
+- Tekmetric: rows come in TWO shapes — full-page-backfill rows carry `closedAt` as an ISO **string** (`postedDate||completedDate||updatedDate`); webhook/poll rows (indexTekmetricWorkOrderJobs) have NO `closedAt`, only `performedAt` as a **Date**. Mongo comparisons are typed, so a string range never matches Date values — count with an `$or` over both shapes. The upstream sample must filter by **postedDate** (matches `closedAt` semantics), NOT `updatedDate`: an RO closed years ago but touched recently lands in the recent updated-window upstream with no matching local row → false gap → reopen.
 - Shopware: `updatedAt` (Date) on `shopware_repair_orders`.
 Counting Protractor by `closedAt` returned 0 every time → false ~100% gap → every completed shop re-queued hourly forever. Even after switching to `performedAt`, counts still drift because last-modified-date ≠ invoice-date, so the same RO falls in different windows on each side.
 

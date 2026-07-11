@@ -3,6 +3,14 @@ import { getDb } from "@/lib/mongo";
 import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor";
 import { getRepairOrders } from "@/lib/integrations/shopware/client";
+import {
+  DELTA_TOLERANCE,
+  buildTekmetricUpstreamParams,
+  buildTekmetricLocalQuery,
+  protractorDayBounds,
+  computeShortfallDelta,
+  sawAnyStoredData,
+} from "./lib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,12 +18,13 @@ export const maxDuration = 300;
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const SAMPLES_PER_SHOP = 6;
-// Re-queue tolerance. Set wide enough to absorb benign count drift caused by
-// comparing our `performedAt` (work-order last-modified date) against upstream's
-// invoice-date filter — the same RO can land in a different 30-day window on
-// each side. Only a SHORTFALL beyond this (see directional delta below) means we
-// are genuinely missing data a re-pull can recover.
-const DELTA_TOLERANCE = 0.1;
+// Re-queue tolerance (DELTA_TOLERANCE, ./lib.ts). Set wide enough to absorb
+// benign count drift from date-field fallbacks — e.g. Protractor's
+// `performedAt` (work-order last-modified date) vs upstream's invoice-date
+// filter, or Tekmetric ROs with no postedDate falling back to
+// completed/updated dates — the same RO can land in a different 30-day window
+// on each side. Only a SHORTFALL beyond this (see directional delta below)
+// means we are genuinely missing data a re-pull can recover.
 const YEARS = 5;
 
 function isAuthorized(req: NextRequest): boolean {
@@ -40,19 +49,6 @@ function randomSampleWindows(years: number, count: number): { start: Date; end: 
   return out;
 }
 
-// Zero-count guard: if we matched ZERO stored records in *every* sampled
-// window, the count query is almost certainly misreading (wrong field/type)
-// rather than the shop having genuinely lost all of its history. For an
-// already-completed shop that is never a legitimate reason to flip it back to
-// incomplete and re-pull, so we refuse to re-queue and just flag it for
-// visibility. (Added after the Protractor reconcile counted `closedAt` — a
-// field Protractor `job_index` rows don't have; their date is `performedAt` —
-// so our count was always 0, every window read a false ~100% gap, and every
-// completed shop got re-queued every hour, forever.)
-function sawAnyStoredData(audits: Array<{ ours?: number }>): boolean {
-  return audits.some((a) => typeof a.ours === "number" && a.ours > 0);
-}
-
 async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: number) {
   const samples = randomSampleWindows(YEARS, SAMPLES_PER_SHOP);
   const audits: any[] = [];
@@ -62,13 +58,12 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
     const startStr = w.start.toISOString();
     const endStr = w.end.toISOString();
 
-    const params = new URLSearchParams({
-      shop: String(tekmetricShopId),
-      page: "0",
-      size: "1",
-      updatedDateStart: startStr,
-      updatedDateEnd: endStr,
-    });
+    // Like-for-like date semantics: sample upstream by POSTED date, because
+    // our local `closedAt` is derived from `postedDate || completedDate ||
+    // updatedDate`. Sampling by `updatedDate` (the old behavior) counted ROs
+    // closed years ago but *touched* recently into the wrong window — a false
+    // gap that re-opened completed shops. See ./lib.ts for the full contract.
+    const params = buildTekmetricUpstreamParams(tekmetricShopId, startStr, endStr);
     let upstreamTotal = 0;
     try {
       const res = await tekmetricRequest<{ totalElements?: number }>(`/repair-orders?${params}`);
@@ -78,18 +73,19 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
       continue;
     }
 
-    const ourROIds: string[] = await db.collection("job_index").distinct("workOrderId", {
-      shopId,
-      sourceSystem: "tekmetric",
-      closedAt: { $gte: startStr, $lte: endStr },
-    });
+    // Count BOTH local row shapes (string `closedAt` from full-page backfill,
+    // Date `performedAt` from webhook/poll indexing) — Mongo comparisons are
+    // typed, so a string range never matches Date values and vice versa.
+    const ourROIds: string[] = await db
+      .collection("job_index")
+      .distinct("workOrderId", buildTekmetricLocalQuery(shopId, startStr, endStr));
     const ourCount = ourROIds.length;
 
     // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
     // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
-    // remove records, and over/under drift is expected from the date-field
-    // mismatch above, so it must never re-queue an already-complete shop.
-    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
+    // remove records, and residual over/under drift from date-field fallbacks
+    // must never re-queue an already-complete shop. (See ./lib.ts.)
+    const delta = computeShortfallDelta(upstreamTotal, ourCount);
     audits.push({
       window: { start: startStr.split("T")[0], end: endStr.split("T")[0] },
       upstream: upstreamTotal,
@@ -178,13 +174,12 @@ async function reconcileProtractorShop(db: any, shopId: number) {
     // NOT `closedAt` (which only Tekmetric rows have). Counting by `closedAt`
     // always returned 0 here -> a false ~100% gap -> every completed shop got
     // re-queued every hour. Count by `performedAt`, with bounds aligned to the
-    // SAME inclusive day window the upstream `/Invoice?startDate=&endDate=`
+    // SAME inclusive UTC day window the upstream `/Invoice?startDate=&endDate=`
     // filter uses (day granularity). Using the raw w.start/w.end timestamps
     // (which carry a random time-of-day) would shave a partial day off each
-    // edge and could push a 30-day window past the 2% tolerance, re-queuing a
-    // shop that is actually complete.
-    const lowerBound = new Date(`${startStr}T00:00:00.000Z`);
-    const upperBound = new Date(`${endStr}T23:59:59.999Z`);
+    // edge and could push a 30-day window past the tolerance, re-queuing a
+    // shop that is actually complete. (protractorDayBounds in ./lib.ts.)
+    const { lowerBound, upperBound } = protractorDayBounds(startStr, endStr);
     const ourInvoiceIds: string[] = await db.collection("job_index").distinct("workOrderId", {
       shopId,
       sourceSystem: "protractor",
@@ -194,9 +189,9 @@ async function reconcileProtractorShop(db: any, shopId: number) {
 
     // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
     // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
-    // remove records, and over/under drift is expected from the date-field
-    // mismatch above, so it must never re-queue an already-complete shop.
-    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
+    // remove records, and residual over/under drift from date-field fallbacks
+    // must never re-queue an already-complete shop. (See ./lib.ts.)
+    const delta = computeShortfallDelta(upstreamTotal, ourCount);
     audits.push({ window: { start: startStr, end: endStr }, upstream: upstreamTotal, ours: ourCount, delta: Number(delta.toFixed(3)) });
 
     if (delta > DELTA_TOLERANCE && (!worstDeltaWindow || delta > worstDeltaWindow.delta)) {
@@ -270,9 +265,9 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
 
     // Directional: only a SHORTFALL (we have fewer than upstream) is a gap a
     // re-pull can fix. Overcount (ours >= upstream) yields 0 — re-pulling can't
-    // remove records, and over/under drift is expected from the date-field
-    // mismatch above, so it must never re-queue an already-complete shop.
-    const delta = upstreamTotal === 0 ? 0 : Math.max(0, upstreamTotal - ourCount) / upstreamTotal;
+    // remove records, and residual over/under drift from date-field fallbacks
+    // must never re-queue an already-complete shop. (See ./lib.ts.)
+    const delta = computeShortfallDelta(upstreamTotal, ourCount);
     audits.push({
       window: { start: w.start.toISOString().split("T")[0], end: w.end.toISOString().split("T")[0] },
       upstream: upstreamTotal,
