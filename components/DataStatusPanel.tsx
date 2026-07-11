@@ -34,6 +34,34 @@ interface DataStatusEntity {
 
 type ResyncStatus = "queued" | "processing" | "completed" | "failed";
 
+interface ProviderLocation {
+  name: string | null;
+  street: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  phone: string | null;
+  timeZone: string | null;
+}
+
+interface ConnectionIdentity {
+  provider: {
+    label: string;
+    connectedAt: string | null;
+    shopName: string | null;
+    providerShopId: string | null;
+    connectionIdMasked: string | null;
+    apiKeyMasked: string | null;
+    locations: ProviderLocation[];
+  } | null;
+  carfax: {
+    configured: boolean;
+    locationId: string | null;
+    lastCallAt: string | null;
+    lastCallOk: boolean | null;
+  };
+}
+
 interface DataStatusResponse {
   shopId: number;
   connection: {
@@ -42,6 +70,7 @@ interface DataStatusResponse {
     providerLabel: string | null;
     lastSyncAt: string | null;
   };
+  identity?: ConnectionIdentity;
   entities: DataStatusEntity[];
   resync?: {
     available: boolean;
@@ -116,6 +145,126 @@ function FreshnessBadge({ state }: { state: FreshnessState }) {
       <Icon className="w-3 h-3" />
       {meta.label}
     </span>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-gray-500 whitespace-nowrap">{label}</dt>
+      <dd className="text-gray-800 text-right font-medium">{value}</dd>
+    </div>
+  );
+}
+
+// "Connection details" — the location + API identity we have on file for
+// this shop, so a client can confirm MOS is connected to the CORRECT shop
+// (right Protractor location, right CARFAX Location ID, …).
+function ConnectionDetails({ identity }: { identity: ConnectionIdentity }) {
+  const p = identity.provider;
+  const cf = identity.carfax;
+  if (!p && !cf.configured) return null;
+
+  return (
+    <div className="mb-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {p && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-gray-900">
+              {p.label} connection
+            </span>
+            {p.connectedAt && (
+              <span className="text-xs text-gray-400">
+                Connected {formatDate(p.connectedAt)}
+              </span>
+            )}
+          </div>
+          <dl className="space-y-1 text-xs">
+            <DetailRow label="Shop name" value={p.shopName} />
+            <DetailRow label={`${p.label} shop ID`} value={p.providerShopId} />
+            <DetailRow label="Connection ID" value={p.connectionIdMasked} />
+            <DetailRow label="API key" value={p.apiKeyMasked} />
+          </dl>
+          {p.locations.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {p.locations.map((loc, i) => (
+                <div
+                  key={i}
+                  className="rounded-md bg-white border border-gray-200 p-2.5 text-xs"
+                >
+                  <p className="font-medium text-gray-900">
+                    {loc.name || "Location"}
+                  </p>
+                  {(loc.street || loc.city) && (
+                    <p className="text-gray-600">
+                      {[loc.street, loc.city, loc.province, loc.postalCode]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  )}
+                  <p className="text-gray-500">
+                    {[loc.phone, loc.timeZone].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-gray-400">
+            As reported by {p.label} when this shop was connected.
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-semibold text-gray-900">
+            CARFAX connection
+          </span>
+          {cf.configured ? (
+            cf.lastCallOk === null ? null : cf.lastCallOk ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <CheckCircle2 className="w-3 h-3" />
+                Working
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <AlertTriangle className="w-3 h-3" />
+                Last call failed
+              </span>
+            )
+          ) : (
+            <span className="text-xs text-gray-400">Not set up</span>
+          )}
+        </div>
+        {cf.configured ? (
+          <dl className="space-y-1 text-xs">
+            <DetailRow label="Location ID" value={cf.locationId} />
+            <DetailRow
+              label="Last CARFAX lookup"
+              value={cf.lastCallAt ? formatRelative(cf.lastCallAt) : null}
+            />
+          </dl>
+        ) : (
+          <p className="text-xs text-gray-500">
+            No CARFAX Location ID on file for this shop. Add one in the CARFAX
+            card above to pull service history.
+          </p>
+        )}
+        {cf.configured && (
+          <p className="mt-2 text-[11px] text-gray-400">
+            Confirm this Location ID matches the one CARFAX assigned to this
+            physical location.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -284,6 +433,9 @@ export default function DataStatusPanel({
           )}
         </div>
       )}
+
+      {/* Connection identity — which exact shop/location we're wired to */}
+      {data?.identity && <ConnectionDetails identity={data.identity} />}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

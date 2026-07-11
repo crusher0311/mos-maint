@@ -59,6 +59,49 @@ export interface DataStatusEntity {
   note?: string | null;
 }
 
+// Connection-identity block (task: confirm we're connected to the CORRECT
+// shop). Surfaces the location details + API identifiers we captured when
+// the provider was connected, plus the shop's CARFAX Location ID and a
+// recent-call health signal. Credentials are always masked to their last 4
+// characters — the panel is client-facing.
+export interface ProviderLocation {
+  name: string | null;
+  street: string | null;
+  city: string | null;
+  province: string | null;
+  postalCode: string | null;
+  phone: string | null;
+  timeZone: string | null;
+}
+
+export interface ConnectionIdentity {
+  provider: {
+    label: string;
+    connectedAt: string | null;
+    // Shop name as reported by the provider at connect time (Tekmetric /
+    // Shop-Ware). Null for providers that report locations instead.
+    shopName: string | null;
+    // The provider-side shop/tenant identifier (Tekmetric shop id,
+    // Shop-Ware tenant id, …). Not a credential.
+    providerShopId: string | null;
+    // Masked credentials (last 4 only) so a client can compare against
+    // what they entered without exposing the secret.
+    connectionIdMasked: string | null;
+    apiKeyMasked: string | null;
+    // Protractor reports its service-provider locations at connect time —
+    // name, address and phone are exactly what confirms "right shop".
+    locations: ProviderLocation[];
+  } | null;
+  carfax: {
+    configured: boolean;
+    locationId: string | null;
+    // Most recent CARFAX call MOS made for this shop (from API usage
+    // tracking) — proves the Location ID is actually working.
+    lastCallAt: string | null;
+    lastCallOk: boolean | null;
+  };
+}
+
 export interface DataStatusResponse {
   shopId: number;
   connection: {
@@ -67,6 +110,7 @@ export interface DataStatusResponse {
     providerLabel: string | null;
     lastSyncAt: string | null;
   };
+  identity: ConnectionIdentity;
   entities: DataStatusEntity[];
   // Customer-requested re-sync state. `available` is true only when the
   // connected provider supports a full backfill re-trigger (Tekmetric /
@@ -346,6 +390,132 @@ function detectProvider(shop: any): {
   return { provider: null, lastSyncAt: null };
 }
 
+// Mask a credential to its last 4 characters ("••••1234"). Returns null for
+// empty/short values so we never leak a whole short token.
+function maskCredential(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (s.length < 8) return null;
+  return `••••${s.slice(-4)}`;
+}
+
+function nonEmpty(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s.length > 0 ? s : null;
+}
+
+// Build the connection-identity block from what the shop doc captured at
+// connect time. Read-only and defensive: any missing field renders as null
+// rather than throwing.
+function buildProviderIdentity(
+  shop: any,
+  provider: ConnectedProvider | null,
+): ConnectionIdentity["provider"] {
+  if (!shop || !provider) return null;
+
+  if (provider === "protractor") {
+    const rawLocations = Array.isArray(shop.protractor?.locations)
+      ? shop.protractor.locations
+      : [];
+    const locations: ProviderLocation[] = rawLocations.map((l: any) => ({
+      name: nonEmpty(l?.Name) ?? nonEmpty(l?.ShortName),
+      street: nonEmpty(l?.Address?.Street),
+      city: nonEmpty(l?.Address?.City),
+      province: nonEmpty(l?.Address?.Province),
+      postalCode: nonEmpty(l?.Address?.PostalCode),
+      phone: nonEmpty(l?.PhoneNumber),
+      timeZone: nonEmpty(l?.TimeZone),
+    }));
+    return {
+      label: PROVIDER_LABELS.protractor,
+      connectedAt: toIso(shop.protractor?.configuredAt),
+      shopName: null,
+      providerShopId: null,
+      connectionIdMasked: maskCredential(
+        shop.protractor?.connectionId ?? shop.protractorConnectionId,
+      ),
+      apiKeyMasked: maskCredential(
+        shop.protractor?.apiKey ?? shop.protractorApiKey,
+      ),
+      locations,
+    };
+  }
+
+  if (provider === "tekmetric") {
+    return {
+      label: PROVIDER_LABELS.tekmetric,
+      connectedAt: toIso(shop.tekmetric?.connectedAt),
+      shopName: nonEmpty(shop.tekmetric?.shopName),
+      providerShopId:
+        nonEmpty(String(shop.tekmetric?.shopId ?? shop.tekmetricShopId ?? "")) ??
+        null,
+      connectionIdMasked: null,
+      apiKeyMasked: null,
+      locations: [],
+    };
+  }
+
+  if (provider === "shopware") {
+    const tenant = shop.shopware?.tenantId;
+    const swShop = shop.shopware?.swShopId;
+    return {
+      label: PROVIDER_LABELS.shopware,
+      connectedAt: toIso(shop.shopware?.connectedAt),
+      shopName: nonEmpty(shop.shopware?.shopName),
+      providerShopId:
+        tenant != null || swShop != null
+          ? `Tenant ${tenant ?? "—"} / Shop ${swShop ?? "—"}`
+          : null,
+      connectionIdMasked: null,
+      apiKeyMasked: null,
+      locations: [],
+    };
+  }
+
+  // Shopmonkey: single-host SPA, identity is scraped client-side; show what
+  // we have (masked key + any stored names).
+  return {
+    label: PROVIDER_LABELS.shopmonkey,
+    connectedAt: toIso(shop.shopmonkey?.connectedAt),
+    shopName:
+      nonEmpty(shop.shopmonkey?.locationName) ??
+      nonEmpty(shop.shopmonkey?.companyName),
+    providerShopId: nonEmpty(shop.shopmonkey?.locationId),
+    connectionIdMasked: null,
+    apiKeyMasked: maskCredential(shop.shopmonkey?.apiKey),
+    locations: [],
+  };
+}
+
+// Latest CARFAX call MOS made for this shop, from the API usage tracker.
+// Best-effort: any error/timeout degrades to nulls.
+async function latestCarfaxCall(
+  db: Awaited<ReturnType<typeof getDb>>,
+  shopId: number,
+): Promise<{ lastCallAt: string | null; lastCallOk: boolean | null }> {
+  try {
+    const row = await withTimeout(
+      db
+        .collection("api_usage")
+        .find(
+          { provider: "carfax", shopId: { $in: [shopId, String(shopId)] } },
+          { projection: { timestamp: 1, isError: 1 } },
+        )
+        .sort({ timestamp: -1 })
+        .limit(1)
+        .next(),
+      QUERY_TIMEOUT_MS,
+      null,
+    );
+    if (!row) return { lastCallAt: null, lastCallOk: null };
+    return {
+      lastCallAt: toIso(row.timestamp),
+      lastCallOk: !row.isError,
+    };
+  } catch {
+    return { lastCallAt: null, lastCallOk: null };
+  }
+}
+
 export async function computeDataStatus(
   shopId: number,
 ): Promise<DataStatusResponse> {
@@ -363,11 +533,27 @@ export async function computeDataStatus(
         protractorApiKey: 1,
         shopware: 1,
         shopmonkey: 1,
+        carfax: 1,
+        carfaxLocationId: 1,
       },
     },
   );
 
   const { provider, lastSyncAt } = detectProvider(shop);
+
+  const carfaxLocationId =
+    nonEmpty(shop?.carfax?.locationId) ?? nonEmpty(shop?.carfaxLocationId);
+  const carfaxCall = carfaxLocationId
+    ? await latestCarfaxCall(db, shopId)
+    : { lastCallAt: null, lastCallOk: null };
+  const identity: ConnectionIdentity = {
+    provider: buildProviderIdentity(shop, provider),
+    carfax: {
+      configured: Boolean(carfaxLocationId),
+      locationId: carfaxLocationId,
+      ...carfaxCall,
+    },
+  };
 
   // Repair/work orders and service jobs carry a real business date, so the
   // panel reports true history depth from it rather than the MOS import
@@ -511,6 +697,7 @@ export async function computeDataStatus(
       providerLabel: provider ? PROVIDER_LABELS[provider] : null,
       lastSyncAt,
     },
+    identity,
     entities,
     resync,
     generatedAt: new Date().toISOString(),
