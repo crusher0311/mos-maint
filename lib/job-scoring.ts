@@ -1,4 +1,5 @@
 import { resolvePlatform, isPlatformShareableSystem, type PlatformResolution } from "./vehicle-platform";
+import { coerceAcesId, buildSubmodelKey } from "./aces-fields";
 
 export type ScoreBand = "exact" | "likely" | "possible" | "low_confidence";
 
@@ -389,25 +390,18 @@ export function extractVehicleSpecs(decoded: any): VehicleSpecs {
   // top level of `dataone_vin_reference`. `mergeCandidates` will null
   // these when the squish is ambiguous, so we coerce zero/missing to
   // null so the scorer treats "ambiguous" the same as "absent".
-  const acesVehicleId =
-    typeof decoded.vehicle_id === "number" && decoded.vehicle_id > 0
-      ? decoded.vehicle_id
-      : null;
-  const acesEngineId =
-    typeof decoded.engine_id === "number" && decoded.engine_id > 0
-      ? decoded.engine_id
-      : null;
+  // Shared with lib/job-index-aces.ts via lib/aces-fields.ts.
+  const acesVehicleId = coerceAcesId(decoded.vehicle_id);
+  const acesEngineId = coerceAcesId(decoded.engine_id);
 
   // Submodel proxy: year|make|model|style — only built when all four are
   // present so we never collide on empty-string keys.
-  let submodelKey: string | null = null;
-  const yr = decoded.year;
-  const mk = decoded.make;
-  const md = decoded.model;
-  const st = decoded.style;
-  if (yr && mk && md && st) {
-    submodelKey = `${String(yr).trim()}|${String(mk).trim().toLowerCase()}|${String(md).trim().toLowerCase()}|${String(st).trim().toLowerCase()}`;
-  }
+  const submodelKey = buildSubmodelKey(
+    decoded.year,
+    decoded.make,
+    decoded.model,
+    decoded.style,
+  );
 
   return {
     gvwrBand: parseGvwrBand(decoded.gross_vehicle_weight_range),
@@ -1186,8 +1180,18 @@ export function applyMinimumResults(
   return results;
 }
 
+/**
+ * Shared query-word tokenizer: lower-case, whitespace-split, drop tokens
+ * shorter than `minLen`. Single source of truth for the split used by the
+ * job-search query builder here (minLen 3) and by the estimate-assist job
+ * knowledge base (minLen 2) — previously copy-pasted at each site.
+ */
+export function tokenizeQueryWords(query: string, minLen: number): string[] {
+  return query.toLowerCase().split(/\s+/).filter(w => w.length >= minLen);
+}
+
 export function buildSearchQuery(query: string): { coreTokens: string[]; allTokens: string[] } {
-  const allTokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const allTokens = tokenizeQueryWords(query, 3);
   const coreTokens = allTokens.filter(w => !STOPWORDS.has(w));
   return { coreTokens, allTokens };
 }

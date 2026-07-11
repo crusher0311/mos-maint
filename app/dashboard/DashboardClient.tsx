@@ -20,15 +20,14 @@ import {
   resolveOilTypeLabel,
   type IntervalsConfig,
 } from "@/lib/sticker-defaults";
+import { resolveVehicleFields, splitDisplayVehicle } from "@/lib/vehicle-display";
 
 function getRowMake(r: any): string | undefined {
   const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
   if (direct) return String(direct);
   const display = r?.displayVehicle;
   if (!display) return undefined;
-  const yearMatch = String(display).match(/^(\d{4})/);
-  const afterYear = yearMatch ? String(display).slice(4).trim() : String(display);
-  const parts = afterYear.split(" ").filter(Boolean);
+  const { parts } = splitDisplayVehicle(display);
   if (parts.length >= 2) {
     const twoWord = `${parts[0]} ${parts[1]}`;
     if (getOELogoUrl(twoWord)) return twoWord;
@@ -291,22 +290,6 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       vehicleMake,
       vehicleModel
     );
-  };
-
-  const resolveVehicleFields = (r: any) => {
-    let year = r.vehicle?.year;
-    let make = r.vehicle?.make;
-    let model = r.vehicle?.model;
-    if (!year && !make && !model && r.displayVehicle) {
-      const vehicleStr = r.displayVehicle || "";
-      const yearMatch = vehicleStr.match(/^(\d{4})/);
-      year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-      const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-      const parts = afterYear.split(" ").filter(Boolean);
-      make = parts[0] || undefined;
-      model = parts.slice(1).join(" ") || undefined;
-    }
-    return { year, make, model };
   };
 
   const cancelStickerLongPress = () => {
@@ -1246,22 +1229,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           {data.enabledFeatures?.includes('job_lookup') ? (
                             <button
                               onClick={() => {
-                                // Use structured vehicle fields with fallback parsing for legacy data
-                                let year = r.vehicle?.year;
-                                let make = r.vehicle?.make;
-                                let model = r.vehicle?.model;
-                                
-                                // Fallback: parse displayVehicle if structured data is missing
-                                if (!year && !make && !model && r.displayVehicle) {
-                                  const vehicleStr = r.displayVehicle || "";
-                                  const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                  year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                  const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                  const parts = afterYear.split(" ").filter(Boolean);
-                                  make = parts[0] || undefined;
-                                  model = parts.slice(1).join(" ") || undefined;
-                                }
-                                
+                                // Structured vehicle fields with fallback parsing for legacy data
+                                const { year, make, model } = resolveVehicleFields(r);
                                 setJobLookupVehicle({
                                   vin,
                                   year,
@@ -1288,20 +1257,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                           {data.enabledFeatures?.includes('common_failures') ? (
                             <button
                               onClick={() => {
-                                let year = r.vehicle?.year;
-                                let make = r.vehicle?.make;
-                                let model = r.vehicle?.model;
-                                
-                                if (!year && !make && !model && r.displayVehicle) {
-                                  const vehicleStr = r.displayVehicle || "";
-                                  const yearMatch = vehicleStr.match(/^(\d{4})/);
-                                  year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-                                  const afterYear = yearMatch ? vehicleStr.slice(4).trim() : vehicleStr;
-                                  const parts = afterYear.split(" ").filter(Boolean);
-                                  make = parts[0] || undefined;
-                                  model = parts.slice(1).join(" ") || undefined;
-                                }
-                                
+                                const { year, make, model } = resolveVehicleFields(r);
                                 setCommonFailuresVehicle({
                                   vin,
                                   year,

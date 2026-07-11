@@ -24,6 +24,7 @@ import {
   toSquishPublic,
   type VinReferenceData,
 } from "@/lib/integrations/dataone-local";
+import { coerceAcesId, buildSubmodelKey } from "@/lib/aces-fields";
 
 export interface AcesEnrichment {
   acesVehicleId: number | null;
@@ -112,6 +113,52 @@ export async function enrichVinsWithAcesStrict(
   return mapDecodedToEnrichment(squishToVin, decoded);
 }
 
+/**
+ * Bulk variant that maps EVERY input VIN — including multiple distinct VINs
+ * that collapse to the same squish — to its enrichment, so each cached value
+ * is identical to calling `enrichVinWithAces()` per VIN. Used by the
+ * normalized-ingestion batch prefetch, which needs all-VIN coverage (a
+ * second same-squish VIN must not miss the cache). Uses the SOFT decode
+ * (`batchDecodeSquishes`) to match the prefetch's original semantics: a
+ * DataOne hiccup yields an empty map ("no match"), never a throw.
+ */
+export async function enrichVinsWithAcesAllVins(
+  vins: ReadonlyArray<string | null | undefined>,
+): Promise<Map<string, AcesEnrichment>> {
+  const vinsBySquish = buildSquishToVins(vins);
+  const result = new Map<string, AcesEnrichment>();
+  if (vinsBySquish.size === 0) return result;
+  const decoded = await batchDecodeSquishes([...vinsBySquish.keys()]);
+  for (const [sq, squishVins] of vinsBySquish) {
+    const enriched = acesFromDecoded(decoded.get(sq));
+    if (enriched) {
+      for (const vin of squishVins) result.set(vin, enriched);
+    }
+  }
+  return result;
+}
+
+function buildSquishToVins(
+  vins: ReadonlyArray<string | null | undefined>,
+): Map<string, string[]> {
+  const vinsBySquish = new Map<string, string[]>();
+  for (const v of vins) {
+    if (!v || typeof v !== "string" || v.length < 11) continue;
+    try {
+      const sq = toSquishPublic(v);
+      const existing = vinsBySquish.get(sq);
+      if (existing) {
+        if (!existing.includes(v)) existing.push(v);
+      } else {
+        vinsBySquish.set(sq, [v]);
+      }
+    } catch {
+      /* skip unparseable */
+    }
+  }
+  return vinsBySquish;
+}
+
 function buildSquishToVin(
   vins: ReadonlyArray<string | null | undefined>,
 ): Map<string, string> {
@@ -149,18 +196,10 @@ export function acesFromDecoded(
   row: VinReferenceData | null | undefined,
 ): AcesEnrichment | null {
   if (!row) return null;
-  const acesVehicleId =
-    typeof row.vehicle_id === "number" && row.vehicle_id > 0
-      ? row.vehicle_id
-      : null;
-  const acesEngineId =
-    typeof row.engine_id === "number" && row.engine_id > 0
-      ? row.engine_id
-      : null;
-  let submodelKey: string | null = null;
-  if (row.year && row.make && row.model && row.style) {
-    submodelKey = `${String(row.year).trim()}|${String(row.make).trim().toLowerCase()}|${String(row.model).trim().toLowerCase()}|${String(row.style).trim().toLowerCase()}`;
-  }
+  // Shared with lib/job-scoring.ts extractVehicleSpecs via lib/aces-fields.ts.
+  const acesVehicleId = coerceAcesId(row.vehicle_id);
+  const acesEngineId = coerceAcesId(row.engine_id);
+  const submodelKey = buildSubmodelKey(row.year, row.make, row.model, row.style);
   const year = typeof row.year === "number" && row.year > 1900 ? row.year : null;
   const make = typeof row.make === "string" && row.make.trim().length > 0 ? row.make.trim() : null;
   const model = typeof row.model === "string" && row.model.trim().length > 0 ? row.model.trim() : null;

@@ -33,8 +33,7 @@ import { updateRepairPattern } from '@/lib/repair-patterns';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
-import { enrichVinWithAces, acesFromDecoded, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
-import { batchDecodeSquishes, toSquishPublic } from '@/lib/integrations/dataone-local';
+import { enrichVinWithAces, enrichVinsWithAcesAllVins, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
 
 // =============================================================================
 // TYPES
@@ -1481,44 +1480,18 @@ export class NormalizedIngestionService {
     // On a bulk-lookup failure we leave the cache `null` so writeToJobIndex
     // falls back to the per-VIN path, preserving the old soft-fail resilience
     // (a single batch hiccup no longer nulls ACES for the whole chunk).
-    const vinsBySquish = new Map<string, string[]>();
-    for (const wo of workOrders) {
-      const vin = this.adapter.extractVehicleFromWorkOrder(wo)?.vin;
-      if (!vin || typeof vin !== 'string' || vin.length < 11) continue;
-      let squish: string;
-      try {
-        squish = toSquishPublic(vin);
-      } catch {
-        continue;
-      }
-      const existing = vinsBySquish.get(squish);
-      if (existing) {
-        if (!existing.includes(vin)) existing.push(vin);
-      } else {
-        vinsBySquish.set(squish, [vin]);
-      }
-    }
-    if (vinsBySquish.size === 0) {
-      this._acesBatchCache = new Map<string, AcesEnrichment>();
-    } else {
-      try {
-        const decoded = await batchDecodeSquishes([...vinsBySquish.keys()]);
-        const cache = new Map<string, AcesEnrichment>();
-        for (const [squish, vins] of vinsBySquish) {
-          const enriched = acesFromDecoded(decoded.get(squish));
-          if (enriched) {
-            for (const vin of vins) cache.set(vin, enriched);
-          }
-        }
-        this._acesBatchCache = cache;
-      } catch (err) {
-        console.warn(
-          `[ingest] Bulk ACES prefetch failed for shop ${this.shopId} ` +
-            `(${vinsBySquish.size} squishes); falling back to per-VIN: ` +
-            `${(err as Error)?.message || err}`,
-        );
-        this._acesBatchCache = null;
-      }
+    const batchVins = workOrders.map(
+      (wo) => this.adapter.extractVehicleFromWorkOrder(wo)?.vin,
+    );
+    try {
+      this._acesBatchCache = await enrichVinsWithAcesAllVins(batchVins);
+    } catch (err) {
+      console.warn(
+        `[ingest] Bulk ACES prefetch failed for shop ${this.shopId} ` +
+          `(${batchVins.length} VINs); falling back to per-VIN: ` +
+          `${(err as Error)?.message || err}`,
+      );
+      this._acesBatchCache = null;
     }
 
     try {

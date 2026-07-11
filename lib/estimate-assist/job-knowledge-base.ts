@@ -2,6 +2,7 @@ import { getDb } from "@/lib/mongo";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { normalizedServiceJobs } from "@/lib/db/schema/normalized";
 import { eq, and, inArray, ilike, sql } from "drizzle-orm";
+import { tokenizeQueryWords } from "@/lib/job-scoring";
 
 export interface JobKnowledgeEntry {
   jobId: string;
@@ -3086,8 +3087,7 @@ export function getJobKnowledgeBase(): JobKnowledgeEntry[] {
 }
 
 export function searchJobs(query: string, limit = 10): JobKnowledgeEntry[] {
-  const queryLower = query.toLowerCase();
-  const words = queryLower.split(/\s+/).filter(w => w.length >= 2);
+  const words = tokenizeQueryWords(query, 2);
 
   const scored = JOB_KNOWLEDGE_BASE.map(job => {
     let score = 0;
@@ -3164,7 +3164,7 @@ export async function getShopHistoricalAverage(
       inArray(normalizedServiceJobs.status, ['completed', 'authorized']),
     ];
 
-    const titleWords = jobTitle.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    const titleWords = tokenizeQueryWords(jobTitle, 2);
     for (const word of titleWords) {
       const pattern = `%${word.replace(/[\\%_]/g, '\\$&')}%`;
       conditions.push(ilike(normalizedServiceJobs.title, pattern));
