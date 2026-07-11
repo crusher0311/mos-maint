@@ -24,9 +24,16 @@ const MAX_SAMPLES = 5;
 
 const tally = new Map<string, UnmatchedIntervalImportEntry>();
 
-function normalizeName(raw: string | null | undefined): string {
+/**
+ * Normalize a document service name for tallying / override matching:
+ * lowercase, single-spaced, trimmed. Shared with the interval-import
+ * override store so casing / spacing variants collapse onto one rule.
+ */
+export function normalizeIntervalImportName(raw: string | null | undefined): string {
   return String(raw ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 }
+
+const normalizeName = normalizeIntervalImportName;
 
 function pushBounded(arr: string[], value: string | null | undefined): void {
   const v = String(value ?? "").trim();

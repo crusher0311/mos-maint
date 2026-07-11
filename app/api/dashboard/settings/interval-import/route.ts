@@ -5,6 +5,7 @@ import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { sanitizeExtraction, buildIntervalProposals } from "@/lib/interval-import";
 import { recordUnmatchedIntervalImportName } from "@/lib/interval-import-log";
+import { getIntervalImportOverridesMap } from "@/lib/data/repositories/interval-import-overrides";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -202,7 +203,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = buildIntervalProposals(extraction);
+    // Operator-managed name → key overrides (taught on
+    // /platform-admin/interval-import-match) apply live, no deploy needed.
+    // A failed load must not break the import — fall back to the built-in
+    // dictionary only.
+    let overrides: Map<string, string> | undefined;
+    try {
+      overrides = await getIntervalImportOverridesMap();
+    } catch (err) {
+      console.error("[interval-import] Failed to load key overrides (continuing without):", err);
+    }
+
+    const result = buildIntervalProposals(extraction, { overrides });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 422 });
     }

@@ -323,6 +323,75 @@ console.log("buildIntervalProposals — guardrails");
 }
 
 // ---------------------------------------------------------------------------
+console.log("operator overrides (platform-admin interval-import-match)");
+{
+  const overrides = new Map<string, string>([["key fob battery", "battery"]]);
+
+  check(
+    "override maps 'Key Fob Battery' → battery",
+    mapImportServiceNameToKey("Key Fob Battery", overrides) === "battery",
+  );
+  check(
+    "override normalizes casing/spacing ('KEY  FOB   Battery')",
+    mapImportServiceNameToKey("KEY  FOB   Battery", overrides) === "battery",
+  );
+  check(
+    "no override → still unmatched",
+    mapImportServiceNameToKey("Key Fob Battery") === null,
+  );
+  check(
+    "override wins over built-in dictionary",
+    mapImportServiceNameToKey("Oil Change", new Map([["oil change", "tire_rotation"]])) ===
+      "tire_rotation",
+  );
+  check(
+    "non-overridden names untouched by overrides map",
+    mapImportServiceNameToKey("Oil Change", overrides) === "oil",
+  );
+
+  const doc: DocExtraction = {
+    milestones: [
+      {
+        miles: 30000,
+        services: [{ name: "Key Fob Battery" }, { name: "Oil Change" }, { name: "Tire Rotation" }],
+      },
+      {
+        miles: 60000,
+        services: [{ name: "Key Fob Battery" }, { name: "Oil Change" }, { name: "Tire Rotation" }],
+      },
+    ],
+  };
+
+  const without = buildIntervalProposals(doc);
+  if (without.ok) {
+    check(
+      "without override: 'Key Fob Battery' lands in unmatchedNames",
+      without.unmatchedNames.includes("Key Fob Battery"),
+    );
+    check(
+      "without override: no battery proposal",
+      !without.proposals.some((p) => p.key === "battery"),
+    );
+  } else {
+    check("without override: doc still produced proposals", false, without.error);
+  }
+
+  const withOverride = buildIntervalProposals(doc, { overrides });
+  if (withOverride.ok) {
+    check(
+      "with override: battery proposal produced",
+      withOverride.proposals.some((p) => p.key === "battery"),
+    );
+    check(
+      "with override: 'Key Fob Battery' no longer in unmatchedNames",
+      !withOverride.unmatchedNames.includes("Key Fob Battery"),
+    );
+  } else {
+    check("with override: doc produced proposals", false, withOverride.error);
+  }
+}
+
+// ---------------------------------------------------------------------------
 if (failures > 0) {
   console.error(`\n${failures} check(s) FAILED`);
   process.exit(1);

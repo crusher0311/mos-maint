@@ -232,6 +232,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
             <NavLink href="/platform-admin/plan-features" icon={Grid3X3} label="Plan Features" indent />
             <NavLink href="/platform-admin/service-mappings" icon={ArrowRightLeft} label="Service Mappings" indent />
             <NavLink href="/platform-admin/carfax-match" icon={FileSearch} label="CARFAX Match" indent />
+            <NavLink href="/platform-admin/interval-import-match" icon={FileSearch} label="Interval Import Match" indent />
             <NavLink href="/platform-admin/engine-risk-overrides" icon={Wrench} label="Engine Risk Overrides" indent />
           </CollapsibleSection>
         </ul>

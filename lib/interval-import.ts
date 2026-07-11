@@ -10,6 +10,7 @@
 
 import { parseServiceAction, toKeyFromName, INSPECTION_SERVICE_KEYS } from "@/lib/service-keys";
 import { COMMON_SERVICE_KEYS, COMMON_SERVICE_NAME_BY_KEY } from "@/lib/interval-common-services";
+import { normalizeIntervalImportName } from "@/lib/interval-import-log";
 
 export type ExtractedService = {
   /** Service line as written in the document (without the parenthetical). */
@@ -122,8 +123,20 @@ export function parseInlineRule(text: string | null | undefined): { miles: numbe
  * first and "Rear Differential Gear Oil Service" contains "oil service"
  * → would mis-map to `oil`. The pre-pass is contained to the import path
  * so history-anchoring behavior elsewhere is untouched.
+ *
+ * When an operator-managed overrides map is provided (normalized name →
+ * service key, managed on /platform-admin/interval-import-match), it wins
+ * over the built-in dictionary so a platform admin can teach the matcher a
+ * shop-specific wording without a code deploy.
  */
-export function mapImportServiceNameToKey(name: string): string | null {
+export function mapImportServiceNameToKey(
+  name: string,
+  overrides?: ReadonlyMap<string, string>,
+): string | null {
+  if (overrides && overrides.size > 0) {
+    const hit = overrides.get(normalizeIntervalImportName(name));
+    if (hit) return hit;
+  }
   const n = name.toLowerCase();
   if (n.includes("transfer case")) return "transfer_case";
   if (n.includes("front differential")) return "front_differential";
@@ -227,7 +240,10 @@ export function sanitizeExtraction(raw: any): DocExtraction | null {
  * Core inference: extraction → proposals + flagged items. Nothing here
  * writes anywhere; the caller decides what to do with the output.
  */
-export function buildIntervalProposals(extraction: DocExtraction): InferenceResult {
+export function buildIntervalProposals(
+  extraction: DocExtraction,
+  opts?: { overrides?: ReadonlyMap<string, string> },
+): InferenceResult {
   const milestones = Array.from(new Set(extraction.milestones.map((m) => m.miles))).sort((a, b) => a - b);
   const totalServices = extraction.milestones.reduce((n, m) => n + m.services.length, 0);
 
@@ -271,7 +287,7 @@ export function buildIntervalProposals(extraction: DocExtraction): InferenceResu
       const fullText = note ? `${name} (${note})` : name;
 
       const action = parseServiceAction(name);
-      const key = mapImportServiceNameToKey(name);
+      const key = mapImportServiceNameToKey(name, opts?.overrides);
 
       // Verb guard: an "Inspect …" line never sets a replacement interval.
       // (Exception: keys whose scheduled item IS an inspection, e.g. emissions.)
