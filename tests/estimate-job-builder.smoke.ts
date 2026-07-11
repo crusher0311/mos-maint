@@ -18,6 +18,7 @@ import {
   resolveKnowledgeBaseJob,
   applyVinAttributeAdjustments,
   shouldUseAiFallback,
+  mapAiCompanionTitlesToKbJobs,
   AI_FALLBACK_MIN_DESCRIPTION_LENGTH,
 } from "../lib/estimate-assist/job-builder-logic";
 import {
@@ -69,6 +70,50 @@ console.log("estimate job builder logic");
   ok("searchJobs respects limit", limited.length === 2);
 
   ok("getJobById unknown id → undefined", getJobById("not-a-real-job") === undefined);
+
+  // Singular/plural fold: a bare plural query must reach the mainstream jobs,
+  // not only entries whose title happens to contain the literal plural
+  // ("brakes" used to resolve to "Wheel Cylinder Replacement (Drum Brakes)").
+  const plural = resolveKnowledgeBaseJob("brakes");
+  ok('bare "brakes" → front pad replacement (not drum wheel cylinder)',
+    plural?.jobId === "brakes-front-pads", plural?.jobId);
+  const pluralComps = getCompanionJobs(plural!.jobId).map(c => c.jobId);
+  ok('  → its related jobs include rotors', pluralComps.includes("brakes-front-rotors"), pluralComps.join(","));
+  const tires = resolveKnowledgeBaseJob("tires");
+  ok('bare "tires" resolves to a tire job', (tires?.category || "") === "Tires", tires?.jobId);
+}
+
+// ------------------------------------------------- AI companion title mapping
+{
+  console.log("\nAI companion-title → KB mapping (off-KB jobs get Related Jobs):");
+
+  const mapped = mapAiCompanionTitlesToKbJobs([
+    "Brake Fluid Flush",
+    "Front Brake Rotor Replacement",
+    "Totally Made Up Flux Capacitor Service zzqq",
+  ]);
+  ok("real titles resolve to KB entries",
+    mapped.some(j => j.jobId === "brake-fluid-flush") &&
+    mapped.some(j => j.jobId === "brakes-front-rotors"),
+    mapped.map(j => j.jobId).join(","));
+
+  const noJunkOnly = mapAiCompanionTitlesToKbJobs(["zzqq unmatchable widget qqzz"]);
+  ok("unresolvable titles are dropped (never invent a suggestion)", noJunkOnly.length === 0);
+
+  const excluded = mapAiCompanionTitlesToKbJobs(["Front Brake Pad Replacement"], "brakes-front-pads");
+  ok("the job itself is excluded from its own suggestions", !excluded.some(j => j.jobId === "brakes-front-pads"));
+
+  const deduped = mapAiCompanionTitlesToKbJobs(["Brake Fluid Flush", "brake fluid flush"]);
+  ok("duplicate titles dedupe to one entry", deduped.length === 1);
+
+  const capped = mapAiCompanionTitlesToKbJobs([
+    "Brake Fluid Flush", "Front Brake Rotor Replacement", "Rear Brake Pad Replacement",
+    "Wheel Alignment", "Tire Rotation", "Coolant Flush",
+  ]);
+  ok("suggestions cap at 4", capped.length === 4, String(capped.length));
+
+  const junkInput = mapAiCompanionTitlesToKbJobs(["", "   ", 42 as any, null as any]);
+  ok("non-string / empty entries are skipped safely", junkInput.length === 0);
 }
 
 // ---------------------------------------------------------------- VIN adjustments
@@ -168,8 +213,10 @@ console.log("estimate job builder logic");
   console.log("\nCompanion / upsell expansion:");
   const comps = getCompanionJobs("brakes-front-pads");
   ok("front pads companions resolve to KB entries",
-    comps.length === 3 && comps.every(c => !!c.jobId),
+    comps.length === 4 && comps.every(c => !!c.jobId),
     comps.map(c => c.jobId).join(","));
+  ok("  → rotors are the first related job for pads (parts add-on list)",
+    comps[0]?.jobId === "brakes-front-rotors", comps[0]?.jobId);
   const ups = getUpsellJobs("brakes-front-pads");
   ok("front pads upsells resolve", ups.length === 2, ups.map(u => u.jobId).join(","));
   ok("unknown jobId → empty arrays", getCompanionJobs("nope").length === 0 && getUpsellJobs("nope").length === 0);

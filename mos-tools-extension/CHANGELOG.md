@@ -2,6 +2,19 @@
 
 ## 1.27.63 — 2026-07-11
 
+### Added
+- **One-click add for related jobs in the Job Builder.** Every "Related Jobs"
+  and "Upsell Opportunities" row in the Estimate tab's builder result now has
+  its own "+ Add" button that sends that job straight to the current RO —
+  no more rebuilding the card and clicking Send to RO for each one, and the
+  estimate you just built stays on screen. The add pulls the job's full
+  knowledge-base details (description, typical labor hours, parts) behind the
+  scenes; if that lookup fails, the job is still added with its title and
+  typical hours. A new "Add all" button on the Related Jobs header adds every
+  related job in one click, sequentially, with per-row Added/Failed feedback —
+  one failing job doesn't stop the rest, and a summary reports any failures.
+  Clicking the row text still rebuilds the builder card as before.
+
 ### Fixed
 - **Audit Current RO now reads the jobs on screen (Tekmetric).** The
   Estimate tab's "Audit RO" button previously only asked the server to look
@@ -15,6 +28,12 @@
   (e.g. "hasn't synced yet") instead of the generic "no line items"
   string. Requires the matching server release for the improved fallback;
   older servers still work with the live line items.
+- **"Failed" button states now actually show.** The Send to RO and audit
+  "+ Add to RO" buttons previously always flashed success even when the add
+  failed (the failure was only visible as a toast); they now correctly show
+  a red "Failed" state when the add doesn't go through.
+
+## 1.27.62 — 2026-07-11
 
 ### Changed
 - **Real part cost now flows through to Tekmetric too.** Adding a job to a

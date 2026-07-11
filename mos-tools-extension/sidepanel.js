@@ -2785,10 +2785,13 @@ async function handleSwAddFinding(service, isDraft = false) {
   }
 }
 
+// Returns true when the job was added, false on failure — callers that show
+// per-job button states (Send to RO, companion "+ Add", Add all) rely on this
+// because errors are handled in here (notification) rather than thrown.
 async function handleAddJob(job) {
   if (!currentContext) {
     alert('No repair order context. Please navigate to a repair order.');
-    return;
+    return false;
   }
 
   if (currentContext.provider === 'shopware') {
@@ -2802,14 +2805,15 @@ async function handleAddJob(job) {
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+        return true;
       } else {
         throw new Error(result.error || 'Failed to add service');
       }
     } catch (err) {
       console.error('[MOS] Error adding Shop-Ware service:', err);
       showNotification(err.message, 'error');
+      return false;
     }
-    return;
   }
 
   const effectiveWriteProvider = currentContext.writeProvider || resolvedWriteProvider || null;
@@ -2882,14 +2886,15 @@ async function handleAddJob(job) {
 
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
+        return true;
       } else {
         throw new Error(result.error || 'Failed to add job to Protractor');
       }
     } catch (err) {
       console.error('[MOS] Error adding Protractor job:', err);
       showNotification(err.message, 'error');
+      return false;
     }
-    return;
   }
 
   const jobData = {
@@ -2931,12 +2936,14 @@ async function handleAddJob(job) {
     
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
+      return true;
     } else {
       throw new Error(result.error || 'Failed to add job');
     }
   } catch (err) {
     console.error('[MOS] Error adding job:', err);
     showNotification(err.message, 'error');
+    return false;
   }
 }
 
@@ -5430,6 +5437,82 @@ function initEstimateAssist() {
   auditBtn.addEventListener('click', () => runEstimateAudit());
 }
 
+// One-click add for a related/upsell job row (Task #854). Fetches the job's
+// full knowledge-base details (description, labor hours, parts) via the same
+// job-builder endpoint, then reuses handleAddJob. If the detail fetch fails,
+// falls back to adding with just the title and the row's typical labor hours
+// so the add still goes through. Returns true on success, false on failure,
+// and drives the row button's Adding…/Added!/Failed states.
+async function addCompanionJobToRo(btn) {
+  const title = btn.dataset.jobTitle || '';
+  if (!title) return false;
+  if (btn.disabled) return false;
+  const typicalHours = parseFloat(btn.dataset.laborHours) || 1;
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'Adding…';
+  btn.style.background = '#2563eb';
+
+  let job = null;
+  try {
+    const vin = currentContext?.vehicle?.vin || undefined;
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/job-builder',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          jobNameOrId: title,
+          vin: vin,
+          languageMode: estimateLanguageMode
+        })
+      }
+    });
+    if (!result.error && result.ok && result.estimate) {
+      const est = result.estimate;
+      const desc = (estimateLanguageMode === 'customer' ? est.customerDescription : est.technicalDescription) || '';
+      job = {
+        title: est.title || title,
+        name: est.title || title,
+        description: desc,
+        note: desc,
+        laborItems: [{ name: est.title || title, hours: est.laborHours?.typical || typicalHours }],
+        parts: (est.requiredParts || []).map(p => ({ name: p, quantity: 1 }))
+      };
+    }
+  } catch (err) {
+    console.warn('[MOS] Companion job detail fetch failed, adding with basics:', err);
+  }
+
+  // Fallback: detail fetch failed — add with the title + row's typical hours.
+  if (!job) {
+    job = {
+      title: title,
+      name: title,
+      description: '',
+      note: '',
+      laborItems: [{ name: title, hours: typicalHours }],
+      parts: []
+    };
+  }
+
+  const ok = await handleAddJob(job);
+  if (ok) {
+    btn.textContent = 'Added!';
+    btn.style.background = '#16a34a';
+  } else {
+    btn.textContent = 'Failed';
+    btn.style.background = '#dc2626';
+  }
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.style.background = '#2563eb';
+    btn.disabled = false;
+  }, 2000);
+  return ok;
+}
+
 async function runEstimateBuilder() {
   const query = document.getElementById('estimate-job-search').value.trim();
   if (!query) return;
@@ -5516,14 +5599,18 @@ async function runEstimateBuilder() {
     if (est.companionJobs && est.companionJobs.length > 0) {
       html += `
         <div style="margin-bottom:8px;">
-          <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase; margin-bottom:4px;">Related Jobs</div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+            <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase;">Related Jobs</div>
+            <button id="estimate-add-all-related-btn" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; font-weight:600; cursor:pointer;">Add all</button>
+          </div>
           ${est.companionJobs.map(j => `
-            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; background:var(--gray-50); border-radius:6px; margin-bottom:3px; cursor:pointer;">
-              <div>
+            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 8px; background:var(--gray-50); border-radius:6px; margin-bottom:3px; cursor:pointer;">
+              <div style="flex:1; min-width:0;">
                 <span style="font-size:12px; font-weight:600; color:var(--gray-800);">${escEstimate(j.title)}</span>
                 ${j.safetyRelated ? '<span style="font-size:9px; color:#dc2626; margin-left:4px;">Safety</span>' : ''}
               </div>
               <span style="font-size:11px; color:var(--gray-500);">${escEstimate(j.laborHoursTypical)}h</span>
+              <button class="estimate-companion-add-btn" data-companion-group="related" data-job-title="${escEstimate(j.title)}" data-labor-hours="${escEstimate(j.laborHoursTypical)}" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0;">+ Add</button>
             </div>
           `).join('')}
         </div>`;
@@ -5534,9 +5621,10 @@ async function runEstimateBuilder() {
         <div style="margin-bottom:8px;">
           <div style="font-size:11px; font-weight:600; color:var(--gray-500); text-transform:uppercase; margin-bottom:4px;">Upsell Opportunities</div>
           ${est.upsellJobs.map(j => `
-            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; margin-bottom:3px; cursor:pointer;">
-              <span style="font-size:12px; font-weight:600; color:var(--gray-800);">${escEstimate(j.title)}</span>
+            <div class="estimate-companion-job" data-job-title="${escEstimate(j.title)}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 8px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; margin-bottom:3px; cursor:pointer;">
+              <span style="font-size:12px; font-weight:600; color:var(--gray-800); flex:1; min-width:0;">${escEstimate(j.title)}</span>
               <span style="font-size:11px; color:var(--gray-500);">${escEstimate(j.laborHoursTypical)}h</span>
+              <button class="estimate-companion-add-btn" data-companion-group="upsell" data-job-title="${escEstimate(j.title)}" data-labor-hours="${escEstimate(j.laborHoursTypical)}" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0;">+ Add</button>
             </div>
           `).join('')}
         </div>`;
@@ -5554,6 +5642,51 @@ async function runEstimateBuilder() {
         }
       });
     });
+
+    // Per-row one-click add for related/upsell jobs. stopPropagation keeps the
+    // row-click (rebuild the card for that job) working independently.
+    resultEl.querySelectorAll('.estimate-companion-add-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await addCompanionJobToRo(btn);
+      });
+    });
+
+    const addAllBtn = resultEl.querySelector('#estimate-add-all-related-btn');
+    if (addAllBtn) {
+      addAllBtn.addEventListener('click', async () => {
+        // Skip rows already mid-add (disabled) so an in-flight manual add
+        // isn't double-fired or miscounted as a failure.
+        const rowBtns = Array.from(resultEl.querySelectorAll('.estimate-companion-add-btn[data-companion-group="related"]'))
+          .filter(b => !b.disabled);
+        if (rowBtns.length === 0) return;
+        addAllBtn.disabled = true;
+        addAllBtn.textContent = 'Adding…';
+        let added = 0;
+        const failed = [];
+        // Sequential on purpose: the add-job endpoints run slow upstream calls
+        // and parallel adds risk rate limits / duplicate open-WO resolution.
+        for (const rowBtn of rowBtns) {
+          const ok = await addCompanionJobToRo(rowBtn);
+          if (ok) added++;
+          else failed.push(rowBtn.dataset.jobTitle || 'Unknown job');
+        }
+        if (failed.length === 0) {
+          showNotification(`Added all ${added} related job${added === 1 ? '' : 's'}`, 'success');
+          addAllBtn.textContent = 'All added!';
+          addAllBtn.style.background = '#16a34a';
+        } else {
+          showNotification(`Added ${added} of ${rowBtns.length} related jobs — failed: ${failed.join(', ')}`, 'error');
+          addAllBtn.textContent = `${failed.length} failed`;
+          addAllBtn.style.background = '#dc2626';
+        }
+        setTimeout(() => {
+          addAllBtn.textContent = 'Add all';
+          addAllBtn.style.background = '#2563eb';
+          addAllBtn.disabled = false;
+        }, 3000);
+      });
+    }
 
     resultEl.querySelectorAll('.estimate-send-to-ro-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -5574,25 +5707,22 @@ async function runEstimateBuilder() {
 
         btn.disabled = true;
         btn.textContent = 'Sending...';
-        try {
-          await handleAddJob(job);
+        // handleAddJob reports failures via its return value (it notifies and
+        // swallows errors internally), so check the boolean — the old
+        // try/catch here could never actually reach its Failed state.
+        const ok = await handleAddJob(job);
+        if (ok) {
           btn.textContent = 'Sent!';
           btn.style.background = '#16a34a';
-          setTimeout(() => {
-            btn.textContent = 'Send to RO';
-            btn.style.background = '#2563eb';
-            btn.disabled = false;
-          }, 2000);
-        } catch (err) {
-          console.warn('[MOS] Send to RO failed:', err);
+        } else {
           btn.textContent = 'Failed';
           btn.style.background = '#dc2626';
-          setTimeout(() => {
-            btn.textContent = 'Send to RO';
-            btn.style.background = '#2563eb';
-            btn.disabled = false;
-          }, 2000);
         }
+        setTimeout(() => {
+          btn.textContent = 'Send to RO';
+          btn.style.background = '#2563eb';
+          btn.disabled = false;
+        }, 2000);
       });
     });
 
@@ -5762,25 +5892,21 @@ async function runEstimateAudit() {
 
         btn.disabled = true;
         btn.textContent = 'Adding...';
-        try {
-          await handleAddJob(job);
+        // handleAddJob reports failures via its return value (it notifies and
+        // swallows errors internally), so check the boolean.
+        const ok = await handleAddJob(job);
+        if (ok) {
           btn.textContent = 'Added!';
           btn.style.background = '#16a34a';
-          setTimeout(() => {
-            btn.textContent = '+ Add to RO';
-            btn.style.background = '#2563eb';
-            btn.disabled = false;
-          }, 2000);
-        } catch (err) {
-          console.warn('[MOS] Audit add to RO failed:', err);
+        } else {
           btn.textContent = 'Failed';
           btn.style.background = '#dc2626';
-          setTimeout(() => {
-            btn.textContent = '+ Add to RO';
-            btn.style.background = '#2563eb';
-            btn.disabled = false;
-          }, 2000);
         }
+        setTimeout(() => {
+          btn.textContent = '+ Add to RO';
+          btn.style.background = '#2563eb';
+          btn.disabled = false;
+        }, 2000);
       });
     });
 

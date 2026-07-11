@@ -23,6 +23,7 @@ import {
   resolveKnowledgeBaseJob,
   applyVinAttributeAdjustments,
   shouldUseAiFallback,
+  mapAiCompanionTitlesToKbJobs,
 } from "@/lib/estimate-assist/job-builder-logic";
 
 // Budget for the optional AI-description pass. When the job is already in the
@@ -258,6 +259,16 @@ export async function POST(req: NextRequest) {
       } catch (aiErr) {
         console.warn("[Estimate Job Builder] AI enhancement failed:", aiErr);
       }
+    }
+
+    // AI-built (off-KB) jobs: the AI suggests companion jobs as title strings.
+    // Map them onto real KB entries so the Related Jobs list isn't empty —
+    // previously these were parsed and then silently dropped.
+    if (companionJobs.length === 0 && aiResult && aiResult.companionJobs.length > 0) {
+      companionJobs = mapAiCompanionTitlesToKbJobs(
+        aiResult.companionJobs,
+        knowledgeBaseJob?.jobId ?? null,
+      );
     }
 
     // No KB match AND the AI fallback failed/timed out — an empty shell with

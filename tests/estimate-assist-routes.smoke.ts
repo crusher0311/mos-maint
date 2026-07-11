@@ -522,7 +522,7 @@ async function run() {
           customerDescription: "Replace a worn part that keeps your vehicle running smoothly.",
           estimatedLaborHours: 2.5,
           requiredParts: ["Flux Capacitor"],
-          companionJobs: [],
+          companionJobs: ["Brake Fluid Flush", "Totally Made Up Nonexistent Service zzqq"],
         }),
         aiCalls,
       );
@@ -535,6 +535,15 @@ async function run() {
     ok("  → AI called exactly once", aiCalls.n === 1);
     ok("  → AI labor hours used", body.estimate.laborHours.typical === 2.5, JSON.stringify(body.estimate.laborHours));
     ok("  → AI parts used", body.estimate.requiredParts.includes("Flux Capacitor"));
+    // AI-suggested companion titles must map to real KB entries (and only
+    // real ones) so off-KB jobs still show Related Jobs — previously these
+    // were parsed and silently dropped.
+    ok(
+      "  → AI companion titles mapped to KB entries",
+      body.estimate.companionJobs.length === 1 &&
+        body.estimate.companionJobs[0].jobId === "brake-fluid-flush",
+      JSON.stringify(body.estimate.companionJobs),
+    );
   }
   {
     restoreAll();

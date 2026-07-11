@@ -57,6 +57,47 @@ export function resolveKnowledgeBaseJob(jobNameOrId: string): JobKnowledgeEntry 
 }
 
 /**
+ * Map AI-suggested companion-job *title strings* to real knowledge-base
+ * entries so AI-built (off-KB) jobs still surface Related Jobs suggestions.
+ * Titles that don't resolve to a KB entry are dropped (we never show a
+ * suggestion we can't build/price). Deduped, excludes the job itself.
+ */
+export function mapAiCompanionTitlesToKbJobs(
+  titles: string[],
+  excludeJobId?: string | null,
+  limit = 4,
+): JobKnowledgeEntry[] {
+  const out: JobKnowledgeEntry[] = [];
+  const seen = new Set<string>(excludeJobId ? [excludeJobId] : []);
+  for (const title of titles) {
+    if (out.length >= limit) break;
+    if (typeof title !== "string" || !title.trim()) continue;
+    const match = resolveKnowledgeBaseJob(title.trim());
+    if (match && !seen.has(match.jobId) && titleWordOverlap(title, match)) {
+      seen.add(match.jobId);
+      out.push(match);
+    }
+  }
+  return out;
+}
+
+/**
+ * Guard against the fuzzy search's short-substring matches when mapping
+ * arbitrary AI titles (e.g. "Totally Made Up Service" scoring "Backup Camera"
+ * via the substring "up"): accept a match only when at least one substantial
+ * word (≥4 chars, singular-folded) from the AI title appears in the KB job's
+ * title or tags.
+ */
+function titleWordOverlap(aiTitle: string, job: JobKnowledgeEntry): boolean {
+  const haystack = `${job.title} ${job.tags.join(" ")}`.toLowerCase();
+  const words = aiTitle.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+  return words.some(w => {
+    const singular = w.endsWith("s") ? w.slice(0, -1) : w;
+    return haystack.includes(w) || haystack.includes(singular);
+  });
+}
+
+/**
  * Apply the KB entry's VIN-aware attributes against the resolved vehicle
  * context. Mirrors the route's original inline logic exactly:
  *  - awd            → drivetrain contains "awd"
