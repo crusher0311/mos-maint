@@ -1208,6 +1208,7 @@ function checkAndInjectButton() {
     if (existingEnhance) existingEnhance.remove();
     enhanceButtonInjected = false;
     enhanceInFlight = false;
+    stopEnhanceSlowNotice();
     const existingBuild = document.getElementById('mos-build-ro-vhi-btn');
     if (existingBuild) existingBuild.remove();
     buildRoFromVhiButtonInjected = false;
@@ -1326,6 +1327,32 @@ let prefillInFlight = false;
 let enhanceButtonInjected = false;
 let enhanceInFlight = false;
 
+// ---- Enhance Findings slow-write notice (task #789) ----
+// The analyze and apply steps can legitimately take 45s+ on big shops. Toasts
+// auto-dismiss, so repeat a reassuring "still working…" toast every
+// ENHANCE_SLOW_NOTICE_INTERVAL_MS (first one after ENHANCE_SLOW_NOTICE_DELAY_MS)
+// until the background reports preview/complete/failed — otherwise users click
+// again or navigate away mid-write.
+const ENHANCE_SLOW_NOTICE_DELAY_MS = 18000;
+const ENHANCE_SLOW_NOTICE_INTERVAL_MS = 25000;
+let enhanceSlowNoticeTimer = null;
+let enhanceSlowNoticeInterval = null;
+
+function startEnhanceSlowNotice(message) {
+  stopEnhanceSlowNotice();
+  const text = message || 'Still working — big shops can take a minute…';
+  enhanceSlowNoticeTimer = setTimeout(() => {
+    enhanceSlowNoticeTimer = null;
+    showToast(text, 'info');
+    enhanceSlowNoticeInterval = setInterval(() => showToast(text, 'info'), ENHANCE_SLOW_NOTICE_INTERVAL_MS);
+  }, ENHANCE_SLOW_NOTICE_DELAY_MS);
+}
+
+function stopEnhanceSlowNotice() {
+  if (enhanceSlowNoticeTimer) { clearTimeout(enhanceSlowNoticeTimer); enhanceSlowNoticeTimer = null; }
+  if (enhanceSlowNoticeInterval) { clearInterval(enhanceSlowNoticeInterval); enhanceSlowNoticeInterval = null; }
+}
+
 function injectEnhanceButton() {
   if (enhanceButtonInjected) return;
   if (document.getElementById('mos-enhance-notes-btn')) {
@@ -1397,6 +1424,7 @@ function handleEnhanceNotes(buttonEl) {
   buttonEl.disabled = true;
   buttonEl.style.opacity = '0.5';
   buttonEl.style.cursor = 'wait';
+  startEnhanceSlowNotice('Still enhancing notes — big shops can take a minute…');
 
   safeSendMessage({
     action: 'ENHANCE_FINDINGS',
@@ -1413,6 +1441,7 @@ function handleEnhanceNotes(buttonEl) {
 
 function resetEnhanceButton() {
   enhanceInFlight = false;
+  stopEnhanceSlowNotice();
   const btn = document.getElementById('mos-enhance-notes-btn');
   if (btn) {
     btn.disabled = false;
@@ -1422,6 +1451,8 @@ function resetEnhanceButton() {
 }
 
 function showEnhanceReviewModal(enhanced, inspectionId, context) {
+  // The analyze step finished — stop the "still working…" notice.
+  stopEnhanceSlowNotice();
   if (!Array.isArray(enhanced) || enhanced.length === 0) {
     showToast('No changes to review', 'info');
     resetEnhanceButton();
@@ -1566,6 +1597,10 @@ function showEnhanceReviewModal(enhanced, inspectionId, context) {
     applyBtn.textContent = 'Applying...';
     applyBtn.style.opacity = '0.6';
     cancelBtn.disabled = true;
+    // Applying writes each finding server-side, which can also run long on
+    // big shops; keep the user reassured until COMPLETE/FAILED arrives
+    // (both call resetEnhanceButton, which stops this notice).
+    startEnhanceSlowNotice('Still applying enhanced notes — big shops can take a minute…');
 
     safeSendMessage({
       action: 'APPLY_ENHANCED_FINDINGS',

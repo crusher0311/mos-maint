@@ -1,5 +1,24 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.58 — 2026-07-11
+
+### Added
+- **"Still working…" notice during long writes.** With the timeout fix in
+  1.27.57, slow writes (Create RO can take up to ~2 minutes, canned/custom job
+  adds up to ~90 seconds on big shops) now wait correctly instead of falsely
+  timing out — but the user only saw a silent spinner. Now, if one of these
+  writes is still running after ~18 seconds, a reassuring notice appears so
+  nobody clicks again or closes the panel mid-write:
+  - **Side panel** (Create RO, apply canned job, add job to RO — Tekmetric,
+    Protractor, and Shop-Ware paths): a persistent blue banner with a spinner
+    ("Still working — big shops can take a minute. Please keep this panel
+    open…") shows at the bottom of the panel and disappears the moment the
+    request finishes, whether it succeeds, fails, or times out.
+  - **Enhance Findings / Enhance Notes** (Tekmetric and AutoFlow pages): since
+    page toasts auto-dismiss, a "Still enhancing notes…" toast repeats every
+    ~25 seconds during both the AI analyze step and the apply step, and stops
+    as soon as the preview, success, or failure arrives.
+
 ## 1.27.57 — 2026-07-09
 
 ### Added

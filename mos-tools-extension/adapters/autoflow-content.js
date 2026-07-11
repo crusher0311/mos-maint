@@ -1829,6 +1829,29 @@ function setVhiBtnBusy(btn, busy) {
   btn.style.cursor = busy ? 'wait' : 'pointer';
 }
 
+// ---- Enhance Notes slow-write notice (task #789) ----
+// The AI analyze step can legitimately take 45s+ on big shops. Toasts
+// auto-dismiss after ~4s, so repeat a reassuring "still working…" toast
+// (first after 18s, then every 25s) until the background responds — otherwise
+// users click again or navigate away mid-request.
+let afEnhanceSlowNoticeTimer = null;
+let afEnhanceSlowNoticeInterval = null;
+
+function startAfEnhanceSlowNotice(message) {
+  stopAfEnhanceSlowNotice();
+  const text = message || 'Still working — big shops can take a minute…';
+  afEnhanceSlowNoticeTimer = setTimeout(() => {
+    afEnhanceSlowNoticeTimer = null;
+    showToast(text, 'info');
+    afEnhanceSlowNoticeInterval = setInterval(() => showToast(text, 'info'), 25000);
+  }, 18000);
+}
+
+function stopAfEnhanceSlowNotice() {
+  if (afEnhanceSlowNoticeTimer) { clearTimeout(afEnhanceSlowNoticeTimer); afEnhanceSlowNoticeTimer = null; }
+  if (afEnhanceSlowNoticeInterval) { clearInterval(afEnhanceSlowNoticeInterval); afEnhanceSlowNoticeInterval = null; }
+}
+
 function injectVhiButtons() {
   if (!isAutoflowDviView()) return;
   const ctx = detectContext();
@@ -2152,10 +2175,12 @@ async function handleAfEnhance(btn) {
   const sheetId = dvi.sheetId || null;
   const findings = withNotes.map((it) => ({ taskId: it.inspecId, taskName: it.name, finding: it.notes }));
   showToast('Enhancing notes with AI…', 'info');
+  startAfEnhanceSlowNotice('Still enhancing notes — big shops can take a minute…');
 
   chrome.runtime.sendMessage(
     { action: 'AF_ANALYZE_ENHANCE', context: Object.assign({}, ctx), findings },
     (resp) => {
+      stopAfEnhanceSlowNotice();
       if (chrome.runtime.lastError || !resp || !resp.success) {
         showToast((resp && resp.error) || 'Enhance failed', 'error');
         setVhiBtnBusy(btn, false);

@@ -2676,7 +2676,7 @@ async function handleAddJob(job) {
         serviceName,
         workOrderId: currentContext.roId,
         vehicle: currentContext.vehicle || null
-      });
+      }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
       } else {
@@ -2742,7 +2742,7 @@ async function handleAddJob(job) {
         // top of the background's 45s fetch cap, so the panel must wait
         // longer than the 60s default or a retried-but-successful add shows a
         // false timeout while the background still completes it.
-      }, 90000);
+      }, 90000, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
 
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
@@ -2779,7 +2779,7 @@ async function handleAddJob(job) {
       shopId: currentContext.shopId,
       roId: currentContext.roId,
       jobData
-    });
+    }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
     
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
@@ -2849,7 +2849,7 @@ async function handleAddCannedJob(job) {
         serviceName,
         workOrderId: currentContext.roId,
         vehicle: currentContext.vehicle || null
-      });
+      }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
       } else {
@@ -2898,7 +2898,7 @@ async function handleAddCannedJob(job) {
           // top of the background's 45s fetch cap, so the panel must wait
           // longer than 60s or a retried-but-successful add shows a false
           // timeout while the background still completes it.
-        }, 90000);
+        }, 90000, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
@@ -2956,7 +2956,7 @@ async function handleAddCannedJob(job) {
         // top of the background's 45s fetch cap, so the panel must wait
         // longer than 60s or a retried-but-successful add shows a false
         // timeout while the background still completes it.
-      }, 90000);
+      }, 90000, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       
       console.log('[MOS] Tekmetric canned job add result:', result);
       
@@ -3973,7 +3973,71 @@ function printStickerViaWindow(sticker) {
 // options.timeoutMs for the background fetch, wait that long plus a buffer.
 const SENDMESSAGE_DEFAULT_TIMEOUT_MS = 60000;
 const SENDMESSAGE_TIMEOUT_BUFFER_MS = 10000;
-function sendMessage(message, timeoutMs) {
+
+// ---- Slow-write "still working…" notice (task #789) ----
+// Long background-routed writes (Create RO up to ~130s, canned adds up to
+// ~90s) now wait correctly instead of falsely timing out — but the user only
+// sees a spinner. After SLOW_NOTICE_DELAY_MS of silence we show a persistent
+// in-panel notice so they don't click again or close the panel mid-write.
+// The notice is a singleton and is always cleared when the request settles
+// (success, error, or timeout).
+const SLOW_NOTICE_DELAY_MS = 18000;
+const SLOW_NOTICE_DEFAULT_TEXT = 'Still working — big shops can take a minute. Please keep this panel open…';
+
+function showSlowWriteNotice(text) {
+  hideSlowWriteNotice();
+  const notice = document.createElement('div');
+  notice.id = 'mos-slow-write-notice';
+  notice.setAttribute('role', 'status');
+  Object.assign(notice.style, {
+    position: 'fixed',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    maxWidth: 'calc(100% - 32px)',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '500',
+    zIndex: '9999',
+    backgroundColor: '#3B82F6',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+  });
+  const spinner = document.createElement('span');
+  Object.assign(spinner.style, {
+    width: '14px',
+    height: '14px',
+    flex: '0 0 auto',
+    border: '2px solid rgba(255,255,255,0.4)',
+    borderTopColor: 'white',
+    borderRadius: '50%',
+    animation: 'mos-slow-notice-spin 0.8s linear infinite'
+  });
+  if (!document.getElementById('mos-slow-notice-style')) {
+    const style = document.createElement('style');
+    style.id = 'mos-slow-notice-style';
+    style.textContent = '@keyframes mos-slow-notice-spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+  }
+  const label = document.createElement('span');
+  label.textContent = text || SLOW_NOTICE_DEFAULT_TEXT;
+  notice.appendChild(spinner);
+  notice.appendChild(label);
+  document.body.appendChild(notice);
+}
+
+function hideSlowWriteNotice() {
+  document.getElementById('mos-slow-write-notice')?.remove();
+}
+
+// slowNoticeText: pass a string (or `true` for the default wording) on
+// long-running write requests to show the persistent "still working…" notice
+// after SLOW_NOTICE_DELAY_MS. It is removed as soon as the request settles.
+function sendMessage(message, timeoutMs, slowNoticeText) {
   let limitMs = (typeof timeoutMs === 'number' && timeoutMs > 0)
     ? timeoutMs
     : SENDMESSAGE_DEFAULT_TIMEOUT_MS;
@@ -3983,13 +4047,27 @@ function sendMessage(message, timeoutMs) {
     // the one to report a timeout (a real one), not us guessing prematurely.
     limitMs = Math.max(limitMs, fetchTimeoutMs + SENDMESSAGE_TIMEOUT_BUFFER_MS);
   }
+  let slowNoticeTimer = null;
+  if (slowNoticeText) {
+    const noticeText = slowNoticeText === true ? SLOW_NOTICE_DEFAULT_TEXT : slowNoticeText;
+    slowNoticeTimer = setTimeout(() => {
+      slowNoticeTimer = null;
+      showSlowWriteNotice(noticeText);
+    }, SLOW_NOTICE_DELAY_MS);
+  }
+  const settleNotice = () => {
+    if (slowNoticeTimer) { clearTimeout(slowNoticeTimer); slowNoticeTimer = null; }
+    if (slowNoticeText) hideSlowWriteNotice();
+  };
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
+      settleNotice();
       resolve({ error: 'Request timed out. Please try again.' });
     }, limitMs);
     
     chrome.runtime.sendMessage(message, (response) => {
       clearTimeout(timeout);
+      settleNotice();
       if (chrome.runtime.lastError) {
         console.error('[MOS] Message error:', chrome.runtime.lastError);
         resolve({ error: chrome.runtime.lastError.message || 'Extension error' });
@@ -6848,7 +6926,7 @@ async function handleCroSubmit() {
             : undefined,
         }),
       }
-    }, 125000);
+    }, 125000, 'Still creating the repair order — big shops can take a minute or two. Please keep this panel open…');
     if (!result?.ok && !result?.success) throw new Error(result?.error || 'Create failed');
     try {
       const createdVin = (createRoState.vehicle?.vin || '').toUpperCase();
