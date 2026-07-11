@@ -14,7 +14,13 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "rotate and balance", "tire service rotation", "4 tire rotation", "wheels rotated",
     // Task #807: real shop phrasing puts balance first ("Road Force Wheel
     // Balance & Rotation") — the existing rotate-first synonyms miss it.
-    "balance & rotation", "balance and rotation"
+    "balance & rotation", "balance and rotation",
+    // Task #819: CARFAX standardized inspect phrase ("Tire condition and
+    // pressure checked", 900+ hits in the cached corpus). Resolving it to
+    // the tires key keeps it out of the unmatched tally; the history verb
+    // guard (isInspectOnlyHistoryPhrase) still prevents it from anchoring
+    // the rotation clock because "checked" is inspect-only.
+    "tire condition"
   ],
   cabin_air: [
     "cabin air filter", "cabin filter", "pollen filter", "hvac filter",
@@ -44,7 +50,9 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     // Task #807: production unmatched-name data — "BG Brake System
     // Service" (BG's brake service IS a fluid exchange) and "Brake System
     // Fluid Flush" phrasings never say "brake fluid" contiguously.
-    "bg brake system", "brake system fluid", "brake system flush"
+    "bg brake system", "brake system fluid", "brake system flush",
+    // Task #819: CARFAX standardized wording ("Brake system bled").
+    "brake system bled", "brakes bled"
   ],
   trans_auto: [
     "automatic transmission fluid", "atf fluid", "atf flush", "auto trans fluid",
@@ -58,6 +66,8 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     // Fill", "Replace Transmission Filter" (a filter service includes new
     // fluid), and "Transmission System Fluid Flush w/ electronic level
     // check" all miss the contiguous "transmission fluid" substring.
+    // Task #819: a transmission filter change is a fluid service ("Transmission
+    // filter replaced" in the CARFAX standardized vocabulary).
     "transmission drain", "transmission filter", "transmission system fluid"
   ],
   trans_manual: [
@@ -69,6 +79,8 @@ export const SERVICE_KEYS: Record<string, string[]> = {
   transfer_case: [
     "transfer case fluid", "transfer case flush", "transfer case oil",
     "transfer case service", "t-case fluid", "t-case service",
+    // Task #819: CARFAX category rollup wording.
+    "transfer case exchange", "transfer case replacement",
     "ptu", "ptu fluid", "ptu service", "power transfer unit",
     "power transfer unit fluid", "power transfer unit service"
   ],
@@ -85,7 +97,10 @@ export const SERVICE_KEYS: Record<string, string[]> = {
   ],
   power_steering: [
     "power steering fluid", "power steering flush", "power steering service",
-    "p/s fluid", "ps fluid", "power steering exchange", "steering fluid"
+    "p/s fluid", "ps fluid", "power steering exchange", "steering fluid",
+    // Task #819: "Power steering system serviced" / "Power steering system
+    // flushed" in the CARFAX standardized vocabulary.
+    "power steering system"
   ],
   fuel_filter: [
     "fuel filter", "replace fuel filter", "r&r fuel filter", "r/r fuel filter",
@@ -119,7 +134,12 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     // Body Service" (existing synonym only covered "cleaning"), and "BG
     // Engine Performance Service (BG MOA/EPR/44K)".
     "fuel injection flush", "fuel injection cleaning", "air induction",
-    "throttle body service", "bg engine performance"
+    "throttle body service", "bg engine performance",
+    // Task #819: CARFAX standardized vocabulary — "Fuel system
+    // cleaned/serviced", "Fuel injection system flushed/serviced",
+    // "Induction system serviced", "Throttle body cleaned/serviced".
+    "fuel system cleaned", "fuel system serviced", "fuel injection system",
+    "induction system", "throttle body cleaned"
   ],
   front_brake_pads: [
     "front brake pads", "front brake lining", "front brakes replaced",
@@ -183,7 +203,10 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     // "Wiper - Bosch Clear Advantage", "WIPERLAT - Latitude", "WIPERR -
     // Rear". "wiper -" deliberately keeps the dash so "wiper motor" (a
     // repair, not a maintenance interval) stays unmatched.
-    "wiper(s)", "wiper -", "wiperlat", "wiperr"
+    // Task #819: CARFAX standardized wording — "Wiper(s) replaced",
+    // "Wiper(s) checked". The "(s)" spelling defeats the plain "wipers"
+    // fallback in toKeyFromFreeText.
+    "wiper(s)", "wiper -", "wiperlat", "wiperr", "wipers replaced"
   ],
   ac_refrigerant: [
     "a/c refrigerant", "ac refrigerant", "air conditioning refill",
@@ -194,12 +217,22 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "air conditioning repair", "a/c system service",
     // Task #807: production job names phrase recharges as "Evacuation and
     // Recharge R134" / "Evacuate and Recharge R134 A/C System".
-    "evacuate and recharge", "evacuation and recharge"
+    "evacuate and recharge", "evacuation and recharge",
+    // Task #819: CARFAX standardized wording — "A/C system flushed",
+    // "A/C system checked" (the latter is verb-guarded so it never anchors).
+    "a/c system"
   ],
   emissions: [
     "emissions test", "emissions inspection", "smog test", "smog check",
     "emission test", "emission inspection", "state inspection",
-    "safety inspection", "obd test", "exhaust emission"
+    "safety inspection", "obd test", "exhaust emission",
+    // Task #819: CARFAX category rollup name for the periodic state
+    // safety/emissions test. For this key the inspection IS the service
+    // (INSPECTION_SERVICE_KEYS), so it legitimately anchors. Outcome-coded
+    // phrases ("Passed emissions inspection" / "Failed emissions
+    // inspection") both anchor the test-performed event — our key tracks
+    // "test was performed", not the result.
+    "safety test"
   ],
   coolant_hoses: [
     "coolant hose", "coolant hoses", "radiator hose", "heater hose",
@@ -556,7 +589,11 @@ export function toKeyFromName(name: string): string | null {
   if (DVI_SKIP.some((s) => n === s)) return null;
   if (n.includes("cabin") && n.includes("air") && n.includes("filter")) return "cabin_air";
   if (n === "cabin air filter" || n === "cabin air") return "cabin_air";
+  // Task #819: mirror the free-text accessory-battery guard — a key-fob /
+  // remote battery item must not resolve to the vehicle-battery key.
+  const accessoryBattery = n.includes("battery") && /\b(?:remote|fob|keyless)\b/.test(n);
   for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
+    if (key === "battery" && accessoryBattery) continue;
     if (vals.some((v) => n.includes(v))) return key;
   }
   if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
@@ -583,7 +620,7 @@ export function toKeyFromName(name: string): string | null {
     if (n.includes("rear")) return "rear_brake_rotors";
     return "front_brake_rotors";
   }
-  if (n.includes("brake pad") || n.includes("brake lining") || n.includes("brakes replaced") || n.includes("brakes serviced") || n.includes("disc brake")) {
+  if (n.includes("brake pad") || n.includes("brake lining") || n.includes("brakes replaced") || n.includes("brakes serviced") || n.includes("brakes checked") || n.includes("brakes inspected") || n.includes("disc brake")) {
     if (n.includes("front")) return "front_brake_pads";
     if (n.includes("rear")) return "rear_brake_pads";
     return "front_brake_pads";
@@ -642,6 +679,9 @@ export const IMPLIES_RESET: Array<{
       /\b(?:four|4|two|2|all)\s+tires?\s+(?:replaced|installed|mounted)\b/i,
       /\bnew\s+(?:set\s+of\s+)?tires?\b/i,
       /\btire\s+replacement\b/i,
+      // Task #819: CARFAX's "(s)" spelling — "Tire(s) replaced",
+      // "Tire(s) mounted" — defeats the plain \btires?\s+ patterns above.
+      /\btires?\(s\)\s+(?:replaced|installed|mounted)\b/i,
     ],
     childKeys: ["tire_rotation"],
   },
@@ -686,7 +726,9 @@ export const IMPLIES_RESET: Array<{
     parentName: "engine air filter replacement",
     parentMatchers: [
       /\bengine\s+air\s+filter\s+replaced\b/i,
-      /\bair\s+filter\s+replaced\b/i,
+      // Task #819: negative lookbehind so "Cabin air filter replaced" does
+      // not imply an engine-air-filter reset.
+      /(?<!cabin\s)\bair\s+filter\s+replaced\b/i,
     ],
     childKeys: ["engine_air"],
   },
@@ -718,6 +760,30 @@ export const IMPLIES_RESET: Array<{
     ],
     childKeys: ["trans_auto"],
   },
+  // Task #819: replacing a major cooling-system component requires draining
+  // and refilling the coolant, so it resets the coolant-exchange clock.
+  // Deliberately narrow (water pump / radiator only) — thermostat and hose
+  // jobs often only partially drain the system.
+  {
+    parentKey: "cooling_component_replaced",
+    parentName: "cooling-system component replacement",
+    parentMatchers: [
+      /\bwater\s+pump\s+replaced\b/i,
+      /\bradiator\s+replaced\b/i,
+    ],
+    childKeys: ["coolant"],
+  },
+  // Task #819: the drain-plug gasket is only ever replaced during an oil
+  // change ("Drain plug gasket replaced" is a CARFAX standardized phrase
+  // that frequently appears without an accompanying oil-change line).
+  {
+    parentKey: "oil_drain_plug_gasket_replaced",
+    parentName: "oil change (drain plug gasket)",
+    parentMatchers: [
+      /\bdrain\s+plug\s+gasket\s+replaced\b/i,
+    ],
+    childKeys: ["oil"],
+  },
 ];
 
 /**
@@ -746,7 +812,10 @@ export function toKeyFromFreeText(desc: string): string[] {
   for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
     if (vals.some((v) => d.includes(v))) hits.push(key);
   }
-  if (d.includes("oil") && !hits.includes("oil")) hits.push("oil");
+  // Task #819: word-boundary match so "Ignition coil(s) replaced" (or any
+  // other "…coil…" phrase) no longer false-positives the oil-change key and
+  // resets the oil clock.
+  if (/\boil\b/.test(d) && !hits.includes("oil")) hits.push("oil");
   if (d.includes("rotate") && d.includes("tire") && !hits.includes("tire_rotation")) hits.push("tire_rotation");
   // Mirror the toKeyFromName transaxle fallback so a shop-history row phrased
   // with "transaxle" anchors the same trans key the OEM item resolves to.
@@ -801,6 +870,11 @@ export function toKeyFromFreeText(desc: string): string[] {
     d.includes("brake lining") ||
     d.includes("brakes replaced") ||
     d.includes("brakes serviced") ||
+    // Task #819: CARFAX standardized inspect phrases ("Brakes checked" /
+    // "Brakes inspected"). Resolving them keeps the unmatched tally clean;
+    // the history verb guard still blocks them from anchoring the pad clock.
+    d.includes("brakes checked") ||
+    d.includes("brakes inspected") ||
     d.includes("disc brake")
   ) {
     const k = d.includes("rear") ? "rear_brake_pads" : "front_brake_pads";
@@ -818,6 +892,24 @@ export function toKeyFromFreeText(desc: string): string[] {
     if (t === "battery") hits.push("battery");
     else if (t === "coolant") hits.push("coolant");
     else if (t === "rotation" || t === "rotate") hits.push("tire_rotation");
+  }
+  // Task #819: a cabin-filter line ("Cabin air filter replaced/cleaned")
+  // also substring-matches the engine_air synonym "air filter replace".
+  // Only the cabin filter was serviced — drop the engine_air hit unless the
+  // phrase explicitly mentions the engine filter too.
+  if (
+    hits.includes("engine_air") &&
+    hits.includes("cabin_air") &&
+    d.includes("cabin") &&
+    !d.includes("engine air")
+  ) {
+    hits.splice(hits.indexOf("engine_air"), 1);
+  }
+  // Task #819: accessory batteries (key-fob / remote / keyless-entry) must
+  // not anchor the vehicle-battery clock ("Anti-theft/keyless remote
+  // battery replaced" is a CARFAX standardized phrase).
+  if (hits.includes("battery") && /\b(?:remote|fob|keyless)\b/.test(d)) {
+    hits.splice(hits.indexOf("battery"), 1);
   }
   return Array.from(new Set(hits));
 }

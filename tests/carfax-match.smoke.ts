@@ -18,6 +18,8 @@ import {
   toKeyFromName,
   toKeyFromFreeText,
   findImpliesResetMatches,
+  toAnchorKeysFromHistory,
+  isInspectOnlyHistoryPhrase,
 } from "../lib/service-keys";
 import {
   recordUnmatchedCarfaxDescription,
@@ -192,6 +194,93 @@ console.log("5. Operator overrides applied live");
   ok("override key surfaces in matchedKeys", entry.matchedKeys.includes("oil"));
   ok("matchedViaOverride flag set", entry.matchedViaOverride === true);
   ok("override drops unmatched count", after.summary.unmatched === 0, `got ${after.summary.unmatched}`);
+}
+
+console.log("6. Task #819 — CARFAX standardized vocabulary mappings");
+{
+  // High-frequency corpus phrases that now resolve to canonical keys
+  // (directly or via an implied reset).
+  const cases: Array<[string, string]> = [
+    ["Tire(s) replaced", "tire_rotation"],
+    ["Tire(s) mounted", "tire_rotation"],
+    ["Wiper(s) replaced", "wiper_blades"],
+    ["Fuel system cleaned/serviced", "fuel_system"],
+    ["Fuel injection system flushed/serviced", "fuel_system"],
+    ["Induction system serviced", "fuel_system"],
+    ["Throttle body cleaned/serviced", "fuel_system"],
+    ["Transmission filter replaced", "trans_auto"],
+    ["Transfer case exchange/replacement", "transfer_case"],
+    ["Power steering system serviced", "power_steering"],
+    ["Brake system bled", "brake_fluid"],
+    ["A/C system flushed", "ac_refrigerant"],
+    ["Safety test", "emissions"],
+    ["Water pump replaced", "coolant"],
+    ["Radiator replaced", "coolant"],
+    ["Drain plug gasket replaced", "oil"],
+  ];
+  for (const [desc, expectKey] of cases) {
+    const ft = toKeyFromFreeText(desc);
+    const impl = findImpliesResetMatches(desc).map((m) => m.childKey);
+    const has = ft.includes(expectKey) || impl.includes(expectKey);
+    ok(`"${desc}" → ${expectKey}`, has, `got ft=[${ft}] impl=[${impl}]`);
+  }
+
+  // Inspect-vs-replace verb guard: inspect-only phrases resolve to a key
+  // (so they leave the unmatched tally) but must NOT anchor/reset the
+  // replace-interval clock.
+  const inspectOnly: Array<[string, string]> = [
+    ["Brakes checked", "front_brake_pads"],
+    ["Brakes inspected", "front_brake_pads"],
+    ["Tire condition and pressure checked", "tire_rotation"],
+    ["A/C system checked", "ac_refrigerant"],
+    ["Power steering system checked", "power_steering"],
+  ];
+  for (const [desc, key] of inspectOnly) {
+    ok(`"${desc}" resolves to ${key}`, toKeyFromFreeText(desc).includes(key), `ft=[${toKeyFromFreeText(desc)}]`);
+    ok(`"${desc}" is inspect-only`, isInspectOnlyHistoryPhrase(desc));
+    ok(`"${desc}" does NOT anchor`, !toAnchorKeysFromHistory(desc).includes(key), `anchors=[${toAnchorKeysFromHistory(desc)}]`);
+    ok(`"${desc}" has no implied reset`, findImpliesResetMatches(desc).length === 0);
+  }
+
+  // Performed counterparts still anchor.
+  ok(`"Brake pads replaced" anchors`, toAnchorKeysFromHistory("Brake pads replaced").includes("front_brake_pads"));
+  ok(`"A/C system flushed" anchors`, toAnchorKeysFromHistory("A/C system flushed").includes("ac_refrigerant"));
+  ok(`"Brake system bled" anchors`, toAnchorKeysFromHistory("Brake system bled").includes("brake_fluid"));
+
+  // Emissions is an inspection-service key: the test IS the service, so
+  // outcome-coded phrases both anchor the test-performed event (the key
+  // does not distinguish pass from fail).
+  ok(`"Passed emissions inspection" anchors emissions`, toAnchorKeysFromHistory("Passed emissions inspection").includes("emissions"));
+  ok(`"Failed emissions inspection" anchors emissions (test-performed semantics)`, toAnchorKeysFromHistory("Failed emissions inspection").includes("emissions"));
+  ok(`"Safety test" anchors emissions`, toAnchorKeysFromHistory("Safety test").includes("emissions"));
+
+  // Front/rear position phrases keep their sides.
+  ok(`"Front brake caliper(s) replaced" does not hit rear pads`, !toKeyFromFreeText("Front brake caliper(s) replaced").includes("rear_brake_pads"));
+  ok(`"Rear brakes checked" resolves rear side`, toKeyFromFreeText("Rear brakes checked").includes("rear_brake_pads"));
+  ok(`"Rear brakes checked" does NOT anchor`, toAnchorKeysFromHistory("Rear brakes checked").length === 0);
+
+  // False-positive fixes surfaced by the corpus analysis.
+  ok(`"Ignition coil(s) replaced" no longer maps to oil`, !toKeyFromFreeText("Ignition coil(s) replaced").includes("oil"), `ft=[${toKeyFromFreeText("Ignition coil(s) replaced")}]`);
+  ok(`"Oil and filter changed" still maps to oil`, toKeyFromFreeText("Oil and filter changed").includes("oil"));
+  {
+    const ft = toKeyFromFreeText("Cabin air filter replaced/cleaned");
+    ok(`"Cabin air filter replaced/cleaned" maps to cabin_air only`, ft.includes("cabin_air") && !ft.includes("engine_air"), `ft=[${ft}]`);
+    const impl = findImpliesResetMatches("Cabin air filter replaced/cleaned").map((m) => m.childKey);
+    ok(`cabin filter line does not imply engine_air reset`, !impl.includes("engine_air"), `impl=[${impl}]`);
+    const engineImpl = findImpliesResetMatches("Air filter replaced").map((m) => m.childKey);
+    ok(`plain "Air filter replaced" still implies engine_air`, engineImpl.includes("engine_air"));
+  }
+  {
+    const ft = toKeyFromFreeText("Anti-theft/keyless remote battery replaced");
+    ok(`key-fob battery does not map to battery key`, !ft.includes("battery"), `ft=[${ft}]`);
+    ok(`key-fob battery name does not map to battery key`, toKeyFromName("Anti-theft/keyless remote battery replaced") !== "battery");
+    ok(`"Battery replaced" still maps to battery`, toKeyFromFreeText("Battery replaced").includes("battery"));
+  }
+
+  // Generic phrases intentionally stay unmatched (no false credit).
+  for (const generic of ["Vehicle serviced", "Recommended maintenance performed", "Maintenance inspection completed", "Battery charged"]) {
+    ok(`generic "${generic}" stays unmatched/unanchored`, !anchored(generic) || toAnchorKeysFromHistory(generic).length === 0);
+  }
 }
 
 if (failed > 0) {
