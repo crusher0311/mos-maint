@@ -17,11 +17,11 @@ completion check: a shop whose parked cursor is already older than the new
 (shorter) oldestDate flips to complete cleanly on its next tick — no re-walk,
 no crash. No extra code needed.
 
-**PROD ACTUALLY RUNS 5y, not the 2y default.** `BACKFILL_HORIZON_YEARS=5` is set
-on the Render services (confirmed 2026-06-07 via Render API on `mos-tools`). So
-every shop walks a full 5 years of history — this is the dominant reason backfills
-are slow and "not done," NOT a bug. Earlier notes that assumed a 2y baseline were
-wrong.
+**PROD NOW RUNS 2y** (confirmed 2026-07-12 via Render API: `BACKFILL_HORIZON_YEARS=2`
+on both `mos-tools` and `backfill-drain-worker`). It was 5 earlier (confirmed
+2026-06-07) and was shrunk to 2 sometime between; shops completed under the 5y era
+have cursors parked at ~2021 dates, newer completions park at ~2y. The horizon is
+one shared env var — NOT per provider and NOT per shop.
 
 **Shrink IS the biggest catch-up lever when the horizon is large.** A previous
 "2y→1y only +3 shops" measurement assumed a 2y baseline; under the real 5y horizon
