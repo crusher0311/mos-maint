@@ -1,5 +1,17 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.66 — 2026-07-12
+
+### Fixed
+- **VHI cards now flip to "On Estimate" right after you add the job.**
+  Adding a job (single "+ Add", canned job, Add All Declined, Job Builder)
+  updates the matching sidebar card immediately and marks the cached plan
+  stale, so the page reload that follows an add no longer repaints an old
+  cached view where the job still shows "+ Add". Previously a job added to
+  the estimate could keep showing as addable until the 5-minute plan cache
+  expired (seen on RO #26362: control arm + alignment were on the estimate
+  but never showed the badge).
+
 ## 1.27.65 — 2026-07-12
 
 ### Fixed

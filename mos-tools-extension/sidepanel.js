@@ -69,6 +69,50 @@ function setPlanCache(key, data) {
     if (oldest !== undefined) planCache.delete(oldest);
   }
 }
+// After a job is successfully added to the current RO, flip the matching VHI
+// card(s) to "On Estimate" right away and expire the cached plan. Without
+// this, the page reload that follows a Tekmetric add repaints from a
+// still-fresh client cache (5-min TTL) whose items were computed BEFORE the
+// add — so the card keeps showing "+ Add" even though the job is now on the
+// estimate (seen live on RO #26362: control arm + alignment added, badge
+// never appeared). Expiring `ts` keeps the instant repaint but forces a
+// quiet background revalidation, where the server recomputes On Estimate
+// from the live RO via service-key pattern matching (the authoritative
+// check — this local title match is only an optimistic preview of it).
+function markServiceOnEstimate(jobName, cacheKeyOverride) {
+  try {
+    // Callers snapshot the cache key before their (slow) add request so a
+    // late success after the user switched ROs never marks the wrong entry.
+    const key = cacheKeyOverride || planCacheKey(currentContext);
+    if (!key) return;
+    const entry = planCache.get(key);
+    if (!entry || !entry.data) return;
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const target = norm(jobName);
+    let flipped = false;
+    if (target) {
+      for (const bucket of ['overdue', 'dueSoon', 'complimentary', 'recommended']) {
+        for (const item of entry.data[bucket] || []) {
+          if (item.onCurrentRO) continue;
+          const t = norm(item.title || item.service || item.name);
+          if (t && (t === target || t.includes(target) || target.includes(t))) {
+            item.onCurrentRO = true;
+            flipped = true;
+          }
+        }
+      }
+    }
+    // Expire (don't delete) so the next visit still paints instantly from
+    // cache but re-checks with the server in the background.
+    entry.ts = 0;
+    // Only repaint if the user is still viewing the RO the job was added to.
+    if (flipped && currentContext && key === planCacheKey(currentContext)) {
+      renderPlan(entry.data, currentContext.roId, currentContext.shopId);
+    }
+  } catch (err) {
+    console.warn('[MOS] markServiceOnEstimate failed:', err?.message || err);
+  }
+}
 // Tabs the main extension actually renders. Used to sanitize a stored
 // `defaultExtensionTab` from the user record — e.g. legacy `"migrate"`
 // values from before the Migrate wizard was extracted into the
@@ -1606,6 +1650,8 @@ async function handleAddAllDeclinedWork() {
     return;
   }
   addAllDeclinedInFlight = true;
+  // Snapshot before the slow add requests — see markServiceOnEstimate.
+  const reqPlanCacheKey = planCacheKey(currentContext);
   const originalLabel = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
 
@@ -1672,6 +1718,7 @@ async function handleAddAllDeclinedWork() {
         }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
         if (res?.success) {
           added++;
+          markServiceOnEstimate(job.title, reqPlanCacheKey);
         } else {
           failures.push(`${job.title}: ${res?.error || 'unknown error'}`);
         }
@@ -2793,6 +2840,8 @@ async function handleAddJob(job) {
     alert('No repair order context. Please navigate to a repair order.');
     return false;
   }
+  // Snapshot before the slow add request — see markServiceOnEstimate.
+  const reqPlanCacheKey = planCacheKey(currentContext);
 
   if (currentContext.provider === 'shopware') {
     const serviceName = job.title || job.name;
@@ -2805,6 +2854,7 @@ async function handleAddJob(job) {
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
         return true;
       } else {
         throw new Error(result.error || 'Failed to add service');
@@ -2886,6 +2936,7 @@ async function handleAddJob(job) {
 
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
+        markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey);
         return true;
       } else {
         throw new Error(result.error || 'Failed to add job to Protractor');
@@ -2936,6 +2987,7 @@ async function handleAddJob(job) {
     
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
+      markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey);
       return true;
     } else {
       throw new Error(result.error || 'Failed to add job');
@@ -2995,6 +3047,8 @@ async function handleAddCannedJob(job) {
     alert('No repair order context. Please navigate to a repair order.');
     return;
   }
+  // Snapshot before the slow add request — see markServiceOnEstimate.
+  const reqPlanCacheKey = planCacheKey(currentContext);
 
   if (currentContext.provider === 'shopware') {
     const serviceName = job.name || job.title;
@@ -3007,6 +3061,7 @@ async function handleAddCannedJob(job) {
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
       } else {
         throw new Error(result.error || 'Failed to add service');
       }
@@ -3057,6 +3112,7 @@ async function handleAddCannedJob(job) {
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
+          markServiceOnEstimate(result.jobName || cannedJobTitle, reqPlanCacheKey);
 
           // Refresh the Protractor shop's page so the new job appears without a
           // manual reload — mirrors the Tekmetric JOB_CREATED path. These shops
@@ -3120,6 +3176,7 @@ async function handleAddCannedJob(job) {
       }
       
       showNotification(`Added: ${job.name}`, 'success');
+      markServiceOnEstimate(job.name, reqPlanCacheKey);
 
       notifyPageJobCreated(["*://*.tekmetric.com/*"], job.name, 'Tekmetric');
     } catch (err) {
