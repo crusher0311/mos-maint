@@ -40,6 +40,18 @@ import {
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
 
+// Protractor (a .NET system) serializes "no date" as DateTime.MinValue —
+// "0001-01-01T00:00:00" — which JS happily parses into a year-1 Date. A
+// handful of invoices carry that sentinel in InvoiceTime, and it landed in
+// closed_date, making Data Status report history "since year 0001". Any
+// business date before 1990 is impossible for a repair order — treat it as
+// absent so callers fall through to the next source (or null).
+function parseBusinessDate(value: any): Date | undefined {
+  const parsed = parseDate(value);
+  if (!parsed) return undefined;
+  return parsed.getFullYear() < 1990 ? undefined : parsed;
+}
+
 // =============================================================================
 // PROTRACTOR ADAPTER
 // =============================================================================
@@ -151,13 +163,13 @@ export class ProtractorAdapter implements INormalizedAdapter {
     // present on the real API payload, so reading only those left every
     // Protractor work-order date column empty (task #640). Fall back through
     // the legacy names for safety, then to the header timestamps.
-    const closedDate = parseDate(
+    const closedDate = parseBusinessDate(
       inv.InvoiceTime ||
       inv.ClosedDate ||
       inv.InvoiceDate ||
       inv.Header?.LastModifiedTime,
     );
-    const checkInDate = parseDate(
+    const checkInDate = parseBusinessDate(
       inv.Header?.CreationTime ||
       inv.DateIn ||
       inv.CreatedDate ||
@@ -232,7 +244,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       // extractRawServiceJobsFromWorkOrder (task #640). Without this the
       // service-job completion date was never set and the Data Status panel
       // fell back to the MOS import timestamp.
-      completedAt: parseDate(
+      completedAt: parseBusinessDate(
         sp.Header?.LastModifiedTime ||
         sp.Header?.CreationTime ||
         sp.CompletedDate ||
