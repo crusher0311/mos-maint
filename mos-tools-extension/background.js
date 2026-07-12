@@ -2220,10 +2220,31 @@ async function fetchRoAuditLineItems(shopId, roId) {
       if (!laborHours && Array.isArray(job.labor) && job.labor.length > 0) {
         laborHours = job.labor.reduce((sum, l) => sum + (l.hours || 0), 0);
       }
+      // Tekmetric's estimate endpoint names the money fields laborPrice /
+      // partsPrice (cents); older jobs-list shapes use laborTotal/laborAmount.
+      // Missing the *Price names sent every job to the audit with $0 parts,
+      // which made it falsely flag "no parts cost" on fully-parted jobs.
+      // Last resort: sum the parts[]/labor[] line arrays.
+      // An explicit numeric 0 from Tekmetric (e.g. package-priced jobs) is
+      // authoritative — only fall back to summing the line arrays when NONE
+      // of the money fields are present.
+      const firstNumber = (...vals) => vals.find(v => typeof v === 'number');
+      let laborCents = firstNumber(job.laborTotal, job.laborAmount, job.laborPrice);
+      if (laborCents === undefined) {
+        laborCents = Array.isArray(job.labor)
+          ? job.labor.reduce((sum, l) => sum + (l.total || 0), 0)
+          : 0;
+      }
+      let partsCents = firstNumber(job.partsTotal, job.partsAmount, job.partsPrice);
+      if (partsCents === undefined) {
+        partsCents = Array.isArray(job.parts)
+          ? job.parts.reduce((sum, p) => sum + (p.total ?? (p.retail || 0) * (p.quantity || 1)), 0)
+          : 0;
+      }
       const item = {
         title: job.name,
-        laborTotal: (job.laborTotal || job.laborAmount || 0) / 100,
-        partsTotal: (job.partsTotal || job.partsAmount || 0) / 100,
+        laborTotal: laborCents / 100,
+        partsTotal: partsCents / 100,
         total: (job.subtotal || job.totalAmount || 0) / 100,
       };
       if (job.note || job.customerConcern) item.description = job.note || job.customerConcern;

@@ -100,4 +100,5 @@
 - [job_index cost backfill](job-index-cost-backfill.md) — in-place line patches must recompute contentHash + match lines by identity not price; sweep script ready, live run operator-gated.
 - [Protractor drops client part cost](protractor-cost-write-dropped.md) — live-verified: Cost/TotalCost on WO material lines is discarded by Protractor (REST+SOAP); MOS [PartCost] payloads are correct, loss is upstream.
 - [Tekmetric posted ROs reject job adds](tekmetric-posted-ro-rejects-adds.md) — fetch-ro 200 + post-job 400 = posted (closed) RO, not a payload bug; probe page API via stored shops.tekmetric.xAuthToken.
+- [Tekmetric money field variants](tekmetric-money-field-variants.md) — estimate endpoint uses partsPrice/laborPrice (not *Total/*Amount); readers missing a variant silently see $0 → false "missing parts" audits.
 - [Declined-add thin lines](declined-add-thin-lines.md) — pre-May-2026 job_index rows have right totals but $0/no-labor lines; re-hydrate from tekmetric_work_orders cache before pushing to an SMS + repo must pass labor `hours` through.

@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.27.65 — 2026-07-12
+
+### Fixed
+- **Audit RO no longer claims jobs are "missing parts cost" when parts are
+  on the estimate.** Tekmetric's estimate endpoint names the money fields
+  `partsPrice`/`laborPrice`, but the audit's live-jobs fetch only read
+  `partsTotal`/`partsAmount` — so every job was audited as if it had $0
+  parts, producing false "Missing Replacement Parts" criticals on fully
+  parted jobs. The mapper now reads all field variants and, as a last
+  resort, sums the job's parts/labor line arrays.
+
 ## 1.27.64 — 2026-07-11
 
 ### Fixed

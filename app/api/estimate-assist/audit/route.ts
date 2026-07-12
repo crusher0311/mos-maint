@@ -138,8 +138,11 @@ function mapCachedTekmetricJobs(jobs: any[]): AuditLineItem[] {
         description: job.note || job.customerConcern || undefined,
         type: job.categoryName || job.category?.name || undefined,
         laborHours: laborHours || undefined,
-        laborTotal: (job.laborTotal || job.laborAmount || 0) / 100,
-        partsTotal: (job.partsTotal || job.partsAmount || 0) / 100,
+        // Field names vary by Tekmetric payload shape: webhook cache and
+        // jobs-list use laborTotal/laborAmount, the estimate endpoint uses
+        // laborPrice/partsPrice (all cents).
+        laborTotal: (job.laborTotal || job.laborAmount || job.laborPrice || 0) / 100,
+        partsTotal: (job.partsTotal || job.partsAmount || job.partsPrice || 0) / 100,
         total: (job.subtotal || job.totalAmount || 0) / 100,
       };
     });
@@ -350,6 +353,8 @@ export async function POST(req: NextRequest) {
 4. Internal inconsistencies (e.g. a parts-replacement job with $0 parts, labor listed with no hours)
 
 NEVER judge whether a price is high or low, and NEVER reference "industry standards", "market rates", or "typical pricing" — you have no pricing data, and shop pricing varies legitimately by region, vehicle, and business model. Do not produce pricing/cost findings of any kind.
+
+All line items are on the SAME repair order and will be performed during the SAME visit. The order they are listed in does NOT reflect the order the technician will perform them — shops control execution sequence. Do NOT produce findings about the timing, ordering, or sequencing of services relative to each other (e.g. "do the alignment after the suspension work") — the shop already handles that.
 
 Return JSON array of findings:
 [{
