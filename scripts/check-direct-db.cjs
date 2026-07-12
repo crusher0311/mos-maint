@@ -453,6 +453,9 @@ const ALLOWLIST = new Set([
   "scripts/protractor-job-index-catchup.ts",
   "scripts/repair-corrupted-carfax-snapshots.ts",
   "scripts/repair-poisoned-aces-markers.ts",
+  // Task #479 — one-shot repair of fake dueMileage/dueAtMiles 0 anchors in
+  // cached plan payloads; same one-off-repair precedent as the two above.
+  "scripts/fix-zero-due-at-miles.ts",
   "scripts/wave1-backfill.ts",
   // Task #629 — customer-requested re-sync on the Data Status panel. The cron
   // processor and the settings route read/write the operational

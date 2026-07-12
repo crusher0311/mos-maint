@@ -5,6 +5,24 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi, resolveMileageFromRo } from "@/lib/vhi-rebuild";
 import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageWhenMissing } from "@/lib/vhi-mileage-fallbacks";
+import {
+  resolveOpenRoMileage,
+  pickMileageInput,
+  type MileageInputSource,
+  type OpenRoMileageResult,
+} from "@/lib/plan-build/open-ro-mileage";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
+
+/**
+ * Task #478: provenance label for the mileage this endpoint fed into the
+ * plan engine. Mirrors the `mileageInputSource` contract of
+ * GET /api/external/vehicles/{vin}/vhi (open_ro / vehicles_collection /
+ * carfax_estimated / annual_estimated) plus one analyze-only value:
+ * `"provided"` when the partner supplied `mileage` in the request body —
+ * that reading never goes through the resolution waterfall, so labeling it
+ * as any of the four GET values would be dishonest.
+ */
+type AnalyzeMileageInputSource = MileageInputSource | "provided";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,58 +86,163 @@ export const POST = createExternalEndpoint(
 
     const db = await getDb();
     let mileage = providedMileage ? Number(providedMileage) : null;
+    if (mileage != null && (isNaN(mileage) || mileage <= 0)) mileage = null;
     let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
     let mileageEstimateDetails: Record<string, unknown> | null = null;
+    let mileageInputSource: AnalyzeMileageInputSource | null = mileage ? "provided" : null;
 
-    if (!mileage || isNaN(mileage)) {
-      mileage = await resolveMileageFromRo(
-        db,
-        resolvedShopId,
-        shopResult.provider,
-        vin,
-        roNumber || null
+    // Task #478: mirror the mileage-resolution waterfall of
+    // GET /api/external/vehicles/{vin}/vhi so the two partner endpoints
+    // resolve the SAME anchor and don't thrash the shared plan cache
+    // (vin+shopId+mileage±500 — see memory vhi-partner-latency). Order:
+    //   (0) partner-supplied `mileage` in the body        [provided]
+    //   (1) roNumber-specific RO odometer when given, else the most-recent
+    //       RO via resolveOpenRoMileage — both run through pickMileageInput's
+    //       monotonic guard against the vehicles snapshot   [open_ro /
+    //       vehicles_collection]
+    //   (2) CARFAX projection                             [carfax_estimated]
+    //   (3) model-year × 12k                              [annual_estimated]
+    let openRoLookup: OpenRoMileageResult | null = null;
+    let vehicleDocMileage: number | null = null;
+    let vehicleDoc: any = null;
+
+    if (!mileage) {
+      // Shop records use numeric shopId, but other collections (vehicles in
+      // particular) sometimes key by the shop's ObjectId, the
+      // ObjectId-as-string, or the numeric/string shopId. Build every form so
+      // the lookups match regardless of how the data was keyed (same as GET).
+      const { ObjectId } = await import("mongodb");
+      const shopRecord = await db.collection("shops").findOne(
+        { shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] } },
+        { projection: { _id: 1, integrationProvider: 1 } }
       );
-    }
+      const shopIdVariants: any[] = [String(resolvedShopId), Number(resolvedShopId)];
+      if (shopRecord?._id) {
+        shopIdVariants.push(shopRecord._id);
+        shopIdVariants.push(String(shopRecord._id));
+        try {
+          const oid = new ObjectId(String(shopRecord._id));
+          if (!shopIdVariants.some((v) => v instanceof ObjectId && v.equals(oid))) {
+            shopIdVariants.push(oid);
+          }
+        } catch {
+          /* not a valid ObjectId, ignore */
+        }
+      }
 
-    // Parity with GET /api/external/vehicles/{vin}/vhi: when neither the
-    // partner-supplied mileage nor the RO odometer is usable, fall through
-    // to CARFAX projection and the model-year × 12k fallback so we never
-    // hard-fail integrators (AppFueled etc.) on a vehicle that simply
-    // hasn't been weighed yet. Estimated paths are clearly marked via
-    // `mileageSource` / `mileageEstimated` in the response.
-    if (!mileage || mileage <= 0) {
-      const vehicleDoc = await db.collection("vehicles").findOne(
+      vehicleDoc = await db.collection("vehicles").findOne(
         {
-          shopId: { $in: [String(resolvedShopId), Number(resolvedShopId)] },
+          shopId: { $in: shopIdVariants },
           vin: { $in: [vin, vin.toUpperCase()] },
         },
         { projection: { year: 1, currentMileage: 1, lastMileage: 1, mileage: 1, odometer: 1 } }
       );
-      // Pass the stale vehicles snapshot so this endpoint resolves the SAME
-      // anchor order as GET /vehicles/{vin}/vhi (open-RO → CARFAX → stale
-      // vehicles → annual) and the two partner endpoints don't thrash the
-      // shared plan cache with different mileages. Mirror GET's snapshot field
-      // precedence exactly (currentMileage → lastMileage → mileage → odometer);
+      // Snapshot field precedence mirrors GET exactly
+      // (currentMileage → lastMileage → mileage → odometer);
       // legacy vehicle docs often only have `mileage`/`odometer`.
-      const vehicleDocMileage =
+      const rawVehicleDocMileage =
         (vehicleDoc?.currentMileage ??
           vehicleDoc?.lastMileage ??
           vehicleDoc?.mileage ??
           vehicleDoc?.odometer ??
           null) as number | null;
-      const estimate = await estimateMileageWhenMissing({
-        shopId: resolvedShopId,
-        vin,
-        knownYear: vehicleDoc?.year ? Number(vehicleDoc.year) : null,
-        vehicleDocMileage:
-          vehicleDocMileage && Number(vehicleDocMileage) > 0 ? Number(vehicleDocMileage) : null,
-      });
-      if (estimate) {
-        mileage = estimate.mileage;
-        mileageSource = estimate.source;
-        mileageEstimateDetails = estimate.estimateDetails;
+      vehicleDocMileage =
+        rawVehicleDocMileage && Number(rawVehicleDocMileage) > 0
+          ? Number(rawVehicleDocMileage)
+          : null;
+
+      // (1a) roNumber-specific lookup first: when the partner names the RO
+      // they're looking at, that RO's odometer is the authoritative open-RO
+      // reading (matches what the advisor sees on screen).
+      if (roNumber) {
+        try {
+          const roMiles = await resolveMileageFromRo(
+            db,
+            resolvedShopId,
+            shopResult.provider,
+            vin,
+            roNumber
+          );
+          if (roMiles && Number(roMiles) > 0) {
+            openRoLookup = {
+              miles: Number(roMiles),
+              integration: (shopResult.provider || "tekmetric") as OpenRoMileageResult["integration"],
+              roIdentifier: String(roNumber),
+              roDate: null,
+            };
+          }
+        } catch (err) {
+          console.warn(
+            `[PartnerVHI] ro_number_lookup_error requestId=${requestId} vin=${vin} roNumber=${roNumber}:`,
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      // (1b) most-recent RO odometer — same helper the GET endpoint uses.
+      if (!openRoLookup) {
+        try {
+          const needsPg =
+            ((shopRecord?.integrationProvider ?? shopResult.provider) ?? "").toLowerCase() ===
+            "autoflow";
+          openRoLookup = await resolveOpenRoMileage({
+            db,
+            pg: needsPg ? getPgDb() : undefined,
+            shopIdVariants,
+            vin,
+            provider: shopRecord?.integrationProvider ?? shopResult.provider ?? null,
+          });
+        } catch (err) {
+          console.warn(
+            `[PartnerVHI] open_ro_lookup_error requestId=${requestId} vin=${vin}:`,
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      // Monotonic guard: prefer the larger of (open-RO odometer, vehicles
+      // snapshot) — an odometer never goes backwards, so the smaller reading
+      // is by definition stale. Same authoritative selector as GET.
+      const picked = pickMileageInput({ vehicleDocMileage, openRoLookup });
+      if (picked.miles && picked.miles > 0) {
+        mileage = picked.miles;
+        mileageInputSource = picked.mileageInputSource;
+      }
+
+      // (2)+(3): CARFAX projection then model-year × 12k. The vehicles
+      // snapshot was already consumed by pickMileageInput above, so pass
+      // null to skip the helper's internal vehicles step (GET resolves it
+      // in the same position).
+      if (!mileage || mileage <= 0) {
+        const estimate = await estimateMileageWhenMissing({
+          shopId: resolvedShopId,
+          vin,
+          knownYear: vehicleDoc?.year ? Number(vehicleDoc.year) : null,
+          vehicleDocMileage: null,
+        });
+        if (estimate) {
+          mileage = estimate.mileage;
+          mileageSource = estimate.source;
+          mileageEstimateDetails = estimate.estimateDetails;
+          mileageInputSource =
+            estimate.source === "estimated_carfax"
+              ? "carfax_estimated"
+              : estimate.source === "estimated_annual"
+                ? "annual_estimated"
+                : "vehicles_collection";
+        }
       }
     }
+
+    // Task #478: same structured log line as the GET endpoint so
+    // [PartnerVHI] mileage dashboards cover both partner surfaces.
+    console.log(
+      `[PartnerVHI] mileage_resolved requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+      `shopId=${resolvedShopId} vin=${vin.toUpperCase()} mileage=${mileage ?? "null"} ` +
+      `mileageInputSource=${mileageInputSource ?? "none"} ` +
+      `openRoMiles=${openRoLookup?.miles ?? "null"} ` +
+      `vehiclesDocMiles=${vehicleDocMileage ?? "null"}`
+    );
 
     if (!mileage || mileage <= 0) {
       return NextResponse.json(
@@ -184,6 +307,9 @@ export const POST = createExternalEndpoint(
       // tell at a glance whether we trusted an actual odometer or a fallback.
       mileageSource: responseSource,
       mileageEstimateDetails: responseDetails,
+      // Task #478: same provenance label the GET endpoint logs, so partner
+      // support tickets can tell which anchor won the waterfall.
+      mileageInputSource: mileageInputSource ?? null,
       score: result.score?.value,
       tier: result.score?.tier,
       summary: result.summary,
@@ -210,6 +336,10 @@ export const POST = createExternalEndpoint(
       mileageSource: responseSource,
       mileageEstimated: responseSource !== "actual",
       mileageEstimateDetails: responseDetails,
+      // Task #478: same mileage-provenance field as GET (open_ro /
+      // vehicles_collection / carfax_estimated / annual_estimated), plus
+      // "provided" when the partner sent mileage in the request body.
+      mileageInputSource: mileageInputSource ?? "vehicles_collection",
     });
   }
 );

@@ -938,8 +938,8 @@ export async function runOnDemandAnalysis(
         }
         
         // Calculate nextDueMileage and status
-        let nextDueMileage: number;
-        let milesToGo: number;
+        let nextDueMileage: number | null;
+        let milesToGo: number | null;
         let status: string;
 
         if (intervalMiles > 0) {
@@ -960,9 +960,16 @@ export async function runOnDemandAnalysis(
             status = "upcoming";
           }
         } else {
-          // Month-only interval — use date-based calculation
-          nextDueMileage = 0;
-          milesToGo = 0;
+          // Month-only interval — use date-based calculation.
+          // Task #479: these rows have NO mileage math, so persist null (not
+          // 0). A literal dueMileage: 0 flows into maintenance_analysis_cache
+          // and is served to partners as dueAtMiles: 0, where legacy readers
+          // computed "remaining = 0 - currentMiles" and told the customer
+          // they're the entire odometer over (e.g. brake fluid 36 months on
+          // a 111k-mi Honda → "111,961 mi over"). The sidepanel already
+          // tolerates null (declined rows persist dueMileage: null).
+          nextDueMileage = null;
+          milesToGo = null;
           
           if (lastPerformed.date && intervalMonths) {
             const lastDate = new Date(lastPerformed.date);
@@ -1105,7 +1112,10 @@ export async function runOnDemandAnalysis(
         // Arm" both map to control_arm and should be ONE card).
         serviceKey: dviKey,
         category: "DVI Finding",
-        dueMileage: 0,
+        // Task #479: DVI findings have no interval math — persist null (not
+        // 0) so cached recommendations never serialize a fake dueMileage: 0
+        // that partner readers turn into dueAtMiles: 0.
+        dueMileage: null,
         interval: 0,
         intervalMonths: null,
         intervalText: "",
@@ -1113,7 +1123,7 @@ export async function runOnDemandAnalysis(
         lastPerformedBy: null,
         lastPerformedMileage: null,
         last: null,
-        milesToGo: 0,
+        milesToGo: null,
         source: "dvi",
         status: dvi.status === "red" ? "overdue" : "due_soon",
         bump: dvi.status,
@@ -1124,7 +1134,8 @@ export async function runOnDemandAnalysis(
       recommendations.push({
         service: unmapped.name,
         category: "DVI Finding",
-        dueMileage: 0,
+        // Task #479: same null-not-0 rule as the mapped DVI rows above.
+        dueMileage: null,
         interval: 0,
         intervalMonths: null,
         intervalText: "",
@@ -1132,7 +1143,7 @@ export async function runOnDemandAnalysis(
         lastPerformedBy: null,
         lastPerformedMileage: null,
         last: null,
-        milesToGo: 0,
+        milesToGo: null,
         source: "dvi",
         status: unmapped.status === "red" ? "overdue" : "due_soon",
         bump: unmapped.status,

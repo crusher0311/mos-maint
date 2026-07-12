@@ -491,7 +491,8 @@ export async function getVhiFromAnalysisCache(
   };
 }
 
-function convertRecToTriaged(rec: any): TriagedItemCache {
+// Exported for tests/plan-build-task-479.smoke.ts (zero-anchor normalization).
+export function convertRecToTriaged(rec: any): TriagedItemCache {
   return {
     key: rec.serviceKey || rec.service || "",
     serviceKey: rec.serviceKey || "",
@@ -500,9 +501,17 @@ function convertRecToTriaged(rec: any): TriagedItemCache {
     intervalMiles: rec.intervalMiles ?? rec.interval ?? null,
     intervalMonths: rec.intervalMonths ?? null,
     last: rec.last || undefined,
-    dueAtMiles: rec.dueMileage ?? null,
+    // Task #479: legacy analysis-cache rows serialized a literal
+    // dueMileage: 0 for time-only OEM rules (e.g. brake fluid: 36 months,
+    // no intervalMiles) and DVI findings. 0 is never a real due-at
+    // odometer — normalize to null so downstream mileage math (e.g.
+    // "remaining = dueAtMiles - currentMiles") can't anchor to zero and
+    // report the vehicle's entire odometer as overdue miles. milesToGo
+    // carried the same 0 sentinel on those rows, so it's only trusted
+    // when a real dueMileage exists.
+    dueAtMiles: rec.dueMileage > 0 ? rec.dueMileage : null,
     dueAtDate: null,
-    milesToGo: rec.milesToGo ?? null,
+    milesToGo: rec.dueMileage > 0 ? (rec.milesToGo ?? null) : null,
     daysToGo: null,
     bump: rec.bump || null,
     source: rec.source === "shop" ? "oem" : rec.source === "oe" ? "oem" : rec.source === "dvi" ? "dvi" : "oem",
