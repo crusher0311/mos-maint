@@ -1,5 +1,20 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.0 — 2026-07-12
+
+### Changed
+- **Calmer, easier-to-scan VHI plan cards.** The Plan tab now matches the
+  customer-facing Vehicle Health Report style: each card leads with a
+  service pictogram next to the name, the shouting ALL-CAPS pills are now
+  sentence case ("Overdue", "Due soon"), and the dual mileage/time progress
+  bars are replaced by ONE green→amber→red gradient bar for whichever axis
+  is furthest along (with a small MILES/KM/TIME indicator). Section headers
+  are renamed to "Needs attention / Due soon / Additional services /
+  Upcoming" with count pills, and the "X mi overdue" detail line is plain
+  red text instead of a boxed alert chip. Presentation only — no changes to
+  severity, sorting, +Add/On Estimate actions, CARFAX/shop logos, or
+  DECLINED provenance badges.
+
 ## 1.27.66 — 2026-07-12
 
 ### Fixed

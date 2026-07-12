@@ -43,6 +43,7 @@ import { AddAllDeferredButton } from "@/components/ui/AddAllDeferredButton";
 import { PlanTrialGate } from "@/components/ui/PlanTrialGate";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { CarfaxMatchBadge } from "@/components/ui/CarfaxMatchBadge";
+import ServiceIcon from "@/components/vehicle-health-report/ServiceIcon";
 import { getCachedPlan, setCachedPlan, type CachedPlanData, type TriagedItemCache, type CachedPlanVariant } from "@/lib/plan-cache";
 import {
   getEnabledChemicalProviders,
@@ -161,7 +162,7 @@ function formatOverdueDate(date: Date | null | undefined): { text: string; isVer
   
   let text = date.toLocaleDateString();
   if (yearsOverdue >= 1) {
-    text = `${date.toLocaleDateString()} (${yearsOverdue}+ years overdue!)`;
+    text = `${date.toLocaleDateString()} (${yearsOverdue}+ years overdue)`;
   } else if (monthsOverdue >= 6) {
     text = `${date.toLocaleDateString()} (${monthsOverdue} months overdue)`;
   }
@@ -2813,7 +2814,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   </a>
                 )}
                 <a href="#overdue" className="rounded-full px-3 py-1 bg-red-600 text-white">
-                  Overdue {counts.overdue}
+                  Needs attention {counts.overdue}
                 </a>
                 {counts.deferred > 0 && (
                   <a href="#deferred" className="inline-flex items-center gap-1 rounded-full px-3 py-1 bg-blue-600 text-white">
@@ -2822,7 +2823,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   </a>
                 )}
                 <a href="#soon" className="rounded-full px-3 py-1 bg-amber-600 text-white">
-                  Due Soon {counts.soon}
+                  Due soon {counts.soon}
                 </a>
                 {counts.complimentary > 0 && (
                   <a href="#complimentary" className="rounded-full px-3 py-1 bg-blue-500 text-white">
@@ -3056,7 +3057,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
         {/* Overdue (non-deferred) */}
         <section id={`overdue${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" /> Overdue ({counts.overdue})
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" /> Needs attention
+            <span className="text-xs font-semibold rounded-full bg-red-100 text-red-700 px-2 py-0.5">{counts.overdue}</span>
           </h2>
           {overdueNonDeferred.length === 0 ? (
             <div className="text-sm text-neutral-500">Nothing overdue 🎉</div>
@@ -3066,7 +3068,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
                 <li key={t.key} className="rounded-xl border p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium">{t.title}</div>
+                      <div className="flex items-center gap-2">
+                        <ServiceIcon serviceKey={t.serviceKey} title={t.title} size={22} className="shrink-0 text-neutral-500" />
+                        <div className="font-medium">{t.title}</div>
+                      </div>
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
@@ -3083,13 +3088,20 @@ async function PlanContent({ params, searchParams }: PageProps) {
                           // (covers cached items round-tripping through
                           // TriagedItemCache); recompute only as a
                           // fallback for legacy rows that pre-date #392.
+                          // Task #865: calm sentence-case pill; the trigger
+                          // axis moves into the tooltip.
                           const trig =
                             (t as any).byMiles !== undefined || (t as any).byTime !== undefined
                               ? { byMiles: (t as any).byMiles ?? null, byTime: (t as any).byTime ?? null }
                               : getProgressTriggers(t, currentMiles, undefined, distanceUnit);
                           const suffix = formatTriggerSuffix(trig.byMiles, trig.byTime, "overdue");
                           return (
-                            <span className="rounded-full bg-red-600 text-white px-2 py-0.5">{`OVERDUE${suffix.toUpperCase()}`}</span>
+                            <span
+                              className="rounded-full bg-red-500 text-white px-2 py-0.5 font-medium"
+                              title={suffix ? `Overdue${suffix}` : undefined}
+                            >
+                              Overdue
+                            </span>
                           );
                         })()}
                         {t.recommendedDefault && (
@@ -3205,14 +3217,14 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         : t.dueAtDate ?? null;
                     const overdueFmt = timeAxisDate ? formatOverdueDate(timeAxisDate) : null;
                     return (
-                      <div className="text-sm mt-2 flex flex-wrap items-center gap-1.5">
+                      <div className="text-sm mt-2 text-neutral-600 flex flex-wrap items-center gap-1.5">
                         {t.dueAtMiles != null && (
                           <>
-                            Due at <strong>{fmtDistance(t.dueAtMiles, distanceUnit)}</strong> {distLabel}
+                            Due at <strong className="text-neutral-800">{fmtDistance(t.dueAtMiles, distanceUnit)} {distLabel}</strong>
                             {t.milesToGo != null && (
                               <>
                                 {" • "}
-                                <span className="inline-flex items-center px-2 py-0.5 bg-red-100 border border-red-300 rounded text-red-700 font-semibold">
+                                <span className="text-red-600 font-semibold">
                                   {fmtDistance(Math.abs(t.milesToGo), distanceUnit)} {distLabel} overdue
                                 </span>
                               </>
@@ -3221,14 +3233,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         )}
                         {t.dueAtMiles != null && timeAxisDate != null && <> • </>}
                         {overdueFmt && (
-                          <span className={overdueFmt.isVeryOverdue ? "inline-flex items-center gap-1" : ""}>
+                          <span>
                             By{" "}
-                            <strong className={overdueFmt.isVeryOverdue ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-300" : ""}>
+                            <strong className={overdueFmt.isVeryOverdue ? "text-red-600" : "text-neutral-800"}>
                               {overdueFmt.text}
                             </strong>
-                            {overdueFmt.yearsOverdue >= 2 && (
-                              <span className="text-red-600 font-bold">⚠️</span>
-                            )}
                           </span>
                         )}
                       </div>
@@ -3328,7 +3337,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-blue-700 flex items-center gap-2">
                 <img src={shopLogo || "/protractor-icon.png"} alt="" className="w-5 h-5 rounded-full object-cover" />
-                Deferred ({counts.deferred})
+                Deferred
+                <span className="text-xs font-semibold rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{counts.deferred}</span>
               </h2>
               {latestWorkOrderId && activeIntegration === "protractor" && (
                 <AddAllDeferredButton 
@@ -3343,7 +3353,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
                 <li key={t.key} className="rounded-xl border border-blue-200 bg-blue-50/30 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium">{t.title}</div>
+                      <div className="flex items-center gap-2">
+                        <ServiceIcon serviceKey={t.serviceKey} title={t.title} size={22} className="shrink-0 text-neutral-500" />
+                        <div className="font-medium">{t.title}</div>
+                      </div>
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
@@ -3428,7 +3441,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
         {/* Due Soon */}
         <section id={`soon${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-amber-700 flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" /> Due Soon ({counts.soon})
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-500" /> Due soon
+            <span className="text-xs font-semibold rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">{counts.soon}</span>
           </h2>
           {dueSoonFiltered.length === 0 ? (
             <div className="text-sm text-neutral-500">Nothing due soon.</div>
@@ -3436,7 +3450,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <ul className="space-y-3">
               {dueSoonFiltered.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
-                  <div className="font-medium">{t.title}</div>
+                  <div className="flex items-center gap-2">
+                    <ServiceIcon serviceKey={t.serviceKey} title={t.title} size={22} className="shrink-0 text-neutral-500" />
+                    <div className="font-medium">{t.title}</div>
+                  </div>
                   {t.notes && t.notes.trim() && (
                     <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                   )}
@@ -3450,13 +3467,19 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       // overdue list — call out whether time or mileage
                       // pushed the item into Due Soon. Prefer stamped
                       // triage values; recompute only as a fallback.
+                      // Task #865: sentence-case pill; trigger axis in tooltip.
                       const trig =
                         (t as any).byMiles !== undefined || (t as any).byTime !== undefined
                           ? { byMiles: (t as any).byMiles ?? null, byTime: (t as any).byTime ?? null }
                           : getProgressTriggers(t, currentMiles, undefined, distanceUnit);
                       const suffix = formatTriggerSuffix(trig.byMiles, trig.byTime, "soon");
                       return (
-                        <span className="rounded-full bg-amber-600 text-white px-2 py-0.5">{`DUE SOON${suffix.toUpperCase()}`}</span>
+                        <span
+                          className="rounded-full bg-amber-500 text-white px-2 py-0.5 font-medium"
+                          title={suffix ? `Due soon${suffix}` : undefined}
+                        >
+                          Due soon
+                        </span>
                       );
                     })()}
                     {t.recommendedDefault && (
@@ -3659,14 +3682,18 @@ async function PlanContent({ params, searchParams }: PageProps) {
         {allComplimentary.length > 0 && (
           <section id={`complimentary${idSuffix}`} className="space-y-3">
             <h2 className="text-lg font-semibold text-blue-600 flex items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Additional Services ({counts.complimentary})
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" /> Additional services
+              <span className="text-xs font-semibold rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">{counts.complimentary}</span>
             </h2>
             <ul className="space-y-3">
               {allComplimentary.map((t) => (
                 <li key={t.key} className="rounded-xl border border-blue-200 bg-blue-50/30 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-medium">{t.title}</div>
+                      <div className="flex items-center gap-2">
+                        <ServiceIcon serviceKey={t.serviceKey} title={t.title} size={22} className="shrink-0 text-neutral-500" />
+                        <div className="font-medium">{t.title}</div>
+                      </div>
                       {t.notes && t.notes.trim() && (
                         <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                       )}
@@ -3675,7 +3702,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                         {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
-                        <span className="rounded-full bg-blue-500 text-white px-2 py-0.5">COMPLIMENTARY</span>
+                        <span className="rounded-full bg-blue-500 text-white px-2 py-0.5 font-medium">Complimentary</span>
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
@@ -3741,7 +3768,8 @@ async function PlanContent({ params, searchParams }: PageProps) {
         {/* Upcoming */}
         <section id={`upcoming${idSuffix}`} className="space-y-3">
           <h2 className="text-lg font-semibold text-emerald-700 flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" /> Upcoming ({counts.upcoming})
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" /> Upcoming
+            <span className="text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{counts.upcoming}</span>
           </h2>
           {buckets.upcoming.length === 0 ? (
             <div className="text-sm text-neutral-500">No upcoming items.</div>
@@ -3749,7 +3777,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <ul className="space-y-3">
               {buckets.upcoming.map((t) => (
                 <li key={t.key} className="rounded-xl border p-3">
-                  <div className="font-medium">{t.title}</div>
+                  <div className="flex items-center gap-2">
+                    <ServiceIcon serviceKey={t.serviceKey} title={t.title} size={22} className="shrink-0 text-neutral-500" />
+                    <div className="font-medium">{t.title}</div>
+                  </div>
                   {t.notes && t.notes.trim() && (
                     <div className="text-xs italic text-neutral-600 mt-0.5">{t.notes.trim()}</div>
                   )}
@@ -3758,7 +3789,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                   )}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-neutral-600">
                     {t.category && <span className="rounded-full bg-neutral-100 px-2 py-0.5">{t.category}</span>}
-                    <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5">UPCOMING</span>
+                    <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5 font-medium">Upcoming</span>
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"

@@ -908,6 +908,21 @@ body {
   color: var(--success);
 }
 
+/* Task #865: bucket count pills next to section titles. */
+.section-count {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  vertical-align: middle;
+}
+.section-count:empty { display: none; }
+.section-count.count-overdue { background: #fee2e2; color: #b91c1c; }
+.section-count.count-due-soon { background: #fef3c7; color: #b45309; }
+.section-count.count-complimentary { background: #dbeafe; color: #1d4ed8; }
+.section-count.count-recommended { background: #dcfce7; color: #166534; }
+
 .service-list {
   list-style: none;
 }
@@ -956,6 +971,18 @@ body {
   font-size: 14px;
   color: var(--gray-800);
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Task #865: service pictogram in the card header. */
+.service-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .service-badges {
@@ -973,12 +1000,12 @@ body {
   border-radius: 10px;
 }
 
+/* Task #865: calm sentence-case pills (no more shouting uppercase). */
 .status-badge {
   font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
-  text-transform: uppercase;
 }
 
 .status-badge.badge-overdue {
@@ -1052,14 +1079,10 @@ body {
   margin-bottom: 4px;
 }
 
+/* Task #865: calm detail line — plain red text, no boxed pill. */
 .overdue-amount {
-  display: inline-block;
-  background: #FEE2E2;
   color: var(--danger);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-weight: 500;
-  border: 1px solid #FECACA;
+  font-weight: 600;
 }
 
 .last-done {
@@ -3107,46 +3130,47 @@ body {
   font-size: 13px;
 }
 
-/* ==================== VHI Progress Bars ==================== */
-/* Mirrors components/ui/IntervalProgressRow.tsx in the dashboard so
-   the extension side panel reads the same as the advisor view. */
-.vhi-bars {
-  margin: 8px 0 6px;
+/* ==================== VHI Progress Bar (Task #865) ==================== */
+/* Mirrors components/ui/IntervalProgressRow.tsx in the dashboard: one
+   dominant-axis green→amber→red gradient bar with a small axis label. */
+.vhi-bar-single {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.vhi-bar-row {
-  display: grid;
-  grid-template-columns: 38px 1fr auto;
   align-items: center;
   gap: 8px;
+  margin: 8px 0 6px;
   font-size: 11px;
   line-height: 1.2;
 }
-.vhi-bar-label {
-  color: var(--gray-500, #64748b);
-  font-weight: 500;
+.vhi-bar-axis {
+  flex-shrink: 0;
+  width: 38px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--gray-400, #9ca3af);
 }
 .vhi-bar-track {
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 3px;
+  flex: 1;
+  height: 7px;
+  background: #f1f5f9;
+  border-radius: 4px;
   overflow: hidden;
+  position: relative;
 }
-.vhi-bar-fill {
+.vhi-bar-gradient {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
+  background-image: linear-gradient(90deg, #34d399 0%, #fbbf24 55%, #f87171 100%);
+  background-repeat: no-repeat;
   transition: width 0.2s ease;
 }
-.vhi-bar-fill.overdue { background: #ef4444; }
-.vhi-bar-fill.soon    { background: #f59e0b; }
-.vhi-bar-fill.ok      { background: #22c55e; }
 .vhi-bar-headline {
+  flex-shrink: 0;
   font-weight: 600;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.vhi-bar-headline.overdue { color: #b91c1c; }
-.vhi-bar-headline.soon    { color: #b45309; }
-.vhi-bar-headline.ok      { color: #166534; }
+.vhi-bar-headline.overdue { color: #dc2626; }
+.vhi-bar-headline.soon    { color: #d97706; }
+.vhi-bar-headline.ok      { color: var(--gray-500, #64748b); font-weight: 500; }
 

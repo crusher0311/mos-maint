@@ -271,6 +271,30 @@ export function computeIntervalProgress(
 }
 
 /**
+ * Task #865: pick the single "dominant" axis for compact one-bar UIs (webapp
+ * plan cards + extension sidepanel). Worse status wins (overdue > soon > ok);
+ * on a tie the axis with the higher percent-consumed wins — the exact same
+ * ordering `computeIntervalProgress` uses for its combined headline, so the
+ * bar and the headline always agree.
+ */
+export function getDominantAxis(
+  progress: IntervalProgress
+): { axis: "miles" | "time"; data: IntervalProgressAxis } | null {
+  const order: Record<ProgressStatus, number> = { overdue: 0, soon: 1, ok: 2 };
+  const candidates: Array<{ axis: "miles" | "time"; data: IntervalProgressAxis }> = [];
+  if (progress.miles.status) candidates.push({ axis: "miles", data: progress.miles });
+  if (progress.time.status) candidates.push({ axis: "time", data: progress.time });
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => {
+    const sa = order[a.data.status as ProgressStatus];
+    const sb = order[b.data.status as ProgressStatus];
+    if (sa !== sb) return sa - sb;
+    return (b.data.percent ?? 0) - (a.data.percent ?? 0);
+  });
+  return candidates[0];
+}
+
+/**
  * Task #392: per-axis "trigger" status pair for the byMiles / byTime fields
  * we surface on TriagedItem, the cached_plans payload, and the
  * AppFueled VHI response. When an axis can't be evaluated (e.g. no time

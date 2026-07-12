@@ -1580,6 +1580,16 @@ function renderPlan(data, reqRoId, reqShopId) {
   
   elements.planContent.classList.remove('hidden');
   
+  // Task #865: bucket count pills next to the section titles.
+  const setSectionCount = (id, count) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(count);
+  };
+  setSectionCount('overdue-count', (data.overdue || []).length);
+  setSectionCount('due-soon-count', (data.dueSoon || []).length);
+  setSectionCount('complimentary-count', (data.complimentary || []).length);
+  setSectionCount('recommended-count', (data.recommended || []).length);
+  
   // Render overdue
   elements.overdueSection.classList.toggle('hidden', !hasOverdue);
   if (hasOverdue) {
@@ -1902,6 +1912,89 @@ function formatLastDone(last, currentMileage) {
   return { text, logo };
 }
 
+// ==================== SERVICE ICONS (Task #865) ====================
+// Ports lib/service-icons.ts so the sidepanel resolves the same pictogram
+// as the dashboard / customer-facing VHR. Artwork lives in icons/service/.
+const SERVICE_ICON_FILES = {
+  brake_pads_front: 'brakes.svg',
+  brake_pads_rear: 'brakes.svg',
+  brake_fluid: 'brake_fluid.svg',
+  wiper_blades: 'wiper_blades.svg',
+  transmission_fluid: 'transmission_fluid.svg',
+  engine_air_filter: 'air_filter.svg',
+  cabin_air_filter: 'cabin_air_filter.svg',
+  spark_plugs: 'spark_plugs.svg',
+  engine_oil: 'oil_change.svg',
+  oil_change: 'oil_change.svg',
+  tires_rotate: 'tire_rotation.svg',
+  coolant: 'coolant.svg',
+  differential_rear: 'differential.svg',
+  differential_front: 'differential.svg',
+  serpentine_belt: 'serpentine_belt.svg',
+  transfer_case: 'transfer_case.svg',
+  battery: 'battery.svg',
+  power_steering: 'power_steering.svg',
+  fuel_system: 'fuel_system.svg',
+  coolant_hoses: 'coolant_hoses.svg',
+  front_shocks: 'shocks.svg',
+  rear_shocks: 'shocks.svg',
+  wheel_alignment: 'wheel_alignment.svg',
+  lubricate: 'lubricate.svg',
+  bolt_torque: 'bolt_torque.svg',
+  oil_reminder: 'oil_reminder.svg',
+  chassis_body: 'chassis_body.svg',
+  lighting: 'lighting.svg',
+  general_service: 'general_service.svg',
+  dvi_finding: 'dvi_finding.svg',
+};
+
+// Keyword -> icon-key matching; order matters (specific before broad).
+// Mirrors titleKeywordMap in lib/service-icons.ts.
+const SERVICE_ICON_KEYWORDS = [
+  [['torque', 're-torque', 'retorque', 'bolt', 'nut'], 'bolt_torque'],
+  [['propeller shaft', 'prop shaft', 'driveshaft', 'drive shaft', 'lubricate'], 'lubricate'],
+  [['oil reminder', 'maint reqd', 'oil reset', 'reset oil', 'oil replacement reminder'], 'oil_reminder'],
+  [['chassis', 'body', 'tighten'], 'chassis_body'],
+  [['serpentine', 'drive belt', 'accessory belt', 'v-belt', 'timing belt'], 'serpentine_belt'],
+  [['transfer case'], 'transfer_case'],
+  [['differential front', 'front differential'], 'differential_front'],
+  [['differential rear', 'rear differential'], 'differential_rear'],
+  [['differential'], 'differential_rear'],
+  [['transmission', 'trans fluid', 'atf'], 'transmission_fluid'],
+  [['coolant hose', 'radiator hose', 'heater hose'], 'coolant_hoses'],
+  [['coolant', 'antifreeze'], 'coolant'],
+  [['brake pad', 'front brake', 'rear brake', 'brake shoe'], 'brake_pads_front'],
+  [['brake fluid'], 'brake_fluid'],
+  [['cabin filter', 'cabin air'], 'cabin_air_filter'],
+  [['air filter', 'engine filter'], 'engine_air_filter'],
+  [['spark plug', 'ignition'], 'spark_plugs'],
+  [['oil change', 'engine oil', 'motor oil', 'oil filter'], 'oil_change'],
+  [['tire rotat', 'rotate tire'], 'tires_rotate'],
+  [['wiper', 'windshield wiper'], 'wiper_blades'],
+  [['battery'], 'battery'],
+  [['power steering', 'steering fluid'], 'power_steering'],
+  [['fuel system', 'fuel inject', 'fuel filter', 'fuel induction'], 'fuel_system'],
+  [['shock', 'strut', 'suspension'], 'front_shocks'],
+  [['wheel align', 'alignment'], 'wheel_alignment'],
+  [['headlight', 'head lamp', 'tail light', 'taillight', 'turn signal', 'marker light', 'fog light', 'license plate light', 'bulb', 'lamp', 'lighting', 'exterior lights', 'interior lights'], 'lighting'],
+  [['inspect', 'check', 'examine', 'visual'], 'general_service'],
+];
+
+function resolveServiceIconFile(serviceKey, title) {
+  if (!serviceKey && !title) return SERVICE_ICON_FILES.general_service;
+  const isDviFinding = !!serviceKey && (String(serviceKey).startsWith('dvi_finding') || String(serviceKey).startsWith('dvi_unmapped'));
+  if (serviceKey && SERVICE_ICON_FILES[serviceKey]) return SERVICE_ICON_FILES[serviceKey];
+  const titleLower = String(title || serviceKey || '').toLowerCase();
+  for (const [keywords, iconKey] of SERVICE_ICON_KEYWORDS) {
+    if (keywords.some((kw) => titleLower.includes(kw))) {
+      if (isDviFinding && iconKey === 'general_service') return SERVICE_ICON_FILES.dvi_finding;
+      return SERVICE_ICON_FILES[iconKey];
+    }
+  }
+  if (isDviFinding) return SERVICE_ICON_FILES.dvi_finding;
+  return SERVICE_ICON_FILES.general_service;
+}
+
 function getOverdueText(item, type) {
   // Axis-aware overdue summary: prefer the new structured progress so we can
   // say "8,868 mi over • 4 mos over" matching the dashboard headlines.
@@ -1919,32 +2012,51 @@ function getOverdueText(item, type) {
   return '';
 }
 
-// Renders the dual mileage/time progress bars when the API ships a
-// `progress` payload. Mirrors the dashboard's IntervalProgressRow.
+// Task #865: single dominant-axis gradient progress bar, mirroring the
+// dashboard's IntervalProgressRow (calm AppFueled/public-VHR style). Picks
+// the worst axis (overdue > soon > ok; tie broken by higher percent) and
+// renders ONE green→amber→red gradient track with a small axis indicator.
 function renderProgressBars(item, type) {
   const p = item && item.progress;
   if (!p) return '';
-  const axisRow = (label, axis) => {
-    if (!axis || axis.percent == null) return '';
-    const pct = Math.max(0, Math.min(100, axis.percent));
-    const cls = axis.status === 'overdue' ? 'overdue'
-              : axis.status === 'soon' ? 'soon'
-              : 'ok';
-    const headline = axis.headline ? escapeHtml(axis.headline) : '';
-    // Overdue bars always render full; otherwise the consumed portion.
-    const fillPct = axis.status === 'overdue' ? 100 : pct;
-    return `
-      <div class="vhi-bar-row">
-        <span class="vhi-bar-label">${label}</span>
-        <div class="vhi-bar-track"><div class="vhi-bar-fill ${cls}" style="width:${fillPct}%"></div></div>
-        <span class="vhi-bar-headline ${cls}">${headline}</span>
-      </div>
-    `;
+  const rank = (axis) => {
+    if (!axis || (axis.percent == null && axis.status !== 'overdue')) return -1;
+    return axis.status === 'overdue' ? 2 : axis.status === 'soon' ? 1 : 0;
   };
-  const milesRow = renderProgressBars && p.miles ? axisRow(getDistAxisLabel(), p.miles) : '';
-  const timeRow = renderProgressBars && p.time ? axisRow('Time', p.time) : '';
-  if (!milesRow && !timeRow) return '';
-  return `<div class="vhi-bars">${milesRow}${timeRow}</div>`;
+  const milesRank = rank(p.miles);
+  const timeRank = rank(p.time);
+  let axis = null;
+  let isMiles = true;
+  if (milesRank < 0 && timeRank < 0) return '';
+  if (milesRank > timeRank) { axis = p.miles; isMiles = true; }
+  else if (timeRank > milesRank) { axis = p.time; isMiles = false; }
+  else {
+    const mp = (p.miles && p.miles.percent) || 0;
+    const tp = (p.time && p.time.percent) || 0;
+    if (tp > mp) { axis = p.time; isMiles = false; }
+    else { axis = p.miles; isMiles = true; }
+  }
+  if (!axis) return '';
+  const pct = axis.percent != null
+    ? Math.max(0, Math.min(100, Math.round(axis.percent)))
+    : (axis.status === 'overdue' ? 100 : null);
+  if (pct == null && !axis.headline) return '';
+  const cls = axis.status === 'overdue' ? 'overdue'
+            : axis.status === 'soon' ? 'soon'
+            : 'ok';
+  const headline = axis.headline ? escapeHtml(axis.headline) : '';
+  const label = isMiles ? getDistAxisLabel().toUpperCase() : 'TIME';
+  const fillPct = pct == null ? 0 : pct;
+  // Anchor the gradient to the full track width so a half-full bar shows
+  // green→amber, not the whole green→red ramp squeezed in.
+  const bgSize = fillPct > 0 ? Math.round(10000 / fillPct) : 100;
+  return `
+    <div class="vhi-bar-single">
+      <span class="vhi-bar-axis">${label}</span>
+      <div class="vhi-bar-track"><div class="vhi-bar-gradient" style="width:${fillPct}%;background-size:${bgSize}% 100%;"></div></div>
+      ${headline ? `<span class="vhi-bar-headline ${cls}">${headline}</span>` : ''}
+    </div>
+  `;
 }
 
 function createServiceItemHTML(item, type) {
@@ -1958,9 +2070,14 @@ function createServiceItemHTML(item, type) {
   const badgeClass = type === 'overdue' ? 'badge-overdue' : 
                      type === 'due-soon' ? 'badge-due-soon' :
                      type === 'complimentary' ? 'badge-complimentary' : 'badge-upcoming';
-  const badgeText = type === 'overdue' ? 'OVERDUE' : 
-                    type === 'due-soon' ? 'DUE SOON' :
-                    type === 'complimentary' ? 'ADDITIONAL' : '';
+  const badgeText = type === 'overdue' ? 'Overdue' : 
+                    type === 'due-soon' ? 'Due soon' :
+                    type === 'complimentary' ? 'Additional' : '';
+  
+  // Task #865: service pictogram in the card header (same resolution logic
+  // as the dashboard / customer-facing VHR).
+  const iconFile = resolveServiceIconFile(item.serviceKey || null, serviceName);
+  const iconHtml = `<img src="icons/service/${iconFile}" alt="" class="service-icon" />`;
   
   // Category badge
   const categoryBadge = item.category ? 
@@ -2005,7 +2122,7 @@ function createServiceItemHTML(item, type) {
   return `
     <li class="service-item ${type}${item.approvedThisVisit ? ' approved-visit' : ''}">
       <div class="service-header">
-        <div class="service-name">${escapeHtml(serviceName)}</div>
+        <div class="service-name">${iconHtml}<span>${escapeHtml(serviceName)}</span></div>
         <div class="add-dropdown">
           ${item.approvedThisVisit ? `
           <button class="btn-approved btn-add-toggle" data-dropdown="${itemId}" data-service='${JSON.stringify(item)}'>
@@ -2087,7 +2204,7 @@ function createServiceItemHTML(item, type) {
           if (dateStr) tipParts.push(`Declined on ${dateStr}`);
           if (item.declined.roNumber) tipParts.push(`RO #${item.declined.roNumber}`);
           if (item.declined.reason) tipParts.push(item.declined.reason);
-          return `<span class="status-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fdba74;" title="${escapeHtml(tipParts.join(' · ') || 'Previously declined')}">DECLINED${dateStr ? ` ${escapeHtml(dateStr)}` : ''}</span>`;
+          return `<span class="status-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fdba74;" title="${escapeHtml(tipParts.join(' · ') || 'Previously declined')}">Declined${dateStr ? ` ${escapeHtml(dateStr)}` : ''}</span>`;
         })() : ''}
       </div>
       ${renderProgressBars(item, type)}
