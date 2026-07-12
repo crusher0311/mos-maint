@@ -668,10 +668,19 @@ type TriagedItem = {
   action?: ServiceAction | null;
   /** Free-text note carried from DataOne (e.g. "If equipped with dipstick"). */
   notes?: string | null;
-  /** True when interval was synthesized from the lifetime-fluid default. */
+  /**
+   * True when this item is a shop-recommended default rather than an
+   * OEM-scheduled interval (lifetime fluids AND the Safety Check row).
+   */
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  /**
+   * Task #868: True ONLY when the interval came from the lifetime-fluid
+   * default — distinguishes real lifetime fluids from other
+   * recommendedDefault rows (Safety Check — Oil Level) for badge text.
+   */
+  lifetimeFluidDefault?: boolean;
   /** Task #198: True when OEM only schedules an "Inspect …" verb on a known fluid. */
   inspectOnly?: boolean;
   /** Task #198: Tooltip / chip rationale for inspectOnly. */
@@ -1001,6 +1010,9 @@ function triage({
     // app/api/plan-build/route.ts so cached & freshly-built plans agree.
     let recommendedDefault = false;
     let recommendedReason: string | null = null;
+    // Task #868: dedicated flag so badges can tell a genuine lifetime
+    // fluid apart from other recommendedDefault rows (Safety Check).
+    let lifetimeFluidDefault = false;
     const isReplacementRow =
       action === null ||
       action === "replace" ||
@@ -1025,6 +1037,7 @@ function triage({
       intervalMiles = oemToShopMiles(LIFETIME_FLUID_DEFAULT_MILES);
       intervalMonths = null;
       recommendedDefault = true;
+      lifetimeFluidDefault = true;
       recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${(intervalMiles ?? LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} ${distLabelLocal}.`;
     }
 
@@ -1143,6 +1156,7 @@ function triage({
       // (which would render again as the gray italic pill).
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      lifetimeFluidDefault: lifetimeFluidDefault || undefined,
       // Task #198: inspect-only fluid flag for the "OEM: Inspect every X mi"
       // chip and the showInspectItems-filter exemption.
       inspectOnly: inspectOnly || undefined,
@@ -2618,6 +2632,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
       intervalMonthsSevere: item.intervalMonthsSevere ?? null,
       recommendedDefault: item.recommendedDefault,
       recommendedReason: item.recommendedReason ?? null,
+      // Task #868: persist the lifetime-fluid distinction so cached reads
+      // render the correct badge (lifetime text vs generic shop rec).
+      lifetimeFluidDefault: item.lifetimeFluidDefault ?? false,
       // Task #198: persist inspect-only fluid flag so cached plans render
       // the OEM-inspect chip and apply the showInspectItems exemption.
       inspectOnly: item.inspectOnly,
@@ -3078,9 +3095,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
+                            title={t.recommendedReason || (t.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                           >
-                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
+                            {t.lifetimeFluidDefault
+                              ? <>OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}</>
+                              : <>Shop recommendation{t.intervalMiles ? ` · every ${t.intervalMiles.toLocaleString()} ${distLabel}` : ""}</>}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -3112,7 +3131,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                             ⚠ Engine flagged — long oil interval
                           </span>
                         )}
-                        {t.recommendedDefault && (
+                        {t.recommendedDefault && t.lifetimeFluidDefault && (
                           <span
                             className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
                             title={t.recommendedReason ?? undefined}
@@ -3340,9 +3359,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
+                            title={t.recommendedReason || (t.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                           >
-                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
+                            {t.lifetimeFluidDefault
+                              ? <>OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}</>
+                              : <>Shop recommendation{t.intervalMiles ? ` · every ${t.intervalMiles.toLocaleString()} ${distLabel}` : ""}</>}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -3441,9 +3462,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                        title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
+                        title={t.recommendedReason || (t.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                       >
-                        OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
+                        {t.lifetimeFluidDefault
+                          ? <>OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}</>
+                          : <>Shop recommendation{t.intervalMiles ? ` · every ${t.intervalMiles.toLocaleString()} ${distLabel}` : ""}</>}
                       </span>
                     )}
                     {t.inspectOnly && (
@@ -3475,7 +3498,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         ⚠ Engine flagged — long oil interval
                       </span>
                     )}
-                    {t.recommendedDefault && (
+                    {t.recommendedDefault && t.lifetimeFluidDefault && (
                       <span
                         className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
                         title={t.recommendedReason ?? undefined}
@@ -3656,9 +3679,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         {t.recommendedDefault && (
                           <span
                             className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                            title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
+                            title={t.recommendedReason || (t.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                           >
-                            OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
+                            {t.lifetimeFluidDefault
+                              ? <>OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}</>
+                              : <>Shop recommendation{t.intervalMiles ? ` · every ${t.intervalMiles.toLocaleString()} ${distLabel}` : ""}</>}
                           </span>
                         )}
                         {t.inspectOnly && (
@@ -3737,9 +3762,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
                     {t.recommendedDefault && (
                       <span
                         className="rounded-full bg-blue-600 text-white px-2 py-0.5"
-                        title={t.recommendedReason || "OEM lists this as lifetime fluid; shop recommendation only."}
+                        title={t.recommendedReason || (t.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                       >
-                        OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}
+                        {t.lifetimeFluidDefault
+                          ? <>OEM lifetime fluid · Shop recommendation at {(distanceUnit === "kilometers" ? Math.round(LIFETIME_FLUID_DEFAULT_MILES * 1.60934) : LIFETIME_FLUID_DEFAULT_MILES).toLocaleString()} {distLabel}</>
+                          : <>Shop recommendation{t.intervalMiles ? ` · every ${t.intervalMiles.toLocaleString()} ${distLabel}` : ""}</>}
                       </span>
                     )}
                     {t.inspectOnly && (
@@ -3768,7 +3795,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
                         ⚠ Engine flagged — long oil interval
                       </span>
                     )}
-                    {t.recommendedDefault && (
+                    {t.recommendedDefault && t.lifetimeFluidDefault && (
                       <span
                         className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5"
                         title={t.recommendedReason ?? undefined}

@@ -217,6 +217,20 @@ ok(
   "convertToCache preserves recommendedDefault=true on the lifetime row",
   cachedReplace?.recommendedDefault === true,
 );
+// Task #868: the lifetime row must also carry the dedicated
+// lifetimeFluidDefault flag (and it must survive the cache round-trip)
+// so the UI can tell it apart from other recommendedDefault producers
+// (e.g. the engine-risk Safety Check — Oil Level row).
+ok(
+  "Lifetime row carries lifetimeFluidDefault === true (Task #868)",
+  replaceAtf?.lifetimeFluidDefault === true,
+  `lifetimeFluidDefault=${replaceAtf?.lifetimeFluidDefault}`,
+);
+ok(
+  "convertToCache preserves lifetimeFluidDefault=true on the lifetime row (Task #868)",
+  cachedReplace?.lifetimeFluidDefault === true,
+  `cache.lifetimeFluidDefault=${cachedReplace?.lifetimeFluidDefault}`,
+);
 ok(
   "convertToCache preserves intervalMiles=120000 on the lifetime row",
   cachedReplace?.intervalMiles === LIFETIME_FLUID_DEFAULT_MILES,

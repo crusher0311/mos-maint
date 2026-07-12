@@ -47,6 +47,14 @@ interface PlanItem {
   notes?: string | null;
   recommendedDefault?: boolean;
   recommendedReason?: string | null;
+  /**
+   * Task #868: True ONLY when the interval came from the lifetime-fluid
+   * default — distinguishes genuine lifetime fluids from other
+   * recommendedDefault rows (e.g. the Safety Check — Oil Level engine-risk
+   * row) so the badge text doesn't conflate them. Absent on plans cached
+   * before schema v10.
+   */
+  lifetimeFluidDefault?: boolean;
   /** Task #198: True when OEM only schedules an "Inspect …" verb on a known fluid. */
   inspectOnly?: boolean;
   /** Task #198: Tooltip / chip rationale for inspectOnly. */
@@ -544,9 +552,11 @@ export default function VehicleHealthReport({
                                 {item.recommendedDefault && (
                                   <span
                                     className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded"
-                                    title={item.recommendedReason ?? "OEM lists this as lifetime fluid; shop recommendation only."}
+                                    title={item.recommendedReason ?? (item.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                                   >
-                                    OEM lifetime fluid · Shop recommendation
+                                    {item.lifetimeFluidDefault
+                                      ? "OEM lifetime fluid · Shop recommendation"
+                                      : `Shop recommendation${item.intervalMiles ? ` · every ${item.intervalMiles.toLocaleString()} ${dAbbrev}` : ""}`}
                                   </span>
                                 )}
                                 {item.inspectOnly && (
@@ -640,9 +650,11 @@ export default function VehicleHealthReport({
                                 {item.recommendedDefault && (
                                   <span
                                     className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded"
-                                    title={item.recommendedReason ?? "OEM lists this as lifetime fluid; shop recommendation only."}
+                                    title={item.recommendedReason ?? (item.lifetimeFluidDefault ? "OEM lists this as lifetime fluid; shop recommendation only." : "Shop-recommended service.")}
                                   >
-                                    OEM lifetime fluid · Shop recommendation
+                                    {item.lifetimeFluidDefault
+                                      ? "OEM lifetime fluid · Shop recommendation"
+                                      : `Shop recommendation${item.intervalMiles ? ` · every ${item.intervalMiles.toLocaleString()} ${dAbbrev}` : ""}`}
                                   </span>
                                 )}
                                 {item.inspectOnly && (

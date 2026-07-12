@@ -322,10 +322,23 @@ export interface TriagedItem {
   action?: ServiceAction | null;
   /** Free-text note carried from DataOne (e.g. "If equipped with dipstick"). */
   notes?: string | null;
-  /** True when interval was synthesized from the lifetime-fluid default. */
+  /**
+   * True when this item is a shop-recommended default rather than an
+   * OEM-scheduled interval. Set by TWO unrelated producers: the
+   * lifetime-fluid default (see `lifetimeFluidDefault`) and the
+   * engine-risk Safety Check — Oil Level row.
+   */
   recommendedDefault?: boolean;
   /** Human-readable rationale shown when recommendedDefault is true. */
   recommendedReason?: string | null;
+  /**
+   * Task #868: True ONLY when the interval was synthesized from the
+   * lifetime-fluid default (OEM lists the fluid as lifetime / fill for
+   * life). Distinguishes genuine lifetime fluids from other
+   * recommendedDefault producers (e.g. the Safety Check — Oil Level row)
+   * so the UI badge text doesn't conflate them.
+   */
+  lifetimeFluidDefault?: boolean;
   /**
    * Task #198: True when the OEM only schedules an "Inspect …" verb on a
    * known fluid (no matching Replace row). Surfaced with an
@@ -893,6 +906,9 @@ export function triage({
     // out of an "Inspect transmission fluid" row.
     let recommendedDefault = false;
     let recommendedReason: string | null = null;
+    // Task #868: dedicated flag so the UI can tell a genuine lifetime-fluid
+    // default apart from other recommendedDefault rows (Safety Check).
+    let lifetimeFluidDefault = false;
     const isReplacementRow = action === null || action === "replace" || action === "flush" || action === "service" || action === "drain";
     if (
       !usingShopInterval &&
@@ -913,6 +929,7 @@ export function triage({
       intervalMiles = lifetimeShopMiles;
       intervalMonths = null;
       recommendedDefault = true;
+      lifetimeFluidDefault = true;
       recommendedReason = `OEM lists this fluid as lifetime / fill for life. Shop recommendation at ${lifetimeShopMiles.toLocaleString()} ${distLabel}.`;
     }
 
@@ -1042,6 +1059,7 @@ export function triage({
       notes: dviInfo?.notes ?? o.notes ?? null,
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,
+      lifetimeFluidDefault: lifetimeFluidDefault || undefined,
       inspectOnly: inspectOnly || undefined,
       inspectOnlyReason: inspectOnlyReason ?? undefined,
       engineRiskFlag: engineRiskFlag || undefined,
@@ -1522,6 +1540,9 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
     notes: item.notes ?? null,
     recommendedDefault: item.recommendedDefault ?? false,
     recommendedReason: item.recommendedReason ?? null,
+    // Task #868: persist the lifetime-fluid distinction so cached reads
+    // render the correct badge (lifetime text vs generic shop rec).
+    lifetimeFluidDefault: item.lifetimeFluidDefault ?? false,
     // Task #198: persist inspect-only fluid flag so cached plans render
     // the "OEM: Inspect every X mi" chip and the show-inspect-items
     // exemption stays consistent across cached and freshly-built reads.

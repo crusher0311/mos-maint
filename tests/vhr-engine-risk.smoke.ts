@@ -23,6 +23,10 @@
  *   5. `isComplimentaryItem` directly returns false for the Safety Check
  *      — Oil Level fixture (defence-in-depth against the
  *      complimentary-keys / title-keyword filter quietly absorbing it).
+ *   6. (Task #868) The Safety Check — Oil Level row does NOT render the
+ *      "OEM lifetime fluid" badge text (it's a shop recommendation with a
+ *      real 3,000 mi interval, not a lifetime fluid), while a genuine
+ *      lifetime-fluid item (`lifetimeFluidDefault: true`) still does.
  */
 
 import { JSDOM } from "jsdom";
@@ -118,6 +122,34 @@ const safetyCheckRow: PlanItem = {
   engineRiskReason: ENGINE_RISK_REASON,
 };
 
+// Task #868: genuine lifetime fluid — carries lifetimeFluidDefault so the
+// VHR renders the "OEM lifetime fluid · Shop recommendation" badge.
+const lifetimeFluidRow: PlanItem = {
+  key: "transmission_fluid",
+  serviceKey: "transmission_fluid",
+  title: "Transmission Fluid",
+  category: "Transmission",
+  intervalMiles: 120000,
+  intervalMonths: null,
+  last: undefined,
+  dueAtMiles: 120000,
+  dueAtDate: null,
+  milesToGo: 34980,
+  daysToGo: null,
+  bump: null,
+  source: "oem",
+  dviSource: null,
+  reason: null,
+  usingShopInterval: false,
+  declined: false,
+  matchedDeferred: null,
+  protractorDeferredId: null,
+  recommendedDefault: true,
+  recommendedReason:
+    "OEM lists this fluid as lifetime / fill for life. Shop recommendation at 120,000 miles.",
+  lifetimeFluidDefault: true,
+};
+
 const fixture: VHIData = {
   vehicle: {
     year: 2019,
@@ -130,7 +162,7 @@ const fixture: VHIData = {
   customerName: "QA Pentastar",
   buckets: {
     overdue: [oilRow],
-    dueSoon: [safetyCheckRow],
+    dueSoon: [safetyCheckRow, lifetimeFluidRow],
     upcoming: [],
   },
 };
@@ -236,6 +268,42 @@ ok(
     (comingUpSoonSection ?? container).querySelectorAll("h4"),
   ).some((h) => h.textContent?.trim() === SAFETY_CHECK_TITLE),
   "Safety Check — Oil Level h4 not found inside Coming Up Soon; complimentary filter or bucket routing may have moved/eaten it",
+);
+
+// 1b. Task #868: badge conflation regression. The Safety Check card must
+//     NOT carry the lifetime-fluid badge text; the genuine lifetime-fluid
+//     card must keep it.
+const LIFETIME_BADGE_TEXT = "OEM lifetime fluid";
+function findCardByTitle(title: string): HTMLElement | null {
+  const h4 = Array.from(container.querySelectorAll("h4")).find(
+    (h) => h.textContent?.trim() === title,
+  );
+  return (h4?.closest("div.border") as HTMLElement | null) ?? h4?.parentElement?.parentElement?.parentElement ?? null;
+}
+
+const safetyCard = findCardByTitle(SAFETY_CHECK_TITLE);
+ok("Safety Check card found in Recommendations tab", Boolean(safetyCard));
+ok(
+  "Safety Check card does NOT render the 'OEM lifetime fluid' badge text (Task #868)",
+  safetyCard ? !safetyCard.textContent?.includes(LIFETIME_BADGE_TEXT) : false,
+  `card text: ${safetyCard?.textContent?.slice(0, 300) ?? "<missing>"}`,
+);
+ok(
+  "Safety Check card renders the accurate shop-recommendation badge with its real interval",
+  safetyCard
+    ? Boolean(safetyCard.textContent?.includes("Shop recommendation · every 3,000 mi"))
+    : false,
+  `card text: ${safetyCard?.textContent?.slice(0, 300) ?? "<missing>"}`,
+);
+
+const lifetimeCard = findCardByTitle("Transmission Fluid");
+ok("Lifetime-fluid card found in Recommendations tab", Boolean(lifetimeCard));
+ok(
+  "Lifetime-fluid card still renders the 'OEM lifetime fluid · Shop recommendation' badge",
+  lifetimeCard
+    ? Boolean(lifetimeCard.textContent?.includes("OEM lifetime fluid · Shop recommendation"))
+    : false,
+  `card text: ${lifetimeCard?.textContent?.slice(0, 300) ?? "<missing>"}`,
 );
 
 const additionalServicesSection = findSectionByHeading(

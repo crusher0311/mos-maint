@@ -54,8 +54,14 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  * Originally shipped as v8, renumbered to v9 on rebase because task #808
  * had already used v8 in production — bumping forces a rebuild so rows
  * cached under #808's v8 (which lack `plans`) pick up the tab variants.
+ *
+ * v10 (Jul 2026, task #868) — adds `lifetimeFluidDefault` so the UI can
+ * distinguish genuine lifetime-fluid recommended defaults from other
+ * `recommendedDefault` producers (the engine-risk Safety Check — Oil
+ * Level row). Bumping forces a rebuild so cached rows carry the flag and
+ * the Safety Check row stops rendering the lifetime-fluid badge text.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 9;
+export const PLAN_CACHE_SCHEMA_VERSION = 10;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -116,6 +122,13 @@ export interface TriagedItemCache {
   recommendedDefault?: boolean;
   /** Human-readable rationale for the recommended-default override. */
   recommendedReason?: string | null;
+  /**
+   * Task #868: True ONLY when the interval was synthesized from the
+   * lifetime-fluid default. Distinguishes genuine lifetime fluids from
+   * other recommendedDefault rows (e.g. Safety Check — Oil Level) so
+   * cached reads render the correct badge text.
+   */
+  lifetimeFluidDefault?: boolean;
   /**
    * Task #198: True when the OEM only schedules an "Inspect …" verb on a
    * known fluid (no matching Replace row). The plan UI / VHR render this

@@ -260,6 +260,14 @@ ok(
   "Pentastar plan: safety row interval = SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES (3,000 mi)",
   flaggedSafetyTriaged?.intervalMiles === SAFETY_CHECK_OIL_LEVEL_INTERVAL_MILES,
 );
+// Task #868: the safety row is a recommendedDefault but NOT a lifetime
+// fluid — it must never carry lifetimeFluidDefault, or the dashboard/VHR
+// would render the "OEM lifetime fluid" badge on a 3,000 mi risk check.
+ok(
+  "Pentastar plan: safety row does NOT carry lifetimeFluidDefault (Task #868)",
+  flaggedSafetyTriaged?.lifetimeFluidDefault !== true,
+  `lifetimeFluidDefault=${flaggedSafetyTriaged?.lifetimeFluidDefault}`,
+);
 
 // Now run the cached items through the side-panel converter. This is the
 // "convertItem" half of the cached-plan path — the conversion that the
