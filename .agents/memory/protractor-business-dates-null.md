@@ -47,7 +47,28 @@ real cached invoices (real 2022–2026 dates out). Adding these fields changes t
 content hash, so the next normal backfill sweep will update each Protractor RO once
 (bounded one-time re-index churn) — that is the going-forward fill mechanism.
 
-**Still PENDING (operator-gated execution):** existing rows stay null until a
+**Backfill EXECUTED (2026-07-12, Brandon-approved):** fleet-wide repair is DONE.
+Fast path used: `scripts/backfill-protractor-dates-fast.ts` — Mongo scan with a
+tiny date-only projection → batched PG UPDATE keyed by (shop_id,
+work_order_number), terminal statuses only, only ever filling NULL/<1990
+columns (never overwrites a real date). 332,383 WO rows + ~1.35M service-job
+completed_at fixed. Remaining 55 rows carrying the .NET `0001-01-01` sentinel
+with NO real date in the raw payload were NULLed (`scripts/cleanup-garbage-dates.ts`)
+so readers coalesce cleanly. Verified via `scripts/probe-protractor-dates.ts`
+(oldest_real now 2018–2024 vs 2026 ingest floors; zero <1990 left).
+Lessons that made it fast/safe:
+- Full re-normalize replay (0.3 WO/s) = weeks; date-only SQL patch = ~1,700/s.
+- The DATAONE PG enforces a DB-side **statement timeout** (~2 min): fleet-wide
+  LIMIT-chunked UPDATEs that re-scan a big join die with 57014. Go per-shop
+  chunked; for un-indexed scans, use a dedicated postgres client with
+  `connection: { statement_timeout: "600000" }` (session-level override works).
+- Phase 2 (sj completed_at from parent closed_date) has no per-shop checkpoint:
+  a resumed run is silent while re-verifying done shops (only >0 fills log) —
+  confirm liveness via pg_stat_activity, don't assume a hang.
+- Scope one-off repair SQL by `provenance->>'sourceSystem'` even when the shop
+  list is provider-filtered — mixed-source shops exist.
+
+**Original pending note (superseded):** existing rows stay null until a
 fleet-wide re-normalize re-processes already-imported Protractor records. Tooling
 exists — `scripts/backfill-protractor-history-dates.ts` (npm
 `backfill:protractor-history-dates`): Protractor-only, paced, resumable, and
