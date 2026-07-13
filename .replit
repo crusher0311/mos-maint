@@ -15,10 +15,6 @@ author = "agent"
 task = "workflow.run"
 args = "MOS Maintenance MVP"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Protractor Date Backfill"
-
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -30,17 +26,6 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
-
-[[workflows.workflow]]
-name = "Protractor Date Backfill"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd /home/runner/workspace && (echo START-CLEANUP2 $(date); npx tsx scripts/cleanup-garbage-dates.ts --confirm; echo SENTINEL_CLEANUP2_DONE exit=$? $(date)) >> /tmp/dates-fast-live.log 2>&1; tail -f /dev/null"
 
 [[ports]]
 localPort = 3000
