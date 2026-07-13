@@ -105,7 +105,7 @@ export interface TriagedItemCache {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor" | "common" | "declined";
-  dviSource?: "autoflow" | "autovitals" | "tekmetric";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
   reason?: string;
   usingShopInterval?: boolean;
   protractorDeferredId?: string;

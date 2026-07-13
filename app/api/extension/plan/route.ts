@@ -25,6 +25,7 @@ import {
   toKeyFromFreeText,
 } from "@/lib/service-keys";
 import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
+import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import {
   classifyEngineRisk,
   loadEngineRiskOverrides,
@@ -2405,11 +2406,18 @@ async function _GET(request: NextRequest) {
           }
         }
 
+        // Task #860: merge findings parsed from public DVI share links found
+        // on Protractor WOs (AutoServe1, avlink.io, AutoFlow microsites, …)
+        // so the extension's on-demand branch matches plan-build. Read-only;
+        // returns [] unless links have been ingested.
+        const dviLinkFindings = await gatherDviLinkFindings(mosShopId, vin);
+        const combinedDviFindings = [...tekDviFindings, ...dviLinkFindings];
+
         const tBeforeAnalysis = Date.now();
         const recommendations = await runOnDemandAnalysis(
           mosShopId, vin, mileage, showInspectItems, shopIntervals, carfaxRecords,
           { oemResult, shopWorkOrders },
-          tekDviFindings.length > 0 ? tekDviFindings : undefined,
+          combinedDviFindings.length > 0 ? combinedDviFindings : undefined,
           intervalApplyMode,
           currentRoAuthorizedJobs,
           currentRoAllJobs,

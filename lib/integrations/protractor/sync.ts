@@ -13,6 +13,7 @@ import { createIngestionService } from "@/lib/integrations/core/normalized-inges
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import pLimit from "p-limit";
+import { detectDviLinksFromProtractorInvoice, isDviLinkIngestEnabled } from "@/lib/dvi-links/ingest";
 
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 // Per-chunk metrics rolling window. Mirrors the Tekmetric backfill cap so the
@@ -531,6 +532,18 @@ async function backfillShopChunk(
       })
     )
   );
+
+  // Task #860: scan synced invoices for public DVI share links (AutoServe1,
+  // AutoVitals avlink.io, AutoFlow microsites, etc.) and register them for
+  // the flag-gated fetch pipeline. No-op unless DVI_LINK_INGEST_ENABLED=true
+  // (checked inside); registration failures never break a sync.
+  if (isDviLinkIngestEnabled()) {
+    for (const inv of invoicesForNormalized) {
+      await detectDviLinksFromProtractorInvoice({ shopId, invoice: inv }).catch(
+        () => {},
+      );
+    }
+  }
 
   if (invoiceDetailErrors > 0) {
     chunkHadError = true;

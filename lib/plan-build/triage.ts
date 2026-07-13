@@ -312,7 +312,7 @@ export interface TriagedItem {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor" | "common" | "declined";
-  dviSource?: "autoflow" | "autovitals" | "tekmetric";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
@@ -721,8 +721,13 @@ export function triage({
 
   // Merge: red beats yellow; pick the longer non-empty note on ties or
   // when the higher-priority status arrives without a note.
-  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }>();
-  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: "autoflow" | "autovitals" | "tekmetric"; notes?: string | null }> = [];
+  // Task #860: "autoserve1" / "mastertech" arrive via DVI share-link
+  // ingestion (lib/dvi-links); share-link "autovitals" reuses the existing
+  // autovitals source id.
+  type DviSourceId = "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
+  const KNOWN_DVI_SOURCES: readonly DviSourceId[] = ["autoflow", "autovitals", "tekmetric", "autoserve1", "mastertech"];
+  const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: DviSourceId; notes?: string | null }>();
+  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: DviSourceId; notes?: string | null }> = [];
   const pickNote = (a?: string | null, b?: string | null): string | null => {
     const aT = (a || "").trim();
     const bT = (b || "").trim();
@@ -735,7 +740,9 @@ export function triage({
     if (!rawName) continue;
     const key = toKeyFromName(rawName);
     const s = String(it.status ?? "");
-    const dviSource = (it.source === "autovitals" ? "autovitals" : it.source === "tekmetric" ? "tekmetric" : "autoflow") as "autoflow" | "autovitals" | "tekmetric";
+    const dviSource: DviSourceId = KNOWN_DVI_SOURCES.includes(it.source as DviSourceId)
+      ? (it.source as DviSourceId)
+      : "autoflow";
     const mappedStatus = s === "0" ? "red" : s === "1" ? "yellow" : null;
     if (!mappedStatus) continue;
     const notes = (it.notes ?? null) ? String(it.notes).trim() || null : null;

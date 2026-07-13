@@ -1,0 +1,468 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Micro Site</title>
+
+    <!-- Bootstrap4 CSS -->
+    <link href="/bs4/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font awesome CSS -->
+    <link href="/Admin/lib/fontawesome-6.1.1/css/all.min.css" rel="stylesheet">
+
+    <script src="/Admin/lib/sortable/js/Sortable.js"></script>
+
+    <link rel='stylesheet' href='css/setup.css'>
+    <link rel='stylesheet' href='css/app.css'>
+  </head>
+
+  <body>
+
+    <div class="wrapper">
+
+        <!-- Sidebar  -->
+        <nav id="sidebar" class="inactive" data-colorpicker="1" data-colorpicker-position="top" data-color-tag="sidebar">
+            <ul class="menu-list">
+                <li onclick="$.fn.loadInfo()">
+                    <span class="icon"><i class='fa fa-user-circle'></i> </span>
+                    <span class="menu-item">My Info</span>
+                </li>
+                <li onclick="$.fn.communicationPreferences()">
+                    <span class="icon"><i class='fa fa-comments'></i> </span>
+                    <span class="menu-item">Communication Preferences</span>
+                </li>
+
+                
+                
+                <!-- SERVICE HISTORY -->
+                                <li onclick="$.fn.serviceHistory()">
+                    <span class="icon"><i class='fa fa-timer'></i> </span>
+                    <span class="menu-item">Service History</span>
+                </li>
+                                
+            </ul>
+        </nav>
+    
+    <div id="content">
+        <div class="d-flex flex-column flex-md-row align-items-center p-1 px-md-4 border-bottom box-shadow" data-colorpicker="1" data-colorpicker-position="center" data-colorpicker-opt="bg" data-color-tag="nav-header" style="background: ">
+          <div class="side-menu">
+            <button class="btn btn-info" id="sidebarCollapse" data-colorpicker="1" data-color-tag="sidebar-toggle" style="background: "><i class='fa fa-bars'></i></button>
+          </div>
+          <h5 class="my-0 mr-md-auto font-weight-normal header ">
+            <img src='https://autotextme.s3.us-west-2.amazonaws.com/logo_datastore/VmNzOE9wOHdwTlQ3Z2dnL3F0VUM2VTkxTHEwa0h0QVNFZVI3WWcwdm1nbmNWNSszRkVMT0g4cEZYbUhYUzRzeA_s._s.jpeg' class='shop_logo'/>                <div class="shop_name" data-test-id="shop_name">                    
+                    <span class='title' data-colorpicker="1" data-colorpicker-opt="text" data-color-tag="shop-title" style="background: ; color: ">
+                        Grip Auto and Tire Murrayville                    </span>
+                   <span class='address' data-colorpicker='1' data-colorpicker-opt='text' data-color-tag='shop-address' style='background:;color:;'>102-22575 Fraser Highway, Langley</span>                </div>
+          </h5>
+          <nav class="my-2 my-md-0 mr-md-3">
+          <a class="p-2" href="tel:604-534-6823" data-colorpicker="1" data-colorpicker-opt="text" data-color-tag='shop-phno' style="background: ; color: "><i class='fa fa-phone'></i> 604-534-6823</a>
+            <a class="p-2 btn btn-text btn-warning" href="sms:6042626697" data-colorpicker="1" data-color-tag='text-button' style="background: ; color: ">
+                <i class='fa fa-comment'></i> Text
+            </a>
+          </nav>
+        </div>
+
+        <div class="inspection_header">
+            <div class="container">
+                <div class="row">
+                <div class="col-12 col-lg-12 align-center">
+                        <h5>
+                            <span data-content-tag="page-title-dvi" data-text-update='1'>Here's your inspection</span>
+                            <i class='fa fa-file-pdf' onclick="$.fn.loadPDF()" data-colorpicker='1' data-color-tag='inspec-title' data-colorpicker-opt="text"></i></h5>
+                            2021 Ford Transit-250 - Kilometer: 41,211 - Stock/Unit ID: #106                        <br/>
+                        <!-- SCHEDULE APPOINTMENT -->
+                                            <div id='vehiclepics_container'>  <div id='vehpics_mobile' class='carousel slide' data-ride='carousel' data-interval='false'>    <ol class='carousel-indicators'> <li data-target='#vehpics_mobile' data-slide-to='1' class='active'>    </ol>    <div class='carousel-inner'><div class='carousel-item active'>  <img src='https://autotextme.s3.us-west-2.amazonaws.com/vehicles/VG9jWVI1L011RHE1QWdxMTIzQk5uQ3A0Y2Y1Uy8xTWJBZWZCbTVyQmVkN1FTNXEyRU5zME4rRjJUbTlXVjRvVw_s.jpeg'></div>    </div>    <a class='left carousel-control-prev' href='#vehpics_mobile' data-slide='prev'>          <span class='fa fa-chevron-left'></span>      <span class='sr-only'>Previous</span>    </a>    <a class='right carousel-control-next' href='#vehpics_mobile' data-slide='next'>          <span class='fa fa-chevron-right'></span>          <span class='sr-only'>Next</span>    </a>  </div></div>                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="details">
+            <div class="container">
+                <div class="video-walk-through"></div>
+                <ul class="report_details">
+
+			<div style='text-align:center' id="spinner">
+				<i class='fa fa-refresh fa-spin'></i> Loading ...
+			</div>
+
+                    <!-- Video presentation -->
+                    <li class="sub-group video-presentation-item" data-order-id="video-presentation" style="display:none;">
+                        <div class="bullet" data-colorpicker='1' data-color-tag='bullet' data-colorpicker-opt="bg">
+                            <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false"><circle stroke="none" cx="16" cy="16" r="10"></circle></svg>
+                        </div>
+                        <div class="title">
+                            <span class="setup-title" data-content-tag="video-presentation-title" data-text-update='1'>Video Presentation</span>
+                        </div>
+                        <div class="video-presentation">
+                            <ul class="video-play-list">
+                                <li class="table-success" data-colorpicker="1" data-color-tag='video-presentation-bar' data-section="video-presentation">
+                                        <div class="report-title col-xs-12" style="height:200px;">
+                                            <span class="title video-playlist-cover"></span>
+                                        </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+
+                    <!-- RVH: Reason for my visit -->
+                    <li class="sub-group"  data-order-id="rvh">
+                        <div class="bullet" data-colorpicker='1' data-color-tag='bullet'>
+                            <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false"><circle stroke="none" cx="16" cy="16" r="10"></circle></svg>
+                        </div>
+                        <div class="title">
+                            Reasons for my visit                        </div>
+                        <div class="rvh">
+                            <ul class="rvh-list">
+                                <li class="table-success" data-colorpicker="1" data-color-tag='rvh-bar' data-toggle="collapse" href="#rvh-details" data-section="rvh">
+                                    <div class="report-title col-xs-10">
+                                        <span class="count stats rvh">0</span>
+                                        <span class="title">Reasons <i> (Click for details)</i></span>
+                                    </div>
+                                    <div class="report-nav rvh-nav col-lg-4 col-xs-2">
+                                        <i class="fa fa-chevron-down pull-right"></i>
+                                    </div>
+                                </li>
+                                <li class="collapse" id="rvh-details"></li>
+                            </ul>
+                        </div>
+                    </li>
+
+                             <!-- Vehicle Health Report -->
+                    <li class="sub-group" data-setup="DVI" data-order-id="health-report">
+                        <div class="bullet">
+                            <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false"><circle stroke="none" cx="16" cy="16" r="10"></circle></svg>
+                        </div>
+                        <div class="title">
+                        Vehicle Health Report                                                </div>
+                        <div class="health-report">
+                            <ul class="health-report" id="dvi-health-report">
+                                                            <li class="dvi-health-report-item" data-value="0" data-colorpicker="1" data-color-tag="report-red" data-toggle="collapse" href="#report-red" data-section="red-items" data-panel_id="red">
+                                    <div class="report-title col-xs-10">
+                                    <span class="count stats red" data-test-id="red">0</span>
+                                        <span class="title">Requires Urgent Attention<i> (Click for details)</i></span>
+                                    </div>
+                                    <div class="report-nav col-lg-4 col-xs-2"><i class="fa fa-chevron-down pull-right"></i></div>
+                                </li>
+                                <li class="collapse health-report-item" id="report-red" data-status="0"></li>
+                                                            <li class="dvi-health-report-item" data-value="1" data-colorpicker="1" data-color-tag="report-orange" data-toggle="collapse" href="#report-orange" data-section="orange-items" data-panel_id="orange">
+                                    <div class="report-title col-xs-10">
+                                    <span class="count stats orange" data-test-id="orange">0</span>
+                                        <span class="title">Requires Future Attention<i> (Click for details)</i></span>
+                                    </div>
+                                    <div class="report-nav col-lg-4 col-xs-2"><i class="fa fa-chevron-down pull-right"></i></div>
+                                </li>
+                                <li class="collapse health-report-item" id="report-orange" data-status="1"></li>
+                                                            <li class="dvi-health-report-item" data-value="2" data-colorpicker="1" data-color-tag="report-green" data-toggle="collapse" href="#report-green" data-section="green-items" data-panel_id="green">
+                                    <div class="report-title col-xs-10">
+                                    <span class="count stats green" data-test-id="green">0</span>
+                                        <span class="title">Good Items<i> (Click for details)</i></span>
+                                    </div>
+                                    <div class="report-nav col-lg-4 col-xs-2"><i class="fa fa-chevron-down pull-right"></i></div>
+                                </li>
+                                <li class="collapse health-report-item" id="report-green" data-status="2"></li>
+                                                        </ul>
+                        </div>
+                    </li>
+
+                    <!-- TIRE INSPECTION -->
+                    <li class="sub-group" data-setup="DVI" data-order-id="tire" style="display:none;">
+                        <div class="bullet">
+                            <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false"><circle stroke="none" cx="16" cy="16" r="10"></circle></svg>
+                        </div>
+                        <div class="title">
+                            Tire Inspection                        </div>
+                        <div class="tire-inspection">
+                            <ul class="tire-inspection-list">
+                                <li class="table-success" data-colorpicker="1" data-color-tag='tire-bar' data-toggle="collapse" href="#tire-inspection-details" data-section="tire-insp">
+                                    <div class="report-title col-xs-10">
+                                        <span class="count stats tire">0</span>
+                                        
+                                        <span class="title">Tire Inspection <i> (Click for details)</i></span>
+                                    </div>
+                                    <div class="report-nav col-lg-4 col-xs-2"><i class="fa fa-chevron-down pull-right"></i></div>
+                                </li>
+                                <li class="collapse" id="tire-inspection-details"></li>
+                            </ul>
+                        </div>
+                    </li>
+
+             <!-- SHOW ONLY VIDEO CONDITION -->
+
+                    <!-- WHATS NEXT -->
+                    <li class="sub-group whats-next">
+                        <div class="bullet">
+                            <svg aria-hidden="true" viewBox="0 0 32 32" focusable="false"><circle stroke="none" cx="16" cy="16" r="10"></circle></svg>
+                        </div>
+                        <div class="title">
+                            What's next?                        </div>
+                                            </li>
+
+                    <li class="sub-group" id="signoff" style="list-style:none">
+                        <div class="advisor"></div>
+                    </li>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+
+    <!-- SHOW IMAGE -->
+    <div class="modal fade" id="showimg" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style='border-bottom:none; position:relative;'>
+                    <h4 class="modal-title"></h4>
+                    <div class="topclose">
+                        <button type="button" class="btn" data-dismiss="modal">&#10007;</button>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding-top:5px; font-size:12pt; position: relative; padding-top:0px;"></div>
+                <div class="modal-footer" style="padding-top:0px; border-top:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIDEO PLAYER -->
+    <div class="modal fade" id="videoplayer" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content" style="padding:0px;">
+                <div class="modal-body" style="padding:0px; font-size:12pt; position: relative;">
+                <div class="videotitle"></div>
+                <div class="videoclose" data-dismiss='modal'>&#10007;</div>
+                <div class="player"></div>
+                <!--video id='vplayer' poster='' controls>
+                    <source src=''/>
+                </video-->
+            </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!-- AUTONET TV -->
+    <div class="modal fade" id="autonettv" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                    <div class="modal-content" style='background:linear-gradient(120deg, #555, #222);'>
+                            <div class="modal-header" style='border-bottom:none; position:relative; padding-bottom:0px;'>
+                                    <h4 class="modal-title" style='border-bottom:0px; color:#ddd;'>AutoNetTV</h4>
+                                    <div class="topclose" style="position:absolute; right:-20px; top:-18px;">
+                                            <button type="button" class="btn" data-dismiss="modal" style="background:transparent;">
+                                                    <i class="fa fa-close"></i>
+                                            </button>
+                                    </div>
+                    <div class="btn-group btn-group-justified">
+                        <a href="#" class="btn active" data-id="attached" onclick="$.fn.toggleAutonet(this);return false;">Attached</a>
+                        <a href="#" class="btn" data-id="catalog" onclick="$.fn.toggleAutonet(this); return false;">AutonetTV Catalog</a>
+                    </div>
+                    <span class='catalog'></span>
+                            </div>
+                            <div class="modal-body" style="min-height:200px; padding:20px;"></div>
+                    </div>
+            </div>
+    </div>
+    <!-- Virtual Vehicle -->
+    <div class="modal fade" id="mv" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-md" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style='border-bottom:none; position:relative;'>
+                    <h4 class="modal-title"></h4>
+                    <div class="topclose">
+                        <button type="button" class="btn" data-dismiss="modal">&#10007;</button>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding-top:5px; font-size:12pt; position: relative; padding-top:0px; margin-top:5%;">
+                    <div id="mvloading" style="text-align:center;"></div>
+                    <iframe id="mvvideo" style="width:100%;height:400px !important;overflow: hidden" src="" frameborder="0" allowtransparency="true" allowfullscreen></iframe>
+                </div>
+                <div class="modal-footer" style="padding-top:0px; border-top:none;"></div>
+                </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- jQuery -->
+	<script src="/js_4/popper.min.js"></script>
+	<script src="/Admin/lib/jquery/jquery-3.4.1.min.js"></script>
+	<script src="/Admin/lib/jquery/jquery-migrate-3.0.1.js"></script>
+    <script src="/bs4/js/bootstrap.min.js"></script>
+
+    <!-- PINCODE -->
+    <script src="../lib/pincodeinput/bootstrap-pincode-input.min.js"></script>
+
+    <!-- ON OFF -->
+    <script src="../lib/onoff/dist/jquery.onoff.min.js"></script>
+    <link rel="stylesheet" href="../lib/onoff/dist/jquery.onoff.css" media="screen" />
+    
+    <script src="/Admin/lib/atme-headers/js/bootstrap-show-modal.js"></script>
+
+    <!-- MOMENT -->
+	<script src="/Admin/lib/momentjs/moment.min.js?ref=1"></script>
+	<script src="/Admin/lib/momentjs/moment-timezone-with-data.js?ref=1"></script>
+
+    <script type="text/javascript" src="../lib/fabricjs/fabric.min.js"></script>
+
+    <!-- VIDEO PLAYER -->
+    <link rel='stylesheet' href='../lib/plyr/plyr.css'>
+    <script src='../lib/plyr/plyr.js'></script>
+
+    <script src="js/jquery.atme.videoplayer.js"></script>
+    <script src="js/jquery.atme.videoplaylist.js?ref=1"></script>
+    <script src="js/jquery.atme.markings.js?ref=1"></script>
+
+            <script type="text/javascript" src="../VV/jquery.atme.vv-api.js"></script>
+            
+            <script src="/Admin/lib/videojs/8.3.0/video.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/videojs-playlist@5.1.2/dist/videojs-playlist.min.js"></script>
+        <script src="/Admin/lib/videojs-playlist-ui/5.0.0/videojs-playlist-ui.min.js"></script>
+        <link href="/Admin/lib/videojs/8.3.0/video-js.min.css" rel="stylesheet">
+        <link href="/Admin/lib/videojs-playlist-ui/5.0.0/videojs-playlist-ui.css" rel="stylesheet">
+    
+    <!-- TIME TRACKING -->
+    <script src="/js_3/timeme.min.js"></script>
+
+    <!-- Panzoom -->
+    <script src="/Admin/lib/panzoom/panzoom.min.js"></script>
+    <script src="../lib/atme-headers/js/jquery.atme.zoom.js?ref=1"></script>
+
+    <script src="js/jquery.atme.customerdvi.js?ref=1783868121"></script>
+    <script src="js/jquery.atme.rvh.js?ref=1"></script>
+    <script src="js/jquery.atme.commons.js?ref=1"></script>
+    <script src="js/jquery.atme.healthreport.js"></script>
+    <script src="js/jquery.atme.signoff.js"></script>
+    <script src="js/jquery.atme.tire.js?ref=1"></script>
+    <script src="js/jquery.atme.info.js"></script>
+    <script src="js/jquery.atme.preferences.js"></script>
+    <script src="js/jquery.atme.servicehistory.js"></script>
+    <script src="js/jquery.atme.guide.js"></script>
+    <script src="js/jquery.atme.greetings.js"></script>
+    <script src="js/jquery.atme.customertrack.js"></script>
+
+    <link href="css/tire.css" rel="stylesheet">
+    <link href="css/rvh-carousel.css" rel="stylesheet">
+
+<script>
+var defaults = {};
+defaults["id"] = "VFJNNjhSTGVCMlNsUXowbnJIWkp4NTlnNW0yNXZTRzZVRmo1c2FtYUJOOD0=";
+defaults["shop_id"] = "1985";
+defaults["shop_name"] = "Grip Auto and Tire Murrayville";
+defaults["shop_overview"] = "";
+defaults["status_id"] = "27570511";
+defaults["rvh"] = [];
+defaults["rvh_mappings"] = [];
+defaults["customer"] = {"status_id":"27570511","user_id":"8169542","vehicle_id":"12287921","status":"99","tech_id":"38646","admin_id":"43580","alt_cust_name":"","etc":"2026-01-30 17:00:00","wait_dropoff":"","status_attr":"","sheet_id":"19124","received_texts":"a","received_emails":"a","mileage":"","kilometer":"41211","hours":"","invoice":"8550","keytag":"","remote_ticket_id":"ca672413-1dc9-4e67-b6a0-8a155eb93cb5","db_lock":"2","firstname":"","lastname":"S","phonenumber":"(xxx)-xxx-x824","email":"dproby@sd35.bc.ca","year":"2021","make":"Ford","model":"Transit-250","unique_id":"RW9434","unit_id":"#106","license_plate_state":"","vin":"1FTBR1C85MKA73249","ABS":"","transmission":"Auto","miscellaneous":"","wheel_drive":"RWD","submodel":"Base","engine_size":"V6 3.5L 3496CC 213CID VIN 8","motor_vehicle_id":"","motor_engine_id":"","motor_submodel_id":"","additional_notes":"","inspecinfo_id":"15529323","remote_veh_id":"138b52cc-41b3-4131-9ad9-75506530bc62","remote_cust_id":"0faa1f4d-a11b-4383-a27c-27310fe462fb","group_id":"","tire_rotation_reminder":"","tire_rotation_reminder_date":"","text_opt_signature":"","motor_cycle_template":"","microsite_items_order":"","video_playlist_order":"","video_play_sequence":"0","only_show_video":""};
+defaults["status"] = null;
+defaults["config"] = {"inspecsetup_id":1842,"shop_id":1985,"default_green":0,"default_green_tire":0,"caution_on_notes":1,"tire_inspec":1,"inspec_pdf_show_green":1,"inspec_pdf_logo_width":0,"populate_inspec_typeahead":0,"repopulate_inspec_toggle":1,"repopulate_green_inspec_toggle":0,"repopulate_tire_toggle":0,"show_approved":1,"miscellaneous":" Oil Filters","green_title":"Good Items","orange_title":"Requires Future Attention","red_title":"Requires Urgent Attention","tire_title":"Tire Inspection","display_order":"t,0,1,2","private_notes":1,"benchmark":1,"bm_images":2,"bm_notes":1,"bm_markings":1,"bm_videos":2,"bm_report_sent":2,"bm_report_viewed":2,"text_template":"Please review the following to view your vehicle inspection report {link}.","email_template":"Attached is a link to the vehicle inspection report for your {vehicle}. You can view the report online at {link}.","upload_via_presigned_url":1,"required_fields":"wheel_drive,unique_id,kilometer,vehicle_picture,transmission","vehicle_meter":"K","show_items_addressed":1,"show_customer_status":0,"markup_color":"#ff0","tire_multi_axle":0,"tire_template":"{\"1\":{\"tires\":\"2\"},\"2\":{\"tires\":\"2\"}}","tire_autotab":0,"tire_axles":"","tire_options":[],"tire_autotab_order":"","tire_rotation_reminder":1,"tire_reminder_template":"our records indicate that your vehicle is due for a tire rotation. Please contact us to schedule an appointment.","tire_status":0,"tire_oe_actual":0,"tire_psi_before":0,"attachment_require_on_marked":null,"attachment_require_on_all_marked":0,"dvi_signoff_wo_pkg":1,"require_images_on_all_items":0,"thread_depth":0,"tire_picture":0,"tire_measurement":"","auto_save_notes_box_status":0,"only_show_video":0,"sheets":{"19124":{"details":{"sheet_id":19124,"shop_id":1985,"title":"Standard Vehicle Inspection","default_sheet":0,"group_sheet":0,"allow_mso_shops":0,"master_default":null,"sub_shop_default":"","tire_inspec":1,"tire_location":"top","date_time":"2025-11-06 09:31:49","updated_by":43580,"archived":0,"sms_code":null},"categories":{"3":{"name":"Outside Vehicle","items":{"919403":"Windshield","919404":"Washer system","919405":"Wiper blades","919406":"Exterior Lights","919407":"Interior Lights","919412":"Body condition","919414":"Wheel\/Cover Damage\/Missing","919429":"Other findings","919430":"Other findings"}},"4":{"name":"Road Test","items":{"919431":"Test driven","919434":"Noises","919435":"Road feel","919436":"Smells","919438":"Other findings"}},"17":{"name":"Warning Lights","items":{"919619":"Warning Lights O"}},"6":{"name":"Inside Vehicle","items":{"919453":"Heating and A\/C Control And Operation","919455":"Cabin air filter","919456":"Interior pedals","919458":"Horn","919459":"Seat belts (Drivers)","919462":"Set clock to current time","919464":"Other findings"}},"7":{"name":"Under Hood","items":{"919465":"Battery\/Batteries","919468":"Battery cables &amp; clamps","919470":"Hood lift struts","919471":"Engine and transmission mounts","919472":"Drive belts &amp; components","919475":"Fuel filter","919477":"Air filter","919480":"Cooling System","919485":"Spark Plugs","919486":"Power Steering System","919487":"Timing belt","919488":"Water pump","919489":"Other findings","919490":"Other findings"}},"8":{"name":"Tires","items":{"919492":"All Four Tires Tread Depth\/Pressure\/Condition\/Balance","919498":"Right Rear Tread Depth\/Pressure\/Condition\/Balance","919501":"Wheel studs, nuts and wheel torque","919503":"Spare tire pressure","919504":"Wheel rims","919505":"Seasonal tires removed condition","919506":"Other findings","919507":"Other findings"}},"9":{"name":"Brakes (INSPECTION ONLY)","items":{"919508":"Brake fluid moisture content or condition","919509":"Front brake condition","919510":"Left front pad measurement\/condition","919511":"Right front pad measurement\/condition","919512":"Front rotors","919513":"Front brake calipers","919515":"Other Front Brake Components","919516":"Rear brake condition","919517":"Left rear pad \/ shoe measurement\/condition","919518":"Right rear pad \/ shoe measurement\/condition","919519":"Rear brake Rotors\/Drums","919521":"Rear brake calipers\/wheel cylinders","919525":"Other Rear Brake Components","919527":"Parking brake holding as designed but disassembly would be required to determine condition","919528":"Parking brake other findings","919532":"Brake master cylinder","919533":"Other findings"}},"10":{"name":"Under Vehicle","items":{"919534":"Steering components","919539":"Front suspension components","919541":"Ball joints","919542":"Lower control arm bushings","919545":"Shocks &amp; Struts","919548":"Front Axle and Components - If Equipped","919778":"Driveline","919549":"Wheel \/ hub bearing","919550":"Rear suspension components","919557":"CV drive axle (Rear)","919558":"Rear Axle and Components - If Equipped","919559":"Wheel Alignment Recommendations","919560":"Other findings","919561":"Other findings"}},"11":{"name":"Exhaust","items":{"919563":"Exhaust manifold","919565":"Exhaust Other Components","919567":"Other findings","919568":"Other findings"}},"12":{"name":"Fluid Leaks","items":{"919569":"Brake fluid leaking","919570":"Coolant leaking","919571":"Engine oil leaking","919572":"Fuel leaking","919573":"Front axle \/ differential leaking","919574":"Power steering fluid leaking","919575":"Rear axle \/ differential fluid leaking","919576":"Transfer case fluid leaking","919577":"Transmission fluid oil leaking","919578":"Other findings","919579":"Other findings"}},"14":{"name":"Fluid Maintenance Condition","items":{"919592":"Coolant","919593":"Engine oil","919594":"Differential(s) Fluid(s)","919595":"Power steering fluid","919598":"Transfer case fluid","919599":"Transmission fluid","919601":"Other Fluids"}}}}},"order":["t","0","1","2"]};
+defaults["phno_by_id"] = {"10611480":"(xxx)-xxx-x824"};
+defaults["tire_inspec"] = 1;
+defaults["multiple_sheets"] = 0;
+defaults["inspec_upload_url"] = "https://autotextme.s3.us-west-2.amazonaws.com/inspec_datastore/";
+defaults["profile_upload_url"] = "https://autotextme.s3.us-west-2.amazonaws.com/profile_datastore/";
+defaults["tire"] = {"tire_id":5380719,"shop_id":1985,"status_id":27570511,"oe":"","actual":"","lf_threaddepth":"3","lf_psi_before":null,"lf_psi_after":null,"lf_notes":"Recommend new tires","lf_status":"0","lf_dot":"","lf_approval":0,"lf_image":"","rf_threaddepth":"3","rf_status":"0","rf_dot":"","rf_approval":0,"rf_notes":"","rf_image":"","rf_psi_before":null,"rf_psi_after":null,"lr_status":"0","lr_dot":"","lr_approval":0,"lr_psi_before":null,"lr_psi_after":null,"lr_threaddepth":"3","lr_notes":"","lr_image":"","rr_status":"0","rr_dot":"","rr_approval":0,"rr_psi_before":null,"rr_psi_after":null,"rr_notes":"","rr_threaddepth":"3","rr_image":"","admin_id":38646,"date_time":"2026-01-30 09:13:13"};
+defaults["preparedby"] = {"first_name":"Brian","last_name":"Wirsz","level_access":1,"thumbnail":"2f7aeebfb52653ec05c844b4268fe0d6","admin_id":"43580","biography":""};
+defaults["signoff"] = {"19124":{"38646":{"first_name":"Tylar","last_name":"L","biography":"","level_access":4,"thumbnail":"085c4f4b0ebcb7dc6f52cda542051ae6_t.jpg","texted_on":null,"emailed_on":null,"viewed_on":null,"signoff_date":"01\/30\/2026 09:32 am"}}};
+defaults["markings"] = [];
+defaults["imgnotes"] = [];
+defaults["mode"] = 1;
+defaults["tool"] = "dvi";
+
+defaults["canvasObjs"] = {};
+defaults["items"]  = {"671940":{"sheet_id":14101,"results_id":316310640,"inspec_id":671940,"inspec_status":"1","notes":"Front rotors appeared to have been overheated lots of hotspots - from Previous Inspection - at 32312 kilometers, on March 4, 2025","customer_approval":"","recommendation":"","tech_id":38646,"rec_sms_code":"","inspec_sub_status":""},"919403":{"sheet_id":19124,"results_id":316310765,"inspec_id":919403,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919404":{"sheet_id":19124,"results_id":316310768,"inspec_id":919404,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919405":{"sheet_id":19124,"results_id":316310772,"inspec_id":919405,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919406":{"sheet_id":19124,"results_id":316310779,"inspec_id":919406,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919407":{"sheet_id":19124,"results_id":316310784,"inspec_id":919407,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919431":{"sheet_id":19124,"results_id":316310793,"inspec_id":919431,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919435":{"sheet_id":19124,"results_id":316310799,"inspec_id":919435,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919434":{"sheet_id":19124,"results_id":316310805,"inspec_id":919434,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919436":{"sheet_id":19124,"results_id":316310809,"inspec_id":919436,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919619":{"sheet_id":19124,"results_id":316310818,"inspec_id":919619,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919456":{"sheet_id":19124,"results_id":316310862,"inspec_id":919456,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919458":{"sheet_id":19124,"results_id":316310871,"inspec_id":919458,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919459":{"sheet_id":19124,"results_id":316310884,"inspec_id":919459,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919462":{"sheet_id":19124,"results_id":316310889,"inspec_id":919462,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919470":{"sheet_id":19124,"results_id":316310912,"inspec_id":919470,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919472":{"sheet_id":19124,"results_id":316310919,"inspec_id":919472,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919477":{"sheet_id":19124,"results_id":316310929,"inspec_id":919477,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919485":{"sheet_id":19124,"results_id":316310945,"inspec_id":919485,"inspec_status":"n","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919480":{"sheet_id":19124,"results_id":316310966,"inspec_id":919480,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919508":{"sheet_id":19124,"results_id":316320369,"inspec_id":919508,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919509":{"sheet_id":19124,"results_id":316320769,"inspec_id":919509,"inspec_status":"2","notes":"8mm","customer_approval":"no","recommendation":"","tech_id":38646,"rec_sms_code":"","inspec_sub_status":""},"919516":{"sheet_id":19124,"results_id":316320814,"inspec_id":919516,"inspec_status":"2","notes":"8mm","customer_approval":"no","recommendation":"","tech_id":38646,"rec_sms_code":"","inspec_sub_status":""},"919563":{"sheet_id":19124,"results_id":316320895,"inspec_id":919563,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919565":{"sheet_id":19124,"results_id":316320899,"inspec_id":919565,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919569":{"sheet_id":19124,"results_id":316321757,"inspec_id":919569,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919570":{"sheet_id":19124,"results_id":316321771,"inspec_id":919570,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""},"919571":{"sheet_id":19124,"results_id":316321777,"inspec_id":919571,"inspec_status":"2","notes":"","customer_approval":"no","recommendation":null,"tech_id":38646,"rec_sms_code":null,"inspec_sub_status":""}};
+defaults["images"] = [];
+defaults["videos"] = [];
+defaults["line_videos"] = [];
+defaults["rvh_videos"] = [];
+defaults["vv_videos"] = [];
+defaults['pdfs'] = [];
+defaults["stats"] = {"red":0,"orange":0,"green":0};
+defaults['playlist_order'] = [];
+defaults['video_play_sequence'] = 0;
+
+defaults['only_show_video'] = 0;
+if (defaults.only_show_video) defaults['video_play_sequence'] = 1;
+
+defaults["fill"] = "transparent";
+defaults["stroke"] = "#ff0";
+defaults["strokeWidth"] = 4;
+defaults["viewed"] = 0;
+defaults["time_zone"] = "US/Pacific";
+defaults["treaddepth"] = "(mm)";
+defaults["id"] = "VFJNNjhSTGVCMlNsUXowbnJIWkp4NTlnNW0yNXZTRzZVRmo1c2FtYUJOOD0=";
+defaults["shop_country"] = "CA";
+
+defaults["virtual_vehicle"] = 1;
+defaults["autonettv"] = 0;
+
+defaults['tracking'] = {"images":[],"videos":[],"total_view_time":null,"sections":[]};
+defaults['vehicle_meter'] = "Kilometer";
+defaults["insights"] = 1;
+defaults["disable_view_trigger"] = 0;
+defaults["show_items_addressed"] = 1;
+
+defaults["hunter_results"] = [];
+defaults["groove_glove_results"] = [];
+
+// MULTI AXLE
+defaults["tire_multi_axle"] = 0;
+defaults["tire_template"] = {"1":{"tires":"2"},"2":{"tires":"2"}};
+defaults["tire_info"] = {};
+defaults["tire_images"] = {};
+defaults["tire_markings"] = {};
+defaults["tire_imgnotes"] = {};
+defaults["tire_axles"] = {};
+defaults['tire_spelling'] = 'Tire';
+defaults['license_spelling'] = 'License';
+
+// GROUP ITEMS
+defaults["group_items"] = [];
+
+defaults["report_order"] = {};
+defaults["color_tags"] = {"rvh-bar":{"text":"#ffffff","bg":"#5bc0de"},"tire-bar":{"text":"#ffffff","bg":"#777777"},"report-green":{"text":"#ffffff","bg":"#288b29"},"sidebar":{"text":"#ffffff","bg":"#5bc0de"}};
+defaults["content_tags"] = {};
+defaults["default_section"] = {};
+defaults["expand_section"] = {"dvi":["","tire-insp"]};
+defaults["guide"] = {"dvi":{"green-items":"Good Items","orange-items":"Require future attention","red-items":"Require urgent attention"}};
+defaults["items_order"] = {};
+defaults["ip_address"] = "35.253.109.164";
+
+if (defaults["virtual_vehicle"])
+{
+    $.fn.initVVapi('7klz606zuik2', 'https://atme.motovisuals.com');
+}
+
+if (!defaults["disable_view_trigger"] && !defaults["shop_overview"])
+{
+    if (!defaults["viewed"]) $.fn.showGreetings('dvi');
+    else if (defaults["insights"]) $().tracker();
+}
+
+if (defaults.video_play_sequence && !defaults.autonettv) $(".video-presentation-item").show();
+$().loadReportOrder();
+$().loadColorTags();
+$().loadContentTags();
+
+window.onload = function()
+{
+    if (!defaults.autonettv) $().videoWalkThrough();
+    $().loadReport();
+    $().loadRVH();
+    $().loadHealthReport();
+    $().loadSignoff();
+    if (defaults.tire_inspec || defaults.groove_glove_results.length > 0 || defaults.hunter_results.length > 0) $().loadTireInspection();
+    $().loadGuide();
+
+    $('#sidebarCollapse').on('click', function () {
+        $('#sidebar').toggleClass('inactive');
+    });
+
+    $(document).find("title").html("Grip Auto and Tire Murrayville");
+    $("#spinner").hide();
+}
+</script>
+
+  </body>
+</html>

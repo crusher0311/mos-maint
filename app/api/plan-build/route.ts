@@ -51,6 +51,7 @@ import { resolveCustomerName } from "@/lib/plan-build/customer-name";
 import { buildCarfaxMatchDiagnostics } from "@/lib/plan-build/carfax-match-diagnostic";
 import { recordUnmatchedCarfaxDescription } from "@/lib/carfax-match-log";
 import { isRemediedSinceInspection } from "@/lib/dvi-prefill-history";
+import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import { getCarfaxOverridesMap } from "@/lib/carfax-overrides";
 import {
   detectMileageDiscrepancy,
@@ -802,7 +803,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings, ...unresolvedHistoricalFindings];
+    // Task #860: findings parsed from public DVI share links found on
+    // Protractor WOs (AutoServe1, avlink.io, AutoFlow microsites, …).
+    // Read-only Mongo lookup; returns [] unless links have been ingested.
+    const dviLinkFindings = await gatherDviLinkFindings(shopId, vin);
+
+    const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings, ...dviLinkFindings, ...unresolvedHistoricalFindings];
 
     let protractorDeferredWork: ProtractorDeferredWork[] = [];
     if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {

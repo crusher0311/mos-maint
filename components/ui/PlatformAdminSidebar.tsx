@@ -26,6 +26,7 @@ import {
   BookOpen,
   ArrowRightLeft,
   FileSearch,
+  ClipboardCheck,
   KeyRound,
   MessageSquare,
   Voicemail,
@@ -207,6 +208,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/queues" icon={Boxes} label="Backfill Queue" />
           <NavLink href="/platform-admin/zink-print" icon={Printer} label="ZINK Print" />
           <NavLink href="/platform-admin/tekmetric-webhook-health" icon={Activity} label="Tek Webhook Health" />
+          <NavLink href="/platform-admin/dvi-links" icon={ClipboardCheck} label="DVI Links" />
           <NavLink href="/platform-admin/concern-skip-stats" icon={MessageCircle} label="Concern Skip Stats" />
           <NavLink href="/platform-admin/tekmetric-migrations" icon={ArrowRightLeft} label="Tek Migrations" />
           <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />

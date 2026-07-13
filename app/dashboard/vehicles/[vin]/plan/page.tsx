@@ -60,6 +60,7 @@ import {
 } from "@/lib/plan-build/protection-plan";
 import { listEnrollmentsForVehicle } from "@/lib/data/repositories/protection-plan-enrollments";
 import { listJobNamesForVehicle } from "@/lib/data/repositories/job-index";
+import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
@@ -2198,10 +2199,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
     }
   }
 
+  // Task #860: findings parsed from public DVI share links found on
+  // Protractor WOs (AutoServe1, avlink.io, AutoFlow microsites, …).
+  // Read-only; returns [] unless links have been ingested.
+  const dviLinkFindings = await gatherDviLinkFindings(shopId, vin);
+
   const dviFindings: Array<{ name?: string; status?: string | number; source?: string; notes?: string | null }> = [
     ...autoflowDviFindings,
     ...autoVitalsDviFindings,
     ...tekmetricDviFindings,
+    ...dviLinkFindings,
   ];
 
   const oemItems: OEMItem[] = (oemData.items as any[]).map((x) => ({

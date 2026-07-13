@@ -34,6 +34,23 @@ export async function findFreshInvoiceCacheEntry(
   });
 }
 
+/**
+ * Async iterator over cached invoices (task #860 DVI-link sweep).
+ * Projects only { shopId, invoice } to keep the cursor light.
+ */
+export async function* iterateInvoiceCacheEntries(
+  shopId?: number,
+): AsyncGenerator<Pick<ProtractorInvoiceCacheDoc, "shopId" | "invoice">> {
+  const col = await collection();
+  const filter = typeof shopId === "number" ? { shopId } : {};
+  const cursor = col.find(filter, {
+    projection: { shopId: 1, invoice: 1 },
+  });
+  for await (const doc of cursor) {
+    yield doc as Pick<ProtractorInvoiceCacheDoc, "shopId" | "invoice">;
+  }
+}
+
 export async function upsertInvoiceCacheEntry(
   shopId: number,
   invoiceId: string,
