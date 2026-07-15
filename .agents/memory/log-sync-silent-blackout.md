@@ -35,6 +35,19 @@ a manual wide-window trigger.
   >1-page tie group at one `dt`; page past it with a *bounded* OFFSET that resets once the
   cursor advances — never truncate tied rows, never loop.
 
+## Recurrence 2026-07-14→15 (11.7h blackout): stale server-side connection, restart fixes
+Froze 2026-07-14 23:16 UTC → 2026-07-15 ~11:00 UTC. This time the freshness alarm DID log
+`Feed stale` + `0 new (99460 fetched)` every run — the telemetry worked; nobody was watching.
+Signature: `fetched` count IDENTICAL across runs (99,460) with `0 new, 0 errors` = prod's
+long-lived process replaying a frozen upstream snapshot. Better Stack had migrated their
+ClickHouse backend (new version, query source rebuilt); the same query from a fresh shell
+returned LIVE rows (proved a live row's dt_hash was absent from PG), so creds/query were fine —
+only prod's pinned connection/DNS was stale. **Fix: restart the Render web service**
+(`POST /v1/services/<id>/restart`) — feed unfroze on the next 15-min tick.
+Also learned: the queryable ClickHouse live tail now retains only ~45 MINUTES (min(dt) ≈
+now-45m), so any blackout gap is permanently lost from the mirror — the "30 days in Better
+Stack" assumption no longer holds for the query API.
+
 ## Operator playbook (confirm / unstick)
 - Rule out the "stale token" red herring FIRST: replay the exact query from a shell using
   `BETTERSTACK_QUERY_{HOST,USERNAME,PASSWORD,SOURCE}` (all env vars; only PASSWORD is a secret).
