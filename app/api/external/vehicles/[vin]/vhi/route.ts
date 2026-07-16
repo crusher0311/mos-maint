@@ -11,7 +11,7 @@ import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
-import { resolveOpenRoMileage, pickMileageInput, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
+import { resolveOpenRoMileage, pickMileageInput, reconcileStaleActualWithEstimate, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
@@ -376,11 +376,15 @@ export const GET = createExternalEndpoint(
     let mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual";
     let mileageEstimateDetails: Record<string, unknown> | null = null;
 
-    // (2) CARFAX estimate — only when NO actual reading (neither open-RO nor the
-    // vehicles snapshot) is available. `estimateMileageFromCarfax` is a cached
-    // Mongo read (no external call), so it's cheap on the hot path; the timeout
-    // is a safety guard.
-    if (!mileage || mileage <= 0) {
+    // (2) CARFAX estimate — when NO actual reading (neither open-RO nor the
+    // vehicles snapshot) is available, OR (Task #872, amending Task #476's
+    // "most-recent RO wins") when the winning RO odometer is older than
+    // RO_ODOMETER_FRESHNESS_DAYS: a months-old posted-RO reading must not be
+    // served as "Current", so we also compute the forward-projecting estimate
+    // and take the LARGER of the two (monotonic guard — never go below a real
+    // reading). `estimateMileageFromCarfax` is a cached Mongo read (no external
+    // call), so it's cheap on the hot path; the timeout is a safety guard.
+    if (!mileage || mileage <= 0 || picked.staleActual) {
       try {
         const est = await withUpstreamTimeout(
           estimateMileageFromCarfax(Number(resolvedShopId), vin),
@@ -388,8 +392,21 @@ export const GET = createExternalEndpoint(
           `carfax estimateMileage ${vin}`,
           { estimated: false, mileage: null, reason: "timeout" } as any,
         );
-        if (est.estimated && est.mileage && est.mileage > 0) {
-          mileage = est.mileage;
+        const estMiles = est.estimated && est.mileage && est.mileage > 0 ? est.mileage : null;
+        const reconciled = reconcileStaleActualWithEstimate({
+          actualMiles: picked.staleActual ? mileage : null,
+          actualSource: mileageInputSource,
+          estimateMiles: estMiles,
+        });
+        if (picked.staleActual && !reconciled.estimateWon) {
+          // Stale RO still wins (estimate unavailable or lower) — keep the
+          // reading but log that it doesn't imply freshness.
+          console.log(
+            `[VHI External] Stale RO odometer retained for ${vin}: ro=${mileage} ` +
+            `roDate=${openRoLookup?.roDate ? new Date(openRoLookup.roDate).toISOString() : "n/a"} estimate=${estMiles ?? "none"}`
+          );
+        } else if (reconciled.estimateWon && reconciled.miles) {
+          mileage = reconciled.miles;
           mileageSource = "estimated_carfax";
           mileageInputSource = "carfax_estimated";
           mileageEstimateDetails = {

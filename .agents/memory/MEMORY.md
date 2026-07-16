@@ -104,4 +104,5 @@
 - [Tekmetric posted ROs reject job adds](tekmetric-posted-ro-rejects-adds.md) — fetch-ro 200 + post-job 400 = posted (closed) RO, not a payload bug; probe page API via stored shops.tekmetric.xAuthToken.
 - [Tekmetric money field variants](tekmetric-money-field-variants.md) — estimate endpoint uses partsPrice/laborPrice (not *Total/*Amount); readers missing a variant silently see $0 → false "missing parts" audits.
 - [Declined-add thin lines](declined-add-thin-lines.md) — pre-May-2026 job_index rows have right totals but $0/no-labor lines; re-hydrate from tekmetric_work_orders cache before pushing to an SMS + repo must pass labor `hours` through.
+- [RO odometer freshness](vhi-ro-odometer-freshness.md) — RO readings >90d old no longer read as "Current"; CARFAX estimate reconciled monotonically on ALL three plan-cache surfaces.
 - [DVI share-link pipeline](dvi-share-link-pipeline.md) — all OFF behind DVI_LINK_INGEST_ENABLED; links expire at provider; findings are advisory-only (never history anchors); new provider = touch dviSource unions + cache version.

@@ -51,6 +51,55 @@ export type MileageInputSource =
   | "carfax_estimated"
   | "annual_estimated";
 
+/**
+ * Task #872: freshness window for an RO odometer reading. Amends the Task
+ * #476 "most-recent RO wins" rule: an RO odometer older than this window is
+ * no longer treated as a *current* reading — the CARFAX rolling estimate is
+ * also computed and the LARGER of the two wins (odometers are monotonic, so
+ * a real reading is a floor that a forward-projecting estimate may exceed,
+ * never undercut). Prevents a months-old posted-RO odometer from being
+ * served as "Current" mileage (the HEART Evanston Lexus case).
+ */
+export const RO_ODOMETER_FRESHNESS_DAYS = 90;
+export const RO_ODOMETER_FRESHNESS_MS = RO_ODOMETER_FRESHNESS_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Task #872: true when an RO date is known AND older than the freshness
+ * window. An unknown/missing date is treated as FRESH — the roNumber-
+ * specific path (an RO the advisor is looking at right now) and legacy
+ * mirrors without timestamps must not be demoted on missing data.
+ */
+export function isRoOdometerStale(
+  roDate: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!roDate) return false;
+  const d = roDate instanceof Date ? roDate : new Date(roDate);
+  if (isNaN(d.getTime())) return false;
+  return now.getTime() - d.getTime() > RO_ODOMETER_FRESHNESS_MS;
+}
+
+/**
+ * Task #872: pure reconciliation of a stale actual reading against the
+ * CARFAX rolling estimate. Callers run this AFTER pickMileageInput when
+ * `staleActual` is true (and an estimate could be computed):
+ *  - estimate > stale actual → estimate wins, labeled `carfax_estimated`
+ *  - estimate missing/lower → stale actual is still served with its
+ *    original label (monotonic guard: never go backward from a real reading)
+ */
+export function reconcileStaleActualWithEstimate(input: {
+  actualMiles: number | null;
+  actualSource: MileageInputSource | null;
+  estimateMiles: number | null | undefined;
+}): { miles: number | null; mileageInputSource: MileageInputSource | null; estimateWon: boolean } {
+  const actual = input.actualMiles && input.actualMiles > 0 ? input.actualMiles : null;
+  const estimate = input.estimateMiles && input.estimateMiles > 0 ? input.estimateMiles : null;
+  if (estimate != null && (actual == null || estimate > actual)) {
+    return { miles: estimate, mileageInputSource: "carfax_estimated", estimateWon: true };
+  }
+  return { miles: actual, mileageInputSource: actual != null ? input.actualSource : null, estimateWon: false };
+}
+
 export async function resolveOpenRoMileage(opts: {
   db: any;
   shopIdVariants: any[];
@@ -188,9 +237,18 @@ export function pickMileageInput(input: {
   vehicleDocMileage: number | null | undefined;
   openRoLookup: OpenRoMileageResult | null;
   discrepancyToleranceMiles?: number;
+  /** Task #872: injectable clock for freshness tests. Defaults to now. */
+  now?: Date;
 }): {
   miles: number | null;
   mileageInputSource: MileageInputSource | null;
+  /**
+   * Task #872: true when the chosen reading is an RO odometer whose RO date
+   * is older than RO_ODOMETER_FRESHNESS_DAYS. A stale actual must no longer
+   * short-circuit the CARFAX rolling estimate — the caller computes the
+   * estimate and runs `reconcileStaleActualWithEstimate` to take the larger.
+   */
+  staleActual: boolean;
   /**
    * Task #476 spec: when the open RO is the LOWER of the two readings the
    * larger (vehicles.currentMileage) wins, but it's also evidence that the
@@ -204,9 +262,11 @@ export function pickMileageInput(input: {
   const roLookup = input.openRoLookup && input.openRoLookup.miles > 0 ? input.openRoLookup : null;
   const ro = roLookup ? roLookup.miles : null;
   const tolerance = input.discrepancyToleranceMiles ?? MILEAGE_DISCREPANCY_TOLERANCE_MILES;
+  // Task #872: staleness of the RO reading (only meaningful when the RO wins).
+  const roIsStale = roLookup ? isRoOdometerStale(roLookup.roDate, input.now) : false;
 
   if (ro != null && (vehicle == null || ro >= vehicle)) {
-    return { miles: ro, mileageInputSource: "open_ro", discrepancy: null };
+    return { miles: ro, mileageInputSource: "open_ro", staleActual: roIsStale, discrepancy: null };
   }
   if (vehicle != null) {
     let discrepancy: MileageDiscrepancy | null = null;
@@ -221,7 +281,10 @@ export function pickMileageInput(input: {
         gapMiles: vehicle - ro,
       };
     }
-    return { miles: vehicle, mileageInputSource: "vehicles_collection", discrepancy };
+    // Task #872: the vehicles snapshot has NO per-record date (frozen since
+    // its one-time import — see memory vhi-partner-latency), so we can't
+    // date-gate it here; the frozen-snapshot problem is tracked separately.
+    return { miles: vehicle, mileageInputSource: "vehicles_collection", staleActual: false, discrepancy };
   }
-  return { miles: null, mileageInputSource: null, discrepancy: null };
+  return { miles: null, mileageInputSource: null, staleActual: false, discrepancy: null };
 }

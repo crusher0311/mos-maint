@@ -8,9 +8,12 @@ import { estimateMileageWhenMissing } from "@/lib/vhi-mileage-fallbacks";
 import {
   resolveOpenRoMileage,
   pickMileageInput,
+  reconcileStaleActualWithEstimate,
   type MileageInputSource,
   type OpenRoMileageResult,
 } from "@/lib/plan-build/open-ro-mileage";
+import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 
 /**
@@ -207,6 +210,52 @@ export const POST = createExternalEndpoint(
       if (picked.miles && picked.miles > 0) {
         mileage = picked.miles;
         mileageInputSource = picked.mileageInputSource;
+      }
+
+      // Task #872 (amends Task #476's "most-recent RO wins"): when the
+      // winning RO odometer is older than RO_ODOMETER_FRESHNESS_DAYS, also
+      // compute the CARFAX rolling estimate and take the LARGER of the two —
+      // a months-old posted-RO reading must not be served as current.
+      // Monotonic guard: the stale reading is a floor the estimate may
+      // exceed, never undercut. Same rule as GET /vehicles/{vin}/vhi so the
+      // shared plan cache (vin+shopId+mileage±500) keys identically.
+      if (picked.staleActual && mileage && mileage > 0) {
+        try {
+          const est = await withUpstreamTimeout(
+            estimateMileageFromCarfax(Number(resolvedShopId), vin.toUpperCase()),
+            5000,
+            `carfax estimateMileage ${vin}`,
+            { estimated: false, mileage: null, reason: "timeout" } as any,
+          );
+          const estMiles = est.estimated && est.mileage && est.mileage > 0 ? est.mileage : null;
+          const reconciled = reconcileStaleActualWithEstimate({
+            actualMiles: mileage,
+            actualSource: picked.mileageInputSource,
+            estimateMiles: estMiles,
+          });
+          if (reconciled.estimateWon && reconciled.miles) {
+            mileage = reconciled.miles;
+            mileageSource = "estimated_carfax";
+            mileageInputSource = "carfax_estimated";
+            mileageEstimateDetails = {
+              confidence: est.confidence,
+              dataPoints: est.dataPoints,
+              lastRecordedMileage: est.lastRecordedMileage,
+              lastRecordedDate: est.lastRecordedDate,
+              milesPerDay: est.milesPerDay,
+            };
+          } else {
+            console.log(
+              `[VHI Analyze] Stale RO odometer retained for ${vin.toUpperCase()}: ro=${mileage} ` +
+              `roDate=${openRoLookup?.roDate ? new Date(openRoLookup.roDate).toISOString() : "n/a"} estimate=${estMiles ?? "none"}`
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[VHI Analyze] CARFAX freshness estimate threw for ${vin.toUpperCase()}:`,
+            err instanceof Error ? err.message : err
+          );
+        }
       }
 
       // (2)+(3): CARFAX projection then model-year × 12k. The vehicles

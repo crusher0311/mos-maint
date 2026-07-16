@@ -15,6 +15,10 @@ import {
   buildMileageDiscrepancyFlag,
   shopHistoryLabelFromProvider,
 } from "@/lib/plan-build/mileage-discrepancy";
+import {
+  isRoOdometerStale,
+  reconcileStaleActualWithEstimate,
+} from "@/lib/plan-build/open-ro-mileage";
 import { buildReportUrl } from "@/lib/report-share";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
 import {
@@ -1822,9 +1826,11 @@ async function _GET(request: NextRequest) {
     // not regress a real higher mileage). Setting `mileage` here also short-
     // circuits the CARFAX block (which only fills when mileage is empty) so
     // the result is correctly tagged `actual`, not `estimated`.
+    let anchoredOnEnteredOdometer = false;
     if (enteredOdometer != null) {
       const known = typeof mileage === "number" && mileage > 0 ? mileage : 0;
       if (enteredOdometer >= known) {
+        anchoredOnEnteredOdometer = true;
         if (mileage !== enteredOdometer) {
           console.log(`[Extension] Anchoring on entered RO odometer ${enteredOdometer} (was ${mileage ?? "none"}) for ${vin ?? roId}`);
         }
@@ -1865,9 +1871,27 @@ async function _GET(request: NextRequest) {
           `carfax estimateMileage ${vin}`,
           { estimated: false as const, mileage: null, reason: "timeout" } as any,
         );
-        if (!mileage || mileage <= 0) {
-          if (estimate.estimated) {
-            mileage = estimate.mileage;
+        // Task #872 (amends Task #476's "most-recent RO wins"): a stale RO
+        // odometer (older than RO_ODOMETER_FRESHNESS_DAYS) no longer
+        // short-circuits the CARFAX rolling estimate — take the LARGER of
+        // the two (monotonic guard: a real reading is a floor the estimate
+        // may exceed, never undercut). The entered on-screen odometer
+        // (anchoredOnEnteredOdometer) is typed today and is always fresh.
+        // Same rule as both partner VHI routes so the shared plan cache
+        // (vin+shopId+mileage±500) keys identically across surfaces.
+        const roReadingIsStale =
+          !anchoredOnEnteredOdometer &&
+          typeof mileage === "number" && mileage > 0 &&
+          isRoOdometerStale(currentRoDate);
+        if (!mileage || mileage <= 0 || roReadingIsStale) {
+          const estMiles = estimate.estimated && estimate.mileage && estimate.mileage > 0 ? estimate.mileage : null;
+          const reconciled = reconcileStaleActualWithEstimate({
+            actualMiles: roReadingIsStale ? mileage : null,
+            actualSource: "open_ro",
+            estimateMiles: estMiles,
+          });
+          if (reconciled.estimateWon && reconciled.miles) {
+            mileage = reconciled.miles;
             mileageEstimated = true;
             mileageEstimateDetails = {
               confidence: estimate.confidence,
@@ -1876,9 +1900,11 @@ async function _GET(request: NextRequest) {
               lastRecordedDate: estimate.lastRecordedDate,
               milesPerDay: estimate.milesPerDay,
             };
-            console.log(`[Extension] Estimated mileage for ${vin}: ${mileage} mi (${estimate.confidence}, ${estimate.dataPoints} CARFAX points, ${estimate.milesPerDay} mi/day)`);
+            console.log(`[Extension] Estimated mileage for ${vin}: ${mileage} mi (${estimate.confidence}, ${estimate.dataPoints} CARFAX points, ${estimate.milesPerDay} mi/day)${roReadingIsStale ? " — estimate won over stale RO reading" : ""}`);
+          } else if (roReadingIsStale) {
+            console.log(`[Extension] Stale RO odometer retained for ${vin}: ro=${mileage} roDate=${currentRoDate ? new Date(currentRoDate).toISOString() : "n/a"} estimate=${estMiles ?? "none"}`);
           } else {
-            console.log(`[Extension] Cannot estimate mileage for ${vin}: ${estimate.reason}`);
+            console.log(`[Extension] Cannot estimate mileage for ${vin}: ${(estimate as any).reason}`);
           }
         } else if (mileage > 0) {
           console.log(`[Extension] Using actual mileage ${mileage} for ${vin} (not estimating)`);
