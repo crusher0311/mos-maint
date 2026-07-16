@@ -2567,10 +2567,22 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     unit = 'km';
   }
   try {
-    const configResp = await fetch(
-      `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
-      { headers: { 'Authorization': `Bearer ${mosApiToken}` } }
-    );
+    // Task #871: this GET used a bare fetch() with NO timeout. A stalled
+    // connection can hang for ~5 minutes (Chrome's socket timeout) before
+    // recovering — matching the 5–7 minute sticker prints reported at CBA
+    // Lubbock while the server route completed in <1s. The config is
+    // optional (defaults exist), so bound it tightly and degrade.
+    const configController = new AbortController();
+    const configTimer = setTimeout(() => configController.abort(), 8000);
+    let configResp;
+    try {
+      configResp = await fetch(
+        `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
+        { headers: { 'Authorization': `Bearer ${mosApiToken}` }, signal: configController.signal }
+      );
+    } finally {
+      clearTimeout(configTimer);
+    }
     if (configResp.ok) {
       const configData = await configResp.json();
       if (context.useKilometers == null && configData.config?.useKilometers) unit = 'km';
@@ -2611,15 +2623,30 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     if (context.vehicle.model) requestBody.vehicleModel = context.vehicle.model;
   }
   
-  // Call the sticker API
-  const response = await fetch(`${mosApiUrl}/api/extension/sticker?_token=${encodeURIComponent(mosApiToken)}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${mosApiToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
-  });
+  // Call the sticker API. Task #871: hard 45s cap (same budget as
+  // MOS_FETCH_TIMEOUT_MS) — a bare fetch here could hang for minutes on a
+  // stalled connection, freezing the print with no feedback.
+  const postController = new AbortController();
+  const postTimer = setTimeout(() => postController.abort(), 45000);
+  let response;
+  try {
+    response = await fetch(`${mosApiUrl}/api/extension/sticker?_token=${encodeURIComponent(mosApiToken)}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mosApiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+      signal: postController.signal
+    });
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw new Error('Sticker generation took too long and was stopped. Please try again.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(postTimer);
+  }
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

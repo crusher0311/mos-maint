@@ -10,6 +10,16 @@ import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+
+// Hard deadlines for external lookups during sticker generation. Each of
+// these is decorative/optional (predictive date, logo, Hovercode QR) — a
+// slow upstream must degrade the sticker, never stall the print. Task #871:
+// a shop reported 5–7 minute prints; the server route must stay hard-bounded
+// so any residual slowness is provably client-side.
+const STICKER_CARFAX_TIMEOUT_MS = 5000;
+const STICKER_LOGO_TIMEOUT_MS = 5000;
+const STICKER_QR_TIMEOUT_MS = 6000;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -701,7 +711,12 @@ async function _POST(request: NextRequest) {
     // If predictive date is enabled and we have a VIN, try driving-habits-based prediction
     if (stickerConfig.usePredictiveDate && vin) {
       try {
-        const estimate = await estimateMileageFromCarfax(mosShopId!, vin);
+        const estimate = await withUpstreamTimeout(
+          estimateMileageFromCarfax(mosShopId!, vin),
+          STICKER_CARFAX_TIMEOUT_MS,
+          `sticker.predictiveDate shop=${mosShopId}`,
+          { estimated: false, milesPerDay: 0 } as Awaited<ReturnType<typeof estimateMileageFromCarfax>>,
+        );
         if (estimate.estimated && estimate.milesPerDay > 0) {
           const daysToMileage = Math.ceil(intervalMileage / estimate.milesPerDay);
           const predictedDate = new Date();
@@ -732,7 +747,12 @@ async function _POST(request: NextRequest) {
 
     let logoDataUrl: string | null = null;
     if (stickerConfig.logo || stickerConfig.logoObjectPath || mosShopId) {
-      logoDataUrl = await fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath, String(mosShopId));
+      logoDataUrl = await withUpstreamTimeout(
+        fetchLogoAsBase64(stickerConfig.logo || "", stickerConfig.logoObjectPath, String(mosShopId)),
+        STICKER_LOGO_TIMEOUT_MS,
+        `sticker.logo shop=${mosShopId}`,
+        null,
+      );
     }
     _lap("logo");
     const configWithLogo = { 
@@ -761,7 +781,12 @@ async function _POST(request: NextRequest) {
       }
     }
     if (!qrDataUrl && stickerConfig.hovercodeQRId) {
-      qrDataUrl = await getExistingHovercodeQR(stickerConfig.hovercodeQRId);
+      qrDataUrl = await withUpstreamTimeout(
+        getExistingHovercodeQR(stickerConfig.hovercodeQRId),
+        STICKER_QR_TIMEOUT_MS,
+        `sticker.hovercodeQR shop=${mosShopId}`,
+        null,
+      );
     }
     if (!qrDataUrl) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
@@ -879,7 +904,10 @@ async function _POST(request: NextRequest) {
     const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["2x2.5"];
 
     console.log(
-      `[Extension Sticker][timing] shop=${mosShopId} provider=${provider} total=${Date.now() - _t0}ms phases=${JSON.stringify(_timings)}`,
+      // Better Stack's ingest drops the JSON-braces payload after `phases=`
+      // (observed: lines end at "phases=" with the object missing), so emit
+      // plain key:value pairs instead of JSON.
+      `[Extension Sticker][timing] shop=${mosShopId} provider=${provider} total=${Date.now() - _t0}ms phases=${Object.entries(_timings).map(([k, v]) => `${k}:${v}`).join(",")}`,
     );
 
     return NextResponse.json({

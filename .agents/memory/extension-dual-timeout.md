@@ -27,3 +27,12 @@ than its fetch cap (e.g. widened `authRetryDelaysMs` 401 retry schedules add
 ~26s of delays on top of the fetch cap → those write sites pass 90s). The
 client cap must always end up above the effective background time so the
 proxy's accurate timeout message wins instead of the generic sidepanel one.
+
+**Third failure mode — bare fetch() bypasses BOTH caps:** some background
+flows call `fetch()` directly against `mosApiUrl` instead of going through
+`_doMosFetch`. Those have NO timeout at all — a stalled connection hangs until
+Chrome's ~5-minute socket timeout, which presents as a deterministic
+"5–7 minute" feature stall while server logs show sub-second handling (this
+was the quick-print sticker hang). When a multi-minute extension stall has
+fast server timings, grep `background.js` for direct `await fetch(` on the
+MOS API and add AbortController caps.

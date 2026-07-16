@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.1 — 2026-07-14
+
+### Fixed
+- **Quick-print stickers can no longer hang for minutes.** The immediate
+  (left-click / interval-preset) sticker print in the background worker
+  used bare `fetch()` calls with no timeout for both the shop-config
+  lookup and the sticker generation request. On a stalled connection
+  Chrome lets such a request hang for ~5 minutes before recovering —
+  matching the 5–7 minute prints reported at CBA Lubbock while the
+  server generated the sticker in under a second. The config lookup is
+  now capped at 8 seconds (degrading to built-in interval defaults) and
+  the generation request at 45 seconds with a clear retry message,
+  matching the budget every other extension API call already had.
+
 ## 1.28.0 — 2026-07-12
 
 ### Changed
