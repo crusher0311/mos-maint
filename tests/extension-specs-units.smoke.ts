@@ -240,8 +240,15 @@ async function main() {
   console.log("\n[6] manifest version bump");
   const manifest = JSON.parse(readFileSync("mos-tools-extension/manifest.json", "utf8"));
   const [maj, min, patch] = manifest.version.split(".").map((n: string) => parseInt(n, 10));
+  const atLeast = (a: number[], b: number[]) => {
+    for (let i = 0; i < 3; i++) {
+      if ((a[i] ?? 0) > (b[i] ?? 0)) return true;
+      if ((a[i] ?? 0) < (b[i] ?? 0)) return false;
+    }
+    return true;
+  };
   assert(
-    maj === 1 && min === 27 && patch >= 11,
+    atLeast([maj, min, patch], [1, 27, 11]),
     `manifest version is at least 1.27.11 (got ${manifest.version})`,
   );
 

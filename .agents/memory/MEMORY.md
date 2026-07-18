@@ -106,3 +106,4 @@
 - [Declined-add thin lines](declined-add-thin-lines.md) — pre-May-2026 job_index rows have right totals but $0/no-labor lines; re-hydrate from tekmetric_work_orders cache before pushing to an SMS + repo must pass labor `hours` through.
 - [RO odometer freshness](vhi-ro-odometer-freshness.md) — RO readings >90d old no longer read as "Current"; CARFAX estimate reconciled monotonically on ALL three plan-cache surfaces.
 - [DVI share-link pipeline](dvi-share-link-pipeline.md) — all OFF behind DVI_LINK_INGEST_ENABLED; links expire at provider; findings are advisory-only (never history anchors); new provider = touch dviSource unions + cache version.
+- [Smoke version pins block deploys](smoke-version-pin-blocks-deploys.md) — a hardcoded minor-version equality in a prebuild smoke test fails every future bump and blocks ALL prod deploys; use true semver-minimum compares.
