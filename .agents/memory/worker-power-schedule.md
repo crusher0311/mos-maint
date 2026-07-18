@@ -11,7 +11,10 @@ in-process cron job that calls the Render API. There is **no manual on/off** in
 normal operation.
 
 - **ON (resumed):** every night + the full weekend.
-- **OFF (suspended):** weekday daytime only — Mon–Fri ~5:00am–10:00pm Central.
+- **OFF (suspended):** weekday daytime only — Mon–Fri ~5:00am–6:00pm Central.
+  (Resume moved 10pm→6pm on 2026-07-18 to stop the web service carrying evening
+  background load alone; smart quiet-window enforce protects late-open shops.
+  Code change in `lib/cron/jobs.cjs` — live only after Brandon's next push.)
 
 **Why:** the heavy backfill drain saturates the shared MongoDB during business
 hours, which surfaces as fleet-wide login/timeout symptoms (see

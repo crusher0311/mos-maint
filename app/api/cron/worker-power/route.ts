@@ -9,12 +9,12 @@ import {
  * Worker power scheduler (suspend/resume the MOS background workers).
  *
  * Driven by two in-process cron jobs registered in `lib/cron/jobs.cjs`:
- *   - worker-resume-nightly  (10:00pm America/Chicago, Mon-Fri) -> ?action=resume
+ *   - worker-resume-nightly  (6:00pm America/Chicago, Mon-Fri) -> ?action=resume
  *   - worker-pause-morning   (05:00am America/Chicago, Mon-Fri) -> ?action=pause
  *
- * Net effect: the workers run nights Mon-Fri PLUS the full weekend (Fri 10pm
+ * Net effect: the workers run nights Mon-Fri PLUS the full weekend (Fri 6pm
  * -> Mon 5am, with no Sat/Sun pause), and are off only during weekday daytime
- * (Mon-Fri 5am-10pm Central). This keeps the heavy backfill drain off the
+ * (Mon-Fri 5am-6pm Central). This keeps the heavy backfill drain off the
  * shared MongoDB during business hours (it has previously saturated Mongo and
  * caused fleet-wide login/timeout symptoms) while still letting it catch up
  * overnight and on weekends.

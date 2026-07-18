@@ -70,6 +70,14 @@ This is gated by the compute cron, so OFF mode writes nothing.
 back to the generic schedule (eligible=true, fallback=true) so a low-data shop
 is never starved.
 
+## Render env-var changes need a DEPLOY, not a restart
+- 2026-07-18: enforce flipped ON with canary `SMART_BACKFILL_TIMING_SHOP_IDS=106,129,159,207,128`
+  on web + both workers. A Render **restart does NOT load env-var changes made via
+  the API** — the process came back still in observe. Applying env requires a new
+  deploy; safe method: `POST /v1/services/{id}/deploys` with `commitId` = the
+  currently-live commit (re-deploys same code with fresh env). Verified live via
+  `[smart-timing][enforce]` runtime lines with `would-BLOCK(not-in-canary)`.
+
 ## Reading runtime status from logs (DON'T trust build smoke lines)
 - `[smart-timing]` lines with `appname=bld-*` (Render BUILD) and the synthetic
   `shop=42`/`shop=99` fixtures are the **smoke test** (`test:smoke` in prebuild),
