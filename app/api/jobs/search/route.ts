@@ -4,8 +4,9 @@ import { getDb } from "@/lib/mongo";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { searchJobsCombined } from "@/lib/job-search-combined";
-import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, buildCorroborationCounts } from "@/lib/job-scoring";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
+import { resolveJobSearchSpecs } from "@/lib/job-search-specs";
 
 export const dynamic = "force-dynamic";
 
@@ -109,49 +110,18 @@ export async function GET(req: NextRequest) {
   
   const vehicleVin = searchParams.get("vin");
 
-  let targetSpecs: VehicleSpecs | null = null;
-  const jobSpecsMap = new Map<string, VehicleSpecs>();
-  
-  try {
-    const squishToVin = new Map<string, string>();
-    if (vehicleVin && vehicleVin.length >= 11) {
-      try { squishToVin.set(toSquishPublic(vehicleVin), vehicleVin); } catch {}
-    }
-    for (const job of jobs) {
-      const jVin = job.vehicle?.vin || job.vin;
-      if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
-        try {
-          const sq = toSquishPublic(jVin);
-          if (!squishToVin.has(sq)) squishToVin.set(sq, jVin);
-        } catch {}
-      }
-    }
-    if (squishToVin.size > 0) {
-      const decoded = await batchDecodeSquishes([...squishToVin.keys()]);
-      if (vehicleVin && vehicleVin.length >= 11) {
-        const tDecoded = decoded.get(toSquishPublic(vehicleVin));
-        if (tDecoded) targetSpecs = extractVehicleSpecs(tDecoded);
-      }
-      for (const job of jobs) {
-        const jVin = job.vehicle?.vin || job.vin;
-        if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
-          try {
-            const jDecoded = decoded.get(toSquishPublic(jVin));
-            if (jDecoded) {
-              const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
-              jobSpecsMap.set(jobId, extractVehicleSpecs(jDecoded));
-            }
-          } catch {}
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[Jobs Search] DataOne specs resolution failed (non-blocking):", err);
-  }
-
   const targetVehicle = { year: vehicleYear, make: vehicleMake, model: vehicleModel, engine: vehicleEngine, vin: vehicleVin };
   const idFor = (job: any) =>
     job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+
+  const { targetSpecs, jobSpecsMap } = await resolveJobSearchSpecs({
+    targetVin: vehicleVin,
+    jobs,
+    idFor,
+    toSquish: toSquishPublic,
+    batchDecode: batchDecodeSquishes,
+    logPrefix: "[Jobs Search]",
+  });
   const corroborationCounts = buildCorroborationCounts(jobs, idFor);
   const scoredJobs = jobs.map((job: any) => {
     const jobId = idFor(job);

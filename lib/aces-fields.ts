@@ -38,3 +38,20 @@ export function buildSubmodelKey(
   if (!year || !make || !model || !style) return null;
   return `${String(year).trim()}|${String(make).trim().toLowerCase()}|${String(model).trim().toLowerCase()}|${String(style).trim().toLowerCase()}`;
 }
+
+/**
+ * Pure VIN → squish (positions 1-8 + 10-11, skipping the check digit).
+ * Mirrors `toSquish` in lib/integrations/dataone-local.ts but lives here so
+ * the scorer (which must stay DB-free and unit-testable) can compare target
+ * and donor squishes without importing the postgres-backed module. Returns
+ * null for anything shorter than 11 chars or containing invalid VIN
+ * characters, so a truncated/garbage VIN can never produce a false
+ * same-squish match.
+ */
+export function toVinSquish(vin: unknown): string | null {
+  if (typeof vin !== "string") return null;
+  const v = vin.trim().toUpperCase();
+  if (v.length < 11) return null;
+  if (!/^[A-HJ-NPR-Z0-9]+$/.test(v)) return null;
+  return v.slice(0, 8) + v.slice(9, 11);
+}

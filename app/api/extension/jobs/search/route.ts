@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { scoreJob, buildSearchQuery, applyMinimumResults, extractVehicleSpecs, buildCorroborationCounts, ScoredJob, VehicleSpecs } from "@/lib/job-scoring";
+import { scoreJob, buildSearchQuery, applyMinimumResults, buildCorroborationCounts, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchJobsCombined } from "@/lib/job-search-combined";
-import { batchDecodeSquishes, toSquishPublic, VinReferenceData } from "@/lib/integrations/dataone-local";
+import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
+import { resolveJobSearchSpecs } from "@/lib/job-search-specs";
 
 const MODEL_VARIANTS: Record<string, string[]> = {
   "EXPEDITION": ["EXPEDITION", "EXPEDITION MAX"],
@@ -105,60 +106,6 @@ async function resolveSearchShopIds(
   
   console.log(`[Jobs Search] Enterprise search (all): shops ${enterprise.shopIds.join(', ')}`);
   return enterprise.shopIds;
-}
-
-async function resolveDataOneSpecs(
-  targetVin: string | null,
-  jobs: any[]
-): Promise<{ targetSpecs: VehicleSpecs | null; jobSpecsMap: Map<string, VehicleSpecs> }> {
-  const jobSpecsMap = new Map<string, VehicleSpecs>();
-  let targetSpecs: VehicleSpecs | null = null;
-
-  const squishToVin = new Map<string, string>();
-  if (targetVin && targetVin.length >= 11) {
-    try {
-      squishToVin.set(toSquishPublic(targetVin), targetVin);
-    } catch {}
-  }
-  for (const job of jobs) {
-    const jVin = job.vehicle?.vin;
-    if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
-      try {
-        const sq = toSquishPublic(jVin);
-        if (!squishToVin.has(sq)) squishToVin.set(sq, jVin);
-      } catch {}
-    }
-  }
-
-  if (squishToVin.size === 0) return { targetSpecs, jobSpecsMap };
-
-  try {
-    const decoded = await batchDecodeSquishes([...squishToVin.keys()]);
-    
-    if (targetVin && targetVin.length >= 11) {
-      const tSquish = toSquishPublic(targetVin);
-      const tDecoded = decoded.get(tSquish);
-      if (tDecoded) targetSpecs = extractVehicleSpecs(tDecoded);
-    }
-
-    for (const job of jobs) {
-      const jVin = job.vehicle?.vin;
-      if (jVin && typeof jVin === 'string' && jVin.length >= 11) {
-        try {
-          const sq = toSquishPublic(jVin);
-          const jDecoded = decoded.get(sq);
-          if (jDecoded) {
-            const jobId = job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
-            jobSpecsMap.set(jobId, extractVehicleSpecs(jDecoded));
-          }
-        } catch {}
-      }
-    }
-  } catch (err) {
-    console.error("[Jobs Search] DataOne specs resolution failed (non-blocking):", err);
-  }
-
-  return { targetSpecs, jobSpecsMap };
 }
 
 const corsHeaders = {
@@ -266,15 +213,23 @@ async function _GET(request: NextRequest) {
 
     console.log(`[Jobs Search] Served from supabase=${combined.supabaseCount} mongo=${mongoResultCount} total=${jobs.length} source=${combined.source}`);
 
-    const { targetSpecs, jobSpecsMap } = await resolveDataOneSpecs(vin || null, jobs);
-    
+    const targetVehicle = { year, make, model, engine, vin };
+    const idFor = (job: any) =>
+      job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
+
+    const { targetSpecs, jobSpecsMap } = await resolveJobSearchSpecs({
+      targetVin: vin,
+      jobs,
+      idFor,
+      toSquish: toSquishPublic,
+      batchDecode: batchDecodeSquishes,
+      logPrefix: "[Jobs Search]",
+    });
+
     if (targetSpecs) {
       console.log(`[Jobs Search] Target vehicle specs: GVWR=${targetSpecs.gvwrBand}, body=${targetSpecs.bodyType}, drive=${targetSpecs.driveType}, disp=${targetSpecs.displacement}`);
     }
 
-    const targetVehicle = { year, make, model, engine, vin };
-    const idFor = (job: any) =>
-      job._id?.toString() || `${job.shopId}-${job.workOrderId}-${job.job?.title}-${job.dataSource || ''}`;
     const corroborationCounts = buildCorroborationCounts(jobs, idFor);
     const scoredJobs: ScoredJob[] = jobs.map(job => {
       const jobId = idFor(job);

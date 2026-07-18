@@ -202,6 +202,12 @@ export function mapServiceJobToCanonicalResult(sj: any, rawLines: any[]) {
       make: vehicle?.make,
       model: vehicle?.model,
       engine: vehicle?.engineDescription || vehicle?.engine,
+      // Task #880 — pass stored ACES identity through when the normalized
+      // ingestion enriched the WO vehicle snapshot, so the job-search spec
+      // resolver can score this donor without a live DataOne decode.
+      acesVehicleId: vehicle?.acesVehicleId ?? null,
+      acesEngineId: vehicle?.acesEngineId ?? null,
+      submodelKey: vehicle?.submodelKey ?? null,
     },
     job: {
       title: sj.title,

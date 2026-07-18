@@ -150,6 +150,12 @@ export interface VinReferenceData {
   brake_system: string;
   country_of_mfr: string;
   plant: string;
+  /** Task #880 — attached (not a DB column) by `batchDecodeSquishesInner`
+   * when a squish matched multiple rows: the distinct non-null vehicle_ids
+   * of the candidates. Lets the job-search scorer recognize a donor whose
+   * concrete/candidate vehicle_id intersects the target's set even though
+   * `mergeCandidates` blanked `vehicle_id` on the merged row. */
+  candidate_vehicle_ids?: number[];
 }
 
 export interface MaintenanceItem {
@@ -452,7 +458,18 @@ async function batchDecodeSquishesInner(squishes: string[]): Promise<Map<string,
     else byPattern.set(row.vin_pattern, [row]);
   }
   for (const [pattern, group] of byPattern) {
-    result.set(pattern, group.length === 1 ? group[0] : mergeCandidates(group).merged);
+    if (group.length === 1) {
+      result.set(pattern, group[0]);
+    } else {
+      // Task #880 — preserve the surviving candidate vehicle_ids on the
+      // merged row (mergeCandidates blanks vehicle_id when candidates
+      // disagree). Mirrors decodeVinLocal's `candidateVehicleIds`.
+      const merged = mergeCandidates(group).merged;
+      merged.candidate_vehicle_ids = [
+        ...new Set(group.map((r) => r.vehicle_id).filter((id): id is number => id != null && id > 0)),
+      ];
+      result.set(pattern, merged);
+    }
   }
   return result;
 }

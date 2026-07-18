@@ -12,15 +12,23 @@ as **pass/fail short-circuit tiers, NOT as a graded component of the percentage*
 - Tier C: same submodelKey, diff engine, chassis systems → floor ~70 + evidence.
 - Else → legacy heuristic (make/model/year/displacement + evidence), which can also reach 100.
 
-**Live-decode dependency (the big surprise):** the tiers only fire when BOTH target
-and donor have ACES ids, and those ids are **re-derived live at query time** by
-decoding each vehicle's VIN squish through DataOne (`resolveDataOneSpecs` →
-`batchDecodeSquishes` in `app/api/extension/jobs/search/route.ts`). The scorer does
-**NOT** read the backfilled ACES columns on job records. So "the ACES backfill is
-done" does NOT help this scorer — a donor with no VIN, or a DataOne miss/timeout,
-silently drops to the heuristic. Making the backfill actually feed the scorer
-(recognize exact-vehicle matches without a live donor VIN decode) is a real,
-separate change — offered to Brandon as a follow-up option, not yet done.
+**Spec resolution is now stored-first (2026-07, Task-880 era).** Shared
+`lib/job-search-specs.ts` `resolveJobSearchSpecs` (wired into BOTH search routes)
+reads stored ACES ids from `job.vehicle.acesVehicleId/acesEngineId/submodelKey`
+first and only live-decodes the target VIN + donors lacking stored ids — so a
+DataOne miss/timeout no longer silently wipes ACES scoring for backfilled donors.
+The PG mapper (`mapServiceJobToCanonicalResult`) passes the stored ids through.
+The decode fn is injected (keeps it tsx-testable; dataone-local pulls in postgres).
+
+**Ambiguous-squish gaps closed (same era):**
+- Same-squish target/donor VINs → flat 95 "Exact Fit" (`exact_aces`), runs before
+  the fuel gate (one shared decode ⇒ fuel disagreement is free-text noise).
+- Ambiguous batch decodes attach `candidate_vehicle_ids` (dataone-local merged
+  row); scorer's `candidateVehicleIds` intersection (either vid null, sets/id
+  overlap) → 90 "Likely Fit" with `acesTier: null` — Exact Fit badge stays
+  reserved for confirmed matches (VIN / squish / equal concrete vehicle_ids).
+- Tier B no longer requires both vehicle_ids non-null (null = ambiguous is fine);
+  but "general" (unclassified) donors no longer qualify for Tier B at all.
 
 **Why "Great Match" outranked "Exact Fit" (2026-07 Corolla vs Prius air filter):**
 1. Heuristic gave a same-make/different-model donor a flat 100; only its *label*

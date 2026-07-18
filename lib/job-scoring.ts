@@ -1,5 +1,5 @@
 import { resolvePlatform, isPlatformShareableSystem, type PlatformResolution } from "./vehicle-platform";
-import { coerceAcesId, buildSubmodelKey } from "./aces-fields";
+import { coerceAcesId, buildSubmodelKey, toVinSquish } from "./aces-fields";
 
 export type ScoreBand = "exact" | "likely" | "possible" | "low_confidence";
 
@@ -41,6 +41,15 @@ export interface VehicleSpecs {
    * on the engine.
    */
   submodelKey: string | null;
+  /**
+   * Distinct candidate ACES `vehicle_id`s when the VIN squish is ambiguous
+   * (Task #880). `mergeCandidates` blanks `acesVehicleId` when multiple
+   * DataOne rows disagree substantively; this carries the surviving
+   * candidate ids so the scorer can still recognize a donor whose
+   * (concrete or candidate) vehicle_id intersects the target's set.
+   * Null/absent when the decode was unambiguous or unavailable.
+   */
+  candidateVehicleIds?: number[] | null;
 }
 
 export interface VehicleContext {
@@ -256,17 +265,17 @@ const SYSTEM_PATTERNS: Array<[VehicleSystem, RegExp]> = [
   // HVAC — must beat powertrain because "blower", "cabin filter" are HVAC.
   ["hvac", /\b(a\/c\b|air\s*conditioning|ac\s*compressor|heater|hvac\b|evaporator|condenser|blower\s*motor|cabin\s*filter|cabin\s*air\s*filter|refrigerant|freon|recharge|heater\s*core|expansion\s*valve|orifice\s*tube)/i],
   // Wheel & tire — alignment, TPMS, rotation, balancing.
-  ["wheel_tire", /\b(tire|tyre|wheel(?!\s*cylinder|\s*bearing|\s*hub)|rim|tpms|rotation|balance|alignment|lug\s*nut|wheel\s*stud)/i],
+  ["wheel_tire", /\b(tire|tyre|wheel(?!\s*cylinder|\s*bearing|\s*hub)|rim|tpms|rotation|rotate|balance|alignment|lug\s*nut|wheel\s*stud|flat\s*repair|patch\s*(?:and|&|\/)?\s*plug|plug\s*(?:and|&|\/)?\s*patch)/i],
   // Suspension — control arms, ball joints, struts, wheel bearings, CV.
   ["suspension", /\b(suspension|shock(?:\s*absorber)?|strut|coil\s*spring|leaf\s*spring|control\s*arm|upper\s*arm|lower\s*arm|ball\s*joint|sway\s*bar|stabilizer|bushing|air\s*ride|wheel\s*bearing|hub\s*assembly|cv\s*axle|cv\s*joint|knuckle)/i],
   // Steering — rack, pump, tie rod, idler/pitman.
   ["steering", /\b(steering|rack\s*(?:and|&)\s*pinion|power\s*steering|steering\s*pump|steering\s*rack|steering\s*column|steering\s*wheel|tie\s*rod|idler\s*arm|pitman\s*arm|steering\s*box)/i],
   // Body — doors, mirrors, glass, lighting, wipers, seats, airbags.
-  ["body", /\b(door(?:\s*handle|\s*latch|\s*lock)?|window\s*regulator|window\s*motor|side\s*mirror|rear\s*view|bumper|fender|hood\s*latch|trunk|tailgate|liftgate|paint|trim|molding|weatherstrip|seat(?:\s*belt)?|upholstery|airbag|wiper|wiper\s*blade|washer\s*pump|washer\s*nozzle|headlight|headlamp|tail\s*light|tail\s*lamp|fog\s*light|turn\s*signal|interior\s*light)/i],
+  ["body", /\b(door(?:\s*handle|\s*latch|\s*lock)?|window\s*regulator|window\s*motor|side\s*mirror|rear\s*view|bumper|fender|hood\s*latch|trunk|tailgate|liftgate|paint|trim|molding|weatherstrip|seat(?:\s*belt)?|upholstery|airbag|wiper|wiper\s*blade|washer\s*pump|washer\s*nozzle|headlight|headlamp|tail\s*light|tail\s*lamp|fog\s*light|turn\s*signal|interior\s*light|light\s*bulb|bulb(?:s)?\b|\blamp(?:s)?\b)/i],
   // Electrical — battery / alternator / starter / wiring / sensors / modules.
   ["electrical", /\b(battery|batteries|alternator|starter|wiring|fuse|relay|harness|ignition\s*switch|key\s*fob|remote\s*start|ecm\b|pcm\b|tcm\b|bcm\b|body\s*control\s*module)/i],
   // Powertrain — engine, transmission, fuel, cooling, exhaust, oil work.
-  ["powertrain", /\b(engine|motor(?!\s*mount)|valve(?!\s*stem)|head\s*gasket|gasket|timing|piston|cylinder\s*head|crankshaft|camshaft|turbo|intercooler|injector|fuel\s*pump|fuel\s*filter|fuel\s*rail|spark\s*plug|coil\s*pack|tune[-\s]*up|oil\s*change|oil\s*filter|oil\s*pan|valve\s*cover|intake\s*manifold|exhaust\s*manifold|catalytic|converter|muffler|exhaust|o2\s*sensor|oxygen\s*sensor|transmission|clutch|differential|transfer\s*case|axle\s*shaft|trans\s*fluid|atf\b|coolant|radiator|water\s*pump|cooling|thermostat(?!\s*housing)|head\s*bolt|serpentine|drive\s*belt|timing\s*belt|timing\s*chain)/i],
+  ["powertrain", /\b(engine|motor(?!\s*mount)|valve(?!\s*stem)|head\s*gasket|gasket|timing|piston|cylinder\s*head|crankshaft|camshaft|turbo|intercooler|injector|fuel\s*pump|fuel\s*filter|fuel\s*rail|spark\s*plug|coil\s*pack|tune[-\s]*up|oil\s*change|oil\s*filter|oil\s*pan|lof\b|lube[,\s]*oil[,\s]*(?:and\s*|&\s*)?filter|fuel\s*(?:system|induction)|valve\s*cover|intake\s*manifold|exhaust\s*manifold|catalytic|converter|muffler|exhaust|o2\s*sensor|oxygen\s*sensor|transmission|clutch|differential|transfer\s*case|axle\s*shaft|trans\s*fluid|atf\b|coolant|radiator|water\s*pump|cooling|thermostat(?!\s*housing)|head\s*bolt|serpentine|drive\s*belt|timing\s*belt|timing\s*chain)/i],
 ];
 
 /**
@@ -412,6 +421,12 @@ export function extractVehicleSpecs(decoded: any): VehicleSpecs {
     acesVehicleId,
     acesEngineId,
     submodelKey,
+    // Task #880 — carried through from batchDecodeSquishes when the squish
+    // stayed ambiguous (merged row attaches the surviving candidate ids).
+    candidateVehicleIds:
+      Array.isArray(decoded.candidate_vehicle_ids) && decoded.candidate_vehicle_ids.length > 0
+        ? decoded.candidate_vehicle_ids.filter((id: unknown): id is number => typeof id === "number" && id > 0)
+        : null,
   };
 }
 
@@ -421,10 +436,16 @@ export function extractVehicleSpecs(decoded: any): VehicleSpecs {
  * different chassis (different `vehicle_id`) are still strong matches
  * for engine / oil / cooling / fuel / exhaust work — the part is bolted
  * to the engine, not the body.
+ *
+ * Task #880: "general" (unclassified) is intentionally EXCLUDED. An
+ * unclassified job could be brake/body/wheel work, so a same-engine match
+ * proves nothing about part fitment — unclassified jobs must earn an ACES
+ * tier through a full vehicle-id / same-squish match only. ("general" still
+ * keeps powertrain-equivalent *heuristic* weights and the fuel safety gate
+ * via CATEGORY_PROFILES — that's a safety behavior, not an ACES boost.)
  */
 const ENGINE_SHARED_SYSTEMS: ReadonlySet<VehicleSystem> = new Set([
   "powertrain",
-  "general",
 ]);
 
 /**
@@ -580,6 +601,63 @@ export function scoreJob(
     };
   }
 
+  // ----- Same-squish exact tier (Task #880) -----
+  // Two VINs with the same squish (positions 1-8 + 10-11) decode to the SAME
+  // DataOne rows — same year/make/model/engine family. Fleet & sibling
+  // vehicles (vans, trucks) frequently share a squish that DataOne marks
+  // ambiguous, which blanks vehicle_id on BOTH sides and used to drop these
+  // to the heuristic band. But whatever the ambiguity is, it is *identical*
+  // on both sides — the donor is as close to the target as the catalog can
+  // express short of a full VIN match. Treat it as an exact ACES match
+  // (Exact Fit, 95). Runs before the fuel gate for the same reason the
+  // same-VIN fast path does: both sides share one decode, so a fuel
+  // disagreement can only come from free-text noise.
+  const tSquish = toVinSquish(targetVehicle.vin);
+  const jSquish = toVinSquish(job.vehicle?.vin ?? job.vin);
+  const sameSquish = tSquish !== null && jSquish !== null && tSquish === jSquish;
+  if (sameSquish) {
+    const squishPositives: string[] = ["Identical factory build (same VIN pattern)"];
+    if (targetYear && jobYear && targetYear === jobYear) {
+      squishPositives.push("Exact year");
+    }
+    const queryCat = searchQuery ? getServiceCategory(searchQuery) : null;
+    const jobCat = getServiceCategory(job.job?.title || job.title);
+    if (queryCat && jobCat && queryCat === jobCat) {
+      squishPositives.push(`Service category match (${jobCat})`);
+    }
+    return {
+      ...job,
+      matchScore: SCORE_ACES_EXACT,
+      matchBand: "exact" as ScoreBand,
+      matchBandLabel: "Exact Fit",
+      matchReason: buildMatchReason(squishPositives, []),
+      gatePass: true,
+      lowConfidence: false,
+      crossClassPenalized: false,
+      sameVinFastPath: false,
+      vehicleSystem,
+      scoreBreakdown: {
+        gvwrClass: 0,
+        bodyStyle: 0,
+        model: 0,
+        make: 0,
+        displacement: 0,
+        driveType: 0,
+        year: 0,
+        serviceCategory: 0,
+        crossClassMultiplier: 1.0,
+        evidenceBonus: 0,
+        vehicleSystem,
+        engineSignalsApplied: profile.engineSignalsApplied,
+        fuelGateApplied: profile.fuelGateApplied,
+        targetPlatform: targetPlatform?.id ?? null,
+        donorPlatform: donorPlatform?.id ?? null,
+        platformCreditApplied: false,
+        acesTier: "exact_aces",
+      },
+    };
+  }
+
   // ----- Fuel safety gate (hard fail diesel-vs-gas) -----
   // Runs *after* the same-VIN fast path: if it's the same physical vehicle,
   // fuel parsing disagreements (typos, partial decode, free-text engine
@@ -619,10 +697,14 @@ export function scoreJob(
   //                                just below a same-VIN match). Identifies
   //                                the same year/make/model/submodel/
   //                                engine/transmission build.
-  //   Tier B (engine_match)   → same engine_id, different vehicle_id, AND
-  //                              the donor job is in the powertrain or
-  //                              general system (engine / oil / cooling /
-  //                              fuel work) → Likely Match floor.
+  //   Tier B (engine_match)   → same engine_id, vehicle_ids differ or are
+  //                              missing/ambiguous on either side, AND the
+  //                              donor job is in the powertrain system
+  //                              (engine / oil / cooling / fuel work) →
+  //                              Likely Match floor. (Task #880: an
+  //                              ambiguous-squish null vehicle_id no longer
+  //                              blocks the tier; unclassified "general"
+  //                              jobs no longer qualify.)
   //   Tier C (submodel_match) → same submodelKey, different engine_id, AND
   //                              the donor job is in body / brakes /
   //                              suspension / steering / wheel-tire (work
@@ -679,16 +761,83 @@ export function scoreJob(
     };
   }
 
-  // Tier B — same engine, different vehicle. Powertrain / general only.
+  // ----- Candidate-set intersection (Task #880) -----
+  // When either side's vehicle_id was blanked because the squish was
+  // ambiguous, the decode still carries the surviving candidate vehicle_ids.
+  // If the concrete id on one side sits in the other side's candidate set —
+  // or the two candidate sets overlap — the donor MAY be the identical
+  // build, but it isn't catalog-confirmed. Documented rule: any candidate
+  // intersection (that isn't the same squish, handled above) scores at the
+  // heuristic-exact cap (90, "Likely Fit") with acesTier left null — the
+  // "Exact Fit" badge stays reserved for confirmed matches (same VIN,
+  // same squish, or equal concrete vehicle_ids at 95).
+  const tVidSet: number[] =
+    tAcesVid !== null ? [tAcesVid] : (targetSpecs?.candidateVehicleIds ?? []);
+  const jVidSet: number[] =
+    jAcesVid !== null ? [jAcesVid] : (jobSpecs?.candidateVehicleIds ?? []);
+  const eitherAmbiguous = tAcesVid === null || jAcesVid === null;
+  const candidateIntersects =
+    eitherAmbiguous &&
+    tVidSet.length > 0 &&
+    jVidSet.length > 0 &&
+    tVidSet.some((id) => jVidSet.includes(id));
+  if (candidateIntersects) {
+    const candPositives: string[] = ["Possible identical build (shared catalog candidates)"];
+    if (targetYear && jobYear && targetYear === jobYear) {
+      candPositives.push("Exact year");
+    }
+    const queryCat = searchQuery ? getServiceCategory(searchQuery) : null;
+    const jobCat = getServiceCategory(job.job?.title || job.title);
+    if (queryCat && jobCat && queryCat === jobCat) {
+      candPositives.push(`Service category match (${jobCat})`);
+    }
+    return {
+      ...job,
+      matchScore: SCORE_HEURISTIC_EXACT_CAP,
+      matchBand: "exact" as ScoreBand,
+      matchBandLabel: "Likely Fit",
+      matchReason: buildMatchReason(candPositives, []),
+      gatePass: true,
+      lowConfidence: false,
+      crossClassPenalized: false,
+      sameVinFastPath: false,
+      vehicleSystem,
+      scoreBreakdown: {
+        gvwrClass: 0,
+        bodyStyle: 0,
+        model: 0,
+        make: 0,
+        displacement: 0,
+        driveType: 0,
+        year: 0,
+        serviceCategory: 0,
+        crossClassMultiplier: 1.0,
+        evidenceBonus: 0,
+        vehicleSystem,
+        engineSignalsApplied: profile.engineSignalsApplied,
+        fuelGateApplied: profile.fuelGateApplied,
+        targetPlatform: targetPlatform?.id ?? null,
+        donorPlatform: donorPlatform?.id ?? null,
+        platformCreditApplied: false,
+        acesTier: null,
+      },
+    };
+  }
+
+  // Tier B — same engine, different (or unresolved) vehicle. Powertrain only.
   // Score lands at the same Great-Match floor as the same-make+model+close-
   // year guarantee so true exact matches still outrank engine-only siblings.
+  // Task #880: an ambiguous squish blanks vehicle_id but usually keeps a
+  // concrete engine_id (all candidates share the engine); requiring BOTH
+  // vehicle_ids to be non-null was silently disqualifying those donors.
+  // Equal non-null vehicle_ids short-circuit at Tier A above, and identical
+  // squishes short-circuit earlier, so reaching here with matching engine
+  // ids means the vehicles genuinely differ or are unresolved.
   const tierBApplies =
     tAcesEid !== null &&
     jAcesEid !== null &&
     tAcesEid === jAcesEid &&
-    tAcesVid !== null &&
-    jAcesVid !== null &&
-    tAcesVid !== jAcesVid &&
+    (tAcesVid === null || jAcesVid === null || tAcesVid !== jAcesVid) &&
     ENGINE_SHARED_SYSTEMS.has(vehicleSystem);
 
   // Tier C — same submodel, different engine. Chassis-shared work only.
