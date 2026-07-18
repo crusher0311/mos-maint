@@ -339,15 +339,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_SHOP_FEATURES") {
-    const shopId = message.shopId || currentSmsContext?.shopId;
-    if (!mosApiToken || !shopId) {
-      sendResponse({ success: false, features: {} });
-      return false;
-    }
     (async () => {
       try {
+        // Wait for chrome.storage state restore before reading
+        // mosApiToken/mosApiUrl. After every MV3 service-worker wake this
+        // handler used to race the restore: mosApiUrl was still null, the
+        // fetch went to "null/api/..." and failed with "Failed to fetch"
+        // on every attempt (Task: AutoFlow v4 feature-fetch loop).
+        await _stateReady;
+        const shopId = message.shopId || currentSmsContext?.shopId;
+        if (!mosApiToken || !shopId) {
+          sendResponse({ success: false, features: {} });
+          return;
+        }
+        const apiBase = mosApiUrl || 'https://mos.tools';
         const provider = message.provider || currentSmsContext?.provider || '';
-        const res = await fetch(`${mosApiUrl}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
+        const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
           headers: { 'Authorization': `Bearer ${mosApiToken}` }
         });
         if (!res.ok) {

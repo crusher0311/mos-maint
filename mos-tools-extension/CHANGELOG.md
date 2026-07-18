@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.3 — 2026-07-18
+
+### Fixed
+- **Endless "[MOS] Feature fetch error: Failed to fetch" loop.** The
+  GET_SHOP_FEATURES handler raced the service worker's chrome.storage state
+  restore: after every MV3 worker wake it read `mosApiUrl` while it was still
+  `null`, built a `null/api/extension/features` URL, and failed at the network
+  layer on every retry (features never loaded; sidepanel kept
+  last-known-good). The handler now awaits `_stateReady` before reading
+  token/URL and falls back to `https://mos.tools` if no URL is stored.
+
 ## 1.28.2 — 2026-07-18
 
 ### Fixed
