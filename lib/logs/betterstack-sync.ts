@@ -82,7 +82,18 @@ async function fetchBetterStackLogs(
   const offsetClause = offset > 0 ? ` OFFSET ${offset}` : "";
   const query = `SELECT dt, raw FROM remote(${escapeClickhouse(BETTERSTACK_SOURCE)}_logs) WHERE dt >= now() - INTERVAL ${minutesBack} MINUTE${cursorClause} ORDER BY dt ASC LIMIT ${BATCH_SIZE}${offsetClause} FORMAT JSONEachRow`;
 
-  const res = await fetch(endpoint, { method: "POST", headers, body: query });
+  // `cache: "no-store"` is load-bearing: this runs inside the in-process
+  // scheduler where Next.js's patched fetch can serve responses from its
+  // Data Cache. Without it, a cached page gets replayed identically on
+  // every run — the feed silently freezes (identical `fetched` count,
+  // 0 new rows) until a restart wipes the cache. Seen 2026-07-14 (11.7h
+  // blackout) and again 2026-07-17→18 (13h).
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: query,
+    cache: "no-store",
+  });
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`BetterStack query failed: ${res.status} - ${errText.slice(0, 200)}`);

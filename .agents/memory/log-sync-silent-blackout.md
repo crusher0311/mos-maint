@@ -42,8 +42,13 @@ Signature: `fetched` count IDENTICAL across runs (99,460) with `0 new, 0 errors`
 long-lived process replaying a frozen upstream snapshot. Better Stack had migrated their
 ClickHouse backend (new version, query source rebuilt); the same query from a fresh shell
 returned LIVE rows (proved a live row's dt_hash was absent from PG), so creds/query were fine —
-only prod's pinned connection/DNS was stale. **Fix: restart the Render web service**
-(`POST /v1/services/<id>/restart`) — feed unfroze on the next 15-min tick.
+only prod's process was serving a frozen response. Recurred 2026-07-17→18 (13h). TRUE root
+cause (architect-confirmed): Next.js's patched fetch Data Cache replayed the cached POST
+response — the sync runs from the in-process scheduler, so the route's `force-dynamic` never
+protects it. **Permanent fix: `cache: "no-store"` on the Better Stack fetch** (2026-07-18).
+Interim unstick: restart the Render web service (`POST /v1/services/<id>/restart`) — clears
+the cache, feed unfroze on the next 15-min tick both times. Rule: any scheduler-path fetch
+that must see live data needs an explicit `cache: "no-store"`.
 Also learned: the queryable ClickHouse live tail now retains only ~45 MINUTES (min(dt) ≈
 now-45m), so any blackout gap is permanently lost from the mirror — the "30 days in Better
 Stack" assumption no longer holds for the query API.
