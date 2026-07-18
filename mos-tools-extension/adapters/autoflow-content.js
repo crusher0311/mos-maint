@@ -15,6 +15,11 @@ function reportActionDropped(action, reason, extra) {
 let lastContext = null;
 let contextCheckInterval = null;
 
+// Mileage sanity ceiling. Real fleet/high-mile vehicles legitimately exceed
+// 1,000,000 (seen live on AutoFlow v4: 1,234,556), so the cap is 2,000,000 —
+// still low enough to reject phone numbers / ids masquerading as mileage.
+const MAX_SANE_MILEAGE = 2000000;
+
 // AutoFlow shop id detection across v3 (per-shop subdomain) and v4 (shared
 // host with the shop slug in the path). Generic infrastructure subdomains
 // (app/www/admin/...) are NOT shop ids, so on v4 we read the path instead.
@@ -35,6 +40,43 @@ function detectAutoflowShopId(hostname, pathname) {
 // placeholder/aria-label/data-testid + associated <label> text). DVI pages
 // hold VIN + mileage in editable inputs whose values never appear in
 // document.body.innerText, so the text-based scrapes can't see them.
+//
+// AutoFlow v4 (July 2026) renders DVI vehicle fields as bare inputs inside
+// table cells with the human label in the ADJACENT cell ("Vin | [input]",
+// "Mileage | [input]") — no <label for>, no name/placeholder/aria hints. So
+// when the attribute-based hints come up empty we also read the previous
+// sibling table cell (and, as a last resort, the input's previous element
+// sibling) as the label. Labels are short by nature; anything long is a
+// content cell, not a label, and is ignored.
+const MAX_ADJACENT_LABEL_LEN = 40;
+
+function readAdjacentCellLabel(el) {
+  try {
+    if (!el || !el.closest) return "";
+    const clean = (t) => {
+      const s = (t || "").replace(/\s+/g, " ").trim();
+      return s && s.length <= MAX_ADJACENT_LABEL_LEN ? s : "";
+    };
+    const cell = el.closest("td, th");
+    if (cell && cell.previousElementSibling) {
+      const t = clean(cell.previousElementSibling.textContent);
+      if (t) return t;
+    }
+    // Non-table v4 layouts: a label-ish element directly before the input.
+    if (el.previousElementSibling) {
+      const t = clean(el.previousElementSibling.textContent);
+      if (t) return t;
+    }
+    // Or directly before the input's wrapper div/span.
+    const parent = el.parentElement;
+    if (parent && parent.previousElementSibling && !cell) {
+      const t = clean(parent.previousElementSibling.textContent);
+      if (t) return t;
+    }
+  } catch (_) {}
+  return "";
+}
+
 function collectFormFieldHints() {
   const out = [];
   let els;
@@ -55,13 +97,17 @@ function collectFormFieldHints() {
         if (wrap) label = wrap.textContent || "";
       }
     } catch (_) {}
-    const hint = [
+    let hint = [
       el.name, el.id,
       el.getAttribute && el.getAttribute("placeholder"),
       el.getAttribute && el.getAttribute("aria-label"),
       el.getAttribute && el.getAttribute("data-testid"),
       label
     ].filter(Boolean).join(" ").toLowerCase();
+    // v4 fallback: no attribute/label hints at all — use the adjacent cell.
+    if (!hint) {
+      hint = readAdjacentCellLabel(el).toLowerCase();
+    }
     out.push({ hint, value });
   }
   return out;
@@ -161,6 +207,10 @@ function _detectContextRaw() {
     /\/invoices?\/(\d+)/,
     /\/inspections?\/(\d+)/,
     /\/dvi[_v0-9]*\/.*[?&]status_id=(\d+)/,
+    // v4 DVI detail page: app.autoflow.com/shop/<number>/dvi/<dviId>
+    // (matched explicitly BEFORE the generic /dvi/<id> pattern so a future
+    // change to the generic pattern can't silently drop v4 support).
+    /\/shop\/[^/]+\/dvi\/(\d+)/i,
     /\/dvi\/(\d+)/,
     // v4 path-based RO/ticket locations under app.autoflow.com/shop/<slug>/...
     /\/shop\/[^/]+\/(?:repair[-_]?orders?|work[-_]?orders?|ro|tickets?|invoices?|inspections?)\/(\d+)/i,
@@ -290,7 +340,7 @@ function _detectContextRaw() {
         const m = el.textContent.match(/[\d,]+/);
         if (m) {
           const v = parseInt(m[0].replace(/,/g, ""));
-          if (v > 100 && v < 1000000) {
+          if (v > 100 && v < MAX_SANE_MILEAGE) {
             context.mileage = v;
             break;
           }
@@ -307,7 +357,7 @@ function _detectContextRaw() {
         const m = f.value.replace(/,/g, "").match(/\d+/);
         if (m) {
           const v = parseInt(m[0]);
-          if (v > 100 && v < 1000000) { context.mileage = v; break; }
+          if (v > 100 && v < MAX_SANE_MILEAGE) { context.mileage = v; break; }
         }
       }
     }
@@ -323,7 +373,7 @@ function _detectContextRaw() {
         const m = pageText.match(p);
         if (m) {
           const v = parseInt(m[1].replace(/,/g, ""));
-          if (v > 0 && v < 1000000) {
+          if (v > 0 && v < MAX_SANE_MILEAGE) {
             context.mileage = v;
             break;
           }
@@ -449,9 +499,97 @@ function sendContextUpdate(context) {
   );
 }
 
+// ==================== INCOMPLETE-CONTEXT TELEMETRY (Task #884) ====================
+// When a DVI-like page (v3 or v4) still yields an incomplete context after
+// the page has had time to render, report it once per URL so unresolved v4
+// layouts / shop numbers surface in /api/extension/telemetry instead of
+// failing silently. Payload carries ONLY the URL shape, resolved-field
+// booleans, and anonymized hint keys — never field values.
+const DVI_INCOMPLETE_SETTLE_MS = 8000;
+const reportedIncompleteUrls = new Set();
+let dviIncompleteTimer = null;
+let dviIncompleteTimerUrl = null;
+
+function classifyDviUrlShape() {
+  const path = window.location.pathname || "";
+  const host = window.location.hostname || "";
+  if (/\/shop\/[^/]+\/dvi\//i.test(path)) return "v4_dvi";
+  if (/\/dvi[_v0-9]*\//i.test(path) && /autotext\.me$/i.test(host)) return "v3_dvi";
+  if (/\/dvi[_v0-9]*\//i.test(path)) return "other_dvi";
+  return null;
+}
+
+// Anonymize hints: keep only short alphabetic tokens (label words like
+// "vin"/"mileage"), never digits or values. Capped so payloads stay tiny.
+function anonymizedHintKeys() {
+  const keys = [];
+  try {
+    const hints = collectFormFieldHints();
+    for (const f of hints) {
+      const tokens = (f.hint || "")
+        .split(/[^a-z]+/i)
+        .filter((t) => t.length >= 2 && t.length <= 24)
+        .slice(0, 3);
+      const key = tokens.join("_");
+      if (key && !keys.includes(key)) keys.push(key);
+      if (keys.length >= 12) break;
+    }
+  } catch (_) {}
+  return keys;
+}
+
+function maybeReportIncompleteDviContext(context) {
+  const urlShape = classifyDviUrlShape();
+  if (!urlShape) return;
+  const url = window.location.href.split("#")[0];
+  const complete = !!(context.shopId && context.vin && context.mileage && context.roId);
+  if (complete) {
+    if (dviIncompleteTimerUrl === url && dviIncompleteTimer) {
+      clearTimeout(dviIncompleteTimer);
+      dviIncompleteTimer = null;
+      dviIncompleteTimerUrl = null;
+    }
+    return;
+  }
+  if (reportedIncompleteUrls.has(url)) return;
+  if (dviIncompleteTimerUrl === url && dviIncompleteTimer) return; // already pending
+  if (dviIncompleteTimer) clearTimeout(dviIncompleteTimer);
+  dviIncompleteTimerUrl = url;
+  // Let the SPA finish rendering before declaring the context incomplete.
+  dviIncompleteTimer = setTimeout(() => {
+    dviIncompleteTimer = null;
+    dviIncompleteTimerUrl = null;
+    try {
+      if (window.location.href.split("#")[0] !== url) return; // navigated away
+      const ctx = detectContext();
+      if (ctx.shopId && ctx.vin && ctx.mileage && ctx.roId) return; // resolved itself
+      reportedIncompleteUrls.add(url);
+      const payload = {
+        provider: "autoflow",
+        urlShape,
+        hasShopId: !!ctx.shopId,
+        hasRoId: !!ctx.roId,
+        hasVin: !!ctx.vin,
+        hasMileage: !!ctx.mileage,
+        hintKeys: anonymizedHintKeys(),
+      };
+      if (ctx.shopId) payload.smsShopId = String(ctx.shopId);
+      if (!chrome.runtime?.id) return;
+      const p = chrome.runtime.sendMessage({
+        action: "REPORT_TELEMETRY",
+        event: "context.incomplete",
+        payload,
+      });
+      if (p && p.catch) p.catch(() => {});
+      console.log("[MOS Tools] AutoFlow incomplete DVI context reported:", payload);
+    } catch (_) { /* no-op */ }
+  }, DVI_INCOMPLETE_SETTLE_MS);
+}
+
 function checkForContextChanges() {
   try {
     const context = detectContext();
+    maybeReportIncompleteDviContext(context);
     if (hasContextChanged(context, lastContext)) {
       lastContext = context;
       console.log("[MOS Tools] AutoFlow context updated:", {

@@ -1,5 +1,25 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.2 — 2026-07-18
+
+### Fixed
+- **Printing and VHI now work on AutoFlow v4 DVI pages**
+  (`app.autoflow.com/shop/<number>/dvi/<id>`). Three v4-specific gaps were
+  closed: the DVI id is now matched by an explicit v4 URL pattern; VIN and
+  mileage inputs that carry no name/placeholder/label hints are resolved by
+  reading the label from the adjacent table cell; and the mileage sanity cap
+  was raised from 1,000,000 to 2,000,000 so real high-mile fleet vehicles
+  (seen live: 1,234,556) aren't rejected as bogus.
+
+### Added
+- **Incomplete-context telemetry.** If a DVI page (v3 or v4) still yields an
+  incomplete context (missing shop/RO/VIN/mileage) after the page settles,
+  the extension reports it once per URL — URL shape, resolved-field booleans,
+  and anonymized field-label keys only, never field values. Unresolved v4
+  shop numbers surface in a new platform-admin page where they can be
+  manually attached to the right shop; until attached, lookups fail closed
+  (never guess a shop).
+
 ## 1.28.1 — 2026-07-14
 
 ### Fixed

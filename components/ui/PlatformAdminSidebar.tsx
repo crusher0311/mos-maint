@@ -197,6 +197,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
                   <NavLink href="/platform-admin/shops" icon={Building2} label="All Shops" indent />
                   <NavLink href="/platform-admin/users" icon={Users} label="Users" indent />
                   <NavLink href="/platform-admin/hovercode" icon={QrCode} label="HoverCode QRs" indent />
+                  <NavLink href="/platform-admin/autoflow-numbers" icon={Building2} label="AutoFlow v4 Numbers" indent />
                 </ul>
               )}
             </li>

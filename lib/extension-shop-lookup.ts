@@ -171,6 +171,35 @@ export async function findShopBySmsId(
     } else if (candidates.length > 1) {
       console.warn(`[Shop Lookup] AutoFlow fallback: ${candidates.length} candidate shops for AutoFlow id "${smsShopId}" — cannot auto-associate. Shops: ${candidates.map(s => s.shopId).join(', ')}`);
     }
+
+    // Task #884: record unresolved AutoFlow identifiers (typically v4 shop
+    // NUMBERS) so a platform admin can manually attach them to the right shop
+    // under /platform-admin/autoflow-numbers. We stay fail-closed — never
+    // guess a shop — but the miss must not be invisible. Best-effort: a write
+    // failure never breaks the lookup itself.
+    if (!shopDoc) {
+      try {
+        const candidateShopIds = candidates
+          .map((s: any) => s?.shopId)
+          .filter((id: any) => id != null)
+          .slice(0, 25);
+        await db.collection("autoflow_unresolved_numbers").updateOne(
+          { number: smsShopId },
+          {
+            $set: {
+              lastSeenAt: new Date(),
+              candidateShopIds,
+              candidateCount: candidates.length,
+            },
+            $setOnInsert: { number: smsShopId, firstSeenAt: new Date(), resolvedShopId: null },
+            $inc: { seenCount: 1 },
+          },
+          { upsert: true }
+        );
+      } catch (err: any) {
+        console.warn(`[Shop Lookup] Failed to record unresolved AutoFlow number "${smsShopId}":`, err?.message || err);
+      }
+    }
   }
 
   // Shopmonkey self-onboard (key present, ids missing). Shopmonkey is a

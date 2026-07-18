@@ -39,6 +39,9 @@ const ALLOWED_EVENTS = new Set<string>([
   "auth.token_invalid_cleared",
   "api.fetch_failure",
   "action.dropped",
+  // Task #884: a DVI-like page (AutoFlow v3/v4) yielded an incomplete
+  // context (missing vin/mileage/roId/shopId) after the page settled.
+  "context.incomplete",
 ]);
 
 // Per-shop-per-minute rate limit. A typical session generates a small
@@ -126,6 +129,22 @@ function sanitizePayload(raw: any): Record<string, unknown> {
   if (reason) out.reason = reason;
   const provider = clampStr(raw.provider, 32);
   if (provider) out.provider = provider;
+  // Task #884 (context.incomplete): URL shape label, resolved-field
+  // booleans, and anonymized form-field hint keys (label words only — the
+  // extension never sends field values here).
+  const urlShape = clampStr(raw.urlShape, 32);
+  if (urlShape) out.urlShape = urlShape;
+  for (const flag of ["hasShopId", "hasRoId", "hasVin", "hasMileage"] as const) {
+    if (typeof raw[flag] === "boolean") out[flag] = raw[flag];
+  }
+  if (Array.isArray(raw.hintKeys)) {
+    const hintKeys = raw.hintKeys
+      .filter((k: unknown) => typeof k === "string")
+      .map((k: string) => k.replace(/[^a-zA-Z_]/g, "").slice(0, 48))
+      .filter((k: string) => k.length > 0)
+      .slice(0, 12);
+    if (hintKeys.length > 0) out.hintKeys = hintKeys;
+  }
   return out;
 }
 

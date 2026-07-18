@@ -166,6 +166,56 @@ async function run() {
     );
   }
 
+  // (2b) Task #884: context.incomplete is accepted and its payload keeps only
+  // the shape/boolean/hint-key fields — hint keys are scrubbed of digits so a
+  // VIN or RO number can never ride along.
+  {
+    reset();
+    const res = await POST(
+      makeReq([
+        {
+          event: "context.incomplete",
+          smsShopId: "1360",
+          provider: "autoflow",
+          payload: {
+            provider: "autoflow",
+            urlShape: "v4_dvi",
+            hasShopId: true,
+            hasRoId: true,
+            hasVin: false,
+            hasMileage: false,
+            hintKeys: ["vin", "mileage_field", "odo123meter", "customerName!"],
+            vin: "1HGCM82633A004352", // must be dropped
+            pageText: "secret content", // must be dropped
+          },
+        },
+      ]),
+    );
+    ok("context.incomplete → 200", res.status === 200, `got ${res.status}`);
+    ok("context.incomplete stored", inserted.length === 1, `len=${inserted.length}`);
+    const p = inserted[0]?.payload ?? {};
+    ok("  → urlShape preserved", p.urlShape === "v4_dvi", `urlShape=${p.urlShape}`);
+    ok("  → booleans preserved", p.hasShopId === true && p.hasVin === false);
+    ok(
+      "  → hintKeys scrubbed of non-letters",
+      Array.isArray(p.hintKeys) &&
+        p.hintKeys.join(",") === "vin,mileage_field,odometer,customerName",
+      `hintKeys=${JSON.stringify(p.hintKeys)}`,
+    );
+    ok("  → vin dropped", !("vin" in p));
+    ok("  → pageText dropped", !("pageText" in p));
+  }
+
+  // (2c) Unknown event names are still rejected (allow-list intact).
+  {
+    reset();
+    const res = await POST(
+      makeReq([{ event: "context.bogus_event", smsShopId: "1360" }]),
+    );
+    ok("unknown event → 200 but rejected", res.status === 200);
+    ok("  → nothing stored", inserted.length === 0, `len=${inserted.length}`);
+  }
+
   // (3) The 121st request in a window returns 429 (limit is 120/min).
   {
     reset();

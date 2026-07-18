@@ -377,6 +377,92 @@ async function run() {
     }
   }
 
+  // 17. AutoFlow v4 shop NUMBER stored in autoflow.shopNumbers resolves (task #884)
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 33, autoflow: { domain: "myshop.autotext.me", shopNumbers: ["1360"] }, integrationProvider: "autoflow" },
+      ],
+    });
+    try {
+      const r = await findShopBySmsId("1360", { isPlatformAdmin: true, providerHint: "autoflow" });
+      ok("autoflow v4 number in shopNumbers resolves", r?.mosShopId === 33);
+    } finally {
+      restore();
+    }
+  }
+
+  // 18. AutoFlow fallback: single candidate auto-learns the v4 number
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 34, autoflow: { domain: "solo.autotext.me" }, integrationProvider: "autoflow" },
+      ],
+    });
+    try {
+      const r = await findShopBySmsId("7777", { isPlatformAdmin: false, userShopIds: [34], providerHint: "autoflow" });
+      ok("autoflow fallback resolves the lone candidate", r?.mosShopId === 34);
+      const persistOp = fake.ops.find(
+        (o) =>
+          o.op === "updateOne" &&
+          (o as any).collection === "shops" &&
+          JSON.stringify((o as any).update).includes("shopNumbers"),
+      );
+      ok("autoflow fallback learns the number into autoflow.shopNumbers", !!persistOp);
+    } finally {
+      restore();
+    }
+  }
+
+  // 19. AutoFlow fallback: ambiguous (>1 candidates) → fail closed AND record
+  //     the unresolved number for the platform-admin attach UI (task #884).
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 35, autoflow: { domain: "a.autotext.me" }, integrationProvider: "autoflow" },
+        { shopId: 36, autoflow: { domain: "b.autotext.me" }, integrationProvider: "autoflow" },
+      ],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const r = await findShopBySmsId("1360", { isPlatformAdmin: true, providerHint: "autoflow" });
+      ok("autoflow ambiguous fallback fails closed (null, never guesses)", r === null);
+      const recordOp = fake.ops.find(
+        (o) =>
+          o.op === "updateOne" &&
+          (o as any).collection === "autoflow_unresolved_numbers",
+      );
+      ok("ambiguous autoflow number recorded as unresolved", !!recordOp);
+      ok(
+        "unresolved record is an upsert keyed by the number",
+        !!recordOp && JSON.stringify((recordOp as any).filter).includes("1360"),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 20. AutoFlow zero-candidate miss (number seen but NO autoflow shops in
+  //     scope) is also recorded — the platform admin needs to see these too.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const r = await findShopBySmsId("9999", { isPlatformAdmin: true, providerHint: "autoflow" });
+      ok("autoflow zero-candidate miss returns null", r === null);
+      const recordOp = fake.ops.find(
+        (o) =>
+          o.op === "updateOne" &&
+          (o as any).collection === "autoflow_unresolved_numbers",
+      );
+      ok("zero-candidate miss recorded as unresolved", !!recordOp);
+    } finally {
+      restore();
+    }
+  }
+
   if (failed > 0) {
     console.error(`\n${failed} smoke check(s) failed.`);
     process.exit(1);
