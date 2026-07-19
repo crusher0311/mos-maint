@@ -17,6 +17,19 @@ name/id/placeholder/aria-label/associated `<label>` text, as a fallback after th
 text scrapes. The mileage label renders with a required asterisk ("Mileage *"),
 so the text-regex must tolerate `*` and assorted separators.
 
+## v4 inputs have randomized ids — attribute hints are non-empty gibberish
+On v4 DVI pages the inputs carry randomized ids (e.g. `jawzvixagj`) with NO
+name/placeholder/aria-label and no `<label for>` association. The attribute-derived
+hint is therefore non-empty garbage — an "only use the adjacent-cell label when the
+hint is empty" fallback never fires, so mileage silently isn't scraped (proven via
+`context.incomplete` telemetry: `urlShape=v4_dvi`, `hasMileage=false`, random
+`hintKeys`). **How to apply:** ALWAYS append the adjacent-cell label
+("Mileage"/"VIN") to every field hint; then match mileage in two passes —
+explicit `mileage|odometer|odom` before loose `miles` — so a stray "miles"-labeled
+field earlier in DOM order can't shadow the real input. The
+`extension_telemetry_events` Mongo collection is the fastest way to see what the
+adapter actually resolved on a customer's page.
+
 ## Shop id: v3 = subdomain, v4 = path (AutoFlow framework upgrade, in progress)
 AutoFlow is mid framework upgrade. **MOST shops are reachable via BOTH URL
 shapes at the same time** — it is not one-or-the-other per shop, so the same

@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.5 — 2026-07-19
+
+### Fixed
+- **AutoFlow v4 DVI mileage now actually detected.** 1.28.4 forwarded the
+  scraped mileage to the plan API, but on v4 DVI pages the mileage was never
+  scraped in the first place: v4 inputs have randomized ids (no
+  name/placeholder/aria-label/`<label for>`), so the field-hint matcher saw
+  gibberish and the adjacent-cell label ("Mileage") was only consulted when
+  the hint was completely empty. Field hints now always include the
+  adjacent-cell label, so the "Mileage" input is recognized and the VHI
+  anchors on the entered odometer instead of a CARFAX estimate.
+  (Diagnosed from context.incomplete telemetry: hasMileage=false with
+  random hintKeys on urlShape v4_dvi.)
+
 ## 1.28.4 — 2026-07-19
 
 ### Fixed

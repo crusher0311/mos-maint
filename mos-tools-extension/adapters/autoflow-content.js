@@ -104,9 +104,15 @@ function collectFormFieldHints() {
       el.getAttribute && el.getAttribute("data-testid"),
       label
     ].filter(Boolean).join(" ").toLowerCase();
-    // v4 fallback: no attribute/label hints at all — use the adjacent cell.
-    if (!hint) {
-      hint = readAdjacentCellLabel(el).toLowerCase();
+    // v4: attribute hints are often useless — inputs carry randomized ids
+    // (e.g. "jawzvixagj") with no name/placeholder/aria-label and no <label>
+    // association, so the attribute-derived hint is non-empty gibberish.
+    // ALWAYS append the adjacent-cell label ("Mileage", "VIN", …) rather than
+    // only when the hint is empty, or the mileage field is never recognized
+    // on v4 DVI pages (telemetry: hasMileage=false with random hintKeys).
+    const adjacent = readAdjacentCellLabel(el).toLowerCase();
+    if (adjacent) {
+      hint = hint ? hint + " " + adjacent : adjacent;
     }
     out.push({ hint, value });
   }
@@ -364,12 +370,20 @@ function _detectContextRaw() {
     // Form-field fallback: DVI pages keep mileage in an editable input whose
     // label renders "Mileage *", so its value is not in innerText.
     if (!context.mileage) {
-      for (const f of fieldHints) {
-        if (!/mileage|odometer|odom|miles/.test(f.hint)) continue;
-        const m = f.value.replace(/,/g, "").match(/\d+/);
-        if (m) {
-          const v = parseInt(m[0]);
-          if (v > 100 && v < MAX_SANE_MILEAGE) { context.mileage = v; break; }
+      // Two passes: an explicit "mileage"/"odometer" label always beats a
+      // looser "miles" match. Now that adjacent-cell labels are appended to
+      // EVERY field's hint (v4 randomized ids), a stray "miles"-labeled
+      // numeric field earlier in DOM order must not shadow the real
+      // Mileage input.
+      const passes = [/mileage|odometer|odom/, /miles/];
+      outer: for (const rx of passes) {
+        for (const f of fieldHints) {
+          if (!rx.test(f.hint)) continue;
+          const m = f.value.replace(/,/g, "").match(/\d+/);
+          if (m) {
+            const v = parseInt(m[0]);
+            if (v > 100 && v < MAX_SANE_MILEAGE) { context.mileage = v; break outer; }
+          }
         }
       }
     }
