@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.4 — 2026-07-19
+
+### Fixed
+- **VHI now anchors on the mileage entered on AutoFlow pages.** The AutoFlow
+  adapter scraped the on-screen mileage but never set `scrapedOdometer` (only
+  the Tekmetric adapter did), so the side panel never forwarded the
+  `odometer` param to the plan API and the VHI header showed the server's
+  CARFAX estimate instead of the mileage on the DVI/ticket page. The AutoFlow
+  adapter now mirrors the Tekmetric behavior; the server's anchoring
+  (monotonicity guard included) is provider-agnostic and needed no change.
+
 ## 1.28.3 — 2026-07-18
 
 ### Fixed

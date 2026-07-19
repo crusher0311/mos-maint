@@ -167,7 +167,19 @@ function applyLastKnownGoodGuard(ctx) {
 
 function detectContext() {
   const ctx = _detectContextRaw();
-  return applyLastKnownGoodGuard(ctx);
+  const guarded = applyLastKnownGoodGuard(ctx);
+  // Mirror the Tekmetric adapter: preserve the on-screen odometer under a
+  // dedicated field. The side panel forwards `scrapedOdometer` to the plan
+  // API's `odometer` param so the VHI anchors on the mileage the advisor
+  // actually entered on the DVI/ticket page, instead of a CARFAX estimate.
+  // Without this, AutoFlow pages never send an odometer and the extension
+  // header can disagree with the page (e.g. estimate 21,489 vs entered
+  // 21,860). `mileage` itself gets overwritten by the server-resolved value
+  // after a plan response, so a separate field is required.
+  if (typeof guarded.mileage === 'number' && guarded.mileage > 0) {
+    guarded.scrapedOdometer = guarded.mileage;
+  }
+  return guarded;
 }
 
 function _detectContextRaw() {
