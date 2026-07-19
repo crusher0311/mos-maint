@@ -54,6 +54,27 @@ so the side panel can match dual-integration shops regardless of `provider`;
 **known gap** — that single field only carries the subdomain form, so a v4-only
 URL whose slug ≠ subdomain won't match unless the v4 number is also stored/sent.
 
+## v4 DVI read/write API (Laravel + Inertia, HAR-confirmed 2026-07-19)
+v4 has no `window.defaults` and no `$.fn.request` — the v3 bridge protocol
+simply doesn't exist there. The v4 SPA (axios) uses:
+- **Write:** POST `/shop/<shop>/dvi/<statusId>/results/<inspecId>` (JSON), auth =
+  session cookie + `x-xsrf-token` header (decodeURIComponent of Laravel's
+  `XSRF-TOKEN` cookie) + `x-requested-with: XMLHttpRequest`. A minimal body
+  `{inspec_id, status_id, inspec_status}` creates/updates the result and RETURNS
+  the full result object (incl. `results_id`); AutoFlow's own UI then POSTs that
+  returned object back with notes/`recommendation:[...]` merged — mirror that
+  two-step dance, don't guess at a partial-notes body.
+- **Read:** item list is NOT a separate GET — it ships in the Inertia page
+  payload (`#app[data-page]`, re-fetchable fresh via GET same URL with
+  `X-Inertia: true` + `X-Inertia-Version`). Scan it shape-agnostically for
+  `{inspec_id, inspec_name[, sheet_id]}` items and `{results_id, inspec_id, ...}`
+  results, joined on `inspec_id` — prop nesting is AutoFlow's private detail.
+- Status codes identical to v3: 0=red, 1=yellow, 2=green. `statusId` = the DVI id
+  in the URL. Canned notes: GET `.../notes/items/<inspecId>?sheet_id=NN`.
+- No known v4 equivalent of v3 `add_rvh` (add-concerns) yet — fail that cleanly.
+**Caution:** raw HARs contain live session cookies/XSRF tokens — never keep them
+in the repo; extract the request shapes then delete the file.
+
 ## Dual-integration AutoFlow shops never resolve as provider="autoflow"
 **Why:** shops that pair AutoFlow with a read/write provider (Protractor, Tekmetric)
 resolve to that provider in `findShopBySmsId` (via `integrationProvider` /

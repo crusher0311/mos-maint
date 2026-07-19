@@ -1,5 +1,26 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.6 — 2026-07-19
+
+### Added
+- **Fill DVI and Enhance Notes now work on AutoFlow v4** (app.autoflow.com).
+  The DVI bridge previously only spoke v3's jQuery/PHP protocol
+  (`window.defaults` + `/Admin/dvi_v3/request.php`), which doesn't exist in
+  the v4 Inertia SPA, so v4 pages always failed with "Could not read DVI
+  items on this page". The bridge now detects v4 DVI URLs
+  (`/shop/<n>/dvi/<id>`) and:
+  - **reads** the item list from a fresh Inertia page payload (shape-agnostic
+    deep scan for `{inspec_id, inspec_name}` items and their results, joined
+    on `inspec_id`), falling back to the boot-time `#app[data-page]` snapshot;
+  - **writes** via the v4 JSON API (HAR-confirmed): POST
+    `/shop/<shop>/dvi/<statusId>/results/<inspecId>` with the Laravel
+    XSRF-TOKEN cookie header — first a minimal status body (server
+    creates/returns the full result), then the returned result object POSTed
+    back with notes merged, mirroring AutoFlow's own saveResultFields.
+  Status codes are identical across v3/v4 (0=red, 1=yellow, 2=green).
+  "Add to concerns" (add_rvh) has no known v4 endpoint yet and fails cleanly
+  with a per-item error instead of hanging.
+
 ## 1.28.5 — 2026-07-19
 
 ### Fixed
