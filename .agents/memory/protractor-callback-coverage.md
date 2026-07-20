@@ -13,3 +13,14 @@ description: Protractor inbound webhooks (callback URL) come bundled with API ac
 - Treat connected Protractor shops as having near-real-time inbound freshness: the callback receiver (`/api/webhooks/protractor/{token}`) fetches the full WO by GUID, snapshots, normalizes, and indexes jobs inline within seconds of a Protractor-side save.
 - Don't propose "check callback coverage" audits for connected shops; a stale Protractor shop points to a receiver/ingestion problem or missing token, not a never-registered callback.
 - Remaining freshness gaps are save-lag (seconds) only — screen-reading features are generally unnecessary for Protractor, unlike Tekmetric (which has a known webhook-arrived-but-jobs-never-indexed gap).
+
+## Webhook-outage fallback pollers REMOVED 2026-07-20
+The May-2026 outage-era pollers (`protractor-af-log-tail` every 1 min,
+`protractor-stage-refresh` every 3 min WO-list pulls) were deleted from
+`lib/cron/jobs.cjs` after webhooks recovered (27k callbacks/24h fleet-wide) and
+Protractor flagged our IP as a top-3 API load source (~8k large list responses/
+day of duplicate traffic). Route handlers remain; Tier 2 also gated by
+`PROTRACTOR_STAGE_REFRESH_DISABLED=true` (left set on prod). If webhook
+delivery breaks again, restore the cron entries from git history — do NOT
+rebuild from scratch, and verify webhook health via `protractor_callback_events`
+before ever re-adding pollers.
