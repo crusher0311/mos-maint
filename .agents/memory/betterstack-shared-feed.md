@@ -26,3 +26,5 @@ or inspect a raw line to confirm origin.
 **Query method that works** (POST body / `--data-binary` returns "Empty query"):
 `curl -s -G "https://$BETTERSTACK_QUERY_HOST" -u "$BETTERSTACK_QUERY_USERNAME:$BETTERSTACK_QUERY_PASSWORD" --data-urlencode "query@/tmp/q.sql"`.
 Secrets are only readable from the project runtime env (bash/node), not the masked viewEnvVars or the code_execution sandbox.
+
+**Retention split:** the remote Better Stack ClickHouse table only retains ~1 HOUR of logs. Anything older must be read from the synced `production_logs` table in Supabase prod PG (`SUPABASE_PROD_DATABASE_URL`, ~30d retention). LIKE scans there are slow at ~3M rows/day — chunk queries per day with a raised `statement_timeout` or they time out.
