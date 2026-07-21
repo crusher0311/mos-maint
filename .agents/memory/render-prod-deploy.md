@@ -59,3 +59,11 @@ commit was an *ancestor* of main HEAD (prod simply behind, not diverged).
 **Security:** the git remote URL has a GitHub PAT embedded in plaintext
 (`git remote get-url origin` exposes it). Treat as compromised if printed; the
 user should rotate that token.
+
+## Env-var changes via API do NOT take effect on their own
+Setting an env var through the Render API (PUT /env-vars/:key) only stores it —
+the running process keeps the old snapshot until a NEW DEPLOY goes live (even a
+service "restart" spun up an instance still missing the var, live-verified
+2026-07-21). After any API env change, trigger `POST /services/:id/deploys`
+(builds current GitHub main, ~7-10 min) and then verify behavior in logs; never
+assume a runtime kill switch is active just because the var reads back.
