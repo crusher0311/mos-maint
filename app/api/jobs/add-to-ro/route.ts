@@ -15,6 +15,11 @@ import {
   logPartCostResolution,
 } from "@/lib/integrations/protractor/part-cost";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import {
+  getJobLaborRate,
+  needsCachedLaborRate,
+  resolveAddToRoLaborRate,
+} from "@/lib/integrations/protractor/labor-rate";
 
 export const dynamic = "force-dynamic";
 
@@ -125,22 +130,28 @@ export async function POST(req: NextRequest) {
     }
   };
 
-  // Try to extract shop's current labor rate from existing work order lines
-  let shopLaborRate = 0;
+  // Task #888 — labor-rate resolution moved to a shared helper so canned
+  // jobs keep their template rate while other sources keep the legacy
+  // RO → cached → job-rate chain.
+  const jobLaborRate = getJobLaborRate(job.lines);
+
+  // Rate from an existing labor line already on the work order.
+  let roLaborRate = 0;
   for (const pkg of existingPackages) {
     const linesRaw = pkg.ServicePackageLines;
     const lines = Array.isArray(linesRaw) ? linesRaw : (linesRaw?.ItemCollection || []);
     for (const line of lines) {
       if ((line.Type === 'Labor' || line.LineType === 'Labor') && line.Price && parseFloat(line.Price) > 0) {
-        shopLaborRate = parseFloat(line.Price);
+        roLaborRate = parseFloat(line.Price);
         break;
       }
     }
-    if (shopLaborRate > 0) break;
+    if (roLaborRate > 0) break;
   }
-  
-  // If no rate found from WO, use cached labor rate from shop document (fast)
-  if (shopLaborRate === 0) {
+
+  // Only hit Mongo for the auto-learned rate when the resolver could use it.
+  let cachedLaborRate = 0;
+  if (needsCachedLaborRate({ source, jobLaborRate, roLaborRate })) {
     const { getDb } = await import("@/lib/mongo");
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
@@ -148,21 +159,20 @@ export async function POST(req: NextRequest) {
       { projection: { cachedLaborRate: 1 } }
     );
     if (shop?.cachedLaborRate && shop.cachedLaborRate > 0) {
-      shopLaborRate = shop.cachedLaborRate;
+      cachedLaborRate = shop.cachedLaborRate;
     }
   }
-  
-  // Final fallback: use historical rate from the job being added
-  if (shopLaborRate === 0) {
-    const laborLine = job.lines.find(l => l.lineType === "labor");
-    if (laborLine && laborLine.unitPrice > 0) {
-      shopLaborRate = laborLine.unitPrice;
-    }
-  }
-  
-  if (shopLaborRate > 0) {
-    console.log(`[Jobs Add to RO] Using labor rate: $${shopLaborRate}/hr`);
-  }
+
+  const { rate: shopLaborRate, rateSource } = resolveAddToRoLaborRate({
+    source,
+    jobLaborRate,
+    roLaborRate,
+    cachedLaborRate,
+  });
+
+  console.log(
+    `[Add-to-RO:${requestId}] Labor rate: $${shopLaborRate}/hr (source=${rateSource}, jobSource=${source || "lookup"})`
+  );
 
   // Task #681 — per-shop cost-estimate ratio for part lines without a real cost.
   const partCostRatio = await getShopPartCostRatio(shopId);

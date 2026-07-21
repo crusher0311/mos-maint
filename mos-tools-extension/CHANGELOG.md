@@ -1,5 +1,18 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.28.7 — 2026-07-20
+
+### Fixed
+- **Canned jobs now keep their template labor rate when pushed to a repair
+  order.** The Protractor add-to-RO path previously discarded the job's own
+  labor rate and substituted a "shop rate" learned from the RO or the shop's
+  history — overriding the rate the shop deliberately saved on the canned
+  template. The sidepanel now sends `source: 'canned'` plus each labor
+  item's own `rate` on the generic add-to-RO fallback (both the Protractor
+  no-canned-ID and no-tekmetricId branches), and the server prefers that
+  template rate when it's positive. Historical/plan/lookup jobs keep the
+  existing RO → cached → job-rate behavior.
+
 ## 1.28.6 — 2026-07-19
 
 ### Added

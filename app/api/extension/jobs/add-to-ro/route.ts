@@ -15,6 +15,11 @@ import {
   logPartCostResolution,
 } from "@/lib/integrations/protractor/part-cost";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import {
+  getJobLaborRate,
+  needsCachedLaborRate,
+  resolveAddToRoLaborRate,
+} from "@/lib/integrations/protractor/labor-rate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,11 +47,14 @@ async function _POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { shopId, roNumber, vin, job, workOrderGuid: workOrderGuidHint } = body as {
+    const { shopId, roNumber, vin, job, source, workOrderGuid: workOrderGuidHint } = body as {
       shopId: number;
       roNumber?: string;
       vin?: string;
       workOrderGuid?: string;
+      // Task #888 — where the pushed job came from. "canned" makes the
+      // template's own labor rate win over the RO/cached shop rate.
+      source?: string;
       job: {
         title: string;
         description?: string;
@@ -63,7 +71,9 @@ async function _POST(req: NextRequest) {
           cost?: number;
           extendedCost?: number;
         }>;
-        laborItems?: Array<{ name: string; hours: number }>;
+        // Task #888 — `rate` carries the template's own labor rate for
+        // canned jobs (older extension builds omit it).
+        laborItems?: Array<{ name: string; hours: number; rate?: number }>;
         parts?: Array<{
           name: string;
           partNumber?: string;
@@ -216,26 +226,42 @@ async function _POST(req: NextRequest) {
       ? existingPackagesRaw
       : existingPackagesRaw?.ItemCollection || [];
 
-    let shopLaborRate = 0;
+    // Task #888 — labor-rate resolution via the shared helper: canned jobs
+    // keep their template rate; other sources keep RO → cached → job rate.
+    const jobLaborRate = getExtensionJobLaborRate(job);
+
+    let roLaborRate = 0;
     for (const pkg of existingPackages) {
       const linesRaw = pkg.ServicePackageLines;
       const lines = Array.isArray(linesRaw) ? linesRaw : linesRaw?.ItemCollection || [];
       for (const line of lines) {
         if ((line.Type === "Labor" || line.LineType === "Labor") && line.Price && parseFloat(line.Price) > 0) {
-          shopLaborRate = parseFloat(line.Price);
+          roLaborRate = parseFloat(line.Price);
           break;
         }
       }
-      if (shopLaborRate > 0) break;
+      if (roLaborRate > 0) break;
     }
 
-    if (shopLaborRate === 0) {
+    let cachedLaborRate = 0;
+    if (needsCachedLaborRate({ source, jobLaborRate, roLaborRate })) {
       const db = await getDb();
       const shop = await db.collection("shops").findOne({ shopId }, { projection: { cachedLaborRate: 1 } });
       if (shop?.cachedLaborRate && shop.cachedLaborRate > 0) {
-        shopLaborRate = shop.cachedLaborRate;
+        cachedLaborRate = shop.cachedLaborRate;
       }
     }
+
+    const { rate: shopLaborRate, rateSource } = resolveAddToRoLaborRate({
+      source,
+      jobLaborRate,
+      roLaborRate,
+      cachedLaborRate,
+    });
+
+    console.log(
+      `[Ext Add-to-RO:${requestId}] Labor rate: $${shopLaborRate}/hr (source=${rateSource}, jobSource=${source || "unknown"})`
+    );
 
     const jobLines = normalizeJobLines(job, shopLaborRate);
 
@@ -385,6 +411,22 @@ type NormalizedLine = {
   cost?: number;
   extendedCost?: number;
 };
+
+// Task #888 — pull the pushed job's own labor rate out of either payload
+// shape: full `lines` (labor unitPrice) or the sidepanel's `laborItems`
+// (per-item `rate`, sent by newer extension builds for canned jobs).
+function getExtensionJobLaborRate(job: {
+  lines?: NormalizedLine[];
+  laborItems?: Array<{ name: string; hours: number; rate?: number }>;
+}): number {
+  const fromLines = getJobLaborRate(job.lines);
+  if (fromLines > 0) return fromLines;
+  for (const item of job.laborItems || []) {
+    const rate = parseFloat(String(item.rate ?? ""));
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  }
+  return 0;
+}
 
 function normalizeJobLines(
   job: {

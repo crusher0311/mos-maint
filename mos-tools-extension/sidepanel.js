@@ -2952,7 +2952,9 @@ async function handleSwAddFinding(service, isDraft = false) {
 // Returns true when the job was added, false on failure — callers that show
 // per-job button states (Send to RO, companion "+ Add", Add all) rely on this
 // because errors are handled in here (notification) rather than thrown.
-async function handleAddJob(job) {
+// Task #888 — `source` marks where the job came from ('canned' makes the
+// server keep the template's own labor rate instead of the RO/cached rate).
+async function handleAddJob(job, source) {
   if (!currentContext) {
     alert('No repair order context. Please navigate to a repair order.');
     return false;
@@ -2989,10 +2991,18 @@ async function handleAddJob(job) {
     const jobData = {
       title: job.title || job.name,
       description: job.note || job.description || '',
-      laborItems: (job.laborItems || job.lines?.filter(l => l.lineType === 'labor') || []).map(item => ({
-        name: item.name || item.description,
-        hours: item.hours || item.quantity || 1
-      })),
+      laborItems: (job.laborItems || job.lines?.filter(l => l.lineType === 'labor') || []).map(item => {
+        // Task #888 — pass the job's own labor rate through so a canned
+        // template's saved rate can win server-side.
+        const rate = Number(item.rate) > 0 ? Number(item.rate)
+          : Number(item.unitPrice) > 0 ? Number(item.unitPrice)
+          : 0;
+        return {
+          name: item.name || item.description,
+          hours: item.hours || item.quantity || 1,
+          ...(rate > 0 ? { rate } : {})
+        };
+      }),
       parts: (job.parts || job.lines?.filter(l => l.lineType === 'part') || []).map(part => {
         // Task #681 — send the REAL part cost as `unitCost`, separate from the
         // legacy `cost` field (which falls back to retail below and must never
@@ -3042,6 +3052,8 @@ async function handleAddJob(job) {
             // Protractor — its OData number-search returns nothing for open WOs
             // and the VIN->cache fallback lags right after creation.
             workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin, currentContext.roId),
+            // Task #888 — 'canned' keeps the template's saved labor rate.
+            source: source || undefined,
             job: jobData
           })
         }
@@ -3249,7 +3261,8 @@ async function handleAddCannedJob(job) {
       }
     } else {
       console.log('[MOS] Adding as generic Protractor job (no canned job ID)');
-      await handleAddJob(job);
+      // Task #888 — mark as canned so the template's labor rate is kept.
+      await handleAddJob(job, 'canned');
     }
     return;
   }
@@ -3302,7 +3315,8 @@ async function handleAddCannedJob(job) {
     }
   } else {
     console.log('[MOS] Adding as generic job (no tekmetricId)');
-    await handleAddJob(job);
+    // Task #888 — mark as canned so the template's labor rate is kept.
+    await handleAddJob(job, 'canned');
   }
 }
 
