@@ -453,6 +453,10 @@ const ALLOWLIST = new Set([
   "scripts/protractor-job-index-catchup.ts",
   "scripts/repair-corrupted-carfax-snapshots.ts",
   "scripts/repair-poisoned-aces-markers.ts",
+  // Task #891 — one-shot repair of 'Unknown Service' titles in
+  // normalized_service_jobs for Protractor shops; titles sourced from the
+  // legacy Mongo job_index. Same one-off-repair precedent as the two above.
+  "scripts/repair-protractor-unknown-service-titles.ts",
   // Task #479 — one-shot repair of fake dueMileage/dueAtMiles 0 anchors in
   // cached plan payloads; same one-off-repair precedent as the two above.
   "scripts/fix-zero-due-at-miles.ts",

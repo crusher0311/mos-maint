@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { fetchCannedJobsWithCache, normalizeProtractorPackageLine } from "@/lib/integrations/protractor";
+import { fetchCannedJobsWithCache, normalizeProtractorPackageLine, isCannedJobsCacheContentBlank } from "@/lib/integrations/protractor";
 
 function extractLines(raw: any): any[] {
   if (!raw) return [];
@@ -42,12 +42,17 @@ export async function GET(req: NextRequest) {
     const rawCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
     const rawItems = rawCache?.items || [];
 
-    let useRaw = rawItems.length > 0;
+    // Task #891: never serve a cache whose items are (nearly) all blank —
+    // shop 66 had 735 title-less, line-less items stamped "enriched", so
+    // this route matched nothing by name and add pushed empty "Untitled"
+    // shells. Fall through to fetchCannedJobsWithCache, which now detects
+    // the poisoned cache itself and re-fetches + re-enriches.
+    const useRaw = rawItems.length > 0 && !isCannedJobsCacheContentBlank(rawItems);
 
     let jobs: any[];
     if (useRaw) {
       jobs = rawItems.map((j: any) => {
-        const rawLines = extractLines(j.ServicePackageLines);
+        const rawLines = Array.isArray(j.lines) ? j.lines : extractLines(j.ServicePackageLines);
         return {
           id: j.ID || j.id || j.Code || "",
           title: j.ServicePackageHeader?.Title || j.Title || j.title || "",
@@ -72,7 +77,9 @@ export async function GET(req: NextRequest) {
         code: j.code || j.Code || "",
         laborHours: j.laborHours ?? j.LaborHours ?? null,
         laborRate: j.laborRate ?? j.LaborRate ?? null,
-        lines: [],
+        // fetchCannedJobsWithCache now carries normalized lines through
+        // (task #891) so add-to-work-order can push a fully-populated job.
+        lines: Array.isArray(j.lines) ? j.lines : [],
       }));
     }
 

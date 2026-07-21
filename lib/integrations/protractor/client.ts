@@ -1234,6 +1234,7 @@ export async function createProtractorWorkOrder(
     body.ServicePackages = { ItemCollection: initialPackages };
   }
 
+  const tCreate = Date.now();
   const result = await protractorFetch<ProtractorWorkOrder>(
     `/WorkOrder/${newWorkOrderId}`,
     config,
@@ -1248,7 +1249,7 @@ export async function createProtractorWorkOrder(
 
   const workOrderId = result.data.ID;
   const workOrderNumber = result.data.WorkOrderNumber;
-  console.log(`[Create WO] Created WO #${workOrderNumber} (${workOrderId})`);
+  console.log(`[Create WO] Created WO #${workOrderNumber} (${workOrderId}) in ${Date.now() - tCreate}ms`);
 
   if (params.servicePackages?.length) {
     const db = await getDb();
@@ -1287,6 +1288,9 @@ export async function createProtractorWorkOrder(
 
     for (const pkg of params.servicePackages) {
       try {
+        // Task #891 timing: line resolution can involve up to 3 sequential
+        // upstream fallbacks per package; measure each phase.
+        const tPkg = Date.now();
         let resolvedLines = pkg.lines || [];
 
         if (resolvedLines.length === 0 && pkg.source === "canned") {
@@ -1301,9 +1305,12 @@ export async function createProtractorWorkOrder(
             return tTitle === titleLower || (codeLower && tCode === codeLower) || tId === pkg.deferredId;
           });
           if (match) {
+            // Task #891: cached items may carry lines either in the raw
+            // ServicePackageLines shape or as pre-normalized `lines`.
             const matchLines = extractLinesFromRaw(match.ServicePackageLines);
-            if (matchLines.length > 0) {
-              resolvedLines = matchLines.map(normalizeOneLine);
+            const cachedLines = matchLines.length > 0 ? matchLines : (Array.isArray(match.lines) ? match.lines : []);
+            if (cachedLines.length > 0) {
+              resolvedLines = cachedLines.map(normalizeOneLine);
               console.log(`[Create WO] Resolved ${resolvedLines.length} lines from canned cache for "${pkg.title}"`);
             }
           }
@@ -1513,7 +1520,7 @@ export async function createProtractorWorkOrder(
         );
 
         if (updateResult.ok) {
-          console.log(`[Create WO] Successfully added "${pkg.title}" to WO #${workOrderNumber}`);
+          console.log(`[Create WO] Successfully added "${pkg.title}" to WO #${workOrderNumber} in ${Date.now() - tPkg}ms (${servicePackageLines.length} lines)`);
         } else {
           console.error(`[Create WO] Failed to add "${pkg.title}": ${updateResult.error}`);
         }
@@ -4095,6 +4102,7 @@ export function normalizeCannedJobForCache(input: any): {
   laborRate: number | null;
   fixedPrice: number | null;
   lineCount: number;
+  lines: any[];
 } {
   const job = input ?? {};
   const header = job.ServicePackageHeader ?? {};
@@ -4102,24 +4110,57 @@ export function normalizeCannedJobForCache(input: any): {
 
   // ServicePackageLines may be either an array (basic shape) or
   // { ItemCollection: [...] } (detail shape).
-  let lineCount = 0;
+  let rawLines: any[] = [];
   if (Array.isArray(job.ServicePackageLines)) {
-    lineCount = job.ServicePackageLines.length;
+    rawLines = job.ServicePackageLines;
   } else if (Array.isArray(job.ServicePackageLines?.ItemCollection)) {
-    lineCount = job.ServicePackageLines.ItemCollection.length;
+    rawLines = job.ServicePackageLines.ItemCollection;
+  } else if (Array.isArray(job.lines)) {
+    // Already-normalized cached shape (re-normalizing is idempotent).
+    rawLines = job.lines;
   }
 
   return {
     id: job.ID ?? job.id ?? "",
-    title: header.Title ?? job.Title ?? "",
-    description: header.Description ?? footer.Description ?? job.Description ?? "",
-    chapter: job.Chapter ?? "",
-    code: job.Code ?? "",
-    laborHours: job.LaborHours ?? null,
-    laborRate: job.LaborRate ?? null,
-    fixedPrice: job.FixedPrice ?? null,
-    lineCount,
+    title: header.Title ?? job.Title ?? job.title ?? "",
+    description: header.Description ?? footer.Description ?? job.Description ?? job.description ?? "",
+    chapter: job.Chapter ?? job.chapter ?? "",
+    code: job.Code ?? job.code ?? "",
+    laborHours: job.LaborHours ?? job.laborHours ?? null,
+    laborRate: job.LaborRate ?? job.laborRate ?? null,
+    fixedPrice: job.FixedPrice ?? job.fixedPrice ?? null,
+    lineCount: rawLines.length,
+    // Task #891: keep the actual parts/labor lines in the cache (normalized
+    // via the shared line normalizer) instead of just a lineCount. Dropping
+    // the lines here is what turned every cached canned job into an empty
+    // "Untitled" $0 shell at add-time for shop 66.
+    lines: rawLines.map((l: any) => normalizeProtractorPackageLine(l)),
   };
+}
+
+/**
+ * Task #891 — poisoned-cache detector. A `protractor_canned_jobs` cache doc
+ * whose items are (nearly) all title-less AND line-less carries no usable
+ * content, regardless of its `source: "enriched"` stamp. Shop 66 had 735
+ * cached items, ALL with empty titles and zero lines, stamped "enriched" —
+ * so `fetchCannedJobsWithCache` short-circuited to blanks forever.
+ *
+ * Pure + exported for regression tests. "Nearly all" = fewer than 5% of
+ * items have any content (a healthy enriched cache keeps ~95%+ with titles).
+ */
+export function isCannedJobsCacheContentBlank(items: ReadonlyArray<any> | null | undefined): boolean {
+  if (!items || items.length === 0) return false;
+  let withContent = 0;
+  for (const it of items) {
+    const title = (it?.title ?? it?.Title ?? it?.ServicePackageHeader?.Title ?? "").toString().trim();
+    const lineCount =
+      (Array.isArray(it?.lines) ? it.lines.length : 0) ||
+      (typeof it?.lineCount === "number" ? it.lineCount : 0) ||
+      (Array.isArray(it?.ServicePackageLines) ? it.ServicePackageLines.length : 0) ||
+      (Array.isArray(it?.ServicePackageLines?.ItemCollection) ? it.ServicePackageLines.ItemCollection.length : 0);
+    if (title.length > 0 || lineCount > 0) withContent += 1;
+  }
+  return withContent / items.length < 0.05;
 }
 
 export async function upsertCannedJobsCache(
@@ -4362,20 +4403,40 @@ export async function fetchCannedJobsWithCache(
   const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
 
   // Normalize cached items to consistent format
-  const normalizeCachedItems = (items: any[]) => items.map(job => ({
-    id: job.id || job.ID || job.code || "",
-    title: job.title || job.Title || "",
-    description: job.description || job.Description || "",
-    chapter: job.chapter || job.Chapter || "",
-    code: job.code || job.Code || "",
-    laborHours: job.laborHours ?? job.LaborHours ?? null,
-    laborRate: job.laborRate ?? job.LaborRate ?? null,
-    fixedPrice: job.fixedPrice ?? job.FixedPrice ?? null,
-    lineCount: job.lineCount ?? job.ServicePackageLines?.length ?? 0,
-  }));
+  const extractRawLines = (job: any): any[] => {
+    if (Array.isArray(job.lines)) return job.lines;
+    if (Array.isArray(job.ServicePackageLines)) return job.ServicePackageLines;
+    if (Array.isArray(job.ServicePackageLines?.ItemCollection)) return job.ServicePackageLines.ItemCollection;
+    return [];
+  };
+  const normalizeCachedItems = (items: any[]) => items.map(job => {
+    const rawLines = extractRawLines(job);
+    return {
+      id: job.id || job.ID || job.code || "",
+      title: job.ServicePackageHeader?.Title || job.title || job.Title || "",
+      description: job.ServicePackageHeader?.Description || job.description || job.Description || "",
+      chapter: job.chapter || job.Chapter || "",
+      code: job.code || job.Code || "",
+      laborHours: job.laborHours ?? job.LaborHours ?? null,
+      laborRate: job.laborRate ?? job.LaborRate ?? null,
+      fixedPrice: job.fixedPrice ?? job.FixedPrice ?? null,
+      lineCount: rawLines.length || job.lineCount || 0,
+      lines: rawLines.map((l: any) => normalizeProtractorPackageLine(l)),
+    };
+  });
 
-  // Check if we have a valid enriched cache (not forcing refresh)
-  const isEnriched = cached?.source === "enriched";
+  // Check if we have a valid enriched cache (not forcing refresh).
+  // Task #891: an "enriched" stamp on an all-blank cache is a lie — treat it
+  // as stale so we fall through to a fresh fetch + background re-enrich
+  // instead of serving titleless, lineless shells forever.
+  const cacheIsBlank = isCannedJobsCacheContentBlank(cached?.items);
+  if (cached?.source === "enriched" && cacheIsBlank) {
+    console.error(
+      `[Protractor] Canned-jobs cache for shop ${shopId} is stamped "enriched" but ` +
+      `${cached.items?.length ?? 0} items are (nearly) all blank — ignoring poisoned cache and re-fetching.`,
+    );
+  }
+  const isEnriched = cached?.source === "enriched" && !cacheIsBlank;
   const hasItems = cached?.items?.length > 0;
   
   if (!options?.forceRefresh && isEnriched && hasItems) {

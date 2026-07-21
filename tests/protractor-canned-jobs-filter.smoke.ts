@@ -26,6 +26,7 @@ import {
   normalizeCannedJobForCache,
   unwrapServicePackageTemplate,
   extractServicePackageTemplateContent,
+  isCannedJobsCacheContentBlank,
 } from "../lib/integrations/protractor/client";
 
 let failed = 0;
@@ -582,6 +583,76 @@ ok(
   'fetchCannedJobs tags the /ServicePackageTemplate branch as source: "servicepackagetemplate"',
   fetchCannedJobsBody.includes('source: "servicepackagetemplate"'),
   "regression: enrichment dispatch needs this tag for v1.0 / shop 116 fallback",
+);
+
+// 11. Task #891 — poisoned-cache detector. Shop 66's cache had 735 items,
+// all stamped `source: "enriched"`, yet every one was contentless (no
+// title, no lines). `isCannedJobsCacheContentBlank` is what lets
+// `fetchCannedJobsWithCache` treat such a cache as stale instead of
+// short-circuiting on the "enriched" stamp forever.
+const blankItem = { id: "x", title: "", lineCount: 0 };
+const goodItem = { id: "y", title: "Oil Change", lineCount: 3 };
+
+// Empty / missing item arrays are handled by the existing cache hit-check
+// (`items.length > 0`), so the blank detector deliberately stays out of
+// that path and only judges caches that HAVE items.
+ok(
+  "blank-detect — empty array defers to the length>0 hit-check (not blank)",
+  isCannedJobsCacheContentBlank([]) === false,
+);
+ok(
+  "blank-detect — all-blank items (shop-66 shape) is blank",
+  isCannedJobsCacheContentBlank(Array(735).fill(blankItem)) === true,
+);
+ok(
+  "blank-detect — healthy cache is not blank",
+  isCannedJobsCacheContentBlank([goodItem, goodItem, blankItem]) === false,
+);
+ok(
+  "blank-detect — <5% content ratio is still blank (1 good in 100)",
+  isCannedJobsCacheContentBlank([goodItem, ...Array(99).fill(blankItem)]) === true,
+);
+ok(
+  "blank-detect — raw-shape items with ServicePackageHeader.Title count as content",
+  isCannedJobsCacheContentBlank([
+    { ID: "r1", ServicePackageHeader: { Title: "Brake Service" } },
+  ]) === false,
+);
+ok(
+  "blank-detect — items with lines but no title count as content",
+  isCannedJobsCacheContentBlank([{ id: "l1", title: "", lines: [{ description: "Pads" }] }]) === false,
+);
+ok(
+  "blank-detect — null/undefined input defers to the hit-check (not blank, no throw)",
+  isCannedJobsCacheContentBlank(null as any) === false &&
+    isCannedJobsCacheContentBlank(undefined as any) === false,
+);
+
+// 12. Task #891 — normalizeCannedJobForCache must PRESERVE lines (not just
+// lineCount) so create-work-order can resolve parts/labor from the sync
+// route's cache rows without a per-package template re-fetch.
+const withLines = normalizeCannedJobForCache({
+  ID: "wl-1",
+  ServicePackageHeader: { Title: "Coolant Flush" },
+  ServicePackageLines: {
+    ItemCollection: [
+      { Description: "Coolant", Type: "Part", PriceSummary: { SellPrice: 30 } },
+      { Description: "Labor", Type: "Labor", Rate: 100, Hours: 1 },
+    ],
+  },
+});
+ok(
+  "normalize — lines array preserved (detail shape)",
+  Array.isArray((withLines as any).lines) && (withLines as any).lines.length === 2,
+);
+ok(
+  "normalize — lineCount matches preserved lines",
+  withLines.lineCount === 2,
+);
+const noLines = normalizeCannedJobForCache({ ID: "nl-1", Title: "Inspection" });
+ok(
+  "normalize — no lines yields empty lines array without throwing",
+  Array.isArray((noLines as any).lines) && (noLines as any).lines.length === 0,
 );
 
 if (failed > 0) {

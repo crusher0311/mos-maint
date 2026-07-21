@@ -250,8 +250,20 @@ export class ProtractorAdapter implements INormalizedAdapter {
         sp.CompletedDate ||
         sp._parentClosedAt,
       ),
-      title: cleanString(sp.Name || sp.Description || sp.ServiceDescription) || 'Unknown Service',
-      description: cleanString(sp.Description || sp.Notes),
+      // Protractor carries the human-readable service name under
+      // ServicePackageHeader.Title (mirroring the raw-extraction path in
+      // extractServiceJobsFromWorkOrder below). Without checking the header
+      // first, every row landed as 'Unknown Service' (task #891, shop 66:
+      // 8,454/8,454 rows) even though legacy job_index had correct titles
+      // from the same source payloads.
+      title: cleanString(
+        sp.ServicePackageHeader?.Title ||
+        sp.Name ||
+        sp.Description ||
+        sp.ServiceDescription ||
+        sp.Title,
+      ) || 'Unknown Service',
+      description: cleanString(sp.ServicePackageHeader?.Description || sp.Description || sp.Notes),
       cannedJobId: cleanString(sp.CannedJobID),
       cannedJobCode: cleanString(sp.CannedJobCode),
       cannedJobName: cleanString(sp.CannedJobName),
