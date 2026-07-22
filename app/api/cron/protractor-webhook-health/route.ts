@@ -31,6 +31,24 @@ const RECEIPT_DROP_MIN_7D = Number(
 // "recovered" pages.
 const RECOVERY_LOOKBACK_DAYS = 3;
 
+// Fleet-wide processing-lag detection — July 21-22 2026 incident: webhooks
+// ARRIVED fine (~48k/day) but the inline processCallbackEvent fetch silently
+// wedged, so only ~3% got processed for ~23h with zero error logs. Receipt
+// health alone can't see this. We compare events *received* vs events
+// *processed* over a trailing window; when the processed ratio collapses
+// below the threshold with meaningful volume, that's a processing wedge,
+// not a webhook outage. Duplicate/superseded events keep the healthy ratio
+// well below 1.0 (~0.55-0.65 observed), so the trip wire sits far under it.
+const PROCESSING_LAG_WINDOW_HOURS = Number(
+  process.env.PROTRACTOR_PROCESSING_LAG_WINDOW_HOURS || 2,
+);
+const PROCESSING_LAG_RATIO = Number(
+  process.env.PROTRACTOR_PROCESSING_LAG_RATIO || 0.2,
+);
+const PROCESSING_LAG_MIN_RECEIVED = Number(
+  process.env.PROTRACTOR_PROCESSING_LAG_MIN_RECEIVED || 100,
+);
+
 /**
  * Protractor webhook health monitor — task #480.
  *
@@ -181,6 +199,49 @@ export async function GET(req: NextRequest) {
     { unique: true, name: "uniq_shop_date_kind" },
   ).catch(() => {});
 
+  // ---------- Fleet-wide processing-lag detection ----------
+  // Received vs processed in the trailing window. `receivedAt` counts GET
+  // callbacks landing; `processedAt` counts events whose follow-up fetch
+  // actually completed (any method). A collapse in the ratio with healthy
+  // receipt volume means the inline processor is wedged (see July 21-22
+  // 2026 incident note at the top of this file).
+  const lagWindowStart = new Date(
+    now - PROCESSING_LAG_WINDOW_HOURS * 60 * 60 * 1000,
+  );
+  // Keep the two counts on the SAME population (method:"GET") — POST rows
+  // are also stamped `processedAt` on their own path, and counting them in
+  // the numerator can mask a GET-processing wedge (false negative).
+  await db.collection("protractor_callback_events").createIndex(
+    { method: 1, receivedAt: -1 },
+    { name: "method_1_receivedAt_-1" },
+  ).catch(() => {});
+  await db.collection("protractor_callback_events").createIndex(
+    { method: 1, processedAt: -1 },
+    { name: "method_1_processedAt_-1" },
+  ).catch(() => {});
+  const [lagReceived, lagProcessed] = await Promise.all([
+    db.collection("protractor_callback_events").countDocuments({
+      method: "GET",
+      receivedAt: { $gte: lagWindowStart },
+    }),
+    db.collection("protractor_callback_events").countDocuments({
+      method: "GET",
+      processedAt: { $gte: lagWindowStart },
+    }),
+  ]);
+  const lagRatio = lagReceived > 0 ? lagProcessed / lagReceived : 1;
+  const processingLagTripped =
+    lagReceived >= PROCESSING_LAG_MIN_RECEIVED &&
+    lagRatio < PROCESSING_LAG_RATIO;
+
+  if (processingLagTripped) {
+    // [OPS-ALERT] prefix so the Better Stack pipeline-stall escalation
+    // pattern picks this up even if the email path fails.
+    console.error(
+      `[OPS-ALERT] [ProtractorWebhookHealth] Processing wedge suspected: received ${lagReceived} GET callbacks in last ${PROCESSING_LAG_WINDOW_HOURS}h but only ${lagProcessed} events processed (ratio ${lagRatio.toFixed(2)} < ${PROCESSING_LAG_RATIO}). Webhooks are arriving; the inline processCallbackEvent path is not completing.`,
+    );
+  }
+
   // ---------- Recovery detection ----------
   // Find open silent alerts from the prior RECOVERY_LOOKBACK_DAYS UTC days
   // (excluding today) whose shop is now delivering callbacks again. For
@@ -263,6 +324,34 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ---------- Dedup insert for the processing-lag alert ----------
+  // Fleet-wide (not per-shop) so it uses the shopId:0 sentinel. Dedup per
+  // UTC day like the other kinds — the hourly cron keeps [OPS-ALERT]
+  // logging every run while the wedge persists, but email fires once/day.
+  let newProcessingLagAlert = false;
+  if (processingLagTripped) {
+    try {
+      await alertsCol.insertOne({
+        shopId: 0,
+        alertDate: today,
+        alertKind: "processing-lag",
+        windowHours: PROCESSING_LAG_WINDOW_HOURS,
+        received: lagReceived,
+        processed: lagProcessed,
+        ratio: Math.round(lagRatio * 1000) / 1000,
+        createdAt: new Date(),
+      });
+      newProcessingLagAlert = true;
+    } catch (err: any) {
+      if (err?.code !== 11000) {
+        console.error(
+          "[ProtractorWebhookHealth] Processing-lag dedup failed:",
+          err?.message,
+        );
+      }
+    }
+  }
+
   // ---------- Dedup insert for recovery alerts + resolve originals ----------
   const toAlertRecovered: RecoveryRow[] = [];
   for (const r of recovered) {
@@ -308,7 +397,8 @@ export async function GET(req: NextRequest) {
   const anyNew =
     toAlertSilent.length > 0 ||
     toAlertDrop.length > 0 ||
-    toAlertRecovered.length > 0;
+    toAlertRecovered.length > 0 ||
+    newProcessingLagAlert;
 
   if (anyNew) {
     const admins = await db.collection("users").find(
@@ -322,6 +412,13 @@ export async function GET(req: NextRequest) {
       );
     } else {
       const sections: string[] = [];
+
+      if (newProcessingLagAlert) {
+        sections.push(`
+          <h3 style="margin-top:24px;color:#b00020">Processing wedge suspected (fleet-wide)</h3>
+          <p>Webhooks are <strong>arriving</strong> but the follow-up fetch is <strong>not completing</strong> — in the last ${PROCESSING_LAG_WINDOW_HOURS}h we received <strong>${lagReceived}</strong> GET callbacks and processed only <strong>${lagProcessed}</strong> events (ratio ${lagRatio.toFixed(2)}, alert threshold ${PROCESSING_LAG_RATIO}). Healthy ratio runs ~0.55&ndash;0.65 due to duplicate callbacks.</p>
+          <p>This is the July 21&ndash;22 2026 failure mode: events sit at <code>processed:false, attempts:0</code> with no error logs because the request wedges inside the Protractor client's background concurrency pool. Shop data goes stale fleet-wide even though webhook receipt looks green. Un-stick by replaying stuck WorkOrder ids through <code>GET /api/callbacks/protractor?connectionId=&hellip;&amp;type=WorkOrder&amp;id=&hellip;&amp;operation=Update</code>.</p>`);
+      }
 
       if (toAlertSilent.length > 0) {
         const rows = toAlertSilent.map((s) => `
@@ -402,6 +499,7 @@ export async function GET(req: NextRequest) {
         </div>`;
 
       const subjectParts: string[] = [];
+      if (newProcessingLagAlert) subjectParts.push("PROCESSING WEDGE");
       if (toAlertSilent.length > 0) subjectParts.push(`${toAlertSilent.length} silent`);
       if (toAlertDrop.length > 0) subjectParts.push(`${toAlertDrop.length} drop`);
       if (toAlertRecovered.length > 0) subjectParts.push(`${toAlertRecovered.length} recovered`);
@@ -426,7 +524,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(
-    `[ProtractorWebhookHealth] Scanned ${protractorShops.length} shops, ${silent.length} silent (${toAlertSilent.length} new), ${drops.length} drop (${toAlertDrop.length} new), ${recovered.length} recovered (${toAlertRecovered.length} new), emailed ${emailed} admin(s)`,
+    `[ProtractorWebhookHealth] Scanned ${protractorShops.length} shops, ${silent.length} silent (${toAlertSilent.length} new), ${drops.length} drop (${toAlertDrop.length} new), ${recovered.length} recovered (${toAlertRecovered.length} new), processing ${lagProcessed}/${lagReceived} last ${PROCESSING_LAG_WINDOW_HOURS}h (ratio ${lagRatio.toFixed(2)}${processingLagTripped ? ", TRIPPED" : ""}), emailed ${emailed} admin(s)`,
   );
 
   return NextResponse.json({
@@ -434,6 +532,14 @@ export async function GET(req: NextRequest) {
     silent: silent.length,
     drops: drops.length,
     recovered: recovered.length,
+    processingLag: {
+      windowHours: PROCESSING_LAG_WINDOW_HOURS,
+      received: lagReceived,
+      processed: lagProcessed,
+      ratio: Math.round(lagRatio * 1000) / 1000,
+      tripped: processingLagTripped,
+      newAlert: newProcessingLagAlert,
+    },
     newSilentAlerts: toAlertSilent.length,
     newDropAlerts: toAlertDrop.length,
     newRecoveryAlerts: toAlertRecovered.length,

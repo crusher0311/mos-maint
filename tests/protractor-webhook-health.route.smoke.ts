@@ -584,6 +584,116 @@ async function run() {
     );
   }
 
+  // (13) Fleet-wide processing wedge: callbacks arriving but not being
+  //      processed → trips the lag alert, [OPS-ALERT]-style email once per
+  //      UTC day (dedup on second run).
+  {
+    const now = Date.now();
+    const events: any[] = [];
+    // 120 GET callbacks received in the 2h window, only 10 processed
+    // (ratio 0.083 < 0.2 threshold, volume >= 100 floor).
+    for (let i = 0; i < 120; i++) {
+      events.push({
+        shopId: 42,
+        method: "GET",
+        objectType: "WorkOrder",
+        objectId: `wo-${i}`,
+        receivedAt: new Date(now - 30 * 60 * 1000),
+        processed: i < 10,
+        ...(i < 10 ? { processedAt: new Date(now - 20 * 60 * 1000) } : {}),
+      });
+    }
+    const fake = makeFakeDb({
+      shops: [
+        { shopId: 42, name: "Busy Shop", protractor: { configured: true } },
+      ],
+      protractor_callback_events: events,
+      users: [{ email: "ops@example.com", isPlatformAdmin: true }],
+      protractor_webhook_health_alerts: [],
+    });
+    const sent: any[] = [];
+    installFakes(fake.db, sent);
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/cron/protractor-webhook-health"),
+    );
+    const body = await res.json();
+    ok("lag: 200", res.status === 200);
+    ok("lag: tripped=true", body.processingLag?.tripped === true);
+    ok("lag: newAlert=true", body.processingLag?.newAlert === true);
+    ok(
+      "lag: received/processed counts surfaced",
+      body.processingLag?.received === 120 && body.processingLag?.processed === 10,
+      `processingLag=${JSON.stringify(body.processingLag)}`,
+    );
+    ok("lag: exactly one email sent", sent.length === 1);
+    ok(
+      "lag: subject flags PROCESSING WEDGE",
+      sent[0]?.subject?.includes("PROCESSING WEDGE"),
+      `subject=${sent[0]?.subject}`,
+    );
+    ok(
+      "lag: html explains the wedge",
+      typeof sent[0]?.html === "string" &&
+        sent[0].html.includes("Processing wedge suspected"),
+    );
+    const lagRows = fake.collections.protractor_webhook_health_alerts.filter(
+      (a: any) => a.alertKind === "processing-lag",
+    );
+    ok("lag: one processing-lag dedup row (shopId 0)", lagRows.length === 1 && lagRows[0].shopId === 0);
+
+    // Second run same UTC day: still tripped, but deduped — no new alert,
+    // no second email.
+    const res2 = await GET(
+      new NextRequest("http://localhost/api/cron/protractor-webhook-health"),
+    );
+    const body2 = await res2.json();
+    ok("lag rerun: still tripped", body2.processingLag?.tripped === true);
+    ok("lag rerun: newAlert=false (deduped)", body2.processingLag?.newAlert === false);
+    ok("lag rerun: no second email", sent.length === 1);
+  }
+
+  // (14) Healthy processing ratio (duplicates keep it ~0.55-0.65) → no trip,
+  //      no email.
+  {
+    const now = Date.now();
+    const events: any[] = [];
+    for (let i = 0; i < 120; i++) {
+      events.push({
+        shopId: 42,
+        method: "GET",
+        objectType: "WorkOrder",
+        objectId: `wo-${i}`,
+        receivedAt: new Date(now - 30 * 60 * 1000),
+        processed: i < 70,
+        ...(i < 70 ? { processedAt: new Date(now - 20 * 60 * 1000) } : {}),
+      });
+    }
+    const fake = makeFakeDb({
+      shops: [
+        { shopId: 42, name: "Busy Shop", protractor: { configured: true } },
+      ],
+      protractor_callback_events: events,
+      users: [{ email: "ops@example.com", isPlatformAdmin: true }],
+      protractor_webhook_health_alerts: [],
+    });
+    const sent: any[] = [];
+    installFakes(fake.db, sent);
+    const res = await GET(
+      new NextRequest("http://localhost/api/cron/protractor-webhook-health"),
+    );
+    const body = await res.json();
+    ok("healthy: tripped=false", body.processingLag?.tripped === false);
+    ok("healthy: newAlert=false", body.processingLag?.newAlert === false);
+    ok("healthy: no email", sent.length === 0);
+    ok(
+      "healthy: no processing-lag row",
+      !fake.collections.protractor_webhook_health_alerts.some(
+        (a: any) => a.alertKind === "processing-lag",
+      ),
+    );
+  }
+
   Object.assign(__deps, ORIGINAL_DEPS);
 
   if (failed > 0) {
