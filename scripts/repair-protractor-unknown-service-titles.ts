@@ -41,15 +41,32 @@
  *   tsx scripts/repair-protractor-unknown-service-titles.ts --batch=500 --sleep=500 --confirm
  */
 
+import fs from "fs";
 import { getDb as getMongoDb } from "../lib/mongo";
-import { getDb as getPgDb } from "../lib/db/drizzle";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { sql } from "drizzle-orm";
+
+// Dedicated client: big shops' candidate scans can exceed the DB's default
+// ~2-minute statement timeout, so raise it for this session only.
+function getPgDb() {
+  const url = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
+  if (!url) throw new Error("Missing database URL. Set DATAONE_DATABASE_URL or DATABASE_URL.");
+  const client = postgres(url, {
+    max: 1,
+    idle_timeout: 30,
+    connect_timeout: 30,
+    connection: { statement_timeout: 600000 },
+  });
+  return drizzle(client);
+}
 
 interface Args {
   shop?: number;
   batch: number;
   sleepMs: number;
   confirm: boolean;
+  resumeFile?: string;
 }
 
 function posInt(flag: string, v: string | undefined, { allowZero = false } = {}): number {
@@ -70,6 +87,7 @@ function parseArgs(): Args {
       case "batch": out.batch = posInt("batch", v); break;
       case "sleep": out.sleepMs = posInt("sleep", v, { allowZero: true }); break;
       case "confirm": out.confirm = true; break;
+      case "resume-file": out.resumeFile = v; break;
       default: console.warn(`Unknown arg: --${k}`);
     }
   }
@@ -107,6 +125,10 @@ async function main() {
   for (const shopId of shopIds) {
     console.log(`\n=== Shop ${shopId} ===`);
     let lastId = "";
+    if (args.resumeFile && fs.existsSync(args.resumeFile)) {
+      lastId = fs.readFileSync(args.resumeFile, "utf8").trim();
+      if (lastId) console.log(`  resuming after id ${lastId} (from ${args.resumeFile})`);
+    }
     let shopUpdated = 0;
     let shopNoTitle = 0;
 
@@ -124,6 +146,7 @@ async function main() {
       `)) as unknown as Array<{ id: string; job_number: string | null; work_order_id: string | null }>;
       if (rows.length === 0) break;
       lastId = rows[rows.length - 1].id;
+      if (args.resumeFile) fs.writeFileSync(args.resumeFile, lastId);
 
       const spIds = rows.map((r) => r.job_number).filter((v): v is string => !!v);
       const titleBySp = new Map<string, string>();
