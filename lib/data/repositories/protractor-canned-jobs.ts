@@ -15,6 +15,10 @@ export interface ProtractorCannedJobsCacheDoc {
   items: unknown[];
   fetchedAt: Date;
   source?: "api" | "enriched" | string;
+  // Task #925: which Protractor list endpoint produced the cached items
+  // ("cannedjob" | "servicepackagetemplate"); lets the create-WO push path
+  // dispatch detail fetches directly instead of trial-and-error.
+  listSource?: string;
   createdAt?: Date;
 }
 

@@ -1366,12 +1366,18 @@ export async function createProtractorWorkOrder(
             }
           }
           if (resolvedLines.length === 0 && pkg.deferredId) {
-            // Task #913/#922: the deferredId's origin list endpoint isn't
-            // recorded here, so call the shared helper with NO listSource —
-            // it runs the full three-endpoint fallback chain (canned-job →
-            // template GET → legacy template Read) and returns the first
-            // line-bearing detail. See fetchCannedJobDetailForListSource.
-            const detailResult = await fetchCannedJobDetailForListSource(shopId, pkg.deferredId);
+            // Task #913/#922/#925: the cache doc records which list endpoint
+            // produced its items (`listSource`, stamped at upsert time). When
+            // present, dispatch the detail fetch directly to the matching
+            // endpoint; only fall back to the three-endpoint trial-and-error
+            // chain (canned-job → template GET → legacy template Read) when
+            // the origin is genuinely unknown (older cache docs, merged/
+            // discovered batches). See fetchCannedJobDetailForListSource.
+            const cachedListSource: ProtractorCannedJobsListSource | undefined =
+              rawCache?.listSource === "cannedjob" || rawCache?.listSource === "servicepackagetemplate"
+                ? rawCache.listSource
+                : undefined;
+            const detailResult = await fetchCannedJobDetailForListSource(shopId, pkg.deferredId, cachedListSource);
             attempted.push(...detailResult.attempted);
             if (detailResult.ok && detailResult.detail) {
               const dLines = extractServicePackageTemplateContent(detailResult.detail).lines;
@@ -4378,7 +4384,17 @@ export function wouldDowngradeCannedJobsCache(
 export async function upsertCannedJobsCache(
   shopId: number,
   cannedJobs: ProtractorCannedJob[],
-  options?: { source?: "enriched" | "api" | "discovered" | "sync-partial" }
+  options?: {
+    source?: "enriched" | "api" | "discovered" | "sync-partial";
+    // Task #925: which Protractor LIST endpoint produced this batch.
+    // Stamped on the cache doc so the create-WO push path can dispatch
+    // the detail fetch directly (fetchCannedJobDetailForListSource with
+    // an explicit listSource) instead of running the three-endpoint
+    // trial-and-error chain. Pass it whenever the batch came from
+    // fetchCannedJobs (listResult.source); omit for merged/discovered
+    // batches whose origin endpoint is genuinely unknown.
+    listSource?: ProtractorCannedJobsListSource;
+  }
 ): Promise<void> {
   const db = await getDb();
   const now = new Date();
@@ -4394,15 +4410,23 @@ export async function upsertCannedJobsCache(
   // `fetchCannedJobsWithCache` will still trigger the background re-enrich.
   const source = options?.source ?? "sync-partial";
 
+  // Task #925: only stamp listSource when the caller knows it — never
+  // overwrite a previously-recorded value with undefined/null (a merged
+  // or discovered batch shouldn't erase a known origin endpoint).
+  const setFields: Record<string, unknown> = {
+    shopId,
+    items: cannedJobs.map((job) => normalizeCannedJobForCache(job)),
+    fetchedAt: now,
+    source,
+  };
+  if (options?.listSource) {
+    setFields.listSource = options.listSource;
+  }
+
   await db.collection("protractor_canned_jobs").updateOne(
     { shopId },
     {
-      $set: {
-        shopId,
-        items: cannedJobs.map((job) => normalizeCannedJobForCache(job)),
-        fetchedAt: now,
-        source,
-      },
+      $set: setFields,
       $setOnInsert: { createdAt: now },
     },
     { upsert: true }
@@ -4770,7 +4794,7 @@ export async function fetchCannedJobsWithCache(
             );
             return;
           }
-          await upsertCannedJobsCache(shopId, enrichedJobs as ProtractorCannedJob[], { source: "enriched" });
+          await upsertCannedJobsCache(shopId, enrichedJobs as ProtractorCannedJob[], { source: "enriched", listSource: listResult.source });
           console.log(`[Protractor] Lineless-cache re-enrich complete for shop ${shopId}: ${enrichedJobs.length} jobs saved`);
         })().catch((err) => {
           console.error(`[Protractor] Lineless-cache re-enrich failed for shop ${shopId}:`, err);
@@ -4819,6 +4843,9 @@ export async function fetchCannedJobsWithCache(
             items: listResult.cannedJobs,
             fetchedAt: now,
             source: "api",
+            // Task #925: record which list endpoint produced this batch so
+            // the create-WO push path can dispatch detail fetches directly.
+            ...(listResult.source ? { listSource: listResult.source } : {}),
           },
           $setOnInsert: { createdAt: now },
         },
@@ -4853,6 +4880,9 @@ export async function fetchCannedJobsWithCache(
               items: enrichedJobs.map((job: any) => normalizeCannedJobForCache(job)),
               fetchedAt: enrichedNow,
               source: "enriched",
+              // Task #925: record the origin list endpoint for direct
+              // detail-fetch dispatch at push time.
+              ...(listResult.source ? { listSource: listResult.source } : {}),
             },
           }
         );
@@ -4913,6 +4943,9 @@ export async function fetchCannedJobsWithCache(
           items: enrichedJobs.map((job: any) => normalizeCannedJobForCache(job)),
           fetchedAt: now,
           source: "enriched",
+          // Task #925: record the origin list endpoint for direct
+          // detail-fetch dispatch at push time.
+          ...(listResult.source ? { listSource: listResult.source } : {}),
         },
         $setOnInsert: { createdAt: now },
       },

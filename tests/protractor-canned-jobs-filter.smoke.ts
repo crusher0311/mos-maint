@@ -809,13 +809,40 @@ ok(
   "regression: sync route must use fetchCannedJobDetailForListSource — its hand-rolled dispatch copy is exactly what drifted and broke shop 219",
 );
 
-// (c) Task #922: the create-WO push path must use the same shared helper
-// (with NO listSource → full fallback chain) instead of its own copy of
-// the three-endpoint chain.
+// (c) Task #922/#925: the create-WO push path must use the same shared
+// helper instead of its own copy of the three-endpoint chain. Since task
+// #925 it passes the cache doc's stamped `listSource` when known (direct
+// dispatch, no wasted 404s) and only falls back to the full chain
+// (undefined listSource) when the origin endpoint wasn't recorded.
 ok(
-  "create-WO push path uses the shared helper's fallback chain",
-  clientSrc.includes("fetchCannedJobDetailForListSource(shopId, pkg.deferredId)"),
+  "create-WO push path uses the shared helper with the cached listSource",
+  clientSrc.includes("fetchCannedJobDetailForListSource(shopId, pkg.deferredId, cachedListSource)"),
   "regression: push path must go through fetchCannedJobDetailForListSource so the chain can't drift from the dispatch",
+);
+ok(
+  "create-WO push path validates the stored listSource before dispatching on it",
+  clientSrc.includes('rawCache?.listSource === "cannedjob"') &&
+    clientSrc.includes('rawCache?.listSource === "servicepackagetemplate"'),
+  "regression: an unrecognized/legacy listSource value must fall back to the chain (undefined), not dispatch to a wrong endpoint",
+);
+
+// (d) Task #925: upsertCannedJobsCache stamps the origin list endpoint on
+// the cache doc — but only when the caller knows it (never erases a
+// previously-recorded value with undefined).
+const upsertBody = extractFunctionBody(
+  clientSrc,
+  "export async function upsertCannedJobsCache",
+);
+ok(
+  "upsertCannedJobsCache stamps listSource only when provided",
+  upsertBody.includes("options?.listSource") &&
+    upsertBody.includes("setFields.listSource = options.listSource"),
+  "regression: cache docs must record which list endpoint produced the batch so the push path can dispatch directly; unknown-origin writes must not erase a known value",
+);
+ok(
+  "sync route passes the list source through to the cache upsert",
+  /upsertCannedJobsCache\(\s*shopId,\s*templatesWithDetails,[\s\S]*?listSource[\s\S]*?\)/.test(syncRouteSrc),
+  "regression: the sync route knows listSource (it dispatches details on it) and must stamp it on the cache doc",
 );
 
 if (failed > 0) {

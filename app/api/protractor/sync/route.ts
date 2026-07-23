@@ -139,7 +139,10 @@ export async function POST(req: NextRequest) {
       await upsertCannedJobsCache(
         shopId,
         templatesWithDetails,
-        { source: classifySyncCannedJobsBatchSource(templatesWithDetails) },
+        // Task #925: stamp the origin list endpoint so the create-WO push
+        // path can dispatch detail fetches directly instead of running the
+        // three-endpoint fallback chain.
+        { source: classifySyncCannedJobsBatchSource(templatesWithDetails), listSource },
       );
       results.cannedJobsSynced = templatesWithDetails.length;
       
