@@ -1338,46 +1338,18 @@ export async function createProtractorWorkOrder(
             }
           }
           if (resolvedLines.length === 0 && pkg.deferredId) {
-            // Task #913: the old code only tried fetchServicePackageTemplateDetail
-            // (/ServicePackageTemplate/Read/{id}), which takes ServicePackageTemplate
-            // IDs — for canned-job IDs from /CannedJob/ it silently 404s (the same
-            // wrong-endpoint bug tasks #405/#406 fixed in the enrichment path but
-            // never here). Try all three detail endpoints in order of likelihood:
-            //   1. /ServicePackage/CannedJob/{id}   (v2.0 canned-job IDs)
-            //   2. /ServicePackageTemplate/{id}     (v1.0 / template-fallback IDs)
-            //   3. /ServicePackageTemplate/Read/{id} (legacy undocumented)
-            // Each fetcher caches its own 404s, so misses are cheap on repeat.
-            attempted.push("canned-job-detail-api");
-            const detailResult = await fetchCannedJobDetail(shopId, pkg.deferredId);
+            // Task #913/#922: the deferredId's origin list endpoint isn't
+            // recorded here, so call the shared helper with NO listSource —
+            // it runs the full three-endpoint fallback chain (canned-job →
+            // template GET → legacy template Read) and returns the first
+            // line-bearing detail. See fetchCannedJobDetailForListSource.
+            const detailResult = await fetchCannedJobDetailForListSource(shopId, pkg.deferredId);
+            attempted.push(...detailResult.attempted);
             if (detailResult.ok && detailResult.detail) {
-              const dLines = extractLinesFromRaw(detailResult.detail.ServicePackageLines);
+              const dLines = extractServicePackageTemplateContent(detailResult.detail).lines;
               if (dLines.length > 0) {
                 resolvedLines = dLines.map(normalizeOneLine);
-                console.log(`[Create WO] Resolved ${resolvedLines.length} lines from canned-job detail API for "${pkg.title}"`);
-              }
-            }
-
-            if (resolvedLines.length === 0) {
-              attempted.push("template-get-api");
-              const tplGetResult = await fetchCannedJobDetailViaTemplate(shopId, pkg.deferredId);
-              if (tplGetResult.ok && tplGetResult.detail) {
-                const tLines = extractLinesFromRaw(tplGetResult.detail.ServicePackageLines);
-                if (tLines.length > 0) {
-                  resolvedLines = tLines.map(normalizeOneLine);
-                  console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template GET API for "${pkg.title}"`);
-                }
-              }
-            }
-
-            if (resolvedLines.length === 0) {
-              attempted.push("template-read-api");
-              const templateResult = await fetchServicePackageTemplateDetail(shopId, pkg.deferredId);
-              if (templateResult.ok && templateResult.template) {
-                const tplLines = extractLinesFromRaw(templateResult.template.ServicePackageLines);
-                if (tplLines.length > 0) {
-                  resolvedLines = tplLines.map(normalizeOneLine);
-                  console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template API for "${pkg.title}"`);
-                }
+                console.log(`[Create WO] Resolved ${resolvedLines.length} lines from canned-job detail fallback chain (${detailResult.attempted[detailResult.attempted.length - 1]}) for "${pkg.title}"`);
               }
             }
           }
@@ -4499,6 +4471,89 @@ async function shouldUseStrictCannedJobFilter(shopId: number): Promise<boolean> 
   }
 }
 
+// Task #922: the per-template detail-fetch + endpoint dispatch used to be
+// copy-pasted in THREE places (enrichCannedJobsWithDetails, the create-WO
+// push-path fallback chain, and app/api/protractor/sync/route.ts). Shop 219
+// broke precisely because the sync route's copy drifted (kept the wrong
+// endpoint after the other two were fixed). This is now the single shared
+// entry point:
+//   - listSource "cannedjob"               → /ServicePackage/CannedJob/{id}
+//                                            via fetchCannedJobDetail (task #405).
+//   - listSource "servicepackagetemplate"  → bare /ServicePackageTemplate/{id}
+//                                            via fetchCannedJobDetailViaTemplate (task #406).
+//   - listSource unknown (undefined)       → the push-path fallback chain
+//                                            (task #913): try all three detail
+//                                            endpoints in order of likelihood
+//                                            and return the first result whose
+//                                            extracted content has lines.
+// Picking the wrong branch silently 404s for every item (shop 116 had this
+// happen in BOTH directions back-to-back; shop 219 hit it via the sync
+// route). The regression smoke test pins the dispatch — do not change
+// without updating tests/protractor-canned-jobs-filter.smoke.ts.
+export async function fetchCannedJobDetailForListSource(
+  shopId: number,
+  cannedJobId: string,
+  listSource?: ProtractorCannedJobsListSource,
+): Promise<{
+  ok: boolean;
+  detail?: ProtractorServicePackageTemplate;
+  error?: string;
+  cached?: boolean;
+  // Labels of the detail endpoints tried, in order — the create-WO push
+  // path folds these into its "attempted fallbacks" warning so a $0
+  // header-only push stays actionable (task #913).
+  attempted: string[];
+}> {
+  if (listSource === "servicepackagetemplate") {
+    const r = await fetchCannedJobDetailViaTemplate(shopId, cannedJobId);
+    return { ...r, attempted: ["template-get-api"] };
+  }
+  if (listSource === "cannedjob") {
+    const r = await fetchCannedJobDetail(shopId, cannedJobId);
+    return { ...r, attempted: ["canned-job-detail-api"] };
+  }
+
+  // Unknown list source (create-WO push path: the deferredId's origin
+  // endpoint isn't recorded). Try all three detail endpoints in order of
+  // likelihood; each fetcher caches its own 404s so misses are cheap on
+  // repeat. A detail without lines is useless to this caller (it would
+  // push a $0 header-only package), so only a line-bearing result wins.
+  const attempted: string[] = [];
+
+  attempted.push("canned-job-detail-api");
+  const cannedResult = await fetchCannedJobDetail(shopId, cannedJobId);
+  if (
+    cannedResult.ok && cannedResult.detail &&
+    extractServicePackageTemplateContent(cannedResult.detail).lines.length > 0
+  ) {
+    return { ok: true, detail: cannedResult.detail, cached: cannedResult.cached, attempted };
+  }
+
+  attempted.push("template-get-api");
+  const tplGetResult = await fetchCannedJobDetailViaTemplate(shopId, cannedJobId);
+  if (
+    tplGetResult.ok && tplGetResult.detail &&
+    extractServicePackageTemplateContent(tplGetResult.detail).lines.length > 0
+  ) {
+    return { ok: true, detail: tplGetResult.detail, cached: tplGetResult.cached, attempted };
+  }
+
+  attempted.push("template-read-api");
+  const tplReadResult = await fetchServicePackageTemplateDetail(shopId, cannedJobId);
+  if (
+    tplReadResult.ok && tplReadResult.template &&
+    extractServicePackageTemplateContent(tplReadResult.template).lines.length > 0
+  ) {
+    return { ok: true, detail: tplReadResult.template, cached: tplReadResult.cached, attempted };
+  }
+
+  return {
+    ok: false,
+    error: "No detail endpoint returned a line-bearing service package",
+    attempted,
+  };
+}
+
 export async function enrichCannedJobsWithDetails(
   shopId: number,
   jobs: ProtractorCannedJob[],
@@ -4532,19 +4587,10 @@ export async function enrichCannedJobsWithDetails(
     
     const batchResults = await Promise.all(
       batch.map(async (job) => {
-        // Task #406: dispatch on the list-endpoint source.
-        //   - "cannedjob"               → /ServicePackage/CannedJob/{id}
-        //                                  via fetchCannedJobDetail (task #405).
-        //   - "servicepackagetemplate"  → bare /ServicePackageTemplate/{id}
-        //                                  via fetchCannedJobDetailViaTemplate.
-        // Picking the wrong branch silently 404s for every item (shop
-        // 116 had this happen in BOTH directions back-to-back). The
-        // regression smoke test pins both branches — do not change
-        // without updating tests/protractor-canned-jobs-filter.smoke.ts.
-        const detailResult =
-          listSource === "servicepackagetemplate"
-            ? await fetchCannedJobDetailViaTemplate(shopId, job.ID)
-            : await fetchCannedJobDetail(shopId, job.ID);
+        // Task #406/#922: dispatch on the list-endpoint source via the
+        // shared helper — see fetchCannedJobDetailForListSource for why
+        // picking the wrong endpoint silently 404s every item.
+        const detailResult = await fetchCannedJobDetailForListSource(shopId, job.ID, listSource);
         if (detailResult.ok && detailResult.detail) {
           // Use the alt-shape-aware extractor so shops that return
           // titles/lines under non-canonical field names still get

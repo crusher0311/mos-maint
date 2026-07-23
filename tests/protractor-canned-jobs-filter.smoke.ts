@@ -383,28 +383,52 @@ const enrichBody = extractFunctionBody(
   "export async function enrichCannedJobsWithDetails",
 );
 
+// Task #922: the per-template detail dispatch is consolidated into ONE
+// shared helper (fetchCannedJobDetailForListSource) used by enrichment,
+// the sync route, and the create-WO push path. The dispatch pins below
+// now target the helper body; the call-site pins assert every caller
+// goes through it (the drift that broke shop 219 was a call site keeping
+// its own copy of the dispatch).
+const dispatchHelperBody = extractFunctionBody(
+  clientSrc,
+  "export async function fetchCannedJobDetailForListSource",
+);
+
 ok(
-  "enrichCannedJobsWithDetails calls fetchCannedJobDetail (the v2.0 /CannedJob/ branch)",
-  enrichBody.includes("fetchCannedJobDetail("),
+  "fetchCannedJobDetailForListSource calls fetchCannedJobDetail (the v2.0 /CannedJob/ branch)",
+  dispatchHelperBody.includes("fetchCannedJobDetail("),
   "regression: /CannedJob/-list shops must hit /ServicePackage/CannedJob/{id}",
 );
 
 ok(
-  "enrichCannedJobsWithDetails calls fetchCannedJobDetailViaTemplate (the v1.0 fallback branch)",
-  enrichBody.includes("fetchCannedJobDetailViaTemplate("),
+  "fetchCannedJobDetailForListSource calls fetchCannedJobDetailViaTemplate (the v1.0 fallback branch)",
+  dispatchHelperBody.includes("fetchCannedJobDetailViaTemplate("),
   "regression: /ServicePackageTemplate-list shops (e.g. 116) must hit the bare canonical /ServicePackageTemplate/{id}",
 );
 
 ok(
-  "enrichCannedJobsWithDetails dispatches on listSource",
-  enrichBody.includes('listSource === "servicepackagetemplate"'),
+  "fetchCannedJobDetailForListSource dispatches on listSource",
+  dispatchHelperBody.includes('listSource === "servicepackagetemplate"') &&
+    dispatchHelperBody.includes('listSource === "cannedjob"'),
   "regression: dispatch must be source-driven, not shop-id-driven (no `if (shopId === 116)`)",
 );
 
 ok(
-  "enrichCannedJobsWithDetails does NOT call fetchServicePackageTemplateDetail",
-  !enrichBody.includes("fetchServicePackageTemplateDetail("),
-  "regression: that hits /ServicePackageTemplate/Read/{id} (undocumented), 404s for 116, and poisons the price-lookup cache",
+  "fetchCannedJobDetailForListSource only reaches fetchServicePackageTemplateDetail in the unknown-source fallback chain",
+  dispatchHelperBody.indexOf("fetchServicePackageTemplateDetail(") >
+    dispatchHelperBody.indexOf('"template-read-api"') &&
+    dispatchHelperBody.indexOf('"template-read-api"') > 0,
+  "regression: /ServicePackageTemplate/Read/{id} (undocumented, 404s for 116) is a last-resort chain step only — never a known-source dispatch target",
+);
+
+ok(
+  "enrichCannedJobsWithDetails uses the shared dispatch helper (and no direct fetchers)",
+  enrichBody.includes("fetchCannedJobDetailForListSource(") &&
+    enrichBody.includes("listSource") &&
+    !enrichBody.includes("fetchCannedJobDetail(") &&
+    !enrichBody.includes("fetchCannedJobDetailViaTemplate(") &&
+    !enrichBody.includes("fetchServicePackageTemplateDetail("),
+  "regression: a hand-rolled dispatch copy here is exactly the drift that broke shops 116/219",
 );
 
 const fetchCannedJobDetailBody = extractFunctionBody(
@@ -777,11 +801,21 @@ ok(
   "regression: /ServicePackageTemplate/Read/{id} 404s for v1.0 / template-fallback shops (shop 219)",
 );
 ok(
-  "sync route dispatches detail fetch on list source",
-  syncRouteSrc.includes('listSource === "servicepackagetemplate"') &&
-    syncRouteSrc.includes("fetchCannedJobDetailViaTemplate(") &&
-    syncRouteSrc.includes("fetchCannedJobDetail("),
-  "regression: sync route must use the same source-driven endpoint dispatch as enrichCannedJobsWithDetails",
+  "sync route dispatches detail fetch via the shared helper (no hand-rolled dispatch)",
+  syncRouteSrc.includes("fetchCannedJobDetailForListSource(") &&
+    syncRouteSrc.includes("listSource") &&
+    !syncRouteSrc.includes("fetchCannedJobDetail(") &&
+    !syncRouteSrc.includes("fetchCannedJobDetailViaTemplate("),
+  "regression: sync route must use fetchCannedJobDetailForListSource — its hand-rolled dispatch copy is exactly what drifted and broke shop 219",
+);
+
+// (c) Task #922: the create-WO push path must use the same shared helper
+// (with NO listSource → full fallback chain) instead of its own copy of
+// the three-endpoint chain.
+ok(
+  "create-WO push path uses the shared helper's fallback chain",
+  clientSrc.includes("fetchCannedJobDetailForListSource(shopId, pkg.deferredId)"),
+  "regression: push path must go through fetchCannedJobDetailForListSource so the chain can't drift from the dispatch",
 );
 
 if (failed > 0) {

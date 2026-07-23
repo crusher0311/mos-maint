@@ -10,8 +10,7 @@ import {
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
   fetchCannedJobs,
-  fetchCannedJobDetail,
-  fetchCannedJobDetailViaTemplate,
+  fetchCannedJobDetailForListSource,
   upsertCannedJobsCache,
   classifySyncCannedJobsBatchSource,
 } from "@/lib/integrations/protractor";
@@ -102,22 +101,18 @@ export async function POST(req: NextRequest) {
       const templateLimit = pLimit(5); // 5 concurrent requests
       console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
       
-      // Task #919: dispatch the detail endpoint on which LIST endpoint
-      // produced the batch — same dispatch enrichCannedJobsWithDetails uses.
-      // The old code always called fetchServicePackageTemplateDetail
-      // (/ServicePackageTemplate/Read/{id}), which 404s for every template
-      // on v1.0/template-fallback shops (shop 219: 3,024 consecutive 404s),
-      // silently falling back to titles-only summaries that then got
-      // stamped "enriched" with zero lines.
+      // Task #919/#922: dispatch the detail endpoint on which LIST endpoint
+      // produced the batch — via the SAME shared helper enrichment uses
+      // (fetchCannedJobDetailForListSource). This route's hand-rolled copy
+      // is exactly what drifted for shop 219 (3,024 consecutive 404s from
+      // the wrong endpoint, silently degrading to titles-only summaries
+      // stamped "enriched" with zero lines).
       const listSource = cannedJobsResult.source;
       const templatesWithDetails = await Promise.all(
         cannedJobsResult.cannedJobs.map((template: any) =>
           templateLimit(async () => {
             try {
-              const detailResult =
-                listSource === "servicepackagetemplate"
-                  ? await fetchCannedJobDetailViaTemplate(shopId, template.ID)
-                  : await fetchCannedJobDetail(shopId, template.ID);
+              const detailResult = await fetchCannedJobDetailForListSource(shopId, template.ID, listSource);
               if (detailResult.ok && detailResult.detail) {
                 const linesCount = detailResult.detail.ServicePackageLines?.ItemCollection?.length || 0;
                 if (linesCount > 0) {
