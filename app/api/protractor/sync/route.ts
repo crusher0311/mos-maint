@@ -10,7 +10,8 @@ import {
   fetchDeferredWork,
   upsertProtractorDeferredWorkSnapshot,
   fetchCannedJobs,
-  fetchServicePackageTemplateDetail,
+  fetchCannedJobDetail,
+  fetchCannedJobDetailViaTemplate,
   upsertCannedJobsCache,
   classifySyncCannedJobsBatchSource,
 } from "@/lib/integrations/protractor";
@@ -101,17 +102,28 @@ export async function POST(req: NextRequest) {
       const templateLimit = pLimit(5); // 5 concurrent requests
       console.log(`[Protractor Sync] Fetching full details for ${cannedJobsResult.cannedJobs.length} templates...`);
       
+      // Task #919: dispatch the detail endpoint on which LIST endpoint
+      // produced the batch — same dispatch enrichCannedJobsWithDetails uses.
+      // The old code always called fetchServicePackageTemplateDetail
+      // (/ServicePackageTemplate/Read/{id}), which 404s for every template
+      // on v1.0/template-fallback shops (shop 219: 3,024 consecutive 404s),
+      // silently falling back to titles-only summaries that then got
+      // stamped "enriched" with zero lines.
+      const listSource = cannedJobsResult.source;
       const templatesWithDetails = await Promise.all(
         cannedJobsResult.cannedJobs.map((template: any) =>
           templateLimit(async () => {
             try {
-              const detailResult = await fetchServicePackageTemplateDetail(shopId, template.ID);
-              if (detailResult.ok && detailResult.template) {
-                const linesCount = detailResult.template.ServicePackageLines?.ItemCollection?.length || 0;
+              const detailResult =
+                listSource === "servicepackagetemplate"
+                  ? await fetchCannedJobDetailViaTemplate(shopId, template.ID)
+                  : await fetchCannedJobDetail(shopId, template.ID);
+              if (detailResult.ok && detailResult.detail) {
+                const linesCount = detailResult.detail.ServicePackageLines?.ItemCollection?.length || 0;
                 if (linesCount > 0) {
                   console.log(`[Protractor Sync] Template ${template.Code}: ${linesCount} lines`);
                 }
-                return detailResult.template;
+                return detailResult.detail;
               }
             } catch (err: any) {
               console.log(`[Protractor Sync] Failed to fetch detail for ${template.Code}: ${err.message}`);

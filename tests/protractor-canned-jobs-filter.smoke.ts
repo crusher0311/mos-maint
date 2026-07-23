@@ -723,6 +723,67 @@ ok(
   wouldDowngradeCannedJobsCache(mkTitled(20, 2), mkTitled(18, 3)) === false,
 );
 
+// 15. Task #919 — shop 219's "fresh enrichment wrote zero lines" root cause.
+// Two layers, both pinned here:
+//
+// (a) classifySyncCannedJobsBatchSource must NOT stamp "enriched" on a batch
+// whose items all carry ServicePackageHeader but zero lines. For v1.0 /
+// template-fallback shops the /ServicePackageTemplate LIST summaries already
+// carry ServicePackageHeader titles — so a sync run where every detail fetch
+// 404'd and fell back to the summary looked fully enriched and wrote a
+// poisoned titles-only cache that fetchCannedJobsWithCache then
+// short-circuited on.
+const titledLinelessTpl = (i: number) => ({
+  ID: `tl-${i}`,
+  ServicePackageHeader: { Title: `Job ${i}` },
+  ServicePackageLines: { ItemCollection: [] as any[] },
+});
+const titledLinedTpl = (i: number) => ({
+  ID: `td-${i}`,
+  ServicePackageHeader: { Title: `Job ${i}` },
+  ServicePackageLines: { ItemCollection: [{ Description: "Part", Type: "Part" }] },
+});
+ok(
+  "classify — all-header but all-lineless batch (shop 219 shape) is sync-partial",
+  classifySyncCannedJobsBatchSource(
+    Array.from({ length: 50 }, (_, i) => titledLinelessTpl(i)),
+  ) === "sync-partial",
+  "regression: ServicePackageHeader presence alone must not earn the enriched stamp",
+);
+ok(
+  "classify — all-header batch WITH lines is still enriched",
+  classifySyncCannedJobsBatchSource(
+    Array.from({ length: 50 }, (_, i) => titledLinedTpl(i)),
+  ) === "enriched",
+);
+ok(
+  "classify — small all-header batches (<10 items) keep the enriched stamp (lineless detector needs signal)",
+  classifySyncCannedJobsBatchSource([enrichedTpl, enrichedTpl]) === "enriched",
+);
+
+// (b) The sync route must dispatch its per-template detail fetch on the
+// LIST source (same dispatch as enrichCannedJobsWithDetails), not call
+// fetchServicePackageTemplateDetail unconditionally —
+// /ServicePackageTemplate/Read/{id} 404s for every template on v1.0 /
+// template-fallback shops (shop 219: 3,024 consecutive cached 404s on
+// 2026-07-22), silently degrading every item to a titles-only summary.
+const syncRouteSrc = readFileSync(
+  join(__dirname, "../app/api/protractor/sync/route.ts"),
+  "utf8",
+);
+ok(
+  "sync route does NOT call fetchServicePackageTemplateDetail",
+  !syncRouteSrc.includes("fetchServicePackageTemplateDetail("),
+  "regression: /ServicePackageTemplate/Read/{id} 404s for v1.0 / template-fallback shops (shop 219)",
+);
+ok(
+  "sync route dispatches detail fetch on list source",
+  syncRouteSrc.includes('listSource === "servicepackagetemplate"') &&
+    syncRouteSrc.includes("fetchCannedJobDetailViaTemplate(") &&
+    syncRouteSrc.includes("fetchCannedJobDetail("),
+  "regression: sync route must use the same source-driven endpoint dispatch as enrichCannedJobsWithDetails",
+);
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);

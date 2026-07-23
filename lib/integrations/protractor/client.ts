@@ -4466,6 +4466,14 @@ export function shouldKeepEnrichedCannedJob(
 // self-heal.
 //
 // Exported pure helper so the regression on shop 116 can't recur silently.
+//
+// Task #919: the ServicePackageHeader marker alone is NOT sufficient. For
+// v1.0/template-fallback shops (shop 219), the /ServicePackageTemplate LIST
+// summaries already carry ServicePackageHeader (titles) but zero lines — so
+// a batch where every detail fetch 404'd and fell back to the summary still
+// looked "enriched" and wrote a poisoned titles-only cache. A batch that
+// trips the lineless detector must classify as "sync-partial" so
+// fetchCannedJobsWithCache re-enriches instead of short-circuiting forever.
 export function classifySyncCannedJobsBatchSource(
   batch: ReadonlyArray<{ ServicePackageHeader?: unknown } | null | undefined>,
 ): "enriched" | "sync-partial" {
@@ -4473,7 +4481,9 @@ export function classifySyncCannedJobsBatchSource(
   const allEnriched = batch.every(
     (t) => t != null && (t as { ServicePackageHeader?: unknown }).ServicePackageHeader !== undefined,
   );
-  return allEnriched ? "enriched" : "sync-partial";
+  if (!allEnriched) return "sync-partial";
+  if (isCannedJobsCacheLineless(batch as any[])) return "sync-partial";
+  return "enriched";
 }
 
 async function shouldUseStrictCannedJobFilter(shopId: number): Promise<boolean> {
