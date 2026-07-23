@@ -26,6 +26,23 @@ const protractorConcurrencyLimit = pLimit(3);
 // per-chunk pattern.
 const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
 
+// Test-only dependency hooks. Unit tests (see
+// tests/protractor-retry-limiter-deadlock.smoke.ts) override these to
+// simulate upstream 500/429 bursts without touching the network or Mongo.
+// Production code paths always go through this indirection so the retry /
+// concurrency-limiter interaction under test is the REAL one.
+export const __protractorClientTestHooks: {
+  httpsRequest: typeof httpsRequest;
+  acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
+  trackApiRequest: typeof trackApiRequest;
+  retryBaseDelayMs: number | null;
+} = {
+  httpsRequest: (...args) => httpsRequest(...args),
+  acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
+  trackApiRequest: (...args) => trackApiRequest(...args),
+  retryBaseDelayMs: null,
+};
+
 /**
  * Run `fn` with a fresh, chunk-scoped Protractor backoff counter active.
  * Any retry sleep paid by Protractor requests issued (transitively) under
@@ -62,7 +79,7 @@ async function acquireRateLimitSlot(priority: boolean = false): Promise<{ acquir
   const startTime = Date.now();
   
   // First: acquire distributed slot (blocks if global limit exceeded)
-  const distributed = await acquireDistributedRateLimitSlot('protractor');
+  const distributed = await __protractorClientTestHooks.acquireDistributedRateLimitSlot('protractor');
   if (!distributed.acquired) {
     if (distributed.circuitOpen) {
       console.warn(`[Protractor] Circuit breaker open, skipping request`);
@@ -545,13 +562,13 @@ export async function protractorFetch<T>(
           body = JSON.stringify(stripStatus(parsed));
         } catch {}
       }
-      const res = await httpsRequest(url, method, headers, body);
+      const res = await __protractorClientTestHooks.httpsRequest(url, method, headers, body);
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
       const isRateLimited = res.statusCode === 429;
       
-      trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+      __protractorClientTestHooks.trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
         retryCount: attempt > 0 ? attempt : undefined,
         errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
@@ -568,7 +585,8 @@ export async function protractorFetch<T>(
         res.body.includes("SqlException") && res.body.includes("column")
       );
       if ((isRateLimited || isServerError) && attempt < maxRetries && !isDeterministicError) {
-        const baseWaitMs = Math.min(Math.pow(2, attempt + 1) * 1000, 10000);
+        const retryBase = __protractorClientTestHooks.retryBaseDelayMs ?? 1000;
+        const baseWaitMs = Math.min(Math.pow(2, attempt + 1) * retryBase, 10000);
         const jitter = Math.random() * 500;
         const waitMs = baseWaitMs + jitter;
         

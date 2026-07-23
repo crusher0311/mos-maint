@@ -20,3 +20,9 @@ the held slot (re-acquiring only the rate-limit slot per attempt), never a
 recursive re-entry into the limiter. Check other clients (Tekmetric, Shop-Ware)
 for the same recursive-retry-inside-limiter shape before trusting their
 long-running bulk jobs.
+
+Regression guard exists: tests/protractor-retry-limiter-deadlock.smoke.ts
+(in the prebuild smoke chain) simulates > pool-size simultaneous 500s via
+`__protractorClientTestHooks` (httpsRequest / distributed-slot / trackApiRequest
+overrides + `retryBaseDelayMs`) and fails fast on hang via hard timeouts.
+Keep the hooks indirection when refactoring the client.
