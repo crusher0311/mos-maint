@@ -111,7 +111,15 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     "spark plug replacement", "replace spark plug", "r&r spark plug",
     "r/r spark plug", "ignition plug", "ngk spark plug", "denso spark plug",
     "champion spark plug", "platinum spark plug", "iridium spark plug",
-    "change spark plug", "install spark plug", "new spark plug"
+    "change spark plug", "install spark plug", "new spark plug",
+    // Task #897: DVI checklist vocabulary — Heart Northbrook's sheet names the
+    // spark-plug task "Ignition System" (verified from the shop's live DVI),
+    // and other sheets use "Plugs & Wires" phrasings. "ignition system" is
+    // specific enough not to over-match (ignition SWITCH/lock lines don't say
+    // "system"); inspect-only history phrases ("Ignition system checked") are
+    // still verb-guarded from anchoring by isInspectOnlyHistoryPhrase.
+    "ignition system", "plugs & wires", "plugs and wires",
+    "spark plugs & wires", "spark plugs and wires"
   ],
   serpentine_belt: [
     "serpentine belt", "drive belt", "accessory belt", "v-belt", "fan belt",
@@ -204,7 +212,12 @@ export const SERVICE_KEYS: Record<string, string[]> = {
     // "battery" substring (would falsely catch "Key Fob Battery", battery
     // tests, terminal cleaning); the exact-equality fallback in
     // toKeyFromName / toKeyFromFreeText handles a standalone "Battery" line.
-    "interstate battery"
+    "interstate battery",
+    // Task #897: DVI checklist vocabulary — "Battery & Charging System"
+    // (Heart Northbrook sheet). Contiguous "battery/charging" already matches;
+    // these cover the "&"/"and" spellings. The accessory-battery (key fob /
+    // remote) guard in both matchers still applies.
+    "battery & charging", "battery and charging"
   ],
   wiper_blades: [
     "wiper blade", "windshield wiper", "wiper replace", "wiper insert",
@@ -596,6 +609,16 @@ export function toAnchorKeysFromHistory(text: string | null | undefined): string
   return Array.from(out);
 }
 
+/**
+ * Task #897 follow-up: a wiper MECHANISM repair ("rear wiper got stuck and
+ * now won't move", "wiper motor replaced", "wiper linkage repair") is not a
+ * blade change and must not anchor the wiper_blades interval clock — the
+ * bare "rear wiper"/"wiper arm" synonyms otherwise substring-match complaint
+ * text and falsely credit a blade replacement.
+ */
+const WIPER_MECHANISM_RE =
+  /\b(?:motor|linkage|switch|pivot|relay|fuse)\b|\bstuck\b|won'?t\s+(?:move|work|park|turn|operate)|not\s+(?:working|moving)|\binoperat\w*\b|\binop\b|\bbinding\b|\bgrind\w*\b/i;
+
 export function toKeyFromName(name: string): string | null {
   const n = name.toLowerCase();
   const DVI_SKIP = ["oil change sticker", "walk around video", "walk around", "other"];
@@ -605,8 +628,10 @@ export function toKeyFromName(name: string): string | null {
   // Task #819: mirror the free-text accessory-battery guard — a key-fob /
   // remote battery item must not resolve to the vehicle-battery key.
   const accessoryBattery = n.includes("battery") && /\b(?:remote|fob|keyless)\b/.test(n);
+  const wiperMechanism = WIPER_MECHANISM_RE.test(n);
   for (const [key, vals] of Object.entries(SERVICE_KEYS)) {
     if (key === "battery" && accessoryBattery) continue;
+    if (key === "wiper_blades" && wiperMechanism) continue;
     if (vals.some((v) => n.includes(v))) return key;
   }
   if (n.includes("air filter") && !n.includes("cabin")) return "engine_air";
@@ -640,7 +665,7 @@ export function toKeyFromName(name: string): string | null {
   }
   if (n === "front brakes" || n === "front brake") return "front_brake_pads";
   if (n === "rear brakes" || n === "rear brake") return "rear_brake_pads";
-  if (n.includes("windshield wiper") || n === "windshield wipers" || n === "wipers") return "wiper_blades";
+  if ((n.includes("windshield wiper") || n === "windshield wipers" || n === "wipers") && !wiperMechanism) return "wiper_blades";
   // Task #807: exact-equality fallbacks for bare one-word job/document lines
   // seen in production unmatched-name logs ("Battery" ×345, "Coolant",
   // "Rotation", "Rotate"). Exact match on purpose — a bare-substring
@@ -650,6 +675,10 @@ export function toKeyFromName(name: string): string | null {
   if (trimmed === "battery") return "battery";
   if (trimmed === "coolant") return "coolant";
   if (trimmed === "rotation" || trimmed === "rotate") return "tire_rotation";
+  // Task #897: bare "Belts" DVI checklist item (Heart Northbrook sheet).
+  // Exact match on purpose — a bare "belt" substring would falsely catch
+  // "Seat Belts" / "Timing Belt".
+  if (trimmed === "belts") return "serpentine_belt";
   return null;
 }
 
@@ -923,6 +952,11 @@ export function toKeyFromFreeText(desc: string): string[] {
   // battery replaced" is a CARFAX standardized phrase).
   if (hits.includes("battery") && /\b(?:remote|fob|keyless)\b/.test(d)) {
     hits.splice(hits.indexOf("battery"), 1);
+  }
+  // Wiper mechanism repairs ("rear wiper got stuck…", "wiper motor
+  // replaced") are not blade changes — mirror the toKeyFromName guard.
+  if (hits.includes("wiper_blades") && WIPER_MECHANISM_RE.test(d)) {
+    hits.splice(hits.indexOf("wiper_blades"), 1);
   }
   return Array.from(new Set(hits));
 }

@@ -1035,6 +1035,9 @@ export async function POST(req: NextRequest) {
       // customer gets about that fluid, so dropping them silently
       // disappears the row entirely.
       if (item.inspectOnly) return false;
+      // A shop-interval override ("use shop interval" on) declares this a
+      // real recurring service — never hide it as a generic inspect row.
+      if (item.usingShopInterval) return false;
       // Prefer the parsed action verb so the filter cannot be fooled by a
       // canonical display label that hides the original "Inspect …" wording.
       if (item.action === "inspect") return true;

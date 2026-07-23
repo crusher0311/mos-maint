@@ -44,7 +44,14 @@ export function isComplimentaryItem(item: {
   serviceKey?: string;
   key?: string;
   title?: string;
+  usingShopInterval?: boolean;
 }): boolean {
+  // A shop that set its own interval override for this service ("use shop
+  // interval" on) has declared it a real recurring service — never demote it
+  // to a complimentary/"additional" item, even when the OEM row is titled
+  // "Inspect …" (e.g. HEART's 30k/24mo brake-fluid policy).
+  if (item.usingShopInterval === true) return false;
+
   const key = (item.serviceKey || item.key || "").toLowerCase();
   if (COMPLIMENTARY_SERVICE_KEYS.has(key)) return true;
 

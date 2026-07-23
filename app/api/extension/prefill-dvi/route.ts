@@ -153,7 +153,14 @@ async function _POST(request: NextRequest) {
   }
 
   const updates: TaskUpdate[] = [];
-  let skippedCount = 0;
+  // Task #897: record WHY each task was skipped so real-world DVI sheet
+  // vocabulary gaps can be mined from production logs:
+  //   - skippedNoServiceKey — the task name didn't resolve via toKeyFromName
+  //     (a matcher vocabulary gap, the actionable kind).
+  //   - skippedNoSignal — the name resolved to a key, but neither VHI nor a
+  //     past inspection finding had anything to say about it.
+  const skippedNoServiceKey: string[] = [];
+  const skippedNoSignal: Array<{ taskName: string; serviceKey: string }> = [];
 
   for (const task of inspectionTasks) {
     const taskId = task.id;
@@ -164,7 +171,7 @@ async function _POST(request: NextRequest) {
 
     const serviceKey = toKeyFromName(taskName);
     if (!serviceKey) {
-      skippedCount++;
+      skippedNoServiceKey.push(taskName);
       continue;
     }
 
@@ -173,7 +180,7 @@ async function _POST(request: NextRequest) {
 
     // Nothing to say about this task from either signal — skip it.
     if (!vhiItem && !pastFinding) {
-      skippedCount++;
+      skippedNoSignal.push({ taskName, serviceKey });
       continue;
     }
 
@@ -283,10 +290,23 @@ async function _POST(request: NextRequest) {
   const overdueCount = updates.filter((u) => u.status === "overdue").length;
   const dueSoonCount = updates.filter((u) => u.status === "due_soon").length;
   const okCount = updates.filter((u) => u.status === "upcoming" || u.status === "ok").length;
+  const skippedCount = skippedNoServiceKey.length + skippedNoSignal.length;
 
   console.log(
     `[Prefill DVI] ${vin} shop ${resolvedShopId}: ${updates.length} updates (${overdueCount} red, ${dueSoonCount} yellow, ${okCount} green), ${skippedCount} skipped`
   );
+  // Task #897: mineable skip detail — one line per reason so production logs
+  // expose the sheet vocabulary the matcher doesn't recognize yet.
+  if (skippedNoServiceKey.length > 0) {
+    console.log(
+      `[Prefill DVI] ${vin} shop ${resolvedShopId}: ${skippedNoServiceKey.length} skipped (no service key): ${skippedNoServiceKey.join(" | ")}`
+    );
+  }
+  if (skippedNoSignal.length > 0) {
+    console.log(
+      `[Prefill DVI] ${vin} shop ${resolvedShopId}: ${skippedNoSignal.length} skipped (no signal): ${skippedNoSignal.map((s) => `${s.taskName} → ${s.serviceKey}`).join(" | ")}`
+    );
+  }
 
   return NextResponse.json({
     success: true,
@@ -302,6 +322,11 @@ async function _POST(request: NextRequest) {
       overdue: overdueCount,
       dueSoon: dueSoonCount,
       ok: okCount,
+    },
+    // Task #897: skip diagnostics, split by reason (see loop above).
+    skippedTasks: {
+      noServiceKey: skippedNoServiceKey,
+      noSignal: skippedNoSignal,
     },
     updates,
   }, { headers: corsHeaders });

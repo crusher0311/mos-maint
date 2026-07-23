@@ -114,6 +114,26 @@ function isProtectedFluidKey(key: string | null | undefined): boolean {
   return !!key && LIFETIME_FLUID_SERVICE_KEYS.has(key);
 }
 
+/**
+ * Cached-plan inspect filter: hide generic inspect rows when the shop turned
+ * off "show inspect items" — but never hide (a) an item the shop set its own
+ * interval override for (`usingShopInterval`, e.g. HEART's 30k brake-fluid
+ * policy — the shop declared it a real recurring service), (b) an
+ * inspect-only fluid row (dashboard `inspectOnly` exemption parity), or
+ * (c) a protected lifetime fluid. Note: `item.key` is the unique row key
+ * ("brake_fluid_inspect_4083"), so the fluid check must use `serviceKey`.
+ */
+function hideInspectPlanItem(
+  item: { title?: string; key?: string; serviceKey?: string | null; usingShopInterval?: boolean; inspectOnly?: boolean },
+  showInspectItems: boolean,
+): boolean {
+  if (showInspectItems) return false;
+  if (!isInspectItem(item.title || item.key || "")) return false;
+  if (item.usingShopInterval) return false;
+  if (item.inspectOnly) return false;
+  return !isProtectedFluidKey(item.serviceKey ?? item.key);
+}
+
 function formatIntervalText(
   intervalMiles: number,
   intervalMonths?: number,
@@ -905,7 +925,11 @@ export async function runOnDemandAnalysis(
           const inspectKey = mapServiceToKey(item.maintenance_name);
           const protectedInspectOnly =
             isProtectedFluidKey(inspectKey) && !oemReplacementKeys.has(inspectKey!);
-          if (!protectedInspectOnly) {
+          // A shop-interval override ("use shop interval" on) declares this
+          // a real recurring service — never hide it as a generic inspect row.
+          const shopScheduled =
+            !!inspectKey && shopIntervals[inspectKey]?.useShop === true;
+          if (!protectedInspectOnly && !shopScheduled) {
             skippedInspect++;
             continue;
           }
@@ -2158,7 +2182,7 @@ async function _GET(request: NextRequest) {
         ];
         const DUE_SOON_THRESHOLD = 1000;
         for (const item of allItems) {
-          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
+          if (hideInspectPlanItem(item, showInspectItems)) continue;
           const dueAt = item.dueAtMiles;
           if (isComplimentaryItem(item)) {
             plan.complimentary.push(convertItem(item, "complimentary"));
@@ -2184,17 +2208,17 @@ async function _GET(request: NextRequest) {
         }
       } else {
         for (const item of (cachedPlan.plan.buckets.overdue || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
+          if (hideInspectPlanItem(item, showInspectItems)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.overdue.push(convertItem(item, "overdue"));
         }
         for (const item of (cachedPlan.plan.buckets.dueSoon || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
+          if (hideInspectPlanItem(item, showInspectItems)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.dueSoon.push(convertItem(item, "dueSoon"));
         }
         for (const item of (cachedPlan.plan.buckets.upcoming || [])) {
-          if (!showInspectItems && isInspectItem(item.title || item.key) && !isProtectedFluidKey(item.key)) continue;
+          if (hideInspectPlanItem(item, showInspectItems)) continue;
           if (isComplimentaryItem(item)) { plan.complimentary.push(convertItem(item, "complimentary")); continue; }
           plan.recommended.push(convertItem(item, "upcoming"));
         }

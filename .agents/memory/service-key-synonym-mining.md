@@ -11,4 +11,6 @@ The `[interval-import]` unmatched-name log stream can be empty (the import featu
 
 Safety pattern that held up: bare one-word lines ("battery", "coolant", "rotation") must be exact-equality post-loop fallbacks, never substrings — substring versions falsely catch "Key Fob Battery", "Check Battery", "Coolant Leak". Keep exact-match branches mirrored in BOTH `toKeyFromName` and `toKeyFromFreeText`.
 
+Second mining source: the DVI pre-fill logs skipped checklist tasks split by reason (`[Prefill DVI] ... skipped (no service key): ...`) — this is the ONLY source for real DVI sheet vocabulary (checklist item names like "Ignition System", "Belts", "Battery & Charging System" that never appear as job names). "No service key" = matcher gap (actionable); "no signal" = key resolved but nothing to say (not a gap).
+
 Known residual gap: CARFAX parenthesized plurals ("Tire(s) replaced") don't match `\btires?\s+` regexes in IMPLIES_RESET (follow-up proposed).
