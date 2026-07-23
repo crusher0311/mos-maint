@@ -479,14 +479,22 @@ export async function protractorFetch<T>(
 
   return concurrencyLimiter(async () => {
     const concurrencyWaitStart = Date.now();
+    const method = (options.method || "GET").toUpperCase();
+    const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
+    const url = `${baseUrl}${endpoint}`;
+
+    // Retries MUST stay inside this callback as a loop. A recursive
+    // protractorFetch() call would try to acquire a SECOND concurrency slot
+    // while this one is still held — with pLimit(3), three simultaneous
+    // retryable responses deadlock the whole pool permanently.
+    let attempt = retryCount;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
     const rateSlot = await acquireRateLimitSlot(isPriority);
     if (!rateSlot.acquired) {
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
     }
 
-    const method = (options.method || "GET").toUpperCase();
-    const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
-    const url = `${baseUrl}${endpoint}`;
     const startTime = Date.now();
     const totalWaitMs = Date.now() - concurrencyWaitStart;
     
@@ -544,7 +552,7 @@ export async function protractorFetch<T>(
       const isRateLimited = res.statusCode === 429;
       
       trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
-        retryCount: retryCount > 0 ? retryCount : undefined,
+        retryCount: attempt > 0 ? attempt : undefined,
         errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
       }).catch(() => {});
@@ -559,17 +567,18 @@ export async function protractorFetch<T>(
         res.body.includes("Invalid column name") ||
         res.body.includes("SqlException") && res.body.includes("column")
       );
-      if ((isRateLimited || isServerError) && retryCount < maxRetries && !isDeterministicError) {
-        const baseWaitMs = Math.min(Math.pow(2, retryCount + 1) * 1000, 10000);
+      if ((isRateLimited || isServerError) && attempt < maxRetries && !isDeterministicError) {
+        const baseWaitMs = Math.min(Math.pow(2, attempt + 1) * 1000, 10000);
         const jitter = Math.random() * 500;
         const waitMs = baseWaitMs + jitter;
         
-        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${retryCount + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
 
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
         await new Promise(r => setTimeout(r, waitMs));
-        return protractorFetch<T>(endpoint, config, options, retryCount + 1, shopId, opts);
+        attempt += 1;
+        continue;
       }
       if (isDeterministicError) {
         console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
@@ -590,6 +599,7 @@ export async function protractorFetch<T>(
       return { ok: true, data: data as T };
     } catch (err: any) {
       return { ok: false, error: err.message || "Network error" };
+    }
     }
   });
 }

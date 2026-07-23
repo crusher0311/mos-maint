@@ -56,6 +56,53 @@ an off-peak `--fix` run:
 
 ~~162 | 444 | enriched | 2026-05-30~~ — fixed 2026-07-23 (validation run).
 
+## Fix run (2026-07-23, business hours — operator's explicit call)
+
+Brandon approved running `--fix` mid-afternoon CT despite the off-peak
+guidance. First attempt froze ~9 minutes in: a burst of upstream nginx 500s
+hit all three in-flight detail calls, and the client's recursive retry
+re-entered the shared `pLimit(3)` concurrency pool while each call still held
+its slot — a permanent deadlock (log signature: 3 simultaneous "Server error
+500, retrying..." lines, then silence with the process alive).
+
+Fixed in `lib/integrations/protractor/client.ts`: retries are now a loop
+inside the held concurrency slot (only the rate-limit slot is re-acquired per
+attempt). The run was restarted and proceeded at ~250 details/min.
+
+### Fix run results (completed 2026-07-23 ~22:30 UTC)
+
+`--fix` over all 21 shops: **16 re-enriched, 5 failed** (script exit after
+retries: `DONE: 16 re-enriched, 5 failed/skipped of 21 target(s)`).
+
+| shopId | result |
+|---|---|
+| 51 | wrote 7508/7518, 7498 with lines |
+| 25 | wrote 7482/7482, 7464 with lines |
+| 67 | wrote 7477/7477, 7459 with lines |
+| 68 | wrote 7542/7542, 7524 with lines |
+| 72 | wrote 7474/7474, 7456 with lines |
+| 50 | wrote 7478/7478, 7459 with lines |
+| 115 | wrote 598/598, 516 with lines |
+| 109 | wrote 865/865, 859 with lines |
+| 139 | wrote 1588/1588, 1527 with lines |
+| 140 | wrote 1504/1504, 1454 with lines |
+| 141 | wrote 1491/1491, 1441 with lines |
+| 142 | wrote 1507/1507, 1457 with lines |
+| 163 | wrote 708/708, 588 with lines |
+| 222 | wrote 1508/1508, 1455 with lines |
+| 227 | wrote 1673/1673, 1562 with lines |
+| 219 | wrote 1513/1513, 1461 with lines |
+| 19 | FAILED — no `shops` doc exists for shopId 19; the cache row is an orphan from a deleted/disconnected shop. Candidate for deletion (operator call). |
+| 146, 148, 149, 150 | FAILED — all four are "Total True Automotive" locations with stored Protractor creds that the API now rejects (`401 InvalidCredential` on every endpoint fallback). Needs fresh credentials from the shop; no cache write happened (old title-only caches remain, so pushes there still produce $0 packages until re-auth + re-run `--fix 146 148 149 150`). |
+
+### Post-fix verification sweep
+
+Re-ran the read-only sweep after the fix (34 docs scanned): **5 shops still
+line-less — exactly the 5 failures above (19, 146, 148, 149, 150)**; all 16
+re-enriched shops are clean. The six ~7.5k-item `api`/`(none)` lists turned
+out to be fully enrichable (not raw dumps) — each now has >99.7% of items
+with lines.
+
 ## Notes
 
 - The six ~7.5k-item `api`/`(none)` shops are raw unenriched lists (many
