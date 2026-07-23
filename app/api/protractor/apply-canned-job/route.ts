@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { vin, cannedJobId, cannedJobTitle, workOrderId } = body;
+  const requestStart = Date.now();
   console.log(`[Apply Canned Job] Request: vin=${vin}, cannedJobId=${cannedJobId}, workOrderId=${workOrderId}`);
 
   if (!cannedJobId) {
@@ -78,7 +79,10 @@ export async function POST(req: NextRequest) {
   let targetWorkOrderId = workOrderId;
 
   if (!targetWorkOrderId && vin) {
+    // Only hit the VIN→vehicle→work-orders chain when the caller didn't
+    // already supply a work-order handle — each hop is an upstream round-trip.
     console.log(`[Apply Canned Job] Looking up vehicle by VIN: ${vin}`);
+    const vinLookupStart = Date.now();
     const vehicleResult = await fetchVehicleByVin(shopId, vin);
     if (!vehicleResult.ok || !vehicleResult.vehicle) {
       console.log(`[Apply Canned Job] Vehicle not found: ${vehicleResult.error}`);
@@ -128,7 +132,7 @@ export async function POST(req: NextRequest) {
     }
 
     targetWorkOrderId = openWorkOrders[0].ID;
-    console.log(`[Apply Canned Job] Using work order ID: ${targetWorkOrderId}`);
+    console.log(`[Apply Canned Job] Using work order ID: ${targetWorkOrderId} (VIN→WO discovery took ${Date.now() - vinLookupStart}ms)`);
   }
 
   if (!targetWorkOrderId) {
@@ -138,7 +142,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const applyStart = Date.now();
   const result = await applyCannedJobToWorkOrder(shopId, targetWorkOrderId, cannedJobId, cannedJobTitle);
+  console.log(`[Apply Canned Job] applyCannedJobToWorkOrder took ${Date.now() - applyStart}ms (ok=${result.ok}, request total ${Date.now() - requestStart}ms)`);
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 500, headers: corsHeaders });

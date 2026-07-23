@@ -466,7 +466,7 @@ export async function protractorFetch<T>(
   options: RequestInit = {},
   retryCount = 0,
   shopId?: number,
-  opts?: { priority?: boolean }
+  opts?: { priority?: boolean; maxRetries?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
@@ -549,7 +549,12 @@ export async function protractorFetch<T>(
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
       }).catch(() => {});
 
-      const maxRetries = (method === 'POST' || method === 'PUT') ? 6 : 3;
+      // Interactive (user-facing) callers can cap retries via opts.maxRetries so
+      // a struggling upstream fails fast instead of hanging 30+ seconds on
+      // exponential backoff. Background callers keep the generous defaults.
+      const maxRetries = opts?.maxRetries !== undefined
+        ? opts.maxRetries
+        : (method === 'POST' || method === 'PUT') ? 6 : 3;
       const isDeterministicError = isServerError && res.body && (
         res.body.includes("Invalid column name") ||
         res.body.includes("SqlException") && res.body.includes("column")
@@ -3575,6 +3580,18 @@ export async function applyCannedJobToWorkOrder(
   templateId?: string,
   employeeId?: string
 ): Promise<{ ok: boolean; servicePackage?: ProtractorServicePackage; error?: string }> {
+  // Interactive user-facing flow: use the priority pool and fail fast (a
+  // single retry) instead of the background 6-retry exponential backoff that
+  // can hang an add for 30+ seconds.
+  const interactiveOpts = { priority: true, maxRetries: 1 };
+  const applyStart = Date.now();
+  let phaseStart = applyStart;
+  const logPhase = (phase: string) => {
+    const now = Date.now();
+    console.log(`[Protractor][ApplyCannedJob][timing] ${phase}: ${now - phaseStart}ms (total ${now - applyStart}ms)`);
+    phaseStart = now;
+  };
+
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -3595,8 +3612,10 @@ export async function applyCannedJobToWorkOrder(
   }
 
   console.log(`[Protractor] Adding service package "${cannedJobCode}" to work order ${workOrderIdOrNumber}`);
+  logPhase("config+shop-flags");
 
   const resolveResult = await resolveWorkOrderGuid(shopId, workOrderIdOrNumber);
+  logPhase("work-order-resolution");
   if (!resolveResult.ok || !resolveResult.workOrderGuid || !resolveResult.workOrder) {
     return { ok: false, error: resolveResult.error || "Could not resolve work order" };
   }
@@ -3666,6 +3685,7 @@ export async function applyCannedJobToWorkOrder(
     }
     
     if (!template) {
+      logPhase("template-resolution");
       console.log(`[Protractor] No template found, using direct WorkOrder update to add service package "${cannedJobCode}"...`);
       
       const newServicePackage = {
@@ -3702,8 +3722,10 @@ export async function applyCannedJobToWorkOrder(
           body: JSON.stringify(minimalWorkOrder)
         },
         0,
-        shopId
+        shopId,
+        interactiveOpts
       );
+      logPhase("no-template-workorder-post");
       
       console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
       if (updateResult.data) {
@@ -3764,7 +3786,8 @@ export async function applyCannedJobToWorkOrder(
   };
   
   if (template && template.ServicePackageLines?.ItemCollection?.length) {
-    console.log(`[Protractor] Using TimeClock API to insert service package lines...`);
+    logPhase("template-resolution");
+    console.log(`[Protractor] Using TimeClock API to insert service package lines (parallel)...`);
     
     const lines = template.ServicePackageLines.ItemCollection;
     console.log(`[Protractor] Found ${lines.length} lines in template`);
@@ -3772,29 +3795,38 @@ export async function applyCannedJobToWorkOrder(
     const errors: string[] = [];
     let successCount = 0;
     
-    for (const line of lines) {
-      const lineType = mapLineType(line.Type);
-      const timeClockPayload = {
-        Type: lineType,
-        EmployeeID: employeeId || ZERO_GUID,
-        ClockedIn: false,
-        WorkOrderID: workOrderGuid,
-        ServicePackageLineID: line.ID,
-      };
-      
-      console.log(`[Protractor] Posting to TimeClock for line ${line.ID} (${lineType})...`);
-      
-      const timeClockResult = await protractorFetch<any>(
-        `/TimeClock/List/WorkOrder/${workOrderGuid}`,
-        config,
-        {
-          method: "POST",
-          body: JSON.stringify(timeClockPayload)
-        },
-        0,
-        shopId
-      );
-      
+    // Push all lines concurrently instead of one sequential round-trip per
+    // line — the priority concurrency pool still bounds actual parallelism.
+    const lineResults = await Promise.all(
+      lines.map(async (line: any) => {
+        const lineType = mapLineType(line.Type);
+        const timeClockPayload = {
+          Type: lineType,
+          EmployeeID: employeeId || ZERO_GUID,
+          ClockedIn: false,
+          WorkOrderID: workOrderGuid,
+          ServicePackageLineID: line.ID,
+        };
+        
+        console.log(`[Protractor] Posting to TimeClock for line ${line.ID} (${lineType})...`);
+        
+        const timeClockResult = await protractorFetch<any>(
+          `/TimeClock/List/WorkOrder/${workOrderGuid}`,
+          config,
+          {
+            method: "POST",
+            body: JSON.stringify(timeClockPayload)
+          },
+          0,
+          shopId,
+          interactiveOpts
+        );
+        return { line, lineType, result: timeClockResult };
+      })
+    );
+    logPhase(`timeclock-line-pushes(${lines.length})`);
+    
+    for (const { line, lineType, result: timeClockResult } of lineResults) {
       if (timeClockResult.ok) {
         successCount++;
         console.log(`[Protractor] TimeClock line ${line.ID} added successfully`);
@@ -3939,25 +3971,46 @@ export async function applyCannedJobToWorkOrder(
   
   delete (fullWorkOrderPayload as any).Status;
 
-  const payloadVariants = [
-    fullWorkOrderPayload,
-    servicePackagePayload,
+  const payloadVariants: { name: string; payload: any }[] = [
+    { name: "fullWorkOrder", payload: fullWorkOrderPayload },
+    { name: "servicePackageOnly", payload: servicePackagePayload },
     { 
-      ID: workOrderGuid,
-      ServicePackages: { 
-        ItemCollection: [{ 
-          ServicePackageTemplateID: template.ID,
-          Code: template.Code || cannedJobCode
-        }] 
-      } 
+      name: "templateRef",
+      payload: {
+        ID: workOrderGuid,
+        ServicePackages: { 
+          ItemCollection: [{ 
+            ServicePackageTemplateID: template.ID,
+            Code: template.Code || cannedJobCode
+          }] 
+        } 
+      },
     },
   ];
+
+  // Remember which payload variant last succeeded for this shop and try it
+  // first, so subsequent adds skip the failed-variant round-trips entirely.
+  let preferredVariant: string | null = null;
+  try {
+    const strategyDoc = await db
+      .collection("protractor_apply_strategy")
+      .findOne({ shopId });
+    preferredVariant = strategyDoc?.workOrderPostVariant || null;
+  } catch {}
+  if (preferredVariant) {
+    const idx = payloadVariants.findIndex((v) => v.name === preferredVariant);
+    if (idx > 0) {
+      const [preferred] = payloadVariants.splice(idx, 1);
+      payloadVariants.unshift(preferred);
+      console.log(`[Protractor] Trying remembered successful payload variant "${preferredVariant}" first`);
+    }
+  }
   
   let lastError = "";
   
   for (let i = 0; i < payloadVariants.length; i++) {
-    const payload = payloadVariants[i];
-    console.log(`[Protractor] Trying payload format ${i + 1}/${payloadVariants.length}...`);
+    const { name: variantName, payload } = payloadVariants[i];
+    console.log(`[Protractor] Trying payload format ${variantName} (${i + 1}/${payloadVariants.length})...`);
     console.log(`[Protractor] Request payload:`, JSON.stringify(payload).substring(0, 500));
     
     const updateResult = await protractorFetch<any>(
@@ -3968,8 +4021,10 @@ export async function applyCannedJobToWorkOrder(
         body: JSON.stringify(payload)
       },
       0,
-      shopId
+      shopId,
+      interactiveOpts
     );
+    logPhase(`workorder-post-variant(${variantName})`);
     
     console.log(`[Protractor] WorkOrder update response: ok=${updateResult.ok}`);
     if (updateResult.data) {
@@ -3977,6 +4032,17 @@ export async function applyCannedJobToWorkOrder(
     }
     
     if (updateResult.ok) {
+      // Persist the winning variant so future adds for this shop go straight
+      // to it (fire-and-forget — never block the user response on this).
+      db.collection("protractor_apply_strategy")
+        .updateOne(
+          { shopId },
+          { $set: { workOrderPostVariant: variantName, updatedAt: new Date() } },
+          { upsert: true }
+        )
+        .catch((err) =>
+          console.error(`[Protractor] Failed to persist apply strategy: ${err?.message || err}`)
+        );
       const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
                                updateResult.data?.ServicePackages || [];
       const added = Array.isArray(responsePackages) && responsePackages.some(
@@ -3986,9 +4052,9 @@ export async function applyCannedJobToWorkOrder(
       );
       
       if (added) {
-        console.log(`[Protractor] SUCCESS: Verified service package in response (format ${i + 1})`);
+        console.log(`[Protractor] SUCCESS: Verified service package in response (variant ${variantName})`);
       } else {
-        console.log(`[Protractor] API returned OK (format ${i + 1}) - service package likely added`);
+        console.log(`[Protractor] API returned OK (variant ${variantName}) - service package likely added`);
       }
       
       return {
@@ -4003,7 +4069,7 @@ export async function applyCannedJobToWorkOrder(
       };
     } else {
       lastError = updateResult.error || "Unknown error";
-      console.log(`[Protractor] Format ${i + 1} failed: ${lastError}`);
+      console.log(`[Protractor] Variant ${variantName} failed: ${lastError}`);
     }
   }
     

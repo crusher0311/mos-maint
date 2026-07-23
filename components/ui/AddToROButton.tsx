@@ -285,11 +285,16 @@ export function AddToROButton({
         title={`Add "${job.title}" to work order`}
       >
         {status === "loading" ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
+          <>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Adding…
+          </>
         ) : (
-          <Plus className="w-3 h-3" />
+          <>
+            <Plus className="w-3 h-3" />
+            {buttonLabel}
+          </>
         )}
-        {buttonLabel}
       </button>
     );
   }
@@ -302,11 +307,16 @@ export function AddToROButton({
         className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
       >
         {status === "loading" ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
+          <>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Adding…
+          </>
         ) : (
-          <Plus className="w-3 h-3" />
+          <>
+            <Plus className="w-3 h-3" />
+            {buttonLabel}
+          </>
         )}
-        {buttonLabel}
         <ChevronDown className="w-3 h-3" />
       </button>
 
