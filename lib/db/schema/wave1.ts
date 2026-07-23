@@ -44,6 +44,28 @@ export const dataoneCache = pgTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* Vehicle specs cache (task #901)                                             */
+/* Caches the fully-resolved Specs-tab payload per VIN + disambiguation hints  */
+/* so repeat visits never re-hit the DataOne Postgres or CARFAX. Rows keyed    */
+/* `hint|<VIN>` store the resolved disambiguation hint (incl. CARFAX-derived)  */
+/* so the double-decode + CARFAX call happen at most once per vehicle.         */
+/* -------------------------------------------------------------------------- */
+export const vehicleSpecsCache = pgTable(
+  "vehicle_specs_cache",
+  {
+    cacheKey: text("cache_key").primaryKey(), // `<VIN>|<hintKey>` or `hint|<VIN>`
+    vin: text("vin").notNull(),
+    payload: jsonb("payload").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => ({
+    vinIdx: index("vehicle_specs_cache_vin_idx").on(t.vin),
+    expiresIdx: index("vehicle_specs_cache_expires_idx").on(t.expiresAt),
+  }),
+);
+
+/* -------------------------------------------------------------------------- */
 /* DataOne OE snapshot per shop+vin (was Mongo `dataone_oe`)                   */
 /* -------------------------------------------------------------------------- */
 export const dataoneOe = pgTable(

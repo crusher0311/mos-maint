@@ -47,6 +47,7 @@ import {
   systemAnnouncements,
   smsHistoricalWorkOrders,
   ratelimits,
+  vehicleSpecsCache,
 } from "@/lib/db/schema/wave1";
 
 export type KnowledgeArticleRow = InferSelectModel<typeof knowledgeArticles>;
@@ -731,6 +732,49 @@ export async function pgUpsertDataOneCache(row: {
         source: row.source,
       },
     });
+}
+
+/* -------------------------------------------------------------------------- */
+/* vehicle_specs_cache (task #901)                                             */
+/* -------------------------------------------------------------------------- */
+export type VehicleSpecsCacheRow = InferSelectModel<typeof vehicleSpecsCache>;
+
+export async function pgFindVehicleSpecsCache(cacheKey: string): Promise<VehicleSpecsCacheRow | null> {
+  const [row] = await db()
+    .select()
+    .from(vehicleSpecsCache)
+    .where(eq(vehicleSpecsCache.cacheKey, cacheKey))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function pgUpsertVehicleSpecsCache(row: {
+  cacheKey: string;
+  vin: string;
+  payload: unknown;
+  fetchedAt: Date;
+  expiresAt: Date;
+}): Promise<void> {
+  await db()
+    .insert(vehicleSpecsCache)
+    .values(row)
+    .onConflictDoUpdate({
+      target: vehicleSpecsCache.cacheKey,
+      set: {
+        vin: row.vin,
+        payload: row.payload,
+        fetchedAt: row.fetchedAt,
+        expiresAt: row.expiresAt,
+      },
+    });
+}
+
+export async function pgDeleteVehicleSpecsCacheForVin(vin: string): Promise<number> {
+  const rows = await db()
+    .delete(vehicleSpecsCache)
+    .where(eq(vehicleSpecsCache.vin, vin))
+    .returning({ cacheKey: vehicleSpecsCache.cacheKey });
+  return rows.length;
 }
 
 export async function pgDeleteDataOneCache(squish: string): Promise<boolean> {

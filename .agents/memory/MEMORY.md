@@ -110,3 +110,4 @@
 - [DVI share-link pipeline](dvi-share-link-pipeline.md) — all OFF behind DVI_LINK_INGEST_ENABLED; links expire at provider; findings are advisory-only (never history anchors); new provider = touch dviSource unions + cache version.
 - [Smoke version pins block deploys](smoke-version-pin-blocks-deploys.md) — a hardcoded minor-version equality in a prebuild smoke test fails every future bump and blocks ALL prod deploys; use true semver-minimum compares.
 - [Resume-file repair verification](resume-file-repair-verification.md) — a restarted resumable repair can report "done" while rows behind the resume marker stay broken; verify residual==unresolvable per shop, else clear resume file and rerun.
+- [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.

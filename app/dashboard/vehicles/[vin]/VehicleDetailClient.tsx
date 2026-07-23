@@ -229,6 +229,12 @@ interface VehicleSpecsGrouped {
   };
 }
 
+// Task #901 — module-level specs cache so navigating away from the vehicle
+// page and back (component remount) renders the Specs tab instantly without
+// refetching. Specs are static per vehicle; the entry lives for the session.
+const specsClientCache = new Map<string, { grouped: VehicleSpecsGrouped | null; vehicleInfo: VehicleInfoDecoded | null }>();
+const SPECS_WARMING_MAX_RETRIES = 5;
+
 export default function VehicleDetailClient({
   vehicle,
   ownerName,
@@ -256,6 +262,7 @@ export default function VehicleDetailClient({
   const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam) ? tabParam : "oe");
   const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
   const specsAttemptedVinRef = useRef<string | null>(null);
+  const specsWarmingRetriesRef = useRef(0);
   const [specsRetryNonce, setSpecsRetryNonce] = useState(0);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoDecoded | null>(null);
   const [specsLoading, setSpecsLoading] = useState(false);
@@ -312,20 +319,48 @@ export default function VehicleDetailClient({
     // effect would otherwise refire forever. Keyed by VIN so a new vehicle
     // always fetches; a manual Retry button clears it for transient failures.
     if (activeTab === "specs" && !specsData && !specsLoading && specsAttemptedVinRef.current !== vehicle.vin) {
+      // Task #901 — serve from the session cache first: switching tabs or
+      // navigating back to a previously-viewed vehicle renders instantly.
+      const cached = specsClientCache.get(vehicle.vin);
+      if (cached) {
+        specsAttemptedVinRef.current = vehicle.vin;
+        if (cached.grouped) setSpecsData(cached.grouped);
+        if (cached.vehicleInfo) setVehicleInfo(cached.vehicleInfo);
+        if (cached.grouped || cached.vehicleInfo) return;
+      }
       specsAttemptedVinRef.current = vehicle.vin;
       setSpecsLoading(true);
+      let retryTimer: ReturnType<typeof setTimeout> | null = null;
       fetch(`/api/vehicles/${vehicle.vin}/specs`)
         .then(res => res.json())
         .then(data => {
+          // The server answers fast with `warming: true` while its data
+          // source wakes from idle — retry shortly instead of hanging.
+          if (data.warming && specsWarmingRetriesRef.current < SPECS_WARMING_MAX_RETRIES) {
+            specsWarmingRetriesRef.current += 1;
+            retryTimer = setTimeout(() => {
+              specsAttemptedVinRef.current = null;
+              setSpecsRetryNonce(n => n + 1);
+            }, typeof data.retryAfterMs === "number" ? data.retryAfterMs : 3000);
+            return;
+          }
+          specsWarmingRetriesRef.current = 0;
           if (data.ok) {
             setSpecsData(data.grouped);
           }
           if (data.vehicleInfo) {
             setVehicleInfo(data.vehicleInfo);
           }
+          if (data.ok || data.vehicleInfo) {
+            specsClientCache.set(vehicle.vin, {
+              grouped: data.ok ? data.grouped : null,
+              vehicleInfo: data.vehicleInfo ?? null,
+            });
+          }
         })
         .catch(console.error)
         .finally(() => setSpecsLoading(false));
+      return () => { if (retryTimer) clearTimeout(retryTimer); };
     }
   }, [activeTab, vehicle.vin, specsData, specsLoading, specsRetryNonce]);
   const handleShareReport = async () => {

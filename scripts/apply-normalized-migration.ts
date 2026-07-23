@@ -385,6 +385,14 @@ async function main() {
       "created_at" timestamp NOT NULL DEFAULT now(),
       "updated_at" timestamp NOT NULL DEFAULT now()
     )`,
+    // Task #901 — vehicle specs cache (mirrors drizzle/0022_task901_vehicle_specs_cache.sql)
+    `CREATE TABLE IF NOT EXISTS "vehicle_specs_cache" (
+      "cache_key" text PRIMARY KEY,
+      "vin" text NOT NULL,
+      "payload" jsonb NOT NULL,
+      "fetched_at" timestamptz NOT NULL DEFAULT now(),
+      "expires_at" timestamptz NOT NULL
+    )`,
   ];
 
   const fkStatements = [
@@ -395,6 +403,9 @@ async function main() {
   ];
 
   const indexStatements = [
+    // Task #901 — vehicle specs cache
+    `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_vin_idx" ON "vehicle_specs_cache" ("vin")`,
+    `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_expires_idx" ON "vehicle_specs_cache" ("expires_at")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "nv_shop_id_vin_idx" ON "normalized_vehicles" ("shop_id", "vin")`,
     `CREATE INDEX IF NOT EXISTS "nv_enterprise_id_idx" ON "normalized_vehicles" ("enterprise_id")`,
     `CREATE INDEX IF NOT EXISTS "nv_vin_idx" ON "normalized_vehicles" ("vin")`,

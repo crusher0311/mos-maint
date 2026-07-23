@@ -71,6 +71,44 @@ async function ensureAwake(): Promise<void> {
   return _wakeUpPromise;
 }
 
+/**
+ * Task #901 — bounded readiness check for interactive routes.
+ *
+ * `ensureAwake` can legitimately block 6+ seconds while the DataOne DB
+ * endpoint wakes from idle. Interactive routes (e.g. the Specs tab) should
+ * not hang that long: they call this with a small budget, and when the DB
+ * isn't reachable in time they return a fast "warming up, retry" response
+ * while the wake-up continues in the background (the shared `_wakeUpPromise`
+ * keeps retrying; the keep-alive timer holds it awake afterwards).
+ */
+export async function pingDataOne(timeoutMs = 2000): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const ping = (async () => {
+      try {
+        const db = getSql();
+        await db`SELECT 1`;
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    const ok = await Promise.race([ping, timeout]);
+    if (!ok) {
+      // Kick the full wake-up loop in the background so a follow-up retry
+      // from the client finds the endpoint awake. ensureKeepAlive keeps it so.
+      ensureKeepAlive();
+      ensureAwake().catch(() => {});
+    }
+    return ok;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000;
 let _keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 let _keepAliveStarted = false;
