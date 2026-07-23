@@ -952,6 +952,7 @@ export function triage({
     let inspectOnly = false;
     let inspectOnlyReason: string | null = null;
     if (
+      !usingShopInterval &&
       !recommendedDefault &&
       mappedKey &&
       !oemReplacementKeys.has(mappedKey) &&
@@ -1010,7 +1011,21 @@ export function triage({
     // (Inspect / Replace / Flush / Rotate / ...) is preserved end-to-end.
     // Fall back to the canonical display name only when the source row had
     // no usable name at all (e.g. miscellaneous items).
-    const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
+    //
+    // Exception: when the shop-interval override is in force, the shop has
+    // declared this a real recurring service — an OEM "Inspect …" title
+    // would misrepresent it (e.g. "Inspect brake fluid." on a shop
+    // 30k/24mo brake fluid service). Swap in the canonical service name
+    // and drop the inspect verb so downstream classifiers treat it as a
+    // service row.
+    const isInspectWording =
+      action === "inspect" || /^\s*(inspect|check)\b/i.test(o.name || "");
+    const shopServiceRetitle =
+      usingShopInterval && isInspectWording && !!SERVICE_KEY_DISPLAY_NAMES[serviceKey];
+    const displayTitle = shopServiceRetitle
+      ? SERVICE_KEY_DISPLAY_NAMES[serviceKey]
+      : (o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item");
+    const effectiveAction = shopServiceRetitle && action === "inspect" ? "service" : action;
 
     let combinedReason: string | undefined;
     if (recommendedDefault) {
@@ -1062,7 +1077,7 @@ export function triage({
       declined: declinedInfo,
       usingShopInterval,
       matchedDeferred,
-      action: action ?? null,
+      action: effectiveAction ?? null,
       notes: dviInfo?.notes ?? o.notes ?? null,
       recommendedDefault: recommendedDefault || undefined,
       recommendedReason: recommendedReason ?? undefined,

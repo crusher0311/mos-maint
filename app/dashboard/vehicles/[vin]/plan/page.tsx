@@ -746,6 +746,7 @@ function triage({
   soonDays = DEFAULT_SOON_DAYS,
   milesPerDay = null,
   shopIntervals = {},
+  intervalApplyMode = "always",
   vehicleYear = null,
   engineRisk = null,
   oilDutyPreference = "severe",
@@ -765,6 +766,7 @@ function triage({
   soonDays?: number;
   milesPerDay?: number | null;
   shopIntervals?: Record<string, ShopIntervalOverride>;
+  intervalApplyMode?: string;
   vehicleYear?: number | null;
   // Task #166: engine-aware oil interval inputs.
   engineRisk?: EngineRiskResult | null;
@@ -956,11 +958,12 @@ function triage({
 
     const action = parseServiceAction(o.name);
     
-    // Check for shop interval override - only use shop intervals if:
-    // 1. Shop has configured custom intervals for this service (useShop === true)
-    // 2. Service was last performed at shop (last?.source === 'shop')
+    // Check for shop interval override. Mirrors lib/plan-build/triage.ts:
+    // the override applies when the shop turned it on (useShop === true) and
+    // either the shop's intervalApplyMode is 'always' (the default) or the
+    // service was last performed at this shop.
     const lastPerformedAtShop = last?.source === 'shop';
-    const usingShopInterval = shopOverride?.useShop === true && lastPerformedAtShop;
+    const usingShopInterval = shopOverride?.useShop === true && (intervalApplyMode === 'always' || lastPerformedAtShop);
     // Task #166: oil rows honour the per-vehicle Normal/Severe duty
     // preference when the shop hasn't supplied a custom interval. Severe is
     // the safer default and matches OEM "Severe-duty" guidance.
@@ -1050,6 +1053,7 @@ function triage({
     let inspectOnlyReason: string | null = null;
     if (
       !recommendedDefault &&
+      !usingShopInterval &&
       !serviceKey.startsWith("misc_") &&
       !oemReplacementKeys.has(serviceKey) &&
       isInspectOnlyFluidItem({ serviceKey, action })
@@ -1131,7 +1135,19 @@ function triage({
     // Always prefer the original DataOne row name so the verb (Inspect /
     // Replace / Flush / Rotate / ...) is preserved end-to-end. Fall back to
     // the canonical display label only when the source row has no name.
-    const displayTitle = o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item";
+    //
+    // Exception (mirrors lib/plan-build/triage.ts): when the shop-interval
+    // override is in force, the shop has declared this a real recurring
+    // service — an OEM "Inspect …" title would misrepresent it. Swap in the
+    // canonical service name and drop the inspect verb.
+    const isInspectWording =
+      action === "inspect" || /^\s*(inspect|check)\b/i.test(o.name || "");
+    const shopServiceRetitle =
+      usingShopInterval && isInspectWording && !!SERVICE_KEY_DISPLAY_NAMES[serviceKey];
+    const displayTitle = shopServiceRetitle
+      ? SERVICE_KEY_DISPLAY_NAMES[serviceKey]
+      : (o.name || SERVICE_KEY_DISPLAY_NAMES[serviceKey] || "Maintenance Item");
+    const effectiveAction = shopServiceRetitle && action === "inspect" ? "service" : action;
 
     triaged.push({
       key: uniqueKey,
@@ -1151,7 +1167,7 @@ function triage({
       declined: declinedInfo,
       usingShopInterval,
       matchedDeferred, // Attach matching deferred work for "+ deferred" button
-      action: action ?? null,
+      action: effectiveAction ?? null,
       notes: dviInfo?.notes ?? o.notes ?? null,
       // The recommended-default rationale is surfaced via a dedicated badge
       // in the renderer, so we deliberately do not duplicate it into `reason`
@@ -1503,6 +1519,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
   const soonMiles = shop?.maintenance?.dueSoonMiles ?? DEFAULT_SOON_MILES;
   const soonDays = shop?.maintenance?.dueSoonDays ?? DEFAULT_SOON_DAYS;
   const rawIntervals: Record<string, ShopIntervalOverride> = shop?.maintenance?.intervals ?? {};
+  const intervalApplyMode: string = shop?.maintenance?.intervalApplyMode || "always";
   const LEGACY_KEY_MAP: Record<string, string[]> = {
     differential: ["front_differential", "rear_differential"],
     alignment: ["wheel_alignment"],
@@ -2437,6 +2454,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       soonDays,
       milesPerDay: mpdBlended,
       shopIntervals,
+      intervalApplyMode,
       vehicleYear: vehicle?.year ?? null,
       engineRisk,
       oilDutyPreference,

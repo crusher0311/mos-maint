@@ -23,6 +23,7 @@ import { buildReportUrl } from "@/lib/report-share";
 import { getDistanceLabel, type DistanceUnit } from "@/lib/distance-utils";
 import {
   LIFETIME_FLUID_SERVICE_KEYS,
+  SERVICE_KEY_DISPLAY_NAMES,
   splitServicePhrases,
   isInspectOnlyHistoryPhrase,
   INSPECTION_SERVICE_KEYS,
@@ -73,7 +74,10 @@ export const __deps = {
 // declined job for the same service merges into the DVI card instead of
 // showing as a duplicate — cached analyses built without the key still
 // hold both cards and must rebuild.
-const ANALYSIS_CACHE_SCHEMA_VERSION = 6;
+// Bumped 6 → 7: shop-interval-override rows with OEM "Inspect …" names are
+// now retitled to the canonical service name (e.g. "Brake Fluid Service");
+// cached analyses still carry the misleading inspect wording and must rebuild.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 7;
 
 // Task #336: OEM data from DataOne is always in real miles. Convert to
 // shop unit (km for Canadian shops) at intake so the on-demand analyzer
@@ -1062,8 +1066,20 @@ export async function runOnDemandAnalysis(
           };
         }
 
+        // Mirrors lib/plan-build/triage.ts: when the shop-interval override
+        // is in force, the shop has declared this a real recurring service —
+        // an OEM "Inspect …" name would misrepresent it (e.g. "Inspect brake
+        // fluid." on HEART's 30k/24mo brake fluid service). Swap in the
+        // canonical service name for display.
+        const displayServiceName =
+          intervalSource === 'shop' &&
+          /^\s*(inspect|check)\b/i.test(item.maintenance_name || "") &&
+          serviceKey && SERVICE_KEY_DISPLAY_NAMES[serviceKey]
+            ? SERVICE_KEY_DISPLAY_NAMES[serviceKey]
+            : item.maintenance_name;
+
         recommendations.push({
-          service: item.maintenance_name,
+          service: displayServiceName,
           serviceKey: serviceKey || null,
           category: item.maintenance_category,
           dueMileage: nextDueMileage,

@@ -283,6 +283,40 @@ ok(
   }) === true,
 );
 
+// Scenario D: shop-interval override on an OEM Inspect row — the shop has
+// declared this a real recurring service, so the row must be retitled to the
+// canonical service name, action mapped inspect -> service, and inspectOnly
+// suppressed (mirrors dashboard duplicate triage + extension analyzer).
+{
+  const oemItems: OEMItem[] = [
+    {
+      maintenance_id: 9301,
+      name: "Inspect brake fluid",
+      category: "Brakes",
+      miles: 20_000,
+      months: null,
+      intervals: [{ units: "Miles", value: 20_000 }],
+      notes: null,
+    },
+  ];
+  const triaged = triage({
+    ...baseTriageOpts,
+    oemItems,
+    shopIntervals: { brake_fluid: { useShop: true, miles: 30_000, months: 24 } },
+    intervalApplyMode: "always",
+  });
+  const bf = findItem(triaged, (t) => t.serviceKey === "brake_fluid");
+  ok("Scenario D: brake_fluid row present", !!bf);
+  ok(
+    "Scenario D: title retitled to canonical service name (no inspect verb)",
+    !!bf?.title && !/^\s*inspect\b/i.test(bf.title),
+  );
+  ok("Scenario D: action mapped to service", bf?.action === "service");
+  ok("Scenario D: usingShopInterval true", bf?.usingShopInterval === true);
+  ok("Scenario D: inspectOnly suppressed", bf?.inspectOnly !== true);
+  ok("Scenario D: shop interval cadence applied (30k)", bf?.intervalMiles === 30_000);
+}
+
 if (failed === 0) {
   console.log("\nAll Task #198 regression checks passed.");
   process.exit(0);
