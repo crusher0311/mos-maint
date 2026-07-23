@@ -98,6 +98,11 @@ export async function POST(req: NextRequest) {
       ok: true,
       workOrderId: result.workOrderId,
       workOrderNumber: result.workOrderNumber,
+      // Task #913: packages pushed header-only ($0, no lines) after all
+      // line-resolution fallbacks failed — surfaced so the wizard can warn.
+      ...(result.packagesWithoutLines?.length
+        ? { packagesWithoutLines: result.packagesWithoutLines }
+        : {}),
     });
   } catch (err: any) {
     console.error("[Create Work Order] Error:", err.message);

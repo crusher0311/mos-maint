@@ -185,6 +185,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createdWO, setCreatedWO] = useState<number | null>(null);
+  // Task #913: jobs that Protractor accepted only as $0 header-only shells
+  // (server couldn't resolve any parts/labor lines from cache or template).
+  const [packagesWithoutLines, setPackagesWithoutLines] = useState<Array<{ title: string; code?: string }>>([]);
 
   const [createNewCustomer, setCreateNewCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState<Record<string, string>>({ firstName: "", lastName: "" });
@@ -770,6 +773,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create work order");
       setCreatedWO(data.workOrderNumber);
+      setPackagesWithoutLines(Array.isArray(data.packagesWithoutLines) ? data.packagesWithoutLines : []);
       setStep("confirm");
       if (onCreated) onCreated(data.workOrderNumber);
     } catch (err: any) {
@@ -2014,6 +2018,24 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                 <span className="font-medium">{vehicleDisplay}</span>
               </p>
               <p className="text-xs text-gray-400">It will appear on your dashboard shortly.</p>
+              {packagesWithoutLines.length > 0 && (
+                <div className="w-full max-w-md rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left">
+                  <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    Some jobs were added without parts &amp; labor
+                  </p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {packagesWithoutLines.map((p, i) => (
+                      <li key={i} className="text-xs text-amber-700">
+                        &bull; {p.title}{p.code ? ` (${p.code})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-xs text-amber-700">
+                    These landed in Protractor as $0 placeholders &mdash; open WO #{createdWO} in Protractor and add the parts/labor lines manually.
+                  </p>
+                </div>
+              )}
               <button
                 onClick={onClose}
                 className="mt-4 px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"

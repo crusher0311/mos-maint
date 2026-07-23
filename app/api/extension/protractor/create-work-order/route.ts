@@ -101,6 +101,11 @@ async function _POST(req: NextRequest) {
         workOrderId: result.workOrderId,
         workOrderNumber: result.workOrderNumber,
         portalUrl,
+        // Task #913: packages pushed header-only ($0, no lines) after all
+        // line-resolution fallbacks failed — surfaced so callers can warn.
+        ...(result.packagesWithoutLines?.length
+          ? { packagesWithoutLines: result.packagesWithoutLines }
+          : {}),
       },
       { headers: corsHeaders },
     );

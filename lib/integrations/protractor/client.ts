@@ -1207,7 +1207,18 @@ export async function createProtractorWorkOrder(
     workflowStage?: string;
     servicePackages?: WorkOrderServicePackage[];
   }
-): Promise<{ ok: boolean; workOrderId?: string; workOrderNumber?: number; error?: string }> {
+): Promise<{
+  ok: boolean;
+  workOrderId?: string;
+  workOrderNumber?: number;
+  error?: string;
+  /**
+   * Task #913: packages that were pushed as header-only ($0, no parts/labor
+   * lines) because every line-resolution fallback came up empty. Callers
+   * should surface these to the user instead of silently reporting success.
+   */
+  packagesWithoutLines?: Array<{ title: string; code?: string; source?: string; attempted: string[] }>;
+}> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -1291,14 +1302,21 @@ export async function createProtractorWorkOrder(
     // carry a real cost from the source system.
     const partCostRatio = await getShopPartCostRatio(shopId);
 
+    const packagesWithoutLines: Array<{ title: string; code?: string; source?: string; attempted: string[] }> = [];
+
     for (const pkg of params.servicePackages) {
       try {
         // Task #891 timing: line resolution can involve up to 3 sequential
         // upstream fallbacks per package; measure each phase.
         const tPkg = Date.now();
         let resolvedLines = pkg.lines || [];
+        // Task #913: track which fallbacks were attempted so a $0 header-only
+        // push produces an actionable warning instead of a silent success.
+        const attempted: string[] = [];
+        if (resolvedLines.length > 0) attempted.push("caller-lines");
 
         if (resolvedLines.length === 0 && pkg.source === "canned") {
+          attempted.push("canned-cache");
           const rawCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
           const rawItems = rawCache?.items || [];
           const titleLower = pkg.title.toLowerCase();
@@ -1320,18 +1338,53 @@ export async function createProtractorWorkOrder(
             }
           }
           if (resolvedLines.length === 0 && pkg.deferredId) {
-            const templateResult = await fetchServicePackageTemplateDetail(shopId, pkg.deferredId);
-            if (templateResult.ok && templateResult.template) {
-              const tplLines = extractLinesFromRaw(templateResult.template.ServicePackageLines);
-              if (tplLines.length > 0) {
-                resolvedLines = tplLines.map(normalizeOneLine);
-                console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template API for "${pkg.title}"`);
+            // Task #913: the old code only tried fetchServicePackageTemplateDetail
+            // (/ServicePackageTemplate/Read/{id}), which takes ServicePackageTemplate
+            // IDs — for canned-job IDs from /CannedJob/ it silently 404s (the same
+            // wrong-endpoint bug tasks #405/#406 fixed in the enrichment path but
+            // never here). Try all three detail endpoints in order of likelihood:
+            //   1. /ServicePackage/CannedJob/{id}   (v2.0 canned-job IDs)
+            //   2. /ServicePackageTemplate/{id}     (v1.0 / template-fallback IDs)
+            //   3. /ServicePackageTemplate/Read/{id} (legacy undocumented)
+            // Each fetcher caches its own 404s, so misses are cheap on repeat.
+            attempted.push("canned-job-detail-api");
+            const detailResult = await fetchCannedJobDetail(shopId, pkg.deferredId);
+            if (detailResult.ok && detailResult.detail) {
+              const dLines = extractLinesFromRaw(detailResult.detail.ServicePackageLines);
+              if (dLines.length > 0) {
+                resolvedLines = dLines.map(normalizeOneLine);
+                console.log(`[Create WO] Resolved ${resolvedLines.length} lines from canned-job detail API for "${pkg.title}"`);
+              }
+            }
+
+            if (resolvedLines.length === 0) {
+              attempted.push("template-get-api");
+              const tplGetResult = await fetchCannedJobDetailViaTemplate(shopId, pkg.deferredId);
+              if (tplGetResult.ok && tplGetResult.detail) {
+                const tLines = extractLinesFromRaw(tplGetResult.detail.ServicePackageLines);
+                if (tLines.length > 0) {
+                  resolvedLines = tLines.map(normalizeOneLine);
+                  console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template GET API for "${pkg.title}"`);
+                }
+              }
+            }
+
+            if (resolvedLines.length === 0) {
+              attempted.push("template-read-api");
+              const templateResult = await fetchServicePackageTemplateDetail(shopId, pkg.deferredId);
+              if (templateResult.ok && templateResult.template) {
+                const tplLines = extractLinesFromRaw(templateResult.template.ServicePackageLines);
+                if (tplLines.length > 0) {
+                  resolvedLines = tplLines.map(normalizeOneLine);
+                  console.log(`[Create WO] Resolved ${resolvedLines.length} lines from template API for "${pkg.title}"`);
+                }
               }
             }
           }
         }
 
         if (resolvedLines.length === 0 && (pkg.source === "deferred" || pkg.source === "canned")) {
+          attempted.push("cached-job-pricing");
           const cachedPricing = await findCachedJobPricing(shopId, {
             serviceItemId: params.vehicleId,
             vin: params.vin,
@@ -1345,6 +1398,7 @@ export async function createProtractorWorkOrder(
         }
 
         if (resolvedLines.length === 0 && pkg.source === "deferred" && pkg.originalWorkOrderId) {
+          attempted.push("original-work-order");
           const origResult = await protractorFetch<ProtractorWorkOrder>(
             `/WorkOrder/${pkg.originalWorkOrderId}`,
             config,
@@ -1374,6 +1428,7 @@ export async function createProtractorWorkOrder(
         }
 
         if (resolvedLines.length === 0 && pkg.source === "history") {
+          attempted.push("job-index-history");
           const histDoc = await db.collection("job_index").findOne({
             shopId,
             'job.title': pkg.title,
@@ -1383,6 +1438,26 @@ export async function createProtractorWorkOrder(
             resolvedLines = histDoc.lines.map(normalizeOneLine);
             console.log(`[Create WO] Resolved ${resolvedLines.length} lines from job_index for "${pkg.title}"`);
           }
+        }
+
+        // Task #913: every fallback came up empty — the package is about to
+        // be pushed as a $0 header-only shell. Log a loud structured warning
+        // (console.error so the BetterStack syslog drain picks it up) and
+        // flag it in the response so the wizard can tell the user.
+        if (resolvedLines.length === 0 && pkg.source !== undefined) {
+          console.error(
+            `[Create WO] WARN: pushing header-only $0 package shop=${shopId} ` +
+              `title="${pkg.title}" code="${pkg.code || ""}" source=${pkg.source} ` +
+              `deferredId=${pkg.deferredId || "none"} ` +
+              `attemptedFallbacks=[${attempted.join(",")}] — all line-resolution ` +
+              `fallbacks returned zero lines.`,
+          );
+          packagesWithoutLines.push({
+            title: pkg.title,
+            code: pkg.code,
+            source: pkg.source,
+            attempted,
+          });
         }
 
         const currentWoResult = await protractorFetch<ProtractorWorkOrder>(
@@ -1533,6 +1608,13 @@ export async function createProtractorWorkOrder(
         console.error(`[Create WO] Error adding "${pkg.title}": ${err.message}`);
       }
     }
+
+    return {
+      ok: true,
+      workOrderId,
+      workOrderNumber,
+      ...(packagesWithoutLines.length > 0 ? { packagesWithoutLines } : {}),
+    };
   }
 
   return {
@@ -4229,6 +4311,70 @@ export function isCannedJobsCacheContentBlank(items: ReadonlyArray<any> | null |
   return withContent / items.length < 0.05;
 }
 
+/**
+ * Task #913 — lineless-cache detector. Shop 219 (Telle Tire) had a canned-jobs
+ * cache whose items all had titles (so `isCannedJobsCacheContentBlank` said
+ * "healthy") but `lineCount: 0` / `lines: []` on every single item — even
+ * though the same templates carry real parts/labor lines in Protractor (shop
+ * 143's cache of the identical SSPM1 template has 3 lines). Pushing from such
+ * a cache produces $0 header-only packages on the work order.
+ *
+ * Titles-but-no-lines across (nearly) the whole cache is a cache-population
+ * failure, not real data: healthy enriched caches carry lines on most items.
+ * Threshold is conservative (<2% of items have any lines AND at least 10
+ * items) so shops with a few genuinely line-less templates never trip it.
+ *
+ * Pure + exported for regression tests.
+ */
+export function isCannedJobsCacheLineless(items: ReadonlyArray<any> | null | undefined): boolean {
+  if (!items || items.length < 10) return false;
+  let withLines = 0;
+  for (const it of items) {
+    const lineCount =
+      (Array.isArray(it?.lines) ? it.lines.length : 0) ||
+      (typeof it?.lineCount === "number" ? it.lineCount : 0) ||
+      (Array.isArray(it?.ServicePackageLines) ? it.ServicePackageLines.length : 0) ||
+      (Array.isArray(it?.ServicePackageLines?.ItemCollection) ? it.ServicePackageLines.ItemCollection.length : 0);
+    if (lineCount > 0) withLines += 1;
+  }
+  return withLines / items.length < 0.02;
+}
+
+/**
+ * Task #913 — "never cache empty over non-empty" guard for enrichment writes.
+ * Returns true when the freshly-enriched batch would REPLACE a cache that has
+ * strictly more usable content (more items with lines, or content where the
+ * new batch has none). Prevents a failed/degraded enrichment run from
+ * clobbering a good cache with blanks.
+ *
+ * Pure + exported for regression tests.
+ */
+export function wouldDowngradeCannedJobsCache(
+  existingItems: ReadonlyArray<any> | null | undefined,
+  newItems: ReadonlyArray<any> | null | undefined,
+): boolean {
+  const countWithLines = (items: ReadonlyArray<any> | null | undefined): number => {
+    if (!items) return 0;
+    let n = 0;
+    for (const it of items) {
+      const lineCount =
+        (Array.isArray(it?.lines) ? it.lines.length : 0) ||
+        (typeof it?.lineCount === "number" ? it.lineCount : 0) ||
+        (Array.isArray(it?.ServicePackageLines) ? it.ServicePackageLines.length : 0) ||
+        (Array.isArray(it?.ServicePackageLines?.ItemCollection) ? it.ServicePackageLines.ItemCollection.length : 0);
+      if (lineCount > 0) n += 1;
+    }
+    return n;
+  };
+  const existingWithLines = countWithLines(existingItems);
+  if (existingWithLines === 0) {
+    // Existing cache has no lines anywhere — an empty new batch over a
+    // non-empty (titles-only) cache is still a downgrade.
+    return (existingItems?.length ?? 0) > 0 && (newItems?.length ?? 0) === 0;
+  }
+  return countWithLines(newItems) === 0;
+}
+
 export async function upsertCannedJobsCache(
   shopId: number,
   cannedJobs: ProtractorCannedJob[],
@@ -4506,6 +4652,47 @@ export async function fetchCannedJobsWithCache(
   const hasItems = cached?.items?.length > 0;
   
   if (!options?.forceRefresh && isEnriched && hasItems) {
+    // Task #913: an "enriched" cache whose items all have titles but ZERO
+    // lines (shop 219 / Telle Tire shape) still serves fine for search, but
+    // pushes $0 header-only packages at create-WO time. Serve the cache
+    // (don't block the caller) but kick a background re-enrich to fill the
+    // lines in — at most once per 24h per shop so a shop whose templates
+    // genuinely have no lines doesn't re-sync on every read.
+    if (isCannedJobsCacheLineless(cached.items)) {
+      const lastAttempt = cached.linesRefreshAttemptedAt ? new Date(cached.linesRefreshAttemptedAt).getTime() : 0;
+      if (Date.now() - lastAttempt > 24 * 60 * 60 * 1000) {
+        console.error(
+          `[Protractor] Canned-jobs cache for shop ${shopId} is "enriched" but ` +
+          `${cached.items.length} items are (nearly) all line-less — scheduling background line re-enrich.`,
+        );
+        await db.collection("protractor_canned_jobs").updateOne(
+          { shopId },
+          { $set: { linesRefreshAttemptedAt: new Date() } },
+        );
+        void (async () => {
+          const listResult = await fetchCannedJobs(shopId);
+          if (!listResult.ok || !listResult.cannedJobs?.length) {
+            console.error(`[Protractor] Lineless-cache re-enrich: list fetch failed for shop ${shopId}: ${listResult.error}`);
+            return;
+          }
+          const enrichedJobs = await enrichCannedJobsWithDetails(shopId, listResult.cannedJobs, {
+            filterEmptyTitles: true,
+            listSource: listResult.source,
+          });
+          if (wouldDowngradeCannedJobsCache(cached.items, enrichedJobs)) {
+            console.error(
+              `[Protractor] Lineless-cache re-enrich for shop ${shopId} produced no line-bearing items ` +
+              `(${enrichedJobs.length} jobs) — keeping existing cache (never cache empty over non-empty).`,
+            );
+            return;
+          }
+          await upsertCannedJobsCache(shopId, enrichedJobs as ProtractorCannedJob[], { source: "enriched" });
+          console.log(`[Protractor] Lineless-cache re-enrich complete for shop ${shopId}: ${enrichedJobs.length} jobs saved`);
+        })().catch((err) => {
+          console.error(`[Protractor] Lineless-cache re-enrich failed for shop ${shopId}:`, err);
+        });
+      }
+    }
     console.log(`[Protractor] Using enriched cache with ${cached.items.length} items for shop ${shopId}`);
     return {
       ok: true,
@@ -4531,20 +4718,29 @@ export async function fetchCannedJobsWithCache(
       return { ok: false, error: listResult.error };
     }
 
-    // Save basic list immediately so page loads fast
+    // Save basic list immediately so page loads fast — unless doing so would
+    // wipe lines an existing cache already carries (task #913: the basic
+    // /CannedJob/ list has no lines; overwriting a line-bearing cache with it
+    // and then having enrichment fail is how lines get lost permanently).
     const now = new Date();
-    await db.collection("protractor_canned_jobs").updateOne(
-      { shopId },
-      {
-        $set: {
-          items: listResult.cannedJobs,
-          fetchedAt: now,
-          source: "api",
+    if (wouldDowngradeCannedJobsCache(cached?.items, listResult.cannedJobs)) {
+      console.log(
+        `[Protractor] Skipping basic-list cache write for shop ${shopId} — existing cache carries lines the basic list lacks.`,
+      );
+    } else {
+      await db.collection("protractor_canned_jobs").updateOne(
+        { shopId },
+        {
+          $set: {
+            items: listResult.cannedJobs,
+            fetchedAt: now,
+            source: "api",
+          },
+          $setOnInsert: { createdAt: now },
         },
-        $setOnInsert: { createdAt: now },
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    }
 
     // Run enrichment in background (fire and forget) - don't block the response
     console.log(`[Protractor] Starting background enrichment for ${listResult.cannedJobs.length} jobs (source: ${listResult.source})...`);
@@ -4553,12 +4749,24 @@ export async function fetchCannedJobsWithCache(
       listSource: listResult.source,
     })
       .then(async (enrichedJobs) => {
+        // Task #913: never clobber a cache that has usable lines with an
+        // enrichment batch that has none (failed/degraded enrichment run).
+        const existingDoc = await db.collection("protractor_canned_jobs").findOne({ shopId });
+        if (wouldDowngradeCannedJobsCache(existingDoc?.items, enrichedJobs)) {
+          console.error(
+            `[Protractor] Background enrichment for shop ${shopId} produced no usable content ` +
+            `(${enrichedJobs.length} jobs) — keeping existing cache (never cache empty over non-empty).`,
+          );
+          return;
+        }
         const enrichedNow = new Date();
         await db.collection("protractor_canned_jobs").updateOne(
           { shopId },
           {
             $set: {
-              items: enrichedJobs,
+              // Normalize so cache items carry lines in the canonical
+              // pre-normalized shape (same as upsertCannedJobsCache).
+              items: enrichedJobs.map((job: any) => normalizeCannedJobForCache(job)),
               fetchedAt: enrichedNow,
               source: "enriched",
             },
@@ -4600,12 +4808,25 @@ export async function fetchCannedJobsWithCache(
       { filterEmptyTitles: true, listSource: listResult.source }
     );
 
+    // Task #913: never clobber a line-bearing cache with a line-less batch.
+    if (wouldDowngradeCannedJobsCache(cached?.items, enrichedJobs)) {
+      console.error(
+        `[Protractor] Force-refresh enrichment for shop ${shopId} produced no usable content ` +
+        `(${enrichedJobs.length} jobs) — keeping existing cache (never cache empty over non-empty).`,
+      );
+      return {
+        ok: true,
+        cannedJobs: normalizeCachedItems(cached?.items || []),
+        source: "enriched",
+      };
+    }
+
     const now = new Date();
     await db.collection("protractor_canned_jobs").updateOne(
       { shopId },
       {
         $set: {
-          items: enrichedJobs,
+          items: enrichedJobs.map((job: any) => normalizeCannedJobForCache(job)),
           fetchedAt: now,
           source: "enriched",
         },

@@ -27,6 +27,8 @@ import {
   unwrapServicePackageTemplate,
   extractServicePackageTemplateContent,
   isCannedJobsCacheContentBlank,
+  isCannedJobsCacheLineless,
+  wouldDowngradeCannedJobsCache,
 } from "../lib/integrations/protractor/client";
 
 let failed = 0;
@@ -653,6 +655,72 @@ const noLines = normalizeCannedJobForCache({ ID: "nl-1", Title: "Inspection" });
 ok(
   "normalize — no lines yields empty lines array without throwing",
   Array.isArray((noLines as any).lines) && (noLines as any).lines.length === 0,
+);
+
+// 13. Task #913 — lineless-cache detector. Shop 219's cache had titles on
+// every item but zero lines everywhere, so `isCannedJobsCacheContentBlank`
+// called it healthy and create-WO pushed $0 header-only packages.
+const mkTitled = (n: number, lines = 0) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `t${i}`,
+    title: `Job ${i}`,
+    lineCount: lines,
+    lines: Array.from({ length: lines }, (_, j) => ({ description: `L${j}` })),
+  }));
+ok(
+  "lineless — titles-only cache (shop 219 shape) is detected",
+  isCannedJobsCacheLineless(mkTitled(50, 0)) === true,
+);
+ok(
+  "lineless — healthy cache with lines is NOT flagged",
+  isCannedJobsCacheLineless([...mkTitled(40, 2), ...mkTitled(10, 0)]) === false,
+);
+ok(
+  "lineless — tiny caches (<10 items) never flagged (too little signal)",
+  isCannedJobsCacheLineless(mkTitled(5, 0)) === false,
+);
+ok(
+  "lineless — null/undefined/empty input is safe and not flagged",
+  isCannedJobsCacheLineless(null) === false &&
+    isCannedJobsCacheLineless(undefined) === false &&
+    isCannedJobsCacheLineless([]) === false,
+);
+ok(
+  "lineless — raw detail-shape lines (ServicePackageLines.ItemCollection) count",
+  isCannedJobsCacheLineless(
+    Array.from({ length: 20 }, (_, i) => ({
+      Title: `Raw ${i}`,
+      ServicePackageLines: { ItemCollection: [{ Description: "Part" }] },
+    })),
+  ) === false,
+);
+
+// 14. Task #913 — never cache empty over non-empty.
+ok(
+  "downgrade — empty batch over line-bearing cache is a downgrade",
+  wouldDowngradeCannedJobsCache(mkTitled(20, 2), []) === true,
+);
+ok(
+  "downgrade — line-less batch over line-bearing cache is a downgrade",
+  wouldDowngradeCannedJobsCache(mkTitled(20, 2), mkTitled(20, 0)) === true,
+);
+ok(
+  "downgrade — line-bearing batch over line-less cache is an UPGRADE (allowed)",
+  wouldDowngradeCannedJobsCache(mkTitled(20, 0), mkTitled(20, 2)) === false,
+);
+ok(
+  "downgrade — empty batch over titles-only cache is still a downgrade",
+  wouldDowngradeCannedJobsCache(mkTitled(20, 0), []) === true,
+);
+ok(
+  "downgrade — anything over an empty/missing cache is allowed",
+  wouldDowngradeCannedJobsCache([], mkTitled(5, 0)) === false &&
+    wouldDowngradeCannedJobsCache(null, []) === false &&
+    wouldDowngradeCannedJobsCache(undefined, mkTitled(5, 2)) === false,
+);
+ok(
+  "downgrade — line-bearing batch over line-bearing cache is allowed",
+  wouldDowngradeCannedJobsCache(mkTitled(20, 2), mkTitled(18, 3)) === false,
 );
 
 if (failed > 0) {
