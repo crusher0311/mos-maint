@@ -66,6 +66,38 @@ export async function upsertCannedJobsBasicList(
   );
 }
 
+// Task #931 backfill sweep: list cache docs still missing `listSource`
+// (matches both field-absent and explicit-null docs).
+export async function findCannedJobsCachesMissingListSource(
+  shopIds?: number[],
+): Promise<Array<Pick<ProtractorCannedJobsCacheDoc, "shopId" | "source" | "fetchedAt">>> {
+  const col = await collection();
+  return col
+    .find(
+      {
+        listSource: null,
+        ...(shopIds && shopIds.length ? { shopId: { $in: shopIds } } : {}),
+      },
+      { projection: { shopId: 1, source: 1, fetchedAt: 1 } },
+    )
+    .toArray();
+}
+
+// Task #931: stamp `listSource` ONLY, and only if the doc is still
+// untagged — never overwrites a value written by a concurrent sync/enrich,
+// never touches items/source/fetchedAt. Returns true when a doc was updated.
+export async function setCannedJobsCacheListSourceIfMissing(
+  shopId: number,
+  listSource: string,
+): Promise<boolean> {
+  const col = await collection();
+  const res = await col.updateOne(
+    { shopId, listSource: null },
+    { $set: { listSource } },
+  );
+  return res.modifiedCount === 1;
+}
+
 export async function upsertCannedJobsEnriched(
   shopId: number,
   items: unknown[],
