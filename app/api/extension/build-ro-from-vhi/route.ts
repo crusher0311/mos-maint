@@ -38,7 +38,13 @@ interface ProposedItem {
     note: string | null;
     labor: Array<Record<string, unknown>>;
     parts: Array<Record<string, unknown>>;
-    cannedJobSource: { id: string | number | null; name: string | null } | null;
+    // Task #932: `listSource` is the Protractor LIST endpoint that produced
+    // the cached canned job ("cannedjob" | "servicepackagetemplate"), when
+    // recorded on the cache doc. Callers that push this job to Protractor and
+    // need a detail fetch should pass it through (WorkOrderServicePackage.
+    // listSource → fetchCannedJobDetailForListSource) so the fetch dispatches
+    // directly instead of guessing across three endpoints.
+    cannedJobSource: { id: string | number | null; name: string | null; listSource?: string } | null;
   };
 }
 
@@ -123,7 +129,11 @@ function buildProposedItem(
   const labor = sanitizeLaborLines(cannedJob?.labor, displayName);
   const parts = sanitizePartsLines(cannedJob?.parts);
   const cannedJobSource = cannedJob
-    ? { id: cannedJob.id ?? cannedJob.code ?? null, name: cannedJob.name || cannedJob.title || null }
+    ? {
+        id: cannedJob.id ?? cannedJob.code ?? null,
+        name: cannedJob.name || cannedJob.title || null,
+        ...(cannedJob._listSource ? { listSource: cannedJob._listSource } : {}),
+      }
     : null;
 
   if (cannedJob) {
@@ -167,6 +177,17 @@ async function loadCannedJobsByServiceKey(
         .collection("protractor_canned_jobs_cache")
         .findOne({ shopId: mosShopId });
       cannedJobs = cached?.cannedJobs || [];
+      // Task #932: the cache doc records which Protractor LIST endpoint
+      // produced its items (stamped by the extension canned-jobs route).
+      // Carry it on each job so cannedJobSource can pass it through to any
+      // downstream detail fetch (fetchCannedJobDetailForListSource).
+      const listSource =
+        cached?.listSource === "cannedjob" || cached?.listSource === "servicepackagetemplate"
+          ? cached.listSource
+          : undefined;
+      if (listSource) {
+        cannedJobs = cannedJobs.map((job: any) => ({ ...job, _listSource: listSource }));
+      }
     } else {
       const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
       if (tekmetricShopId) {

@@ -1208,6 +1208,13 @@ export interface WorkOrderServicePackage {
   source: "canned" | "deferred" | "history";
   originalWorkOrderId?: string;
   deferredId?: string;
+  // Task #932: which Protractor LIST endpoint produced this canned job
+  // (when the caller knows — e.g. items served from a cache doc that
+  // recorded its origin). Lets the line-resolution detail fetch dispatch
+  // directly via fetchCannedJobDetailForListSource instead of running the
+  // three-endpoint trial-and-error chain. Takes precedence over the
+  // shop-level listSource stamped on the protractor_canned_jobs cache doc.
+  listSource?: ProtractorCannedJobsListSource;
   lines?: Array<{
     description?: string;
     lineType?: string;
@@ -1428,7 +1435,15 @@ export async function createProtractorWorkOrder(
               rawCache?.listSource === "cannedjob" || rawCache?.listSource === "servicepackagetemplate"
                 ? rawCache.listSource
                 : undefined;
-            const detailResult = await fetchCannedJobDetailForListSource(shopId, pkg.deferredId, cachedListSource);
+            // Task #932: a per-package listSource (stamped by the caller from
+            // whichever cache doc served the item, e.g. the extension-facing
+            // protractor_canned_jobs_cache) wins over the shop-level stamp on
+            // the dashboard cache doc.
+            const pkgListSource: ProtractorCannedJobsListSource | undefined =
+              pkg.listSource === "cannedjob" || pkg.listSource === "servicepackagetemplate"
+                ? pkg.listSource
+                : undefined;
+            const detailResult = await fetchCannedJobDetailForListSource(shopId, pkg.deferredId, pkgListSource ?? cachedListSource);
             attempted.push(...detailResult.attempted);
             if (detailResult.ok && detailResult.detail) {
               const dLines = extractServicePackageTemplateContent(detailResult.detail).lines;

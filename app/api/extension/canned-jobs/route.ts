@@ -44,15 +44,23 @@ async function fetchAndCacheProtractorCannedJobs(db: any, mosShopId: number): Pr
       }));
 
       if (cannedJobs.length > 0) {
+        // Task #932: stamp which Protractor LIST endpoint produced this batch
+        // (mirrors the dashboard-side `protractor_canned_jobs` cache, task
+        // #925) so any future detail fetch driven from these items can
+        // dispatch directly via fetchCannedJobDetailForListSource instead of
+        // running the three-endpoint trial-and-error chain. Only set when the
+        // adapter reported it — never overwrite a known value with undefined.
+        const setFields: Record<string, unknown> = {
+          shopId: mosShopId,
+          cannedJobs,
+          fetchedAt: new Date(),
+        };
+        if (result.listSource === "cannedjob" || result.listSource === "servicepackagetemplate") {
+          setFields.listSource = result.listSource;
+        }
         await db.collection("protractor_canned_jobs_cache").updateOne(
           { shopId: mosShopId },
-          {
-            $set: {
-              shopId: mosShopId,
-              cannedJobs,
-              fetchedAt: new Date(),
-            },
-          },
+          { $set: setFields },
           { upsert: true }
         );
         console.log(`[Extension Canned Jobs] Fetched ${cannedJobs.length} jobs from Protractor API`);

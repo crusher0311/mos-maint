@@ -809,14 +809,17 @@ ok(
   "regression: sync route must use fetchCannedJobDetailForListSource — its hand-rolled dispatch copy is exactly what drifted and broke shop 219",
 );
 
-// (c) Task #922/#925: the create-WO push path must use the same shared
+// (c) Task #922/#925/#932: the create-WO push path must use the same shared
 // helper instead of its own copy of the three-endpoint chain. Since task
 // #925 it passes the cache doc's stamped `listSource` when known (direct
 // dispatch, no wasted 404s) and only falls back to the full chain
-// (undefined listSource) when the origin endpoint wasn't recorded.
+// (undefined listSource) when the origin endpoint wasn't recorded. Since
+// task #932 a per-package `listSource` (stamped by callers serving items
+// from the extension-facing cache) takes precedence over the shop-level
+// cache stamp.
 ok(
-  "create-WO push path uses the shared helper with the cached listSource",
-  clientSrc.includes("fetchCannedJobDetailForListSource(shopId, pkg.deferredId, cachedListSource)"),
+  "create-WO push path uses the shared helper with the per-package-then-cached listSource",
+  clientSrc.includes("fetchCannedJobDetailForListSource(shopId, pkg.deferredId, pkgListSource ?? cachedListSource)"),
   "regression: push path must go through fetchCannedJobDetailForListSource so the chain can't drift from the dispatch",
 );
 ok(
@@ -824,6 +827,12 @@ ok(
   clientSrc.includes('rawCache?.listSource === "cannedjob"') &&
     clientSrc.includes('rawCache?.listSource === "servicepackagetemplate"'),
   "regression: an unrecognized/legacy listSource value must fall back to the chain (undefined), not dispatch to a wrong endpoint",
+);
+ok(
+  "create-WO push path validates the per-package listSource before dispatching on it",
+  clientSrc.includes('pkg.listSource === "cannedjob"') &&
+    clientSrc.includes('pkg.listSource === "servicepackagetemplate"'),
+  "regression: an unrecognized per-package listSource value must be ignored (undefined), not dispatch to a wrong endpoint",
 );
 
 // (d) Task #925: upsertCannedJobsCache stamps the origin list endpoint on

@@ -11,7 +11,7 @@ import type {
   BackfillResult,
 } from '@/lib/integrations/core/types';
 import { findShopByShopId } from '@/lib/data/repositories/shops';
-import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection } from './client';
+import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection, type ProtractorCannedJobsListSource } from './client';
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
 import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
 import { withUpstreamTimeout } from '@/lib/with-upstream-timeout';
@@ -196,7 +196,13 @@ export class ProtractorAdapter implements IIntegrationAdapter {
     return { ok: true, data: allWorkOrders };
   }
 
-  async getCannedJobs(shopId: number): Promise<Result<CannedJob[]>> {
+  // Task #932: the returned batch carries `listSource` so callers that cache
+  // it (e.g. the extension canned-jobs route) can stamp which Protractor LIST
+  // endpoint produced the items — future detail fetches can then dispatch
+  // directly (fetchCannedJobDetailForListSource) instead of guessing across
+  // three endpoints. This adapter only ever pages GET /CannedJob/, so the
+  // source is always "cannedjob" on success.
+  async getCannedJobs(shopId: number): Promise<Result<CannedJob[]> & { listSource?: ProtractorCannedJobsListSource }> {
     const config = await resolveProtractorConfig(shopId);
     if (!config.configured) {
       return { ok: false, error: 'Protractor not configured for this shop' };
@@ -254,7 +260,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       }
     }
 
-    return { ok: true, data: allJobs };
+    return { ok: true, data: allJobs, listSource: 'cannedjob' };
   }
 
   async getDeclinedServices(shopId: number, vehicleId: string): Promise<Result<DeclinedService[]>> {
