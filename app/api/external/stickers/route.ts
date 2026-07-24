@@ -41,6 +41,33 @@ export const POST = createExternalEndpoint(
         { status: 400 }
       );
     }
+
+    // Coerce caller-supplied mileage values (strings like "71,378" are
+    // accepted) and reject implausible values so a bad payload never
+    // records/prints an absurd sticker.
+    const { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } = await import("@/lib/sticker-mileage");
+    let parsedCurrentMileage = 0;
+    let parsedNextServiceMileage = 0;
+    if (currentMileage !== undefined && currentMileage !== null && currentMileage !== "") {
+      const parsed = parseMileageInput(currentMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `currentMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      parsedCurrentMileage = parsed;
+    }
+    if (nextServiceMileage !== undefined && nextServiceMileage !== null && nextServiceMileage !== "") {
+      const parsed = parseMileageInput(nextServiceMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `nextServiceMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      parsedNextServiceMileage = parsed;
+    }
     
     try {
       const { getDb } = await import("@/lib/mongo");
@@ -65,8 +92,8 @@ export const POST = createExternalEndpoint(
         customerPhone,
         customerEmail,
         vehicleId,
-        currentMileage: currentMileage || 0,
-        nextServiceMileage: nextServiceMileage || 0,
+        currentMileage: parsedCurrentMileage,
+        nextServiceMileage: parsedNextServiceMileage,
         nextServiceDate: nextServiceDate || "",
         oilType: oilType || "",
         oilBrand: oilBrand || "",
@@ -82,8 +109,8 @@ export const POST = createExternalEndpoint(
         vehicleYear,
         vehicleMake,
         vehicleModel,
-        currentMileage,
-        nextServiceMileage,
+        currentMileage: parsedCurrentMileage,
+        nextServiceMileage: parsedNextServiceMileage,
         nextServiceDate,
         oilType,
         oilBrand,

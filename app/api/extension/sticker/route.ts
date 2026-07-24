@@ -11,6 +11,7 @@ import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-bo
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } from "@/lib/sticker-mileage";
 
 // Hard deadlines for external lookups during sticker generation. Each of
 // these is decorative/optional (predictive date, logo, Hovercode QR) — a
@@ -649,12 +650,44 @@ async function _POST(request: NextRequest) {
       excludeQR,
     } = body;
     
-    // Accept either customMileage or customMiles
-    const effectiveCustomMileage = customMileage || customMiles;
-
-    if (!currentMileage || currentMileage <= 0) {
+    // Coerce caller-supplied mileage to a number. The extension sometimes
+    // sends strings ("71378" / "71,378"); raw `+ interval` would
+    // string-concatenate and print an absurd sticker.
+    const parsedCurrentMileage = parseMileageInput(currentMileage);
+    if (parsedCurrentMileage === null) {
       return NextResponse.json(
-        { error: "currentMileage is required and must be positive" },
+        { error: "currentMileage is required and must be a positive number" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    if (isAbsurdMileage(parsedCurrentMileage)) {
+      return NextResponse.json(
+        { error: `currentMileage ${parsedCurrentMileage} exceeds plausible odometer ceiling (${MAX_PLAUSIBLE_MILEAGE})` },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Accept either customMileage or customMiles (also coerced)
+    const rawCustomMileage = customMileage ?? customMiles;
+    const effectiveCustomMileage =
+      rawCustomMileage !== undefined && rawCustomMileage !== null && rawCustomMileage !== ""
+        ? parseMileageInput(rawCustomMileage)
+        : null;
+    if (
+      rawCustomMileage !== undefined && rawCustomMileage !== null && rawCustomMileage !== "" &&
+      effectiveCustomMileage === null
+    ) {
+      return NextResponse.json(
+        { error: "customMileage must be a positive number" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    const customMonthsProvided =
+      customMonths !== undefined && customMonths !== null && customMonths !== "";
+    const parsedCustomMonths = customMonthsProvided ? parseMonthsInput(customMonths) : null;
+    if (customMonthsProvided && parsedCustomMonths === null) {
+      return NextResponse.json(
+        { error: "customMonths must be a positive number" },
         { status: 400, headers: corsHeaders }
       );
     }
@@ -693,14 +726,20 @@ async function _POST(request: NextRequest) {
     // If custom miles/months provided, treat as custom interval
     if (effectiveCustomMileage || intervalType === "custom") {
       intervalMileage = effectiveCustomMileage || 5000;
-      intervalMonths = customMonths || 6;
+      intervalMonths = parsedCustomMonths || 6;
     } else {
       const interval = intervals[intervalType as keyof typeof intervals] || intervals.synthetic;
       intervalMileage = interval.mileage;
       intervalMonths = interval.months;
     }
 
-    const nextServiceMileage = currentMileage + intervalMileage;
+    const nextServiceMileage = parsedCurrentMileage + intervalMileage;
+    if (isAbsurdMileage(nextServiceMileage)) {
+      return NextResponse.json(
+        { error: `Computed next-service mileage ${nextServiceMileage} exceeds plausible ceiling (${MAX_PLAUSIBLE_MILEAGE}); refusing to print` },
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     // Calculate next service date using interval months as default
     const maxDate = new Date();

@@ -31,6 +31,32 @@ export const POST = createExternalEndpoint(
         { status: 400 }
       );
     }
+
+    // Coerce caller-supplied mileage values (strings like "71,378" are
+    // accepted) and reject implausible values.
+    const { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } = await import("@/lib/sticker-mileage");
+    let parsedCurrentMileage: number | undefined;
+    let parsedNextServiceMileage: number | undefined;
+    if (currentMileage !== undefined && currentMileage !== null && currentMileage !== "") {
+      const parsed = parseMileageInput(currentMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `currentMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      parsedCurrentMileage = parsed;
+    }
+    if (nextServiceMileage !== undefined && nextServiceMileage !== null && nextServiceMileage !== "") {
+      const parsed = parseMileageInput(nextServiceMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `nextServiceMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      parsedNextServiceMileage = parsed;
+    }
     
     try {
       const { getDb } = await import("@/lib/mongo");
@@ -55,8 +81,8 @@ export const POST = createExternalEndpoint(
         vehicleMake,
         vehicleModel,
         vehicleInfo: `${vehicleYear || ""} ${vehicleMake || ""} ${vehicleModel || ""}`.trim(),
-        currentMileage,
-        nextServiceMileage,
+        currentMileage: parsedCurrentMileage,
+        nextServiceMileage: parsedNextServiceMileage,
         nextServiceDate,
         oilType,
         tagNumber,

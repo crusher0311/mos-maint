@@ -8,6 +8,7 @@ import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-bo
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import { verifyHovercode } from "@/lib/hovercode";
 import { getStickerSizeInches, pngBufferToSizedPdfBuffer, STICKER_PDF_SAFE_MARGIN_IN } from "@/lib/sticker-pdf";
+import { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } from "@/lib/sticker-mileage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -349,6 +350,35 @@ export async function POST(req: NextRequest) {
 
   try {
     const body: StickerRequest = await req.json();
+
+    // Coerce caller-supplied mileage to numbers (strings like "71,378"
+    // are accepted) and refuse implausible values so a bad payload never
+    // prints a broken sticker.
+    if (body.currentMileage !== undefined && body.currentMileage !== null && (body.currentMileage as unknown) !== "") {
+      const parsed = parseMileageInput(body.currentMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `currentMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      body.currentMileage = parsed;
+    } else {
+      body.currentMileage = undefined;
+    }
+    if (body.nextServiceMileage !== undefined && body.nextServiceMileage !== null && (body.nextServiceMileage as unknown) !== "") {
+      const parsed = parseMileageInput(body.nextServiceMileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `nextServiceMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      body.nextServiceMileage = parsed;
+    } else {
+      body.nextServiceMileage = undefined;
+    }
+
     const size = body.size || "2x2.5";
     const includeQR = body.includeQR !== false;
 
