@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  type CreateRequestIds,
+  getOrCreateRequestId,
+  clearRequestId,
+  resetRequestIds,
+} from "@/lib/create-request-ids";
 import {
   X,
   Search,
@@ -37,6 +43,33 @@ const US_STATES = [
 const CA_PROVINCES = [
   "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
 ];
+
+// Task #936: client-side fetch timeout slightly above the server's upstream
+// deadline (35s contact/vehicle, 45s work order) so a truly wedged request
+// can never spin the wizard's button forever.
+const WIZARD_CREATE_TIMEOUT_MS = 45_000;
+const WIZARD_CREATE_WO_TIMEOUT_MS = 60_000;
+const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
+
+async function postJsonWithTimeout(url: string, body: unknown, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(SLOW_UPSTREAM_MSG);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const UNSUPPORTED_PLATE_REGIONS: Record<string, string> = {
   AB: "Alberta",
@@ -193,6 +226,12 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [newCustomer, setNewCustomer] = useState<Record<string, string>>({ firstName: "", lastName: "" });
   const [creatingContact, setCreatingContact] = useState(false);
 
+  // Task #936: per-create idempotency keys. Generated on the first submit and
+  // reused for retries after a timeout so the server upserts the SAME
+  // Protractor record (contact/vehicle/WO IDs are client-pinned UUIDs) instead
+  // of creating a duplicate. Cleared on success.
+  const createRequestIdsRef = useRef<CreateRequestIds>({});
+
   const [createNewVehicle, setCreateNewVehicle] = useState(false);
   const [newVehicle, setNewVehicle] = useState<Record<string, string>>({});
   const [creatingVehicle, setCreatingVehicle] = useState(false);
@@ -248,6 +287,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setVinDecoding(false);
       setVinDecoded(false);
       setPlateLooking(false);
+      // Task #936: idempotency keys are scoped to a single modal session.
+      // A stale key surviving a close/reopen would upsert (overwrite) the
+      // previous session's Protractor record instead of creating a new one.
+      resetRequestIds(createRequestIdsRef.current);
     }
   }, [isOpen]);
 
@@ -550,13 +593,14 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setCreatingContact(true);
     setContactError("");
     try {
-      const res = await fetch("/api/dashboard/protractor/create-contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCustomer),
-      });
+      const res = await postJsonWithTimeout(
+        "/api/dashboard/protractor/create-contact",
+        { ...newCustomer, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "contact") },
+        WIZARD_CREATE_TIMEOUT_MS,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create customer");
+      clearRequestId(createRequestIdsRef.current, "contact");
       const contact: Contact = {
         id: data.contactId,
         firstName: newCustomer.firstName || "",
@@ -602,13 +646,14 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setCreatingVehicle(true);
     setVehicleError("");
     try {
-      const res = await fetch("/api/dashboard/protractor/create-vehicle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newVehicle, ownerId: selectedContact.id }),
-      });
+      const res = await postJsonWithTimeout(
+        "/api/dashboard/protractor/create-vehicle",
+        { ...newVehicle, ownerId: selectedContact.id, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "vehicle") },
+        WIZARD_CREATE_TIMEOUT_MS,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
+      clearRequestId(createRequestIdsRef.current, "vehicle");
       const vehicle: Vehicle = {
         id: data.vehicleId,
         vin: newVehicle.vin || "",
@@ -757,10 +802,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         seen.add(c);
         return true;
       });
-      const res = await fetch("/api/dashboard/protractor/create-work-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await postJsonWithTimeout(
+        "/api/dashboard/protractor/create-work-order",
+        {
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
           vin: selectedVehicle.vin || undefined,
@@ -768,10 +812,13 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           note: noteText.trim() || undefined,
           mileage: mileageInput ? Number(mileageInput) : undefined,
           servicePackages: selectedJobs.length > 0 ? selectedJobs : undefined,
-        }),
-      });
+          clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "workOrder"),
+        },
+        WIZARD_CREATE_WO_TIMEOUT_MS,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create work order");
+      clearRequestId(createRequestIdsRef.current, "workOrder");
       setCreatedWO(data.workOrderNumber);
       setPackagesWithoutLines(Array.isArray(data.packagesWithoutLines) ? data.packagesWithoutLines : []);
       setStep("confirm");

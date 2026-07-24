@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServiceItem } from "@/lib/integrations/protractor";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Task #936: bounded upstream deadline so the wizard's create-vehicle step
+// can never spin forever — the route always answers (success, error, or 504).
+const UPSTREAM_DEADLINE_MS = 35_000;
+// SOAP socket cap kept below the route deadline so a hung socket surfaces as
+// a client error (with detail) rather than the generic route timeout.
+const SOAP_TIMEOUT_MS = 30_000;
+const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,29 +20,47 @@ export async function POST(req: NextRequest) {
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { ownerId, vin, year, make, model, submodel, color, engine, transmission, odometer, licensePlate } = body;
+    const { ownerId, vin, year, make, model, submodel, color, engine, transmission, odometer, licensePlate, clientRequestId } = body;
 
     if (!ownerId) {
       return NextResponse.json({ error: "Owner contact ID is required" }, { status: 400 });
     }
 
     const shopId = Number(sess.shopId);
-    const result = await createServiceItem(shopId, {
-      ownerId,
-      vin: vin || undefined,
-      year: year ? Number(year) : undefined,
-      make: make || undefined,
-      model: model || undefined,
-      submodel: submodel || undefined,
-      color: color || undefined,
-      engine: engine || undefined,
-      transmission: transmission || undefined,
-      odometer: odometer ? Number(odometer) : undefined,
-      licensePlate: licensePlate || undefined,
-    });
+    // Client-pinned vehicle ID: a wizard retry after a timeout upserts the
+    // SAME service item instead of creating a duplicate vehicle.
+    const result = await withUpstreamTimeout(
+      createServiceItem(
+        shopId,
+        {
+          ownerId,
+          vin: vin || undefined,
+          year: year ? Number(year) : undefined,
+          make: make || undefined,
+          model: model || undefined,
+          submodel: submodel || undefined,
+          color: color || undefined,
+          engine: engine || undefined,
+          transmission: transmission || undefined,
+          odometer: odometer ? Number(odometer) : undefined,
+          licensePlate: licensePlate || undefined,
+        },
+        {
+          vehicleId: typeof clientRequestId === "string" ? clientRequestId : undefined,
+          soapTimeoutMs: SOAP_TIMEOUT_MS,
+        },
+      ),
+      UPSTREAM_DEADLINE_MS,
+      `wizard-create-vehicle shop=${shopId}`,
+      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
+    );
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 });
+      const timedOut = (result as any).timedOut === true;
+      if (timedOut) {
+        console.error(`[Create Vehicle] upstream deadline (${UPSTREAM_DEADLINE_MS}ms) exceeded shop=${shopId}`);
+      }
+      return NextResponse.json({ error: result.error }, { status: timedOut ? 504 : 500 });
     }
 
     return NextResponse.json({

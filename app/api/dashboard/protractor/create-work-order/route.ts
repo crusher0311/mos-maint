@@ -3,6 +3,13 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
 import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+
+// Task #936: bounded upstream deadline so the wizard's final create step can
+// never spin forever. WO create can legitimately push several service
+// packages sequentially, so it gets a longer budget than contact/vehicle.
+const UPSTREAM_DEADLINE_MS = 45_000;
+const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { contactId, vehicleId, vin, concernText, concerns, note, mileage, servicePackages } = body;
+    const { contactId, vehicleId, vin, concernText, concerns, note, mileage, servicePackages, clientRequestId } = body;
 
     if (!contactId || !vehicleId) {
       return NextResponse.json({ error: "Contact and vehicle are required" }, { status: 400 });
@@ -54,24 +61,41 @@ export async function POST(req: NextRequest) {
     // Task #891: per-step timings — WO create was reported at 15-20s with no
     // visibility into where the time goes.
     const tStart = Date.now();
-    const result = await createProtractorWorkOrder(shopId, {
-      contactId,
-      vehicleId,
-      vin: vin || undefined,
-      concernText: concernText || undefined,
-      concerns: Array.isArray(concerns)
-        ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-        : undefined,
-      note: note || undefined,
-      mileage: mileage || undefined,
-      servicePackages: servicePackages || undefined,
-    });
+    // Task #936: interactive lane (priority pool, capped retries) + a
+    // client-pinned WO ID so a wizard retry after a timeout upserts the SAME
+    // work order instead of creating a duplicate. The whole create is bounded
+    // by an upstream deadline so the route always answers.
+    const result = await withUpstreamTimeout(
+      createProtractorWorkOrder(
+        shopId,
+        {
+          contactId,
+          vehicleId,
+          vin: vin || undefined,
+          concernText: concernText || undefined,
+          concerns: Array.isArray(concerns)
+            ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+            : undefined,
+          note: note || undefined,
+          mileage: mileage || undefined,
+          servicePackages: servicePackages || undefined,
+        },
+        {
+          interactive: true,
+          workOrderId: typeof clientRequestId === "string" ? clientRequestId : undefined,
+        },
+      ),
+      UPSTREAM_DEADLINE_MS,
+      `wizard-create-work-order shop=${shopId}`,
+      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
+    );
 
     const createMs = Date.now() - tStart;
 
     if (!result.ok) {
-      console.error(`[Create WO] timing shop=${shopId} create=${createMs}ms FAILED: ${result.error}`);
-      return NextResponse.json({ error: result.error }, { status: 500 });
+      const timedOut = (result as any).timedOut === true;
+      console.error(`[Create WO] timing shop=${shopId} create=${createMs}ms FAILED${timedOut ? " (upstream deadline exceeded)" : ""}: ${result.error}`);
+      return NextResponse.json({ error: result.error }, { status: timedOut ? 504 : 500 });
     }
 
     // Task #891: finalize (WO re-fetch + dashboard snapshot + normalize) is

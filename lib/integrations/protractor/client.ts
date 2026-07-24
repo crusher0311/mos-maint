@@ -36,11 +36,17 @@ export const __protractorClientTestHooks: {
   acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
   trackApiRequest: typeof trackApiRequest;
   retryBaseDelayMs: number | null;
+  // Task #936: lets wizard-create tests stub Mongo-backed config resolution
+  // and observe which lane/retry-cap a high-level create call used.
+  resolveProtractorConfig: typeof resolveProtractorConfig;
+  onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
 } = {
   httpsRequest: (...args) => httpsRequest(...args),
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
+  resolveProtractorConfig: (...args) => resolveProtractorConfig(...args),
+  onFetchStart: null,
 };
 
 /**
@@ -57,6 +63,13 @@ export async function runWithProtractorBackoffTracking<T>(
 ): Promise<T> {
   const counter = { ms: 0 };
   return backoffStorage.run(counter, () => fn(counter));
+}
+
+// Task #936: accept only well-formed UUIDs from callers that pin a
+// client-generated create ID (idempotent wizard retries) — anything else
+// falls back to a fresh server-side UUID.
+function isUuid(v: unknown): v is string {
+  return typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
 // PRIORITY concurrency limiter: separate pool for user-initiated requests (bypasses background queue)
@@ -490,7 +503,11 @@ export async function protractorFetch<T>(
   }
   
   const isPriority = opts?.priority === true;
-  
+
+  try {
+    __protractorClientTestHooks.onFetchStart?.(endpoint, opts);
+  } catch {}
+
   // Use separate concurrency pool for priority (user-initiated) vs background requests
   const concurrencyLimiter = isPriority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
 
@@ -748,14 +765,20 @@ export async function createContact(
     noMessaging?: boolean;
     noEmail?: boolean;
     noPostCard?: boolean;
-  }
+  },
+  // Task #936: interactive (wizard) callers pass { priority: true, maxRetries: 1 }
+  // so the create runs on the priority pool and fails fast instead of waiting
+  // behind backfill traffic with 6-retry exponential backoff. `contactId` lets
+  // the caller pin a client-generated UUID so a retry after a timeout re-POSTs
+  // the SAME contact (Protractor's POST /Contact/{id} upserts by ID — no dupes).
+  opts?: { priority?: boolean; maxRetries?: number; contactId?: string }
 ): Promise<{ ok: boolean; contactId?: string; contact?: ProtractorContact; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const newContactId = crypto.randomUUID();
+  const newContactId = isUuid(opts?.contactId) ? opts!.contactId! : crypto.randomUUID();
 
   const body: Record<string, any> = {
     ID: newContactId,
@@ -791,7 +814,10 @@ export async function createContact(
     config,
     { method: "POST", body: JSON.stringify(body) },
     0,
-    shopId
+    shopId,
+    opts?.priority !== undefined || opts?.maxRetries !== undefined
+      ? { priority: opts.priority, maxRetries: opts.maxRetries }
+      : undefined
   );
 
   if (!result.ok || !result.data) {
@@ -859,8 +885,12 @@ const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
 
 async function protractorSoapServiceItemUpdate(
   config: { connectionId: string; apiKey: string; authentication: string },
-  serviceItemXml: string
+  serviceItemXml: string,
+  // Task #936: per-request socket timeout (there was none — a hung SOAP
+  // socket blocked the wizard's create-vehicle step indefinitely).
+  opts?: { timeoutMs?: number }
 ): Promise<{ ok: boolean; error?: string }> {
+  const timeoutMs = opts?.timeoutMs ?? 120_000;
   const soapEnvelope = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"',
@@ -897,6 +927,9 @@ async function protractorSoapServiceItemUpdate(
         }
       );
       req.on("error", reject);
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`SOAP ServiceItemUpdate timed out after ${timeoutMs}ms`));
+      });
       req.write(soapEnvelope);
       req.end();
     });
@@ -1004,8 +1037,12 @@ async function protractorSoapWorkOrderUpdate(
   config: { connectionId: string; apiKey: string; authentication: string },
   workOrderId: string,
   workOrderXml: string,
-  shopId?: number | string
+  shopId?: number | string,
+  // Task #936: interactive callers cap the 6-retry loop and get a per-request
+  // socket timeout so a hung SOAP call can't spin a wizard button forever.
+  opts?: { maxRetries?: number; timeoutMs?: number }
 ): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const timeoutMs = opts?.timeoutMs ?? 120_000;
   const soapEnvelope = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"',
@@ -1021,7 +1058,7 @@ async function protractorSoapWorkOrderUpdate(
     '</soap:Envelope>',
   ].join('\n');
 
-  const maxRetries = 6;
+  const maxRetries = opts?.maxRetries ?? 6;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
@@ -1045,6 +1082,9 @@ async function protractorSoapWorkOrderUpdate(
           }
         );
         req.on('error', reject);
+        req.setTimeout(timeoutMs, () => {
+          req.destroy(new Error(`SOAP WorkOrderUpdate timed out after ${timeoutMs}ms`));
+        });
         req.write(soapEnvelope);
         req.end();
       });
@@ -1104,14 +1144,18 @@ export async function createServiceItem(
     transmission?: string;
     odometer?: number;
     licensePlate?: string;
-  }
+  },
+  // Task #936: `vehicleId` lets the wizard pin a client-generated UUID so a
+  // retry after a timeout upserts the SAME service item (no duplicates);
+  // `soapTimeoutMs` bounds the SOAP socket for interactive callers.
+  opts?: { vehicleId?: string; soapTimeoutMs?: number }
 ): Promise<{ ok: boolean; vehicleId?: string; vehicle?: ProtractorVehicle; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const newVehicleId = crypto.randomUUID();
+  const newVehicleId = isUuid(opts?.vehicleId) ? opts!.vehicleId! : crypto.randomUUID();
 
   const descParts = [
     params.year ? String(params.year) : null,
@@ -1143,7 +1187,8 @@ export async function createServiceItem(
 
   const soapResult = await protractorSoapServiceItemUpdate(
     { connectionId: config.connectionId, apiKey: config.apiKey, authentication: config.authentication },
-    xmlBody
+    xmlBody,
+    opts?.soapTimeoutMs !== undefined ? { timeoutMs: opts.soapTimeoutMs } : undefined
   );
 
   if (!soapResult.ok) {
@@ -1234,7 +1279,12 @@ export async function createProtractorWorkOrder(
     mileage?: number;
     workflowStage?: string;
     servicePackages?: WorkOrderServicePackage[];
-  }
+  },
+  // Task #936: `interactive` puts the initial WO create on the priority pool
+  // with a single retry (background callers keep the generous defaults);
+  // `workOrderId` pins a client-generated UUID so a wizard retry after a
+  // timeout upserts the SAME work order instead of creating a duplicate.
+  opts?: { interactive?: boolean; workOrderId?: string }
 ): Promise<{
   ok: boolean;
   workOrderId?: string;
@@ -1247,12 +1297,12 @@ export async function createProtractorWorkOrder(
    */
   packagesWithoutLines?: Array<{ title: string; code?: string; source?: string; attempted: string[] }>;
 }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const newWorkOrderId = crypto.randomUUID();
+  const newWorkOrderId = isUuid(opts?.workOrderId) ? opts!.workOrderId! : crypto.randomUUID();
 
   const body: Record<string, any> = {
     ID: newWorkOrderId,
@@ -1284,7 +1334,8 @@ export async function createProtractorWorkOrder(
     config,
     { method: "POST", body: JSON.stringify(body) },
     0,
-    shopId
+    shopId,
+    opts?.interactive ? { priority: true, maxRetries: 1 } : undefined
   );
 
   if (!result.ok || !result.data) {
