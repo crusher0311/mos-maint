@@ -45,3 +45,42 @@ export function vinPrefix(term: string): { $regex: string } {
     $regex: string;
   };
 }
+
+/**
+ * Small set of casing variants for a human-entered value ("toyota" →
+ * ["toyota", "TOYOTA", "Toyota"]). Used to turn a case-INSENSITIVE match —
+ * which MongoDB cannot bound with a regular index — into an index-eligible
+ * `$in` of case-SENSITIVE values. Covers the casings real writers produce
+ * (raw, UPPER, lower, Title Case per word); pathological MiXeD case is not
+ * matched, which is acceptable for make/model fields that come from SMS
+ * providers with consistent casing.
+ */
+export function caseVariants(term: string): string[] {
+  const t = term.trim();
+  if (!t) return [];
+  const title = t
+    .toLowerCase()
+    .replace(/(^|[\s\-/])([a-z])/g, (_m, sep, ch) => sep + ch.toUpperCase());
+  return Array.from(new Set([t, t.toUpperCase(), t.toLowerCase(), title]));
+}
+
+/**
+ * Index-eligible, case-insensitive-ish EXACT match: `$in` of the casing
+ * variants. Replaces `{ $regex: ^term$, $options: "i" }`, which forces a
+ * scan of the shopId-bounded slice.
+ */
+export function exactCaseVariants(term: string): { $in: string[] } {
+  return { $in: caseVariants(term) };
+}
+
+/**
+ * Index-eligible, case-insensitive-ish PREFIX match: `$in` of anchored,
+ * case-SENSITIVE regexes (Mongo `$in` accepts regexes, and each anchored
+ * case-sensitive branch can be bounded by an index). Replaces unanchored
+ * `{ $regex: term, $options: "i" }` "contains" matches.
+ */
+export function prefixCaseVariants(term: string): { $in: RegExp[] } {
+  return {
+    $in: caseVariants(term).map((v) => new RegExp(`^${escapeRegex(v)}`)),
+  };
+}

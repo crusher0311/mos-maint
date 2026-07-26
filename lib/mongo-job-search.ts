@@ -1,9 +1,6 @@
 import type { Db } from "mongodb";
 import { expandTokenVariants } from "@/lib/job-scoring";
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+import { exactCaseVariants, prefixCaseVariants } from "@/lib/dashboard-search";
 
 /**
  * Legacy Mongo `job_index` arm, restored as a fallback for the two job-search
@@ -54,11 +51,18 @@ export async function searchMongoJobIndex(
         }));
       }
     }
+    // Task #945: never use unanchored case-insensitive regexes here — they
+    // degrade to a scan of the shop's entire job history (same COLLSCAN
+    // pattern as the VIN-regex incident). Make keeps its historical
+    // "starts with" semantics ("Mercedes" still matches "Mercedes-Benz")
+    // via anchored case-SENSITIVE prefix regexes over the casing variants;
+    // strict model is an exact match via the same variant expansion. Both
+    // shapes are index-eligible.
     if (vehicleMake) {
-      matchStage["vehicle.make"] = { $regex: escapeRegex(vehicleMake), $options: "i" };
+      matchStage["vehicle.make"] = prefixCaseVariants(vehicleMake);
     }
     if (strictModel && vehicleModel) {
-      matchStage["vehicle.model"] = { $regex: `^${escapeRegex(vehicleModel)}$`, $options: "i" };
+      matchStage["vehicle.model"] = exactCaseVariants(vehicleModel);
     }
     return matchStage;
   };

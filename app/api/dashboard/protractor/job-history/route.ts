@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
-import { prefixRegex } from "@/lib/dashboard-search";
+import { prefixRegex, exactCaseVariants } from "@/lib/dashboard-search";
 
 function normalizeLine(l: any) {
   return {
@@ -55,11 +55,15 @@ export async function GET(req: NextRequest) {
 
     let similarResults: any[] = [];
     if (make && model) {
+      // Task #945: `^…$` with `$options: 'i'` is NOT index-eligible — the
+      // planner still walks the whole shopId slice. Match make/model as an
+      // exact `$in` of casing variants instead, which the
+      // (shopId, vehicle.make, vehicle.model) index can bound directly.
       const similarQuery: any = {
         shopId,
         'vehicle.vin': { $ne: vin.toUpperCase() },
-        'vehicle.make': { $regex: `^${make}$`, $options: 'i' },
-        'vehicle.model': { $regex: `^${model}$`, $options: 'i' },
+        'vehicle.make': exactCaseVariants(make),
+        'vehicle.model': exactCaseVariants(model),
       };
       if (engine) {
         const engineBase = engine.split(' ').slice(0, 2).join(' ');

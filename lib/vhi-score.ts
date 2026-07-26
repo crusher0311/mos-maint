@@ -443,9 +443,15 @@ export async function getVhiFromAnalysisCache(
   const score = computeScore(separated);
   const tier = getScoreTier(score);
 
+  // Task #945: tight projection so the fast path never pulls the full
+  // vehicle document. The lookup MUST stay shop-scoped: the same VIN can
+  // exist under multiple shops, and this row feeds `customerName` into the
+  // response — a VIN-only lookup could leak another tenant's customer.
+  // shopId is matched as both String and Number (legacy writers stored
+  // either); the (shopId, vin) unique index bounds the query either way.
   const vehicleDoc = await db.collection("vehicles").findOne(
     { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
-    { projection: { year: 1, make: 1, model: 1, engine: 1, customerName: 1 } }
+    { projection: { _id: 0, year: 1, make: 1, model: 1, engine: 1, customerName: 1 } }
   );
 
   return {

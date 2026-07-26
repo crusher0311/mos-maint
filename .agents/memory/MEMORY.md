@@ -99,7 +99,7 @@
 - [Declined work in VHI](declined-work-in-vhi.md) — Tekmetric declined jobs merge into plan-build (forced overdue, `declined` provenance); add-all WRITES happen extension-side via page session, server only lists/resolves/dedups.
 - [Service-key synonym false positives](service-key-synonym-false-positives.md) — substring synonyms cross-match ("coil"→oil, cabin→engine_air, fob battery); corpus-check new synonyms via scripts/probe-carfax-phrase-corpus.ts.
 - [Testing feature gates in dev](feature-gate-dev-testing.md) — flip DEV_SHOP_ID to a detect_dog_founder shop (founder = all-features wildcard) to see unlocked entitlement states; no prod flag flips needed.
-- [vehicles collection VIN-keyed](vehicles-collection-vin-keyed.md) — Mongo `vehicles` docs have NO shopId field; any {shopId, vin} filter silently matches nothing — look up by exact upper VIN only.
+- [vehicles collection VIN-keyed](vehicles-collection-vin-keyed.md) — `vehicles` shopId is inconsistent (some docs lack it, others String/Number); customer-facing reads MUST stay shop-scoped ($in variants) — VIN-only leaks tenants.
 - [job_index cost backfill](job-index-cost-backfill.md) — in-place line patches must recompute contentHash + match lines by identity not price; sweep script ready, live run operator-gated.
 - [Protractor drops client part cost](protractor-cost-write-dropped.md) — live-verified: Cost/TotalCost on WO material lines is discarded by Protractor (REST+SOAP); MOS [PartCost] payloads are correct, loss is upstream.
 - [VHI zero mileage anchors](vhi-zero-mileage-sentinel.md) — dueMileage/dueAtMiles 0 is a "no mileage math" sentinel, never real; writers persist null, readers normalize >0-or-null, stale caches need one-shot cleanup.
@@ -113,4 +113,5 @@
 - [Resume-file repair verification](resume-file-repair-verification.md) — a restarted resumable repair can report "done" while rows behind the resume marker stay broken; verify residual==unresolvable per shop, else clear resume file and rerun.
 - [Protractor retry limiter deadlock](protractor-retry-limiter-deadlock.md) — recursive retry re-entering the p-limit pool while holding a slot freezes the whole client when all in-flight calls 500 at once; retries must loop inside the held slot.
 - [Protractor interactive writes](protractor-interactive-writes.md) — user-facing Protractor writes need priority lane + capped retries + route deadline + client-pinned UUID (upsert-by-ID makes retries dupe-safe).
+- [cached_plans lookup index](cached-plans-index.md) — plan-cache reads need (vin, shopId, createdAt:-1) on cached_plans (+ vin/shopId on analysis cache); createIndex is operator-gated (dev Mongo IS prod).
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.

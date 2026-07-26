@@ -145,6 +145,7 @@ export async function listBrandedJobRowsForShop(
       } as unknown as Filter<JobIndexDoc>,
       {
         projection: {
+          _id: 0,
           jobName: 1,
           "job.title": 1,
           "vehicle.vin": 1,
@@ -155,6 +156,12 @@ export async function listBrandedJobRowsForShop(
     )
     .sort({ performedAt: -1 })
     .limit(limit)
+    // Task #945: the regex $or can only be satisfied by walking the
+    // shopId-bounded slice; on a very large shop that walk must never be
+    // allowed to run unbounded on the shared cluster. The limit caps rows
+    // RETURNED, maxTimeMS caps the scan itself — the report page degrades
+    // (partial roster) instead of saturating Mongo fleet-wide.
+    .maxTimeMS(8000)
     .toArray();
 
   const out: Array<{ vin: string; name: string; performedAt: Date | null }> = [];

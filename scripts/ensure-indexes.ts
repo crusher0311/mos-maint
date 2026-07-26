@@ -49,6 +49,16 @@ async function ensureIndexes() {
       // by shopId_title (scripts/create-job-index-indexes.ts); add the matching
       // `job.code` branch so the anchored-regex $or is fully index-eligible.
       { collection: "job_index", index: { shopId: 1, "job.code": 1 }, options: { name: "shopId_job_code" } },
+      // Task #945: job-search make/model filtering + dashboard job-history
+      // "similar vehicles" query now use index-eligible exact/prefix matches
+      // on vehicle.make / vehicle.model; this compound index bounds them so
+      // they stop walking the whole shopId slice. Creating it against
+      // production is an OPERATOR-GATED action (dev Mongo IS prod).
+      {
+        collection: "job_index",
+        index: { shopId: 1, "vehicle.make": 1, "vehicle.model": 1, performedAt: -1 },
+        options: { name: "shopId_vehicle_make_model_performedAt" },
+      },
 
       // job_history - Protractor job search
       { collection: "job_history", index: { shopId: 1 } },
@@ -67,6 +77,22 @@ async function ensureIndexes() {
       { collection: "vehicles", index: { shopId: 1, "customer.name": 1 }, options: { name: "shopId_customer_name" } },
       { collection: "vehicles", index: { shopId: 1, "customer.firstName": 1 }, options: { name: "shopId_customer_firstName" } },
       { collection: "vehicles", index: { shopId: 1, "customer.lastName": 1 }, options: { name: "shopId_customer_lastName" } },
+
+      // cached_plans - plan cache lookup (task #945). getCachedPlan queries
+      // { vin, shopId: { $in: [String, Number] } } sorted createdAt desc; this
+      // index serves both the read and the invalidate paths without a scan.
+      // Creating it against production is an OPERATOR-GATED action.
+      {
+        collection: "cached_plans",
+        index: { vin: 1, shopId: 1, createdAt: -1 },
+        options: { name: "vin_shopId_createdAt" },
+      },
+      // maintenance_analysis_cache - fast VHI path findOne({ vin, shopId }).
+      {
+        collection: "maintenance_analysis_cache",
+        index: { vin: 1, shopId: 1 },
+        options: { name: "vin_shopId" },
+      },
 
       // viewed_vins - trial tracking
       { collection: "viewed_vins", index: { shopId: 1 } },
