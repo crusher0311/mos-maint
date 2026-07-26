@@ -45,12 +45,13 @@ export const POST = createExternalEndpoint(
     // Coerce caller-supplied mileage values (strings like "71,378" are
     // accepted) and reject implausible values so a bad payload never
     // records/prints an absurd sticker.
-    const { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } = await import("@/lib/sticker-mileage");
+    const { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } = await import("@/lib/sticker-mileage");
     let parsedCurrentMileage = 0;
     let parsedNextServiceMileage = 0;
     if (currentMileage !== undefined && currentMileage !== null && currentMileage !== "") {
       const parsed = parseMileageInput(currentMileage);
       if (parsed === null || isAbsurdMileage(parsed)) {
+        logStickerMileageReject({ route: "external/stickers", field: "currentMileage", rawValue: currentMileage, shopId, reason: parsed === null ? "unparseable" : "absurd" });
         return NextResponse.json(
           { error: `currentMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
           { status: 400 }
@@ -61,6 +62,7 @@ export const POST = createExternalEndpoint(
     if (nextServiceMileage !== undefined && nextServiceMileage !== null && nextServiceMileage !== "") {
       const parsed = parseMileageInput(nextServiceMileage);
       if (parsed === null || isAbsurdMileage(parsed)) {
+        logStickerMileageReject({ route: "external/stickers", field: "nextServiceMileage", rawValue: nextServiceMileage, shopId, reason: parsed === null ? "unparseable" : "absurd" });
         return NextResponse.json(
           { error: `nextServiceMileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
           { status: 400 }

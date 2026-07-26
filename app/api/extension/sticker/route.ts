@@ -11,7 +11,7 @@ import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-bo
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
-import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } from "@/lib/sticker-mileage";
+import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
 
 // Hard deadlines for external lookups during sticker generation. Each of
 // these is decorative/optional (predictive date, logo, Hovercode QR) — a
@@ -655,12 +655,14 @@ async function _POST(request: NextRequest) {
     // string-concatenate and print an absurd sticker.
     const parsedCurrentMileage = parseMileageInput(currentMileage);
     if (parsedCurrentMileage === null) {
+      logStickerMileageReject({ route: "extension/sticker", field: "currentMileage", rawValue: currentMileage, shopId: smsShopId, reason: "unparseable" });
       return NextResponse.json(
         { error: "currentMileage is required and must be a positive number" },
         { status: 400, headers: corsHeaders }
       );
     }
     if (isAbsurdMileage(parsedCurrentMileage)) {
+      logStickerMileageReject({ route: "extension/sticker", field: "currentMileage", rawValue: currentMileage, shopId: smsShopId, reason: "absurd" });
       return NextResponse.json(
         { error: `currentMileage ${parsedCurrentMileage} exceeds plausible odometer ceiling (${MAX_PLAUSIBLE_MILEAGE})` },
         { status: 400, headers: corsHeaders }
@@ -677,6 +679,7 @@ async function _POST(request: NextRequest) {
       rawCustomMileage !== undefined && rawCustomMileage !== null && rawCustomMileage !== "" &&
       effectiveCustomMileage === null
     ) {
+      logStickerMileageReject({ route: "extension/sticker", field: "customMileage", rawValue: rawCustomMileage, shopId: smsShopId, reason: "unparseable" });
       return NextResponse.json(
         { error: "customMileage must be a positive number" },
         { status: 400, headers: corsHeaders }
@@ -735,6 +738,7 @@ async function _POST(request: NextRequest) {
 
     const nextServiceMileage = parsedCurrentMileage + intervalMileage;
     if (isAbsurdMileage(nextServiceMileage)) {
+      logStickerMileageReject({ route: "extension/sticker", field: "computedNextServiceMileage", rawValue: nextServiceMileage, shopId: mosShopId ?? smsShopId, reason: "absurd" });
       return NextResponse.json(
         { error: `Computed next-service mileage ${nextServiceMileage} exceeds plausible ceiling (${MAX_PLAUSIBLE_MILEAGE}); refusing to print` },
         { status: 400, headers: corsHeaders }

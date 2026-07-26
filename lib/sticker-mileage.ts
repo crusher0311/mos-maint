@@ -46,3 +46,37 @@ export function parseMonthsInput(value: unknown): number | null {
 export function isAbsurdMileage(value: number): boolean {
   return !Number.isFinite(value) || value > MAX_PLAUSIBLE_MILEAGE;
 }
+
+/**
+ * Structured log marker for rejected mileage inputs (task #940).
+ *
+ * Every sticker/keytag route that 400s a mileage value must call this so
+ * rejections are visible in Better Stack (search `[StickerMileageReject]`,
+ * host mos-maintenance-mvp-main). Repeated rejections for one shop mean
+ * that shop's scraper/integration is systematically feeding garbage
+ * mileage and should be fixed at the source.
+ */
+export function logStickerMileageReject(details: {
+  /** Which endpoint rejected the value, e.g. "extension/sticker". */
+  route: string;
+  /** Which field failed, e.g. "currentMileage" or "computedNextServiceMileage". */
+  field: string;
+  /** The raw caller-supplied (or computed) value that was rejected. */
+  rawValue: unknown;
+  /** Best-available shop identifier at the rejection point. */
+  shopId?: string | number | null;
+  /** Why it was rejected: "unparseable" or "absurd". */
+  reason: "unparseable" | "absurd";
+}): void {
+  let raw: string;
+  try {
+    raw = typeof details.rawValue === "string" ? details.rawValue : JSON.stringify(details.rawValue);
+  } catch {
+    raw = String(details.rawValue);
+  }
+  if (raw === undefined) raw = String(details.rawValue);
+  if (raw.length > 100) raw = raw.slice(0, 100) + "…";
+  console.warn(
+    `[StickerMileageReject] route=${details.route} shop=${details.shopId ?? "unknown"} field=${details.field} reason=${details.reason} raw=${raw}`
+  );
+}
