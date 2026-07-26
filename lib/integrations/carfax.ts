@@ -576,11 +576,24 @@ export async function upsertCarfaxSnapshot(
   }
 
   // Case 3: happy path — first snapshot, or new content overwrites old.
+  // NOTE: this branch is also reached when the fetch was ok:true but EMPTY
+  // and there was no prior good content to preserve (first-ever fetch during
+  // a CARFAX degradation, or a partial payload with no
+  // serviceHistory.displayRecords). We still persist it (so cache-only
+  // readers have *something* and we don't refire on every view), but we
+  // stamp lastEmptyFetchAt so fetchCarfaxWithCache can apply a short TTL to
+  // the empty snapshot instead of the full 7-day freshness window — see
+  // carfaxEmptySnapshotTtlMs. This mirrors the plan-cache oemMissing
+  // pattern: one degraded moment must not poison the VIN for days.
+  const emptyStamp: Record<string, any> = newHasContent
+    ? {}
+    : { lastEmptyFetchAt: now };
   await coll.updateOne(
     { shopId, vin },
     {
       $set: {
         ...lifecycle,
+        ...emptyStamp,
         fetchedAt: now,
         reportDate: report.reportDate ?? null,
         numberOfOwners: report.numberOfOwners ?? null,
@@ -797,6 +810,31 @@ function carfaxNegativeCacheMs(): number {
   return Number(process.env.CARFAX_NEGATIVE_CACHE_MS) || 15 * 60 * 1000;
 }
 
+/**
+ * Short freshness window for ok:true snapshots that carry NO service records.
+ * An empty report can be legitimate (a genuinely history-less vehicle), but it
+ * can also be a partial/degraded CARFAX payload that parsed cleanly to zero
+ * records — and stamping such a snapshot fresh for the full 7-day TTL removes
+ * the CARFAX tier of the mileage waterfall for a week (this is exactly what
+ * happened to JTHBW1GG8E2070579: an empty snapshot persisted 2026-07-13, the
+ * refetch on 2026-07-24 found 18 valid records). We can't cheaply tell the two
+ * apart, so ALL empty-ok snapshots get a short TTL: genuinely-empty vehicles
+ * cost one extra paid refetch per window (only ~200 of 65k+ cached reports are
+ * empty fleet-wide, so the spend is bounded), while degraded ones self-heal
+ * quickly. Overridable via CARFAX_EMPTY_TTL_MS; defaults to 6 hours.
+ */
+function carfaxEmptySnapshotTtlMs(): number {
+  return Number(process.env.CARFAX_EMPTY_TTL_MS) || 6 * 60 * 60 * 1000;
+}
+
+/** True when a stored snapshot doc is ok:true but has no service records. */
+function snapshotIsEmptyOk(doc: any): boolean {
+  return Boolean(
+    doc?.ok &&
+      (!Array.isArray(doc.serviceRecords) || doc.serviceRecords.length === 0)
+  );
+}
+
 /** Cached fetch; defaults to 7 days freshness */
 export async function fetchCarfaxWithCache(
   shopId: number,
@@ -813,8 +851,14 @@ export async function fetchCarfaxWithCache(
   // persisted with ok:false and fetchedAt=now (see upsertCarfaxSnapshot case 1),
   // so gating on doc.ok prevents that failure from masquerading as fresh for the
   // full 7-day TTL — failures are governed by the short negative cache below.
+  // Empty-but-ok snapshots only count as fresh for a short window (see
+  // carfaxEmptySnapshotTtlMs) — a degraded/partial payload must not suppress
+  // refetching for the full 7 days.
+  const effectiveMaxAgeMs = snapshotIsEmptyOk(doc)
+    ? Math.min(maxAgeMs, carfaxEmptySnapshotTtlMs())
+    : maxAgeMs;
   const fresh = doc?.ok && doc?.fetchedAt
-    ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs
+    ? now - new Date(doc.fetchedAt).getTime() <= effectiveMaxAgeMs
     : false;
 
   if (fresh) return snapshotToResult(doc);
@@ -859,7 +903,15 @@ export async function fetchCarfaxStaleWhileRevalidate(
   const doc = await db.collection("carfax_reports").findOne(key);
 
   const now = Date.now();
-  const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;
+  // Same empty-ok short TTL as fetchCarfaxWithCache: an empty snapshot only
+  // suppresses the (background) refresh briefly. The refresh here is
+  // fire-and-forget, so this costs the caller no latency.
+  const effectiveMaxAgeMs = snapshotIsEmptyOk(doc)
+    ? Math.min(maxAgeMs, carfaxEmptySnapshotTtlMs())
+    : maxAgeMs;
+  const fresh = doc?.fetchedAt
+    ? now - new Date(doc.fetchedAt).getTime() <= effectiveMaxAgeMs
+    : false;
 
   if (fresh) return snapshotToResult(doc);
 

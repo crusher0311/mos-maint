@@ -114,4 +114,5 @@
 - [Protractor retry limiter deadlock](protractor-retry-limiter-deadlock.md) — recursive retry re-entering the p-limit pool while holding a slot freezes the whole client when all in-flight calls 500 at once; retries must loop inside the held slot.
 - [Protractor interactive writes](protractor-interactive-writes.md) — user-facing Protractor writes need priority lane + capped retries + route deadline + client-pinned UUID (upsert-by-ID makes retries dupe-safe).
 - [cached_plans lookup index](cached-plans-index.md) — plan-cache reads need (vin, shopId, createdAt:-1) on cached_plans (+ vin/shopId on analysis cache); createIndex is operator-gated (dev Mongo IS prod).
+- [CARFAX empty-ok snapshot TTL](carfax-empty-snapshot-ttl.md) — ok:true + zero serviceRecords is a real degraded state; empty snapshots get short TTL (6h), never 7d fresh; ok:true ≠ has data.
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.
