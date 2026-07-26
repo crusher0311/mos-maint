@@ -29,45 +29,51 @@ export async function GET(req: NextRequest) {
     'normalized_recommendations',
   ];
 
-  const stats: Record<string, any> = {};
-
-  for (const collName of collections) {
+  // Run the per-collection counts/aggregations concurrently — the serial
+  // version got linearly slower as collections grew.
+  const collectStats = async (collName: string) => {
     const collection = db.collection(collName);
-    
-    const totalCount = await collection.countDocuments({ deletedAt: null });
-    
-    const bySourceAgg = await collection.aggregate([
-      { $match: { deletedAt: null } },
-      { $group: { _id: '$provenance.sourceSystem', count: { $sum: 1 } } }
-    ]).toArray();
-    
+
+    const [totalCount, bySourceAgg, recentCount] = await Promise.all([
+      collection.countDocuments({ deletedAt: null }),
+      collection.aggregate([
+        { $match: { deletedAt: null } },
+        { $group: { _id: '$provenance.sourceSystem', count: { $sum: 1 } } }
+      ]).toArray(),
+      collection.countDocuments({
+        deletedAt: null,
+        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      }),
+    ]);
+
     const bySource: Record<string, number> = {};
     for (const item of bySourceAgg) {
       bySource[item._id || 'unknown'] = item.count;
     }
 
-    const recentCount = await collection.countDocuments({
-      deletedAt: null,
-      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-    });
-
-    stats[collName] = {
+    return {
       total: totalCount,
       bySource,
       last24Hours: recentCount,
     };
+  };
+
+  const [perCollection, jobIndexCount, coverageByShop] = await Promise.all([
+    Promise.all(collections.map(async (name) => [name, await collectStats(name)] as const)),
+    db.collection('job_index').countDocuments(),
+    db.collection('normalized_work_orders').aggregate([
+      { $match: { deletedAt: null } },
+      { $group: { _id: '$shopId', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 }
+    ]).toArray(),
+  ]);
+
+  const stats: Record<string, any> = {};
+  for (const [name, s] of perCollection) {
+    stats[name] = s;
   }
-
-  const jobIndex = db.collection('job_index');
-  const jobIndexCount = await jobIndex.countDocuments();
   stats.legacy_job_index = { total: jobIndexCount };
-
-  const coverageByShop = await db.collection('normalized_work_orders').aggregate([
-    { $match: { deletedAt: null } },
-    { $group: { _id: '$shopId', count: { $sum: 1 } } },
-    { $sort: { count: -1 } },
-    { $limit: 20 }
-  ]).toArray();
 
   return NextResponse.json({
     ok: true,

@@ -3,6 +3,25 @@ import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { trackOpenAiCall } from "@/lib/ai";
 import { enforceAiBudget } from "@/lib/ai-budget";
+import { getSession } from "@/lib/auth";
+import { userHasShopAccess } from "@/lib/data/repositories/shop-access";
+
+// How long we'll wait on OpenAI before failing fast instead of hanging.
+const OPENAI_TIMEOUT_MS = 60_000;
+
+/**
+ * Verify the authenticated requester actually has access to `shopId` before
+ * we apply rate limits / AI budget to that shop. Access = the session's own
+ * shop, any shop in the user's `shopIds` union (Model B enterprise access),
+ * any shop in the same enterprise as the user's home shop, or platform admin.
+ */
+async function requesterHasShopAccess(
+  session: { shopId: number; email: string; role: string; isPlatformAdmin?: boolean },
+  targetShopId: number,
+): Promise<boolean> {
+  if (session.isPlatformAdmin || session.role === "platform_admin") return true;
+  return userHasShopAccess(session.email, Number(session.shopId), targetShopId);
+}
 
 function safeJsonParse<T = unknown>(text: string): T | null {
   try {
@@ -112,6 +131,25 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Authorization: the requester must be authenticated AND actually belong to
+  // the shop whose rate limits / AI budget this request will consume —
+  // otherwise anyone could burn another shop's OpenAI budget by passing its ID.
+  const session = await getSession();
+  if (!session) {
+    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+  const hasAccess = await requesterHasShopAccess(session, shopIdNum);
+  if (!hasAccess) {
+    console.warn(
+      `[analyze] User ${session.email} (shop ${session.shopId}) attempted to analyze for shop ${shopIdNum} without access`,
+    );
+    return Response.json(
+      { ok: false, error: "Access denied to this shop" },
+      { status: 403 }
+    );
+  }
+
   const blocked = await enforceAiBudget({
     shopId: shopIdNum,
     route: "/api/analyze",
@@ -203,10 +241,14 @@ Instructions:
         ],
         temperature: 0.2,
       }),
+      // Bounded upstream timeout so a stalled OpenAI call fails fast instead
+      // of hanging the request indefinitely.
+      signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
     });
 
     if (!resp.ok) {
-      const t = await resp.text();
+      // Cap how much of the provider error body we read/log/echo.
+      const t = (await resp.text().catch(() => "")).slice(0, 500);
       // Track failed request
       trackApiRequest('openai', '/api/analyze', 'POST', resp.status, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
       return Response.json({ ok: false, error: `OpenAI error: ${resp.status} ${t}` }, { status: 500 });
@@ -250,6 +292,14 @@ Instructions:
       raw,
     });
   } catch (e: any) {
+    const timedOut = e?.name === "TimeoutError" || e?.name === "AbortError";
+    if (timedOut) {
+      trackApiRequest('openai', '/api/analyze', 'POST', 504, Date.now() - startTime, shopIdNum).catch(() => {});
+      return Response.json(
+        { ok: false, error: "AI provider did not respond in time" },
+        { status: 504 }
+      );
+    }
     return Response.json({ ok: false, error: e?.message ?? "Analyzer failed." }, { status: 500 });
   }
 }

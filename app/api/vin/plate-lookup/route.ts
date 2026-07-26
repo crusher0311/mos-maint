@@ -19,6 +19,9 @@ const UNSUPPORTED_PLATE_REGIONS: Record<string, string> = {
   YT: "Yukon",
 };
 
+// How long we'll wait on the PlateToVin upstream before failing fast.
+const PLATE_LOOKUP_TIMEOUT_MS = 10_000;
+
 export async function POST(request: NextRequest) {
   try {
     const store = await cookies();
@@ -58,18 +61,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Plate lookup service not configured" }, { status: 503 });
     }
 
-    const plateRes = await fetch("https://platetovin.com/api/convert", {
-      method: "POST",
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ plate, state }),
-    });
+    // Bounded upstream timeout: PlateToVin occasionally stalls; fail fast with
+    // a 504 instead of hanging the request indefinitely.
+    let plateRes: Response;
+    try {
+      plateRes = await fetch("https://platetovin.com/api/convert", {
+        method: "POST",
+        headers: {
+          Authorization: apiKey,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ plate, state }),
+        signal: AbortSignal.timeout(PLATE_LOOKUP_TIMEOUT_MS),
+      });
+    } catch (err: any) {
+      const timedOut = err?.name === "TimeoutError" || err?.name === "AbortError";
+      console.error(
+        `PlateToVin API ${timedOut ? "timed out" : "failed"}:`,
+        err?.message || err,
+      );
+      return NextResponse.json(
+        { error: "Plate lookup provider did not respond in time" },
+        { status: timedOut ? 504 : 502 },
+      );
+    }
 
     if (!plateRes.ok) {
-      console.error("PlateToVin API error:", plateRes.status, await plateRes.text());
+      // Cap how much of the provider error body we read for logging.
+      const errBody = await plateRes.text().catch(() => "");
+      console.error("PlateToVin API error:", plateRes.status, errBody.slice(0, 500));
       return NextResponse.json({ error: "Plate lookup failed" }, { status: 502 });
     }
 

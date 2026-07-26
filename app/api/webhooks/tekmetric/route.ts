@@ -147,6 +147,9 @@ function forwardWebhook(body: any, sourceHost: string) {
         "X-Webhook-Forward": "true",
       },
       body: JSON.stringify(body),
+      // Bounded timeout: this is fire-and-forget, but without a signal a
+      // stalled target keeps the socket (and lambda) alive indefinitely.
+      signal: AbortSignal.timeout(10_000),
     }).then(res => {
       console.log(`[Tekmetric Webhook] Forwarded to ${forwardUrl}: ${res.status}`);
     }).catch(err => {
@@ -379,44 +382,13 @@ export async function POST(req: NextRequest) {
             // persist it to the cache row BEFORE indexing. Only defer indexing
             // (via the still-unset `jobsIndexed` flag, so a later webhook/recovery
             // can retry) when the vin is genuinely unresolvable.
-            let vin: string | undefined = cached.vin;
-            let vehicleYear = cached.vehicleYear;
-            let vehicleMake = cached.vehicleMake;
-            let vehicleModel = cached.vehicleModel;
-            let vehicleEngine = cached.vehicleEngine;
-
-            if (!vin && repairOrder?.vehicleId) {
-              try {
-                const vehicle = await getVehicle(repairOrder.vehicleId);
-                if (vehicle?.vin) {
-                  vin = String(vehicle.vin).toUpperCase();
-                  vehicleYear = vehicle.year ?? vehicleYear;
-                  vehicleMake = vehicle.make ?? vehicleMake;
-                  vehicleModel = vehicle.model ?? vehicleModel;
-                  vehicleEngine = vehicle.engine ?? vehicleEngine;
-
-                  const vinPatch: any = { vin, updatedAt: new Date() };
-                  if (vehicle.year != null) vinPatch.vehicleYear = vehicle.year;
-                  if (vehicle.make) vinPatch.vehicleMake = vehicle.make;
-                  if (vehicle.model) vinPatch.vehicleModel = vehicle.model;
-                  if (vehicle.engine) vinPatch.vehicleEngine = vehicle.engine;
-                  await db.collection("tekmetric_work_orders").updateOne(
-                    { tekmetricShopId, workOrderId: String(roId) },
-                    { $set: vinPatch }
-                  );
-                  console.log(`[Tekmetric Webhook] Resolved missing VIN for RO #${roNumber} via getVehicle before indexing`);
-                }
-              } catch (err: any) {
-                console.error(`[Tekmetric Webhook] VIN resolve failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, err?.message || err);
-              }
-            }
-
-            if (!vin) {
-              // No vin available even after a resolve attempt. Leave jobsIndexed
-              // unset so a subsequent webhook (or the reconcile recovery) retries
-              // rather than losing this RO to history permanently.
-              console.warn(`[Tekmetric Webhook] RO #${roNumber} terminal with jobs but no resolvable VIN — indexing deferred for retry`);
-            } else {
+            // Shared indexing routine used by both the inline (VIN already
+            // cached — Mongo-only, fast) and deferred (VIN needs a live
+            // getVehicle fetch) paths below.
+            const indexJobs = async (
+              vin: string,
+              vehicleInfo: { year?: any; make?: any; model?: any; engine?: any },
+            ) => {
               try {
                 // Pass jobs[] directly from the webhook payload when present, so
                 // we never need to call /jobs as a fallback. Falls back to cached
@@ -432,10 +404,10 @@ export async function POST(req: NextRequest) {
                   roNumber,
                   {
                     vin,
-                    year: vehicleYear,
-                    make: vehicleMake,
-                    model: vehicleModel,
-                    engine: vehicleEngine
+                    year: vehicleInfo.year,
+                    make: vehicleInfo.make,
+                    model: vehicleInfo.model,
+                    engine: vehicleInfo.engine
                   },
                   repairOrder?.completedDate || repairOrder?.postedDate || new Date().toISOString(),
                   cached.odometer ?? terminalOdometer ?? null,
@@ -451,6 +423,70 @@ export async function POST(req: NextRequest) {
               } catch (err: any) {
                 console.error(`[Tekmetric Webhook] Job indexing failed for RO #${roNumber}:`, err.message);
               }
+            };
+
+            if (cached.vin) {
+              // Fast path: VIN already on the cache row — indexing is
+              // Mongo-only and cheap, keep it inline for dashboard freshness.
+              await indexJobs(cached.vin, {
+                year: cached.vehicleYear,
+                make: cached.vehicleMake,
+                model: cached.vehicleModel,
+                engine: cached.vehicleEngine,
+              });
+            } else if (repairOrder?.vehicleId) {
+              // Missing VIN: resolving it requires a live Tekmetric getVehicle
+              // call, which can stall past Tekmetric's webhook response
+              // deadline and cause duplicate deliveries. Respond first, then
+              // resolve + index off the response path. jobsIndexed stays unset
+              // until the deferred work succeeds, so a later webhook/recovery
+              // retries on failure.
+              __deps.defer(async () => {
+                let vin: string | undefined;
+                let vehicleYear = cached.vehicleYear;
+                let vehicleMake = cached.vehicleMake;
+                let vehicleModel = cached.vehicleModel;
+                let vehicleEngine = cached.vehicleEngine;
+                try {
+                  const vehicle = await getVehicle(repairOrder.vehicleId);
+                  if (vehicle?.vin) {
+                    vin = String(vehicle.vin).toUpperCase();
+                    vehicleYear = vehicle.year ?? vehicleYear;
+                    vehicleMake = vehicle.make ?? vehicleMake;
+                    vehicleModel = vehicle.model ?? vehicleModel;
+                    vehicleEngine = vehicle.engine ?? vehicleEngine;
+
+                    const vinPatch: any = { vin, updatedAt: new Date() };
+                    if (vehicle.year != null) vinPatch.vehicleYear = vehicle.year;
+                    if (vehicle.make) vinPatch.vehicleMake = vehicle.make;
+                    if (vehicle.model) vinPatch.vehicleModel = vehicle.model;
+                    if (vehicle.engine) vinPatch.vehicleEngine = vehicle.engine;
+                    await db.collection("tekmetric_work_orders").updateOne(
+                      { tekmetricShopId, workOrderId: String(roId) },
+                      { $set: vinPatch }
+                    );
+                    console.log(`[Tekmetric Webhook] Resolved missing VIN for RO #${roNumber} via getVehicle (deferred) before indexing`);
+                  }
+                } catch (err: any) {
+                  console.error(`[Tekmetric Webhook] VIN resolve failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, err?.message || err);
+                }
+
+                if (!vin) {
+                  // No vin available even after a resolve attempt. Leave
+                  // jobsIndexed unset so a subsequent webhook (or the reconcile
+                  // recovery) retries rather than losing this RO to history.
+                  console.warn(`[Tekmetric Webhook] RO #${roNumber} terminal with jobs but no resolvable VIN — indexing deferred for retry`);
+                  return;
+                }
+                await indexJobs(vin, {
+                  year: vehicleYear,
+                  make: vehicleMake,
+                  model: vehicleModel,
+                  engine: vehicleEngine,
+                });
+              });
+            } else {
+              console.warn(`[Tekmetric Webhook] RO #${roNumber} terminal with jobs but no VIN or vehicleId — indexing deferred for retry`);
             }
           }
         }
