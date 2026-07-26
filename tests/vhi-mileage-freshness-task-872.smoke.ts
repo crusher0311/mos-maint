@@ -171,6 +171,92 @@ ok("ISO-string RO date accepted", isRoOdometerStale(daysAgo(120).toISOString(), 
   ok("zero estimate treated as no estimate (sentinel guard)", r.estimateWon === false && r.miles === 112000);
 }
 
+// ---------------------------------------------------------------------
+// Task #943: no-estimate forward projection of a stale reading
+// ---------------------------------------------------------------------
+{
+  // The HEART Evanston Lexus case: stale RO reading (~6 months old), CARFAX
+  // estimate unavailable (empty serviceHistory) → project forward at the
+  // default annual rate, labeled estimated.
+  const r = reconcileStaleActualWithEstimate({
+    actualMiles: 82258,
+    actualSource: "open_ro",
+    estimateMiles: null,
+    staleReadingDate: daysAgo(180),
+    now: NOW,
+  });
+  const expected = Math.round(82258 + 180 * (12000 / 365));
+  ok("no estimate + stale date: projection wins", r.projectionWon === true && r.miles === expected, `got ${r.miles}, expected ${expected}`);
+  ok("projection labeled annual_estimated", r.mileageInputSource === "annual_estimated");
+  ok("projection never below the stale reading (monotonic)", (r.miles ?? 0) > 82258);
+  ok("projection carries estimate details", !!r.projectionDetails && (r.projectionDetails as any).method === "stale_reading_forward_projection" && (r.projectionDetails as any).baseMiles === 82258);
+}
+{
+  // Low estimate (below the stale reading) — projection still applies so the
+  // stale reading is never presented as current.
+  const r = reconcileStaleActualWithEstimate({
+    actualMiles: 112000,
+    actualSource: "open_ro",
+    estimateMiles: 108000,
+    staleReadingDate: daysAgo(240),
+    now: NOW,
+  });
+  ok("low estimate: projection wins over both", r.projectionWon === true && (r.miles ?? 0) > 112000);
+  ok("low-estimate projection labeled annual_estimated", r.mileageInputSource === "annual_estimated");
+}
+{
+  // Higher estimate still wins over the projection path.
+  const r = reconcileStaleActualWithEstimate({
+    actualMiles: 112000,
+    actualSource: "open_ro",
+    estimateMiles: 118400,
+    staleReadingDate: daysAgo(240),
+    now: NOW,
+  });
+  ok("higher estimate still beats projection", r.estimateWon === true && r.projectionWon === false && r.miles === 118400);
+}
+{
+  // No stale date → legacy behavior: stale actual retained with its label.
+  const r = reconcileStaleActualWithEstimate({
+    actualMiles: 112000,
+    actualSource: "open_ro",
+    estimateMiles: null,
+    staleReadingDate: null,
+    now: NOW,
+  });
+  ok("no date to project from: stale actual retained", r.projectionWon === false && r.miles === 112000 && r.mileageInputSource === "open_ro");
+}
+{
+  // Invalid / future dates never project.
+  const bad = reconcileStaleActualWithEstimate({
+    actualMiles: 112000,
+    actualSource: "open_ro",
+    estimateMiles: null,
+    staleReadingDate: "not-a-date",
+    now: NOW,
+  });
+  ok("invalid date: no projection", bad.projectionWon === false && bad.miles === 112000);
+  const future = reconcileStaleActualWithEstimate({
+    actualMiles: 112000,
+    actualSource: "open_ro",
+    estimateMiles: null,
+    staleReadingDate: new Date(NOW.getTime() + DAY_MS),
+    now: NOW,
+  });
+  ok("future date: no projection", future.projectionWon === false && future.miles === 112000);
+}
+{
+  // ISO-string dates accepted (Mongo often hands back strings).
+  const r = reconcileStaleActualWithEstimate({
+    actualMiles: 82258,
+    actualSource: "open_ro",
+    estimateMiles: null,
+    staleReadingDate: daysAgo(180).toISOString(),
+    now: NOW,
+  });
+  ok("ISO-string stale date projects", r.projectionWon === true && (r.miles ?? 0) > 82258);
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) FAILED`);
   process.exit(1);

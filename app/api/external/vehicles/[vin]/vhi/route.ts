@@ -124,13 +124,27 @@ function buildPlanResponse(
     cachedAt: unknown;
     mileageInputSource: MileageInputSource | null;
     openRoMileageDiscrepancy: Parameters<typeof buildFlags>[0]["openRoMileageDiscrepancy"];
+    /**
+     * Task #943: freshly resolved anchor overlay. The anchor is resolved
+     * BEFORE the cache lookup, so cache-hit / stale-plan responses must carry
+     * today's mileage and basis instead of the value frozen into the older
+     * cached plan (which may be a stale reading once presented as "Current").
+     * The served plan/buckets are unchanged — only the headline mileage
+     * fields are overlaid.
+     */
+    resolvedMiles?: number | null;
+    resolvedMileageSource?: "actual" | "estimated_carfax" | "estimated_annual" | null;
+    resolvedMileageEstimateDetails?: Record<string, unknown> | null;
   },
 ) {
   const separated = separateComplimentary(plan.buckets);
   const score = computeScore(separated);
+  const hasOverlay = opts.resolvedMiles != null && opts.resolvedMiles > 0;
   const planSource: "actual" | "estimated_carfax" | "estimated_annual" =
-    plan.mileageSource ?? "actual";
-  const planDetails = planSource === "actual" ? null : plan.mileageEstimateDetails ?? null;
+    (hasOverlay ? opts.resolvedMileageSource : null) ?? plan.mileageSource ?? "actual";
+  const planDetails = planSource === "actual"
+    ? null
+    : (hasOverlay ? opts.resolvedMileageEstimateDetails : null) ?? plan.mileageEstimateDetails ?? null;
   return {
     success: true,
     vin: opts.vin,
@@ -140,7 +154,7 @@ function buildPlanResponse(
       model: plan.vehicle?.model ?? null,
       engine: plan.vehicle?.engine ?? null,
     },
-    currentMiles: plan.currentMiles,
+    currentMiles: hasOverlay ? opts.resolvedMiles : plan.currentMiles,
     distanceUnit: plan.distanceUnit,
     customerName: plan.customerName ?? null,
     score: buildApiScore(score, plan.dataQuality),
@@ -397,10 +411,24 @@ export const GET = createExternalEndpoint(
           actualMiles: picked.staleActual ? mileage : null,
           actualSource: mileageInputSource,
           estimateMiles: estMiles,
+          // Task #943: when the estimate is unavailable/lower, project the
+          // stale reading forward from its RO date at the default annual rate
+          // so a months-old reading is never presented as "Current".
+          staleReadingDate: picked.staleActual ? openRoLookup?.roDate ?? null : null,
         });
-        if (picked.staleActual && !reconciled.estimateWon) {
-          // Stale RO still wins (estimate unavailable or lower) — keep the
-          // reading but log that it doesn't imply freshness.
+        if (reconciled.projectionWon && reconciled.miles) {
+          mileage = reconciled.miles;
+          mileageSource = "estimated_annual";
+          mileageInputSource = "annual_estimated";
+          mileageEstimateDetails = reconciled.projectionDetails;
+          console.log(
+            `[VHI External] Stale RO odometer projected forward for ${vin}: ` +
+            `ro=${(reconciled.projectionDetails as any)?.baseMiles} → projected=${mileage} ` +
+            `roDate=${(reconciled.projectionDetails as any)?.baseDate} (no usable CARFAX estimate)`
+          );
+        } else if (picked.staleActual && !reconciled.estimateWon) {
+          // Stale RO still wins (estimate unavailable or lower, and no RO
+          // date to project from) — keep the reading but log it.
           console.log(
             `[VHI External] Stale RO odometer retained for ${vin}: ro=${mileage} ` +
             `roDate=${openRoLookup?.roDate ? new Date(openRoLookup.roDate).toISOString() : "n/a"} estimate=${estMiles ?? "none"}`
@@ -448,10 +476,18 @@ export const GET = createExternalEndpoint(
       // Task #384: echo persisted mileage source. Legacy entries that
       // predate the persistence change are missing the fields — default
       // to "actual" / null so the response shape is always consistent.
+      // Task #943: the anchor is resolved BEFORE this cache lookup, so a
+      // cache hit must carry TODAY's freshly resolved mileage and basis —
+      // not the value frozen into the older cached plan (which may be a
+      // stale reading once presented as "Current"). The served plan/buckets
+      // are unchanged; only the headline mileage fields are overlaid.
+      const hasFreshAnchor = mileage != null && mileage > 0;
       const cachedSource: "actual" | "estimated_carfax" | "estimated_annual" =
-        plan.mileageSource ?? "actual";
+        hasFreshAnchor ? mileageSource : plan.mileageSource ?? "actual";
       const cachedDetails =
-        cachedSource === "actual" ? null : plan.mileageEstimateDetails ?? null;
+        cachedSource === "actual"
+          ? null
+          : (hasFreshAnchor ? mileageEstimateDetails : null) ?? plan.mileageEstimateDetails ?? null;
 
       return NextResponse.json({
         success: true,
@@ -462,7 +498,7 @@ export const GET = createExternalEndpoint(
           model: plan.vehicle.model ?? null,
           engine: plan.vehicle.engine ?? null,
         },
-        currentMiles: plan.currentMiles,
+        currentMiles: hasFreshAnchor ? mileage : plan.currentMiles,
         distanceUnit: plan.distanceUnit,
         customerName: plan.customerName ?? null,
         // Task #439: soften score in API when data-quality is
@@ -688,6 +724,11 @@ export const GET = createExternalEndpoint(
             cachedAt: lastPlan.createdAt,
             mileageInputSource,
             openRoMileageDiscrepancy,
+            // Task #943: carry today's freshly resolved anchor, not the
+            // stale plan's frozen mileage.
+            resolvedMiles: mileage,
+            resolvedMileageSource: mileageSource,
+            resolvedMileageEstimateDetails: mileageEstimateDetails,
           }),
         );
       }

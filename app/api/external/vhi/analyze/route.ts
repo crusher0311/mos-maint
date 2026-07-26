@@ -232,8 +232,22 @@ export const POST = createExternalEndpoint(
             actualMiles: mileage,
             actualSource: picked.mileageInputSource,
             estimateMiles: estMiles,
+            // Task #943: no-estimate fallback — project the stale reading
+            // forward from its RO date at the default annual rate. Same rule
+            // as GET so the shared plan cache keys identically.
+            staleReadingDate: openRoLookup?.roDate ?? null,
           });
-          if (reconciled.estimateWon && reconciled.miles) {
+          if (reconciled.projectionWon && reconciled.miles) {
+            mileage = reconciled.miles;
+            mileageSource = "estimated_annual";
+            mileageInputSource = "annual_estimated";
+            mileageEstimateDetails = reconciled.projectionDetails;
+            console.log(
+              `[VHI Analyze] Stale RO odometer projected forward for ${vin.toUpperCase()}: ` +
+              `ro=${(reconciled.projectionDetails as any)?.baseMiles} → projected=${mileage} ` +
+              `roDate=${(reconciled.projectionDetails as any)?.baseDate} (no usable CARFAX estimate)`
+            );
+          } else if (reconciled.estimateWon && reconciled.miles) {
             mileage = reconciled.miles;
             mileageSource = "estimated_carfax";
             mileageInputSource = "carfax_estimated";

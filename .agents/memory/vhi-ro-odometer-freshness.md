@@ -5,7 +5,11 @@ description: Stale RO odometers (>90d) no longer read as "Current" mileage in VH
 
 # RO odometer freshness (amends "most-recent RO wins")
 
-Rule: when the winning RO odometer's RO date is older than `RO_ODOMETER_FRESHNESS_DAYS` (90, in `lib/plan-build/open-ro-mileage.ts`), the CARFAX rolling estimate is ALSO computed and the LARGER of the two wins. Estimate win → labeled `carfax_estimated`; estimate missing/lower → stale reading still served (monotonic floor — a real odometer reading is never undercut).
+Rule: when the winning RO odometer's RO date is older than `RO_ODOMETER_FRESHNESS_DAYS` (90, in `lib/plan-build/open-ro-mileage.ts`), the CARFAX rolling estimate is ALSO computed and the LARGER of the two wins. Estimate win → labeled `carfax_estimated`; estimate missing/lower → the stale reading is projected FORWARD from its RO date at the annual fallback rate (12k/yr) and the larger of projection vs. reading wins, labeled `annual_estimated` (never presented as "Current"). Only when there is no RO date to project from is the stale reading served as-is (monotonic floor — a real odometer reading is never undercut).
+
+Gotcha: many `tekmetric_work_orders` mirror docs carry Tekmetric's own field names (`updatedDate`/`completedDate`/`createdDate`), NOT `updatedAt`/`createdAt` — any date-based logic reading that mirror must fall back through both naming families or the RO date silently resolves null (and freshness gates never fire — that's why the HEART Lexus stayed "Current").
+
+Cache-hit echo: the partner GET resolves the anchor BEFORE the cache lookup, and cache-hit / stale-plan-rebuilding responses overlay the freshly resolved mileage+basis onto the response (buckets/plan unchanged) so a pull inside the 4h TTL still reflects today's anchor.
 
 **Why:** a posted RO from months ago was being served as "Current" mileage on the partner VHI (HEART Evanston Lexus case), making overdue items look current.
 

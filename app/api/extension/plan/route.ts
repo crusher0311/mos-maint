@@ -1848,6 +1848,11 @@ async function _GET(request: NextRequest) {
 
     let mileageEstimated = false;
     let mileageEstimateDetails: any = null;
+    // Task #943: which estimate variant won when mileageEstimated is true —
+    // "estimated_annual" when the stale-reading forward projection won,
+    // else "estimated_carfax". Persisted onto the analysis cache so the
+    // external VHI fallback echoes the same basis.
+    let mileageEstimatedSource: "estimated_carfax" | "estimated_annual" = "estimated_carfax";
 
     // Task #649: capture the best already-known reading BEFORE the entered
     // odometer overwrites `mileage` below. This is the most-recent open-RO /
@@ -1929,8 +1934,22 @@ async function _GET(request: NextRequest) {
             actualMiles: roReadingIsStale ? mileage : null,
             actualSource: "open_ro",
             estimateMiles: estMiles,
+            // Task #943: no-estimate fallback — project the stale RO reading
+            // forward from its date at the default annual rate. Same rule as
+            // both partner routes so the shared plan cache keys identically.
+            staleReadingDate: roReadingIsStale ? currentRoDate ?? null : null,
           });
-          if (reconciled.estimateWon && reconciled.miles) {
+          if (reconciled.projectionWon && reconciled.miles) {
+            mileage = reconciled.miles;
+            mileageEstimated = true;
+            mileageEstimatedSource = "estimated_annual";
+            mileageEstimateDetails = reconciled.projectionDetails;
+            console.log(
+              `[Extension] Stale RO odometer projected forward for ${vin}: ` +
+              `ro=${(reconciled.projectionDetails as any)?.baseMiles} → projected=${mileage} ` +
+              `roDate=${(reconciled.projectionDetails as any)?.baseDate} (no usable CARFAX estimate)`
+            );
+          } else if (reconciled.estimateWon && reconciled.miles) {
             mileage = reconciled.miles;
             mileageEstimated = true;
             mileageEstimateDetails = {
@@ -2494,7 +2513,7 @@ async function _GET(request: NextRequest) {
           // Task #384: persist mileage provenance on the analysis cache so
           // the external VHI endpoint echoes the same fields when it
           // serves from this fallback.
-          mileageEstimated ? "estimated_carfax" : "actual",
+          mileageEstimated ? mileageEstimatedSource : "actual",
           mileageEstimated ? mileageEstimateDetails : null,
         );
         console.log(`[Extension Plan] TIMING runOnDemandAnalysis=${Date.now() - tBeforeAnalysis}ms parallelFetch=${tBeforeAnalysis - startTime}ms vin=${vin?.toUpperCase()}`);

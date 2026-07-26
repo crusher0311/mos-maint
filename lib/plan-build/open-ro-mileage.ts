@@ -80,24 +80,82 @@ export function isRoOdometerStale(
 }
 
 /**
+ * Task #943: default forward-projection rate used when a stale reading must
+ * be projected and NO CARFAX rolling estimate is available. Matches the
+ * bottom-of-waterfall annual fallback (model-year × 12k miles/year).
+ */
+export const ANNUAL_FALLBACK_MILES_PER_YEAR = 12000;
+export const ANNUAL_FALLBACK_MILES_PER_DAY = ANNUAL_FALLBACK_MILES_PER_YEAR / 365;
+
+/**
  * Task #872: pure reconciliation of a stale actual reading against the
  * CARFAX rolling estimate. Callers run this AFTER pickMileageInput when
  * `staleActual` is true (and an estimate could be computed):
  *  - estimate > stale actual → estimate wins, labeled `carfax_estimated`
- *  - estimate missing/lower → stale actual is still served with its
- *    original label (monotonic guard: never go backward from a real reading)
+ *  - Task #943: estimate missing/lower AND the stale reading's RO date is
+ *    known → project the stale reading forward from its date at the default
+ *    annual rate and take the LARGER of projection vs. reading, labeled
+ *    `annual_estimated` (`projectionWon`) — a months-old reading must never
+ *    be presented as "Current".
+ *  - otherwise → stale actual is still served with its original label
+ *    (monotonic guard: never go backward from a real reading)
  */
 export function reconcileStaleActualWithEstimate(input: {
   actualMiles: number | null;
   actualSource: MileageInputSource | null;
   estimateMiles: number | null | undefined;
-}): { miles: number | null; mileageInputSource: MileageInputSource | null; estimateWon: boolean } {
+  /**
+   * Task #943: the stale reading's RO date. When provided (and the estimate
+   * doesn't win), enables the forward projection fallback.
+   */
+  staleReadingDate?: Date | string | null;
+  /** Injectable clock for tests. Defaults to now. */
+  now?: Date;
+}): {
+  miles: number | null;
+  mileageInputSource: MileageInputSource | null;
+  estimateWon: boolean;
+  /** Task #943: true when the annual forward projection of the stale reading won. */
+  projectionWon: boolean;
+  /** Task #943: estimate-details payload when projectionWon (else null). */
+  projectionDetails: Record<string, unknown> | null;
+} {
   const actual = input.actualMiles && input.actualMiles > 0 ? input.actualMiles : null;
   const estimate = input.estimateMiles && input.estimateMiles > 0 ? input.estimateMiles : null;
   if (estimate != null && (actual == null || estimate > actual)) {
-    return { miles: estimate, mileageInputSource: "carfax_estimated", estimateWon: true };
+    return { miles: estimate, mileageInputSource: "carfax_estimated", estimateWon: true, projectionWon: false, projectionDetails: null };
   }
-  return { miles: actual, mileageInputSource: actual != null ? input.actualSource : null, estimateWon: false };
+  // Task #943: no usable estimate (missing or not above the reading) — if we
+  // know WHEN the stale reading was taken, project it forward at the default
+  // annual rate. Monotonic guard holds by construction: projection is the
+  // reading plus a non-negative delta.
+  if (actual != null && input.staleReadingDate) {
+    const baseDate = input.staleReadingDate instanceof Date
+      ? input.staleReadingDate
+      : new Date(input.staleReadingDate);
+    const now = input.now ?? new Date();
+    if (!isNaN(baseDate.getTime()) && now.getTime() > baseDate.getTime()) {
+      const daysSince = (now.getTime() - baseDate.getTime()) / (24 * 60 * 60 * 1000);
+      const projected = Math.round(actual + daysSince * ANNUAL_FALLBACK_MILES_PER_DAY);
+      if (projected > actual) {
+        return {
+          miles: projected,
+          mileageInputSource: "annual_estimated",
+          estimateWon: false,
+          projectionWon: true,
+          projectionDetails: {
+            confidence: "low",
+            method: "stale_reading_forward_projection",
+            baseMiles: actual,
+            baseDate: baseDate.toISOString(),
+            milesPerDay: Math.round(ANNUAL_FALLBACK_MILES_PER_DAY * 10) / 10,
+            assumedMilesPerYear: ANNUAL_FALLBACK_MILES_PER_YEAR,
+          },
+        };
+      }
+    }
+  }
+  return { miles: actual, mileageInputSource: actual != null ? input.actualSource : null, estimateWon: false, projectionWon: false, projectionDetails: null };
 }
 
 export async function resolveOpenRoMileage(opts: {
@@ -116,8 +174,16 @@ export async function resolveOpenRoMileage(opts: {
       const wo = await db.collection("tekmetric_work_orders").findOne(
         { shopId: { $in: shopIdVariants }, vin: vinUpper },
         {
-          sort: { updatedAt: -1, createdAt: -1 },
-          projection: { odometer: 1, repairOrderNumber: 1, workOrderNumber: 1, updatedAt: 1, createdAt: 1 },
+          sort: { updatedAt: -1, updatedDate: -1, createdAt: -1 },
+          projection: {
+            odometer: 1, repairOrderNumber: 1, workOrderNumber: 1,
+            // Task #943: most tekmetric_work_orders mirror docs carry
+            // Tekmetric's own field names (updatedDate / completedDate /
+            // createdDate), not updatedAt/createdAt — without them roDate
+            // resolves null and the Task #872 staleness gate never fires
+            // (the HEART Evanston Lexus doc has ONLY the *Date variants).
+            updatedAt: 1, createdAt: 1, updatedDate: 1, completedDate: 1, createdDate: 1,
+          },
         },
       );
       if (wo?.odometer && Number(wo.odometer) > 0) {
@@ -125,7 +191,9 @@ export async function resolveOpenRoMileage(opts: {
           miles: Number(wo.odometer),
           integration: "tekmetric",
           roIdentifier: wo.repairOrderNumber ?? wo.workOrderNumber ?? null,
-          roDate: wo.updatedAt ?? wo.createdAt ?? null,
+          roDate:
+            wo.updatedAt ?? wo.updatedDate ?? wo.completedDate ??
+            wo.createdAt ?? wo.createdDate ?? null,
         };
       }
       return null;
