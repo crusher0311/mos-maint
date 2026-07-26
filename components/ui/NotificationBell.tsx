@@ -54,9 +54,21 @@ export function NotificationBell({ isPlatformAdmin = false }: NotificationBellPr
   };
 
   useEffect(() => {
+    // Pause the unread-count poll while the tab is hidden, and refresh
+    // immediately when the user comes back.
+    const tick = () => {
+      if (!document.hidden) fetchCount();
+    };
     fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(tick, 30000);
+    const handleVisibility = () => {
+      if (!document.hidden) fetchCount();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   useEffect(() => {

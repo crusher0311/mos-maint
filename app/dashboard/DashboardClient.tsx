@@ -884,19 +884,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   useEffect(() => {
     let lastKnownUpdate = 0;
-    let lastFullRefresh = Date.now();
-    const POLL_INTERVAL = 3000;
-    const FULL_REFRESH_INTERVAL = 30000;
+    // Poll every 15s instead of the old 3s — the change-detection endpoint
+    // means freshness is bounded by the poll interval, and 15s is plenty
+    // for a shop-floor dashboard while cutting backend load 5x. Full
+    // refreshes only happen when the updates endpoint reports a change
+    // (no more unconditional 30s reloads).
+    const POLL_INTERVAL = 15000;
+    let inFlight = false;
 
     const checkForUpdates = async () => {
+      // Skip entirely while the tab is hidden, and never stack requests.
+      if (document.hidden || inFlight) return;
+      inFlight = true;
       try {
-        const now = Date.now();
-        if (now - lastFullRefresh >= FULL_REFRESH_INTERVAL) {
-          lastFullRefresh = now;
-          loadData(currentPage, searchQuery, showArchived);
-          return;
-        }
-
         const response = await fetch('/api/dashboard/updates');
         if (response.ok) {
           const result = await response.json();
@@ -908,12 +908,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           }
         }
       } catch (e) {
+      } finally {
+        inFlight = false;
       }
     };
 
+    // Catch up immediately when the tab becomes visible again so a user
+    // returning to the dashboard doesn't wait a full poll interval.
+    const handleVisibility = () => {
+      if (!document.hidden) checkForUpdates();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     checkForUpdates();
     const interval = setInterval(checkForUpdates, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [currentPage, searchQuery, showArchived]);
 
   // NOTE: check-closed-orders polling disabled - Protractor webhooks now handle

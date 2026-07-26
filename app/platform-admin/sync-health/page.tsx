@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -508,7 +508,11 @@ function TekmetricEndpointHealthSection() {
     }
   };
 
+  // StrictMode-safe single mount fetch (see main page mount effect).
+  const didLoad = useRef(false);
   useEffect(() => {
+    if (didLoad.current) return;
+    didLoad.current = true;
     load();
   }, []);
 
@@ -820,12 +824,19 @@ export default function SyncHealthPage() {
       errors: { unresolved: 0 },
     });
 
+    // Client-side deadline per slice: a hanging provider route would
+    // otherwise leave its section (and the partial-failure banner logic)
+    // waiting forever — the server routes have no guaranteed timeout.
+    const SLICE_TIMEOUT_MS = 45_000;
+
     const fetchSlice = async (
       url: string,
       apply: (json: any) => void,
     ): Promise<{ ok: boolean; error?: string }> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), SLICE_TIMEOUT_MS);
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
         const json = await res.json();
         if (!res.ok) {
           return { ok: false, error: json.error || `Failed (${res.status})` };
@@ -833,7 +844,15 @@ export default function SyncHealthPage() {
         apply(json);
         return { ok: true };
       } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return {
+            ok: false,
+            error: `${url} timed out after ${SLICE_TIMEOUT_MS / 1000}s`,
+          };
+        }
         return { ok: false, error: err?.message || "Failed" };
+      } finally {
+        clearTimeout(timer);
       }
     };
 
@@ -902,7 +921,13 @@ export default function SyncHealthPage() {
     }
   };
 
+  // Guard against React 18 StrictMode double-invoking the mount effect in
+  // dev (and any future accidental re-mount) — the page fires 4 backend
+  // slice requests per load, so a duplicate mount means 8 heavy queries.
+  const didInitialLoad = useRef(false);
   useEffect(() => {
+    if (didInitialLoad.current) return;
+    didInitialLoad.current = true;
     load();
   }, []);
 

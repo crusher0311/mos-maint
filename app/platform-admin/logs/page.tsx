@@ -76,8 +76,13 @@ export default function LogsPage() {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [error, setError] = useState("");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const inFlightRef = useRef(false);
 
   const fetchLogs = useCallback(async () => {
+    // Never stack overlapping requests (a slow Better Stack query can
+    // easily outlast the 10s auto-refresh interval).
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -100,6 +105,7 @@ export default function LogsPage() {
     } catch (err: any) {
       setError(err.message || "Connection error");
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, [search, level, minutes]);
@@ -110,7 +116,20 @@ export default function LogsPage() {
 
   useEffect(() => {
     if (autoRefresh) {
-      timerRef.current = setInterval(fetchLogs, 10000);
+      // Skip ticks while the tab is hidden; catch up as soon as it's
+      // visible again so "Live" mode feels live without background load.
+      const tick = () => {
+        if (!document.hidden) fetchLogs();
+      };
+      timerRef.current = setInterval(tick, 10000);
+      const handleVisibility = () => {
+        if (!document.hidden) fetchLogs();
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Monitor, RefreshCw, User, Building2, Ticket, ExternalLink, Play } from "lucide-react";
 
 interface CobrowseDevice {
@@ -19,9 +19,13 @@ export default function CobrowsePage() {
   const [loading, setLoading] = useState(true);
   const [connectCode, setConnectCode] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     const fetchDevices = async () => {
+      // Don't poll while the tab is hidden and never stack requests.
+      if (document.hidden || inFlightRef.current) return;
+      inFlightRef.current = true;
       try {
         const res = await fetch("/api/platform-admin/cobrowse/devices");
         const data = await res.json();
@@ -31,13 +35,23 @@ export default function CobrowsePage() {
       } catch (error) {
         console.error("Error fetching devices:", error);
       } finally {
+        inFlightRef.current = false;
         setLoading(false);
       }
     };
 
+    // Refresh immediately when the tab becomes visible again.
+    const handleVisibility = () => {
+      if (!document.hidden) fetchDevices();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     fetchDevices();
     const interval = setInterval(fetchDevices, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   const refreshDevices = async () => {
