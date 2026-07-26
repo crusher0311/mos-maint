@@ -126,7 +126,10 @@ export async function GET(
           ],
           customerName: { $exists: true, $nin: [null, "", "Unknown Customer"] },
         },
-        { sort: { updatedAt: -1, createdAt: -1 }, projection: { customerName: 1 } }
+        // Task #960: sync-written mirror docs carry only Tekmetric's *Date
+        // fields (updatedDate/createdDate), not updatedAt/createdAt —
+        // include both so "most recent" holds for either writer.
+        { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }, projection: { customerName: 1 } }
       );
       if (tekWo?.customerName) customerName = tekWo.customerName;
     }

@@ -26,7 +26,8 @@ async function main() {
   // Locate the shop that owns this VIN's ROs (tekmetric mirror).
   const wo = await db.collection("tekmetric_work_orders").findOne(
     { vin: VIN },
-    { projection: { shopId: 1, workOrderNumber: 1 }, sort: { updatedAt: -1 } }
+    // Task #960: mirror docs may only carry Tekmetric's updatedDate.
+    { projection: { shopId: 1, workOrderNumber: 1 }, sort: { updatedAt: -1, updatedDate: -1 } }
   );
   if (!wo) {
     console.error(`No tekmetric_work_orders row for VIN ${VIN}`);

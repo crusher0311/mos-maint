@@ -582,7 +582,10 @@ async function backgroundPrefetchShopPlans(
       shopId: { $in: [String(mosShopId), Number(mosShopId)] },
       status: { $nin: ["Invoice", "Invoiced", "Posted", "Deleted", "Void", "Closed"] },
       vin: { $exists: true, $ne: null }
-    }).sort({ updatedAt: -1 }).limit(PREFETCH_MAX_VEHICLES + 10).toArray();
+      // Task #960: sync-written mirror docs carry only Tekmetric's *Date
+      // fields (updatedDate/createdDate), not updatedAt/createdAt — include
+      // both so "most recent open WO" holds for either writer.
+    }).sort({ updatedAt: -1, updatedDate: -1 }).limit(PREFETCH_MAX_VEHICLES + 10).toArray();
 
     const uniqueVins = new Map<string, { vin: string; mileage: number }>();
     const zeroMileageVins: string[] = [];

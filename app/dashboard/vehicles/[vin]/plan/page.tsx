@@ -1706,7 +1706,10 @@ async function PlanContent({ params, searchParams }: PageProps) {
     // VINs are stored uppercased on write.
     db.collection("tekmetric_work_orders").findOne(
       { shopId: { $in: [String(shopId), Number(shopId)] }, vin: vin.toUpperCase() },
-      { sort: { updatedAt: -1, createdAt: -1 } }
+      // Task #960: sync-written mirror docs carry only Tekmetric's *Date
+      // fields (updatedDate/createdDate), not updatedAt/createdAt — include
+      // both so "most recent" holds for either writer.
+      { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 } }
     ),
     // AutoFlow work orders (via webhook events)
     db.collection("autoflow_events").findOne(

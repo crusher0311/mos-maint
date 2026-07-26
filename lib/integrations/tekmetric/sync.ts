@@ -113,6 +113,14 @@ export async function syncSingleShop(
           workOrderId: String(ro.id)
         });
 
+        // Task #960 — tekmetric_work_orders date-field contract:
+        //  - Sync writers (this file, incremental-sync.ts, cron/tekmetric-sync)
+        //    stamp Tekmetric's own names: createdDate/updatedDate/completedDate
+        //    (+ fetchedAt). They do NOT stamp updatedAt/createdAt.
+        //  - Webhook + ro-context writers stamp app-side updatedAt/createdAt.
+        // Readers that sort or date-gate must therefore check BOTH families,
+        // e.g. sort { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }
+        // and read roDate as updatedAt ?? updatedDate ?? completedDate ?? createdAt ?? createdDate.
         await db.collection("tekmetric_work_orders").updateOne(
           { 
             shopId: { $in: [String(numericShopId), numericShopId] },

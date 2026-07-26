@@ -473,7 +473,15 @@ export async function resolveMileageFromRo(
     }
     const wo = await db
       .collection("tekmetric_work_orders")
-      .findOne(query, { sort: { createdAt: -1 }, projection: { odometer: 1 } });
+      // Task #960: most tekmetric_work_orders mirror docs carry Tekmetric's
+      // own field names (updatedDate/createdDate), not updatedAt/createdAt —
+      // sync writers stamp only the *Date variants (+ fetchedAt), while
+      // webhook/ro-context writers stamp updatedAt/createdAt. Sort on both so
+      // "most recent" doesn't silently degrade to insertion order.
+      .findOne(query, {
+        sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 },
+        projection: { odometer: 1 },
+      });
     return wo?.odometer ?? null;
   }
 

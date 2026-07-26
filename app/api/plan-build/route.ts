@@ -937,7 +937,10 @@ export async function POST(req: NextRequest) {
             shopId: { $in: [String(shopId), Number(shopId)] },
             vin: vinUpper,
           },
-          { sort: { updatedAt: -1, createdAt: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
+          // Task #960: sync-written mirror docs carry only Tekmetric's *Date
+          // fields (updatedDate/createdDate), not updatedAt/createdAt —
+          // include both so "most recent" holds for either writer.
+          { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }, projection: { workOrderNumber: 1, customerName: 1 } }
         );
         if (cachedWO) {
           if (cachedWO.workOrderNumber) latestRoNumber = String(cachedWO.workOrderNumber);
