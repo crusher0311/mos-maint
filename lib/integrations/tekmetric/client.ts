@@ -355,8 +355,13 @@ export async function tekmetricRequest<T = any>(
       if (attempt > MAX_429_RETRIES) {
         throw new Error(`[Tekmetric] Shared rate limiter timed out after ${MAX_429_RETRIES} attempts on ${endpoint}; refusing to breach the cap.`);
       }
-      const backoffMs = compute429Backoff(attempt, null);
-      console.warn(`[Tekmetric] shared rate limiter saturated on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms before retry`);
+      // Single backoff budget (task #946): the shared limiter already made
+      // us wait `waitedMs` (up to its MAX_WAIT_MS) inside the acquire call.
+      // Count that wait against this attempt's backoff instead of stacking
+      // a full exponential sleep on top of it — the double wait was what
+      // dragged effective throughput far below the cap under saturation.
+      const backoffMs = Math.max(0, compute429Backoff(attempt, null) - sharedSlot.waitedMs);
+      console.warn(`[Tekmetric] shared rate limiter saturated on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), already waited ${sharedSlot.waitedMs}ms in limiter, backing off ${Math.round(backoffMs)}ms more before retry`);
       const backoffCounter = backoff429Storage.getStore();
       if (backoffCounter) backoffCounter.ms += backoffMs;
       await abortableSleep(backoffMs, abortSignal);
@@ -404,8 +409,17 @@ export async function tekmetricRequest<T = any>(
       if (response.status === 429 && attempt <= MAX_429_RETRIES) {
         trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
         const retryAfter = response.headers.get('Retry-After');
-        const backoffMs = compute429Backoff(attempt, retryAfter);
-        console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
+        // Single backoff budget (task #946): time already spent waiting in
+        // the limiters for this attempt counts against the 429 backoff, so a
+        // request that queued 4s at the shared bucket and then still 429'd
+        // doesn't pay 4s + a full exponential sleep. Retry-After is upstream's
+        // explicit floor, so when present it is honored as-is.
+        const limiterWaitMs = rateSlot.waitedMs + sharedSlot.waitedMs;
+        const computedBackoff = compute429Backoff(attempt, retryAfter);
+        const backoffMs = retryAfter
+          ? computedBackoff
+          : Math.max(0, computedBackoff - limiterWaitMs);
+        console.warn(`[Tekmetric] 429 on ${endpoint} (attempt ${attempt}/${MAX_429_RETRIES}), waited ${limiterWaitMs}ms in limiters, backing off ${Math.round(backoffMs)}ms${retryAfter ? ` (Retry-After=${retryAfter})` : ''}`);
         const backoffCounter = backoff429Storage.getStore();
         if (backoffCounter) backoffCounter.ms += backoffMs;
         await abortableSleep(backoffMs, abortSignal);

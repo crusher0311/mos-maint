@@ -334,6 +334,46 @@ async function backfillShopChunk(
     const overrunFactor = Math.min(4, Math.ceil(lastDurationMs / targetChunkMs));
     daysToProcess = Math.max(7, Math.floor(daysToProcess / overrunFactor));
   }
+
+  // Interrupted-attempt shrink (task #946). The time-based shrink above only
+  // fires when the previous chunk FINISHED and persisted its metrics. A chunk
+  // that gets killed mid-flight (wall-clock cap, worker deadline, process
+  // death) writes nothing, so the next attempt re-walks the exact same window
+  // at the exact same size — forever, on a shop dense enough to always blow
+  // the cap. We persist a `pendingAttempt` marker at chunk start and clear it
+  // when the chunk commits its cursor; if we arrive here and the marker is
+  // still present for the SAME cursor position, the previous attempt died
+  // mid-chunk and we halve the window (floored at 7 days, and never larger
+  // than what the dead attempt tried) so each retry walks a strictly smaller
+  // window until one fits inside the budget and the cursor finally advances.
+  const pendingAttempt = progress?.pendingAttempt;
+  if (
+    pendingAttempt?.chunkEnd &&
+    new Date(pendingAttempt.chunkEnd).getTime() === chunkEnd.getTime()
+  ) {
+    const priorDays = Number(pendingAttempt.days) || daysToProcess;
+    const shrunk = Math.max(7, Math.floor(Math.min(daysToProcess, priorDays) / 2));
+    if (shrunk < daysToProcess || priorDays <= 7) {
+      console.warn(
+        `[Backfill] Shop ${shopId}: previous attempt at cursor ${chunkEnd.toISOString().split("T")[0]} ` +
+          `(${priorDays}d window, started ${pendingAttempt.startedAt ? new Date(pendingAttempt.startedAt).toISOString() : "?"}) ` +
+          `never committed — shrinking window ${daysToProcess}d -> ${shrunk}d so the cursor can advance`,
+      );
+    }
+    daysToProcess = shrunk;
+  }
+  await db.collection("backfill_progress").updateOne(
+    { shopId },
+    {
+      $set: {
+        pendingAttempt: {
+          chunkEnd,
+          days: daysToProcess,
+          startedAt: new Date(),
+        },
+      },
+    },
+  );
   
   const chunkStart = new Date(chunkEnd);
   chunkStart.setDate(chunkStart.getDate() - daysToProcess);
@@ -411,7 +451,10 @@ async function backfillShopChunk(
             : { lastError: null, lastErrorAt: null }),
           lastChunkMetrics: emptyChunkMetrics,
           recentChunkMetrics: nextEmptyRecent,
-        }
+        },
+        // Chunk committed its cursor decision — clear the interrupted-attempt
+        // marker so the next chunk isn't treated as a re-walk (task #946).
+        $unset: { pendingAttempt: "" },
       }
     );
     if (isComplete) {
@@ -731,7 +774,10 @@ async function backfillShopChunk(
         lastChunkMetrics: chunkMetrics,
         recentChunkMetrics: nextRecentChunkMetrics,
       },
-      $inc: { totalJobsIndexed: jobsIndexed }
+      $inc: { totalJobsIndexed: jobsIndexed },
+      // Chunk committed its cursor decision — clear the interrupted-attempt
+      // marker so the next chunk isn't treated as a re-walk (task #946).
+      $unset: { pendingAttempt: "" },
     }
   );
 

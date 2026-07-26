@@ -224,6 +224,36 @@ function mongoBucketBackend(db: any): BucketBackend {
   };
 }
 
+// Task #946: expired-bucket sweep coordination. Per-process throttle plus a
+// PG advisory xact lock so concurrent workers never contend on the same
+// DELETE. See the call site in `pgBucketBackend.inc` for the rationale.
+const SWEEP_MIN_INTERVAL_MS = 30_000;
+let lastPgSweepAttemptMs = 0;
+
+function maybeSweepExpiredPgBuckets(sql: any): void {
+  const now = Date.now();
+  if (now - lastPgSweepAttemptMs < SWEEP_MIN_INTERVAL_MS) return;
+  if (Math.random() >= 0.01) return;
+  lastPgSweepAttemptMs = now;
+  // `pg_try_advisory_xact_lock` makes this a cross-process mutex: if another
+  // worker's sweep already holds the lock, the predicate is false and this
+  // statement deletes nothing and returns immediately (no row-lock waits).
+  // The lock releases automatically when the statement's implicit
+  // transaction ends.
+  Promise.resolve(
+    sql.unsafe(
+      `DELETE FROM tekmetric_rate_buckets
+       WHERE expires_at <= now()
+         AND pg_try_advisory_xact_lock(hashtext('tekmetric_rate_buckets_sweep'))`,
+    ),
+  ).catch(() => {});
+}
+
+/** Test-only seam: reset the sweep throttle. */
+export function __resetPgSweepThrottleForTest(): void {
+  lastPgSweepAttemptMs = 0;
+}
+
 function pgBucketBackend(sql: any): BucketBackend {
   return {
     async inc(key: string, _nowMs: number): Promise<number> {
@@ -237,13 +267,21 @@ function pgBucketBackend(sql: any): BucketBackend {
       );
       const count = Array.isArray(rows) && rows.length > 0 ? Number(rows[0].count) : 1;
       // Postgres has no Mongo-style TTL index, so sweep expired buckets
-      // opportunistically (~1% of calls) to keep the table tiny. Fire and
-      // forget — failure here never affects the acquire decision.
-      if (Math.random() < 0.01) {
-        Promise.resolve(
-          sql.unsafe(`DELETE FROM tekmetric_rate_buckets WHERE expires_at <= now()`),
-        ).catch(() => {});
-      }
+      // opportunistically to keep the table tiny. Fire and forget — failure
+      // here never affects the acquire decision.
+      //
+      // Task #946: the old bare `Math.random() < 0.01` sweep raced across
+      // workers — under fleet-wide load several processes would fire the
+      // same DELETE in the same second and contend on the same expired rows.
+      // Two guards now serialize it:
+      //   1. A per-process throttle (at most one sweep attempt per
+      //      SWEEP_MIN_INTERVAL_MS, still jittered by the 1% dice roll) so a
+      //      hot process doesn't spam sweeps.
+      //   2. A Postgres advisory xact lock inside the DELETE itself, so even
+      //      when two processes' sweeps do coincide, exactly one performs the
+      //      delete and the other no-ops instantly instead of blocking on
+      //      row locks.
+      maybeSweepExpiredPgBuckets(sql);
       return count;
     },
     async dec(key: string): Promise<void> {

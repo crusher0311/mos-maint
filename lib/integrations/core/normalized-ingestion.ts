@@ -30,10 +30,20 @@ import {
   INormalizedAdapter,
 } from './normalized-adapter';
 import { updateRepairPattern } from '@/lib/repair-patterns';
+import pLimit from 'p-limit';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
 import { enrichVinWithAces, enrichVinsWithAcesAllVins, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
+
+// Bounded concurrency for per-entity child writes during work-order
+// ingestion (task #946). High enough to collapse the serial round-trip
+// chain on dense work orders, low enough not to saturate the shared
+// PG/Mongo pools while a fleet of backfill chunks runs concurrently.
+const INGESTION_WRITE_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.NORMALIZED_INGEST_WRITE_CONCURRENCY) || 5,
+);
 
 // =============================================================================
 // TYPES
@@ -1349,35 +1359,32 @@ export class NormalizedIngestionService {
       // ingest each one, then walk its line items in the same order so
       // `line_items.service_job_id` resolves correctly.
       const rawServiceJobs = this.adapter.extractRawServiceJobsFromWorkOrder(sourceData);
-      for (const rawJob of rawServiceJobs) {
-        const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
-        serviceJobs.push(sjResult);
-        if (sjResult.success && sjResult.entityId) {
-          const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
-          for (const rawLine of rawLines) {
-            const liResult = await this.ingestLineItem(workOrderId, sjResult.entityId, rawLine);
-            lineItems.push(liResult);
-          }
-        }
-      }
+      // Task #946: child-entity writes used to run strictly serially — a
+      // dense work order (dozens of jobs × lines + payments/inspections/
+      // recommendations) paid one full DB round-trip per entity, one at a
+      // time. Fan them out with bounded concurrency instead. Line items
+      // still run AFTER (and only with) their own service job so the
+      // `service_job_id` FK linkage is preserved; ordering WITHIN each
+      // entity family is retained in the result arrays by writing into
+      // pre-sized index slots. Distinct entities dedupe on distinct
+      // natural keys, so concurrent upserts of different rows don't race
+      // each other.
+      const sjWrite = await this.ingestServiceJobsAndLineItemsBounded(workOrderId, rawServiceJobs);
+      serviceJobs.push(...sjWrite.serviceJobs);
+      lineItems.push(...sjWrite.lineItems);
 
       const paymentData = this.adapter.extractPaymentsFromWorkOrder(sourceData);
-      for (const payment of paymentData) {
-        const result = await this.ingestPayment(workOrderId, payment);
-        payments.push(result);
-      }
-      
       const inspectionData = this.adapter.extractInspectionsFromWorkOrder(sourceData);
-      for (const inspection of inspectionData) {
-        const result = await this.ingestInspection(workOrderId, vehicleId, inspection);
-        inspections.push(result);
-      }
-      
       const recommendationData = this.adapter.extractRecommendationsFromWorkOrder(sourceData);
-      for (const rec of recommendationData) {
-        const result = await this.ingestRecommendation(vehicleId, rec, workOrderId);
-        recommendations.push(result);
-      }
+      const limit = pLimit(INGESTION_WRITE_CONCURRENCY);
+      const [payResults, inspResults, recResults] = await Promise.all([
+        Promise.all(paymentData.map((payment: any) => limit(() => this.ingestPayment(workOrderId, payment)))),
+        Promise.all(inspectionData.map((inspection: any) => limit(() => this.ingestInspection(workOrderId, vehicleId, inspection)))),
+        Promise.all(recommendationData.map((rec: any) => limit(() => this.ingestRecommendation(vehicleId, rec, workOrderId)))),
+      ]);
+      payments.push(...payResults);
+      inspections.push(...inspResults);
+      recommendations.push(...recResults);
     }
     
     return {
@@ -1431,21 +1438,58 @@ export class NormalizedIngestionService {
     workOrderId: string,
     sourceData: any,
   ): Promise<{ serviceJobs: IngestionResult[]; lineItems: IngestionResult[] }> {
-    const serviceJobs: IngestionResult[] = [];
-    const lineItems: IngestionResult[] = [];
     const rawServiceJobs = this.adapter.extractRawServiceJobsFromWorkOrder(sourceData);
-    for (const rawJob of rawServiceJobs) {
-      const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
-      serviceJobs.push(sjResult);
-      if (sjResult.success && sjResult.entityId) {
-        const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
-        for (const rawLine of rawLines) {
-          const liResult = await this.ingestLineItem(workOrderId, sjResult.entityId, rawLine);
-          lineItems.push(liResult);
-        }
-      }
-    }
-    return { serviceJobs, lineItems };
+    return this.ingestServiceJobsAndLineItemsBounded(workOrderId, rawServiceJobs);
+  }
+
+  /**
+   * Shared service-job + line-item write core (task #946). Ingests each raw
+   * service job, then its line items, with bounded concurrency across jobs
+   * (and across a job's lines). A line item is only written after its own
+   * service job succeeded, so `line_items.service_job_id` FK linkage is
+   * preserved exactly as in the old serial loop. Result arrays keep the
+   * source order of service jobs (and of lines within each job) so callers
+   * relying on positional correspondence see no behavior change.
+   */
+  private async ingestServiceJobsAndLineItemsBounded(
+    workOrderId: string,
+    rawServiceJobs: any[],
+  ): Promise<{ serviceJobs: IngestionResult[]; lineItems: IngestionResult[] }> {
+    const serviceJobs: IngestionResult[] = new Array(rawServiceJobs.length);
+    const lineItemsByJob: IngestionResult[][] = new Array(rawServiceJobs.length);
+    // Two separate pools: a job task holds its slot while awaiting its
+    // lines, so lines MUST draw from a different pool — sharing one limiter
+    // would deadlock once every job slot is parked waiting on line slots
+    // that can never be granted.
+    const jobLimit = pLimit(INGESTION_WRITE_CONCURRENCY);
+    const lineLimit = pLimit(INGESTION_WRITE_CONCURRENCY);
+    await Promise.all(
+      rawServiceJobs.map((rawJob, jobIdx) =>
+        jobLimit(async () => {
+          const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
+          serviceJobs[jobIdx] = sjResult;
+          if (sjResult.success && sjResult.entityId) {
+            const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
+            // Lines fan out through the line pool; source order is
+            // restored positionally below.
+            const lineResults: IngestionResult[] = new Array(rawLines.length);
+            await Promise.all(
+              rawLines.map((rawLine: any, lineIdx: number) =>
+                lineLimit(() => this.ingestLineItem(workOrderId, sjResult.entityId!, rawLine)).then(
+                  (r) => {
+                    lineResults[lineIdx] = r;
+                  },
+                ),
+              ),
+            );
+            lineItemsByJob[jobIdx] = lineResults;
+          } else {
+            lineItemsByJob[jobIdx] = [];
+          }
+        }),
+      ),
+    );
+    return { serviceJobs, lineItems: lineItemsByJob.flat() };
   }
 
   async ingestWorkOrderBatchWithAllEntities(workOrders: any[]): Promise<{
