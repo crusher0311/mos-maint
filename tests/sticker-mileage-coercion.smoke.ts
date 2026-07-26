@@ -118,6 +118,21 @@ console.log("route wiring — entry points must go through the helper");
       extStickers.includes("parseMileageInput(nextServiceMileage)"),
   );
 
+  const keytagGen = readFileSync("app/api/keytag/generate/route.ts", "utf8");
+  ok(
+    "keytag generate route coerces via helper",
+    keytagGen.includes('from "@/lib/sticker-mileage"') &&
+      keytagGen.includes("parseMileageInput(body.mileage)"),
+  );
+  ok(
+    "keytag generate route guards absurd mileage",
+    keytagGen.includes("isAbsurdMileage(parsed)"),
+  );
+  ok(
+    "keytag generate route renders the PARSED mileage, not the raw body value",
+    !/mileage: body\.mileage/.test(keytagGen),
+  );
+
   const extKeytags = readFileSync("app/api/external/keytags/route.ts", "utf8");
   ok(
     "external keytags route coerces via helper",

@@ -5,6 +5,7 @@ import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer"
 import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 import { pngBufferToSizedPdfBuffer } from "@/lib/sticker-pdf";
+import { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } from "@/lib/sticker-mileage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,22 @@ export async function POST(req: NextRequest) {
     if (!body || !body.customerName || !body.roNumber) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    // Coerce caller-supplied mileage through the shared helper (task #941).
+    // The keytag only *displays* mileage today, but coercing here means any
+    // future mileage math cannot reintroduce the string-concatenation bug,
+    // and garbage values never print.
+    let parsedMileage: number | undefined;
+    if (body.mileage !== undefined && body.mileage !== null && body.mileage !== "") {
+      const parsed = parseMileageInput(body.mileage);
+      if (parsed === null || isAbsurdMileage(parsed)) {
+        return NextResponse.json(
+          { error: `mileage must be a positive number no greater than ${MAX_PLAUSIBLE_MILEAGE}` },
+          { status: 400 }
+        );
+      }
+      parsedMileage = parsed;
+    }
     
     const db = await getDb();
     const shop = await db.collection("shops").findOne(
@@ -97,7 +114,7 @@ export async function POST(req: NextRequest) {
           vehicleInfo: body.vehicleInfo,
           vin: body.vin,
           roNumber: body.roNumber,
-          mileage: body.mileage,
+          mileage: parsedMileage ?? "",
         },
         paper.renderWidth,
         paper.renderHeight,
@@ -112,7 +129,7 @@ export async function POST(req: NextRequest) {
           vehicleInfo: body.vehicleInfo,
           vin: body.vin,
           roNumber: body.roNumber,
-          mileage: body.mileage,
+          mileage: parsedMileage ?? "",
         },
         paper.renderWidth,
         paper.renderHeight,
