@@ -31,6 +31,14 @@ export interface AuditFinding {
 export interface AuditReport {
   workOrderId?: string;
   workOrderNumber?: string;
+  /** SMS the audited RO came from (normalized provenance.sourceSystem). */
+  provider?: string;
+  /**
+   * The provider's own primary id for this RO (e.g. the Protractor WO GUID
+   * from provenance idType "invoice_id"). Lets the dashboard push built
+   * estimate lines back to the RO via the existing add-to-RO routes.
+   */
+  smsWorkOrderId?: string;
   vehicleDisplay?: string;
   auditDate: string;
   findings: AuditFinding[];

@@ -192,6 +192,19 @@ export async function POST(req: NextRequest) {
     let vehicleInfo = body.vehicleInfo || null;
     let workOrderNumber: string | undefined;
     let workOrderId = body.workOrderId;
+    // Provider + the provider's own primary RO id (from normalized
+    // provenance). The dashboard uses these to offer "Push to RO" for
+    // providers with a server-side write path (currently Protractor).
+    let provider: string | undefined;
+    let smsWorkOrderId: string | undefined;
+    const captureProvenance = (wo: any) => {
+      const prov = wo?.provenance;
+      if (!prov) return;
+      provider = prov.sourceSystem || undefined;
+      const ids = Array.isArray(prov.sourceIds) ? prov.sourceIds : [];
+      const primary = ids.find((s: any) => s?.isPrimary) || ids[0];
+      smsWorkOrderId = primary?.idValue ? String(primary.idValue) : undefined;
+    };
 
     if (workOrderId && lineItems.length > 0) {
       // The extension now sends live on-screen line items alongside the RO
@@ -203,6 +216,7 @@ export async function POST(req: NextRequest) {
         const wo = await findNormalizedWorkOrder(db, shopId, String(workOrderId));
         if (wo) {
           workOrderNumber = wo.workOrderNumber;
+          captureProvenance(wo);
           if (!vehicleInfo && wo.vehicle) {
             vehicleInfo = {
               year: wo.vehicle.year,
@@ -240,6 +254,7 @@ export async function POST(req: NextRequest) {
       if (wo) {
         workOrderId = String(wo._id);
         workOrderNumber = wo.workOrderNumber;
+        captureProvenance(wo);
 
         if (wo.vehicle) {
           vehicleInfo = {
@@ -427,6 +442,8 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
     const report: AuditReport = {
       workOrderId,
       workOrderNumber,
+      provider,
+      smsWorkOrderId,
       vehicleDisplay: vehicleInfo
         ? `${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''}`.trim()
         : undefined,

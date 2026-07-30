@@ -18,6 +18,8 @@ interface AuditFinding {
 interface AuditReport {
   workOrderId?: string;
   workOrderNumber?: string;
+  provider?: string;
+  smsWorkOrderId?: string;
   vehicleDisplay?: string;
   auditDate: string;
   findings: AuditFinding[];
@@ -80,6 +82,11 @@ export default function EstimateAuditPage() {
   const [activeTab, setActiveTab] = useState<"audit" | "builder" | "history">("audit");
   const [builtEstimates, setBuiltEstimates] = useState<Record<string, Record<string, unknown>>>({});
   const [buildingFindingId, setBuildingFindingId] = useState<string | null>(null);
+  // Push-to-RO (Protractor only for now): the audit report carries the
+  // provider + the SMS's own RO id, and /api/jobs/add-to-ro does the write.
+  const [pushingFindingId, setPushingFindingId] = useState<string | null>(null);
+  const [pushedFindings, setPushedFindings] = useState<Record<string, boolean>>({});
+  const [pushErrors, setPushErrors] = useState<Record<string, string>>({});
   const [jobBuilderError, setJobBuilderError] = useState("");
   // null = still checking; fail open on transient errors so a hiccup in the
   // features API never locks a paying shop out of the page.
@@ -293,6 +300,64 @@ export default function EstimateAuditPage() {
       setError(`Couldn't build "${finding.suggestedJobTitle}". Please check your connection and try again.`);
     }
     setBuildingFindingId(null);
+  };
+
+  // Push a built estimate onto the audited RO. Only offered when the RO
+  // came from a provider with a server-side write path (Protractor). Labor
+  // is priced by the add-to-RO route's labor-rate chain; parts go in at $0
+  // so the shop sets real pricing in the SMS.
+  const canPushToRo =
+    report?.provider === "protractor" &&
+    !!report?.smsWorkOrderId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(report.smsWorkOrderId);
+
+  const pushToRo = async (finding: AuditFinding) => {
+    const be = builtEstimates[finding.id];
+    if (!be || !report?.smsWorkOrderId) return;
+    setPushingFindingId(finding.id);
+    setPushErrors(prev => ({ ...prev, [finding.id]: "" }));
+    try {
+      const lh = be.laborHours as Record<string, unknown> | undefined;
+      const laborHours = Number(lh?.typical) || Number(lh?.min) || 1;
+      const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
+      const lines = [
+        {
+          lineType: "labor",
+          description: String(be.title || finding.suggestedJobTitle || "Labor"),
+          quantity: laborHours,
+          unitPrice: 0,
+          extendedPrice: 0,
+        },
+        ...requiredParts.map(part => ({
+          lineType: "part",
+          description: part,
+          quantity: 1,
+          unitPrice: 0,
+          extendedPrice: 0,
+        })),
+      ];
+      const response = await fetch("/api/jobs/add-to-ro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderGuid: report.smsWorkOrderId,
+          job: {
+            title: String(be.title || finding.suggestedJobTitle || ""),
+            description: String(be.customerDescription || be.description || ""),
+            lines,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && !data.error) {
+        setPushedFindings(prev => ({ ...prev, [finding.id]: true }));
+      } else {
+        setPushErrors(prev => ({ ...prev, [finding.id]: data.error || "Couldn't add the job to the work order." }));
+      }
+    } catch {
+      setPushErrors(prev => ({ ...prev, [finding.id]: "Couldn't add the job to the work order. Check your connection and try again." }));
+    }
+    setPushingFindingId(null);
   };
 
   const filteredFindings = report?.findings.filter(f =>
@@ -571,6 +636,37 @@ export default function EstimateAuditPage() {
                                 <span>Parts: <strong className="text-gray-700">{(be.requiredParts as string[]).join(", ")}</strong></span>
                               )}
                             </div>
+                            {canPushToRo ? (
+                              <div className="mt-3 flex items-center gap-3">
+                                <button
+                                  onClick={() => pushToRo(finding)}
+                                  disabled={pushingFindingId === finding.id || !!pushedFindings[finding.id]}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
+                                    pushedFindings[finding.id]
+                                      ? "bg-green-600 text-white cursor-default"
+                                      : "bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50"
+                                  }`}
+                                >
+                                  {pushingFindingId === finding.id
+                                    ? "Adding to RO..."
+                                    : pushedFindings[finding.id]
+                                      ? `Added to RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""} ✓`
+                                      : `Add to RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""}`}
+                                </button>
+                                {!pushedFindings[finding.id] && (
+                                  <span className="text-xs text-gray-400">
+                                    Labor uses your shop rate; parts are added at $0 — set pricing in Protractor.
+                                  </span>
+                                )}
+                              </div>
+                            ) : report?.provider && report.provider !== "protractor" ? (
+                              <p className="mt-3 text-xs text-gray-400">
+                                Adding this job to the RO from the dashboard is available for Protractor shops. In Tekmetric, use the MOS browser extension to push jobs.
+                              </p>
+                            ) : null}
+                            {pushErrors[finding.id] && (
+                              <p className="mt-2 text-xs text-red-600">{pushErrors[finding.id]}</p>
+                            )}
                           </div>
                         );
                       })()}

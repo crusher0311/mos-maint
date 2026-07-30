@@ -358,6 +358,35 @@ async function run() {
     const body = await res.json();
     ok("  → code RO_NO_LINE_ITEMS", body.code === "RO_NO_LINE_ITEMS", body.code);
   }
+  {
+    // Push-to-RO support: a normalized WO's provenance (provider + the
+    // SMS's own primary RO id, e.g. the Protractor WO GUID) must surface
+    // on the report so the dashboard can offer "Add to RO".
+    restoreAll();
+    stubCommon(auditDeps);
+    const guid = "3f2b1a90-1111-4222-8333-abcdefabcdef";
+    const fake = makeFakeDb({
+      [NORMALIZED_COLLECTIONS.workOrders]: [
+        {
+          _id: "nwo-3",
+          shopId: 42,
+          workOrderNumber: "778",
+          serviceJobs: [{ title: "Front Brake Pad Replacement", laborTotal: 180, partsTotal: 89, total: 269 }],
+          provenance: {
+            sourceSystem: "protractor",
+            sourceIds: [{ system: "protractor", idType: "invoice_id", idValue: guid, isPrimary: true }],
+          },
+        },
+      ],
+    });
+    auditDeps.getDb = (async () => fake.db) as any;
+    auditDeps.getOpenAI = () => fakeOpenAI("{}", { n: 0 });
+    const res = await auditPOST(jsonReq("/api/estimate-assist/audit", { workOrderId: "778" }));
+    ok("protractor WO audit → 200", res.status === 200, String(res.status));
+    const body = await res.json();
+    ok("  → report.provider = protractor", body.report?.provider === "protractor", body.report?.provider);
+    ok("  → report.smsWorkOrderId = primary source GUID", body.report?.smsWorkOrderId === guid, body.report?.smsWorkOrderId);
+  }
 
   console.log("\nPOST /api/estimate-assist/audit — report generation (AI stubbed):");
   {

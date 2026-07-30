@@ -32,6 +32,7 @@ import {
   Phone,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
+import { filterNavItemsByFeatures } from "@/lib/sidebar-nav";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
 interface NavChild {
@@ -287,6 +288,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       featureId: "part_xref",
     },
     {
+      name: "Estimate Assist",
+      href: "/dashboard/estimate-audit",
+      icon: <ClipboardCheck className="w-5 h-5" />,
+      featureId: "estimate_assist",
+    },
+    {
       name: "Protection Plans",
       href: "/dashboard/protection-plans",
       icon: <Shield className="w-5 h-5" />
@@ -319,35 +326,9 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
     },
       ];
 
-  const filteredNavItems = navItems.filter(item => {
-    if (!item.featureId) return true;
-    return enabledFeatures.includes(item.featureId);
-  }).map(item => {
-    if (item.children) {
-      return {
-        ...item,
-        children: item.children.filter(child => {
-          if (!child.featureId) return true;
-          return enabledFeatures.includes(child.featureId);
-        }).map(child => {
-          if (child.children) {
-            return {
-              ...child,
-              children: child.children.filter(grandchild => {
-                if (!grandchild.featureId) return true;
-                return enabledFeatures.includes(grandchild.featureId);
-              }),
-            };
-          }
-          return child;
-        }).filter(child => {
-          if (child.children && child.children.length === 0) return false;
-          return true;
-        }),
-      };
-    }
-    return item;
-  });
+  // Feature gating lives in a pure helper (lib/sidebar-nav.ts) so it can
+  // be unit-tested without rendering this client component.
+  const filteredNavItems = filterNavItemsByFeatures(navItems, enabledFeatures);
 
   return (
     <aside className="w-full h-full min-h-screen flex flex-col print:hidden" style={{ backgroundColor: '#3C81C3' }}>
