@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText } from "lucide-react";
+import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText, FileSearch } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
@@ -47,7 +47,7 @@ type PaginationInfo = {
   hasPrevPage: boolean;
 };
 
-type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "concern_assistant";
+type FeatureId = "maintenance" | "job_lookup" | "common_failures" | "oil_sticker" | "keytags" | "auto_booking" | "part_xref" | "concern_assistant" | "estimate_assist";
 
 type QuickSpecs = {
   frontTireDescription?: string;
@@ -1381,6 +1381,31 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                               title="Concern Assistant not enabled for this shop"
                             >
                               <MessageSquareText className="w-4 h-4" />
+                            </span>
+                          )}
+                          {data.enabledFeatures?.includes('estimate_assist') ? (
+                            (r.displayRo || r.workOrderGuid || r.workOrderId || r.roId) ? (
+                              <Link
+                                href={`/dashboard/estimate-audit?wo=${encodeURIComponent(r.displayRo || r.workOrderGuid || r.workOrderId || r.roId || '')}`}
+                                className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                title="Estimate Assist — audit this RO's estimate"
+                              >
+                                <FileSearch className="w-4 h-4" />
+                              </Link>
+                            ) : (
+                              <span
+                                className="p-1.5 text-gray-300 cursor-not-allowed"
+                                title="No RO to audit for this vehicle"
+                              >
+                                <FileSearch className="w-4 h-4" />
+                              </span>
+                            )
+                          ) : (
+                            <span
+                              className="p-1.5 text-gray-300 cursor-not-allowed"
+                              title="Estimate Assist not enabled for this shop"
+                            >
+                              <FileSearch className="w-4 h-4" />
                             </span>
                           )}
                         </div>
