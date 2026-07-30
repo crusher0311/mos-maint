@@ -155,6 +155,7 @@ export async function GET(request: NextRequest) {
         displayVin: wo.vin,
         displayMiles: wo.mileageOut || wo.mileageIn || null,
         displayRo: wo.sourceId,
+        normalizedId: wo._id?.toString?.() || null,
         dviDone: false,
         archived: true,
         source: wo.smsType,
@@ -255,6 +256,10 @@ export async function GET(request: NextRequest) {
       displayRo: wo.sourceId,
       workOrderId: wo.sourceId,
       workOrderGuid: wo.sourceId,
+      // Normalized doc id — the one identifier the estimate-audit API can
+      // always resolve (open Protractor ROs carry a GUID in
+      // workOrderNumber; the human RO number only appears once closed).
+      normalizedId: wo._id?.toString?.() || null,
       dviDone: wo.hasDvi || false,
       source: wo.smsType,
       displayStatus: wo.label || wo.status,

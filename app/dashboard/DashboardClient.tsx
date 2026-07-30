@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText, FileSearch } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
+import EstimateAssistPanel from "@/components/EstimateAssistPanel";
 import CommonFailuresPanel from "@/components/CommonFailuresPanel";
 import { VinSpecsTooltip } from "@/components/VinSpecsTooltip";
 import AddVehicleModal from "@/components/AddVehicleModal";
@@ -204,6 +205,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     contactId?: string;
     serviceItemId?: string;
     customerName?: string;
+  } | null>(null);
+  const [estimateAssist, setEstimateAssist] = useState<{
+    workOrderId: string;
+    roDisplay?: string;
+    vin: string;
+    vehicleDisplay: string;
+    customerName?: string;
+    mileage?: number;
   } | null>(null);
 
   const handleVehicleAdded = (row: any) => {
@@ -1384,14 +1393,29 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             </span>
                           )}
                           {data.enabledFeatures?.includes('estimate_assist') ? (
-                            (r.displayRo || r.workOrderGuid || r.workOrderId || r.roId) ? (
-                              <Link
-                                href={`/dashboard/estimate-audit?wo=${encodeURIComponent(r.displayRo || r.workOrderGuid || r.workOrderId || r.roId || '')}`}
+                            (r.normalizedId || r.displayRo || r.workOrderGuid || r.workOrderId || r.roId) ? (
+                              <button
+                                onClick={() => {
+                                  setEstimateAssist({
+                                    // Prefer opaque ids the audit API can always
+                                    // resolve: normalized _id, then the provider
+                                    // source id (open Protractor ROs only carry
+                                    // their GUID in normalized data — the human
+                                    // RO number is attached at close). The RO
+                                    // number is the last resort.
+                                    workOrderId: r.normalizedId || r.workOrderGuid || r.workOrderId || r.roId || r.displayRo || '',
+                                    roDisplay: r.displayRo || undefined,
+                                    vin,
+                                    vehicleDisplay: r.displayVehicle || '',
+                                    customerName: r.displayName || undefined,
+                                    mileage: r.displayMiles ?? undefined,
+                                  });
+                                }}
                                 className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                title="Estimate Assist — audit this RO's estimate"
+                                title="Estimate Assist — audit this RO or smart-build jobs"
                               >
                                 <FileSearch className="w-4 h-4" />
-                              </Link>
+                              </button>
                             ) : (
                               <span
                                 className="p-1.5 text-gray-300 cursor-not-allowed"
@@ -1685,6 +1709,40 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         customerName={concernAssistant?.customerName}
         smsType={data.smsType}
       />
+
+      {estimateAssist && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <FileSearch className="w-5 h-5 text-emerald-600" />
+                  Estimate Assist
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {[estimateAssist.customerName, estimateAssist.vehicleDisplay].filter(Boolean).join(" - ")}
+                  {estimateAssist.roDisplay ? <> &middot; RO# {estimateAssist.roDisplay}</> : null}
+                  {estimateAssist.mileage ? <> &middot; {estimateAssist.mileage.toLocaleString()} mi</> : null}
+                </p>
+              </div>
+              <button
+                onClick={() => setEstimateAssist(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              <EstimateAssistPanel
+                embedded
+                initialWorkOrderId={estimateAssist.workOrderId}
+                initialRoDisplay={estimateAssist.roDisplay}
+                initialVin={estimateAssist.vin}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
