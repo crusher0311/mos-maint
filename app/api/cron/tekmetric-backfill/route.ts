@@ -13,6 +13,7 @@ import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
 import { syncProtractorRoster } from "@/lib/integrations/protractor/sync-roster";
 import { decideChunkAdvance } from "@/lib/integrations/tekmetric/backfill-chunk-advance";
+import { DEFAULT_STALE_HEARTBEAT_MS } from "@/lib/integrations/tekmetric/inflight-lock";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -53,6 +54,15 @@ const NEW_SHOP_FASTPATH_DAYS = Math.max(
 // as often as the weekend boost) and keeps the focus on the handful
 // of shops that are genuinely brand-new.
 const FASTPATH_MAX_SHOPS_PER_RUN = 3;
+// Fastpath idempotence cooldown (task #966): a fastpath tick skips any
+// new shop whose last chunk attempt is younger than this, so back-to-back
+// 5-min ticks can't re-kick a shop the previous tick just worked. Kept
+// just under the 5-min cadence so a healthy shop still gets a chunk
+// nearly every tick.
+const FASTPATH_RECENT_ATTEMPT_MINUTES = Math.max(
+  1,
+  Number(process.env.TEKMETRIC_FASTPATH_COOLDOWN_MINUTES) || 4,
+);
 // Roster sync (Task #632): upcoming appointments + current employee roster.
 // Runs as a separate, lightweight pass over ALL connected Tekmetric shops
 // (independent of the backfill queue) so it also keeps *completed* shops
@@ -2061,8 +2071,67 @@ export async function GET(req: NextRequest) {
       shopsToProcess = shopsToProcess.filter((s) =>
         newShopIds.has(Number(s.shopId)),
       );
+
+      // Idempotence guard (task #966): a fastpath tick used to re-pick
+      // the exact same shops even while the previous tick's chunks were
+      // still running (or had just run), so a slow shop turned every
+      // 5-min tick into another parallel/duplicate kick until the
+      // scheduler timed the route out at 480s. Skip shops that are
+      // demonstrably already being worked:
+      //   - in_flight: the per-shop in-flight lock is live with a fresh
+      //     heartbeat (another process is actively chunking this shop);
+      //   - recently_attempted: lastRunAt is within the fastpath cadence,
+      //     so the previous tick already made progress — the next tick
+      //     will pick it up again once the cooldown lapses.
+      // Each skip logs a clear reason so on-call can confirm the guard
+      // is doing the throttling instead of a silent timeout loop.
+      if (shopsToProcess.length > 0) {
+        const cooldownMs = FASTPATH_RECENT_ATTEMPT_MINUTES * 60 * 1000;
+        const nowMs = Date.now();
+        const progressRows = await db
+          .collection("tekmetric_backfill_progress")
+          .find({ shopId: { $in: shopsToProcess.map((s) => Number(s.shopId)) } })
+          .project({
+            shopId: 1,
+            lastRunAt: 1,
+            inFlightUntil: 1,
+            inFlightOwner: 1,
+            inFlightHeartbeatAt: 1,
+          })
+          .toArray();
+        const progressByShop = new Map<number, any>(
+          progressRows.map((r: any) => [Number(r.shopId), r]),
+        );
+        const kept: typeof shopsToProcess = [];
+        for (const s of shopsToProcess) {
+          const row = progressByShop.get(Number(s.shopId));
+          const heartbeatMs = row?.inFlightHeartbeatAt
+            ? new Date(row.inFlightHeartbeatAt).getTime()
+            : 0;
+          const lockLive =
+            row?.inFlightUntil &&
+            new Date(row.inFlightUntil).getTime() > nowMs &&
+            heartbeatMs > nowMs - DEFAULT_STALE_HEARTBEAT_MS;
+          const lastRunMs = row?.lastRunAt
+            ? new Date(row.lastRunAt).getTime()
+            : 0;
+          if (lockLive) {
+            console.log(
+              `[Tekmetric Backfill] fastpath skip shop ${s.shopId}: in_flight (owner=${row.inFlightOwner || "unknown"}, heartbeat ${Math.round((nowMs - heartbeatMs) / 1000)}s ago)`,
+            );
+          } else if (lastRunMs > nowMs - cooldownMs) {
+            console.log(
+              `[Tekmetric Backfill] fastpath skip shop ${s.shopId}: recently_attempted (lastRunAt ${Math.round((nowMs - lastRunMs) / 1000)}s ago, cooldown ${FASTPATH_RECENT_ATTEMPT_MINUTES}m)`,
+            );
+          } else {
+            kept.push(s);
+          }
+        }
+        shopsToProcess = kept;
+      }
+
       console.log(
-        `[Tekmetric Backfill] fastpath=newShops: ${shopsToProcess.length} shop(s) created in last ${NEW_SHOP_FASTPATH_DAYS}d`,
+        `[Tekmetric Backfill] fastpath=newShops: ${shopsToProcess.length} shop(s) eligible (created in last ${NEW_SHOP_FASTPATH_DAYS}d, after in-flight/cooldown skips)`,
       );
     }
 

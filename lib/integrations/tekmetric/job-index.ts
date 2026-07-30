@@ -729,11 +729,35 @@ export async function reindexFromStoredData(
   return { rosProcessed, jobsReindexed };
 }
 
+/**
+ * New-shop detector — HAND-OFF ONLY (task #966).
+ *
+ * This used to run `runTekmetricHistoryBackfill(shopId, ..., 5)` INLINE
+ * from the tekmetric-sync cron on the web process. For a shop with real
+ * history that's tens of thousands of serial API calls + Mongo writes on
+ * the process serving interactive traffic — on 2026-07-29 one new shop
+ * connected during business hours degraded the whole fleet for ~20
+ * minutes this way (workers are suspended weekday daytime by design, so
+ * everything landed on the web dyno).
+ *
+ * Now the heavy history work is handed off instead of run here:
+ *   1. Upsert the shop's `tekmetric_backfill_progress` row (the same
+ *      write the connect flow's `triggerJobHistoryBackfill` does) so the
+ *      resumable, rate-capped chunker cron owns the history walk.
+ *   2. Best-effort enqueue onto the existing BullMQ backfill lane
+ *      (`drain-tekmetric`, per-shop allowlist, stable jobId) so the
+ *      worker drains it off-hours; if Redis is unavailable the chunker
+ *      cron still covers the shop — nothing falls back to inline work.
+ *   3. Stamp `tekmetric.jobIndexBackfillHandedOffAt` so this detector is
+ *      one-shot per shop instead of re-kicking every hour forever.
+ *
+ * Only the fast "first vehicles" sync (`syncSingleShop`, single-flight
+ * locked) still runs near-real-time; full history is allowed to take
+ * hours without hurting anyone.
+ */
 export async function checkAndRunBackfillForNewShops(): Promise<void> {
   const db = await getDb();
-  
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  
+
   const shops = await db.collection("shops").find({
     $and: [
       {
@@ -743,32 +767,60 @@ export async function checkAndRunBackfillForNewShops(): Promise<void> {
         ]
       },
       { "tekmetric.jobIndexBackfillCompleted": { $exists: false } },
-      {
-        $or: [
-          { "tekmetric.jobIndexBackfillStartedAt": { $exists: false } },
-          { "tekmetric.jobIndexBackfillStartedAt": { $lt: oneHourAgo } }
-        ]
-      }
+      { "tekmetric.jobIndexBackfillHandedOffAt": { $exists: false } }
     ]
   }).toArray();
-  
+
   for (const shop of shops) {
     const shopId = Number(shop.shopId);
-    const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
-    
+    const tekmetricShopId = Number(shop.tekmetric?.shopId || shop.tekmetricShopId);
+
     if (!tekmetricShopId) continue;
-    
-    console.log(`[Tekmetric] New shop ${shopId} detected, starting 5-year backfill...`);
-    
+
+    const now = new Date();
+
+    // Queue the chunker (idempotent — same write as the connect flow's
+    // triggerJobHistoryBackfill; re-upserting an existing row is a no-op
+    // for its cursor).
+    await db.collection("tekmetric_backfill_progress").updateOne(
+      { shopId },
+      {
+        $set: { shopId, queuedAt: now, completed: false, logicVersion: 2 },
+        $setOnInsert: { startedAt: null },
+      },
+      { upsert: true }
+    );
     await db.collection("shops").updateOne(
       { shopId: { $in: [shopId, String(shopId)] } },
-      { $set: { "tekmetric.jobIndexBackfillStartedAt": new Date() } }
+      {
+        $set: {
+          tekmetricBackfillComplete: false,
+          "tekmetric.jobIndexBackfillHandedOffAt": now,
+        },
+      }
     );
-    
+
+    // Best-effort queue-lane enqueue so the background worker picks the
+    // shop up as soon as it's running. Failure here is non-fatal — the
+    // chunker cron owns the shop either way.
+    let enqueueOutcome = "not_attempted";
     try {
-      await runTekmetricHistoryBackfill(shopId, tekmetricShopId, 5);
-    } catch (err: any) {
-      console.error(`[Tekmetric] Backfill failed for shop ${shopId}: ${err.message}`);
+      const { enqueueDrain } = await import("@/lib/queue/producer");
+      const enq = await enqueueDrain({
+        provider: "tekmetric",
+        shopIds: [shopId],
+        enqueuedAt: now.toISOString(),
+      });
+      enqueueOutcome = enq.enqueued
+        ? `enqueued jobId=${enq.jobId}`
+        : `not_enqueued (${enq.reason})`;
+    } catch (enqErr: any) {
+      enqueueOutcome = `enqueue_error: ${enqErr?.message || enqErr}`;
     }
+
+    console.log(
+      `[Tekmetric] New shop ${shopId} detected — history backfill HANDED OFF to queue lane ` +
+        `(progress row queued, drain-tekmetric ${enqueueOutcome}); NOT running inline on web process (task #966)`
+    );
   }
 }

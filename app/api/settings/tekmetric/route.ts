@@ -239,6 +239,15 @@ export async function POST(request: NextRequest) {
     // anything missed if this promise loses to a process restart.
     syncSingleShop(userShopId, tekmetricShopId)
       .then(async (result) => {
+        // Single-flight no-op (task #966): another trigger already owns
+        // this shop's initial sync. Leave initialSyncState alone — the
+        // in-flight run will write the terminal state when it finishes.
+        if (result.skipped) {
+          console.log(
+            `[Tekmetric Settings] Initial sync for shop ${userShopId} skipped (${result.reason}) — in-flight run owns the state`,
+          );
+          return;
+        }
         await db.collection("shops").updateOne(
           { shopId: { $in: [userShopId, Number(userShopId)] } },
           {

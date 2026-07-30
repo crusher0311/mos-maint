@@ -42,7 +42,23 @@ interface SyncResult {
   success: boolean;
   synced: number;
   error?: string;
+  /**
+   * True when this trigger was deliberately dropped because another
+   * initial sync for the same shop is already in flight (task #966).
+   * Callers must treat this as "someone else owns it" — NOT a failure.
+   */
+  skipped?: boolean;
+  reason?: string;
 }
+
+// Yield the event loop + the shared Tekmetric rate budget every this
+// many ROs. The initial sync is strictly serial (one API call and one
+// Mongo write at a time — that bound is load-bearing, see task #966),
+// but on the busy web process a tight serial loop over ~1000 ROs can
+// still starve interactive requests of limiter slots; a short breather
+// keeps user-facing calls interleaving with the sync.
+const SYNC_YIELD_EVERY_ROS = 10;
+const SYNC_YIELD_MS = 250;
 
 export async function syncSingleShop(
   shopId: number | string, 
@@ -50,7 +66,44 @@ export async function syncSingleShop(
 ): Promise<SyncResult> {
   const db = await getDb();
   const numericShopId = Number(shopId);
-  
+
+  // Single-flight guard (task #966): overlapping triggers — a cron
+  // re-tick, a fetch retry, a second admin click — become logged no-ops
+  // instead of parallel storms against the shared rate limiter.
+  const { acquireInitialSyncLock, releaseInitialSyncLock } = await import(
+    "./initial-sync-lock"
+  );
+  const lock = await acquireInitialSyncLock(db, numericShopId);
+  if (!lock.acquired) {
+    const startedAgoSec = lock.startedAt
+      ? Math.round((Date.now() - new Date(lock.startedAt).getTime()) / 1000)
+      : null;
+    console.log(
+      `[Tekmetric Sync] THROTTLED: initial sync for shop ${shopId} already in flight ` +
+        `(held by ${lock.heldBy || "unknown"}, started ${startedAgoSec === null ? "?" : `${startedAgoSec}s ago`}, ` +
+        `lock expires ${lock.heldUntil ? new Date(lock.heldUntil).toISOString() : "?"}) — dropping duplicate trigger`,
+    );
+    return {
+      success: false,
+      synced: 0,
+      skipped: true,
+      reason: "in_flight",
+    };
+  }
+
+  try {
+    return await runInitialSync(db, shopId, numericShopId, tekmetricShopId);
+  } finally {
+    await releaseInitialSyncLock(db, numericShopId, lock.owner);
+  }
+}
+
+async function runInitialSync(
+  db: any,
+  shopId: number | string,
+  numericShopId: number,
+  tekmetricShopId: number,
+): Promise<SyncResult> {
   try {
     console.log(`[Tekmetric Sync] Starting initial sync for shop ${shopId} (Tekmetric: ${tekmetricShopId})`);
     
@@ -78,7 +131,12 @@ export async function syncSingleShop(
       if (page > 10) break;
     }
 
+    let rosProcessed = 0;
     for (const ro of activeWOs) {
+      rosProcessed++;
+      if (rosProcessed % SYNC_YIELD_EVERY_ROS === 0) {
+        await new Promise((r) => setTimeout(r, SYNC_YIELD_MS));
+      }
       if (!vehicleCache.has(ro.vehicleId)) {
         try {
           const vehicle = await getVehicle(ro.vehicleId);
