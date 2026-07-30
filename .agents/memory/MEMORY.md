@@ -116,4 +116,5 @@
 - [Protractor interactive writes](protractor-interactive-writes.md) — user-facing Protractor writes need priority lane + capped retries + route deadline + client-pinned UUID (upsert-by-ID makes retries dupe-safe).
 - [cached_plans lookup index](cached-plans-index.md) — plan-cache reads need (vin, shopId, createdAt:-1) on cached_plans (+ vin/shopId on analysis cache); createIndex is operator-gated (dev Mongo IS prod).
 - [CARFAX empty-ok snapshot TTL](carfax-empty-snapshot-ttl.md) — ok:true + zero serviceRecords is a real degraded state; empty snapshots get short TTL (6h), never 7d fresh; ok:true ≠ has data.
+- [platform_features tier resolution](platform-features-tier-resolution.md) — plan features come from PG rows, not the static map; unseeded features are off everywhere & `demo` needs the elite-tier mapping.
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.

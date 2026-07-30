@@ -1,7 +1,6 @@
 import { getDb } from "./mongo";
 import { getDb as getPgDb } from "./db/drizzle";
 import { platformFeatures } from "./db/schema/platform-features";
-import { eq } from "drizzle-orm";
 import {
   isIdentityPgCanonical,
   shadowWriteMongoIdentity,
@@ -137,26 +136,47 @@ async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSe
     // task #344 (W3a, §5 row #5): read PG, not Mongo. Admin writes
     // already land in PG; this fixes the silent-no-op drift bug.
     const db = __deps.getPgDb();
+    // Fetch ALL rows (any status): a row whose status is not "active" is
+    // an intentional admin disable and must count as "seen" so the
+    // missing-row fallback below never re-enables it.
     const rows = await db
       .select({
         slug: platformFeatures.slug,
         includedInTiers: platformFeatures.includedInTiers,
+        status: platformFeatures.status,
       })
-      .from(platformFeatures)
-      .where(eq(platformFeatures.status, "active"));
+      .from(platformFeatures);
 
     if (!rows || rows.length === 0) {
       return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
     }
 
-    const tierSlug = plan === "professional" ? "elite" : plan;
+    // `professional` is the legacy name for elite; `demo` shops get the
+    // full elite feature set (mirrors PLAN_FALLBACK_KEYS.demo = all keys —
+    // no platform_features row lists a literal "demo" tier, so without
+    // this mapping demo shops resolved to ZERO features).
+    const tierSlug = plan === "professional" || plan === "demo" ? "elite" : plan;
     const enabled = new Set<FeatureKey>();
+    const seenKeys = new Set<FeatureKey>();
 
     for (const pf of rows) {
-      const includedInTiers = (pf.includedInTiers as string[] | null) || [];
       const featureKey = FEATURE_SLUG_TO_KEY[pf.slug];
-      if (featureKey && includedInTiers.includes(tierSlug)) {
+      if (!featureKey) continue;
+      seenKeys.add(featureKey);
+      if (pf.status !== "active") continue;
+      const includedInTiers = (pf.includedInTiers as string[] | null) || [];
+      if (includedInTiers.includes(tierSlug)) {
         enabled.add(featureKey);
+      }
+    }
+
+    // Features that exist in code but have no platform_features row yet
+    // (e.g. a feature shipped before an admin seeds it) fall back to the
+    // static plan map instead of silently resolving to "off" everywhere.
+    const fallbackKeys = new Set(PLAN_FALLBACK_KEYS[plan] ?? PLAN_FALLBACK_KEYS.trial);
+    for (const key of FEATURE_KEYS) {
+      if (!seenKeys.has(key) && fallbackKeys.has(key)) {
+        enabled.add(key);
       }
     }
 
