@@ -165,11 +165,12 @@ export default function EstimateAssistPanel({
   // link values through these props; the dashboard's Estimate Assist modal
   // passes the row's normalized id + vehicle context directly.
   useEffect(() => {
-    if (initialVin) setJobBuilderVin(initialVin);
-    const wo = (initialWorkOrderId || "").trim();
+    if (initialVin) setJobBuilderVin(String(initialVin));
+    // Coerce defensively: dashboard rows can carry RO numbers as numbers.
+    const wo = String(initialWorkOrderId ?? "").trim();
     if (wo) {
       setActiveTab("audit");
-      setWorkOrderId((initialRoDisplay || wo).trim());
+      setWorkOrderId(String(initialRoDisplay ?? wo).trim() || wo);
       runAudit(wo);
     }
     // Run once on mount only — deliberately not reactive to state changes.
@@ -236,7 +237,7 @@ export default function EstimateAssistPanel({
   // idOverride lets the picker audit by the normalized _id (exact match)
   // while the input keeps showing the human-facing RO number.
   const runAudit = async (idOverride?: string) => {
-    const auditId = (idOverride || workOrderId).trim();
+    const auditId = String(idOverride ?? workOrderId ?? "").trim();
     if (!auditId) {
       setError("Please enter a work order number or ID");
       return;

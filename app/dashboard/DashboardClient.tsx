@@ -1403,8 +1403,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                                     // their GUID in normalized data — the human
                                     // RO number is attached at close). The RO
                                     // number is the last resort.
-                                    workOrderId: r.normalizedId || r.workOrderGuid || r.workOrderId || r.roId || r.displayRo || '',
-                                    roDisplay: r.displayRo || undefined,
+                                    workOrderId: String(r.normalizedId || r.workOrderGuid || r.workOrderId || r.roId || r.displayRo || ''),
+                                    roDisplay: r.displayRo != null && r.displayRo !== '' ? String(r.displayRo) : undefined,
                                     vin,
                                     vehicleDisplay: r.displayVehicle || '',
                                     customerName: r.displayName || undefined,
