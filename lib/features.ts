@@ -12,7 +12,8 @@ export type FeatureId =
   | "keytags"          // Key identification tags for vehicles in shop
   | "auto_booking"     // Auto booking for oil change appointments
   | "part_xref"        // Part cross-reference tool
-  | "labor_rates";     // Labor rate rules auto-apply
+  | "labor_rates"      // Labor rate rules auto-apply
+  | "estimate_assist"; // AI estimate audits + smart job builder
 
 export type FeatureConfig = {
   id: FeatureId;
@@ -90,6 +91,14 @@ export const FEATURES: FeatureConfig[] = [
     icon: "DollarSign",
     requiresSMS: true,
     smsProviders: ["tekmetric", "protractor", "shopmonkey"],
+  },
+  {
+    id: "estimate_assist",
+    name: "Estimate Assist",
+    description: "AI-powered estimate audits and smart job building from synced work orders",
+    icon: "FileSearch",
+    requiresSMS: true,
+    smsProviders: ["protractor", "tekmetric", "shopmonkey"],
   },
 ];
 

@@ -1333,6 +1333,7 @@ export default function PlatformShopsPage() {
                     { key: "concern_assistant", label: "Concern Assistant", desc: "AI-powered customer concern intake with follow-up questions and RO injection" },
                     { key: "dvi_prefill", label: "DVI Pre-fill (VHI)", desc: "Auto-fill DVI inspection ratings using VHI maintenance data" },
                     { key: "enhance_notes", label: "Enhance Notes (AI)", desc: "AI-powered rewriting of technician notes into customer-facing language" },
+                    { key: "estimate_assist", label: "Estimate Assist", desc: "AI-powered estimate audits and smart job building" },
                   ].map(feature => {
                     const isFounder = billingEdits.plan === "detect_dog_founder";
                     const checked = isFounder
@@ -1529,6 +1530,7 @@ export default function PlatformShopsPage() {
                     { key: "concern_assistant", label: "Concern Assistant" },
                     { key: "dvi_prefill", label: "DVI Pre-fill (VHI)" },
                     { key: "enhance_notes", label: "Enhance Notes (AI)" },
+                    { key: "estimate_assist", label: "Estimate Assist" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input
