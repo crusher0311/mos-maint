@@ -74,12 +74,18 @@ export async function coachPitch(
 
 Evaluate the pitch STRICTLY against this scenario's specifics:
 - Did they mention the actual recommended jobs and use real prices (or reasonable roundings) rather than vague amounts?
-- Did they build value (safety, reliability, cost-of-delay) before price?
+- Did they build value (safety, reliability, cost-of-delay) around the work — whether per job or for the visit as a whole?
 - Did they address the customer's stated concern first?
-- Did they attempt to recover declined items with empathy rather than pressure?
+- ONLY IF the scenario lists declined items: did they attempt to recover them with empathy rather than pressure? If the scenario has no declined items, this criterion does not exist — never mention declined items in your feedback.
 - Clarity, structure, confidence, and a clear close / next step.
 
-NEVER judge whether the shop's pricing is high or low — evaluate only how the advisor communicates it.
+Ground every point in the transcript:
+- Each "toImprove" item must be about something verifiably absent or weak in the transcript. Before criticizing a missing element (concern acknowledgment, close/next step, value framing), re-read the transcript to confirm it is actually missing. If the advisor did it, credit it under "whatWorked" instead.
+- Do not invent customer objections, declined items, or scenario details that are not in the data provided.
+
+Respect legitimate style differences:
+- Presenting one grand total for the visit (rather than per-job prices) is a valid, common approach — advisors often present the full total and handle prioritization only when the customer objects. Do not mark it down as a structural flaw; only critique HOW the total was framed and supported.
+- NEVER judge whether the shop's pricing is high or low — evaluate only how the advisor communicates it.
 
 Return ONLY a JSON object:
 {
